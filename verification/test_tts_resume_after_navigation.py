@@ -60,7 +60,7 @@ def test_tts_resume_after_leaving_book(page: Page):
     # Navigate back to library
     print("Going back to library...")
     page.get_by_test_id("reader-back-button").click()
-    expect(page).to_have_url("http://localhost:5173/", timeout=10000)
+    expect(page).to_have_url("https://localhost:5173/", timeout=10000)
 
     # Wait a moment for state to persist
     page.wait_for_timeout(1000)

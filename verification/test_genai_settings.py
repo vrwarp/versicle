@@ -3,7 +3,7 @@ from playwright.sync_api import Page, expect
 
 def test_genai_settings_tab(page: Page):
     # 1. Open App
-    page.goto("http://localhost:5173")
+    page.goto("https://localhost:5173")
 
     # 2. Wait for Load
     page.wait_for_timeout(5000)

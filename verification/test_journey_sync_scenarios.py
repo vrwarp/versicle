@@ -62,7 +62,7 @@ def test_journey_seamless_handoff(browser: Browser, browser_context_args):
     - Device B: Open app. See "Resume" badge. Click it. Verify location & note.
     """
     test_uid = f"mock-user-{uuid.uuid4().hex[:8]}"
-    base_url = browser_context_args.get("base_url", "http://localhost:5173")
+    base_url = browser_context_args.get("base_url", "https://localhost:5173")
 
     # --- Device A ---
     print("\n[A] Setting up...")
@@ -234,7 +234,7 @@ def test_note_marker_affordance(browser: Browser, browser_context_args):
     Verifies that adding a note to a highlight creates a visible visual affordance (post-it marker).
     """
     test_uid = f"mock-user-{uuid.uuid4().hex[:8]}"
-    base_url = browser_context_args.get("base_url", "http://localhost:5173")
+    base_url = browser_context_args.get("base_url", "https://localhost:5173")
     context = browser.new_context(**browser_context_args)
     page = context.new_page()
     inject_mock_firestore(page, test_uid)
@@ -356,7 +356,7 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     - Device B: Receive.
     """
     test_uid = f"mock-user-{uuid.uuid4().hex[:8]}"
-    base_url = browser_context_args.get("base_url", "http://localhost:5173")
+    base_url = browser_context_args.get("base_url", "https://localhost:5173")
 
     # --- Device A ---
     context_a = browser.new_context(**browser_context_args)
@@ -478,7 +478,7 @@ def test_journey_data_liberation(browser: Browser, browser_context_args):
     - Validate JSON content.
     """
     test_uid = f"mock-user-{uuid.uuid4().hex[:8]}"
-    base_url = browser_context_args.get("base_url", "http://localhost:5173")
+    base_url = browser_context_args.get("base_url", "https://localhost:5173")
     context = browser.new_context(**browser_context_args)
     page = context.new_page()
     inject_mock_firestore(page, test_uid)

@@ -7,7 +7,7 @@ def run(playwright):
     page = context.new_page()
 
     # Go to app
-    page.goto("http://localhost:5173")
+    page.goto("https://localhost:5173")
 
     # Wait for app to load (library view)
     page.wait_for_selector('button[aria-label="Settings"]', state="visible")
