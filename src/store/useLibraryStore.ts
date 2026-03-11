@@ -109,26 +109,10 @@ interface IDBService {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const createLibraryStore = (injectedDB: IDBService = dbService as any) => create<LibraryState>()(
-  (set, get) => ({
-    // Transient state
-    staticMetadata: {},
-    offloadedBookIds: new Set<string>(),
-    isHydrating: false,
-    isLoading: false,
-    isImporting: false,
-    importProgress: 0,
-    importStatus: '',
-    uploadProgress: 0,
-    uploadStatus: '',
-    error: null,
+  (set, get) => {
 
-    sortOrder: 'last_read',
-
-    // Actions
-
-    setSortOrder: (sort) => set({ sortOrder: sort }),
-
-    hydrateStaticMetadata: async () => {
+    // Extracted hydrate function to avoid get() and stale closures
+    const hydrateStaticMetadataFn = async () => {
       // Access books from the SYNCED store (Yjs)
       const books = useBookStore.getState().books;
       const bookIds = Object.keys(books);
@@ -170,9 +154,30 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         logger.error('Failed to hydrate static metadata:', err);
         set({ isHydrating: false });
       }
-    },
+    };
 
-    addBook: async (file: File, options?: { overwrite?: boolean }) => {
+    return {
+      // Transient state
+      staticMetadata: {},
+      offloadedBookIds: new Set<string>(),
+    isHydrating: false,
+    isLoading: false,
+    isImporting: false,
+    importProgress: 0,
+    importStatus: '',
+    uploadProgress: 0,
+    uploadStatus: '',
+    error: null,
+
+    sortOrder: 'last_read',
+
+      // Actions
+
+      setSortOrder: (sort) => set({ sortOrder: sort }),
+
+      hydrateStaticMetadata: hydrateStaticMetadataFn,
+
+      addBook: async (file: File, options?: { overwrite?: boolean }) => {
       set({
         isImporting: true,
         importProgress: 0,
@@ -282,22 +287,24 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         try {
           set({ importStatus: 'Checking for existing library entries...' });
           const meta = await extractBookMetadata(file);
-          const staticMeta = get().staticMetadata;
           const books = useBookStore.getState().books;
+
+          let ghostMatch: UserInventoryItem | undefined;
 
           // Find a ghost book that matches Title + Author
           // We must EXCLUDE the existingId check result above (which matched by filename)
-          // But here we are matching by metadata.
-          const ghostMatch = Object.values(books).find(b => {
-            // ... match logic ...
+          // but here we are matching by metadata.
+          // Note: We use `get().staticMetadata` inside the loop to ensure we read the latest state
+          // to avoid race conditions if rapid sequential imports happen.
+          const staticMeta = get().staticMetadata;
+          ghostMatch = Object.values(books).find(b => {
             const isGhost = !staticMeta[b.bookId];
             const isMatch = b.title.trim() === meta.title.trim() && b.author.trim() === meta.author.trim();
             return isGhost && isMatch;
           });
 
           if (ghostMatch) {
-            // ... existing ghost match logic ...
-            logger.info(`Found Ghost Book match: "${ghostMatch.title}" (${ghostMatch.bookId}). Linking file...`);
+            logger.info(`Found Ghost Book match by metadata for file "${file.name}": "${ghostMatch.title}" (${ghostMatch.bookId}). Linking binary file to existing Yjs record...`);
             set({ importStatus: `Linking to existing entry: ${ghostMatch.title}...` });
 
             const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
@@ -313,6 +320,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
             });
 
             // Update Static Metadata
+            // Important: using functional updater `set((state) => ...)` to avoid race conditions.
             set((state) => ({
               staticMetadata: {
                 ...state.staticMetadata,
@@ -320,7 +328,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
                   ...manifest,
                   id: manifest.bookId,
                   version: manifest.schemaVersion,
-                  addedAt: ghostMatch.addedAt
+                  addedAt: ghostMatch?.addedAt || Date.now()
                 } as BookMetadata
               },
               offloadedBookIds: new Set([...state.offloadedBookIds].filter(id => id !== manifest.bookId)),
@@ -363,6 +371,9 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         useBookStore.getState().addBook(inventoryItem);
 
         // 4. Update Local Static Metadata
+        // Always use the functional updater pattern `set((state) => ({ ... }))` when updating objects or arrays
+        // derived from existing state (like staticMetadata and offloadedBookIds). This prevents stale closures
+        // and race conditions, especially during concurrent automated ingestions.
         set((state) => ({
           staticMetadata: {
             ...state.staticMetadata,
@@ -473,7 +484,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         }
 
         // Hydrate newly imported books
-        await get().hydrateStaticMetadata();
+        await hydrateStaticMetadataFn();
 
         set({
           isImporting: false,
@@ -525,7 +536,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         logger.error('Failed to remove book:', err);
         set({ error: 'Failed to remove book.' });
         // Re-hydrate to revert on failure
-        await get().hydrateStaticMetadata();
+        await hydrateStaticMetadataFn();
       }
     },
 
@@ -582,6 +593,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           });
 
           // Update static metadata with the new manifest
+          // Use functional updater to guarantee we don't clobber concurrent static metadata additions.
           set((state) => ({
             staticMetadata: {
               ...state.staticMetadata,
@@ -596,7 +608,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         }
 
         // Re-hydrate to get the restored cover
-        await get().hydrateStaticMetadata();
+        await hydrateStaticMetadataFn();
 
         // Update offload state
         set((state) => ({
@@ -609,9 +621,9 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         logger.error('Failed to restore book:', err);
         set({ error: err instanceof Error ? err.message : 'Failed to restore book.', isImporting: false });
       }
-    },
-  })
-);
+    }
+  };
+});
 
 /**
  * Zustand store for managing the user's library of books (Local, non-synced UI state).
