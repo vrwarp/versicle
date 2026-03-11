@@ -10,7 +10,7 @@ PID=$!
 echo "⏳ Waiting for application to be ready at https://localhost:5173..."
 RETRIES=30
 for i in $(seq 1 $RETRIES); do
-    if curl -s https://localhost:5173 > /dev/null; then
+    if curl -k -s https://localhost:5173 > /dev/null; then
         echo "✅ Application is ready!"
         break
     fi
