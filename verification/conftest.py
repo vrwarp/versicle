@@ -17,6 +17,7 @@ def browser_context_args(request, browser_context_args):
     if request.param == "mobile":
         return {
             **browser_context_args,
+            "ignore_https_errors": True,
             "base_url": "https://localhost:5173",
             "viewport": {"width": 375, "height": 667},
             "is_mobile": True,
@@ -25,6 +26,7 @@ def browser_context_args(request, browser_context_args):
     else:
         return {
             **browser_context_args,
+            "ignore_https_errors": True,
             "base_url": "https://localhost:5173",
             "viewport": {"width": 1280, "height": 720},
         }
