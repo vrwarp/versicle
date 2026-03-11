@@ -32,7 +32,7 @@ def reset_app(page: Page):
     Args:
         page: The Playwright Page object.
     """
-    page.goto("http://localhost:5173", timeout=10000)
+    page.goto("https://localhost:5173", timeout=10000)
     # Reload first to potentially release any DB locks from previous sessions
     page.reload()
 
