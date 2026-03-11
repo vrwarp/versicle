@@ -680,7 +680,7 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Why**: Prevents a down-level client from inadvertently overwriting or corrupting newer data structures introduced by an updated app version.
     *   **Trade-off**: The user is completely locked out of the app until they update to the latest version.
 *   **Service Worker**: The app verifies `waitForServiceWorkerController` on launch to ensure image serving infrastructure is active, failing fast if the SW is broken.
-*   **Battery Guard**: Explicitly checks Android battery optimization settings via `BatteryGuard` and warns the user if they are likely to interfere with background playback.
+*   **Battery Guard**: Explicitly checks Android battery optimization settings via `@capawesome-team/capacitor-android-battery-optimization` and warns the user if they are likely to interfere with background playback.
 *   **Transactional Voice Download**: `PiperProvider` prevents corrupt voice models by ensuring files are downloaded and verified in memory before writing to persistent storage.
 *   **Input Sanitization**: All text inputs to the WASM TTS engine are sanitized and chunked to prevent memory access violations or worker crashes.
 *   **Process Protection**: `PlatformIntegration` runs a silent audio loop during playback to prevent Android "Phantom Process Killers" from terminating the app in the background.
