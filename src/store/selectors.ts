@@ -29,6 +29,19 @@ function resolveProgress(bookProgress: Record<string, UserProgress> | undefined)
     return local || null;
 }
 
+export type BaseBook = UserInventoryItem & {
+    id: string;
+    title: string;
+    author: string;
+    coverBlob?: Blob;
+    version?: number;
+    coverUrl?: string;
+    fileHash?: string;
+    fileSize?: number;
+    totalChars?: number;
+    isOffloaded: boolean;
+};
+
 /**
  * Returns all books with static metadata merged.
  * Static metadata (cover, full title/author) is used if available,
@@ -62,7 +75,7 @@ export const useAllBooks = () => {
     // Clean React pattern: The WeakMap cache will be recreated from scratch
     // whenever the metadata/offloaded dependencies change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const baseBookCache = useMemo(() => new WeakMap<UserInventoryItem, any>(), [staticMetadata, offloadedBookIds]);
+    const baseBookCache = useMemo(() => new WeakMap<UserInventoryItem, BaseBook>(), [staticMetadata, offloadedBookIds]);
 
     const baseBooks = useMemo(() => {
         const booksObj = books || {};
