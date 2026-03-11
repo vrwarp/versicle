@@ -2,6 +2,7 @@ import React from 'react';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { Trash2, StickyNote, PenLine } from 'lucide-react';
 import type { Annotation } from '../../types/db';
+import { Button } from '../ui/Button';
 
 interface Props {
   /** Callback to navigate to the annotation's location. */
@@ -75,8 +76,8 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
                       }}
                     />
                     <div className="flex gap-1">
-                      <button data-testid="annotation-save-button" onClick={() => saveEdit(annotation.id)} className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">Save</button>
-                      <button data-testid="annotation-cancel-button" onClick={() => setEditingId(null)} className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded">Cancel</button>
+                      <Button data-testid="annotation-save-button" onClick={() => saveEdit(annotation.id)} size="sm" className="h-6 text-xs px-2 py-1">Save</Button>
+                      <Button data-testid="annotation-cancel-button" onClick={() => setEditingId(null)} variant="secondary" size="sm" className="h-6 text-xs px-2 py-1">Cancel</Button>
                     </div>
                   </div>
                 ) : (
@@ -97,22 +98,28 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
                 )}
               </div>
               <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
+                <Button
                   data-testid="annotation-edit-button"
+                  variant="ghost"
+                  size="icon"
                   onClick={(e) => handleEditNote(e, annotation)}
-                  className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
+                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
                   title="Edit Note"
+                  aria-label="Edit Note"
                 >
                   <PenLine className="w-3 h-3" />
-                </button>
-                <button
+                </Button>
+                <Button
                   data-testid="annotation-delete-button"
+                  variant="ghost"
+                  size="icon"
                   onClick={(e) => handleDelete(e, annotation.id)}
-                  className="p-1 hover:bg-destructive/10 rounded text-destructive"
+                  className="h-6 w-6 text-destructive hover:bg-destructive/10 hover:text-destructive"
                   title="Delete"
+                  aria-label="Delete Annotation"
                 >
                   <Trash2 className="w-3 h-3" />
-                </button>
+                </Button>
               </div>
             </div>
           </li>
