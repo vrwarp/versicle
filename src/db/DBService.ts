@@ -113,6 +113,65 @@ class DBService {
    * Retrieves the book ID associated with a given filename.
    * Uses Yjs store (useBookStore) instead of IDB.
    */
+
+  /**
+   * Retrieves metadata for multiple books in a single transaction.
+   * This is a performance optimization for bulk hydration during startup.
+   *
+   * @param ids - Array of book IDs to fetch.
+   * @returns Array of BookMetadata objects (or undefined for missing entries).
+   */
+  async getBooksMetadata(ids: string[]): Promise<(BookMetadata | undefined)[]> {
+    try {
+      const db = await this.getDB();
+      const tx = db.transaction(['static_manifests', 'static_resources'], 'readonly');
+
+      const manifestStore = tx.objectStore('static_manifests');
+      const resourceStore = tx.objectStore('static_resources');
+
+      // Fetch all required data concurrently within the single transaction
+      const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
+      const resourceKeysPromise = Promise.all(ids.map(id => resourceStore.getKey(id)));
+
+      const [manifests, resourceKeys] = await Promise.all([manifestsPromise, resourceKeysPromise]);
+      await tx.done;
+
+      const books = useBookStore.getState().books;
+
+      return ids.map((id, index) => {
+        const manifest = manifests[index];
+        const resourceKey = resourceKeys[index];
+
+        if (!manifest) {
+          return undefined;
+        }
+
+        const inventory = books[id];
+
+        return {
+          id: manifest.bookId,
+          title: inventory?.customTitle || inventory?.title || manifest.title,
+          author: inventory?.customAuthor || inventory?.author || manifest.author,
+          description: manifest.description,
+          coverBlob: manifest.coverBlob,
+          addedAt: inventory?.addedAt || Date.now(),
+
+          bookId: manifest.bookId,
+          filename: inventory?.sourceFilename || 'unknown.epub',
+          fileHash: manifest.fileHash,
+          fileSize: manifest.fileSize,
+          totalChars: manifest.totalChars,
+          version: manifest.schemaVersion,
+
+          isOffloaded: !resourceKey
+        };
+      });
+    } catch (error) {
+      this.handleError(error);
+      return ids.map(() => undefined);
+    }
+  }
+
   getBookIdByFilename(filename: string): string | undefined {
     const books = useBookStore.getState().books;
     for (const book of Object.values(books)) {

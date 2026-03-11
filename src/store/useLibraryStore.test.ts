@@ -12,6 +12,7 @@ const mockDBService = {
   offloadBook: vi.fn(),
   restoreBook: vi.fn(),
   getBookMetadata: vi.fn(),
+  getBooksMetadata: vi.fn(),
   getOffloadedStatus: vi.fn().mockResolvedValue(new Map()),
   getBookIdByFilename: vi.fn(),
   importBookWithId: vi.fn(),
@@ -232,11 +233,11 @@ describe('useLibraryStore', () => {
 
     // Mock DBService to return static metadata
     vi.mocked(mockDBService.getLibrary).mockResolvedValue([mockBook]);
-    vi.mocked(mockDBService.getBookMetadata).mockResolvedValue(mockBook);
+    vi.mocked(mockDBService.getBooksMetadata).mockResolvedValue([mockBook]);
 
     await useLibraryStore.getState().hydrateStaticMetadata();
 
-    expect(mockDBService.getBookMetadata).toHaveBeenCalledWith('test-id');
+    expect(mockDBService.getBooksMetadata).toHaveBeenCalledWith(['test-id']);
     const state = useLibraryStore.getState();
     expect(state.staticMetadata['test-id']).toBeDefined();
   });

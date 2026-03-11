@@ -103,6 +103,7 @@ interface IDBService {
   offloadBook: (id: string) => Promise<void>;
   restoreBook: (id: string, file: File) => Promise<void>;
   getBookMetadata: (id: string) => Promise<BookMetadata | undefined>;
+  getBooksMetadata: (ids: string[]) => Promise<(BookMetadata | undefined)[]>;
   getOffloadedStatus: (bookIds?: string[]) => Promise<Map<string, boolean>>;
   getBookIdByFilename: (filename: string) => string | undefined;
 }
@@ -141,12 +142,12 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
       set({ isHydrating: true });
 
       try {
-        const manifests = await Promise.all(
-          bookIds.map(id => injectedDB.getBookMetadata(id))
-        );
+        // OPTIMIZATION: Fetch all metadata in a single IndexedDB transaction
+        // to prevent UI freezing and transaction overhead during startup.
+        const manifests = await injectedDB.getBooksMetadata(bookIds);
 
         const staticMetadata: Record<string, BookMetadata> = {};
-        manifests.forEach(manifest => {
+        (manifests || []).forEach(manifest => {
           if (manifest && manifest.id) {
             staticMetadata[manifest.id] = manifest;
           }
