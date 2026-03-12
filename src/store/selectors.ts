@@ -61,8 +61,11 @@ export const useAllBooks = () => {
 
     // Clean React pattern: The WeakMap cache will be recreated from scratch
     // whenever the metadata/offloaded dependencies change.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const baseBookCache = useMemo(() => new WeakMap<UserInventoryItem, any>(), []);
+    const baseBookCache = useMemo(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return new WeakMap<UserInventoryItem, any>();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [staticMetadata, offloadedBookIds]);
 
     const baseBooks = useMemo(() => {
         const booksObj = books || {};
