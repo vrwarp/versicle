@@ -289,15 +289,13 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           const meta = await extractBookMetadata(file);
           const books = useBookStore.getState().books;
 
-          let ghostMatch: UserInventoryItem | undefined;
-
           // Find a ghost book that matches Title + Author
           // We must EXCLUDE the existingId check result above (which matched by filename)
           // but here we are matching by metadata.
           // Note: We use `get().staticMetadata` inside the loop to ensure we read the latest state
           // to avoid race conditions if rapid sequential imports happen.
           const staticMeta = get().staticMetadata;
-          ghostMatch = Object.values(books).find(b => {
+          const ghostMatch = Object.values(books).find(b => {
             const isGhost = !staticMeta[b.bookId];
             const isMatch = b.title.trim() === meta.title.trim() && b.author.trim() === meta.author.trim();
             return isGhost && isMatch;
