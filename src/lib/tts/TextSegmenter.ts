@@ -79,6 +79,10 @@ export const RE_TRAILING_PUNCTUATION = /[.,!?;:]$/;
 // Used when Intl.Segmenter is not available.
 export const RE_SENTENCE_FALLBACK = /([^.!?]+[.!?]+)/g;
 
+// Matches a single letter (a-z, A-Z) or Roman numeral (1-9) followed by a period and optional whitespace.
+// Used to identify abbreviations that should not trigger a sentence break unless followed by a starter.
+export const RE_SINGLE_LETTER_OR_ROMAN_NUMERAL = /\b(?:[a-zA-Z]|I{1,3}|IV|V|VI{1,3}|IX|i{1,3}|iv|v|vi{1,3}|ix)\.\s*$/;
+
 /**
  * Robust text segmentation utility using Intl.Segmenter with fallback and post-processing.
  * Handles edge cases like abbreviations (e.g., "Mr.", "i.e.") to prevent incorrect sentence splitting.
@@ -272,7 +276,7 @@ export class TextSegmenter {
 
                 // Check if last segment ends with an abbreviation
                 // OPTIMIZATION: Use Trie scan to avoid substring allocation and lowercasing
-                if (abbrTrie.hasMatchEnd(last.text)) {
+                if (abbrTrie.hasMatchEnd(last.text) || RE_SINGLE_LETTER_OR_ROMAN_NUMERAL.test(last.text)) {
                     let shouldMerge = false;
 
                     // Check if the abbreviation is in the alwaysMerge list
