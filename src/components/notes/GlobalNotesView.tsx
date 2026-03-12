@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { NotesSearchBar } from './NotesSearchBar';
 import { BookNotesBlock } from './BookNotesBlock';
@@ -18,7 +18,7 @@ export const GlobalNotesView: React.FC<GlobalNotesViewProps> = ({ onContentMissi
     const groups = useGroupedAnnotations(debouncedQuery);
     const navigate = useNavigate();
 
-    const handleNavigate = (bookId: string, cfiRange: string) => {
+    const handleNavigate = useCallback((bookId: string, cfiRange: string) => {
         const staticMetadata = useLibraryStore.getState().staticMetadata;
         const offloadedBookIds = useLibraryStore.getState().offloadedBookIds;
 
@@ -30,9 +30,9 @@ export const GlobalNotesView: React.FC<GlobalNotesViewProps> = ({ onContentMissi
             return;
         }
         navigate(`/read/${bookId}?cfi=${encodeURIComponent(cfiRange)}`);
-    };
+    }, [navigate, onContentMissing]);
 
-    const handleOpenBook = (bookId: string) => {
+    const handleOpenBook = useCallback((bookId: string) => {
         const staticMetadata = useLibraryStore.getState().staticMetadata;
         const offloadedBookIds = useLibraryStore.getState().offloadedBookIds;
 
@@ -44,7 +44,19 @@ export const GlobalNotesView: React.FC<GlobalNotesViewProps> = ({ onContentMissi
             return;
         }
         navigate(`/read/${bookId}`);
-    };
+    }, [navigate, onContentMissing]);
+
+    // OPTIMIZATION: Memoize mapped output to prevent O(N) mapping on every search input keystroke
+    const renderedGroups = useMemo(() => {
+        return groups.map(group => (
+            <BookNotesBlock
+                key={group.bookId}
+                group={group}
+                onNavigate={handleNavigate}
+                onOpenBook={handleOpenBook}
+            />
+        ));
+    }, [groups, handleNavigate, handleOpenBook]);
 
     return (
         <div className="flex-1 w-full max-w-4xl mx-auto flex flex-col gap-6" data-testid="global-notes-view">
@@ -96,14 +108,7 @@ export const GlobalNotesView: React.FC<GlobalNotesViewProps> = ({ onContentMissi
                         )}
                     </div>
                 ) : (
-                    groups.map(group => (
-                        <BookNotesBlock
-                            key={group.bookId}
-                            group={group}
-                            onNavigate={handleNavigate}
-                            onOpenBook={handleOpenBook}
-                        />
-                    ))
+                    renderedGroups
                 )}
             </div>
         </div>
