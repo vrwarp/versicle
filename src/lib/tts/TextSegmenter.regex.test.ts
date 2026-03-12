@@ -5,10 +5,43 @@ import {
     RE_FIRST_WORD,
     RE_LEADING_PUNCTUATION,
     RE_TRAILING_PUNCTUATION,
-    RE_SENTENCE_FALLBACK
+    RE_SENTENCE_FALLBACK,
+    RE_SINGLE_LETTER_OR_ROMAN_NUMERAL
 } from './TextSegmenter';
 
 describe('TextSegmenter Regexes', () => {
+    describe('RE_SINGLE_LETTER_OR_ROMAN_NUMERAL', () => {
+        it('matches single letters with periods', () => {
+            expect('A.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0].trim()).toBe('A.');
+            expect('z.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0].trim()).toBe('z.');
+            expect('M.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0].trim()).toBe('M.');
+            expect('Some M.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0].trim()).toBe('M.');
+        });
+
+        it('matches roman numerals (1-9) with periods', () => {
+            expect('I.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0].trim()).toBe('I.');
+            expect('III.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0].trim()).toBe('III.');
+            expect('IV.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0].trim()).toBe('IV.');
+            expect('V.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0].trim()).toBe('V.');
+            expect('VI.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0].trim()).toBe('VI.');
+            expect('IX.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0].trim()).toBe('IX.');
+            expect('ix.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0].trim()).toBe('ix.');
+            expect('Chapter IV.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0].trim()).toBe('IV.');
+        });
+
+        it('does not match non-roman words or numbers without periods correctly', () => {
+            expect('cat.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)).toBeNull();
+            expect('XI.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)).toBeNull();
+            expect('XII.'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)).toBeNull();
+            expect('A'.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)).toBeNull();
+        });
+
+        it('handles trailing whitespace', () => {
+            expect('A. '.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0]).toBe('A. ');
+            expect('IV.   '.match(RE_SINGLE_LETTER_OR_ROMAN_NUMERAL)?.[0]).toBe('IV.   ');
+        });
+    });
+
     describe('RE_LAST_WORD', () => {
         it('matches the last word in a string', () => {
             expect('Hello World'.match(RE_LAST_WORD)?.[0]).toBe('World');
