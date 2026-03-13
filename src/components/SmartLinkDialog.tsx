@@ -5,7 +5,7 @@ import { Checkbox } from './ui/Checkbox';
 import { useReadingListStore } from '../store/useReadingListStore';
 import { useBookStore } from '../store/useBookStore';
 import { genAIService } from '../lib/genai/GenAIService';
-import { Loader2, Wand2, Link2, Unlink } from 'lucide-react';
+import { Loader2, Link2, Unlink } from 'lucide-react';
 import { useGenAIStore } from '../store/useGenAIStore';
 
 interface SmartLinkDialogProps {
