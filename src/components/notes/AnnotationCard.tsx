@@ -4,6 +4,7 @@ import { StickyNote, PenLine, Trash2, Copy } from 'lucide-react';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { copyAnnotationAsMarkdown } from '../../lib/export-notes';
 import { useToastStore } from '../../store/useToastStore';
+import { Button } from '../ui/Button';
 
 interface AnnotationCardProps {
     annotation: UserAnnotation;
@@ -81,8 +82,8 @@ export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNa
                             }}
                         />
                         <div className="flex gap-2">
-                            <button onClick={handleSaveEdit} className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded font-medium">Save</button>
-                            <button onClick={handleCancelEdit} className="text-xs bg-muted text-muted-foreground px-3 py-1.5 rounded font-medium">Cancel</button>
+                            <Button onClick={handleSaveEdit} size="sm" className="h-7 text-xs px-3 py-1.5 font-medium">Save</Button>
+                            <Button onClick={handleCancelEdit} variant="secondary" size="sm" className="h-7 text-xs px-3 py-1.5 font-medium">Cancel</Button>
                         </div>
                     </div>
                 ) : (
@@ -107,27 +108,36 @@ export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNa
             </div>
 
             <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
-                <button
+                <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={handleCopy}
-                    className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
                     title="Copy as Markdown"
+                    aria-label="Copy as Markdown"
                 >
                     <Copy className="w-4 h-4" />
-                </button>
-                <button
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={handleEditClick}
-                    className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
                     title="Edit Note"
+                    aria-label="Edit Note"
                 >
                     <PenLine className="w-4 h-4" />
-                </button>
-                <button
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={handleDelete}
-                    className="p-1.5 hover:bg-destructive/10 rounded text-destructive transition-colors"
+                    className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
                     title="Delete"
+                    aria-label="Delete Annotation"
                 >
                     <Trash2 className="w-4 h-4" />
-                </button>
+                </Button>
             </div>
         </div>
     );

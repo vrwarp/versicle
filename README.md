@@ -11,7 +11,7 @@
 *   **Hybrid Intelligence**:
     *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
     *   **Cloud TTS**: Connect your own API keys (OpenAI, Google, LemonFox) for studio-quality narration.
-    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content, and adapt tables for listening. Includes **Smart Rotation** to maximize free quotas and prevent rate limits.
+    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content (by identifying reference boundaries), and adapt tables for listening. Includes **Smart Rotation** to maximize free quotas and prevent rate limits.
 *   **Dual Sync**:
     *   **Real-time**: Synchronize progress instantly across devices using Firestore.
     *   **Native Backup**: Seamless integration with Android's built-in backup system.
@@ -32,13 +32,13 @@
 *   **Mobile**: Capacitor 7.1.1 (Android) + `@capacitor/filesystem` + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4.1.18 + Radix UI
-*   **Tools**: `@zumer/snapdom` (Snapshots), `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
+*   **Tools**: `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
 *   **Dev Tools**: `vite-plugin-mkcert` (Local HTTPS)
 
 ## Features
 
 ### Reading (The "Reading Room")
-*   **Adaptive Contrast**: The UI automatically adapts to your book covers using **Weighted K-Means Clustering** to extract dominant colors, creating beautiful and accessible gradients/text themes (L* calc).
+*   **Adaptive Contrast**: The UI automatically adapts to your book covers using **Weighted K-Means Clustering** to extract dominant colors, creating beautiful gradients and text themes.
 *   **Satellite FAB**: A dedicated floating action button for quick access to playback controls and menu actions.
 *   **Customizable**: Fonts, themes, line height, margins via a dedicated Visual Settings interface.
 *   **Formats**: EPUB, ZIP (Batch Import), Folder Import (Batch).
@@ -50,19 +50,15 @@
 *   **Instant Resume**: Remembers the last open book and restores your place immediately on launch, bypassing heavy sync checks.
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker. Features smart offloading of XML parsing and direct EPUB archive extraction (with rendering fallback) to keep the UI buttery smooth during indexing.
 *   **Annotations**: Highlights and notes.
-*   **Table Snapshots**: Complex tables are captured as structural images for visual preservation.
 
 ### Listening (The "Listening Room")
 *   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
 *   **Optimistic Playback**: Audio starts playing instantly while content filtering (skip masks) and smart adaptations are applied asynchronously in the background.
-*   **Table Teleprompter**: Uses Multimodal GenAI to "see" data tables and convert them into natural narrative speech (Table Adaptations).
-    *   **Thinking Budget**: Configurable "Thinking Budget" (default 512 tokens) allows the AI to reason about complex data layouts before speaking.
-    *   **Synced Analysis**: AI-generated content (adaptations, semantic maps) is synchronized across devices via Yjs, so you only pay the generation cost once.
 *   **Smart Handoff**: Gapless playback for Native Android TTS using speculative preloading.
 *   **Chapter Pre-roll**: Optional announcements (Title, Author) at the start of each new chapter.
 *   **Text-to-Speech**: Turn any book into an audiobook.
 *   **Reactive Segmentation**: Natural pausing at sentence boundaries using Just-In-Time analysis. Updates instantly when Lexicon settings change (e.g., toggling Bible mode).
-*   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini.
+*   **AI Content Filtering**: Automatically skip citations, footnotes, and tables during playback using Gemini. Optimizes API usage by finding the boundary where references begin rather than analyzing individual elements.
 *   **Smart Rotation**: Automatically switches between Gemini models (Flash Lite/Flash) to handle rate limits (429) and maximize free quotas.
 *   **Lexicon**: Fix mispronounced words with custom rules (Regex supported). Includes "Trace Mode" for debugging rule application.
 *   **Bible Lexicon**: Specialized pronunciation rules for Bible verses (e.g., "Gen 1:1"), enabled by default in settings.

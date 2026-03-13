@@ -344,10 +344,6 @@ Handles the complex task of importing an EPUB file.
     3.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head 4KB + Metadata + Tail 4KB) using a `cheapHash` function for O(1) duplicate detection.
     4.  **Adaptive Contrast**: Generates a **Cover Palette** via `cover-palette.ts`.
         *   **Logic**: Uses **Weighted K-Means Clustering** (manual implementation) on the cover image to extract dominant colors. It prioritizes colors based on spatial distribution (corners vs. center) to ensure UI elements don't clash with key visual areas.
-        *   **Accessibility**: Calculates **Perceptual Lightness (L*)** (CIE 1976) from the extracted RGB values to determine the optimal text color (Soft Dark, Hard Black, Hard White, Soft Light) for UI overlays, ensuring WCAG contrast compliance.
-    5.  **Table Snapshots**: Captures complex tables as images for visual preservation.
-        *   **Tool**: Uses **`@zumer/snapdom`** to render table nodes into lightweight WebP blobs.
-        *   **Configuration**: 0.1 quality, 0.5 scale to minimize storage footprint while maintaining legibility.
 
 #### Service Worker Image Serving (`src/lib/serviceWorkerUtils.ts`)
 *   **Goal**: Prevent memory leaks caused by `URL.createObjectURL`.
@@ -360,7 +356,7 @@ Handles the complex task of importing an EPUB file.
 *   **Logic**:
     *   **Smart Rotation**: Implements a `executeWithRetry` strategy that shuffles between models (e.g., `gemini-2.5-flash-lite`, `gemini-2.5-flash`) to mitigate `429 RESOURCE_EXHAUSTED` errors and maximize free tier usage.
     *   **Thinking Budget**: `generateTableAdaptations` utilizes a configurable `thinkingBudget` (default 512 tokens) to allow the model to "reason" about complex table layouts (headers vs. data cells) before generating the narrative JSON.
-    *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures into 5 categories: **Title**, **Footnote**, **Main**, **Table**, and **Other**.
+    *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures. It identifies the boundary of the references section and stores it as a single `referenceStartCfi` string in `SectionAnalysis`, replacing the deprecated granular `semanticMap`/`contentTypes` arrays to save space. All content after this CFI is uniformly mapped as 'reference'.
     *   **Structure Generation**: `generateTOCForBatch` uses GenAI to infer meaningful section titles when the EPUB metadata is lacking.
 *   **Fuzzy Matching (`textMatching.ts`)**: Uses a robust fuzzy matching algorithm to locate LLM-generated snippets back in the original source text for accurate CFI targeting.
     *   **Strategy**: Tries Exact Match -> Case-Insensitive Match -> **Flexible Whitespace Regex** (matches varying newlines/spaces) to handle LLM formatting quirks.
@@ -420,7 +416,7 @@ Integrates with Google Drive to provide a cloud-based library.
 *   **Goal**: Perform database hygiene and remove orphaned data.
 *   **Logic**:
     *   **Orphan Detection**: Scans `static_resources` (files) and `cache_` stores for keys that no longer exist in the Yjs `user_inventory`.
-    *   **Post-Migration Role**: After the Yjs migration, this service transition to *only* managing `static_` and `cache_` stores in IndexedDB. It strictly cleans up heavy binary data and cached assets. It *does not* touch or manage any `user_` data (inventory, progress, annotations, overrides), as those are managed entirely by their respective Yjs stores and Firestore sync.
+    *   **Post-Migration Role**: After the Yjs migration, this service transitions to *only* managing `static_` and `cache_` stores in IndexedDB. It strictly cleans up heavy binary data and cached assets. It *does not* touch or manage any `user_` data (inventory, progress, annotations, overrides), as those are managed entirely by their respective Yjs stores and Firestore sync.
     *   **Metadata Regeneration**: Can re-import books from their binary blobs (`regenerateAllMetadata`) to refresh Yjs metadata if the schema changes, using `DBService.importBookWithId`.
 
 #### Cancellable Task Runner (`src/lib/cancellable-task-runner.ts`)
@@ -638,7 +634,7 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Logic**:
         *   **Persistence**: Stored in `localStorage` via `persist` middleware.
         *   **Usage Tracking**: Tracks token usage and estimated cost for the current session.
-        *   **Logging**: Maintains a rolling buffer of the last 10 debug logs (`GenAILogEntry`) for troubleshooting.
+        *   **Logging**: Maintains a rolling buffer of the last 100 debug logs (`GenAILogEntry`) for troubleshooting. Each log is linked by a generated `correlationId` and contextualized with `bookId` and `sectionId` to trace full request/response lifecycles.
 *   **`useLexiconStore` (Synced)**:
     *   **Goal**: Synchronize pronunciation rules across devices.
     *   **Logic**:
@@ -646,8 +642,8 @@ State is managed using **Zustand** with specialized strategies for different dat
         *   **Ordering**: Rules have an explicit `order` field to ensure deterministic application order.
         *   **Settings**: Stores book-specific preferences (e.g., enable Bible Lexicon) in a nested map.
 *   **`useContentAnalysisStore` (Synced)**:
-    *   **Goal**: Sync expensive AI artifacts (Table Adaptations, Semantic Maps) across devices.
-    *   **Logic**: Maps `${bookId}/${sectionId}` to a `SectionAnalysis` object containing the semantic map (footnotes/titles) and teleprompter scripts.
+    *   **Goal**: Sync expensive AI artifacts (Table Adaptations) across devices.
+    *   **Logic**: Maps `${bookId}/${sectionId}` to a `SectionAnalysis` object containing the teleprompter scripts. It also stores `referenceStartCfi` to define the boundary where references begin, replacing deprecated granular arrays (like semantic maps) to save space.
     *   **Trade-off**: Large analysis objects (e.g., from books with many tables) increase the Yjs document size, potentially causing higher latency during initial sync/hydration.
 *   **`useBackNavigationStore` (Local Only)**:
     *   **Goal**: Solve the "Back Button Hell" on Android where multiple components (Router, Modals, Menus) compete for the hardware back action.
@@ -668,7 +664,7 @@ State is managed using **Zustand** with specialized strategies for different dat
 #### Selector Optimization (`src/store/selectors.ts`)
 *   **Goal**: Ensure smooth UI scrolling (60fps) by preventing unnecessary re-renders in the main `LibraryView`.
 *   **Logic**:
-    *   **The `useAllBooks` Hot Path**: This selector executes frequently (e.g., on every page turn due to `progressMap` updates). Any dependencies within this selector (like `readingListEntries` or fallback defaults) must maintain strict referential stability to prevent triggering expensive O(N) recalculations.
+    *   **The `useAllBooks` Hot Path**: This selector executes frequently (e.g., on every page turn due to `progressMap` updates). Any dependencies within this selector (like `readingListEntries` or fallback defaults, e.g., `{}`) must maintain strict referential stability (using `useMemo` for fallbacks) to prevent triggering expensive O(N) recalculations.
     *   **Phase 1 (Base Book Memoization)**: Merges heavy static metadata (covers, titles) into book objects. Memoized on `books` + `staticMetadata` (rare changes).
     *   **Phase 2 (Progress Merge)**: Merges frequent updates (Reading Progress) into the Base Books using **Reference Stability**.
         *   *Array Item Memoization*: Reuses the *same* book object reference from the previous render if only the progress changed but the book identity/metadata is stable, allowing `React.memo` components to skip updates.
@@ -680,11 +676,11 @@ State is managed using **Zustand** with specialized strategies for different dat
 
 *   **Database Resilience**: `DBService` wraps `QuotaExceededError` into a unified `StorageFullError` for consistent UI handling.
 *   **Safe Mode**: If critical database initialization fails, the app boots into `SafeModeView`, providing a "Factory Reset" (`deleteDB`) option to unblock the user.
-*   **Schema Quarantine (`ObsoleteLockView`)**: When the `FirestoreSyncManager` detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION`), `handleObsoleteClient` severs the cloud connection and locks the UI permanently.
+*   **Schema Quarantine (`ObsoleteLockView`)**: When the application detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION`), it renders `ObsoleteLockView` to lock the UI permanently.
     *   **Why**: Prevents a down-level client from inadvertently overwriting or corrupting newer data structures introduced by an updated app version.
     *   **Trade-off**: The user is completely locked out of the app until they update to the latest version.
 *   **Service Worker**: The app verifies `waitForServiceWorkerController` on launch to ensure image serving infrastructure is active, failing fast if the SW is broken.
-*   **Battery Guard**: Explicitly checks Android battery optimization settings via `BatteryGuard` and warns the user if they are likely to interfere with background playback.
+*   **Battery Guard**: Explicitly checks Android battery optimization settings via `@capawesome-team/capacitor-android-battery-optimization` and warns the user if they are likely to interfere with background playback.
 *   **Transactional Voice Download**: `PiperProvider` prevents corrupt voice models by ensuring files are downloaded and verified in memory before writing to persistent storage.
 *   **Input Sanitization**: All text inputs to the WASM TTS engine are sanitized and chunked to prevent memory access violations or worker crashes.
 *   **Process Protection**: `PlatformIntegration` runs a silent audio loop during playback to prevent Android "Phantom Process Killers" from terminating the app in the background.

@@ -7,9 +7,13 @@ import { getParentCfi, parseCfiRange, generateCfiRange, mergeCfiRanges, generate
 let triggerEpubCfiError = false;
 
 // Mock epubjs EpubCFI with more realistic comparison logic for tests
-const mockCompare = vi.fn((a: string, b: string) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockCompare = vi.fn((aRaw: any, bRaw: any) => {
+    const a = typeof aRaw === 'string' ? aRaw : aRaw?.str;
+    const b = typeof bRaw === 'string' ? bRaw : bRaw?.str;
+
     // Check if we need to throw for specific test case
-    if (a.includes('THROW_MERGE') || b.includes('THROW_MERGE')) {
+    if (a && a.includes('THROW_MERGE') || b && b.includes('THROW_MERGE')) {
         throw new Error('Merge error');
     }
 
@@ -19,7 +23,7 @@ const mockCompare = vi.fn((a: string, b: string) => {
     const parse = (cfi: string) => {
         // e.g. epubcfi(/6/2!/4/2/1:0)
         // Remove wrapper
-        const content = cfi.replace('epubcfi(', '').replace(')', '');
+        const content = cfi ? cfi.replace('epubcfi(', '').replace(')', '') : '';
         // Split path and offset
         const parts = content.split(':');
         // If no offset, assume 0
@@ -43,9 +47,15 @@ const mockCompare = vi.fn((a: string, b: string) => {
 vi.mock('epubjs', () => {
     return {
         EpubCFI: class {
+            str: string;
             constructor(range?: Range | string, baseCfi?: string) {
                 // To avoid unused vars
-                void range; void baseCfi;
+                void baseCfi;
+                if (typeof range === 'string') {
+                    this.str = range;
+                } else {
+                    this.str = 'mock-cfi';
+                }
                 if (triggerEpubCfiError) {
                     throw new Error('Constructor error');
                 }

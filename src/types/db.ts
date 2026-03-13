@@ -9,7 +9,7 @@ export interface NavigationItem {
   parent?: string;
 }
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
-import type { ContentType, AnalysisStatus } from './content-analysis';
+import type { AnalysisStatus } from './content-analysis';
 
 // --- NEW V18 ARCHITECTURE TYPES ---
 
@@ -235,11 +235,8 @@ export interface UserAiInference {
   id: string;
   bookId: string;
   sectionId: string;
-  /** Detected content types. */
-  semanticMap: {
-    rootCfi: string;
-    type: ContentType;
-  }[];
+  /** The rootCfi marking the beginning of the references section, if any. */
+  referenceStartCfi?: string;
   /** Accessibility layers (e.g. Table Adaptations). */
   accessibilityLayers: {
     type: 'table-adaptation' | 'image-description';
@@ -446,11 +443,8 @@ export interface ContentAnalysis {
     title?: string;
     footnoteMatches: string[];
   };
-  /** Detected content types for sections (CFI -> Type). */
-  contentTypes?: {
-    rootCfi: string;
-    type: ContentType;
-  }[];
+  /** The rootCfi marking the beginning of the references section, if any. */
+  referenceStartCfi?: string;
   tableAdaptations?: TableAdaptation[];
   /** Summary of the section. */
   summary?: string;

@@ -77,7 +77,7 @@ vi.mock('../../db/DBService', () => ({
             });
         }),
         saveTTSPosition: vi.fn(),
-        saveContentClassifications: vi.fn(),
+        saveReferenceStartCfi: vi.fn(),
         getTableImages: vi.fn().mockResolvedValue([]), // Added mock
         markAnalysisLoading: vi.fn(),
         markAnalysisError: vi.fn(),

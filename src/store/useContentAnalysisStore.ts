@@ -1,15 +1,7 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { yDoc, getYjsOptions } from './yjs-provider';
-import type { ContentType, AnalysisStatus } from '../types/content-analysis';
-
-/**
- * A content classification entry (CFI -> type).
- */
-export interface ContentClassification {
-    rootCfi: string;
-    type: ContentType;
-}
+import type { AnalysisStatus } from '../types/content-analysis';
 
 /**
  * A table adaptation entry (CFI -> spoken text).
@@ -23,8 +15,8 @@ export interface TableAdaptation {
  * Analysis data for a single section.
  */
 export interface SectionAnalysis {
-    /** Detected content types (footnote, table, etc). */
-    semanticMap?: ContentClassification[];
+    /** The rootCfi marking the beginning of the references section, if any. */
+    referenceStartCfi?: string;
     /** AI-generated spoken text for tables. */
     tableAdaptations?: TableAdaptation[];
     /** Section title extracted via AI. */
@@ -57,12 +49,12 @@ interface ContentAnalysisState {
 
     // === ACTIONS ===
     /**
-     * Saves content classifications for a section.
+     * Saves the start CFI for references in a section.
      */
-    saveClassifications: (
+    saveReferenceStartCfi: (
         bookId: string,
         sectionId: string,
-        classifications: ContentClassification[]
+        referenceStartCfi?: string
     ) => void;
 
     /**
@@ -123,7 +115,7 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
         (set, get) => ({
             sections: {},
 
-            saveClassifications: (bookId, sectionId, classifications) =>
+            saveReferenceStartCfi: (bookId, sectionId, referenceStartCfi) =>
                 set((state) => {
                     const currentSections = state.sections || {};
                     const key = makeKey(bookId, sectionId);
@@ -133,7 +125,7 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
                             ...currentSections,
                             [key]: {
                                 ...existing,
-                                semanticMap: classifications,
+                                referenceStartCfi,
                                 generatedAt: Date.now(),
                                 status: 'success',
                                 lastAttempt: Date.now(),

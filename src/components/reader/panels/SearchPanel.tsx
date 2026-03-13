@@ -92,16 +92,17 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                     <ul className="space-y-4">
                         {searchResults.map((result, idx) => (
                             <li key={idx} className="border-b border-border pb-2 last:border-0">
-                                <button
+                                <Button
+                                    variant="ghost"
                                     data-testid={`search-result-${idx}`}
-                                    className="text-left w-full"
+                                    className="text-left w-full h-auto p-2 block items-start justify-start font-normal"
                                     onClick={() => onResultClick(result)}
                                 >
                                     <p className="text-xs text-muted-foreground mb-1">Result {idx + 1}</p>
-                                    <p className="text-sm text-foreground line-clamp-3">
+                                    <p className="text-sm text-foreground line-clamp-3 whitespace-normal break-words">
                                         {result.excerpt}
                                     </p>
-                                </button>
+                                </Button>
                             </li>
                         ))}
                         {searchResults.length === 0 && activeSearchQuery && !isSearching && (

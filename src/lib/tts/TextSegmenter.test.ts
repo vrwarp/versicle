@@ -24,6 +24,45 @@ describe('TextSegmenter', () => {
     expect(segments[0].text.trim()).toBe("Mr.");
   });
 
+  it('automatically treats single letters as abbreviations and merges them', () => {
+    const sentences: SentenceNode[] = [
+      { text: "A. ", cfi: "cfi1" },
+      { text: "Smith went to Washington.", cfi: "cfi2" }
+    ];
+
+    // No abbreviations passed, but "A." should be auto-merged
+    const refined = TextSegmenter.refineSegments(sentences, [], [], []);
+
+    expect(refined).toHaveLength(1);
+    expect(refined[0].text).toBe("A. Smith went to Washington.");
+  });
+
+  it('automatically treats roman numerals (1-9) as abbreviations and merges them', () => {
+    const sentences: SentenceNode[] = [
+      { text: "Part IV. ", cfi: "cfi1" },
+      { text: "The Return.", cfi: "cfi2" }
+    ];
+
+    const refined = TextSegmenter.refineSegments(sentences, [], [], []);
+
+    expect(refined).toHaveLength(1);
+    expect(refined[0].text).toBe("Part IV. The Return.");
+  });
+
+  it('does not merge single letters/roman numerals if followed by a sentence starter', () => {
+    const sentences: SentenceNode[] = [
+      { text: "He finished Part IV. ", cfi: "cfi1" },
+      { text: "Then he rested.", cfi: "cfi2" }
+    ];
+
+    // "Then" is a default starter, so it shouldn't merge
+    const refined = TextSegmenter.refineSegments(sentences, [], [], DEFAULT_SENTENCE_STARTERS);
+
+    expect(refined).toHaveLength(2);
+    expect(refined[0].text).toBe("He finished Part IV. ");
+    expect(refined[1].text).toBe("Then he rested.");
+  });
+
   it('can refine abbreviations via refineSegments', () => {
     // Construct sentences simulating raw split (space attached to first segment)
     const sentences: SentenceNode[] = [

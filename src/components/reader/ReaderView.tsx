@@ -705,16 +705,11 @@ export const ReaderView: React.FC = () => {
                 const analysis = await dbService.getContentAnalysis(id!, section.href);
                 if (!analysis) return;
 
-                if (analysis.contentTypes) {
-                    const items = analysis.contentTypes;
-                    for (let i = 0; i < items.length; i++) {
-                        const item = items[i];
-                        // Skip if already added
-                        if (addedDebugHighlights.current.has(item.rootCfi)) continue;
+                if (analysis.referenceStartCfi) {
+                    const highlightCfi = analysis.referenceStartCfi;
 
-                        const highlightCfi = item.rootCfi;
-
-                        const color = TYPE_COLORS[item.type];
+                    if (!addedDebugHighlights.current.has(highlightCfi)) {
+                        const color = TYPE_COLORS['reference'];
                         if (color) {
                             try {
                                 // @ts-expect-error annotations is not typed fully
@@ -724,7 +719,7 @@ export const ReaderView: React.FC = () => {
                                     fillOpacity: '1',
                                     mixBlendMode: 'multiply'
                                 });
-                                addedDebugHighlights.current.add(item.rootCfi);
+                                addedDebugHighlights.current.add(highlightCfi);
                             } catch (e) {
                                 logger.warn("Failed to add debug highlight", e);
                             }

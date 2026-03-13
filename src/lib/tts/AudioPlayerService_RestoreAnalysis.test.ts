@@ -16,7 +16,7 @@ vi.mock('../../db/DBService', () => ({
         getTTSContent: vi.fn().mockResolvedValue({ sentences: [] }),
         getTableImages: vi.fn().mockResolvedValue([]),
         saveTableAdaptations: vi.fn(),
-        saveContentClassifications: vi.fn(),
+        saveReferenceStartCfi: vi.fn(),
         markAnalysisLoading: vi.fn(),
         markAnalysisError: vi.fn(),
     }

@@ -63,13 +63,14 @@ export const TOCPanel: React.FC<TOCPanelProps> = ({
 
         return (
             <li key={item.id}>
-                <button
+                <Button
+                    variant="ghost"
                     data-testid={currentId}
                     className={cn(
-                        "text-left w-full text-sm py-1 block truncate transition-colors flex items-center justify-between group",
-                        isActive ? "text-primary font-medium bg-accent/50 rounded-md px-2 -ml-2" : "text-muted-foreground hover:text-primary"
+                        "text-left w-full h-auto text-sm py-1.5 px-2 block truncate transition-colors flex items-center justify-between group font-normal",
+                        isActive ? "text-primary font-medium bg-accent/50" : "text-muted-foreground hover:text-primary hover:bg-accent/30"
                     )}
-                    style={{ paddingLeft: `${level * 1.0 + (isActive ? 0.5 : 0)}rem` }}
+                    style={{ paddingLeft: `${level * 1.0 + 0.5}rem` }}
                     onClick={() => onNavigate(item.href)}
                 >
                     <span className="truncate">{item.label.trim()}</span>
@@ -82,7 +83,7 @@ export const TOCPanel: React.FC<TOCPanelProps> = ({
                             ))}
                         </div>
                     )}
-                </button>
+                </Button>
                 {showSubitems && (
                     <ul className="space-y-1 mt-1">
                         {item.subitems!.map((subitem, subIndex) => renderTOCItem(subitem, subIndex, level + 1, currentId))}

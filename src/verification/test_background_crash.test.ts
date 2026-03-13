@@ -50,7 +50,7 @@ vi.mock('../db/DBService', () => ({
     updatePlaybackState: vi.fn(),
     getSections: vi.fn(),
     saveTTSPosition: vi.fn(),
-    saveContentClassifications: vi.fn(),
+    saveReferenceStartCfi: vi.fn(),
   },
 }));
 

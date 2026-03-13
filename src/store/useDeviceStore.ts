@@ -43,67 +43,69 @@ export const useDeviceStore = create<DeviceState>()(
     yjs(
         yDoc,
         'devices', // Shared map name in Yjs
-        (set, get) => ({
+        (set) => ({
             devices: {},
 
             registerCurrentDevice: (deviceId, profile, name) => {
-                const state = get();
-                const existing = state.devices[deviceId];
-                const now = Date.now();
+                set((state) => {
+                    const existing = state.devices[deviceId];
+                    const now = Date.now();
 
-                // Parse UA if not already fully registered or update if needed
-                // We always update to capture browser upgrades etc.
-                const parser = new UAParser();
-                const result = parser.getResult();
+                    // Parse UA if not already fully registered or update if needed
+                    // We always update to capture browser upgrades etc.
+                    const parser = new UAParser();
+                    const result = parser.getResult();
 
-                // Smart Name Generation (only if new)
-                let deviceName = existing?.name;
-                if (name) {
-                    deviceName = name;
-                } else if (!deviceName) {
-                    const browser = result.browser.name || 'Browser';
-                    const os = result.os.name || 'Unknown OS';
-                    const device = result.device.model ? ` ${result.device.model}` : '';
-                    deviceName = `${browser} on ${os}${device}`;
-                }
-
-                set({
-                    devices: {
-                        ...state.devices,
-                        [deviceId]: {
-                            id: deviceId,
-                            name: deviceName,
-                            platform: result.os.name || 'Unknown',
-                            browser: result.browser.name || 'Unknown',
-                            model: result.device.model || null,
-                            userAgent: result.ua,
-                            appVersion: packageJson.version,
-                            created: existing ? existing.created : now,
-                            lastActive: now,
-                            profile
-                        }
+                    // Smart Name Generation (only if new)
+                    let deviceName = existing?.name;
+                    if (name) {
+                        deviceName = name;
+                    } else if (!deviceName) {
+                        const browser = result.browser.name || 'Browser';
+                        const os = result.os.name || 'Unknown OS';
+                        const device = result.device.model ? ` ${result.device.model}` : '';
+                        deviceName = `${browser} on ${os}${device}`;
                     }
+
+                    return {
+                        devices: {
+                            ...state.devices,
+                            [deviceId]: {
+                                id: deviceId,
+                                name: deviceName,
+                                platform: result.os.name || 'Unknown',
+                                browser: result.browser.name || 'Unknown',
+                                model: result.device.model || null,
+                                userAgent: result.ua,
+                                appVersion: packageJson.version,
+                                created: existing ? existing.created : now,
+                                lastActive: now,
+                                profile
+                            }
+                        }
+                    };
                 });
             },
 
             touchDevice: (deviceId) => {
-                const state = get();
-                const existing = state.devices[deviceId];
-                if (!existing) return;
+                set((state) => {
+                    const existing = state.devices[deviceId];
+                    if (!existing) return state;
 
-                const now = Date.now();
-                if (now - existing.lastActive < HEARTBEAT_THROTTLE_MS) {
-                    return; // Throttle
-                }
-
-                set({
-                    devices: {
-                        ...state.devices,
-                        [deviceId]: {
-                            ...existing,
-                            lastActive: now
-                        }
+                    const now = Date.now();
+                    if (now - existing.lastActive < HEARTBEAT_THROTTLE_MS) {
+                        return state; // Throttle
                     }
+
+                    return {
+                        devices: {
+                            ...state.devices,
+                            [deviceId]: {
+                                ...existing,
+                                lastActive: now
+                            }
+                        }
+                    };
                 });
             },
 

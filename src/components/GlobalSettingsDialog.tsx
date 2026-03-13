@@ -7,7 +7,7 @@ import { useReadingStateStore } from '../store/useReadingStateStore';
 import { usePreferencesStore } from '../store/usePreferencesStore';
 import { useToastStore } from '../store/useToastStore';
 import { useShallow } from 'zustand/react/shallow';
-import { Modal, ModalContent, ModalHeader, ModalTitle } from './ui/Modal';
+import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from './ui/Modal';
 import { Button } from './ui/Button';
 
 
@@ -449,9 +449,11 @@ export const GlobalSettingsDialog = () => {
                     <VisuallyHidden>
                         <ModalHeader>
                             <ModalTitle>Global Settings</ModalTitle>
+                            <ModalDescription id="global-settings-desc">
+                                Global application settings including appearance, TTS configuration, and data management.
+                            </ModalDescription>
                         </ModalHeader>
                     </VisuallyHidden>
-                    <span id="global-settings-desc" className="sr-only">Global application settings including appearance, TTS configuration, and data management.</span>
                     {isCsvImporting && (
                         <div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-8 text-center">
                             <Loader2 className={`h-12 w-12 text-primary mb-4 ${!csvImportComplete ? 'animate-spin' : ''}`} aria-hidden="true" />
