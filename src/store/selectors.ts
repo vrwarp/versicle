@@ -6,6 +6,7 @@ import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
 import type { UserProgress, UserInventoryItem } from '../types/db';
 import { getDeviceId } from '../lib/device-id';
+import { generateMatchKey } from '../lib/entity-resolution';
 
 /**
  * Resolves the progress for a book using the "Local Priority > Global Recent" strategy.
@@ -136,15 +137,15 @@ export const useAllBooks = () => {
             // Lookup by exact filename first
             let rawReadingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
 
-            // Fallback: If missing, try matching by title and author
-            if (!rawReadingListEntry && book.title && book.author) {
-                const searchTitle = book.title.toLowerCase().trim();
-                const searchAuthor = book.author.toLowerCase().trim();
+            // Fallback: If missing, try matching by normalized title+author
+            if (!rawReadingListEntry && (book.title || book.author)) {
+                const bookKey = generateMatchKey(book.title || '', book.author || '');
 
-                rawReadingListEntry = Object.values(readingListEntries).find(
-                    entry => entry.title.toLowerCase().trim() === searchTitle &&
-                        entry.author.toLowerCase().trim() === searchAuthor
-                );
+                if (bookKey) {
+                    rawReadingListEntry = Object.values(readingListEntries).find(
+                        entry => generateMatchKey(entry.title, entry.author) === bookKey
+                    );
+                }
             }
 
             // Check cache for reuse
@@ -223,14 +224,14 @@ export const useBook = (id: string | null) => {
 
     // Fallback lookup if not found by filename
     const readingListEntriesMap = useReadingListStore(state => state.entries);
-    if (!readingListEntry && book?.title && book?.author && readingListEntriesMap) {
-        const searchTitle = book.title.toLowerCase().trim();
-        const searchAuthor = book.author.toLowerCase().trim();
+    if (!readingListEntry && (book?.title || book?.author) && readingListEntriesMap) {
+        const bookKey = generateMatchKey(book?.title || '', book?.author || '');
 
-        readingListEntry = Object.values(readingListEntriesMap).find(
-            entry => entry.title.toLowerCase().trim() === searchTitle &&
-                entry.author.toLowerCase().trim() === searchAuthor
-        );
+        if (bookKey) {
+            readingListEntry = Object.values(readingListEntriesMap).find(
+                entry => generateMatchKey(entry.title, entry.author) === bookKey
+            );
+        }
     }
 
     // Get resolved progress (Local > Recent) across all devices for this book
