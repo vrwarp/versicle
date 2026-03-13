@@ -32,6 +32,7 @@ export interface BackupManifestV2 {
   locations: BookLocations[];
 
   // === Human-Readable Payload (Passive Artifact) ===
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   semanticData?: Partial<any>; // Using any to avoid importing SyncManifest since it's just a passive export
 }
 

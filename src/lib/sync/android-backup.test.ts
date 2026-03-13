@@ -28,6 +28,7 @@ describe('AndroidBackupService', () => {
 
     it('should write backup payload from generateManifest', async () => {
         const mockManifest = { version: 2, yjsSnapshot: 'test' };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         vi.mocked(backupService.generateManifest).mockResolvedValue(mockManifest as any);
 
         await AndroidBackupService.writeBackupPayload();
