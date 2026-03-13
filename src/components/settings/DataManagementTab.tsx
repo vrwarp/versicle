@@ -12,7 +12,6 @@ export interface DataManagementTabProps {
     // Backup
     backupStatus: string | null;
     onExportFull: () => void;
-    onExportWizard: () => void;
     onExportLight: () => void;
     onRestoreBackup: (file: File) => void;
     // Maintenance
@@ -35,7 +34,6 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
     onImportReadingList,
     backupStatus,
     onExportFull,
-    onExportWizard,
     onExportLight,
     onRestoreBackup,
     isScanning,
@@ -110,15 +108,10 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                 <div className="flex flex-col gap-2">
                     <div className="flex flex-col sm:flex-row gap-2">
                         <Button onClick={onExportFull} variant="outline" className="flex-1">
-                            Export Full Backup (ZIP)
+                            Full ZIP Export
                         </Button>
-                        <Button onClick={onExportWizard} variant="outline" className="flex-1" data-testid="export-wizard-btn">
-                            Export Wizard (JSON)
-                        </Button>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                        <Button onClick={onExportLight} variant="ghost" className="text-xs text-muted-foreground">
-                            Quick JSON Export (Legacy)
+                        <Button onClick={onExportLight} variant="outline" className="flex-1">
+                            Quick JSON Export
                         </Button>
                     </div>
                     <Button onClick={() => fileInputRef.current?.click()} variant="default" className="w-full">

@@ -11,7 +11,6 @@ describe('DataManagementTab', () => {
         onImportReadingList: vi.fn(),
         backupStatus: null,
         onExportFull: vi.fn(),
-        onExportWizard: vi.fn(),
         onExportLight: vi.fn(),
         onRestoreBackup: vi.fn(),
         isScanning: false,
@@ -39,8 +38,7 @@ describe('DataManagementTab', () => {
         render(<DataManagementTab {...defaultProps} />);
 
         expect(screen.getByText('Backup & Restore')).toBeInTheDocument();
-        expect(screen.getByText('Export Full Backup (ZIP)')).toBeInTheDocument();
-        expect(screen.getByText('Export Wizard (JSON)')).toBeInTheDocument();
+        expect(screen.getByText('Full ZIP Export')).toBeInTheDocument();
         expect(screen.getByText('Restore Backup')).toBeInTheDocument();
     });
 
@@ -110,7 +108,7 @@ describe('DataManagementTab', () => {
         const onExportFull = vi.fn();
         render(<DataManagementTab {...defaultProps} onExportFull={onExportFull} />);
 
-        fireEvent.click(screen.getByText('Export Full Backup (ZIP)'));
+        fireEvent.click(screen.getByText('Full ZIP Export'));
         expect(onExportFull).toHaveBeenCalled();
     });
 

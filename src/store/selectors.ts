@@ -6,6 +6,7 @@ import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
 import type { UserProgress, UserInventoryItem } from '../types/db';
 import { getDeviceId } from '../lib/device-id';
+import { generateMatchKey } from '../lib/entity-resolution';
 
 /**
  * Resolves the progress for a book using the "Local Priority > Global Recent" strategy.
@@ -133,7 +134,19 @@ export const useAllBooks = () => {
 
         const result = baseBooks.map(book => {
             const rawBookProgress = progressMap[book.id];
-            const rawReadingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
+            // Lookup by exact filename first
+            let rawReadingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
+
+            // Fallback: If missing, try matching by normalized title+author
+            if (!rawReadingListEntry && (book.title || book.author)) {
+                const bookKey = generateMatchKey(book.title || '', book.author || '');
+
+                if (bookKey) {
+                    rawReadingListEntry = Object.values(readingListEntries).find(
+                        entry => generateMatchKey(entry.title, entry.author) === bookKey
+                    );
+                }
+            }
 
             // Check cache for reuse
             const prev = cache[book.id];
@@ -179,7 +192,7 @@ export const useAllBooks = () => {
         });
 
         return { books: result, cache: newCache };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [baseBooks, progressMap, readingListEntries]);
 
     // Update cache for next render
@@ -205,9 +218,21 @@ export const useBook = (id: string | null) => {
     // Subscribe to progress changes ONLY for this specific book
     const bookProgressMap = useReadingStateStore(state => id && state.progress ? state.progress[id] : undefined);
 
-    // Only subscribe to the specific reading list entry if we have a source filename
+    // Get reading list entry (with fallback)
     const sourceFilename = book?.sourceFilename;
-    const readingListEntry = useReadingListStore(state => sourceFilename && state.entries ? state.entries[sourceFilename] : undefined);
+    let readingListEntry = useReadingListStore(state => sourceFilename && state.entries ? state.entries[sourceFilename] : undefined);
+
+    // Fallback lookup if not found by filename
+    const readingListEntriesMap = useReadingListStore(state => state.entries);
+    if (!readingListEntry && (book?.title || book?.author) && readingListEntriesMap) {
+        const bookKey = generateMatchKey(book?.title || '', book?.author || '');
+
+        if (bookKey) {
+            readingListEntry = Object.values(readingListEntriesMap).find(
+                entry => generateMatchKey(entry.title, entry.author) === bookKey
+            );
+        }
+    }
 
     // Get resolved progress (Local > Recent) across all devices for this book
     const progress = id ? resolveProgress(bookProgressMap) : null;

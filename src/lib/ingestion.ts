@@ -338,7 +338,8 @@ export async function extractBookData(
         totalChars,
         schemaVersion: CURRENT_BOOK_VERSION,
         isbn: undefined,
-        coverBlob: thumbnailBlob || coverBlob
+        coverBlob: thumbnailBlob || coverBlob,
+        coverPalette
     };
 
     const resource: StaticResource = {

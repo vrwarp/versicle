@@ -121,7 +121,10 @@ export class MaintenanceService {
       try {
         const fileBlob = await dbService.getBookFile(bookId);
         if (fileBlob) {
-          const file = new File([fileBlob], books[bookId].sourceFilename || 'book.epub', { type: 'application/epub+zip' });
+          // Extract filename from the stored File object if available
+          const blobFilename = fileBlob instanceof File ? fileBlob.name : undefined;
+          const knownFilename = blobFilename || books[bookId].sourceFilename || null;
+          const file = new File([fileBlob], knownFilename || 'book.epub', { type: 'application/epub+zip' });
 
           // Get current settings for extraction
           const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
@@ -135,12 +138,17 @@ export class MaintenanceService {
             sanitizationEnabled
           });
 
+          // If no filename was found from the blob or inventory, construct one from metadata
+          const sourceFilename = knownFilename || `${manifest.title} - ${manifest.author}.epub`;
+
           // Update Inventory
           // We only update fields that should be refreshed from source.
           // Note: updateBook will merge with existing fields.
           useBookStore.getState().updateBook(bookId, {
             title: manifest.title,
             author: manifest.author,
+            coverPalette: manifest.coverPalette,
+            sourceFilename,
             // We preserve addedAt, tags, status, etc.
           });
 

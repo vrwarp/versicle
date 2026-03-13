@@ -119,7 +119,8 @@ describe('useLibraryStore', () => {
       fileHash: 'hash',
       fileSize: 100,
       totalChars: 1000,
-      schemaVersion: 1
+      schemaVersion: 1,
+      coverPalette: [1, 2, 3, 4, 5]
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(mockDBService.addBook).mockResolvedValue(mockManifest as any);
@@ -132,11 +133,12 @@ describe('useLibraryStore', () => {
     const state = useLibraryStore.getState();
     const bookState = useBookStore.getState();
     expect(bookState.books['test-id']).toBeDefined();
+    expect(bookState.books['test-id'].coverPalette).toEqual([1, 2, 3, 4, 5]);
     expect(state.isLoading).toBe(false);
   });
 
   it('should handle add book error', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => { });
     const error = new Error('Add failed');
     vi.mocked(mockDBService.addBook).mockRejectedValue(error);
 
@@ -149,7 +151,7 @@ describe('useLibraryStore', () => {
   });
 
   it('should detect duplicate book and throw error if not overwriting', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => { });
     vi.mocked(mockDBService.getBookIdByFilename).mockResolvedValue('existing-id');
 
     await expect(useLibraryStore.getState().addBook(mockFile)).rejects.toThrow('A book with the filename "test.epub" already exists.');
@@ -253,8 +255,8 @@ describe('useLibraryStore', () => {
     ];
 
     const mockManifests = [
-      { manifest: { bookId: 'b1', title: 'Book 1', author: 'A', fileSize: 0 }, sourceFilename: 'book1.epub' },
-      { manifest: { bookId: 'b2', title: 'Book 2', author: 'B', fileSize: 0 }, sourceFilename: 'book2.epub' }
+      { manifest: { bookId: 'b1', title: 'Book 1', author: 'A', fileSize: 0, coverPalette: [1, 2, 3, 4, 5] }, sourceFilename: 'book1.epub' },
+      { manifest: { bookId: 'b2', title: 'Book 2', author: 'B', fileSize: 0, coverPalette: [6, 7, 8, 9, 10] }, sourceFilename: 'book2.epub' }
     ];
 
     // Mock processBatchImport to return successful manifests
@@ -284,6 +286,8 @@ describe('useLibraryStore', () => {
     // Verify state update
     const bookState = useBookStore.getState();
     expect(bookState.books['b1']).toBeDefined();
+    expect(bookState.books['b1'].coverPalette).toEqual([1, 2, 3, 4, 5]);
     expect(bookState.books['b2']).toBeDefined();
+    expect(bookState.books['b2'].coverPalette).toEqual([6, 7, 8, 9, 10]);
   });
 });

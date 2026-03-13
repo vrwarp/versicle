@@ -502,26 +502,9 @@ def test_journey_data_liberation(browser: Browser, browser_context_args):
     time.sleep(1) # Wait for dialog animation
     page.get_by_role("button", name="Data Management").click(force=True)
 
-    # Trigger Export Wizard
-    page.click("data-testid=export-wizard-btn", force=True)
-
-    # Wizard Steps
-    expect(page.get_by_text("Select what data you want to include")).to_be_visible()
-
-    # Check Options (Default all checked)
-    # Click Next
-    page.get_by_role("button", name="Next").click()
-
-    # Format Step
-    expect(page.get_by_text("Choose how you want to download your data.")).to_be_visible()
-    page.get_by_role("button", name="Generate Export").click()
-
-    # Download Step
-    expect(page.get_by_text("Export Complete!")).to_be_visible()
-
-    # Handle Download
+    # Trigger Quick JSON Export -> Downloads directly
     with page.expect_download() as download_info:
-        page.get_by_role("button", name="Download").click()
+        page.get_by_role("button", name="Quick JSON Export").click(force=True)
 
     download = download_info.value
     path = f"/tmp/export_{uuid.uuid4()}.json"
@@ -531,12 +514,9 @@ def test_journey_data_liberation(browser: Browser, browser_context_args):
     with open(path, 'r') as f:
         data = json.load(f)
 
-    assert data["meta"]["exporter"] == "Versicle"
-    assert "settings" in data["data"]
-
-    # New check: Verify settings field exists
-    # Note: We haven't changed defaults so we can't check specific values easily unless we set them.
-    # But checking schema presence is good.
+    assert data["version"] == 2
+    assert "yjsSnapshot" in data
+    assert "semanticData" in data
 
     os.remove(path)
     page.close()

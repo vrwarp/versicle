@@ -13,7 +13,8 @@ vi.mock('../db/DBService', () => ({
             title: 'Mock Title',
             author: 'Mock Author',
             schemaVersion: 1,
-            fileSize: 100
+            fileSize: 100,
+            coverPalette: [1, 2, 3, 4, 5]
         }),
     }
 }));
@@ -137,7 +138,9 @@ describe('batch-ingestion', () => {
             // Verify structure
             expect(result.successful).toHaveLength(2);
             expect(result.successful[0].sourceFilename).toBe('book1.epub');
+            expect(result.successful[0].manifest.coverPalette).toEqual([1, 2, 3, 4, 5]);
             expect(result.successful[1].sourceFilename).toBe('book2.epub');
+            expect(result.successful[1].manifest.coverPalette).toEqual([1, 2, 3, 4, 5]);
         });
 
         it('should unzip and process files from zips', async () => {
