@@ -33,7 +33,11 @@ describe('TaskSequencer', () => {
         const p1 = sequencer.enqueue(task1);
         const p2 = sequencer.enqueue(task2);
 
-        await p1; // Should resolve undefined (caught internally)
+        try {
+            await p1;
+        } catch (e) {
+            // caller can catch the error
+        }
         await p2;
 
         expect(results).toEqual([2]);

@@ -17,14 +17,12 @@ export class TaskSequencer {
     enqueue<T>(task: () => Promise<T>): Promise<T | void> {
         const resultPromise = this.pendingPromise.then(async () => {
             if (this.isDestroyed) return;
-            try {
-                return await task();
-            } catch (err) {
-                console.error("TaskSequencer task failed safely:", err);
-            }
+            return await task();
         });
 
-        this.pendingPromise = resultPromise.then(() => { }).catch(() => { });
+        this.pendingPromise = resultPromise.then(() => { }).catch((err) => {
+            console.error("TaskSequencer task failed safely:", err);
+        });
         return resultPromise;
     }
 
