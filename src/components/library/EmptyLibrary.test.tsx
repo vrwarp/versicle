@@ -104,9 +104,9 @@ describe('EmptyLibrary', () => {
     });
 
     render(<EmptyLibrary onImport={vi.fn()} />);
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.getAllByText('Loading...')[0]).toBeInTheDocument();
     // Verify spinner is present (Loader2 usually renders an svg with specific class)
-    const button = screen.getByText('Loading...').closest('button');
+    const button = screen.getAllByText('Loading...')[0].closest('button');
     expect(button).toBeDisabled();
     expect(button?.querySelector('.animate-spin')).toBeInTheDocument();
   });
