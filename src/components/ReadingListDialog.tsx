@@ -5,9 +5,12 @@ import { Dialog } from './ui/Dialog';
 import { Checkbox } from './ui/Checkbox';
 import { useReadingListStore } from '../store/useReadingListStore';
 import type { ReadingListEntry } from '../types/db';
-import { ArrowUpDown, Trash2, Edit2, Download, ArrowUp, ArrowDown, BookOpen } from 'lucide-react';
+import { ArrowUpDown, Trash2, Edit2, Download, ArrowUp, ArrowDown, BookOpen, Wand2 } from 'lucide-react';
 import { EditReadingListEntryDialog } from './EditReadingListEntryDialog';
 import { exportFile } from '../lib/export';
+import { useGenAIStore } from '../store/useGenAIStore';
+import { genAIService } from '../lib/genai/GenAIService';
+import { SmartLinkDialog } from './SmartLinkDialog';
 
 interface ReadingListDialogProps {
     open: boolean;
@@ -91,6 +94,11 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
     const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
     const [editEntry, setEditEntry] = useState<ReadingListEntry | null>(null);
     const [deleteConfirmation, setDeleteConfirmation] = useState<{ type: 'single', filename: string } | { type: 'batch' } | null>(null);
+    const [isSmartLinkOpen, setIsSmartLinkOpen] = useState(false);
+    const isGenAIEnabled = useGenAIStore(state => state.isEnabled);
+
+    // Using genAIService to check if any provider is configured (API Key or mock)
+    const canUseGenAI = isGenAIEnabled && genAIService.isConfigured();
 
     // No need for useEffect -> refreshEntries, store is reactive
 
@@ -228,18 +236,26 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
                     <div className="flex items-center justify-between p-4 border-b">
                         <div className="flex items-center gap-4 min-h-[2.25rem]">
                             <h2 className="text-xl font-bold">Reading List</h2>
-                            {selectedEntries.size > 0 && (
-                                <div className="flex items-center gap-2">
-                                    <Button variant="outline" size="sm" onClick={handleBatchDelete} className="text-destructive hover:text-destructive">
-                                        <Trash2 className="w-4 h-4 mr-2" />
-                                        Delete ({selectedEntries.size})
+                            <div className="flex items-center gap-2">
+                                {canUseGenAI && (
+                                    <Button variant="outline" size="sm" onClick={() => setIsSmartLinkOpen(true)}>
+                                        <Wand2 className="w-4 h-4 mr-2" />
+                                        Smart Link
                                     </Button>
-                                    <Button variant="outline" size="sm" onClick={handleExportCSV}>
-                                        <Download className="w-4 h-4 mr-2" />
-                                        Export CSV
-                                    </Button>
-                                </div>
-                            )}
+                                )}
+                                {selectedEntries.size > 0 && (
+                                    <>
+                                        <Button variant="outline" size="sm" onClick={handleBatchDelete} className="text-destructive hover:text-destructive">
+                                            <Trash2 className="w-4 h-4 mr-2" />
+                                            Delete ({selectedEntries.size})
+                                        </Button>
+                                        <Button variant="outline" size="sm" onClick={handleExportCSV}>
+                                            <Download className="w-4 h-4 mr-2" />
+                                            Export CSV
+                                        </Button>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -341,6 +357,11 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
                         <Button variant="destructive" onClick={confirmDelete}>Delete</Button>
                     </>
                 }
+            />
+
+            <SmartLinkDialog
+                open={isSmartLinkOpen}
+                onOpenChange={setIsSmartLinkOpen}
             />
         </>
     );
