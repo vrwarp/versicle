@@ -248,6 +248,7 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
       expect(mocks.capturedDocs.length).toBeGreaterThan(0);
       const restoredDoc = mocks.capturedDocs[mocks.capturedDocs.length - 1] as Y.Doc;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const restoredBooks = restoredDoc.getMap('library').get('books') as Y.Map<any>;
       expect(restoredBooks).toBeDefined();
       const b1 = restoredBooks.get('b1');

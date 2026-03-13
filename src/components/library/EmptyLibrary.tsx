@@ -56,14 +56,18 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
         <FileUploader />
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md justify-center">
+      <div
+        className="flex flex-col sm:flex-row gap-4 w-full max-w-md justify-center"
+        aria-live="polite"
+        aria-busy={isImporting}
+      >
         <Button
           variant="default"
           onClick={onImport}
           disabled={isImporting}
           className="font-medium gap-2 h-12 px-6 transition-all touch-manipulation w-full sm:w-auto"
         >
-          <Upload className="h-4 w-4" />
+          <Upload className="h-4 w-4" aria-hidden="true" />
           Browse Files
         </Button>
         <Button
@@ -75,11 +79,12 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
           {isImporting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              Loading...
+              <span className="sr-only">Loading...</span>
+              <span aria-hidden="true">Loading...</span>
             </>
           ) : (
             <>
-              <BookOpen className="h-4 w-4" />
+              <BookOpen className="h-4 w-4" aria-hidden="true" />
               Load Demo Book (Alice in Wonderland)
             </>
           )}
