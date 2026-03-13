@@ -8,7 +8,7 @@ import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
 import type { UserProgress } from '../types/db';
 import { getDeviceId } from '../lib/device-id';
-import type { UserProgress, BookMetadata } from '../types/db';
+import type { BookMetadata } from '../types/db';
 
 // Mock stores
 vi.mock('./useLocalHistoryStore', () => ({
@@ -195,6 +195,59 @@ describe('selectors', () => {
 
       expect(result.current).toHaveLength(1);
       expect(result.current[0].progress).toBe(0.75);
+    });
+
+    it('should fallback to title/author matching for reading list progress if sourceFilename is missing', () => {
+      const mockBookState = {
+        books: {
+          'b1': {
+            bookId: 'b1',
+            title: '  The Great Gatsby ',
+            author: ' F. Scott Fitzgerald',
+            // sourceFilename is explicitly missing
+            addedAt: 100,
+            lastInteraction: 100,
+            status: 'unread',
+            tags: []
+          }
+        }
+      };
+
+      const mockLibraryState = {
+        staticMetadata: {},
+        offloadedBookIds: new Set()
+      };
+
+      const mockReadingListState = {
+        entries: {
+          'old-filename.epub': {
+            filename: 'old-filename.epub',
+            percentage: 0.85,
+            lastUpdated: 200,
+            // Testing case insensitivity and whitespace handling
+            title: 'the great gatsby',
+            author: 'f. scott fitzgerald  '
+          }
+        }
+      };
+
+      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
+        return selector(mockBookState);
+      });
+      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
+        return selector(mockLibraryState);
+      });
+      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
+        return selector({ progress: {} }); // No device progress
+      });
+      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
+        return selector(mockReadingListState);
+      });
+
+      const { result } = renderHook(() => useAllBooks());
+
+      expect(result.current).toHaveLength(1);
+      expect(result.current[0].progress).toBe(0.85);
     });
 
     it('should maintain object reference stability for unchanged books when progress updates', () => {
