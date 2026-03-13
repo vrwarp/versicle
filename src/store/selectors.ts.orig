@@ -69,6 +69,7 @@ export const useAllBooks = () => {
         const staticMetadataObj = staticMetadata || {};
         const offloadedBookIdsSet = offloadedBookIds || new Set();
 
+        // eslint-disable-next-line react-hooks/immutability
         return Object.values(booksObj).map(book => {
             // Check cache
             const cached = baseBookCache.get(book);
@@ -106,6 +107,7 @@ export const useAllBooks = () => {
                 isOffloaded: offloadedBookIdsSet.has(book.bookId),
             };
 
+            // eslint-disable-next-line react-hooks/immutability
             baseBookCache.set(book, newBaseBook);
             return newBaseBook;
         }).sort((a, b) => b.lastInteraction - a.lastInteraction);
@@ -157,6 +159,7 @@ export const useAllBooks = () => {
                 lastRead: lastRead
             };
 
+            // eslint-disable-next-line react-hooks/immutability
             previousResultsCache.set(book, {
                 result: newBook,
                 rawBookProgress,
