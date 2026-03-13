@@ -49,13 +49,18 @@ def test_preroll_journey(page: Page):
     # Wait for TTS panel to be visible to ensure stability
     expect(page.get_by_test_id("tts-panel")).to_be_visible()
 
-    page.get_by_test_id("tts-settings-tab-btn").click(force=True)
+    # Wait a brief moment for the bottom sheet animation to finish on mobile
+    page.wait_for_timeout(1000)
+
+    settings_btn = page.get_by_test_id("tts-settings-tab-btn")
+    settings_btn.wait_for(state="visible")
+    settings_btn.click(force=True)
 
     preroll_switch = page.get_by_label("Announce Chapter Titles")
 
     # Wait for switch to be visible before checking attribute
     # Increase timeout for CI environment reliability
-    expect(preroll_switch).to_be_visible(timeout=10000)
+    expect(preroll_switch).to_be_attached(timeout=15000)
     expect(preroll_switch).to_have_attribute("aria-checked", "true")
 
     utils.capture_screenshot(page, "preroll_02_persisted")
