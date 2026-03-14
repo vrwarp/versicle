@@ -52,6 +52,7 @@ describe('extractContentOffscreen', () => {
     // Setup mock Book
     mockBook = {
       ready: Promise.resolve(),
+      opened: Promise.resolve(),
       renderTo: vi.fn(() => mockRendition),
       spine: mockSpine,
       destroy: vi.fn(),

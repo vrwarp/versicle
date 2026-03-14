@@ -63,11 +63,12 @@ export async function reprocessBook(bookId: string): Promise<void> {
 
     // Capture Real TOC
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const book = (ePub as any)(fileBlob);
+    const book = (ePub as any)(fileBlob, { replacements: 'none' });
     await book.ready;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const navigation = await (book.loaded as any).navigation;
     const realToc: NavigationItem[] = navigation ? navigation.toc : [];
+    await book.opened.catch(() => { });
     book.destroy();
 
     const chapters = await extractContentOffscreen(fileBlob, {});
@@ -207,7 +208,7 @@ export async function extractBookData(
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const book = (ePub as any)(file);
+    const book = (ePub as any)(file, { replacements: 'none' });
     await book.ready;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -251,6 +252,7 @@ export async function extractBookData(
     const navigation = await (book.loaded as any).navigation;
     const realToc: NavigationItem[] = navigation ? navigation.toc : [];
 
+    await book.opened.catch(() => { });
     book.destroy();
 
     const chapters = await extractContentOffscreen(file, ttsOptions, onProgress);
@@ -424,7 +426,7 @@ export async function extractBookMetadata(file: File): Promise<{
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const book = (ePub as any)(file);
+    const book = (ePub as any)(file, { replacements: 'none' });
     await book.ready;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -463,6 +465,7 @@ export async function extractBookMetadata(file: File): Promise<{
         if (coverPalette.length === 0) coverPalette = undefined;
     }
 
+    await book.opened.catch(() => { });
     book.destroy();
 
     const fileHash = await generateFileFingerprint(file, {

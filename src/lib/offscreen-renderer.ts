@@ -180,7 +180,10 @@ export async function extractContentOffscreen(
 
   } finally {
     // Cleanup
-    if (book) book.destroy();
+    if (book) {
+      await book.opened.catch(() => { });
+      book.destroy();
+    }
     if (container.parentNode) container.parentNode.removeChild(container);
   }
 
