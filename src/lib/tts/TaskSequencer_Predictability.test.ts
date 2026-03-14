@@ -33,7 +33,9 @@ describe('TaskSequencer Predictability', () => {
             await sequencer.enqueue(task1);
         } catch (e: unknown) {
             caught = true;
-            expect((e as Error).message).toBe('Specific Error');
+            if (e instanceof Error) {
+                expect(e.message).toBe('Specific Error');
+            }
         }
 
         expect(caught).toBe(true);
