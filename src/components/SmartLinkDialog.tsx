@@ -59,40 +59,13 @@ export const SmartLinkDialog: React.FC<SmartLinkDialogProps> = ({ open, onOpenCh
             setError(null);
 
             try {
-                const prompt = `
-You are a helpful assistant that maps orphan reading list entries to unmapped library books based on their titles and authors.
-
-Here are the unmapped reading list entries:
-${unmappedEntries.map(e => `- ID: ${e.filename}, Title: "${e.title}", Author: "${e.author}"`).join('\n')}
-
-Here are the unmapped library books:
-${unmappedBooks.map(b => `- ID: ${b.bookId}, Title: "${b.title}", Author: "${b.author}", Filename: "${b.sourceFilename || 'N/A'}"`).join('\n')}
-
-Find all pairs where the reading list entry matches the library book. Return a JSON object with a 'mappings' array containing the pairs.
-Only include matches you are highly confident about.
-`;
-                const schema = {
-                    type: "OBJECT",
-                    properties: {
-                        mappings: {
-                            type: "ARRAY",
-                            items: {
-                                type: "OBJECT",
-                                properties: {
-                                    readingListFilename: { type: "STRING" },
-                                    libraryBookId: { type: "STRING" }
-                                },
-                                required: ["readingListFilename", "libraryBookId"]
-                            }
-                        }
-                    },
-                    required: ["mappings"]
-                };
-
-                const result = await genAIService.generateStructured<{ mappings: MappingResult[] }>(prompt, schema);
+                const generatedMappings = await genAIService.mapReadingListToLibrary(
+                    unmappedEntries,
+                    unmappedBooks
+                );
 
                 // Filter mappings to ensure they are valid
-                const validMappings = (result.mappings || []).filter(m => {
+                const validMappings = generatedMappings.filter(m => {
                     const entryExists = unmappedEntries.some(e => e.filename === m.readingListFilename);
                     const bookExists = unmappedBooks.some(b => b.bookId === m.libraryBookId);
                     return entryExists && bookExists;
