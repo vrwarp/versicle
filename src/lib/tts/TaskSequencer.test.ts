@@ -35,7 +35,7 @@ describe('TaskSequencer', () => {
 
         try {
             await p1;
-        } catch (e) {
+        } catch {
             // caller can catch the error
         }
         await p2;
