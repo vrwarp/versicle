@@ -11,7 +11,7 @@
 *   **Hybrid Intelligence**:
     *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
     *   **Cloud TTS**: Connect your own API keys (OpenAI, Google, LemonFox) for studio-quality narration.
-    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content (by identifying reference boundaries), and adapt tables for listening. Includes **Smart Rotation** to maximize free quotas and prevent rate limits.
+    *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content (by identifying reference boundaries), and narrate adapted tables. Includes **Smart Rotation** to maximize free quotas and prevent rate limits.
 *   **Dual Sync**:
     *   **Real-time**: Synchronize progress instantly across devices using Firestore.
     *   **Native Backup**: Seamless integration with Android's built-in backup system.
@@ -29,7 +29,7 @@
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API / LemonFox.ai
 *   **AI**: Google Gemini 2.5 (Flash Lite / Flash) via `@google/generative-ai`
-*   **Mobile**: Capacitor 7.1.1 (Android) + `@capacitor/filesystem` + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login`
+*   **Mobile**: Capacitor 7.1.1 (Android) + `@capacitor/filesystem` + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login` + `@capacitor-community/text-to-speech`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4.1.18 + Radix UI
 *   **Tools**: `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
@@ -74,7 +74,7 @@
     *   **Dual Sync**:
         *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates.
         *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
-        *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses a smart **Heuristic Sync** (`viewedByMeTime` vs `lastScanTime`) to skip unnecessary expensive API scans, and optimizes memory by mapping heavy API objects to a lightweight file indexing strategy to speed up "New Book" diffing. Forces a full scan if the Cloud Index is empty.
+        *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses a smart **Heuristic Sync** (`viewedByMeTime` vs `lastScanTime`) to skip unnecessary expensive API scans, and optimizes memory by mapping heavy API objects to a lightweight file indexing strategy to speed up "New Book" diffing. Forces a full scan if the Cloud Index is empty. Automatically syncs recursive folders.
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
         *   **Sync Mesh**: Real-time visibility of active devices in the network with "Last Active" status and peer awareness.
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the most recent position across the mesh.
@@ -86,8 +86,8 @@
 *   **Lexicon Management**:
     *   **CSV Import/Export**: Bulk manage pronunciation rules using CSV files.
 *   **Backups & Export**:
-    *   **Light**: JSON export of metadata/settings (Data Portability).
-    *   **Full**: ZIP archive including all book files, powered by a **V2 Binary Snapshot** (`Y.encodeStateAsUpdate(yDoc)`) that perfectly preserves the Yjs state without merge conflicts. Restores destructively by clearing `yjsPersistence.clearData()`.
+    *   **Light Backup**: Fast JSON export of your `user_` metadata, settings, and Yjs snapshot (without heavy book files).
+    *   **Full Backup**: ZIP archive including all book files, powered by a **V2 Binary Snapshot** (`Y.encodeStateAsUpdate(yDoc)`) that perfectly preserves the Yjs state without merge conflicts. Restores destructively by clearing `yjsPersistence.clearData()`.
     *   **Unified Export**: Share files natively (AirDrop, Nearby Share) or download via browser.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
