@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
@@ -6,6 +6,7 @@ import { Search, Download, Loader2, Cloud } from 'lucide-react';
 import { useDriveStore, type DriveFileIndex } from '../../store/useDriveStore';
 import { DriveScannerService } from '../../lib/drive/DriveScannerService';
 import { useToastStore } from '../../store/useToastStore';
+import { useDebounce } from '../../hooks/useDebounce';
 
 function formatRelativeTime(timestamp: number | null): string {
     if (!timestamp) return 'Never';
@@ -28,6 +29,7 @@ interface DriveImportDialogProps {
 
 export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, onClose }) => {
     const [searchQuery, setSearchQuery] = useState('');
+    const debouncedSearchQuery = useDebounce(searchQuery, 300);
     const [importingId, setImportingId] = useState<string | null>(null);
 
     const { index, lastScanTime, isScanning } = useDriveStore();
@@ -36,12 +38,12 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
     // Client-side search (instant)
     const filteredFiles = useMemo(() => {
         if (!index) return [];
-        if (!searchQuery.trim()) return index.slice(0, 50); // Show recent/top 50 empty
-        const lowerQuery = searchQuery.toLowerCase();
+        if (!debouncedSearchQuery.trim()) return index.slice(0, 50); // Show recent/top 50 empty
+        const lowerQuery = debouncedSearchQuery.toLowerCase();
         return index.filter(file => file.name.toLowerCase().includes(lowerQuery));
-    }, [index, searchQuery]);
+    }, [index, debouncedSearchQuery]);
 
-    const handleImport = async (file: DriveFileIndex) => {
+    const handleImport = useCallback(async (file: DriveFileIndex) => {
         if (importingId) return; // Prevent multiple
         setImportingId(file.id);
         try {
@@ -53,7 +55,7 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
         } finally {
             setImportingId(null);
         }
-    };
+    }, [importingId, showToast]);
 
     const handleRefresh = async () => {
         try {
@@ -62,6 +64,36 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
             showToast('Failed to refresh index', 'error');
         }
     };
+
+    const renderedFiles = useMemo(() => filteredFiles.map((file) => (
+        <div
+            key={file.id}
+            className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 group transition-colors border border-transparent hover:border-border"
+        >
+            <div className="flex-1 min-w-0 pr-4">
+                <p className="font-medium truncate text-sm text-foreground">{file.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    {(file.size / 1024 / 1024).toFixed(2)} MB • {new Date(file.modifiedTime).toLocaleDateString()}
+                </p>
+            </div>
+            <Button
+                size="sm"
+                variant={importingId === file.id ? "ghost" : "secondary"}
+                onClick={() => handleImport(file)}
+                disabled={!!importingId}
+                className="shrink-0"
+            >
+                {importingId === file.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                ) : (
+                    <>
+                        <Download className="w-4 h-4 mr-2" />
+                        Import
+                    </>
+                )}
+            </Button>
+        </div>
+    )), [filteredFiles, importingId, handleImport]);
 
     return (
         <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -116,35 +148,8 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
                         </div>
                     ) : (
                         <div className="space-y-1">
-                            {filteredFiles.map((file) => (
-                                <div
-                                    key={file.id}
-                                    className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 group transition-colors border border-transparent hover:border-border"
-                                >
-                                    <div className="flex-1 min-w-0 pr-4">
-                                        <p className="font-medium truncate text-sm text-foreground">{file.name}</p>
-                                        <p className="text-xs text-muted-foreground mt-0.5">
-                                            {(file.size / 1024 / 1024).toFixed(2)} MB • {new Date(file.modifiedTime).toLocaleDateString()}
-                                        </p>
-                                    </div>
-                                    <Button
-                                        size="sm"
-                                        variant={importingId === file.id ? "ghost" : "secondary"}
-                                        onClick={() => handleImport(file)}
-                                        disabled={!!importingId}
-                                        className="shrink-0"
-                                    >
-                                        {importingId === file.id ? (
-                                            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                                        ) : (
-                                            <>
-                                                <Download className="w-4 h-4 mr-2" />
-                                                Import
-                                            </>
-                                        )}
-                                    </Button>
-                                </div>
-                            ))}
+                            {/* OPTIMIZATION: Memoize mapped output and debounce search to prevent O(N) filtering and VDOM allocation on every keystroke. */}
+                            {renderedFiles}
                         </div>
                     )}
                 </div>
