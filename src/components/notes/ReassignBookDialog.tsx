@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Search } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
+import { ScrollArea } from '../ui/ScrollArea';
 import { useAllBooks } from '../../store/selectors';
 
 interface ReassignBookDialogProps {
@@ -16,6 +19,25 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
 }) => {
     const books = useAllBooks();
     const [selectedBookId, setSelectedBookId] = useState<string>('');
+    const [searchQuery, setSearchQuery] = useState('');
+
+    useEffect(() => {
+        if (isOpen) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setSelectedBookId('');
+            setSearchQuery('');
+        }
+    }, [isOpen]);
+
+    const filteredBooks = useMemo(() => {
+        return books
+            .filter((book) => {
+                const titleMatch = (book.title || 'Untitled').toLowerCase().includes(searchQuery.toLowerCase());
+                const authorMatch = (book.author || '').toLowerCase().includes(searchQuery.toLowerCase());
+                return titleMatch || authorMatch;
+            })
+            .sort((a, b) => (a.title || 'Untitled').localeCompare(b.title || 'Untitled'));
+    }, [books, searchQuery]);
 
     const handleConfirm = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -48,19 +70,40 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
                 </>
             }
         >
-            <div className="py-4">
-                <select
-                    className="w-full p-2 border rounded bg-background text-foreground"
-                    value={selectedBookId}
-                    onChange={(e) => setSelectedBookId(e.target.value)}
-                >
-                    <option value="" disabled>Select a book...</option>
-                    {books.map((book) => (
-                        <option key={book.id} value={book.id}>
-                            {book.title || 'Untitled'} {book.author ? `by ${book.author}` : ''}
-                        </option>
-                    ))}
-                </select>
+            <div className="py-4 flex flex-col gap-4">
+                <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        type="search"
+                        placeholder="Search books..."
+                        className="pl-9"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </div>
+                <ScrollArea className="h-[200px] border rounded-md p-2">
+                    <div className="flex flex-col gap-1">
+                        {filteredBooks.length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                                No books found matching "{searchQuery}"
+                            </p>
+                        ) : (
+                            filteredBooks.map((book) => (
+                                <Button
+                                    key={book.id}
+                                    variant={selectedBookId === book.id ? "secondary" : "ghost"}
+                                    className="w-full h-auto font-normal justify-start text-left flex-col items-start py-2 px-3"
+                                    onClick={() => setSelectedBookId(book.id)}
+                                >
+                                    <span className="font-medium line-clamp-1">{book.title || 'Untitled'}</span>
+                                    {book.author && (
+                                        <span className="text-xs text-muted-foreground line-clamp-1">{book.author}</span>
+                                    )}
+                                </Button>
+                            ))
+                        )}
+                    </div>
+                </ScrollArea>
             </div>
         </Dialog>
     );
