@@ -125,3 +125,54 @@ describe('GenAIService Rotation Logic', () => {
     expect(mocks.getGenerativeModel).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('GenAIService Smart Link', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    genAIService.configure('test-api-key', 'gemini-2.5-flash-lite', false);
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it('should map reading list entries to library books', async () => {
+    // Setup mock response
+    const mockMappings = {
+      mappings: [
+        { readingListFilename: 'entry1', libraryBookId: 'book1' }
+      ]
+    };
+
+    mocks.generateContent.mockResolvedValueOnce({
+      response: {
+        text: () => JSON.stringify(mockMappings)
+      }
+    });
+
+    const unmappedEntries = [
+      { filename: 'entry1', title: 'Test', author: 'Author' }
+    ];
+    const unmappedBooks = [
+      { bookId: 'book1', title: 'Test Book', author: 'Author', sourceFilename: 'other.epub' }
+    ];
+
+    const result = await genAIService.mapReadingListToLibrary(unmappedEntries, unmappedBooks);
+
+    expect(result).toEqual(mockMappings.mappings);
+    // Since mapReadingListToLibrary calls generateStructured, the mock receives the prompt directly
+    expect(mocks.generateContent).toHaveBeenCalledWith(expect.stringContaining("Find all pairs"));
+  });
+
+  it('should return empty array when mappings are missing in response', async () => {
+    mocks.generateContent.mockResolvedValueOnce({
+      response: {
+        text: () => JSON.stringify({})
+      }
+    });
+
+    const result = await genAIService.mapReadingListToLibrary([], []);
+    expect(result).toEqual([]);
+  });
+});
