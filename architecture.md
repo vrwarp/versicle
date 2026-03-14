@@ -372,11 +372,11 @@ Implements full-text search off the main thread.
 #### Backup Strategy (`src/lib/BackupService.ts` & `src/lib/sync/ExportImportService.ts`)
 Versicle employs a dual-strategy for data safety, distinguishing between "Hard Reset" backups and "Portable" exports.
 
-*   **Full Backup (`BackupService` V2)**:
-    *   **Goal**: Complete system state preservation ("Hard Reset"). Transitioned away from V1 JSON exports which lost CRDT context.
+*   **Full/Light Backup (`BackupService` V2)**:
+    *   **Goal**: Complete system state preservation ("Hard Reset"). Transitioned away from V1 JSON exports which lost CRDT context. Supports "Light" backups (JSON manifest only) and "Full" backups (ZIP archive including EPUB files).
     *   **Logic**:
-        *   **Snapshot**: Captures the entire Yjs document state as a binary update using `Y.encodeStateAsUpdate(yDoc)`. Also captures static metadata and cache data (like locations) from IndexedDB.
-        *   **Restore**: Implements a destructive restore. It explicitly clears the existing `yjsPersistence` data via `yjsPersistence.clearData()` before creating a fresh isolated Y.Doc and applying the snapshot update. This bypasses merge conflicts and ensures the restored state is an exact replica of the backup.
+        *   **Snapshot**: Captures the entire Yjs document state as a binary update using `Y.encodeStateAsUpdate(yDoc)` encoded to base64. Also captures static metadata, semantic trees, and cache data (like locations) from IndexedDB.
+        *   **Restore**: Implements a destructive restore. It explicitly clears the existing `yjsPersistence` data via `yjsPersistence.clearData()` before creating a fresh isolated Y.Doc and applying the binary snapshot update. This bypasses merge conflicts and ensures the restored state is an exact replica of the backup. Re-writes all extracted `static_manifests` and `cache_render_metrics`. For ZIPs, it directly inserts missing blobs into `static_resources`.
     *   **Trade-off**: Restore is destructive; any changes made since the backup are lost. Requires app reload to pick up new state.
 *   **Export/Import (`ExportImportService`)**:
     *   **Goal**: Data portability and merging between devices.
@@ -392,7 +392,7 @@ Integrates with Google Drive to provide a cloud-based library.
     *   **Goal**: Manage high-level sync logic and state.
     *   **Logic**:
         *   **Heuristic Sync**: To save API quota, it checks if the remote folder's `viewedByMeTime` is more recent than the local `lastScanTime` (`shouldAutoSync`). If not, it skips the expensive scan. If the Cloud Index is empty, it bypasses the heuristic and forces a full folder scan.
-        *   **Folder Scanning (`scanAndIndex`)**: Scans for EPUB files by querying the `linkedFolderId` explicitly. It optimizes memory by mapping the heavy API `DriveFile` responses to lightweight indexing objects (`DriveFileIndex`) before persisting them in `useDriveStore`.
+        *   **Folder Scanning (`scanAndIndex`)**: Scans for EPUB files by querying the `linkedFolderId` explicitly using `DriveService.listFilesRecursive`. It optimizes memory by mapping the heavy API `DriveFile` responses to lightweight indexing objects (`DriveFileIndex`) before persisting them in `useDriveStore`.
         *   **Diffing (`checkForNewFiles`)**: Compares the lightweight Cloud Index (`useDriveStore`) against the Local Library (`useBookStore` inventory via filenames) to identify "New" files available for import.
         *   **Direct Store Access**: Reads directly from `useDriveStore` and `useLibraryStore` to manage state and trigger imports.
 *   **`DriveService.ts` (The Muscle)**:
@@ -417,6 +417,7 @@ Integrates with Google Drive to provide a cloud-based library.
 *   **Logic**:
     *   **Orphan Detection**: Scans `static_resources` (files) and `cache_` stores for keys that no longer exist in the Yjs `user_inventory`.
     *   **Post-Migration Role**: After the Yjs migration, this service transitions to *only* managing `static_` and `cache_` stores in IndexedDB. It strictly cleans up heavy binary data and cached assets. It *does not* touch or manage any `user_` data (inventory, progress, annotations, overrides), as those are managed entirely by their respective Yjs stores and Firestore sync.
+    *   **Orphan Pruning**: Prunes files (`static_resources`), locations (`cache_render_metrics`), and TTS Prep (`cache_tts_preparation`) that no longer have a matching parent book ID in `useBookStore`.
     *   **Metadata Regeneration**: Can re-import books from their binary blobs (`regenerateAllMetadata`) to refresh Yjs metadata if the schema changes, using `DBService.importBookWithId`.
 
 #### Cancellable Task Runner (`src/lib/cancellable-task-runner.ts`)
@@ -480,6 +481,15 @@ The central hub for TTS operations. It runs on the **Main Thread** and coordinat
     *   **Session Tracking**: Uses a transient Zustand store (`useCostStore`) to track characters processed in the current session.
     *   **Estimation**: Applies per-character pricing models (e.g., $0.000016/char for Google WaveNet).
 
+#### `src/lib/tts/TableAdaptationProcessor.ts`
+*   **Goal**: Integrate AI-generated narrative adaptations for complex tables into the playback queue.
+*   **Logic**:
+    *   **Caching**: Checks `dbService.getContentAnalysis` for existing adaptations to avoid redundant API calls.
+    *   **Extraction**: Identifies tables that actually exist in the current section by comparing against `dbService.getTableImages`.
+    *   **Matching**: Uses robust CFI prefix matching in `mapSentencesToAdaptations` to identify which raw sentences in the TTS queue belong to an adapted table block, replacing them dynamically.
+    *   **Optimization**: Pre-filters and pre-parses table image CFIs via `preprocessTableRoots` to avoid redundant string manipulation and parsing in the hot loop.
+*   **Trade-off**: High reliance on exact CFI structure; buggy or non-standard CFIs generated by `epub.js` can cause mismatching or skipped adaptations.
+
 #### `src/lib/tts/AudioContentPipeline.ts`
 The Data Pipeline for TTS.
 
@@ -491,7 +501,7 @@ The Data Pipeline for TTS.
         *   **Dynamic Scope Expansion**: If a new sentence is an ancestor of the current group (e.g., a `div` wrapping a `p`), the logic expands the group's scope to the ancestor's level. This ensures that subsequent descendants of the ancestor are correctly included in the same semantic block.
         *   **Optimization**: Pre-filters table images by `sectionId` and batch-processes their CFIs via `preprocessTableRoots` to avoid redundant parsing and reduce lookup complexity during sentence grouping.
     3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`, `onAdaptationsFound`).
-        *   **Table Injection**: `mapSentencesToAdaptations` matches raw sentences to AI-generated table narratives using CFI prefix matching, replacing the raw data cells with a natural language summary in real-time.
+        *   **Table Injection**: `TableAdaptationProcessor.mapSentencesToAdaptations` matches raw sentences to AI-generated table narratives using CFI prefix matching, replacing the raw data cells with a natural language summary in real-time.
     4.  **Memoization**: Caches merged abbreviations (`getMergedAbbreviations`) to ensure reference stability, allowing `TextSegmenter` to skip redundant `Set` creation in hot loops.
 
 #### `src/lib/tts/TextSegmenter.ts`

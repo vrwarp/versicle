@@ -179,6 +179,7 @@ export const FileUploader: React.FC = () => {
             className="text-muted-foreground hover:text-primary"
             onClick={handleDriveConnect}
             disabled={isDriveConnecting}
+            aria-label="Connect Google Drive"
           >
             {isDriveConnecting ? <Loader2 className="mr-2 h-3 w-3 animate-spin" aria-hidden="true" /> : null}
             Connect Google Drive
@@ -189,6 +190,7 @@ export const FileUploader: React.FC = () => {
             size="sm"
             className="gap-2 text-primary border-primary/20 hover:bg-primary/5"
             onClick={handleBrowseDrive}
+            aria-label="Browse Google Drive"
           >
             <svg className="w-4 h-4" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg">
               <path d="m6.6 66.85 25.3-43.8 25.3 43.8z" fill="currentColor" />

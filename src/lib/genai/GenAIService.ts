@@ -333,6 +333,48 @@ PROCESS:
       context
     );
   }
+
+  /**
+   * Generates a mapping between reading list entries and library books.
+   */
+  public async mapReadingListToLibrary(
+    unmappedEntries: { filename: string, title: string, author: string }[],
+    unmappedBooks: { bookId: string, title: string, author: string, sourceFilename?: string }[]
+  ): Promise<{ readingListFilename: string, libraryBookId: string }[]> {
+    const prompt = `
+You are a helpful assistant that maps orphan reading list entries to unmapped library books based on their titles and authors.
+
+Here are the unmapped reading list entries:
+${unmappedEntries.map(e => `- ID: ${e.filename}, Title: "${e.title}", Author: "${e.author}"`).join('\n')}
+
+Here are the unmapped library books:
+${unmappedBooks.map(b => `- ID: ${b.bookId}, Title: "${b.title}", Author: "${b.author}", Filename: "${b.sourceFilename || 'N/A'}"`).join('\n')}
+
+Find all pairs where the reading list entry matches the library book. Return a JSON object with a 'mappings' array containing the pairs.
+Only include matches you are highly confident about.
+`;
+
+    const schema = {
+      type: SchemaType.OBJECT,
+      properties: {
+        mappings: {
+          type: SchemaType.ARRAY,
+          items: {
+            type: SchemaType.OBJECT,
+            properties: {
+              readingListFilename: { type: SchemaType.STRING },
+              libraryBookId: { type: SchemaType.STRING }
+            },
+            required: ["readingListFilename", "libraryBookId"]
+          }
+        }
+      },
+      required: ["mappings"]
+    };
+
+    const result = await this.generateStructured<{ mappings: { readingListFilename: string, libraryBookId: string }[] }>(prompt, schema);
+    return result.mappings || [];
+  }
 }
 
 export const genAIService = GenAIService.getInstance();
