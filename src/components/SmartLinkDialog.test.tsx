@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SmartLinkDialog } from './SmartLinkDialog';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
 import { useReadingListStore } from '../store/useReadingListStore';
 import { useBookStore } from '../store/useBookStore';
 import { useGenAIStore } from '../store/useGenAIStore';
@@ -14,8 +14,8 @@ vi.mock('../store/useGenAIStore');
 vi.mock('../lib/genai/GenAIService');
 
 describe('SmartLinkDialog', () => {
-    let mockAddEntry: any;
-    let mockRemoveEntry: any;
+    let mockAddEntry: Mock;
+    let mockRemoveEntry: Mock;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -23,7 +23,7 @@ describe('SmartLinkDialog', () => {
         mockAddEntry = vi.fn();
         mockRemoveEntry = vi.fn();
 
-        (useReadingListStore.getState as any).mockReturnValue({
+        (useReadingListStore.getState as Mock).mockReturnValue({
             addEntry: mockAddEntry,
             removeEntry: mockRemoveEntry,
             entries: {
@@ -41,7 +41,7 @@ describe('SmartLinkDialog', () => {
             })
         );
 
-        (useBookStore.getState as any).mockReturnValue({
+        (useBookStore.getState as Mock).mockReturnValue({
             books: {
                 'unmapped_book_1': { bookId: 'unmapped_book_1', title: 'Test Book', author: 'Author A', sourceFilename: 'some_other_filename.epub' },
                 'mapped_book_2': { bookId: 'mapped_book_2', title: 'Mapped Book', author: 'Author B', sourceFilename: 'mapped_entry_2' }
@@ -61,7 +61,7 @@ describe('SmartLinkDialog', () => {
             selector({ isEnabled: true })
         );
 
-        (genAIService.mapReadingListToLibrary as any).mockResolvedValue([
+        (genAIService.mapReadingListToLibrary as Mock).mockResolvedValue([
             { readingListFilename: 'unmapped_entry_1', libraryBookId: 'unmapped_book_1' }
         ]);
     });
@@ -81,7 +81,7 @@ describe('SmartLinkDialog', () => {
     });
 
     it('displays error message if GenAI service fails', async () => {
-        (genAIService.mapReadingListToLibrary as any).mockRejectedValue(new Error('AI Error'));
+        (genAIService.mapReadingListToLibrary as Mock).mockRejectedValue(new Error('AI Error'));
 
         render(<SmartLinkDialog open={true} onOpenChange={vi.fn()} />);
 
@@ -104,7 +104,7 @@ describe('SmartLinkDialog', () => {
 
     it('applies selected mappings and updates stores', async () => {
         // Need to reset the resolved value because it was changed in a previous test
-        (genAIService.mapReadingListToLibrary as any).mockResolvedValue([
+        (genAIService.mapReadingListToLibrary as Mock).mockResolvedValue([
             { readingListFilename: 'unmapped_entry_1', libraryBookId: 'unmapped_book_1' }
         ]);
 
