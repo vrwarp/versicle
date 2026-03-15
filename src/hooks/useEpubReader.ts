@@ -155,6 +155,7 @@ export function useEpubReader(
   const prevSize = useRef({ width: 0, height: 0 });
   const resizeRaf = useRef<number | null>(null);
   const applyStylesRef = useRef<() => void>(() => { });
+  const sandboxObserverRef = useRef<MutationObserver | null>(null);
 
   // Use a ref for options to access latest values in event listeners without re-binding
   const optionsRef = useRef(options);
@@ -224,8 +225,44 @@ export function useEpubReader(
         });
         renditionRef.current = newRendition;
 
-        // Manually ensure allow-scripts is present to fix event handling in strict environments (like Docker)
-        // This is a backup to the MutationObserver strategy mentioned above (which might be missing or slow)
+        // Cleanup old observer if any
+        if (sandboxObserverRef.current) {
+          sandboxObserverRef.current.disconnect();
+        }
+
+        // Manually ensure allow-scripts is present to fix event handling in strict environments (like WebKit)
+        // We patch sandbox attribute manually via MutationObserver to catch dynamically created iframes.
+        const observer = new MutationObserver((mutations) => {
+          mutations.forEach(mutation => {
+            if (mutation.type === 'childList') {
+              mutation.addedNodes.forEach(node => {
+                const element = node as HTMLElement;
+                if (element.tagName === 'IFRAME') {
+                  const iframe = element as HTMLIFrameElement;
+                  const sandbox = iframe.getAttribute('sandbox') || '';
+                  if (!sandbox.includes('allow-scripts')) {
+                    iframe.setAttribute('sandbox', (sandbox + ' allow-scripts allow-same-origin').trim());
+                  }
+                } else if (element.querySelectorAll) {
+                  const iframes = element.querySelectorAll('iframe');
+                  iframes.forEach(iframe => {
+                    const sandbox = iframe.getAttribute('sandbox') || '';
+                    if (!sandbox.includes('allow-scripts')) {
+                      iframe.setAttribute('sandbox', (sandbox + ' allow-scripts allow-same-origin').trim());
+                    }
+                  });
+                }
+              });
+            }
+          });
+        });
+
+        if (viewerRef.current) {
+          observer.observe(viewerRef.current, { childList: true, subtree: true });
+          sandboxObserverRef.current = observer;
+        }
+
+        // Also patch immediately if it already exists
         const iframe = viewerRef.current?.querySelector('iframe');
         if (iframe) {
           const sandbox = iframe.getAttribute('sandbox') || '';
@@ -474,6 +511,10 @@ export function useEpubReader(
           bookRef.current = null;
         }
         renditionRef.current = null;
+        if (sandboxObserverRef.current) {
+          sandboxObserverRef.current.disconnect();
+          sandboxObserverRef.current = null;
+        }
       }
     );
 
