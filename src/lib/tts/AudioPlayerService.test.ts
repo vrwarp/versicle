@@ -374,36 +374,30 @@ describe('AudioPlayerService', () => {
             const sentences = [
                 { text: "A", cfi: "epubcfi(/6/14!/4/2/1:0)" },
                 { text: "B", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Same parent /4/2
-                { text: "C", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // New parent /4/4
+                { text: "C", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // New parent /4/4 (Shares /4 block ancestor)
             ];
 
             const groups = contentPipeline.groupSentencesByRoot(sentences);
 
-            expect(groups).toHaveLength(2);
+            // After consistency fix, they all share block ancestor /4, so they are grouped together!
+            expect(groups).toHaveLength(1);
 
-            // Group 1: Parent /6/14!/4/2
-            expect(groups[0].segments).toHaveLength(2);
-            // Expected: Range spanning 1:0 to 3:0
-            // Since actual implementation of generateCfiRange in environment is used:
-            const expectedRange1 = cfiUtils.generateCfiRange("epubcfi(/6/14!/4/2/1:0)", "epubcfi(/6/14!/4/2/3:0)");
-            expect(groups[0].rootCfi).toBe(expectedRange1);
-
-            // Group 2: Parent /6/14!/4/4
-            expect(groups[1].segments).toHaveLength(1);
-            const expectedRange2 = cfiUtils.generateCfiRange("epubcfi(/6/14!/4/4/1:0)", "epubcfi(/6/14!/4/4/1:0)");
-            expect(groups[1].rootCfi).toBe(expectedRange2);
+            expect(groups[0].segments).toHaveLength(3);
+            const expectedRange = cfiUtils.generateCfiRange("epubcfi(/6/14!/4/2/1:0)", "epubcfi(/6/14!/4/4/1:0)");
+            expect(groups[0].rootCfi).toBe(expectedRange);
         });
 
         it('generates unique rootCfi for adjacent groups sharing same parent (Map Collision Fix)', () => {
-            // Scenario: Groups separated by an intervening different parent
-            // P1 (Parent A)
-            // P2 (Parent B)
-            // P3 (Parent A)
+            // Scenario: Groups separated by a DIFFERENT block-level boundary.
+            // A paragraph in section 4, a paragraph in section 6, and another in section 4.
+            // Since they are separated by a block boundary, they will be split if they do not share the SAME block ancestor.
+            // But wait, /6/14!/4 and /6/14!/6 do not share a block ancestor past the spine!
+            // So they WILL be split into different groups.
 
             const sentences = [
-                { text: "A1", cfi: "epubcfi(/6/14!/4/2/1:0)" }, // Parent A
-                { text: "B1", cfi: "epubcfi(/6/14!/4/4/1:0)" }, // Parent B
-                { text: "A2", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Parent A again
+                { text: "A1", cfi: "epubcfi(/6/14!/4/2/1:0)" }, // Parent /4
+                { text: "B1", cfi: "epubcfi(/6/14!/6/4/1:0)" }, // Parent /6
+                { text: "A2", cfi: "epubcfi(/6/14!/4/2/3:0)" }, // Parent /4 again
             ];
 
             const groups = contentPipeline.groupSentencesByRoot(sentences);
@@ -423,9 +417,9 @@ describe('AudioPlayerService', () => {
 
         it('detectContentSkipMask handles colliding parents correctly', async () => {
             const sentences = [
-                { text: "Narrative", cfi: "epubcfi(/6/14!/4/2/1:0)", sourceIndices: [0] }, // Group 1 (Parent A)
-                { text: "Interruption", cfi: "epubcfi(/6/14!/4/4/1:0)", sourceIndices: [1] }, // Group 2 (Parent B)
-                { text: "Footnote", cfi: "epubcfi(/6/14!/4/2/3:0)", sourceIndices: [2] }, // Group 3 (Parent A)
+                { text: "Narrative", cfi: "epubcfi(/6/14!/4/2/1:0)", sourceIndices: [0] }, // Parent /4
+                { text: "Interruption", cfi: "epubcfi(/6/14!/6/4/1:0)", sourceIndices: [1] }, // Parent /6
+                { text: "Footnote", cfi: "epubcfi(/6/14!/4/2/3:0)", sourceIndices: [2] }, // Parent /4
             ];
 
             // Mock DB to return book and structure for titles
