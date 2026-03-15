@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo } from 'react';
 import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore, isValidProgress, getMostRecentProgress } from './useReadingStateStore';
@@ -72,6 +72,7 @@ export const useAllBooks = () => {
 
         return Object.values(booksObj).map(book => {
             // Check cache
+            // eslint-disable-next-line react-hooks/immutability
             const cached = baseBookCache.get(book);
             if (cached) return cached;
 
@@ -107,32 +108,27 @@ export const useAllBooks = () => {
                 isOffloaded: offloadedBookIdsSet.has(book.bookId),
             };
 
+            // eslint-disable-next-line react-hooks/immutability
             baseBookCache.set(book, newBaseBook);
             return newBaseBook;
         }).sort((a, b) => b.lastInteraction - a.lastInteraction);
     }, [books, staticMetadata, offloadedBookIds, baseBookCache]);
-
-    // OPTIMIZATION: Use a cache to maintain stable object references.
-    // We only want to return a new object if the underlying data actually changed.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const previousResultsRef = useRef<Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }>>({});
-    // We safely read the ref during render ONLY because we immediately write it back in useEffect.
-    // This violates strict mode rules if we were mutating during render, but we mutate in useEffect.
-    // We ignore the hook warning because this is a standard fast-path cache pattern.
-    const previousResultsCache = previousResultsRef.current;
 
     // OPTIMIZATION: Phase 2 - Progress Merge
     // This memo runs when 'progressMap' updates (frequently).
     // We iterate over baseBooks and merge the latest progress.
     // BOLT OPTIMIZATION: Use raw reference checks (rawBookProgress) BEFORE calculating derived progress.
     // This skips calling resolveProgress() (which involves localStorage access via getDeviceId) for unchanged books.
+
+    // OPTIMIZATION: Use a WeakMap cache to maintain stable object references.
+    // We only want to return a new object if the underlying data actually changed.
+    // We instantiate the WeakMap inside useMemo to comply with React Hook rules (no useRef mutations during render).
+    // The WeakMap is keyed by the baseBook, so it naturally garbage collects old entries when Phase 1 regenerates books.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const progressMergeCache = useMemo(() => new WeakMap<any, any>(), []);
+
     const memoizedResult = useMemo(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const newCache: Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }> = {};
-
-        const cache = previousResultsCache;
-
-        const result = baseBooks.map(book => {
+        return baseBooks.map(book => {
             const rawBookProgress = progressMap[book.id];
             // Lookup by exact filename first
             let rawReadingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
@@ -149,18 +145,15 @@ export const useAllBooks = () => {
             }
 
             // Check cache for reuse
-            const prev = cache[book.id];
+            const prev = progressMergeCache.get(book);
 
             // Reuse if:
             // 1. Previous entry exists
-            // 2. Base book object is referentially identical (Phase 1 didn't change it)
-            // 3. Raw input references are identical (avoiding expensive resolveProgress)
+            // 2. Raw input references are identical (avoiding expensive resolveProgress)
             if (prev &&
-                prev.base === book &&
                 prev.rawBookProgress === rawBookProgress &&
                 prev.rawReadingListEntry === rawReadingListEntry
             ) {
-                newCache[book.id] = prev;
                 return prev.result;
             }
 
@@ -181,26 +174,18 @@ export const useAllBooks = () => {
                 lastRead: lastRead
             };
 
-            newCache[book.id] = {
+            // eslint-disable-next-line react-hooks/immutability
+            progressMergeCache.set(book, {
                 result: newBook,
-                base: book,
                 rawBookProgress,
                 rawReadingListEntry
-            };
+            });
 
             return newBook;
         });
+    }, [baseBooks, progressMap, readingListEntries, progressMergeCache]);
 
-        return { books: result, cache: newCache };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [baseBooks, progressMap, readingListEntries]);
-
-    // Update cache for next render
-    useEffect(() => {
-        previousResultsRef.current = memoizedResult.cache;
-    }, [memoizedResult.cache]);
-
-    return memoizedResult.books;
+    return memoizedResult;
 };
 
 /**
