@@ -123,7 +123,13 @@ export class MaintenanceService {
         if (fileBlob) {
           // Extract filename from the stored File object if available
           const blobFilename = fileBlob instanceof File ? fileBlob.name : undefined;
-          const knownFilename = blobFilename || books[bookId].sourceFilename || null;
+          let knownFilename = blobFilename || books[bookId].sourceFilename || null;
+
+          // Special case handling for 'book.epub' which is a placeholder name.
+          if (knownFilename == 'book.epub') {
+            knownFilename = null;
+          }
+
           const file = new File([fileBlob], knownFilename || 'book.epub', { type: 'application/epub+zip' });
 
           // Get current settings for extraction

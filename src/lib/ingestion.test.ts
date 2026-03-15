@@ -28,6 +28,7 @@ vi.mock('epubjs', () => {
   return {
     default: vi.fn(() => ({
       ready: Promise.resolve(),
+      opened: Promise.resolve(),
       loaded: {
         metadata: Promise.resolve({
           title: 'Mock Title',
@@ -60,7 +61,7 @@ vi.mock('uuid', () => ({
 
 // Mock extractCoverPalette
 vi.mock('./cover-palette', () => ({
-    extractCoverPalette: vi.fn().mockResolvedValue([1, 2, 3, 4, 5])
+  extractCoverPalette: vi.fn().mockResolvedValue([1, 2, 3, 4, 5])
 }));
 
 describe('ingestion', () => {
@@ -127,6 +128,7 @@ describe('ingestion', () => {
     const epubjs = await import('epubjs');
     (epubjs.default as any).mockImplementation(() => ({
       ready: Promise.resolve(),
+      opened: Promise.resolve(),
       loaded: {
         metadata: Promise.resolve({
           title: 'No Cover Book',
@@ -149,6 +151,7 @@ describe('ingestion', () => {
     const epubjs = await import('epubjs');
     (epubjs.default as any).mockImplementation(() => ({
       ready: Promise.resolve(),
+      opened: Promise.resolve(),
       loaded: {
         metadata: Promise.resolve({
           // Missing title, creator, and description
@@ -174,6 +177,7 @@ describe('ingestion', () => {
     const epubjs = await import('epubjs');
     (epubjs.default as any).mockImplementation(() => ({
       ready: Promise.resolve(),
+      opened: Promise.resolve(),
       loaded: {
         metadata: Promise.resolve({
           title: longTitle,

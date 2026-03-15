@@ -149,7 +149,7 @@ describe('MaintenanceService', () => {
                 title: 'Updated Title',
                 author: 'Updated Author',
                 coverPalette: [10, 20, 30, 40, 50],
-                sourceFilename: 'book.epub',
+                sourceFilename: 'Updated Title - Updated Author.epub',
             });
         });
 

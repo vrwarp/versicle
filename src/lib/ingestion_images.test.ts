@@ -12,6 +12,7 @@ vi.mock('epubjs', () => {
   return {
     default: vi.fn(() => ({
       ready: Promise.resolve(),
+      opened: Promise.resolve(),
       loaded: {
         metadata: Promise.resolve({
           title: 'Test Book',
