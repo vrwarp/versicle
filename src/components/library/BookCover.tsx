@@ -164,6 +164,7 @@ export const BookCover: React.FC<BookCoverProps & { showActions?: boolean }> = R
                                     "touch-manipulation"
                                 )}
                                 data-testid="book-menu-trigger"
+                                aria-label="Book options"
                             >
                                 <span>
                                     <MoreVertical className="w-4 h-4" />
