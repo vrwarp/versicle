@@ -65,7 +65,7 @@ export const CheckpointDiffView: React.FC<CheckpointDiffViewProps> = ({
               <div className="font-mono opacity-70 mb-0.5 flex items-center gap-2">
                 <span>{key}:</span>
                 <button
-                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-primary/20 rounded"
+                  className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-0.5 hover:bg-primary/20 rounded"
                   onClick={() => setSelectedDiff({ title: key, old: value.old, new: value.new })}
                   title="View detailed diff"
                 >
