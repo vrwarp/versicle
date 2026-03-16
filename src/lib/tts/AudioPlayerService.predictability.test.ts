@@ -84,10 +84,10 @@ describe('AudioPlayerService Predictability', () => {
     });
 
     it('should not overwrite playlist if setBookId is called again before the first db lookup finishes', async () => {
-        let resolveFirst: any;
-        const firstPromise = new Promise<any[]>(r => resolveFirst = r);
-        let resolveSecond: any;
-        const secondPromise = new Promise<any[]>(r => resolveSecond = r);
+        let resolveFirst: (value: { sectionId: string; title: string }[]) => void;
+        const firstPromise = new Promise<{ sectionId: string; title: string }[]>(r => resolveFirst = r);
+        let resolveSecond: (value: { sectionId: string; title: string }[]) => void;
+        const secondPromise = new Promise<{ sectionId: string; title: string }[]>(r => resolveSecond = r);
 
         vi.mocked(dbService.getSections)
             .mockReturnValueOnce(firstPromise)
