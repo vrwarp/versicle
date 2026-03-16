@@ -186,7 +186,7 @@ export class AudioPlayerService {
 
             if (bookId) {
                 this.playlistPromise = dbService.getSections(bookId).then(sections => {
-                    this.playlist = sections;
+                    if (this.currentBookId !== bookId) return; this.playlist = sections;
                     this.restoreQueue(bookId);
                 }).catch(e => logger.error("Failed to load playlist", e));
             } else {
@@ -681,12 +681,16 @@ export class AudioPlayerService {
     }
 
     subscribe(listener: PlaybackListener) {
+        let isSubscribed = true;
         this.listeners.push(listener);
         const currentCfi = this.stateManager.getCurrentItem()?.cfi || null;
         setTimeout(() => {
-            listener(this.status, currentCfi, this.stateManager.currentIndex, this.stateManager.queue, null);
+            if (isSubscribed) {
+                listener(this.status, currentCfi, this.stateManager.currentIndex, this.stateManager.queue, null);
+            }
         }, 0);
         return () => {
+            isSubscribed = false;
             this.listeners = this.listeners.filter(l => l !== listener);
         };
     }
