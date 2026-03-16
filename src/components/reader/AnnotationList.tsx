@@ -97,7 +97,7 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
                   </>
                 )}
               </div>
-              <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                 <Button
                   data-testid="annotation-edit-button"
                   variant="ghost"

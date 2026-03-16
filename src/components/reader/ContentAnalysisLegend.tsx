@@ -360,7 +360,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                             />
                                             <button
                                                 onClick={() => jumpToTable(img.cfi)}
-                                                className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white font-bold transition-opacity"
+                                                className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 flex items-center justify-center text-white font-bold transition-opacity"
                                             >
                                                 JUMP
                                             </button>
