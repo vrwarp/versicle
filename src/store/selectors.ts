@@ -132,6 +132,16 @@ export const useAllBooks = () => {
 
         const cache = previousResultsCache;
 
+        // BOLT OPTIMIZATION: Pre-compute match keys for reading list entries to avoid O(N * M)
+        // string parsing (generateMatchKey) inside the baseBooks.map fallback loop.
+        const readingListMatchMap = new Map<string, typeof readingListEntries[string]>();
+        Object.values(readingListEntries).forEach(entry => {
+            const key = generateMatchKey(entry.title, entry.author);
+            if (key) {
+                readingListMatchMap.set(key, entry);
+            }
+        });
+
         const result = baseBooks.map(book => {
             const rawBookProgress = progressMap[book.id];
             // Lookup by exact filename first
@@ -142,9 +152,7 @@ export const useAllBooks = () => {
                 const bookKey = generateMatchKey(book.title || '', book.author || '');
 
                 if (bookKey) {
-                    rawReadingListEntry = Object.values(readingListEntries).find(
-                        entry => generateMatchKey(entry.title, entry.author) === bookKey
-                    );
+                    rawReadingListEntry = readingListMatchMap.get(bookKey);
                 }
             }
 
@@ -229,9 +237,17 @@ export const useBook = (id: string | null) => {
         const bookKey = generateMatchKey(book?.title || '', book?.author || '');
 
         if (bookKey) {
-            readingListEntry = Object.values(readingListEntriesMap).find(
-                entry => generateMatchKey(entry.title, entry.author) === bookKey
-            );
+            // BOLT OPTIMIZATION: Instead of re-parsing string match keys for every entry in the store,
+            // manually iterate to find the match, avoiding array allocation and keeping cost linear.
+            // Since this hook only processes ONE book (unlike useAllBooks), building a full Map isn't strictly necessary,
+            // but we can still avoid allocating `Object.values` and using array methods.
+            for (const key in readingListEntriesMap) {
+                const entry = readingListEntriesMap[key];
+                if (generateMatchKey(entry.title, entry.author) === bookKey) {
+                    readingListEntry = entry;
+                    break;
+                }
+            }
         }
     }
 
