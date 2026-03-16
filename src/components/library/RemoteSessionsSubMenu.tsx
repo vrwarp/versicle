@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Monitor } from 'lucide-react';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
+
 import { useDeviceStore } from '../../store/useDeviceStore';
 import { getDeviceId } from '../../lib/device-id';
 import { DeviceIcon } from '../devices/DeviceIcon';
@@ -13,6 +13,7 @@ import {
 
 interface RemoteSessionsSubMenuProps {
   bookId: string;
+  allProgress?: Record<string, { percentage: number; currentCfi: string; lastRead: number }>;
   onResumeClick: (deviceId: string, cfi: string) => void;
 }
 
@@ -20,10 +21,10 @@ interface RemoteSessionsSubMenuProps {
  * A submenu that lists other devices with reading progress for this book.
  * Separated from BookCard to isolate useDeviceStore updates.
  */
-export const RemoteSessionsSubMenu: React.FC<RemoteSessionsSubMenuProps> = React.memo(({ bookId, onResumeClick }) => {
+export const RemoteSessionsSubMenu: React.FC<RemoteSessionsSubMenuProps> = React.memo(({ allProgress, onResumeClick }) => {
   const currentDeviceId = getDeviceId();
 
-  const allProgress = useReadingStateStore((state) => state.progress[bookId]);
+
   // Isolate expensive store updates to this component only
   const devices = useDeviceStore((state) => state.devices);
 
