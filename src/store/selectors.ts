@@ -178,7 +178,8 @@ export const useAllBooks = () => {
                 // Fallback to reading list progress if no device progress is found
                 progress: progress,
                 currentCfi: currentCfi,
-                lastRead: lastRead
+                lastRead: lastRead,
+                allProgress: rawBookProgress
             };
 
             newCache[book.id] = {

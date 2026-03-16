@@ -123,6 +123,9 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
               {onResume && (
                 <RemoteSessionsSubMenu
                   bookId={book.id}
+
+
+          allProgress={((book as unknown) as { allProgress?: Record<string, { percentage: number; currentCfi: string; lastRead: number }> }).allProgress}
                   onResumeClick={handleResumeClick}
                 />
               )}
@@ -159,6 +162,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
       {onResume && (
         <ResumeBadge
           bookId={book.id}
+          allProgress={((book as unknown) as { allProgress?: Record<string, { percentage: number; currentCfi: string; lastRead: number }> }).allProgress}
           onResumeClick={handleResumeClick}
         />
       )}
