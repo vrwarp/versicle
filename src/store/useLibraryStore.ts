@@ -136,7 +136,10 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           }
         });
 
-        set({ staticMetadata, isHydrating: false });
+        set((state) => ({
+          staticMetadata: { ...staticMetadata, ...state.staticMetadata },
+          isHydrating: false
+        }));
 
         // Hydrate Offload Status
         try {
@@ -146,7 +149,10 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           offloadedMap.forEach((isOffloaded, id) => {
             if (isOffloaded) offloadedSet.add(id);
           });
-          set({ offloadedBookIds: offloadedSet });
+
+          set((state) => ({
+            offloadedBookIds: new Set([...state.offloadedBookIds, ...offloadedSet])
+          }));
         } catch (e) {
           logger.error('Failed to hydrate offload status:', e);
         }
