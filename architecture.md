@@ -345,6 +345,13 @@ Handles the complex task of importing an EPUB file.
     4.  **Adaptive Contrast**: Generates a **Cover Palette** via `cover-palette.ts`.
         *   **Logic**: Uses **Weighted K-Means Clustering** (manual implementation) on the cover image to extract dominant colors. It prioritizes colors based on spatial distribution (corners vs. center) to ensure UI elements don't clash with key visual areas.
 
+#### Entity Resolution (`src/lib/entity-resolution.ts`)
+*   **Goal**: Deterministically match reading list entries to library books when their primary filenames differ.
+*   **Logic**:
+    *   **Normalization Pipeline**: Processes metadata (title/author) through a strict sequence: stripping file extensions, removing parenthetical/bracketed text, replacing structural punctuation with spaces, removing quotes, and nullifying generic "unknown author" strings.
+    *   **Match Key Generation**: Combines normalized title and author, intelligently stripping author prefixes from titles (a common pattern in filename-derived metadata) to generate a unified, comparable string.
+*   **Trade-off**: Hardcoded heuristics may strip overly aggressively on non-standard metadata formats or edge-case titles, leading to false positives or missed matches.
+
 #### Service Worker Image Serving (`src/lib/serviceWorkerUtils.ts`)
 *   **Goal**: Prevent memory leaks caused by `URL.createObjectURL`.
 *   **Logic**:
@@ -384,6 +391,9 @@ Versicle employs a dual-strategy for data safety, distinguishing between "Hard R
         *   **Format**: Serializes library state into a human-readable JSON format.
         *   **Restore**: Merges the imported data into the current Yjs document using `yDoc.transact`. It handles conflicts using a "Last Write Wins" (LWW) or Union strategy depending on the data type (e.g., merging annotations vs overwriting book metadata).
     *   **Trade-off**: Does not preserve full CRDT history or vector clocks.
+*   **Notes Export (`src/lib/export-notes.ts`)**:
+    *   **Goal**: Enable users to easily extract annotations from books for external use.
+    *   **Logic**: Generates raw Markdown string payloads combining highlight text and user notes. Facilitates both direct Blob download via `URL.createObjectURL` and Clipboard API copy functionality.
 
 #### Cloud Library (`src/lib/drive/`)
 Integrates with Google Drive to provide a cloud-based library.

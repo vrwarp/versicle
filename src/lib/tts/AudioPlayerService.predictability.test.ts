@@ -84,9 +84,13 @@ describe('AudioPlayerService Predictability', () => {
     });
 
     it('should not overwrite playlist if setBookId is called again before the first db lookup finishes', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let resolveFirst: any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const firstPromise = new Promise<any[]>(r => resolveFirst = r);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let resolveSecond: any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const secondPromise = new Promise<any[]>(r => resolveSecond = r);
 
         vi.mocked(dbService.getSections)
