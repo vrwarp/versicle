@@ -17,12 +17,15 @@ describe('LibraryStore race conditions', () => {
       getOffloadedStatus: vi.fn(async () => new Map()),
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const useLibraryStore = createLibraryStore(mockDb as any);
 
     // 2. Put a book in the sync store so hydrate has something to do
     useBookStore.setState({
       books: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         'old-book': { bookId: 'old-book', title: 'Old Book' } as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         'existing-book': { bookId: 'existing-book', title: 'Existing Book' } as any
       }
     });
@@ -34,7 +37,9 @@ describe('LibraryStore race conditions', () => {
     useLibraryStore.setState((state) => ({
       staticMetadata: {
         ...state.staticMetadata,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         'new-book': { id: 'new-book', title: 'New Book' } as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         'existing-book': { id: 'existing-book', title: 'Existing Book Updated Concurrently' } as any
       }
     }));

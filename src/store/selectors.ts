@@ -121,6 +121,20 @@ export const useAllBooks = () => {
     // We ignore the hook warning because this is a standard fast-path cache pattern.
     const previousResultsCache = previousResultsRef.current;
 
+    // BOLT OPTIMIZATION: Pre-compute match keys for reading list entries in a separate useMemo
+    // to avoid O(N * M) string parsing (generateMatchKey) inside the frequently-running progress map loop.
+    // readingListEntries changes rarely, whereas progressMap changes on every page turn.
+    const readingListMatchMap = useMemo(() => {
+        const map = new Map<string, typeof readingListEntries[string]>();
+        Object.values(readingListEntries).forEach(entry => {
+            const key = generateMatchKey(entry.title, entry.author);
+            if (key) {
+                map.set(key, entry);
+            }
+        });
+        return map;
+    }, [readingListEntries]);
+
     // OPTIMIZATION: Phase 2 - Progress Merge
     // This memo runs when 'progressMap' updates (frequently).
     // We iterate over baseBooks and merge the latest progress.
@@ -131,16 +145,6 @@ export const useAllBooks = () => {
         const newCache: Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }> = {};
 
         const cache = previousResultsCache;
-
-        // BOLT OPTIMIZATION: Pre-compute match keys for reading list entries to avoid O(N * M)
-        // string parsing (generateMatchKey) inside the baseBooks.map fallback loop.
-        const readingListMatchMap = new Map<string, typeof readingListEntries[string]>();
-        Object.values(readingListEntries).forEach(entry => {
-            const key = generateMatchKey(entry.title, entry.author);
-            if (key) {
-                readingListMatchMap.set(key, entry);
-            }
-        });
 
         const result = baseBooks.map(book => {
             const rawBookProgress = progressMap[book.id];
@@ -202,7 +206,7 @@ export const useAllBooks = () => {
 
         return { books: result, cache: newCache };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [baseBooks, progressMap, readingListEntries]);
+    }, [baseBooks, progressMap, readingListEntries, readingListMatchMap]);
 
     // Update cache for next render
     useEffect(() => {
