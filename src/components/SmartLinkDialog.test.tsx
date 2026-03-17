@@ -19,7 +19,6 @@ describe('SmartLinkDialog', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.spyOn(console, 'error').mockImplementation(() => {});
 
         mockAddEntry = vi.fn();
         mockRemoveEntry = vi.fn();

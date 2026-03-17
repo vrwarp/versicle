@@ -6,7 +6,6 @@ describe('TaskSequencer Predictability', () => {
 
     beforeEach(() => {
         sequencer = new TaskSequencer();
-        vi.spyOn(console, 'error').mockImplementation(() => {});
     });
 
     afterEach(() => {

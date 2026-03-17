@@ -95,3 +95,49 @@ Object.defineProperty(window, 'SpeechSynthesisUtterance', {
   value: vi.fn(),
   writable: true
 });
+
+// Console suppression system for tests
+// Captures console.error and console.warn during tests
+// Only prints them if the test fails or if VERBOSE=1 is set
+import { beforeEach, afterEach } from 'vitest';
+
+const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+const originalConsoleLog = console.log;
+const originalConsoleInfo = console.info;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let capturedLogs: { type: 'error' | 'warn' | 'log' | 'info', args: any[] }[] = [];
+
+const isVerbose = process.env.VERBOSE === '1' || process.env.VERBOSE === 'true';
+
+beforeEach(() => {
+  capturedLogs = [];
+  if (!isVerbose) {
+    console.error = (...args) => capturedLogs.push({ type: 'error', args });
+    console.warn = (...args) => capturedLogs.push({ type: 'warn', args });
+    console.log = (...args) => capturedLogs.push({ type: 'log', args });
+    console.info = (...args) => capturedLogs.push({ type: 'info', args });
+  }
+});
+
+afterEach(({ task }) => {
+  if (!isVerbose) {
+    console.error = originalConsoleError;
+    console.warn = originalConsoleWarn;
+    console.log = originalConsoleLog;
+    console.info = originalConsoleInfo;
+
+    // task.result?.state will be 'fail' if the test threw an error
+    if (task.result?.state === 'fail' && capturedLogs.length > 0) {
+      originalConsoleError('\n--- Captured Console Output for Failed Test ---');
+      for (const log of capturedLogs) {
+        if (log.type === 'error') originalConsoleError(...log.args);
+        else if (log.type === 'warn') originalConsoleWarn(...log.args);
+        else if (log.type === 'log') originalConsoleLog(...log.args);
+        else if (log.type === 'info') originalConsoleInfo(...log.args);
+      }
+      originalConsoleError('-----------------------------------------------\n');
+    }
+  }
+});
