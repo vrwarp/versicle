@@ -1,0 +1,15 @@
+<<<<<<< SEARCH
+        // BOLT OPTIMIZATION: Pre-compute match keys for reading list entries to avoid O(N * M)
+        // string parsing (generateMatchKey) inside the baseBooks.map fallback loop.
+        const readingListMatchMap = new Map<string, typeof readingListEntries[string]>();
+        Object.values(readingListEntries).forEach(entry => {
+            const key = generateMatchKey(entry.title, entry.author);
+            if (key) {
+                readingListMatchMap.set(key, entry);
+            }
+        });
+
+        const result = baseBooks.map(book => {
+=======
+        const result = baseBooks.map(book => {
+>>>>>>> REPLACE
