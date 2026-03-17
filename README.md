@@ -32,7 +32,7 @@
 *   **Mobile**: Capacitor 7.1.1 (Android) + `@capacitor/filesystem` + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login` + `@capacitor-community/text-to-speech`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4.1.18 + Radix UI
-*   **Tools**: `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
+*   **Tools**: `browser-image-compression`, `JSZip`, `lucide-react`, `react-lazy-load-image-component`, `react-window`, `dompurify`
 *   **Dev Tools**: `vite-plugin-mkcert` (Local HTTPS)
 
 ## Features

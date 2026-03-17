@@ -289,9 +289,12 @@ Provides a "Cloud Overlay" for real-time synchronization.
 *   **Logic**:
     *   **Hybrid Auth**: Supports both Web (`signInWithPopup`/`getRedirectResult`) and Native Android (`FirebaseAuthentication` plugin) flows for Google Sign-In.
     *   **Cloud Overlay**: Acts as a secondary sync provider. `y-indexeddb` remains the primary source of truth, while Firestore relays updates to other devices.
-    *   **Hook Integration**: The synchronization logic is exposed to the UI via `useFirestoreSync` (maintains the connection) and `useSyncStore` (tracks status), decoupling the UI from the underlying provider.
+    *   **Hook Integration**: The synchronization logic is exposed to the UI via `useFirestoreSync` (initializes `FirestoreSyncManager`, provides sign-in/out, and manages subscription lifecycles) and `useSyncStore` (tracks connection and auth status), decoupling the UI components from the underlying provider instance.
     *   **Y-Fire**: Uses `y-cinder` (a custom `y-fire` fork) to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
     *   **Pre-Sync Checkpoint**: Automatically creates a "pre-sync" checkpoint via `CheckpointService` immediately before connecting to the provider, ensuring a safe fallback state exists before merging remote changes (Destructive Restore protection).
+    *   **Sync Toasts (`useSyncToasts`)**: Provides UI awareness of remote activity by subscribing directly to `useReadingStateStore` and comparing serialized state.
+        *   **Logic**: It detects significant remote reading progress (jumps > 5% or completion) and emits throttled global toasts (max 1 per book per minute) to notify the user.
+        *   **Trade-off**: The hook relies on stringifying the entire `progress` dictionary (`JSON.stringify`) on every state change to perform its diff, which introduces a CPU cost that scales `O(N)` with the user's reading history.
     *   **Clean Client Sync**: When an entirely empty client connects (a device with zero books), it delays applying changes to the main `yDoc`. It creates a temporary `Y.Doc` to fetch the entire cloud snapshot (`performCleanSync`), and only applies the `stateVector` locally once the complete dataset is downloaded. This prevents the UI from rendering incomplete data states.
     *   **Configurable Debounce**: Implements `maxWaitFirestoreTime` (default 2000ms) and `maxUpdatesThreshold` (default 50) to balance cost vs. latency.
     *   **Environment Aware**: Writes to `dev` bucket in development and `main` in production to prevent test data pollution.
