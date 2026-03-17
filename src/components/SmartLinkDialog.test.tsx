@@ -19,6 +19,7 @@ describe('SmartLinkDialog', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.spyOn(console, 'error').mockImplementation(() => {});
 
         mockAddEntry = vi.fn();
         mockRemoveEntry = vi.fn();
@@ -64,6 +65,10 @@ describe('SmartLinkDialog', () => {
         (genAIService.mapReadingListToLibrary as Mock).mockResolvedValue([
             { readingListFilename: 'unmapped_entry_1', libraryBookId: 'unmapped_book_1' }
         ]);
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     it('renders correctly when there are unmapped entries and books', async () => {

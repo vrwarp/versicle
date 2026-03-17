@@ -3,6 +3,14 @@ import { MaintenanceService } from './MaintenanceService';
 
 // --- Mocks ---
 
+vi.mock('./logger', () => ({
+    createLogger: vi.fn(() => ({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+    })),
+}));
+
 const mockUpdateBook = vi.fn();
 const mockGetState = vi.fn();
 
