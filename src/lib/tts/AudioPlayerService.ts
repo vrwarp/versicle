@@ -435,10 +435,14 @@ export class AudioPlayerService {
             return this.resumeInternal();
         }
 
-        if (this.status === 'stopped' && this.currentBookId && !this.sessionRestored) {
+        const initialBookId = this.currentBookId;
+
+        if (this.status === 'stopped' && initialBookId && !this.sessionRestored) {
             this.sessionRestored = true;
             try {
-                const book = await dbService.getBookMetadata(this.currentBookId);
+                const book = await dbService.getBookMetadata(initialBookId);
+                if (this.currentBookId !== initialBookId) return;
+
                 if (book) {
                     if (book.lastPlayedCfi && this.stateManager.currentIndex === 0) {
                         const index = this.stateManager.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
@@ -460,6 +464,8 @@ export class AudioPlayerService {
 
         if (this.status !== 'playing') {
             const engaged = await this.engageBackgroundMode(item);
+            if (this.currentBookId !== initialBookId) return;
+
             if (!engaged && Capacitor.getPlatform() === 'android') {
                 this.setStatus('stopped');
                 this.notifyError("Cannot play in background");
@@ -475,7 +481,8 @@ export class AudioPlayerService {
             const voiceId = this.voiceId || '';
 
             if (!this.activeLexiconRules) {
-                this.activeLexiconRules = await this.lexiconService.getRules(this.currentBookId || undefined);
+                this.activeLexiconRules = await this.lexiconService.getRules(initialBookId || undefined);
+                if (this.currentBookId !== initialBookId) return;
             }
             const rules = this.activeLexiconRules;
 
