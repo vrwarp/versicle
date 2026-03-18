@@ -22,6 +22,7 @@ describe('TaskSequencer Predictability', () => {
     });
 
     it('returns a promise that rejects if the task throws, allowing the caller to handle the specific error', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
         const task1 = async () => {
             throw new Error('Specific Error');
         };
@@ -38,6 +39,10 @@ describe('TaskSequencer Predictability', () => {
             }
         }
 
+        // wait for background promise in TaskSequencer to reject
+        await new Promise(resolve => setTimeout(resolve, 0));
+
         expect(caught).toBe(true);
+        consoleErrorSpy.mockRestore();
     });
 });
