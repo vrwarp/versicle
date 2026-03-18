@@ -154,6 +154,7 @@ describe('MaintenanceService', () => {
         });
 
         it('should skip books with no stored file', async () => {
+            const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
             setupBookStore('book-1', {
                 title: 'Ghost Book',
                 author: 'Nobody',
@@ -165,9 +166,11 @@ describe('MaintenanceService', () => {
 
             expect(mockImportBookWithId).not.toHaveBeenCalled();
             expect(mockUpdateBook).not.toHaveBeenCalled();
+            consoleWarnSpy.mockRestore();
         });
 
         it('should continue processing remaining books if one fails', async () => {
+            const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
             mockGetState.mockReturnValue({
                 books: {
                     'book-1': { title: 'Book 1', author: 'A', sourceFilename: 'b1.epub' },
@@ -192,6 +195,7 @@ describe('MaintenanceService', () => {
             expect(mockUpdateBook).toHaveBeenCalledWith('book-2', expect.objectContaining({
                 sourceFilename: 'b2.epub',
             }));
+            consoleErrorSpy.mockRestore();
         });
     });
 });
