@@ -84,3 +84,7 @@
 ## 2026-03-03 - Focus Visibility for Hover-Revealed Elements
 **Learning:** Elements hidden via `opacity-0` and revealed on hover (`group-hover:opacity-100`) often become inaccessible to keyboard users because tabbing to them doesn't trigger the hover state, leaving focused elements invisible.
 **Action:** Always pair `opacity-0 group-hover:opacity-100` with focus visibility classes (e.g., `focus-within:opacity-100` for containers or `focus-visible:opacity-100` for the element itself) to ensure they are visible when navigated to via keyboard.
+
+## 2026-03-03 - Keyboard Accessibility for Hover-Revealed Elements
+**Learning:** Elements hidden via `opacity-0` and revealed on hover (`group-hover:opacity-100`) often become inaccessible to keyboard users because tabbing to them doesn't trigger the hover state. Furthermore, if the hidden element is inside a wrapper that actually receives focus (like a Radix `DropdownMenuTrigger`), applying `focus-visible:opacity-100` to the hidden element itself is insufficient.
+**Action:** Always pair `opacity-0 group-hover:opacity-100` with focus visibility classes. For elements wrapped in focusable containers, use `focus-within:opacity-100` on the hidden element so it becomes visible when the wrapper receives keyboard focus. For directly focusable elements, use `focus-visible:opacity-100 focus-visible:ring-2`.
