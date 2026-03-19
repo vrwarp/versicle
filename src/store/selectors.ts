@@ -12,9 +12,8 @@ import { generateMatchKey } from '../lib/entity-resolution';
  * Resolves the progress for a book using the "Local Priority > Global Recent" strategy.
  * Matches the logic in useReadingStateStore.getProgress().
  */
-function resolveProgress(bookProgress: Record<string, UserProgress> | undefined): UserProgress | null {
+function resolveProgress(bookProgress: Record<string, UserProgress> | undefined, deviceId: string): UserProgress | null {
     if (!bookProgress) return null;
-    const deviceId = getDeviceId();
 
     // 1. Try Local (Must be Valid)
     const local = bookProgress[deviceId];
@@ -142,6 +141,8 @@ export const useAllBooks = () => {
             }
         });
 
+        const currentDeviceId = getDeviceId();
+
         const result = baseBooks.map(book => {
             const rawBookProgress = progressMap[book.id];
             // Lookup by exact filename first
@@ -174,7 +175,7 @@ export const useAllBooks = () => {
 
             // Cache Miss: Calculate derived values
             // This involves resolveProgress which calls getDeviceId -> localStorage.getItem (slow)
-            const bookProgress = resolveProgress(rawBookProgress);
+            const bookProgress = resolveProgress(rawBookProgress, currentDeviceId);
             const progress = bookProgress?.percentage || rawReadingListEntry?.percentage || 0;
             const currentCfi = bookProgress?.currentCfi || undefined;
             const lastRead = bookProgress?.lastRead || rawReadingListEntry?.lastUpdated || 0;
@@ -252,7 +253,10 @@ export const useBook = (id: string | null) => {
     }
 
     // Get resolved progress (Local > Recent) across all devices for this book
-    const progress = id ? resolveProgress(bookProgressMap) : null;
+    const progress = useMemo(() => {
+        if (!id) return null;
+        return resolveProgress(bookProgressMap, getDeviceId());
+    }, [id, bookProgressMap]);
 
     // OPTIMIZATION: Memoize the single book result
     return useMemo(() => {
