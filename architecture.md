@@ -276,6 +276,10 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 
 Versicle implements a strategy combining **Real-Time Sync** (via Firestore) for cross-device activity and **Native Backup** (via Android) for data safety.
 
+#### `FirestoreSyncManager`
+*   **Goal**: Provides real-time cloud sync as a secondary remote overlay.
+*   **Logic**: Uses `y-cinder` (a custom `y-fire` fork) to manage the connection. `y-indexeddb` remains the primary source of truth for offline availability.
+
 #### `CheckpointService.ts` (The Moral Layer)
 *   **Goal**: Prevent data loss during complex sync merges by creating "Safety Snapshots".
 *   **Logic**:
@@ -385,8 +389,8 @@ Versicle employs a dual-strategy for data safety, distinguishing between "Hard R
 *   **Full/Light Backup (`BackupService` V2)**:
     *   **Goal**: Complete system state preservation ("Hard Reset"). Transitioned away from V1 JSON exports which lost CRDT context. Supports "Light" backups (JSON manifest only) and "Full" backups (ZIP archive including EPUB files).
     *   **Logic**:
-        *   **Snapshot**: Captures the entire Yjs document state as a binary update using `Y.encodeStateAsUpdate(yDoc)` encoded to base64. Also captures static metadata, semantic trees, and cache data (like locations) from IndexedDB. Full backups optimize payload size by explicitly skipping offloaded books.
-        *   **Restore**: Implements a destructive restore. It explicitly clears the existing `yjsPersistence` data via `yjsPersistence.clearData()` before creating a fresh isolated Y.Doc and applying the binary snapshot update. This bypasses merge conflicts and ensures the restored state is an exact replica of the backup. Re-writes all extracted `static_manifests` and `cache_render_metrics`. For ZIPs, it directly inserts missing blobs into `static_resources` and clears their offloaded status.
+        *   **Snapshot**: Captures the entire Yjs document state as a binary update (`Y.encodeStateAsUpdate(yDoc)`) encoded to base64. Also captures static metadata, semantic trees, and cache data (like locations) from IndexedDB. Full backups optimize payload size by explicitly ignoring offloaded books.
+        *   **Restore**: Implements a destructive restore. It explicitly clears the existing `yjsPersistence` data via `yjsPersistence.clearData()` to prevent merge conflicts before creating a fresh isolated Y.Doc and applying the binary snapshot update. This ensures the restored state is an exact replica of the backup. Re-writes all extracted `static_manifests` and `cache_render_metrics`. For ZIPs, it directly inserts missing blobs into `static_resources` and clears their offloaded status.
     *   **Trade-off**: Restore is destructive; any changes made since the backup are lost. Requires app reload to pick up new state.
 *   **Export/Import (`ExportImportService`)**:
     *   **Goal**: Data portability and merging between devices.
@@ -429,7 +433,7 @@ Integrates with Google Drive to provide a cloud-based library.
 *   **Goal**: Perform database hygiene and remove orphaned data.
 *   **Logic**:
     *   **Orphan Detection**: Scans `static_resources` (files), `cache_render_metrics` (locations), and `cache_tts_preparation` (TTS prep) for keys that no longer exist in the Yjs `user_inventory` (`useBookStore`).
-    *   **Post-Migration Role**: After the Yjs migration, this service transitions to *only* managing `static_` and `cache_` stores in IndexedDB. It strictly cleans up heavy binary data and cached assets. It *does not* touch or manage any `user_` data (inventory, progress, annotations, overrides), as those are managed entirely by their respective Yjs stores and Firestore sync.
+    *   **Post-Migration Role**: After the Yjs migration, this service strictly manages IDB `static_` and `cache_` stores to clean up orphaned binary data. It leaves `user_` data entirely to Yjs/Firestore sync.
     *   **Orphan Pruning**: Prunes files (`static_resources`), locations (`cache_render_metrics`), and TTS Prep (`cache_tts_preparation`) that no longer have a matching parent book ID in `useBookStore`.
     *   **Metadata Regeneration**: Can re-import books from their binary blobs (`regenerateAllMetadata`) to refresh Yjs metadata if the schema changes, using `DBService.importBookWithId`.
 
@@ -483,8 +487,9 @@ The central hub for TTS operations. It runs on the **Main Thread** and coordinat
 #### `src/lib/tts/TaskSequencer.ts`
 *   **Goal**: Prevent race conditions in async audio operations.
 *   **Logic**:
-    *   **Queue**: Maintains a promise chain (`pendingPromise`).
+    *   **Queue**: Maintains a promise chain (`pendingPromise`). It internally catches and logs errors on this chain to prevent the queue from stalling permanently.
     *   **Serialization**: Ensures tasks like `play()`, `pause()`, and `loadSection()` run sequentially, preventing "Double Play" or invalid state transitions.
+    *   **Unifying Promises**: The `enqueue()` method explicitly returns the unhandled `resultPromise` so the caller can correctly await or catch task-specific rejections without breaking the sequencer's internal chain.
 *   **Trade-offs**:
     *   **Head-of-Line Blocking**: A single slow operation (e.g., a network timeout) will block all subsequent playback actions.
 
@@ -674,7 +679,7 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Trade-off**: Requires strict lifecycle management. If a component fails to unregister its handler on unmount (zombie handler), it can permanently hijack the back button and trap the user.
 *   **`useLibraryStore` (Local Only)**:
     *   **Strategy**: Manages transient and local-only state like `isImporting` flags and **Static Metadata** (covers, file hashes) which are too heavy for Yjs. The inventory `books` property has been fully migrated to `useBookStore`.
-    *   **The "Ghost Book" Pattern**: The UI merges Synced Inventory (Yjs) with Local Static Metadata (IDB). If the local file is missing, the book appears as a "Ghost Book" using synced metadata.
+    *   **The "Ghost Book" Pattern**: The UI merges Synced Inventory (Yjs) with Local Static Metadata (IDB). It merges these to support "Ghost Books" - books where the heavy local file is offloaded/deleted, but the user's progress and metadata remain in the Yjs CRDT.
     *   **Smart Ingestion**: When importing a file (`addBook`), the store uses "Smart Matching" to explicitly check if the new file's metadata (Title + Author) matches an existing "Ghost Book" in the synced inventory. If found, it links the new binary file to the existing Yjs record instead of creating a duplicate entry.
 *   **`useGoogleServicesStore` (Local Only)**:
     *   **Goal**: Manage connection state for Google APIs (Drive, Sync) and persist user preferences.
