@@ -64,9 +64,9 @@ describe('useAllBooks Performance', () => {
         // 2. Render Hook
         const { result } = renderHook(() => useAllBooks());
 
-        // Baseline: 10 calls (1 per book)
-        // Note: resolveProgress calls getDeviceId
-        expect(getDeviceIdSpy).toHaveBeenCalledTimes(10);
+        // Baseline: 1 call (we optimized this to run only once per hook call instead of per book)
+        // Note: resolveProgress no longer calls getDeviceId
+        expect(getDeviceIdSpy).toHaveBeenCalledTimes(1);
 
         expect(result.current).toHaveLength(10);
 
@@ -90,8 +90,8 @@ describe('useAllBooks Performance', () => {
         });
 
         // 4. Assert Performance
-        // Without optimization: 10 calls.
-        // With optimization: 1 call.
+        // Without optimization: 10 calls per render.
+        // With optimization: 1 call per render.
         expect(getDeviceIdSpy).toHaveBeenCalledTimes(1);
     });
 });
