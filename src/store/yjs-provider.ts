@@ -60,12 +60,12 @@ export function handleObsoleteClient(incomingVersion: number): void {
     // 1. Sever cloud connection (lazy import to avoid circular deps)
     import('../lib/sync/hooks/useSyncStore').then(({ useSyncStore }) => {
         useSyncStore.getState().setFirestoreStatus('disconnected');
-    });
+    }).catch(err => logger.error('Failed to import useSyncStore:', err));
 
     // 2. Lock UI — requires useUIStore (imported lazily to avoid circular deps at module init)
     import('./useUIStore').then(({ useUIStore }) => {
         useUIStore.getState().setObsoleteLock(true);
-    });
+    }).catch(err => logger.error('Failed to import useUIStore:', err));
 }
 
 // ─── Deterministic Migration Runner ─────────────────────────────────────────
