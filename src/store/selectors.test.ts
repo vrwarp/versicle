@@ -507,6 +507,45 @@ describe('selectors', () => {
       // This validates the Phase 1 WeakMap optimization
       expect(bookB_v2).toBe(bookB_v1);
     });
+
+    it('should rebuild cache when staticMetadata dependencies change, avoiding stale cache reads', () => {
+      const bookA = { bookId: 'book-a', title: 'Book A', lastInteraction: 100, status: 'unread', tags: [] };
+      const mockBookState = {
+        books: { 'book-a': bookA }
+      };
+
+      let mockLibraryState = { staticMetadata: {}, offloadedBookIds: new Set() };
+      const mockProgress = { 'book-a': {} };
+
+      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockBookState));
+      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockLibraryState));
+      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ progress: mockProgress }));
+      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ entries: {} }));
+
+      const { result, rerender } = renderHook(() => useAllBooks());
+
+      const firstRender = result.current;
+      const bookA_v1 = firstRender.find((b: BookMetadata) => b.id === 'book-a');
+      expect(bookA_v1.title).toBe('Book A');
+
+      // Update static metadata
+      mockLibraryState = {
+        staticMetadata: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          'book-a': { id: 'book-a', title: 'Book A - Static Meta' } as any
+        },
+        offloadedBookIds: new Set()
+      };
+
+      rerender();
+
+      const secondRender = result.current;
+      const bookA_v2 = secondRender.find((b: BookMetadata) => b.id === 'book-a');
+
+      // We expect the new title from static metadata, proving the cache was invalidated and rebuilt
+      expect(bookA_v2.title).toBe('Book A - Static Meta');
+      expect(bookA_v2).not.toBe(bookA_v1);
+    });
   });
 
   describe('useLastReadBookId', () => {
