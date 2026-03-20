@@ -88,3 +88,7 @@
 ## 2026-03-03 - Keyboard Accessibility for Hover-Revealed Elements
 **Learning:** Elements hidden via `opacity-0` and revealed on hover (`group-hover:opacity-100`) often become inaccessible to keyboard users because tabbing to them doesn't trigger the hover state. Furthermore, if the hidden element is inside a wrapper that actually receives focus (like a Radix `DropdownMenuTrigger`), applying `focus-visible:opacity-100` to the hidden element itself is insufficient.
 **Action:** Always pair `opacity-0 group-hover:opacity-100` with focus visibility classes. For elements wrapped in focusable containers, use `focus-within:opacity-100` on the hidden element so it becomes visible when the wrapper receives keyboard focus. For directly focusable elements, use `focus-visible:opacity-100 focus-visible:ring-2`.
+
+## 2025-06-03 - Accessible Loading States in Buttons
+**Learning:** Using an icon like `Loader2` to indicate a loading state in a button is visually clear, but without `sr-only` text, screen reader users might only hear the original button text (e.g., "Delete") while the action is actually "Deleting...".
+**Action:** Always pair a spinning loading icon inside a button with `<span className="sr-only">Loading...</span>` (or context-specific text like "Deleting...") so screen readers announce the state change. Also, hide the original button text using `aria-hidden={isLoading}` if it remains in the DOM.
