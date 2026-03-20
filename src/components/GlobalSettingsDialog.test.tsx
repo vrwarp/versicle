@@ -8,7 +8,7 @@ import { useTTSStore } from '../store/useTTSStore';
 vi.mock('./ui/Modal', () => {
     return {
         Modal: ({ open, children }: { open: boolean, children: React.ReactNode }) => open ? <div role="dialog">{children}</div> : null,
-        ModalContent: ({ children, 'aria-describedby': ariaDescribedBy }: { children: React.ReactNode, className?: string, 'aria-describedby'?: string }) => (
+        ModalContent: ({ children, 'aria-describedby': ariaDescribedBy, hideCloseButton }: { children: React.ReactNode, className?: string, 'aria-describedby'?: string, hideCloseButton?: boolean }) => (
             <div>
                 {/* Ensure accessibility elements are present in tests */}
                 <h1>Global Settings</h1>
@@ -19,6 +19,7 @@ vi.mock('./ui/Modal', () => {
         ModalHeader: ({ children }: { children: React.ReactNode }) => <header>{children}</header>,
         ModalTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
         ModalDescription: ({ children }: { children: React.ReactNode }) => <p>{children}</p>,
+        ModalClose: ({ children }: { children: React.ReactNode }) => <button>{children}</button>,
     };
 });
 
