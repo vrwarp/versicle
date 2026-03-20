@@ -23,7 +23,7 @@ export class TaskSequencer {
         this.pendingPromise = resultPromise.then(() => { }).catch((err) => {
             console.error("TaskSequencer task failed safely:", err);
         });
-        return resultPromise;
+        return resultPromise as Promise<T | void>;
     }
 
     /**
