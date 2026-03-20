@@ -13,6 +13,7 @@ import { PlatformIntegration } from './PlatformIntegration';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useToastStore } from '../../store/useToastStore';
 import { createLogger } from '../logger';
+import { requestNotificationPermission } from '../permissions';
 
 const logger = createLogger('AudioPlayerService');
 
@@ -199,6 +200,10 @@ export class AudioPlayerService {
     }
 
     private async engageBackgroundMode(item: TTSQueueItem): Promise<boolean> {
+        if (Capacitor.getPlatform() === 'android') {
+            await requestNotificationPermission();
+        }
+
         try {
             this.platformIntegration.updateMetadata({
                 title: item.title || 'Chapter Text',
