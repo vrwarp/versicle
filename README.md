@@ -64,6 +64,7 @@
 *   **Bible Lexicon**: Specialized pronunciation rules for Bible verses (e.g., "Gen 1:1"), enabled by default in settings.
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
+*   **Hardware Acceleration**: Uses WebGPU via ONNX Runtime Web for fast, local Piper voice generation, falling back to WebAssembly (WASM) when unavailable.
 *   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service) with optional White Noise generation.
     *   **Background Audio Mode**: Configurable options (Silence, White Noise, Off) to ensure the OS keeps the app alive during playback.
 *   **Battery Guard**: Explicitly checks and warns about aggressive Android battery optimizations that might kill background playback using `BatteryOptimization`.
