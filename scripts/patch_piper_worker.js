@@ -279,6 +279,43 @@ if (content.includes('async function init(data, phonemizeOnly = false) {\n  try 
 }
 
 
+// ---------------------------------------------------------------------------
+// Patch 7: Enable WebGPU Execution Provider
+// ---------------------------------------------------------------------------
+// ONNX Runtime Web supports WebGPU for hardware-accelerated inference. This patch
+// switches the loaded ORT script to 'ort.webgpu.min.js' and configures the
+// InferenceSession to use ['webgpu', 'wasm'] as execution providers.
+
+const searchWebGpuScript = `  const onnxruntimeJs = URL.createObjectURL(await getBlob(\`\${onnxruntimeBase}ort.min.js\`, blobs));`;
+const replaceWebGpuScript = `  const onnxruntimeJs = URL.createObjectURL(await getBlob(\`\${onnxruntimeBase}ort.webgpu.min.js\`, blobs));`;
+
+if (content.includes('ort.webgpu.min.js')) {
+    console.log('WebGPU script patch already applied.');
+} else {
+    if (content.includes(searchWebGpuScript)) {
+        content = content.replace(searchWebGpuScript, replaceWebGpuScript);
+        modified = true;
+        console.log('Applied WebGPU script patch.');
+    } else {
+        console.warn('Could not find ORT script loading block.');
+    }
+}
+
+const searchSession = `  const session = cachedSession[modelUrl] ?? await ort.InferenceSession.create(URL.createObjectURL(modelBlob));`;
+const replaceSession = `  const session = cachedSession[modelUrl] ?? await ort.InferenceSession.create(URL.createObjectURL(modelBlob), { executionProviders: ['webgpu', 'wasm'] });`;
+
+if (content.includes(`executionProviders: ['webgpu', 'wasm']`)) {
+    console.log('WebGPU session patch already applied.');
+} else {
+    if (content.includes(searchSession)) {
+        content = content.replace(searchSession, replaceSession);
+        modified = true;
+        console.log('Applied WebGPU session patch.');
+    } else {
+        console.warn('Could not find ORT session creation block.');
+    }
+}
+
 if (modified) {
     fs.writeFileSync(workerPath, content, 'utf8');
     console.log('piper_worker.js updated.');

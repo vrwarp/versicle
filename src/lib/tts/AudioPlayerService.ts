@@ -186,7 +186,7 @@ export class AudioPlayerService {
 
             if (bookId) {
                 this.playlistPromise = dbService.getSections(bookId).then(sections => {
-                    this.playlist = sections;
+                    if (this.currentBookId !== bookId) return; this.playlist = sections;
                     this.restoreQueue(bookId);
                 }).catch(e => logger.error("Failed to load playlist", e));
             } else {
@@ -435,10 +435,14 @@ export class AudioPlayerService {
             return this.resumeInternal();
         }
 
-        if (this.status === 'stopped' && this.currentBookId && !this.sessionRestored) {
+        const initialBookId = this.currentBookId;
+
+        if (this.status === 'stopped' && initialBookId && !this.sessionRestored) {
             this.sessionRestored = true;
             try {
-                const book = await dbService.getBookMetadata(this.currentBookId);
+                const book = await dbService.getBookMetadata(initialBookId);
+                if (this.currentBookId !== initialBookId) return;
+
                 if (book) {
                     if (book.lastPlayedCfi && this.stateManager.currentIndex === 0) {
                         const index = this.stateManager.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
@@ -460,6 +464,8 @@ export class AudioPlayerService {
 
         if (this.status !== 'playing') {
             const engaged = await this.engageBackgroundMode(item);
+            if (this.currentBookId !== initialBookId) return;
+
             if (!engaged && Capacitor.getPlatform() === 'android') {
                 this.setStatus('stopped');
                 this.notifyError("Cannot play in background");
@@ -475,7 +481,8 @@ export class AudioPlayerService {
             const voiceId = this.voiceId || '';
 
             if (!this.activeLexiconRules) {
-                this.activeLexiconRules = await this.lexiconService.getRules(this.currentBookId || undefined);
+                this.activeLexiconRules = await this.lexiconService.getRules(initialBookId || undefined);
+                if (this.currentBookId !== initialBookId) return;
             }
             const rules = this.activeLexiconRules;
 
@@ -681,12 +688,16 @@ export class AudioPlayerService {
     }
 
     subscribe(listener: PlaybackListener) {
+        let isSubscribed = true;
         this.listeners.push(listener);
         const currentCfi = this.stateManager.getCurrentItem()?.cfi || null;
         setTimeout(() => {
-            listener(this.status, currentCfi, this.stateManager.currentIndex, this.stateManager.queue, null);
+            if (isSubscribed) {
+                listener(this.status, currentCfi, this.stateManager.currentIndex, this.stateManager.queue, null);
+            }
         }, 0);
         return () => {
+            isSubscribed = false;
             this.listeners = this.listeners.filter(l => l !== listener);
         };
     }

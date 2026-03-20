@@ -12,9 +12,8 @@ import { generateMatchKey } from '../lib/entity-resolution';
  * Resolves the progress for a book using the "Local Priority > Global Recent" strategy.
  * Matches the logic in useReadingStateStore.getProgress().
  */
-function resolveProgress(bookProgress: Record<string, UserProgress> | undefined): UserProgress | null {
+function resolveProgress(bookProgress: Record<string, UserProgress> | undefined, deviceId: string): UserProgress | null {
     if (!bookProgress) return null;
-    const deviceId = getDeviceId();
 
     // 1. Try Local (Must be Valid)
     const local = bookProgress[deviceId];
@@ -132,6 +131,18 @@ export const useAllBooks = () => {
 
         const cache = previousResultsCache;
 
+        // BOLT OPTIMIZATION: Pre-compute match keys for reading list entries to avoid O(N * M)
+        // string parsing (generateMatchKey) inside the baseBooks.map fallback loop.
+        const readingListMatchMap = new Map<string, typeof readingListEntries[string]>();
+        Object.values(readingListEntries).forEach(entry => {
+            const key = generateMatchKey(entry.title, entry.author);
+            if (key) {
+                readingListMatchMap.set(key, entry);
+            }
+        });
+
+        const currentDeviceId = getDeviceId();
+
         const result = baseBooks.map(book => {
             const rawBookProgress = progressMap[book.id];
             // Lookup by exact filename first
@@ -142,9 +153,7 @@ export const useAllBooks = () => {
                 const bookKey = generateMatchKey(book.title || '', book.author || '');
 
                 if (bookKey) {
-                    rawReadingListEntry = Object.values(readingListEntries).find(
-                        entry => generateMatchKey(entry.title, entry.author) === bookKey
-                    );
+                    rawReadingListEntry = readingListMatchMap.get(bookKey);
                 }
             }
 
@@ -166,7 +175,7 @@ export const useAllBooks = () => {
 
             // Cache Miss: Calculate derived values
             // This involves resolveProgress which calls getDeviceId -> localStorage.getItem (slow)
-            const bookProgress = resolveProgress(rawBookProgress);
+            const bookProgress = resolveProgress(rawBookProgress, currentDeviceId);
             const progress = bookProgress?.percentage || rawReadingListEntry?.percentage || 0;
             const currentCfi = bookProgress?.currentCfi || undefined;
             const lastRead = bookProgress?.lastRead || rawReadingListEntry?.lastUpdated || 0;
@@ -178,7 +187,8 @@ export const useAllBooks = () => {
                 // Fallback to reading list progress if no device progress is found
                 progress: progress,
                 currentCfi: currentCfi,
-                lastRead: lastRead
+                lastRead: lastRead,
+                allProgress: rawBookProgress
             };
 
             newCache[book.id] = {
@@ -228,14 +238,25 @@ export const useBook = (id: string | null) => {
         const bookKey = generateMatchKey(book?.title || '', book?.author || '');
 
         if (bookKey) {
-            readingListEntry = Object.values(readingListEntriesMap).find(
-                entry => generateMatchKey(entry.title, entry.author) === bookKey
-            );
+            // BOLT OPTIMIZATION: Instead of re-parsing string match keys for every entry in the store,
+            // manually iterate to find the match, avoiding array allocation and keeping cost linear.
+            // Since this hook only processes ONE book (unlike useAllBooks), building a full Map isn't strictly necessary,
+            // but we can still avoid allocating `Object.values` and using array methods.
+            for (const key in readingListEntriesMap) {
+                const entry = readingListEntriesMap[key];
+                if (generateMatchKey(entry.title, entry.author) === bookKey) {
+                    readingListEntry = entry;
+                    break;
+                }
+            }
         }
     }
 
     // Get resolved progress (Local > Recent) across all devices for this book
-    const progress = id ? resolveProgress(bookProgressMap) : null;
+    const progress = useMemo(() => {
+        if (!id) return null;
+        return resolveProgress(bookProgressMap, getDeviceId());
+    }, [id, bookProgressMap]);
 
     // OPTIMIZATION: Memoize the single book result
     return useMemo(() => {

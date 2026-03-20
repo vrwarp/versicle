@@ -52,6 +52,11 @@ export function normalizeMetadata(text: string): string {
     return normalized;
 }
 
+// Bounded cache to prevent memory leaks while optimizing O(N*M) selector loops
+// that repeatedly check the same titles/authors during render phases.
+const matchKeyCache = new Map<string, string>();
+const MAX_CACHE_SIZE = 5000;
+
 /**
  * Generates a composite match key from a title and author.
  * Used to compare entries across different data stores.
@@ -62,6 +67,12 @@ export function normalizeMetadata(text: string): string {
  * @returns A normalized, collapsed string: "normalizedtitle normalizedauthor"
  */
 export function generateMatchKey(title: string, author: string): string {
+    const rawKey = `${title}\0${author}`;
+    const cached = matchKeyCache.get(rawKey);
+    if (cached !== undefined) {
+        return cached;
+    }
+
     let normTitle = normalizeMetadata(title);
     const normAuthor = normalizeMetadata(author);
 
@@ -70,5 +81,14 @@ export function generateMatchKey(title: string, author: string): string {
     if (normAuthor && normTitle.startsWith(normAuthor + " ")) {
         normTitle = normTitle.slice(normAuthor.length).trim();
     }
-    return `${normTitle} ${normAuthor}`.replace(/\s+/g, " ").trim();
+    const result = `${normTitle} ${normAuthor}`.replace(/\s+/g, " ").trim();
+
+    if (matchKeyCache.size >= MAX_CACHE_SIZE) {
+        // Simple eviction: clear the cache if it gets too large.
+        // This is safe since this is purely a fast-path cache.
+        matchKeyCache.clear();
+    }
+    matchKeyCache.set(rawKey, result);
+
+    return result;
 }

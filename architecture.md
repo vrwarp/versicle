@@ -234,7 +234,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   **Logic**: Parses the new file but *forces* the internal IDs (Book ID, Spine Items, Batches) to match the provided ID, ensuring the new binary seamlessly reconnects with existing Yjs progress/annotations. It explicitly rewrites all internal references in the extracted data structures to align with the target ID before ingestion. Does NOT write `user_inventory`.
 *   **`deleteBook(id)`**: Cleans up all `static_` and `cache_` stores (Heavy Data) and removes the synced `Content Analysis` (AI data) but deliberately *leaves* the critical `user_` data (Inventory, Progress, Annotations) in the Yjs document. This allows for a "Soft Delete" where the user can restore the book later (Ghost Book) without losing their place. The UI merges the Yjs inventory with IDB static metadata via `useLibraryStore` to display these "Ghost Books" seamlessly.
 *   **`ingestBook(data)`**: Performs a "Static Only" write. It persists the heavy immutable data (`static_manifests`, `static_resources`) to IDB but relies on the caller (Zustand) to update the Yjs `user_inventory`.
-*   **`addBook(file)`**: Pure ingestion pipeline that extracts data and delegates to `ingestBook`. It only writes to `static_` and `cache_` stores, relying on `useLibraryStore` to handle the `user_inventory` Yjs update.
+*   **`addBook(file)`**: Pure ingestion pipeline that extracts data and delegates to `ingestBook`. It only writes to `static_` and `cache_` stores. Does NOT write `user_inventory` (handled by caller).
 *   **`getOffloadedStatus(bookIds)`**: Returns a Map indicating whether the binary resource for each book exists locally or has been offloaded.
 *   **`getAvailableResourceIds()`**: Returns a Set of all book IDs that have binary content locally (NOT offloaded).
 
@@ -276,6 +276,10 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
 
 Versicle implements a strategy combining **Real-Time Sync** (via Firestore) for cross-device activity and **Native Backup** (via Android) for data safety.
 
+#### `FirestoreSyncManager`
+*   **Goal**: Provides real-time cloud sync as a secondary remote overlay.
+*   **Logic**: Uses `y-cinder` (a custom `y-fire` fork) to manage the connection. `y-indexeddb` remains the primary source of truth for offline availability.
+
 #### `CheckpointService.ts` (The Moral Layer)
 *   **Goal**: Prevent data loss during complex sync merges by creating "Safety Snapshots".
 *   **Logic**:
@@ -289,9 +293,12 @@ Provides a "Cloud Overlay" for real-time synchronization.
 *   **Logic**:
     *   **Hybrid Auth**: Supports both Web (`signInWithPopup`/`getRedirectResult`) and Native Android (`FirebaseAuthentication` plugin) flows for Google Sign-In.
     *   **Cloud Overlay**: Acts as a secondary sync provider. `y-indexeddb` remains the primary source of truth, while Firestore relays updates to other devices.
-    *   **Hook Integration**: The synchronization logic is exposed to the UI via `useFirestoreSync` (maintains the connection) and `useSyncStore` (tracks status), decoupling the UI from the underlying provider.
+    *   **Hook Integration**: The synchronization logic is exposed to the UI via `useFirestoreSync` (initializes `FirestoreSyncManager`, provides sign-in/out, and manages subscription lifecycles) and `useSyncStore` (tracks connection and auth status), decoupling the UI components from the underlying provider instance.
     *   **Y-Fire**: Uses `y-cinder` (a custom `y-fire` fork) to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
     *   **Pre-Sync Checkpoint**: Automatically creates a "pre-sync" checkpoint via `CheckpointService` immediately before connecting to the provider, ensuring a safe fallback state exists before merging remote changes (Destructive Restore protection).
+    *   **Sync Toasts (`useSyncToasts`)**: Provides UI awareness of remote activity by subscribing directly to `useReadingStateStore` and comparing serialized state.
+        *   **Logic**: It detects significant remote reading progress (jumps > 5% or completion) and emits throttled global toasts (max 1 per book per minute) to notify the user.
+        *   **Trade-off**: The hook relies on stringifying the entire `progress` dictionary (`JSON.stringify`) on every state change to perform its diff, which introduces a CPU cost that scales `O(N)` with the user's reading history.
     *   **Clean Client Sync**: When an entirely empty client connects (a device with zero books), it delays applying changes to the main `yDoc`. It creates a temporary `Y.Doc` to fetch the entire cloud snapshot (`performCleanSync`), and only applies the `stateVector` locally once the complete dataset is downloaded. This prevents the UI from rendering incomplete data states.
     *   **Configurable Debounce**: Implements `maxWaitFirestoreTime` (default 2000ms) and `maxUpdatesThreshold` (default 50) to balance cost vs. latency.
     *   **Environment Aware**: Writes to `dev` bucket in development and `main` in production to prevent test data pollution.
@@ -345,6 +352,13 @@ Handles the complex task of importing an EPUB file.
     4.  **Adaptive Contrast**: Generates a **Cover Palette** via `cover-palette.ts`.
         *   **Logic**: Uses **Weighted K-Means Clustering** (manual implementation) on the cover image to extract dominant colors. It prioritizes colors based on spatial distribution (corners vs. center) to ensure UI elements don't clash with key visual areas.
 
+#### Entity Resolution (`src/lib/entity-resolution.ts`)
+*   **Goal**: Deterministically match reading list entries to library books when their primary filenames differ.
+*   **Logic**:
+    *   **Normalization Pipeline**: Processes metadata (title/author) through a strict sequence: stripping file extensions, removing parenthetical/bracketed text, replacing structural punctuation with spaces, removing quotes, and nullifying generic "unknown author" strings.
+    *   **Match Key Generation**: Combines normalized title and author, intelligently stripping author prefixes from titles (a common pattern in filename-derived metadata) to generate a unified, comparable string.
+*   **Trade-off**: Hardcoded heuristics may strip overly aggressively on non-standard metadata formats or edge-case titles, leading to false positives or missed matches.
+
 #### Service Worker Image Serving (`src/lib/serviceWorkerUtils.ts`)
 *   **Goal**: Prevent memory leaks caused by `URL.createObjectURL`.
 *   **Logic**:
@@ -375,8 +389,8 @@ Versicle employs a dual-strategy for data safety, distinguishing between "Hard R
 *   **Full/Light Backup (`BackupService` V2)**:
     *   **Goal**: Complete system state preservation ("Hard Reset"). Transitioned away from V1 JSON exports which lost CRDT context. Supports "Light" backups (JSON manifest only) and "Full" backups (ZIP archive including EPUB files).
     *   **Logic**:
-        *   **Snapshot**: Captures the entire Yjs document state as a binary update using `Y.encodeStateAsUpdate(yDoc)` encoded to base64. Also captures static metadata, semantic trees, and cache data (like locations) from IndexedDB.
-        *   **Restore**: Implements a destructive restore. It explicitly clears the existing `yjsPersistence` data via `yjsPersistence.clearData()` before creating a fresh isolated Y.Doc and applying the binary snapshot update. This bypasses merge conflicts and ensures the restored state is an exact replica of the backup. Re-writes all extracted `static_manifests` and `cache_render_metrics`. For ZIPs, it directly inserts missing blobs into `static_resources`.
+        *   **Snapshot**: Captures the entire Yjs document state as a binary update (`Y.encodeStateAsUpdate(yDoc)`) encoded to base64. Also captures static metadata, semantic trees, and cache data (like locations) from IndexedDB. Full backups optimize payload size by explicitly ignoring offloaded books.
+        *   **Restore**: Implements a destructive restore. It explicitly clears the existing `yjsPersistence` data via `yjsPersistence.clearData()` to prevent merge conflicts before creating a fresh isolated Y.Doc and applying the binary snapshot update. This ensures the restored state is an exact replica of the backup. Re-writes all extracted `static_manifests` and `cache_render_metrics`. For ZIPs, it directly inserts missing blobs into `static_resources` and clears their offloaded status.
     *   **Trade-off**: Restore is destructive; any changes made since the backup are lost. Requires app reload to pick up new state.
 *   **Export/Import (`ExportImportService`)**:
     *   **Goal**: Data portability and merging between devices.
@@ -384,6 +398,9 @@ Versicle employs a dual-strategy for data safety, distinguishing between "Hard R
         *   **Format**: Serializes library state into a human-readable JSON format.
         *   **Restore**: Merges the imported data into the current Yjs document using `yDoc.transact`. It handles conflicts using a "Last Write Wins" (LWW) or Union strategy depending on the data type (e.g., merging annotations vs overwriting book metadata).
     *   **Trade-off**: Does not preserve full CRDT history or vector clocks.
+*   **Notes Export (`src/lib/export-notes.ts`)**:
+    *   **Goal**: Enable users to easily extract annotations from books for external use.
+    *   **Logic**: Generates raw Markdown string payloads combining highlight text and user notes. Facilitates both direct Blob download via `URL.createObjectURL` and Clipboard API copy functionality.
 
 #### Cloud Library (`src/lib/drive/`)
 Integrates with Google Drive to provide a cloud-based library.
@@ -392,7 +409,7 @@ Integrates with Google Drive to provide a cloud-based library.
     *   **Goal**: Manage high-level sync logic and state.
     *   **Logic**:
         *   **Heuristic Sync**: To save API quota, it checks if the remote folder's `viewedByMeTime` is more recent than the local `lastScanTime` (`shouldAutoSync`). If not, it skips the expensive scan. If the Cloud Index is empty, it bypasses the heuristic and forces a full folder scan.
-        *   **Folder Scanning (`scanAndIndex`)**: Scans for EPUB files by querying the `linkedFolderId` explicitly using `DriveService.listFilesRecursive`. It optimizes memory by mapping the heavy API `DriveFile` responses to lightweight indexing objects (`DriveFileIndex`) before persisting them in `useDriveStore`.
+        *   **Folder Scanning (`scanAndIndex`)**: Scans for EPUB files by querying the `linkedFolderId` explicitly using `DriveService.listFilesRecursive`. It optimizes memory by mapping the heavy API `DriveFile` responses to lightweight indexing objects (`DriveFileIndex` via `mapToDriveFileIndex`) before persisting them in `useDriveStore`.
         *   **Diffing (`checkForNewFiles`)**: Compares the lightweight Cloud Index (`useDriveStore`) against the Local Library (`useBookStore` inventory via filenames) to identify "New" files available for import.
         *   **Direct Store Access**: Reads directly from `useDriveStore` and `useLibraryStore` to manage state and trigger imports.
 *   **`DriveService.ts` (The Muscle)**:
@@ -415,8 +432,8 @@ Integrates with Google Drive to provide a cloud-based library.
 #### `src/lib/MaintenanceService.ts`
 *   **Goal**: Perform database hygiene and remove orphaned data.
 *   **Logic**:
-    *   **Orphan Detection**: Scans `static_resources` (files) and `cache_` stores for keys that no longer exist in the Yjs `user_inventory`.
-    *   **Post-Migration Role**: After the Yjs migration, this service transitions to *only* managing `static_` and `cache_` stores in IndexedDB. It strictly cleans up heavy binary data and cached assets. It *does not* touch or manage any `user_` data (inventory, progress, annotations, overrides), as those are managed entirely by their respective Yjs stores and Firestore sync.
+    *   **Orphan Detection**: Scans `static_resources` (files), `cache_render_metrics` (locations), and `cache_tts_preparation` (TTS prep) for keys that no longer exist in the Yjs `user_inventory` (`useBookStore`).
+    *   **Post-Migration Role**: After the Yjs migration, this service strictly manages IDB `static_` and `cache_` stores to clean up orphaned binary data. It leaves `user_` data entirely to Yjs/Firestore sync.
     *   **Orphan Pruning**: Prunes files (`static_resources`), locations (`cache_render_metrics`), and TTS Prep (`cache_tts_preparation`) that no longer have a matching parent book ID in `useBookStore`.
     *   **Metadata Regeneration**: Can re-import books from their binary blobs (`regenerateAllMetadata`) to refresh Yjs metadata if the schema changes, using `DBService.importBookWithId`.
 
@@ -470,8 +487,9 @@ The central hub for TTS operations. It runs on the **Main Thread** and coordinat
 #### `src/lib/tts/TaskSequencer.ts`
 *   **Goal**: Prevent race conditions in async audio operations.
 *   **Logic**:
-    *   **Queue**: Maintains a promise chain (`pendingPromise`).
+    *   **Queue**: Maintains a promise chain (`pendingPromise`). It internally catches and logs errors on this chain to prevent the queue from stalling permanently.
     *   **Serialization**: Ensures tasks like `play()`, `pause()`, and `loadSection()` run sequentially, preventing "Double Play" or invalid state transitions.
+    *   **Unifying Promises**: The `enqueue()` method explicitly returns the unhandled `resultPromise` so the caller can correctly await or catch task-specific rejections without breaking the sequencer's internal chain.
 *   **Trade-offs**:
     *   **Head-of-Line Blocking**: A single slow operation (e.g., a network timeout) will block all subsequent playback actions.
 
@@ -660,9 +678,9 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Logic**: Implements a **Priority Queue** (Modal > UI > Default). Components register handlers with a priority, and the store executes only the highest-priority handler.
     *   **Trade-off**: Requires strict lifecycle management. If a component fails to unregister its handler on unmount (zombie handler), it can permanently hijack the back button and trap the user.
 *   **`useLibraryStore` (Local Only)**:
-    *   **Strategy**: Manages **Static Metadata** (covers, file hashes) which are too heavy for Yjs. The inventory `books` property has been fully migrated to `useBookStore`.
-    *   **The "Ghost Book" Pattern**: The UI merges Synced Inventory (Yjs) with Local Static Metadata (IDB). If the local file is missing, the book appears as a "Ghost Book" using synced metadata.
-    *   **Smart Ingestion**: When importing a file (`addBook`), the store explicitly checks if the new file's metadata (Title + Author) matches an existing "Ghost Book" in the synced inventory. If found, it links the new binary file to the existing Yjs record instead of creating a duplicate entry.
+    *   **Strategy**: Manages transient and local-only state like `isImporting` flags and **Static Metadata** (covers, file hashes) which are too heavy for Yjs. The inventory `books` property has been fully migrated to `useBookStore`.
+    *   **The "Ghost Book" Pattern**: The UI merges Synced Inventory (Yjs) with Local Static Metadata (IDB). It merges these to support "Ghost Books" - books where the heavy local file is offloaded/deleted, but the user's progress and metadata remain in the Yjs CRDT.
+    *   **Smart Ingestion**: When importing a file (`addBook`), the store uses "Smart Matching" to explicitly check if the new file's metadata (Title + Author) matches an existing "Ghost Book" in the synced inventory. If found, it links the new binary file to the existing Yjs record instead of creating a duplicate entry.
 *   **`useGoogleServicesStore` (Local Only)**:
     *   **Goal**: Manage connection state for Google APIs (Drive, Sync) and persist user preferences.
     *   **Logic**: Tracks which services are actively connected and stores client IDs. Used to coordinate the authentication flow via `GoogleIntegrationManager`.
@@ -690,7 +708,7 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Why**: Prevents a down-level client from inadvertently overwriting or corrupting newer data structures introduced by an updated app version.
     *   **Trade-off**: The user is completely locked out of the app until they update to the latest version.
 *   **Service Worker**: The app verifies `waitForServiceWorkerController` on launch to ensure image serving infrastructure is active, failing fast if the SW is broken.
-*   **Battery Guard**: Explicitly checks Android battery optimization settings via `@capawesome-team/capacitor-android-battery-optimization` and warns the user if they are likely to interfere with background playback.
+*   **Battery Guard**: Explicitly checks Android battery optimization settings via `@capawesome-team/capacitor-android-battery-optimization` (`checkBatteryOptimization`) and warns the user if they are likely to interfere with background playback.
 *   **Transactional Voice Download**: `PiperProvider` prevents corrupt voice models by ensuring files are downloaded and verified in memory before writing to persistent storage.
 *   **Input Sanitization**: All text inputs to the WASM TTS engine are sanitized and chunked to prevent memory access violations or worker crashes.
 *   **Process Protection**: `PlatformIntegration` runs a silent audio loop during playback to prevent Android "Phantom Process Killers" from terminating the app in the background.

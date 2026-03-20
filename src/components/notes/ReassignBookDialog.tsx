@@ -76,6 +76,7 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
                     <Input
                         type="search"
                         placeholder="Search books..."
+                        aria-label="Search books"
                         className="pl-9"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}

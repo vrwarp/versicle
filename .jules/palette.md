@@ -80,3 +80,11 @@
 ## 2026-03-03 - Accessibility of Action Buttons in Lists and Cards
 **Learning:** When using icon-only buttons for actions like "Copy", "Edit", or "Delete" within repeated UI elements like lists or cards (e.g., `AnnotationList`, `AnnotationCard`), native `<button>` elements often lack accessible names. Furthermore, styling them manually leads to inconsistencies with standard hover/focus states provided by the design system.
 **Action:** Always replace native icon-only `<button>` tags with the `<Button variant="ghost" size="icon">` component from the design system, and critically, attach a descriptive `aria-label` attribute (e.g., `aria-label="Edit Note"`) to ensure assistive technologies can correctly interpret the action regardless of the visual icon.
+
+## 2026-03-03 - Focus Visibility for Hover-Revealed Elements
+**Learning:** Elements hidden via `opacity-0` and revealed on hover (`group-hover:opacity-100`) often become inaccessible to keyboard users because tabbing to them doesn't trigger the hover state, leaving focused elements invisible.
+**Action:** Always pair `opacity-0 group-hover:opacity-100` with focus visibility classes (e.g., `focus-within:opacity-100` for containers or `focus-visible:opacity-100` for the element itself) to ensure they are visible when navigated to via keyboard.
+
+## 2026-03-03 - Keyboard Accessibility for Hover-Revealed Elements
+**Learning:** Elements hidden via `opacity-0` and revealed on hover (`group-hover:opacity-100`) often become inaccessible to keyboard users because tabbing to them doesn't trigger the hover state. Furthermore, if the hidden element is inside a wrapper that actually receives focus (like a Radix `DropdownMenuTrigger`), applying `focus-visible:opacity-100` to the hidden element itself is insufficient.
+**Action:** Always pair `opacity-0 group-hover:opacity-100` with focus visibility classes. For elements wrapped in focusable containers, use `focus-within:opacity-100` on the hidden element so it becomes visible when the wrapper receives keyboard focus. For directly focusable elements, use `focus-visible:opacity-100 focus-visible:ring-2`.

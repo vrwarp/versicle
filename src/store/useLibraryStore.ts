@@ -125,6 +125,10 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
       set({ isHydrating: true });
 
       try {
+        // Capture the initial set of offloaded IDs before ANY async operations
+        // to detect concurrent removals that occur while waiting for the DB.
+        const initialOffloadedBookIds = get().offloadedBookIds;
+
         const manifests = await Promise.all(
           bookIds.map(id => injectedDB.getBookMetadata(id))
         );
@@ -136,17 +140,37 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           }
         });
 
-        set({ staticMetadata, isHydrating: false });
+        set((state) => ({
+          staticMetadata: { ...staticMetadata, ...state.staticMetadata },
+          isHydrating: false
+        }));
 
         // Hydrate Offload Status
         try {
           const offloadedMap = await injectedDB.getOffloadedStatus(bookIds);
-          // logger.debug(`Offloaded Map for ${bookIds.length} books: ${JSON.stringify(Array.from(offloadedMap.entries()))}`);
           const offloadedSet = new Set<string>();
           offloadedMap.forEach((isOffloaded, id) => {
             if (isOffloaded) offloadedSet.add(id);
           });
-          set({ offloadedBookIds: offloadedSet });
+
+          set((state) => {
+            const nextOffloadedBookIds = new Set(state.offloadedBookIds);
+
+            // Only add IDs from the DB read if they weren't explicitly removed
+            // from the state concurrently while the DB read was pending.
+            for (const id of offloadedSet) {
+              if (initialOffloadedBookIds.has(id) && !state.offloadedBookIds.has(id)) {
+                // The ID was concurrently removed from state (e.g. by restoreBook).
+                // Do NOT add it back from the stale DB read.
+                continue;
+              }
+              nextOffloadedBookIds.add(id);
+            }
+
+            return {
+              offloadedBookIds: nextOffloadedBookIds
+            };
+          });
         } catch (e) {
           logger.error('Failed to hydrate offload status:', e);
         }

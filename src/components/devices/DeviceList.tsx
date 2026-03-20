@@ -120,7 +120,7 @@ const DeviceItem = ({ device, isCurrent, onRename, onDelete, onClone }: DeviceIt
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 transition-opacity"
                                     onClick={() => setIsEditing(true)}
                                     aria-label="Rename device"
                                 >
