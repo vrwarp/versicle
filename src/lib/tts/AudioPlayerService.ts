@@ -340,7 +340,10 @@ export class AudioPlayerService {
 
     public loadSectionBySectionId(sectionId: string, autoPlay: boolean = true, sectionTitle?: string) {
         return this.enqueue(async () => {
+            const originalBookId = this.currentBookId;
             if (this.playlistPromise) await this.playlistPromise;
+            if (this.currentBookId !== originalBookId) return;
+
             const index = this.playlist.findIndex(s => s.sectionId === sectionId);
             if (index !== -1) {
                 // Optimization: If the section is already loaded (e.g. from restore) and we are not forcing playback,
