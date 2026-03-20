@@ -24,7 +24,7 @@ export class AudioContentPipeline {
     private lastAbbrInputs: { custom: string[], bible: boolean } | null = null;
     private lastAbbrResult: string[] | null = null;
 
-    private tableProcessor = new TableAdaptationProcessor();
+    public tableProcessor = new TableAdaptationProcessor();
 
     /**
      * Loads a section, processes its text, and returns a playable queue.
@@ -229,11 +229,11 @@ export class AudioContentPipeline {
         const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled && genAISettings.isEnabled;
 
         if (isContentAnalysisEnabled) {
-            if (skipTypes.length > 0 && onMaskFound) {
+            if (skipTypes.length > 0) {
                 // Trigger background detection
                 this.detectContentSkipMask(bookId, sectionId, skipTypes, sentences)
                     .then(mask => {
-                        if (mask && mask.size > 0) {
+                        if (mask && mask.size > 0 && onMaskFound) {
                             onMaskFound(mask);
                         }
                     })
@@ -241,17 +241,27 @@ export class AudioContentPipeline {
             }
         }
 
-        if (onAdaptationsFound && genAISettings.isTableAdaptationEnabled && genAISettings.isEnabled) {
-            // Fetch sentences if not provided, as processTableAdaptations needs them
-            let targetSentences = sentences;
-            if (!targetSentences) {
-                const content = await dbService.getTTSContent(bookId, sectionId);
-                targetSentences = content?.sentences || [];
-            }
+        if (genAISettings.isTableAdaptationEnabled && genAISettings.isEnabled) {
+            (async () => {
+                try {
+                    // Fetch sentences if not provided, as processTableAdaptations needs them
+                    let targetSentences = sentences;
+                    if (!targetSentences) {
+                        const content = await dbService.getTTSContent(bookId, sectionId);
+                        targetSentences = content?.sentences || [];
+                    }
 
-            // Trigger table adaptations
-            this.tableProcessor.processTableAdaptations(bookId, sectionId, targetSentences, onAdaptationsFound)
-                .catch(err => console.warn("Background table adaptation failed", err));
+                    // Trigger table adaptations
+                    // The callback is optional — results are persisted to useContentAnalysisStore
+                    // by processTableAdaptations, and AudioPlayerService reactively subscribes.
+                    await this.tableProcessor.processTableAdaptations(
+                        bookId, sectionId, targetSentences,
+                        onAdaptationsFound || (() => { }) // no-op if no callback
+                    );
+                } catch (err) {
+                    console.warn("Background table adaptation failed", err);
+                }
+            })();
         }
     }
 
@@ -303,7 +313,7 @@ export class AudioContentPipeline {
      */
     async triggerNextChapterAnalysis(bookId: string, currentSectionIndex: number, playlist: SectionMetadata[]) {
         const genAISettings = useGenAIStore.getState();
-        if (!genAISettings.isEnabled || !genAISettings.isContentAnalysisEnabled || genAISettings.contentFilterSkipTypes.length === 0) {
+        if (!genAISettings.isEnabled || !genAISettings.isContentAnalysisEnabled) {
             return;
         }
 
@@ -321,20 +331,39 @@ export class AudioContentPipeline {
                 const ttsContent = await dbService.getTTSContent(bookId, nextSection.sectionId);
                 if (!ttsContent || ttsContent.sentences.length === 0) return;
 
-                // 2. Fetch Table CFIs for Grouping
-                const tableImages = await dbService.getTableImages(bookId);
-                // OPTIMIZATION: Filter table images by the current section ID to avoid checking irrelevant tables.
-                // This reduces getParentCfi complexity from O(N_sentences * N_total_book_tables) to O(N_sentences * N_section_tables).
-                const sectionTableImages = tableImages.filter(img => img.sectionId === nextSection.sectionId);
+                const analysisTasks: Promise<unknown>[] = [];
 
-                // Preprocess table roots for efficient querying (optimized)
-                const preprocessedTableRoots = this.tableProcessor.preprocessTableRoots(sectionTableImages);
+                // 2. Reference Detection Analysis
+                if (genAISettings.contentFilterSkipTypes.length > 0) {
+                    // Fetch Table CFIs for Grouping
+                    const tableImages = await dbService.getTableImages(bookId);
+                    const sectionTableImages = tableImages.filter(img => img.sectionId === nextSection.sectionId);
 
-                // 3. Group (Using raw sentences to ensure correct parent mapping)
-                const groups = this.groupSentencesByRoot(ttsContent.sentences, preprocessedTableRoots);
+                    // Preprocess table roots for efficient querying (optimized)
+                    const preprocessedTableRoots = this.tableProcessor.preprocessTableRoots(sectionTableImages);
 
-                // 4. Detect (will use deduplicated promise if already running)
-                await this.getOrDetectContentTypes(bookId, nextSection.sectionId, groups);
+                    // Group (Using raw sentences to ensure correct parent mapping)
+                    const groups = this.groupSentencesByRoot(ttsContent.sentences, preprocessedTableRoots);
+
+                    // Detect (will use deduplicated promise if already running)
+                    analysisTasks.push(this.getOrDetectContentTypes(bookId, nextSection.sectionId, groups));
+                }
+
+                // 3. Table Adaptation Analysis
+                if (genAISettings.isTableAdaptationEnabled) {
+                    analysisTasks.push(
+                        this.tableProcessor.processTableAdaptations(
+                            bookId,
+                            nextSection.sectionId,
+                            ttsContent.sentences,
+                            () => { } // Background pre-warming doesn't need immediate callback
+                        )
+                    );
+                }
+
+                if (analysisTasks.length > 0) {
+                    await Promise.allSettled(analysisTasks);
+                }
 
             } catch (e) {
                 console.warn('Background analysis failed', e);
