@@ -6,6 +6,7 @@ import { parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
 import type { SentenceNode } from '../tts';
 
 export class TableAdaptationProcessor {
+    private tableAnalysisPromises = new Map<string, Promise<void>>();
     /**
      * Retrieves cached table adaptations from DB or triggers GenAI detection if missing.
      * Replaces `AudioContentPipeline.processTableAdaptations`.
@@ -16,12 +17,18 @@ export class TableAdaptationProcessor {
         sentences: SentenceNode[],
         onAdaptationsFound: (adaptations: { indices: number[], text: string }[]) => void
     ): Promise<void> {
-        const genAISettings = useGenAIStore.getState();
+        const key = `${bookId}:${sectionId}`;
+        if (this.tableAnalysisPromises.has(key)) {
+            return this.tableAnalysisPromises.get(key)!;
+        }
 
-        try {
-            // Ensure we have sentences
-            if (!sentences || sentences.length === 0) return;
-            const targetSentences = sentences;
+        const promise = (async () => {
+            const genAISettings = useGenAIStore.getState();
+
+            try {
+                // Ensure we have sentences
+                if (!sentences || sentences.length === 0) return;
+                const targetSentences = sentences;
 
             // 1. Check DB for existing adaptations
             const analysis = await dbService.getContentAnalysis(bookId, sectionId);
@@ -109,8 +116,16 @@ export class TableAdaptationProcessor {
                 onAdaptationsFound(finalResult);
             }
 
-        } catch (e) {
-            console.warn("Error processing table adaptations", e);
+            } catch (e) {
+                console.warn("Error processing table adaptations", e);
+            }
+        })();
+
+        this.tableAnalysisPromises.set(key, promise);
+        try {
+            await promise;
+        } finally {
+            this.tableAnalysisPromises.delete(key);
         }
     }
 
