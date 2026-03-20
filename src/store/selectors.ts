@@ -59,10 +59,22 @@ export const useAllBooks = () => {
     // This depends only on 'books', 'staticMetadata', and 'offloadedBookIds', which change rarely.
     // It does NOT depend on 'progressMap', which changes frequently (on every page turn).
 
-    // Clean React pattern: The WeakMap cache will be recreated from scratch
-    // whenever the metadata/offloaded dependencies change.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps
-    const baseBookCache = useMemo(() => new WeakMap<UserInventoryItem, any>(), [staticMetadata, offloadedBookIds]);
+    // We keep a module-level or stable ref cache to avoid impure render mutations
+    // and correctly maintain referential equality across renders for unchanged books.
+    // However, a useRef is the standard way to persist this cache safely without triggering react-hooks/immutability.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const baseBookCacheRef = useRef<WeakMap<UserInventoryItem, any>>(new WeakMap());
+
+    // Rebuild cache completely when staticMetadata or offloadedBookIds change,
+    // to invalidate the entire cache, ensuring we don't serve stale metadata.
+    const lastDepsRef = useRef({ staticMetadata, offloadedBookIds });
+    if (
+        lastDepsRef.current.staticMetadata !== staticMetadata ||
+        lastDepsRef.current.offloadedBookIds !== offloadedBookIds
+    ) {
+        baseBookCacheRef.current = new WeakMap();
+        lastDepsRef.current = { staticMetadata, offloadedBookIds };
+    }
 
     const baseBooks = useMemo(() => {
         const booksObj = books || {};
@@ -71,7 +83,7 @@ export const useAllBooks = () => {
 
         return Object.values(booksObj).map(book => {
             // Check cache
-            const cached = baseBookCache.get(book);
+            const cached = baseBookCacheRef.current.get(book);
             if (cached) return cached;
 
             if (!staticMetadataObj) {
@@ -106,10 +118,10 @@ export const useAllBooks = () => {
                 isOffloaded: offloadedBookIdsSet.has(book.bookId),
             };
 
-            baseBookCache.set(book, newBaseBook);
+            baseBookCacheRef.current.set(book, newBaseBook);
             return newBaseBook;
         }).sort((a, b) => b.lastInteraction - a.lastInteraction);
-    }, [books, staticMetadata, offloadedBookIds, baseBookCache]);
+    }, [books, staticMetadata, offloadedBookIds]);
 
     // OPTIMIZATION: Use a cache to maintain stable object references.
     // We only want to return a new object if the underlying data actually changed.
@@ -119,6 +131,22 @@ export const useAllBooks = () => {
     // This violates strict mode rules if we were mutating during render, but we mutate in useEffect.
     // We ignore the hook warning because this is a standard fast-path cache pattern.
     const previousResultsCache = previousResultsRef.current;
+
+    // BOLT OPTIMIZATION: Pre-compute match keys for reading list entries to avoid O(N * M)
+    // string parsing (generateMatchKey) inside the baseBooks.map fallback loop.
+    // Memoized separately to prevent rebuilding the Map on every page turn (when progressMap updates).
+    // We iterate using for...in to avoid the array allocation overhead of Object.values().
+    const readingListMatchMap = useMemo(() => {
+        const map = new Map<string, typeof readingListEntries[string]>();
+        for (const key in readingListEntries) {
+            const entry = readingListEntries[key];
+            const matchKey = generateMatchKey(entry.title, entry.author);
+            if (matchKey) {
+                map.set(matchKey, entry);
+            }
+        }
+        return map;
+    }, [readingListEntries]);
 
     // OPTIMIZATION: Phase 2 - Progress Merge
     // This memo runs when 'progressMap' updates (frequently).
@@ -130,16 +158,6 @@ export const useAllBooks = () => {
         const newCache: Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }> = {};
 
         const cache = previousResultsCache;
-
-        // BOLT OPTIMIZATION: Pre-compute match keys for reading list entries to avoid O(N * M)
-        // string parsing (generateMatchKey) inside the baseBooks.map fallback loop.
-        const readingListMatchMap = new Map<string, typeof readingListEntries[string]>();
-        Object.values(readingListEntries).forEach(entry => {
-            const key = generateMatchKey(entry.title, entry.author);
-            if (key) {
-                readingListMatchMap.set(key, entry);
-            }
-        });
 
         const currentDeviceId = getDeviceId();
 
@@ -203,7 +221,7 @@ export const useAllBooks = () => {
 
         return { books: result, cache: newCache };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [baseBooks, progressMap, readingListEntries]);
+    }, [baseBooks, progressMap, readingListEntries, readingListMatchMap]);
 
     // Update cache for next render
     useEffect(() => {
