@@ -59,10 +59,22 @@ export const useAllBooks = () => {
     // This depends only on 'books', 'staticMetadata', and 'offloadedBookIds', which change rarely.
     // It does NOT depend on 'progressMap', which changes frequently (on every page turn).
 
-    // Clean React pattern: The WeakMap cache will be recreated from scratch
-    // whenever the metadata/offloaded dependencies change.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps
-    const baseBookCache = useMemo(() => new WeakMap<UserInventoryItem, any>(), [staticMetadata, offloadedBookIds]);
+    // We keep a module-level or stable ref cache to avoid impure render mutations
+    // and correctly maintain referential equality across renders for unchanged books.
+    // However, a useRef is the standard way to persist this cache safely without triggering react-hooks/immutability.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const baseBookCacheRef = useRef<WeakMap<UserInventoryItem, any>>(new WeakMap());
+
+    // Rebuild cache completely when staticMetadata or offloadedBookIds change,
+    // to invalidate the entire cache, ensuring we don't serve stale metadata.
+    const lastDepsRef = useRef({ staticMetadata, offloadedBookIds });
+    if (
+        lastDepsRef.current.staticMetadata !== staticMetadata ||
+        lastDepsRef.current.offloadedBookIds !== offloadedBookIds
+    ) {
+        baseBookCacheRef.current = new WeakMap();
+        lastDepsRef.current = { staticMetadata, offloadedBookIds };
+    }
 
     const baseBooks = useMemo(() => {
         const booksObj = books || {};
@@ -71,7 +83,7 @@ export const useAllBooks = () => {
 
         return Object.values(booksObj).map(book => {
             // Check cache
-            const cached = baseBookCache.get(book);
+            const cached = baseBookCacheRef.current.get(book);
             if (cached) return cached;
 
             if (!staticMetadataObj) {
@@ -106,10 +118,10 @@ export const useAllBooks = () => {
                 isOffloaded: offloadedBookIdsSet.has(book.bookId),
             };
 
-            baseBookCache.set(book, newBaseBook);
+            baseBookCacheRef.current.set(book, newBaseBook);
             return newBaseBook;
         }).sort((a, b) => b.lastInteraction - a.lastInteraction);
-    }, [books, staticMetadata, offloadedBookIds, baseBookCache]);
+    }, [books, staticMetadata, offloadedBookIds]);
 
     // OPTIMIZATION: Use a cache to maintain stable object references.
     // We only want to return a new object if the underlying data actually changed.
