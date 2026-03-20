@@ -84,7 +84,8 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                             {isCloudRestoring ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                                    Downloading...
+                                    <span className="sr-only">Downloading...</span>
+                                    <span aria-hidden="true">Downloading...</span>
                                 </>
                             ) : (
                                 <>
@@ -98,7 +99,8 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                         {isRestoring ? (
                             <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                                Restoring...
+                                <span className="sr-only">Restoring...</span>
+                                <span aria-hidden="true">Restoring...</span>
                             </>
                         ) : (
                             <>
