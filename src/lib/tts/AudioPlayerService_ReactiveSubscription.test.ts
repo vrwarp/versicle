@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
-import { dbService } from '../../db/DBService';
 import { useContentAnalysisStore } from '../../store/useContentAnalysisStore';
 import type { SectionAnalysis } from '../../store/useContentAnalysisStore';
 

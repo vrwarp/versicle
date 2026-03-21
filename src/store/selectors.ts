@@ -153,6 +153,8 @@ export const useAllBooks = () => {
     // We iterate over baseBooks and merge the latest progress.
     // BOLT OPTIMIZATION: Use raw reference checks (rawBookProgress) BEFORE calculating derived progress.
     // This skips calling resolveProgress() (which involves localStorage access via getDeviceId) for unchanged books.
+    // BOLT OPTIMIZATION: Hoisted `getDeviceId()` outside the `baseBooks.map` loop to avoid redundant function
+    // invocations (and potential fast-path cache hits) for every single book on every page turn.
     const memoizedResult = useMemo(() => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const newCache: Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }> = {};
