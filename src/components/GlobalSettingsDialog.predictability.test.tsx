@@ -41,7 +41,7 @@ vi.mock('../store/useToastStore', () => ({
 vi.mock('./ui/Modal', () => {
     return {
         Modal: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
-        ModalContent: ({ children, hideCloseButton }: React.PropsWithChildren & { hideCloseButton?: boolean }) => <div>{children}</div>,
+        ModalContent: ({ children, }: React.PropsWithChildren & { hideCloseButton?: boolean }) => <div>{children}</div>,
         ModalHeader: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
         ModalTitle: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
         ModalDescription: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
