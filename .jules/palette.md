@@ -92,3 +92,7 @@
 ## 2025-06-03 - Accessible Loading States in Buttons
 **Learning:** Using an icon like `Loader2` to indicate a loading state in a button is visually clear, but without `sr-only` text, screen reader users might only hear the original button text (e.g., "Delete") while the action is actually "Deleting...".
 **Action:** Always pair a spinning loading icon inside a button with `<span className="sr-only">Loading...</span>` (or context-specific text like "Deleting...") so screen readers announce the state change. Also, hide the original button text using `aria-hidden={isLoading}` if it remains in the DOM.
+
+## 2026-03-21 - Accessible Hidden File Inputs
+**Learning:** Hidden `<input type="file">` elements triggered by visible buttons are often missed by accessibility tools and lack names in the accessibility tree.
+**Action:** Always add an `aria-label` to hidden file inputs to ensure they have an accessible name, even when they are not visually rendered.
