@@ -83,34 +83,38 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
     };
   }, [key, initialValue]);
 
+  // We use a ref for the latest state so we can reliably get it in `setValue`
+  // without creating stale closures.
+  const stateRef = useRef<T>(currentValue);
+  stateRef.current = currentValue;
+
   // Return a wrapped version of useState's setter function that ...
   // ... persists the new value to localStorage.
   // We use useCallback to ensure referential stability.
   const setValue = useCallback((value: T | ((val: T) => T)) => {
     try {
-      setStoredValue((prev) => {
-        const currentKey = keyRef.current;
-        // Allow value to be a function so we have same API as useState
-        const valueToStore = value instanceof Function ? value(prev) : value;
+      const currentKey = keyRef.current;
+      const prevValue = stateRef.current;
+      const valueToStore = value instanceof Function ? value(prevValue) : value;
 
-        // Save to local storage
-        if (typeof window !== 'undefined') {
-          const serializedValue = JSON.stringify(valueToStore);
-          window.localStorage.setItem(currentKey, serializedValue);
+      setStoredValue(valueToStore);
+      stateRef.current = valueToStore;
 
-          // Dispatch a custom event so other components in the same tab using this hook can sync
-          // Use setTimeout to ensure we don't dispatch synchronously during a React render phase
-          setTimeout(() => {
-            window.dispatchEvent(
-              new CustomEvent(LOCAL_STORAGE_CHANGE_EVENT, {
-                detail: { key: currentKey, value: serializedValue }
-              })
-            );
-          }, 0);
-        }
+      // Save to local storage
+      if (typeof window !== 'undefined') {
+        const serializedValue = JSON.stringify(valueToStore);
+        window.localStorage.setItem(currentKey, serializedValue);
 
-        return valueToStore;
-      });
+        // Dispatch a custom event so other components in the same tab using this hook can sync
+        // Use setTimeout to ensure we don't dispatch synchronously during a React render phase
+        setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent(LOCAL_STORAGE_CHANGE_EVENT, {
+              detail: { key: currentKey, value: serializedValue }
+            })
+          );
+        }, 0);
+      }
     } catch (error) {
       console.warn(`Error setting localStorage key "${keyRef.current}":`, error);
     }
