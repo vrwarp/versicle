@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { dbService } from '../../db/DBService';
-import { useGenAIStore } from '../../store/useGenAIStore';
 
 vi.mock('../../db/DBService', () => ({
     dbService: {

@@ -22,6 +22,43 @@ interface PiperVoiceInfo {
   files: Record<string, { size_bytes: number; md5_digest: string }>;
 }
 
+function splitLongSentence(text: string, maxLen: number): string[] {
+    if (text.length <= maxLen) return [text];
+
+    const chunks: string[] = [];
+    let currentText = text;
+
+    while (currentText.length > maxLen) {
+        let splitIndex = -1;
+
+        // 1. Clause Boundary Scan
+        const clauseRegex = /[,;:—–]/g;
+        let match;
+        while ((match = clauseRegex.exec(currentText.substring(0, maxLen))) !== null) {
+            splitIndex = match.index + 1; // Inclusive of punctuation
+        }
+
+        // 2. Lexical Boundary Scan
+        if (splitIndex === -1) {
+            splitIndex = currentText.lastIndexOf(' ', maxLen);
+        }
+
+        // 3. Pathological Hard Split
+        if (splitIndex <= 0) {
+            splitIndex = maxLen;
+        }
+
+        chunks.push(currentText.substring(0, splitIndex).trim());
+        currentText = currentText.substring(splitIndex).trim();
+    }
+
+    if (currentText) {
+        chunks.push(currentText);
+    }
+
+    return chunks;
+}
+
 export class PiperProvider extends BaseCloudProvider {
   id = 'piper';
   private voiceMap: Map<string, { modelPath: string; configPath: string; speakerId?: number }> = new Map();
@@ -189,9 +226,9 @@ export class PiperProvider extends BaseCloudProvider {
     for (const segment of segments) {
          if (!segment.trim()) continue;
 
-         // Double-check length; if a single sentence is huge, we must split it hard.
+         // Double-check length; if a single sentence is huge, we must split it.
          // This is a safety fallback if TextSegmenter returns a giant chunk.
-         const subSegments = segment.length > MAX_CHARS ? segment.match(new RegExp(`.{1,${MAX_CHARS}}`, 'g')) || [segment] : [segment];
+         const subSegments = splitLongSentence(segment, MAX_CHARS);
 
          for (const subSegment of subSegments) {
             const result = await piperGenerate(
