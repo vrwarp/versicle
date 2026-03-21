@@ -150,6 +150,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                     ref={fileInputRef}
                     onChange={handleFileSelect}
                     data-testid="restore-file-input"
+                    aria-label="Select file to restore"
                 />
             </div>
         </Dialog>
