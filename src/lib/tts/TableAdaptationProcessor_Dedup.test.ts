@@ -113,6 +113,7 @@ describe('TableAdaptationProcessor - Deduplication (Vulnerability 3)', () => {
     });
 
     it('should clean up the promise map even if the inner logic throws', async () => {
+        const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
         vi.mocked(dbService.getContentAnalysis).mockRejectedValue(new Error('DB Error'));
 
         const sentences = [{ text: 'test', cfi: 'cfi1' }];
@@ -132,5 +133,8 @@ describe('TableAdaptationProcessor - Deduplication (Vulnerability 3)', () => {
 
         await processor.processTableAdaptations('book1', 'section1', sentences, callback);
         expect(secondExecuted).toBe(true);
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+        consoleSpy.mockRestore();
     });
 });
