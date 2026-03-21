@@ -186,22 +186,6 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                                 ))}
                                             </div>
 
-                                            <div className="pt-4">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="space-y-0.5">
-                                                        <label htmlFor="genai-debug" className="text-sm font-medium">Enable Content Analysis Debugging</label>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Highlights content based on its detected type.
-                                                        </p>
-                                                    </div>
-                                                    <Switch
-                                                        id="genai-debug"
-                                                        checked={isDebugModeEnabled}
-                                                        onCheckedChange={onDebugModeChange}
-                                                    />
-                                                </div>
-                                            </div>
-
                                             <div className="pt-2">
                                                 <Button variant="outline" size="sm" onClick={onClearContentAnalysis}>
                                                     Clear Content Analysis Cache
@@ -221,6 +205,20 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                             id="genai-table-adaptation"
                                             checked={isTableAdaptationEnabled}
                                             onCheckedChange={onTableAdaptationChange}
+                                        />
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-0.5">
+                                            <label htmlFor="genai-debug" className="text-sm font-medium">Enable GenAI Debug Panel</label>
+                                            <p className="text-xs text-muted-foreground">
+                                                Shows a debug panel for content analysis and table teleprompter features.
+                                            </p>
+                                        </div>
+                                        <Switch
+                                            id="genai-debug"
+                                            checked={isDebugModeEnabled}
+                                            onCheckedChange={onDebugModeChange}
                                         />
                                     </div>
                                 </div>
