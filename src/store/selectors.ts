@@ -248,27 +248,28 @@ export const useBook = (id: string | null) => {
 
     // Get reading list entry (with fallback)
     const sourceFilename = book?.sourceFilename;
-    let readingListEntry = useReadingListStore(state => sourceFilename && state.entries ? state.entries[sourceFilename] : undefined);
 
-    // Fallback lookup if not found by filename
-    const readingListEntriesMap = useReadingListStore(state => state.entries);
-    if (!readingListEntry && (book?.title || book?.author) && readingListEntriesMap) {
-        const bookKey = generateMatchKey(book?.title || '', book?.author || '');
-
-        if (bookKey) {
-            // BOLT OPTIMIZATION: Instead of re-parsing string match keys for every entry in the store,
-            // manually iterate to find the match, avoiding array allocation and keeping cost linear.
-            // Since this hook only processes ONE book (unlike useAllBooks), building a full Map isn't strictly necessary,
-            // but we can still avoid allocating `Object.values` and using array methods.
-            for (const key in readingListEntriesMap) {
-                const entry = readingListEntriesMap[key];
-                if (generateMatchKey(entry.title, entry.author) === bookKey) {
-                    readingListEntry = entry;
-                    break;
+    // BOLT OPTIMIZATION: Combine sourceFilename and fallback lookups into a single selector.
+    // This avoids subscribing to the entire `state.entries` object, preventing unnecessary
+    // re-renders of the component whenever *any* reading list entry is updated.
+    const readingListEntry = useReadingListStore(state => {
+        if (!state.entries) return undefined;
+        if (sourceFilename && state.entries[sourceFilename]) {
+            return state.entries[sourceFilename];
+        }
+        if (book?.title || book?.author) {
+            const bookKey = generateMatchKey(book.title || '', book.author || '');
+            if (bookKey) {
+                for (const key in state.entries) {
+                    const entry = state.entries[key];
+                    if (generateMatchKey(entry.title, entry.author) === bookKey) {
+                        return entry;
+                    }
                 }
             }
         }
-    }
+        return undefined;
+    });
 
     // Get resolved progress (Local > Recent) across all devices for this book
     const progress = useMemo(() => {
