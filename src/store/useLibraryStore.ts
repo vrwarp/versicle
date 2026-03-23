@@ -133,17 +133,25 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           bookIds.map(id => injectedDB.getBookMetadata(id))
         );
 
-        const staticMetadata: Record<string, BookMetadata> = {};
-        manifests.forEach(manifest => {
-          if (manifest && manifest.id) {
-            staticMetadata[manifest.id] = manifest;
-          }
-        });
+        set((state) => {
+          const currentBooks = useBookStore.getState().books;
+          const nextStaticMetadata = { ...state.staticMetadata };
 
-        set((state) => ({
-          staticMetadata: { ...staticMetadata, ...state.staticMetadata },
-          isHydrating: false
-        }));
+          manifests.forEach(manifest => {
+            if (manifest && manifest.id) {
+              // Only add if it still exists in the synced inventory (not concurrently removed)
+              // and wasn't already loaded/updated in state.
+              if (currentBooks[manifest.id] && !(manifest.id in nextStaticMetadata)) {
+                nextStaticMetadata[manifest.id] = manifest;
+              }
+            }
+          });
+
+          return {
+            staticMetadata: nextStaticMetadata,
+            isHydrating: false
+          };
+        });
 
         // Hydrate Offload Status
         try {
@@ -154,6 +162,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           });
 
           set((state) => {
+            const currentBooks = useBookStore.getState().books;
             const nextOffloadedBookIds = new Set(state.offloadedBookIds);
 
             // Only add IDs from the DB read if they weren't explicitly removed
@@ -164,6 +173,12 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
                 // Do NOT add it back from the stale DB read.
                 continue;
               }
+
+              // Ensure the book still exists in the synced inventory
+              if (!currentBooks[id]) {
+                continue;
+              }
+
               nextOffloadedBookIds.add(id);
             }
 
