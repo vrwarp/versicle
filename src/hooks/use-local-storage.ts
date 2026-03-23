@@ -1,7 +1,10 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 
 // A generic way to broadcast local storage changes on the same tab
 const LOCAL_STORAGE_CHANGE_EVENT = 'local-storage-change';
+
+// Polyfill for SSR
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 /**
  * A custom React hook for persisting state to localStorage.
@@ -46,12 +49,20 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
     setStoredValue(currentValue);
   }
 
+  // We use a stateRef to accumulate sequential synchronous calls to setter
+  const stateRef = useRef(currentValue);
+
+  // Safely update refs after render to maintain concurrent mode predictability
+  // using useLayoutEffect ensures it's updated synchronously before browser paint
+  // and before any subsequent user actions
+  useIsomorphicLayoutEffect(() => {
+    keyRef.current = key;
+    stateRef.current = currentValue;
+  }, [key, currentValue]);
+
   // Subscribe to changes to localStorage so that this state reflects updates from:
   // 1. Other browser tabs (StorageEvent)
   // 2. Other hook instances on the same page (CustomEvent)
-  useEffect(() => {
-    keyRef.current = key;
-  }, [key]);
 
   useEffect(() => {
     const handleStorageChange = (e: Event) => {
@@ -88,29 +99,29 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
   // We use useCallback to ensure referential stability.
   const setValue = useCallback((value: T | ((val: T) => T)) => {
     try {
-      setStoredValue((prev) => {
-        const currentKey = keyRef.current;
-        // Allow value to be a function so we have same API as useState
-        const valueToStore = value instanceof Function ? value(prev) : value;
+      const currentKey = keyRef.current;
+      // Allow value to be a function so we have same API as useState
+      const valueToStore = value instanceof Function ? value(stateRef.current) : value;
 
-        // Save to local storage
-        if (typeof window !== 'undefined') {
-          const serializedValue = JSON.stringify(valueToStore);
-          window.localStorage.setItem(currentKey, serializedValue);
+      // Update stateRef synchronously to support multiple sequential calls in the same render cycle
+      stateRef.current = valueToStore;
+      setStoredValue(valueToStore);
 
-          // Dispatch a custom event so other components in the same tab using this hook can sync
-          // Use setTimeout to ensure we don't dispatch synchronously during a React render phase
-          setTimeout(() => {
-            window.dispatchEvent(
-              new CustomEvent(LOCAL_STORAGE_CHANGE_EVENT, {
-                detail: { key: currentKey, value: serializedValue }
-              })
-            );
-          }, 0);
-        }
+      // Save to local storage
+      if (typeof window !== 'undefined') {
+        const serializedValue = JSON.stringify(valueToStore);
+        window.localStorage.setItem(currentKey, serializedValue);
 
-        return valueToStore;
-      });
+        // Dispatch a custom event so other components in the same tab using this hook can sync
+        // Use setTimeout to ensure we don't dispatch synchronously during a React render phase
+        setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent(LOCAL_STORAGE_CHANGE_EVENT, {
+              detail: { key: currentKey, value: serializedValue }
+            })
+          );
+        }, 0);
+      }
     } catch (error) {
       console.warn(`Error setting localStorage key "${keyRef.current}":`, error);
     }
