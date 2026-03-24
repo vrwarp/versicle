@@ -81,10 +81,17 @@ export const useAllBooks = () => {
         const staticMetadataObj = staticMetadata || {};
         const offloadedBookIdsSet = offloadedBookIds || new Set();
 
-        return Object.values(booksObj).map(book => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result: any[] = [];
+        for (const key in booksObj) {
+            if (!Object.prototype.hasOwnProperty.call(booksObj, key)) continue;
+            const book = booksObj[key];
             // Check cache
             const cached = baseBookCacheRef.current.get(book);
-            if (cached) return cached;
+            if (cached) {
+                result.push(cached);
+                continue;
+            }
 
             if (!staticMetadataObj) {
                 console.error('staticMetadata is undefined in useAllBooks');
@@ -119,8 +126,9 @@ export const useAllBooks = () => {
             };
 
             baseBookCacheRef.current.set(book, newBaseBook);
-            return newBaseBook;
-        }).sort((a, b) => b.lastInteraction - a.lastInteraction);
+            result.push(newBaseBook);
+        }
+        return result.sort((a, b) => b.lastInteraction - a.lastInteraction);
     }, [books, staticMetadata, offloadedBookIds]);
 
     // OPTIMIZATION: Use a cache to maintain stable object references.
@@ -139,6 +147,7 @@ export const useAllBooks = () => {
     const readingListMatchMap = useMemo(() => {
         const map = new Map<string, typeof readingListEntries[string]>();
         for (const key in readingListEntries) {
+            if (!Object.prototype.hasOwnProperty.call(readingListEntries, key)) continue;
             const entry = readingListEntries[key];
             const matchKey = generateMatchKey(entry.title, entry.author);
             if (matchKey) {
