@@ -44,11 +44,13 @@ describe('LibraryStore remove race conditions', () => {
 
     // 4. Concurrently, something else removes the book from BOTH stores
     useBookStore.setState((state) => {
-      const { ['book-to-remove']: removed, ...remaining } = state.books;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { ['book-to-remove']: _removed, ...remaining } = state.books;
       return { books: remaining };
     });
     useLibraryStore.setState((state) => {
-      const { ['book-to-remove']: removed, ...remaining } = state.staticMetadata;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { ['book-to-remove']: _removed, ...remaining } = state.staticMetadata;
       return { staticMetadata: remaining };
     });
 

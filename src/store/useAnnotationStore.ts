@@ -151,9 +151,14 @@ export const createAnnotationStore = () => create<AnnotationState>()(
 
       getByBook: (bookId) => {
         const { annotations } = get();
-        return Object.values(annotations)
-          .filter(ann => ann.bookId === bookId)
-          .sort((a, b) => a.created - b.created);
+        const bookAnnotations: Annotation[] = [];
+        for (const key in annotations) {
+          if (!Object.prototype.hasOwnProperty.call(annotations, key)) continue;
+          if (annotations[key].bookId === bookId) {
+            bookAnnotations.push(annotations[key]);
+          }
+        }
+        return bookAnnotations.sort((a, b) => a.created - b.created);
       },
 
       showPopover: (x, y, cfiRange, text, id) => {

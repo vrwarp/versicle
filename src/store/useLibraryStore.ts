@@ -230,7 +230,14 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         // Check for duplicates
         // Use Store state first (synchronous check to avoid race conditions with recent adds)
         const books = useBookStore.getState().books;
-        let existingId = Object.values(books).find(b => b.sourceFilename === file.name)?.bookId;
+        let existingId: string | undefined;
+        for (const key in books) {
+          if (!Object.prototype.hasOwnProperty.call(books, key)) continue;
+          if (books[key].sourceFilename === file.name) {
+            existingId = books[key].bookId;
+            break;
+          }
+        }
 
         // If not found in store (e.g. not fully synced?), try DB as backup
         if (!existingId) {
@@ -335,11 +342,17 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           // Note: We use `get().staticMetadata` inside the loop to ensure we read the latest state
           // to avoid race conditions if rapid sequential imports happen.
           const staticMeta = get().staticMetadata;
-          const ghostMatch: UserInventoryItem | undefined = Object.values(books).find(b => {
+          let ghostMatch: UserInventoryItem | undefined;
+          for (const key in books) {
+            if (!Object.prototype.hasOwnProperty.call(books, key)) continue;
+            const b = books[key];
             const isGhost = !staticMeta[b.bookId];
             const isMatch = b.title.trim() === meta.title.trim() && b.author.trim() === meta.author.trim();
-            return isGhost && isMatch;
-          });
+            if (isGhost && isMatch) {
+              ghostMatch = b;
+              break;
+            }
+          }
 
           if (ghostMatch) {
             logger.info(`Found Ghost Book match by metadata for file "${file.name}": "${ghostMatch.title}" (${ghostMatch.bookId}). Linking binary file to existing Yjs record...`);

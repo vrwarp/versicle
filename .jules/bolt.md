@@ -115,3 +115,7 @@
 - **Bottleneck:** Inside the `useAllBooks` Phase 2 `useMemo` (which re-runs on every page turn due to `progressMap` updates), a fallback `readingListMatchMap` was being created using `Object.values(readingListEntries).forEach()`. This triggered `O(N)` array allocations and map inserts on *every single keystroke/page turn*.
 - **Solution:** Extracted the map creation into its own `useMemo` that depends only on `[readingListEntries]`, and switched the loop to `for...in` to avoid `Object.values()` array allocation overhead.
 - **Learning:** When calculating data required for a hot-path fallback loop, NEVER inline the object/map creation into the same `useMemo` that holds frequently-changing data. Extract the structure into a separate `useMemo` based on its own stable dependencies, and use `for...in` when mapping over large record objects to avoid O(N) memory allocations.
+
+## 2024-05-19 - [Selector Tuning: Replacing Object.values]
+**Learning:** `Object.values()` creates a new array instance every time it is called. When used in fast-path selectors (like inside `src/store/selectors.ts` or `src/store/useLibraryStore.ts` during map iterations), it can cause memory bloat and degrade performance during rapid state updates (e.g. library sorting or syncing).
+**Action:** Replace `Object.values(obj).find(...)` and `Object.values(obj).reduce(...)` with `for...in` loops to iterate over object keys without allocating an intermediate array, thereby reducing GC overhead and avoiding O(N) array allocations in hot paths.
