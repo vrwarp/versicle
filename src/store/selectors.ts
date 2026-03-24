@@ -81,7 +81,8 @@ export const useAllBooks = () => {
         const staticMetadataObj = staticMetadata || {};
         const offloadedBookIdsSet = offloadedBookIds || new Set();
 
-        const result: PartialLibraryBook[] = [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result: any[] = [];
         for (const key in booksObj) {
             if (!Object.prototype.hasOwnProperty.call(booksObj, key)) continue;
             const book = booksObj[key];

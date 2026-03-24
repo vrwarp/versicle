@@ -151,7 +151,7 @@ export const createAnnotationStore = () => create<AnnotationState>()(
 
       getByBook: (bookId) => {
         const { annotations } = get();
-        const bookAnnotations: Annotation[] = [];
+        const bookAnnotations: UserAnnotation[] = [];
         for (const key in annotations) {
           if (!Object.prototype.hasOwnProperty.call(annotations, key)) continue;
           if (annotations[key].bookId === bookId) {
