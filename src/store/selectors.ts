@@ -61,22 +61,34 @@ export const useAllBooks = () => {
 
     // We keep a module-level or stable ref cache to avoid impure render mutations
     // and correctly maintain referential equality across renders for unchanged books.
-    // However, a useRef is the standard way to persist this cache safely without triggering react-hooks/immutability.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const baseBookCacheRef = useRef<WeakMap<UserInventoryItem, any>>(new WeakMap());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const baseBooksRef = useRef<any[]>([]);
 
     // Rebuild cache completely when staticMetadata or offloadedBookIds change,
     // to invalidate the entire cache, ensuring we don't serve stale metadata.
-    const lastDepsRef = useRef({ staticMetadata, offloadedBookIds });
+    // We start with null values to force an initial render computation
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const lastDepsRef = useRef<{books: any, staticMetadata: any, offloadedBookIds: any}>({
+        books: null,
+        staticMetadata: null,
+        offloadedBookIds: null
+    });
+
+    // Check if we need to rebuild
     if (
+        lastDepsRef.current.books !== books ||
         lastDepsRef.current.staticMetadata !== staticMetadata ||
         lastDepsRef.current.offloadedBookIds !== offloadedBookIds
     ) {
-        baseBookCacheRef.current = new WeakMap();
-        lastDepsRef.current = { staticMetadata, offloadedBookIds };
-    }
+        if (
+            lastDepsRef.current.staticMetadata !== staticMetadata ||
+            lastDepsRef.current.offloadedBookIds !== offloadedBookIds
+        ) {
+            baseBookCacheRef.current = new WeakMap();
+        }
 
-    const baseBooks = useMemo(() => {
         const booksObj = books || {};
         const staticMetadataObj = staticMetadata || {};
         const offloadedBookIdsSet = offloadedBookIds || new Set();
@@ -128,8 +140,12 @@ export const useAllBooks = () => {
             baseBookCacheRef.current.set(book, newBaseBook);
             result.push(newBaseBook);
         }
-        return result.sort((a, b) => b.lastInteraction - a.lastInteraction);
-    }, [books, staticMetadata, offloadedBookIds]);
+
+        baseBooksRef.current = result.sort((a, b) => b.lastInteraction - a.lastInteraction);
+        lastDepsRef.current = { books, staticMetadata, offloadedBookIds };
+    }
+
+    const baseBooks = baseBooksRef.current;
 
     // OPTIMIZATION: Use a cache to maintain stable object references.
     // We only want to return a new object if the underlying data actually changed.
@@ -144,7 +160,11 @@ export const useAllBooks = () => {
     // string parsing (generateMatchKey) inside the baseBooks.map fallback loop.
     // Memoized separately to prevent rebuilding the Map on every page turn (when progressMap updates).
     // We iterate using for...in to avoid the array allocation overhead of Object.values().
-    const readingListMatchMap = useMemo(() => {
+    const readingListMatchDepsRef = useRef({ readingListEntries: null as any });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const readingListMatchMapRef = useRef<Map<string, any>>(new Map());
+
+    if (readingListMatchDepsRef.current.readingListEntries !== readingListEntries) {
         const map = new Map<string, typeof readingListEntries[string]>();
         for (const key in readingListEntries) {
             if (!Object.prototype.hasOwnProperty.call(readingListEntries, key)) continue;
@@ -154,15 +174,33 @@ export const useAllBooks = () => {
                 map.set(matchKey, entry);
             }
         }
-        return map;
-    }, [readingListEntries]);
+        readingListMatchMapRef.current = map;
+        readingListMatchDepsRef.current = { readingListEntries };
+    }
+    const readingListMatchMap = readingListMatchMapRef.current;
 
     // OPTIMIZATION: Phase 2 - Progress Merge
     // This memo runs when 'progressMap' updates (frequently).
     // We iterate over baseBooks and merge the latest progress.
     // BOLT OPTIMIZATION: Use raw reference checks (rawBookProgress) BEFORE calculating derived progress.
     // This skips calling resolveProgress() (which involves localStorage access via getDeviceId) for unchanged books.
-    const memoizedResult = useMemo(() => {
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const lastPhase2DepsRef = useRef<{ baseBooks: any, progressMap: any, readingListEntries: any, readingListMatchMap: any }>({
+        baseBooks: null,
+        progressMap: null,
+        readingListEntries: null,
+        readingListMatchMap: null
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const memoizedResultRef = useRef<{books: any[], cache: any}>({books: [], cache: {}});
+
+    if (
+        lastPhase2DepsRef.current.baseBooks !== baseBooks ||
+        lastPhase2DepsRef.current.progressMap !== progressMap ||
+        lastPhase2DepsRef.current.readingListEntries !== readingListEntries ||
+        lastPhase2DepsRef.current.readingListMatchMap !== readingListMatchMap
+    ) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const newCache: Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }> = {};
 
@@ -228,9 +266,11 @@ export const useAllBooks = () => {
             return newBook;
         });
 
-        return { books: result, cache: newCache };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [baseBooks, progressMap, readingListEntries, readingListMatchMap]);
+        memoizedResultRef.current = { books: result, cache: newCache };
+        lastPhase2DepsRef.current = { baseBooks, progressMap, readingListEntries, readingListMatchMap };
+    }
+
+    const memoizedResult = memoizedResultRef.current;
 
     // Update cache for next render
     useEffect(() => {
