@@ -28,16 +28,21 @@ export const SmartLinkDialog: React.FC<SmartLinkDialogProps> = ({ open, onOpenCh
     const libraryBooks = useBookStore(state => state.books);
     const isGenAIEnabled = useGenAIStore(state => state.isEnabled);
 
-    // Identify unmapped entries and books
-    const unmappedEntries = Object.values(readingListEntries || {}).filter(entry => {
-        // Entry is unmapped if no library book has its sourceFilename equal to entry.filename
-        return !Object.values(libraryBooks || {}).some(book => book.sourceFilename === entry.filename);
-    });
+    // BOLT OPTIMIZATION: Pre-compute sets of filenames for O(1) lookups
+    // This eliminates O(N*M) nested Object.values().some() during component render
+    const unmappedEntries = React.useMemo(() => {
+        const librarySourceFilenames = new Set(Object.values(libraryBooks || {}).map(b => b.sourceFilename));
+        return Object.values(readingListEntries || {}).filter(entry => {
+            return !librarySourceFilenames.has(entry.filename);
+        });
+    }, [libraryBooks, readingListEntries]);
 
-    const unmappedBooks = Object.values(libraryBooks || {}).filter(book => {
-        // Book is unmapped if no reading list entry has its filename equal to book.sourceFilename
-        return !Object.values(readingListEntries || {}).some(entry => entry.filename === book.sourceFilename);
-    });
+    const unmappedBooks = React.useMemo(() => {
+        const readingListFilenames = new Set(Object.values(readingListEntries || {}).map(e => e.filename));
+        return Object.values(libraryBooks || {}).filter(book => {
+            return !readingListFilenames.has(book.sourceFilename);
+        });
+    }, [libraryBooks, readingListEntries]);
 
     useEffect(() => {
         if (!open) {

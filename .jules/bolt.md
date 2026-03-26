@@ -119,3 +119,7 @@
 ## 2024-05-19 - [Selector Tuning: Replacing Object.values]
 **Learning:** `Object.values()` creates a new array instance every time it is called. When used in fast-path selectors (like inside `src/store/selectors.ts` or `src/store/useLibraryStore.ts` during map iterations), it can cause memory bloat and degrade performance during rapid state updates (e.g. library sorting or syncing).
 **Action:** Replace `Object.values(obj).find(...)` and `Object.values(obj).reduce(...)` with `for...in` loops to iterate over object keys without allocating an intermediate array, thereby reducing GC overhead and avoiding O(N) array allocations in hot paths.
+
+## 2025-06-14 - Eliminating O(N*M) lookups in SmartLinkDialog
+**Learning:** `SmartLinkDialog` mapped arrays derived from `Object.values(libraryBooks)` and `Object.values(readingListEntries)` into filter functions containing nested `Array.prototype.some` lookups involving the same `Object.values()` conversions. This compounded the array allocation overhead (`Object.values()`) with an O(N*M) algorithmic search space, running on *every* component render.
+**Action:** When filtering one array based on the existence of properties in another array/map within a React component, use `React.useMemo` to pre-compute a lookup `Set` (e.g., of IDs or filenames) for the second collection. This reduces the search complexity to O(N + M) and prevents unnecessary recalculations across renders.
