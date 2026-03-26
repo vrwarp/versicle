@@ -320,7 +320,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                     placeholder="epubcfi(...)"
                                     className="flex-1 bg-muted p-1 rounded border border-input text-[10px] font-mono"
                                 />
-                                <button onClick={copyCfi} className="p-1 hover:bg-accent rounded" title="Copy CFI">
+                                <button onClick={copyCfi} className="p-1 hover:bg-accent rounded" title="Copy CFI" aria-label="Copy CFI">
                                     <Copy className="h-3 w-3" />
                                 </button>
                             </div>
@@ -338,6 +338,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                     onClick={copyContent}
                                     className="absolute top-1 right-1 p-1 bg-background/80 hover:bg-accent rounded shadow-sm"
                                     title="Copy Content"
+                                    aria-label="Copy Content"
                                 >
                                     <Copy className="h-3 w-3" />
                                 </button>

@@ -443,7 +443,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                 <ArrowDown size={12} />
                                             </button>
                                         </div>
-                                        <button onClick={() => setEditingRule({ ...rule, matchType: rule.matchType || (rule.isRegex ? 'regex' : 'ignore_case') })} className="text-xs text-primary hover:underline">Edit</button>
+                                        <button aria-label="Edit rule" onClick={() => setEditingRule({ ...rule, matchType: rule.matchType || (rule.isRegex ? 'regex' : 'ignore_case') })} className="text-xs text-primary hover:underline">Edit</button>
                                         <button aria-label="Delete rule" onClick={() => handleDelete(rule.id)} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 size={16} /></button>
                                     </div>
                                 </>
