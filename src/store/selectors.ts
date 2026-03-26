@@ -92,7 +92,6 @@ export const useAllBooks = () => {
         lastDepsRef.current.offloadedBookIds !== offloadedBookIds;
 
     if (needsRebuildPhase1) {
-        // eslint-disable-next-line react-hooks/refs
         if (
             // eslint-disable-next-line react-hooks/refs
             lastDepsRef.current.staticMetadata !== staticMetadata ||
@@ -305,12 +304,10 @@ export const useAllBooks = () => {
         lastPhase2DepsRef.current = { baseBooks, progressMap, readingListEntries, readingListMatchMap };
     }
 
-    // eslint-disable-next-line react-hooks/refs
     const memoizedResult = memoizedResultRef.current;
 
     // Update cache for next render
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/refs
         previousResultsRef.current = memoizedResultRef.current.cache;
     // eslint-disable-next-line react-hooks/refs
     }, [memoizedResultRef.current.cache]);
