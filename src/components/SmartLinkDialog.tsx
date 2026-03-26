@@ -40,7 +40,7 @@ export const SmartLinkDialog: React.FC<SmartLinkDialogProps> = ({ open, onOpenCh
     const unmappedBooks = React.useMemo(() => {
         const readingListFilenames = new Set(Object.values(readingListEntries || {}).map(e => e.filename));
         return Object.values(libraryBooks || {}).filter(book => {
-            return !readingListFilenames.has(book.sourceFilename);
+            return book.sourceFilename && !readingListFilenames.has(book.sourceFilename);
         });
     }, [libraryBooks, readingListEntries]);
 
