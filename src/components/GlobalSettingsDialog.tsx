@@ -391,11 +391,23 @@ export const GlobalSettingsDialog = () => {
 
                     const store = useReadingListStore.getState();
                     const rsStore = useReadingStateStore.getState();
+
+                    // Pre-compute a mapping of sourceFilename -> bookId to avoid O(N*M) lookups in the loop
+                    const libraryBooks = useBookStore.getState().books;
+                    const filenameToBookId: Record<string, string> = {};
+                    // Iterate over Object.values to match the original behavior exactly (finding the book object directly)
+                    for (const book of Object.values(libraryBooks)) {
+                        if (book && book.sourceFilename && !filenameToBookId[book.sourceFilename]) {
+                            // Only set if not already set, to match original .find() behavior (first match wins)
+                            filenameToBookId[book.sourceFilename] = book.bookId;
+                        }
+                    }
+
                     for (const entry of entries) {
                         store.upsertEntry(entry);
                         if (entry.percentage !== undefined) {
-                            const book = Object.values(useBookStore.getState().books).find(b => b.sourceFilename === entry.filename);
-                            const targetId = book ? book.bookId : entry.filename;
+                            const bookId = filenameToBookId[entry.filename];
+                            const targetId = bookId || entry.filename;
                             rsStore.updateLocation(targetId, '', entry.percentage);
                         }
                     }
