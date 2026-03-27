@@ -123,3 +123,7 @@
 ## 2025-06-14 - Eliminating O(N*M) lookups in SmartLinkDialog
 **Learning:** `SmartLinkDialog` mapped arrays derived from `Object.values(libraryBooks)` and `Object.values(readingListEntries)` into filter functions containing nested `Array.prototype.some` lookups involving the same `Object.values()` conversions. This compounded the array allocation overhead (`Object.values()`) with an O(N*M) algorithmic search space, running on *every* component render.
 **Action:** When filtering one array based on the existence of properties in another array/map within a React component, use `React.useMemo` to pre-compute a lookup `Set` (e.g., of IDs or filenames) for the second collection. This reduces the search complexity to O(N + M) and prevents unnecessary recalculations across renders.
+
+## 2026-03-09 - [CSV Import Performance]
+**Learning:** During the CSV import flow, the user's uploaded reading list entries are merged with the local `useBookStore`. Originally, this used `Object.values(useBookStore.getState().books).find(...)` inside the loop for every single row. For a large CSV, this caused an `O(N * M)` nested search and `O(N)` repeated array allocations that could severely block the main thread.
+**Action:** When performing bulk updates/merges (like CSV imports) that require searching a large dictionary, never use `.find()` on `Object.values()` inside the loop. Pre-compute an inverted index/lookup map (`Record<string, string>`) outside the loop to reduce the search complexity to `O(N + M)` and eliminate repeated array allocations.
