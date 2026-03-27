@@ -1,6 +1,7 @@
 import React from 'react';
 import { useUIStore } from '../store/useUIStore';
 import { CURRENT_SCHEMA_VERSION } from '../store/yjs-provider';
+import { Button } from './ui/Button';
 
 /**
  * Non-dismissible full-screen overlay when the app detects a newer
@@ -42,22 +43,13 @@ export const ObsoleteLockView: React.FC = () => {
                     Please update the app to the latest version, then reload this page.
                     Your data is safe — this lock prevents any accidental overwrites.
                 </p>
-                <button
+                <Button
                     onClick={() => window.location.reload()}
-                    style={{
-                        marginTop: '2rem',
-                        padding: '0.75rem 1.5rem',
-                        borderRadius: '0.5rem',
-                        border: 'none',
-                        backgroundColor: 'var(--primary, #3b82f6)',
-                        color: 'var(--primary-foreground, #fff)',
-                        fontSize: '0.875rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                    }}
+                    className="mt-8"
+                    size="lg"
                 >
                     Reload After Updating
-                </button>
+                </Button>
             </div>
         </div>
     );
