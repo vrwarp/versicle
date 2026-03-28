@@ -217,6 +217,7 @@ const StringListManager: React.FC<StringListManagerProps> = ({
                         style={{ display: 'none' }}
                         onChange={handleFileChange}
                         data-testid={`csv-upload-${title.toLowerCase().replace(/\s+/g, '-')}`}
+                        aria-label={`Upload CSV for ${title}`}
                     />
                 </div>
             </div>

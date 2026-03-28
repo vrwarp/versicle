@@ -96,3 +96,6 @@
 ## 2026-03-21 - Accessible Hidden File Inputs
 **Learning:** Hidden `<input type="file">` elements triggered by visible buttons are often missed by accessibility tools and lack names in the accessibility tree.
 **Action:** Always add an `aria-label` to hidden file inputs to ensure they have an accessible name, even when they are not visually rendered.
+## 2026-03-28 - Hidden Input ARIA Labels
+**Learning:** Added `aria-label` attributes to visually hidden `<input type="file">` elements that are triggered by other visible proxy buttons.
+**Action:** Always ensure that hidden file inputs have proper ARIA labels so they have an accessible name in the accessibility tree, even if they aren't visually rendered. However, do not add `aria-label` to elements with `display: none` (like Tailwind's `hidden` class) as they are completely removed from the accessibility tree, making the label ineffective.
