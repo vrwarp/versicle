@@ -597,7 +597,7 @@ export const LibraryView: React.FC = () => {
               </div>
               {/* Live region for screen readers */}
               <div role="status" aria-live="polite" className="sr-only">
-                {searchQuery ? (
+                {debouncedSearchQuery ? (
                   filteredAndSortedBooks.length === 0
                     ? 'No books found'
                     : `${filteredAndSortedBooks.length} books found`
@@ -683,7 +683,7 @@ export const LibraryView: React.FC = () => {
             <EmptyLibrary onImport={triggerFileUpload} />
           ) : filteredAndSortedBooks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <p className="text-lg">No books found matching "{searchQuery}"</p>
+              <p className="text-lg">No books found matching "{debouncedSearchQuery}"</p>
               <Button
                 variant="link"
                 onClick={() => setSearchQuery('')}
