@@ -438,6 +438,7 @@ export const LibraryView: React.FC = () => {
         accept=".epub"
         className="hidden"
         data-testid="hidden-file-input"
+        aria-label="Upload EPUB file"
       />
 
 

@@ -300,7 +300,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                     <Button data-testid="lexicon-import-btn" asChild variant="ghost" size="sm" title="Import from CSV">
                         <label className="cursor-pointer flex items-center">
                             <Upload size={14} className="mr-1" /> Import
-                            <input data-testid="lexicon-import-input" ref={fileInputRef} type="file" className="hidden" accept=".csv" onChange={handleImport} />
+                            <input data-testid="lexicon-import-input" ref={fileInputRef} type="file" className="hidden" accept=".csv" onChange={handleImport} aria-label="Import lexicon from CSV" />
                         </label>
                     </Button>
                 </div>
