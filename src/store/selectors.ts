@@ -1,10 +1,10 @@
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo } from 'react';
 import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore, isValidProgress, getMostRecentProgress } from './useReadingStateStore';
 import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
-import type { UserProgress, UserInventoryItem } from '../types/db';
+import type { UserProgress } from '../types/db';
 import { getDeviceId } from '../lib/device-id';
 import { generateMatchKey } from '../lib/entity-resolution';
 
@@ -59,49 +59,14 @@ export const useAllBooks = () => {
     // This depends only on 'books', 'staticMetadata', and 'offloadedBookIds', which change rarely.
     // It does NOT depend on 'progressMap', which changes frequently (on every page turn).
 
-    // We keep a module-level or stable ref cache to avoid impure render mutations
-    // and correctly maintain referential equality across renders for unchanged books.
-    //
-    // REACT PREDICTABILITY: We use a manual `useRef` based caching mechanism instead of `useMemo`
-    // here because `useMemo` does not provide strict semantic guarantees. React is free to discard
-    // `useMemo` caches at any time to free up memory, which would break the reference stability of
-    // the `baseBooks` array, causing unpredictable and expensive re-renders downstream (like in LibraryView)
-    // even when no underlying data actually changed.
+    // REACT PREDICTABILITY: We compute the transformed base books purely in `useMemo`.
+    // As per user directives, if keeping referential equality strictly using a manual cache is
+    // causing predictability errors / linting errors because of React's render phase limitations,
+    // we should prioritize pure `useMemo` derivations, even if React might drop the cache occasionally.
+    // We reinstantiate the array entirely inside `useMemo` to obey the memory directive and
+    // avoid leaking rendering concerns to `useRef`.
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const baseBookCacheRef = useRef<WeakMap<UserInventoryItem, any>>(new WeakMap());
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const baseBooksRef = useRef<any[]>([]);
-
-    // Rebuild cache completely when staticMetadata or offloadedBookIds change,
-    // to invalidate the entire cache, ensuring we don't serve stale metadata.
-    // We start with null values to force an initial render computation
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const lastDepsRef = useRef<{books: any, staticMetadata: any, offloadedBookIds: any}>({
-        books: null,
-        staticMetadata: null,
-        offloadedBookIds: null
-    });
-
-    // Check if we need to rebuild
-    // eslint-disable-next-line react-hooks/refs
-    const needsRebuildPhase1 = lastDepsRef.current.books !== books ||
-        // eslint-disable-next-line react-hooks/refs
-        lastDepsRef.current.staticMetadata !== staticMetadata ||
-        // eslint-disable-next-line react-hooks/refs
-        lastDepsRef.current.offloadedBookIds !== offloadedBookIds;
-
-    if (needsRebuildPhase1) {
-        if (
-            // eslint-disable-next-line react-hooks/refs
-            lastDepsRef.current.staticMetadata !== staticMetadata ||
-            // eslint-disable-next-line react-hooks/refs
-            lastDepsRef.current.offloadedBookIds !== offloadedBookIds
-        ) {
-            // eslint-disable-next-line react-hooks/refs
-            baseBookCacheRef.current = new WeakMap();
-        }
-
+    const baseBooks = useMemo(() => {
         const booksObj = books || {};
         const staticMetadataObj = staticMetadata || {};
         const offloadedBookIdsSet = offloadedBookIds || new Set();
@@ -111,13 +76,6 @@ export const useAllBooks = () => {
         for (const key in booksObj) {
             if (!Object.prototype.hasOwnProperty.call(booksObj, key)) continue;
             const book = booksObj[key];
-            // Check cache
-            // eslint-disable-next-line react-hooks/refs
-            const cached = baseBookCacheRef.current.get(book);
-            if (cached) {
-                result.push(cached);
-                continue;
-            }
 
             if (!staticMetadataObj) {
                 console.error('staticMetadata is undefined in useAllBooks');
@@ -151,41 +109,17 @@ export const useAllBooks = () => {
                 isOffloaded: offloadedBookIdsSet.has(book.bookId),
             };
 
-            // eslint-disable-next-line react-hooks/refs
-            baseBookCacheRef.current.set(book, newBaseBook);
             result.push(newBaseBook);
         }
 
-        // eslint-disable-next-line react-hooks/refs
-        baseBooksRef.current = result.sort((a, b) => b.lastInteraction - a.lastInteraction);
-        // eslint-disable-next-line react-hooks/refs
-        lastDepsRef.current = { books, staticMetadata, offloadedBookIds };
-    }
-
-    // eslint-disable-next-line react-hooks/refs
-    const baseBooks = baseBooksRef.current;
-
-    // OPTIMIZATION: Use a cache to maintain stable object references.
-    // We only want to return a new object if the underlying data actually changed.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const previousResultsRef = useRef<Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }>>({});
-    // We safely read the ref during render ONLY because we immediately write it back in useEffect.
-    // This violates strict mode rules if we were mutating during render, but we mutate in useEffect.
-    // We ignore the hook warning because this is a standard fast-path cache pattern.
-    const previousResultsCache = previousResultsRef.current;
+        return result.sort((a, b) => b.lastInteraction - a.lastInteraction);
+    }, [books, staticMetadata, offloadedBookIds]);
 
     // BOLT OPTIMIZATION: Pre-compute match keys for reading list entries to avoid O(N * M)
     // string parsing (generateMatchKey) inside the baseBooks.map fallback loop.
     // Memoized separately to prevent rebuilding the Map on every page turn (when progressMap updates).
     // We iterate using for...in to avoid the array allocation overhead of Object.values().
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const readingListMatchDepsRef = useRef({ readingListEntries: null as any });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const readingListMatchMapRef = useRef<Map<string, any>>(new Map());
-
-    // eslint-disable-next-line react-hooks/refs
-    const needsRebuildMatchMap = readingListMatchDepsRef.current.readingListEntries !== readingListEntries;
-    if (needsRebuildMatchMap) {
+    const readingListMatchMap = useMemo(() => {
         const map = new Map<string, typeof readingListEntries[string]>();
         for (const key in readingListEntries) {
             if (!Object.prototype.hasOwnProperty.call(readingListEntries, key)) continue;
@@ -195,53 +129,25 @@ export const useAllBooks = () => {
                 map.set(matchKey, entry);
             }
         }
-        // eslint-disable-next-line react-hooks/refs
-        readingListMatchMapRef.current = map;
-        // eslint-disable-next-line react-hooks/refs
-        readingListMatchDepsRef.current = { readingListEntries };
-    }
-    // eslint-disable-next-line react-hooks/refs
-    const readingListMatchMap = readingListMatchMapRef.current;
+        return map;
+    }, [readingListEntries]);
 
     // OPTIMIZATION: Phase 2 - Progress Merge
     // This runs when 'progressMap' updates (frequently).
     // We iterate over baseBooks and merge the latest progress.
-    // BOLT OPTIMIZATION: Use raw reference checks (rawBookProgress) BEFORE calculating derived progress.
-    // This skips calling resolveProgress() (which involves localStorage access via getDeviceId) for unchanged books.
 
-    // REACT PREDICTABILITY: Similar to Phase 1, we use a manual `useRef` cache here instead of `useMemo`
-    // to strictly enforce referential stability and prevent React from randomly throwing away the cache,
-    // which would otherwise cause massive array recreations and downstream re-renders on every keystroke.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const lastPhase2DepsRef = useRef<{ baseBooks: any, progressMap: any, readingListEntries: any, readingListMatchMap: any }>({
-        baseBooks: null,
-        progressMap: null,
-        readingListEntries: null,
-        readingListMatchMap: null
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const memoizedResultRef = useRef<{books: any[], cache: any}>({books: [], cache: {}});
+    // REACT PREDICTABILITY: We compute the transformed base books purely in `useMemo`.
+    // We don't use a manual ref cache to avoid react-hooks/refs errors.
 
-    // eslint-disable-next-line react-hooks/refs
-    const needsRebuildPhase2 = lastPhase2DepsRef.current.baseBooks !== baseBooks ||
-        // eslint-disable-next-line react-hooks/refs
-        lastPhase2DepsRef.current.progressMap !== progressMap ||
-        // eslint-disable-next-line react-hooks/refs
-        lastPhase2DepsRef.current.readingListEntries !== readingListEntries ||
-        // eslint-disable-next-line react-hooks/refs
-        lastPhase2DepsRef.current.readingListMatchMap !== readingListMatchMap;
-
-    if (needsRebuildPhase2) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const newCache: Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }> = {};
-
-        const cache = previousResultsCache;
-
+    const finalBooks = useMemo(() => {
         const currentDeviceId = getDeviceId();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result: any[] = [];
 
-        // eslint-disable-next-line react-hooks/refs
-        const result = baseBooks.map(book => {
+        for (let i = 0; i < baseBooks.length; i++) {
+            const book = baseBooks[i];
             const rawBookProgress = progressMap[book.id];
+
             // Lookup by exact filename first
             let rawReadingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
 
@@ -254,23 +160,6 @@ export const useAllBooks = () => {
                 }
             }
 
-            // Check cache for reuse
-            const prev = cache[book.id];
-
-            // Reuse if:
-            // 1. Previous entry exists
-            // 2. Base book object is referentially identical (Phase 1 didn't change it)
-            // 3. Raw input references are identical (avoiding expensive resolveProgress)
-            if (prev &&
-                prev.base === book &&
-                prev.rawBookProgress === rawBookProgress &&
-                prev.rawReadingListEntry === rawReadingListEntry
-            ) {
-                newCache[book.id] = prev;
-                return prev.result;
-            }
-
-            // Cache Miss: Calculate derived values
             // This involves resolveProgress which calls getDeviceId -> localStorage.getItem (slow)
             const bookProgress = resolveProgress(rawBookProgress, currentDeviceId);
             const progress = bookProgress?.percentage || rawReadingListEntry?.percentage || 0;
@@ -288,32 +177,13 @@ export const useAllBooks = () => {
                 allProgress: rawBookProgress
             };
 
-            newCache[book.id] = {
-                result: newBook,
-                base: book,
-                rawBookProgress,
-                rawReadingListEntry
-            };
+            result.push(newBook);
+        }
 
-            return newBook;
-        });
+        return result;
+    }, [baseBooks, progressMap, readingListEntries, readingListMatchMap]);
 
-        // eslint-disable-next-line react-hooks/refs
-        memoizedResultRef.current = { books: result, cache: newCache };
-        // eslint-disable-next-line react-hooks/refs
-        lastPhase2DepsRef.current = { baseBooks, progressMap, readingListEntries, readingListMatchMap };
-    }
-
-    const memoizedResult = memoizedResultRef.current;
-
-    // Update cache for next render
-    useEffect(() => {
-        previousResultsRef.current = memoizedResultRef.current.cache;
-    // eslint-disable-next-line react-hooks/refs
-    }, [memoizedResultRef.current.cache]);
-
-    // eslint-disable-next-line react-hooks/refs
-    return memoizedResult.books;
+    return finalBooks;
 };
 
 /**
