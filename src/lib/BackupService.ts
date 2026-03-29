@@ -234,6 +234,7 @@ export class BackupService {
     logger.debug('Writing Yjs snapshot directly to IndexedDB...');
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.open('versicle-yjs');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       request.onupgradeneeded = (event: any) => {
         const db = event.target.result as IDBDatabase;
         if (!db.objectStoreNames.contains('updates')) {
@@ -243,6 +244,7 @@ export class BackupService {
             db.createObjectStore('custom');
         }
       };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       request.onsuccess = (event: any) => {
         const db = event.target.result as IDBDatabase;
         const tx = db.transaction(['updates'], 'readwrite');
