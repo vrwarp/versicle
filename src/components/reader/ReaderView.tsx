@@ -59,6 +59,8 @@ export const ReaderView: React.FC = () => {
     const { activeSidebar, setSidebar } = useSidebarState();
     const viewerRef = useRef<HTMLDivElement>(null);
     const previousLocation = useRef<{ start: string; end: string; timestamp: number } | null>(null);
+    const touchStartRef = useRef<{y: number, x: number} | null>(null);
+    const scrollWrapperRef = useRef<HTMLDivElement>(null);
 
     const {
         currentTheme,
@@ -1034,6 +1036,55 @@ const annotationList = Object.values(annotations).filter(a => a.bookId === bookI
     const showAnnotations = activeSidebar === 'annotations';
     const showSearch = activeSidebar === 'search';
 
+    useEffect(() => {
+        const wrapper = scrollWrapperRef.current;
+        if (!wrapper) return;
+
+        const handleWheel = (e: WheelEvent) => {
+            if (readerViewMode !== 'scrolled') return;
+            const epubContainer = viewerRef.current?.firstElementChild as HTMLElement;
+            if (epubContainer) {
+                epubContainer.scrollBy({ top: e.deltaY, left: e.deltaX });
+                if (e.cancelable) e.preventDefault();
+            }
+        };
+
+        const handleTouchStart = (e: TouchEvent) => {
+            if (readerViewMode !== 'scrolled') return;
+            touchStartRef.current = { y: e.touches[0].clientY, x: e.touches[0].clientX };
+        };
+
+        const handleTouchMove = (e: TouchEvent) => {
+            if (readerViewMode !== 'scrolled' || !touchStartRef.current) return;
+            const deltaY = touchStartRef.current.y - e.touches[0].clientY;
+            const deltaX = touchStartRef.current.x - e.touches[0].clientX;
+            
+            const epubContainer = viewerRef.current?.firstElementChild as HTMLElement;
+            if (epubContainer) {
+                epubContainer.scrollBy({ top: deltaY, left: deltaX });
+                if (e.cancelable) e.preventDefault();
+            }
+            
+            touchStartRef.current = { y: e.touches[0].clientY, x: e.touches[0].clientX };
+        };
+
+        const handleTouchEnd = () => {
+            touchStartRef.current = null;
+        };
+
+        wrapper.addEventListener('wheel', handleWheel, { passive: false });
+        wrapper.addEventListener('touchstart', handleTouchStart, { passive: true });
+        wrapper.addEventListener('touchmove', handleTouchMove, { passive: false });
+        wrapper.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+        return () => {
+            wrapper.removeEventListener('wheel', handleWheel);
+            wrapper.removeEventListener('touchstart', handleTouchStart);
+            wrapper.removeEventListener('touchmove', handleTouchMove);
+            wrapper.removeEventListener('touchend', handleTouchEnd);
+        };
+    }, [readerViewMode]);
+
     return (
         <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
             <Dialog
@@ -1285,7 +1336,10 @@ const annotationList = Object.values(annotations).filter(a => a.bookId === bookI
                 )}
 
                 {/* Reader Area */}
-                <div className="flex-1 relative min-w-0 flex flex-col items-center">
+                <div 
+                    ref={scrollWrapperRef}
+                    className="flex-1 relative min-w-0 flex flex-col items-center"
+                >
                     <div
                         data-testid="reader-iframe-container"
                         ref={viewerRef}

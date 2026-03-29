@@ -244,9 +244,29 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
       // Verify that clearData was called on the existing persistence
       expect(mocks.persistenceMock.clearData).toHaveBeenCalled();
 
-      // Verify that a new Y.Doc was created and populated
-      expect(mocks.capturedDocs.length).toBeGreaterThan(0);
-      const restoredDoc = mocks.capturedDocs[mocks.capturedDocs.length - 1] as Y.Doc;
+      // Wait for test to settle
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // Verify that the snapshot was written directly to IndexedDB 'updates' store
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const req = indexedDB.open('versicle-yjs');
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+
+      const tx = db.transaction(['updates'], 'readonly');
+      const store = tx.objectStore('updates');
+      const allUpdates = await new Promise<any[]>((resolve, reject) => {
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+
+      expect(allUpdates.length).toBeGreaterThan(0);
+      
+      // We can apply the update to a fresh doc to verify its contents
+      const restoredDoc = new Y.Doc();
+      Y.applyUpdate(restoredDoc, allUpdates[allUpdates.length - 1]);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const restoredBooks = restoredDoc.getMap('library').get('books') as Y.Map<any>;
@@ -254,6 +274,8 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
       const b1 = restoredBooks.get('b1');
       expect(b1).toBeDefined();
       expect(b1.title).toBe('Restored Book');
+      
+      db.close();
     });
 
     it('should reject v1 backup format', async () => {
