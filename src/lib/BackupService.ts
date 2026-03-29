@@ -7,7 +7,7 @@ import { getDB } from '../db/db';
 import { yDoc, waitForYjsSync, yjsPersistence } from '../store/yjs-provider';
 import { createLogger } from './logger';
 import { useLibraryStore } from '../store/useLibraryStore';
-import { IndexeddbPersistence } from 'y-indexeddb';
+
 
 const logger = createLogger('BackupService');
 
@@ -219,7 +219,7 @@ export class BackupService {
     logger.debug(`Applying Yjs snapshot: ${stateUpdate.byteLength} bytes`);
 
     // CRDT Issue: If we apply snapshot to current doc, deleted items remain deleted (Delete wins).
-    // Solution: Wipe IDB data, then write snapshot using a fresh/isolated YDoc.
+    // Solution: Wipe IDB data, then write snapshot cleanly.
     // The App must be reloaded after this to pick up the new state.
 
     // 1. Clear existing persistence
@@ -228,24 +228,37 @@ export class BackupService {
       await yjsPersistence.clearData();
     }
 
-    // 2. Create isolated YDoc and Persistence to write the snapshot as fresh state
-    const tempDoc = new Y.Doc();
-    Y.applyUpdate(tempDoc, stateUpdate);
-
-    const tempPersistence = new IndexeddbPersistence('versicle-yjs', tempDoc);
-
-    // 3. Wait for temp persistence to save
-    logger.debug('Writing snapshot to clean database...');
-    await new Promise<void>((resolve) => {
-      // IndexeddbPersistence saves updates immediately, but we wait for 'synced' to ensure connection
-      // and then a small buffer for write completion.
-      tempPersistence.once('synced', () => {
-        setTimeout(resolve, 500);
-      });
+    // 2. Write snapshot safely via native IDB to guarantee completion before reload
+    // We cannot use y-indexeddb here because it writes asynchronously and lacks a flush promise.
+    // The previous 500ms timeout before reload aborted the transaction for large datasets, dropping notes.
+    logger.debug('Writing Yjs snapshot directly to IndexedDB...');
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('versicle-yjs');
+      request.onupgradeneeded = (event: any) => {
+        const db = event.target.result as IDBDatabase;
+        if (!db.objectStoreNames.contains('updates')) {
+            db.createObjectStore('updates', { autoIncrement: true });
+        }
+        if (!db.objectStoreNames.contains('custom')) {
+            db.createObjectStore('custom');
+        }
+      };
+      request.onsuccess = (event: any) => {
+        const db = event.target.result as IDBDatabase;
+        const tx = db.transaction(['updates'], 'readwrite');
+        const store = tx.objectStore('updates');
+        store.put(stateUpdate);
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(tx.error);
+        };
+      };
+      request.onerror = () => reject(request.error);
     });
-
-    tempPersistence.destroy();
-    tempDoc.destroy();
 
     onProgress?.(30, 'Syncing stores...');
 
