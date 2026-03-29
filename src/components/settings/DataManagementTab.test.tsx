@@ -21,7 +21,9 @@ describe('DataManagementTab', () => {
         regenerationPercent: 0,
         onRegenerateMetadata: vi.fn(),
         onClearAllData: vi.fn(),
-        isClearing: false
+        isClearing: false,
+        onClearCloudData: vi.fn(),
+        isClearingCloud: false
     };
 
     it('renders reading list section', () => {
@@ -86,14 +88,32 @@ describe('DataManagementTab', () => {
         render(<DataManagementTab {...defaultProps} isClearing={true} />);
 
         expect(screen.getByText('Clearing...')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /clearing/i })).toBeDisabled();
+        // The clear cloud data button should also be disabled when clearing local data
+        const buttons = screen.getAllByRole('button');
+        const clearLocalBtn = buttons.find(b => b.textContent?.includes('Clearing...'));
+        const clearCloudBtn = buttons.find(b => b.textContent?.includes('Delete Cloud Data'));
+        expect(clearLocalBtn).toBeDisabled();
+        expect(clearCloudBtn).toBeDisabled();
+    });
+
+    it('shows clearing cloud data state', () => {
+        render(<DataManagementTab {...defaultProps} isClearingCloud={true} />);
+
+        expect(screen.getByText('Deleting Cloud Data...')).toBeInTheDocument();
+        // The clear local data button should also be disabled when clearing cloud data
+        const buttons = screen.getAllByRole('button');
+        const clearLocalBtn = buttons.find(b => b.textContent?.includes('Clear All Local Data'));
+        const clearCloudBtn = buttons.find(b => b.textContent?.includes('Deleting Cloud Data...'));
+        expect(clearLocalBtn).toBeDisabled();
+        expect(clearCloudBtn).toBeDisabled();
     });
 
     it('renders danger zone', () => {
         render(<DataManagementTab {...defaultProps} />);
 
         expect(screen.getByText('Danger Zone')).toBeInTheDocument();
-        expect(screen.getByText('Clear All Data')).toBeInTheDocument();
+        expect(screen.getByText('Delete Cloud Data')).toBeInTheDocument();
+        expect(screen.getByText('Clear All Local Data')).toBeInTheDocument();
     });
 
     it('calls onViewReadingList when View List clicked', () => {
@@ -120,12 +140,20 @@ describe('DataManagementTab', () => {
         expect(onRepairDB).toHaveBeenCalled();
     });
 
-    it('calls onClearAllData when Clear All Data clicked', () => {
+    it('calls onClearAllData when Clear All Local Data clicked', () => {
         const onClearAllData = vi.fn();
         render(<DataManagementTab {...defaultProps} onClearAllData={onClearAllData} />);
 
-        fireEvent.click(screen.getByText('Clear All Data'));
+        fireEvent.click(screen.getByText('Clear All Local Data'));
         expect(onClearAllData).toHaveBeenCalled();
+    });
+
+    it('calls onClearCloudData when Delete Cloud Data clicked', () => {
+        const onClearCloudData = vi.fn();
+        render(<DataManagementTab {...defaultProps} onClearCloudData={onClearCloudData} />);
+
+        fireEvent.click(screen.getByText('Delete Cloud Data'));
+        expect(onClearCloudData).toHaveBeenCalled();
     });
 
     it('triggers file input when Import CSV clicked', () => {

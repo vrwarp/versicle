@@ -25,6 +25,8 @@ export interface DataManagementTabProps {
     // Danger Zone
     onClearAllData: () => void;
     isClearing?: boolean;
+    onClearCloudData: () => void;
+    isClearingCloud?: boolean;
 }
 
 export const DataManagementTab: React.FC<DataManagementTabProps> = ({
@@ -44,7 +46,9 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
     regenerationPercent,
     onRegenerateMetadata,
     onClearAllData,
-    isClearing = false
+    isClearing = false,
+    onClearCloudData,
+    isClearingCloud = false
 }) => {
     const csvInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -179,16 +183,28 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
             {/* Danger Zone */}
             <div className="border-t pt-4 space-y-4">
                 <h3 className="text-lg font-medium text-destructive">Danger Zone</h3>
-                <Button variant="destructive" onClick={onClearAllData} disabled={isClearing}>
-                    {isClearing ? (
-                        <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                            Clearing...
-                        </>
-                    ) : (
-                        "Clear All Data"
-                    )}
-                </Button>
+                <div className="flex flex-col gap-2">
+                    <Button variant="destructive" onClick={onClearCloudData} disabled={isClearingCloud || isClearing}>
+                        {isClearingCloud ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                                Deleting Cloud Data...
+                            </>
+                        ) : (
+                            "Delete Cloud Data"
+                        )}
+                    </Button>
+                    <Button variant="destructive" onClick={onClearAllData} disabled={isClearing || isClearingCloud}>
+                        {isClearing ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                                Clearing...
+                            </>
+                        ) : (
+                            "Clear All Local Data"
+                        )}
+                    </Button>
+                </div>
             </div>
         </div>
     );

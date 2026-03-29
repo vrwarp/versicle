@@ -22,6 +22,7 @@ import { dbService } from '../db/DBService';
 import { CheckpointService } from '../lib/sync/CheckpointService';
 import { useSyncStore } from '../lib/sync/hooks/useSyncStore';
 import { useFirestoreSync } from '../lib/sync/hooks/useFirestoreSync';
+import { getFirestoreSyncManager } from '../lib/sync/FirestoreSyncManager';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
 import { exportFile } from '../lib/export';
 import { ReadingListDialog } from './ReadingListDialog';
@@ -66,6 +67,7 @@ export const GlobalSettingsDialog = () => {
     const [regenerationPercent, setRegenerationPercent] = useState(0);
     const [backupStatus, setBackupStatus] = useState<string | null>(null);
     const [isClearing, setIsClearing] = useState(false);
+    const [isClearingCloud, setIsClearingCloud] = useState(false);
 
 
     const readingListEntries = useReadingListStore(state => state.entries);
@@ -234,6 +236,28 @@ export const GlobalSettingsDialog = () => {
         isDebugModeEnabled,
         setDebugModeEnabled
     } = useGenAIStore();
+
+    const handleClearCloudData = async () => {
+        const syncManager = getFirestoreSyncManager();
+        if (!syncManager.isSignedIn()) {
+            showToast("You must be signed in to clear cloud data.", "error");
+            return;
+        }
+
+        if (confirm("Are you sure you want to delete ALL your cloud sync data? This cannot be undone.\n\nNote: This will also sign you out of sync on this device to prevent re-uploading your local data. Your local data will NOT be deleted.")) {
+            setIsClearingCloud(true);
+            try {
+                await syncManager.clearCloudData();
+                await syncManager.signOut();
+                showToast("Cloud data successfully deleted.", "success");
+            } catch (e) {
+                logger.error('Failed to clear cloud data', e);
+                showToast("Failed to clear cloud data. Check console.", "error");
+            } finally {
+                setIsClearingCloud(false);
+            }
+        }
+    };
 
     const handleClearAllData = async () => {
         if (confirm("Are you sure you want to delete ALL data? This includes books, annotations, and settings.")) {
@@ -702,6 +726,8 @@ export const GlobalSettingsDialog = () => {
                                     onRegenerateMetadata={handleRegenerateMetadata}
                                     onClearAllData={handleClearAllData}
                                     isClearing={isClearing}
+                                    onClearCloudData={handleClearCloudData}
+                                    isClearingCloud={isClearingCloud}
                                 />
                             )
                         }

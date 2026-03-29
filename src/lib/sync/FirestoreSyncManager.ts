@@ -16,7 +16,7 @@ import { yDoc, CURRENT_SCHEMA_VERSION } from '../../store/yjs-provider';
 import { CheckpointService } from './CheckpointService';
 import * as Y from 'yjs';
 import { useBookStore } from '../../store/useBookStore';
-import { doc, getDoc, collection, getDocs, query, limit } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, query, limit, deleteDoc } from 'firebase/firestore';
 
 import {
     getFirebaseApp,
@@ -488,6 +488,47 @@ class FirestoreSyncManager {
         } catch (error) {
             logger.error('Sign in failed:', error);
             this.setAuthStatus('signed-out');
+            throw error;
+        }
+    }
+
+    /**
+     * Clear all user data from Firestore for this app (delete Firestore DB)
+     */
+    async clearCloudData(): Promise<void> {
+        const uid = this.currentUser?.uid;
+        if (!uid) throw new Error('Cannot clear cloud data: user not signed in');
+
+        const db = getFirestoreDb();
+        if (!db) throw new Error('Firestore not initialized');
+
+        // Stop sync immediately
+        this.disconnectFireProvider();
+
+        const forceDevInstance = useSyncStore.getState().forceDevInstance;
+        const isDev = import.meta.env.DEV || forceDevInstance;
+        const schemaSuffix = CURRENT_SCHEMA_VERSION > 1 ? `${CURRENT_SCHEMA_VERSION}` : '';
+        const path = isDev ? `users/${uid}/versicle/dev${schemaSuffix}` : `users/${uid}/versicle/main${schemaSuffix}`;
+
+        logger.info(`Starting cloud data deletion for path: ${path}`);
+
+        try {
+            // Delete the main document
+            const docRef = doc(db, path);
+            await deleteDoc(docRef);
+
+            // Fetch and delete all documents in the 'updates' subcollection
+            const updatesRef = collection(db, path, 'updates');
+            const updatesSnapshot = await getDocs(updatesRef);
+
+            if (!updatesSnapshot.empty) {
+                const deletePromises = updatesSnapshot.docs.map(doc => deleteDoc(doc.ref));
+                await Promise.all(deletePromises);
+            }
+
+            logger.info('Cloud data cleared successfully');
+        } catch (error) {
+            logger.error('Failed to clear cloud data:', error);
             throw error;
         }
     }
