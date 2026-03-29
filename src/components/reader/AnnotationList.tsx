@@ -42,9 +42,11 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
     setEditingId(null);
   };
 
-  const annotationList = Object.values(annotations)
-    .filter(a => !bookId || a.bookId === bookId)
-    .sort((a, b) => a.created - b.created);
+  const annotationList = React.useMemo(() => {
+    return Object.values(annotations)
+      .filter(a => !bookId || a.bookId === bookId)
+      .sort((a, b) => a.created - b.created);
+  }, [annotations, bookId]);
 
   if (annotationList.length === 0) {
     return <div className="p-4 text-sm text-gray-500 text-center">No annotations yet. Select text to highlight.</div>;
