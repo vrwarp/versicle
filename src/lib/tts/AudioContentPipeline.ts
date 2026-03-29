@@ -580,38 +580,71 @@ export class AudioContentPipeline {
             const fullCfi = s.cfi || '';
             const parentCfi = getParentCfi(fullCfi, tableCfis);
 
-            // Helper to check if the current group already "contains" this new parent
             if (currentGroup && currentParentBase === null) {
-                // Initialize cache if missing
                 currentParentBase = currentGroup.parentCfi.endsWith(')') ? currentGroup.parentCfi.slice(0, -1) : currentGroup.parentCfi;
             }
 
             const newParentBase = parentCfi.endsWith(')') ? parentCfi.slice(0, -1) : parentCfi;
 
-            // Check if one path is a prefix of the other, confirming they belong to the same branch.
-            // We verify that the prefix match is followed by a separator or is the end of string
-            // to avoid false positives (e.g. "/1" matching "/10").
-            const isDescendant = currentGroup && currentParentBase && newParentBase.startsWith(currentParentBase) &&
-                (newParentBase.length === currentParentBase.length || ['/', '!', ':'].includes(newParentBase[currentParentBase.length]));
+            let isDescendant = false;
+            let isAncestor = false;
 
-            const isAncestor = currentGroup && currentParentBase && currentParentBase.startsWith(newParentBase) &&
-                (currentParentBase.length === newParentBase.length || ['/', '!', ':'].includes(currentParentBase[newParentBase.length]));
+            if (currentGroup && currentParentBase) {
+                isDescendant = newParentBase.startsWith(currentParentBase) &&
+                    (newParentBase.length === currentParentBase.length || ['/', '!', ':'].includes(newParentBase[currentParentBase.length]));
 
-            const isInternalNode = isDescendant || isAncestor;
+                isAncestor = currentParentBase.startsWith(newParentBase) &&
+                    (currentParentBase.length === newParentBase.length || ['/', '!', ':'].includes(currentParentBase[newParentBase.length]));
+            }
+
+            let isInternalNode = isDescendant || isAncestor;
 
             if (!currentGroup || !isInternalNode) {
-                if (currentGroup) {
-                    finalizeGroup(currentGroup);
+                if (currentGroup && currentParentBase) {
+                    let commonPrefix = "";
+                    for (let j = 0; j < Math.min(currentParentBase.length, newParentBase.length); j++) {
+                        if (currentParentBase[j] === newParentBase[j]) {
+                            commonPrefix += currentParentBase[j];
+                        } else {
+                            break;
+                        }
+                    }
+
+                    const lastSep = Math.max(commonPrefix.lastIndexOf('/'), commonPrefix.lastIndexOf('!'), commonPrefix.lastIndexOf(':'));
+                    if (lastSep > 0) {
+                        commonPrefix = commonPrefix.substring(0, lastSep);
+                    }
+
+                    const spineSep = commonPrefix.indexOf('!');
+                    const hasBlockAncestor = spineSep > 0 && commonPrefix.length > spineSep + 1;
+
+                    let isTableBoundary = false;
+                    for (const t of tableCfis) {
+                        const tClean = typeof t === 'string' ? t : (t as PreprocessedRoot).clean;
+                        const tBase = `epubcfi(${tClean}`;
+                        // Only prevent merging if we are crossing a known boundary
+                        if (currentParentBase === tBase || newParentBase === tBase) {
+                            isTableBoundary = true;
+                            break;
+                        }
+                    }
+
+                    if (hasBlockAncestor && !isTableBoundary) {
+                        currentParentBase = commonPrefix;
+                        currentGroup.parentCfi = commonPrefix + ")";
+                        isInternalNode = true;
+                    } else {
+                        finalizeGroup(currentGroup);
+                        currentGroup = null;
+                    }
                 }
+            }
+
+            if (!currentGroup) {
                 currentGroup = { parentCfi, segments: [], fullText: '' };
-                // Reset cache
                 currentParentBase = parentCfi.endsWith(')') ? parentCfi.slice(0, -1) : parentCfi;
             } else if (isAncestor) {
-                // If the new sentence is an ancestor of the current group (e.g. a Div containing a P),
-                // we expand the group's scope to the ancestor's level. This ensures subsequent
-                // descendants of this ancestor are correctly included in the group.
                 currentGroup.parentCfi = parentCfi;
-                // Update cache
                 currentParentBase = newParentBase;
             }
 
