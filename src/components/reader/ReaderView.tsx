@@ -567,9 +567,12 @@ export const ReaderView: React.FC = () => {
         }
     };
 
+    const annotationList = useMemo(() => {
+        return Object.values(annotations).filter(a => a.bookId === bookId);
+    }, [annotations, bookId]);
+
     useEffect(() => {
         if (rendition && isRenditionReady) {
-const annotationList = Object.values(annotations).filter(a => a.bookId === bookId);
             const currentIds = new Set(annotationList.map(a => a.id));
 
             // 1. Remove deleted annotations (Highlights and Markers)
@@ -666,7 +669,7 @@ const annotationList = Object.values(annotations).filter(a => a.bookId === bookI
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (window as any).__reader_added_annotations_count = addedAnnotations.current.size;
         }
-    }, [annotations, isRenditionReady, rendition, showPopover, bookId]);
+    }, [annotationList, isRenditionReady, rendition, showPopover]);
 
     // Handle TTS Errors
     const showToast = useToastStore(state => state.showToast);
