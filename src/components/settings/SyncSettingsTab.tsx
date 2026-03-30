@@ -99,6 +99,10 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     // ... inside component ...
     const {
         isServiceConnected,
+        googleClientId,
+        setGoogleClientId,
+        googleIosClientId,
+        setGoogleIosClientId
     } = useGoogleServicesStore();
     const [isDriveConnecting, setIsDriveConnecting] = React.useState(false);
 
@@ -569,17 +573,17 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                         <div className="flex gap-2">
                                             <Input
                                                 id="google-web-client-id"
-                                                value={useGoogleServicesStore.getState().googleClientId || ''}
-                                                onChange={(e) => useGoogleServicesStore.getState().setGoogleClientId(e.target.value)}
+                                                value={googleClientId || ''}
+                                                onChange={(e) => setGoogleClientId(e.target.value)}
                                                 placeholder="Default Web Client ID"
                                                 className="text-xs h-8"
                                             />
-                                            {useGoogleServicesStore.getState().googleClientId && (
+                                            {googleClientId && (
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
                                                     className="h-8 px-2 text-muted-foreground"
-                                                    onClick={() => useGoogleServicesStore.getState().setGoogleClientId('')}
+                                                    onClick={() => setGoogleClientId('')}
                                                     title="Clear"
                                                 >
                                                     ✕
@@ -595,17 +599,17 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                         <div className="flex gap-2">
                                             <Input
                                                 id="google-ios-client-id"
-                                                value={useGoogleServicesStore.getState().googleIosClientId || ''}
-                                                onChange={(e) => useGoogleServicesStore.getState().setGoogleIosClientId(e.target.value)}
+                                                value={googleIosClientId || ''}
+                                                onChange={(e) => setGoogleIosClientId(e.target.value)}
                                                 placeholder="Default iOS Client ID"
                                                 className="text-xs h-8"
                                             />
-                                            {useGoogleServicesStore.getState().googleIosClientId && (
+                                            {googleIosClientId && (
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
                                                     className="h-8 px-2 text-muted-foreground"
-                                                    onClick={() => useGoogleServicesStore.getState().setGoogleIosClientId('')}
+                                                    onClick={() => setGoogleIosClientId('')}
                                                     title="Clear"
                                                 >
                                                     ✕

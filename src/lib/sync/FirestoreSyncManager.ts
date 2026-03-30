@@ -960,6 +960,7 @@ class FirestoreSyncManager {
                 this.currentUser = auth.currentUser;
                 return this.currentUser;
             }
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (e) {
             // Ignore if Firebase isn't initialized yet
         }
