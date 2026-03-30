@@ -192,6 +192,11 @@ export class TextSegmenter {
         RE_SENTENCE_FALLBACK.lastIndex = 0;
 
         while ((match = RE_SENTENCE_FALLBACK.exec(text)) !== null) {
+            if (match[0].length === 0) {
+                RE_SENTENCE_FALLBACK.lastIndex++;
+                continue;
+            }
+
             sentences.push({
                 text: match[0],
                 index: match.index,

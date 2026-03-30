@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { SearchEngine } from './search-engine';
 
 describe('SearchEngine', () => {
@@ -6,6 +6,10 @@ describe('SearchEngine', () => {
 
     beforeEach(() => {
         engine = new SearchEngine();
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     it('should index and search a book', () => {
@@ -143,5 +147,34 @@ describe('SearchEngine', () => {
         expect(results).toHaveLength(2);
         expect(results[0].href).toBe('chap1.html');
         expect(results[1].href).toBe('chap2.html');
+    });
+
+    it('should prevent infinite loops on zero-width matches', () => {
+        engine.indexBook('testBook', [{ id: '1', href: 'chap1.html', text: 'hello world' }]);
+
+        // Mock RegExp to return zero-width match at start, if code doesn't advance lastIndex, it will loop
+        const originalRegExp = global.RegExp;
+        vi.spyOn(global, 'RegExp').mockImplementation(function(...args) {
+            const r = new originalRegExp(...args);
+            r.exec = function(str) {
+                this._count = (this._count || 0) + 1;
+                if (this._count > 100) {
+                    throw new Error("Infinite loop detected!");
+                }
+
+                // Return a zero-width match at the current lastIndex.
+                const matchIndex = this.lastIndex;
+                if (matchIndex < str.length) {
+                    const match = Object.assign([''], { index: matchIndex, input: str });
+                    return match;
+                }
+                return null;
+            };
+            return r;
+        });
+
+        // The safeguard should prevent the infinite loop and not throw an error.
+        const results = engine.search('testBook', 'hello');
+        expect(results).toBeDefined();
     });
 });
