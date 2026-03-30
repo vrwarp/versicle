@@ -85,8 +85,7 @@ function App() {
   const [swInitialized, setSwInitialized] = useState(false);
   const [swError, setSwError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('Initializing...');
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [migrationPending, setMigrationPending] = useState<{
+  const [migrationPending] = useState<{
     targetWorkspaceId: string;
     backupCheckpointId: number;
   } | null>(() => {
