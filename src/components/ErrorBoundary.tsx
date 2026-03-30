@@ -2,6 +2,8 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Button } from './ui/Button';
 import { createLogger } from '../lib/logger';
 import { DataRecoveryView } from './settings/DataRecoveryView';
+import { MigrationStateService } from '../lib/sync/MigrationStateService';
+import { CriticalMigrationFailureView } from './sync/CriticalMigrationFailureView';
 
 const logger = createLogger('ErrorBoundary');
 
@@ -52,6 +54,16 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      // Check for migration failure: crash during AWAITING_CONFIRMATION
+      const migrationState = MigrationStateService.getState();
+      if (migrationState && migrationState.status === 'AWAITING_CONFIRMATION') {
+        return (
+          <CriticalMigrationFailureView
+            backupId={migrationState.backupCheckpointId}
+          />
+        );
+      }
+
       if (this.state.showRecovery) {
         return (
           <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-background text-foreground text-center">

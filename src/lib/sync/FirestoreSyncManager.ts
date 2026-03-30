@@ -14,9 +14,11 @@ import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
 import { yDoc, CURRENT_SCHEMA_VERSION } from '../../store/yjs-provider';
 import { CheckpointService } from './CheckpointService';
+import { MigrationStateService } from './MigrationStateService';
 import * as Y from 'yjs';
 import { useBookStore } from '../../store/useBookStore';
-import { doc, getDoc, collection, getDocs, query, limit } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, query, limit } from 'firebase/firestore';
+import type { WorkspaceMetadata } from '../../types/workspace';
 
 import {
     getFirebaseApp,
@@ -242,10 +244,8 @@ class FirestoreSyncManager {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const maxWaitTime = (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || this.config.maxWaitFirestoreTime;
 
-        const forceDevInstance = useSyncStore.getState().forceDevInstance;
-        const isDev = import.meta.env.DEV || forceDevInstance;
-        const schemaSuffix = CURRENT_SCHEMA_VERSION > 1 ? `${CURRENT_SCHEMA_VERSION}` : '';
-        const path = isDev ? `users/${uid}/versicle/dev${schemaSuffix}` : `users/${uid}/versicle/main${schemaSuffix}`;
+        const workspaceId = useSyncStore.getState().activeWorkspaceId || FirestoreSyncManager.getDefaultWorkspaceId();
+        const path = `users/${uid}/versicle/${workspaceId}`;
 
         const isCleanClient = Object.keys(useBookStore.getState().books || {}).length === 0;
 
@@ -527,6 +527,234 @@ class FirestoreSyncManager {
         logger.debug('Manager destroyed');
     }
 
+    // --- Workspace Management ---
+
+    /**
+     * Returns the default workspace ID for backward compatibility.
+     * Maps to the old path structure: main${schemaSuffix} or dev${schemaSuffix}.
+     */
+    static getDefaultWorkspaceId(): string {
+        const isDev = import.meta.env.DEV;
+        const schemaSuffix = CURRENT_SCHEMA_VERSION > 1 ? `${CURRENT_SCHEMA_VERSION}` : '';
+        return isDev ? `dev${schemaSuffix}` : `main${schemaSuffix}`;
+    }
+
+    /**
+     * Get the currently active workspace ID.
+     */
+    getActiveWorkspaceId(): string {
+        const { activeWorkspaceId } = useSyncStore.getState();
+        return activeWorkspaceId || FirestoreSyncManager.getDefaultWorkspaceId();
+    }
+
+    /**
+     * Create a new workspace.
+     * Flow A: Generates ID, writes metadata to Firestore, switches active workspace.
+     */
+    async createWorkspace(name: string): Promise<string> {
+        const user = this.getCurrentUser();
+        if (!user) throw new Error('Must be signed in to create a workspace');
+
+        const workspaceId = `ws_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+        const metadata: WorkspaceMetadata = {
+            workspaceId,
+            name,
+            createdAt: Date.now(),
+            schemaVersion: CURRENT_SCHEMA_VERSION,
+        };
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+
+        if (isMock) {
+            // Store workspace metadata in localStorage for mock mode
+            const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
+            const workspaces: WorkspaceMetadata[] = JSON.parse(raw);
+            if (workspaces.length === 0) {
+                workspaces.push({ workspaceId: FirestoreSyncManager.getDefaultWorkspaceId(), name: 'Default', createdAt: Date.now(), schemaVersion: 4 });
+            }
+            workspaces.push(metadata);
+            localStorage.setItem('__VERSICLE_WORKSPACES__', JSON.stringify(workspaces));
+            logger.info(`[Mock] Created workspace: ${name} (${workspaceId})`);
+        } else {
+            const db = getFirestoreDb();
+            if (!db) throw new Error('Firestore not initialized');
+            const metaRef = doc(db, `users/${user.uid}/workspaces/${workspaceId}`);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await setDoc(metaRef, metadata as any);
+            logger.info(`Created workspace: ${name} (${workspaceId})`);
+        }
+
+        // Update active workspace
+        useSyncStore.getState().setActiveWorkspaceId(workspaceId);
+
+        // Reconnect with new path (empty remote = local becomes source of truth)
+        this.disconnectFireProvider();
+        this.connectFireProvider(user.uid);
+
+        return workspaceId;
+    }
+
+    /**
+     * Switch to an existing workspace using the multi-stage commit process.
+     * Flow B: Pre-flight → Backup → State Lock → Hydrate → Apply → Reload.
+     */
+    async switchWorkspace(targetWorkspaceId: string): Promise<void> {
+        const user = this.getCurrentUser();
+        if (!user) throw new Error('Must be signed in to switch workspaces');
+
+        const currentWorkspaceId = this.getActiveWorkspaceId();
+        if (targetWorkspaceId === currentWorkspaceId) {
+            logger.info('Already on the target workspace, no switch needed');
+            return;
+        }
+
+        logger.info(`Switching workspace: ${currentWorkspaceId} → ${targetWorkspaceId}`);
+        const toast = useToastStore.getState().showToast;
+
+        try {
+            // Step 1: Backup current state
+            logger.info('Creating pre-migration checkpoint...');
+            const backupId = await CheckpointService.createCheckpoint('pre-migration');
+            logger.info(`Pre-migration checkpoint created: #${backupId}`);
+
+            // Step 2: State Lock
+            MigrationStateService.setAwaitingConfirmation(targetWorkspaceId, backupId);
+
+            // Step 3: Update active workspace ID (persists across reload)
+            useSyncStore.getState().setActiveWorkspaceId(targetWorkspaceId);
+
+            // Step 4: Hydrate remote state into temp Y.Doc
+            logger.info('Downloading remote workspace state...');
+            toast('Downloading workspace data...', 'info');
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+            const app = getFirebaseApp();
+
+            if (!app && !isMock) {
+                throw new Error('Firebase app not available');
+            }
+
+            const targetPath = `users/${user.uid}/versicle/${targetWorkspaceId}`;
+            const tempDoc = new Y.Doc();
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const maxWaitTime = (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || 2000;
+
+            const remoteBlob = await new Promise<Uint8Array>((resolve, reject) => {
+                let resolved = false;
+
+                const timeout = setTimeout(() => {
+                    if (!resolved) {
+                        resolved = true;
+                        // Empty remote = new workspace, just resolve with current tempDoc state
+                        resolve(Y.encodeStateAsUpdate(tempDoc));
+                    }
+                }, 8000);
+
+                tempDoc.on('update', () => {
+                    if (!resolved) {
+                        setTimeout(() => {
+                            if (!resolved) {
+                                clearTimeout(timeout);
+                                resolved = true;
+                                resolve(Y.encodeStateAsUpdate(tempDoc));
+                            }
+                        }, 1000);
+                    }
+                });
+
+                const providerConfig = {
+                    firebaseApp: app || ({} as FirebaseApp),
+                    ydoc: tempDoc,
+                    path: targetPath,
+                    maxWaitTime,
+                    maxUpdatesThreshold: this.config.maxUpdatesThreshold,
+                };
+
+                try {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    let tempProvider: any;
+                    if (isMock) {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        tempProvider = new MockFireProvider(providerConfig as any);
+                    } else {
+                        tempProvider = new FireProvider(providerConfig);
+                    }
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (tempDoc as any)._tempProvider = tempProvider;
+                } catch (e) {
+                    if (!resolved) {
+                        clearTimeout(timeout);
+                        resolved = true;
+                        reject(e);
+                    }
+                }
+            });
+
+            // Cleanup temp provider
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const tempProvider = (tempDoc as any)._tempProvider;
+            if (tempProvider) {
+                try { tempProvider.destroy(); } catch (e) { logger.error('Error destroying temp provider', e); }
+            }
+            tempDoc.destroy();
+
+            // Step 5: Apply & Reload
+            logger.info('Applying remote state and reloading...');
+            await CheckpointService.applyRemoteState(remoteBlob);
+            // applyRemoteState triggers window.location.reload()
+
+        } catch (error) {
+            logger.error('Workspace switch failed:', error);
+            // Clean up migration state on failure (local IDB untouched)
+            MigrationStateService.clear();
+            // Revert workspace ID
+            useSyncStore.getState().setActiveWorkspaceId(currentWorkspaceId === FirestoreSyncManager.getDefaultWorkspaceId() ? null : currentWorkspaceId);
+            toast('Workspace switch failed. Please try again.', 'error');
+            throw error;
+        }
+    }
+
+    /**
+     * List available workspaces for the current user.
+     */
+    async listWorkspaces(): Promise<WorkspaceMetadata[]> {
+        const user = this.getCurrentUser();
+        if (!user) return [];
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+
+        if (isMock) {
+            const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
+            const workspaces = JSON.parse(raw);
+            if (workspaces.length === 0) {
+                return [{
+                    workspaceId: FirestoreSyncManager.getDefaultWorkspaceId(),
+                    name: 'Default',
+                    createdAt: Date.now(),
+                    schemaVersion: 4
+                }];
+            }
+            return workspaces;
+        }
+
+        const db = getFirestoreDb();
+        if (!db) return [];
+
+        try {
+            const workspacesRef = collection(db, `users/${user.uid}/workspaces`);
+            const snapshot = await getDocs(workspacesRef);
+            return snapshot.docs.map(d => d.data() as WorkspaceMetadata);
+        } catch (error) {
+            logger.error('Failed to list workspaces:', error);
+            return [];
+        }
+    }
+
     // --- Status Management ---
 
     private setStatus(status: FirestoreSyncStatus): void {
@@ -572,7 +800,29 @@ class FirestoreSyncManager {
     }
 
     getCurrentUser(): User | null {
-        return this.currentUser;
+        if (this.currentUser) return this.currentUser;
+
+        // Fallback for HMR / Dev mode where singleton state might be lost
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+        if (isMock) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const mockUid = (typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_USER_ID__) || 'mock-user';
+            this.currentUser = { uid: mockUid, email: `${mockUid}@example.com` } as User;
+            return this.currentUser;
+        }
+
+        try {
+            const auth = getFirebaseAuth();
+            if (auth?.currentUser) {
+                this.currentUser = auth.currentUser;
+                return this.currentUser;
+            }
+        } catch (e) {
+            // Ignore if Firebase isn't initialized yet
+        }
+
+        return null;
     }
 
     isConnected(): boolean {

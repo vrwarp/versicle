@@ -1,10 +1,8 @@
 import React from 'react';
 import { Label } from '../ui/Label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { Input } from '../ui/Input';
 import { PasswordInput } from '../ui/PasswordInput';
 import { Button } from '../ui/Button';
-import { Switch } from '../ui/Switch';
 import { Loader2 } from 'lucide-react';
 
 export interface FirebaseConfig {
@@ -26,9 +24,6 @@ export interface SyncSettingsTabProps {
     currentDeviceId: string;
     currentDeviceName: string;
     onDeviceRename: (name: string) => void;
-    // Provider
-    syncProvider: 'none' | 'firebase';
-    onSyncProviderChange: (provider: 'none' | 'firebase') => void;
     // Firebase
     isFirebaseAvailable: boolean;
     firebaseAuthStatus: FirebaseAuthStatus;
@@ -37,8 +32,6 @@ export interface SyncSettingsTabProps {
     isFirebaseSigningIn: boolean;
     firebaseConfig: FirebaseConfig;
     onFirebaseConfigChange: (config: Partial<FirebaseConfig>) => void;
-    forceDevInstance: boolean;
-    onForceDevInstanceChange: (force: boolean) => void;
     onFirebaseSignIn: () => Promise<void>;
     onFirebaseSignOut: () => Promise<void>;
     onClearConfig: () => void;
@@ -49,15 +42,14 @@ import { DriveFolderPicker } from '../drive/DriveFolderPicker';
 import { useDriveStore } from '../../store/useDriveStore';
 import { DriveScannerService } from '../../lib/drive/DriveScannerService';
 import { useToastStore } from '../../store/useToastStore';
-import { getDB } from '../../db/db';
-import { disconnectYjs } from '../../store/yjs-provider';
+import { getFirestoreSyncManager, FirestoreSyncManager } from '../../lib/sync/FirestoreSyncManager';
+import { useSyncStore } from '../../lib/sync/hooks/useSyncStore';
+import type { WorkspaceMetadata } from '../../types/workspace';
 
 export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     currentDeviceId,
     currentDeviceName,
     onDeviceRename,
-    syncProvider,
-    onSyncProviderChange,
     isFirebaseAvailable,
     firebaseAuthStatus,
     firestoreStatus,
@@ -65,8 +57,6 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     isFirebaseSigningIn,
     firebaseConfig,
     onFirebaseConfigChange,
-    forceDevInstance,
-    onForceDevInstanceChange,
     onFirebaseSignIn,
     onFirebaseSignOut,
     onClearConfig
@@ -116,6 +106,54 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     const { linkedFolderName, setLinkedFolder } = useDriveStore();
     const [isScanning, setIsScanning] = React.useState(false);
     const { showToast } = useToastStore();
+
+    // Workspace State
+    const [workspaces, setWorkspaces] = React.useState<WorkspaceMetadata[]>([]);
+    const [isLoadingWorkspaces, setIsLoadingWorkspaces] = React.useState(false);
+    const [newWorkspaceName, setNewWorkspaceName] = React.useState('');
+    const [isCreatingWorkspace, setIsCreatingWorkspace] = React.useState(false);
+    const [isSwitchingWorkspace, setIsSwitchingWorkspace] = React.useState<string | null>(null);
+    const activeWorkspaceId = useSyncStore(state => state.activeWorkspaceId);
+
+    // Load workspaces when signed in
+    React.useEffect(() => {
+        if (firebaseAuthStatus === 'signed-in') {
+            setIsLoadingWorkspaces(true);
+            getFirestoreSyncManager().listWorkspaces()
+                .then(setWorkspaces)
+                .catch(err => console.error('Failed to load workspaces:', err))
+                .finally(() => setIsLoadingWorkspaces(false));
+        }
+    }, [firebaseAuthStatus]);
+
+    const handleCreateWorkspace = async () => {
+        if (!newWorkspaceName.trim()) return;
+        setIsCreatingWorkspace(true);
+        try {
+            await getFirestoreSyncManager().createWorkspace(newWorkspaceName.trim());
+            showToast(`Workspace "${newWorkspaceName.trim()}" created!`, 'success');
+            setNewWorkspaceName('');
+            // Refresh workspace list
+            const updated = await getFirestoreSyncManager().listWorkspaces();
+            setWorkspaces(updated);
+        } catch (err) {
+            console.error('Failed to create workspace:', err);
+            showToast('Failed to create workspace.', 'error');
+        } finally {
+            setIsCreatingWorkspace(false);
+        }
+    };
+
+    const handleSwitchWorkspace = async (workspaceId: string) => {
+        setIsSwitchingWorkspace(workspaceId);
+        try {
+            await getFirestoreSyncManager().switchWorkspace(workspaceId);
+            // switchWorkspace triggers reload, so this won't typically reach here
+        } catch (err) {
+            console.error('Failed to switch workspace:', err);
+            setIsSwitchingWorkspace(null);
+        }
+    };
 
     const handleFolderSelect = (id: string, name: string) => {
         setLinkedFolder(id, name);
@@ -172,54 +210,6 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     }, [currentDeviceName]);
     const hasDeviceNameChanged = localDeviceName !== currentDeviceName;
 
-    const handleForceDevInstanceToggle = async (checked: boolean) => {
-        if (!confirm("This will purge all local data (books, annotations, and settings) and reload the app to switch instances. Are you sure you want to proceed?")) {
-            return;
-        }
-
-        try {
-            await disconnectYjs();
-
-            // Clear IndexedDB (static and cache stores)
-            const db = await getDB();
-            await db.clear('static_manifests');
-            await db.clear('static_resources');
-            await db.clear('static_structure');
-            await db.clear('cache_table_images');
-            await db.clear('cache_render_metrics');
-            await db.clear('cache_audio_blobs');
-            await db.clear('cache_session_state');
-            await db.clear('cache_tts_preparation');
-
-            // Save the toggle state before clearing local storage
-            // This is slightly tricky: if we clear all local storage, the setting is lost.
-            // But we actually only want to save the new toggle.
-            // Wait, we need the new setting to be active when it reloads.
-            const currentSyncState = localStorage.getItem('sync-storage');
-
-            // Clear LocalStorage (includes Yjs persistence and preferences)
-            localStorage.clear();
-
-            // Restore sync storage but with updated toggle
-            if (currentSyncState) {
-                const parsed = JSON.parse(currentSyncState);
-                if (parsed.state) {
-                    parsed.state.forceDevInstance = checked;
-                    localStorage.setItem('sync-storage', JSON.stringify(parsed));
-                }
-            } else {
-                // Fallback if structured oddly
-                onForceDevInstanceChange(checked);
-            }
-
-            // Reload to reset Yjs stores
-            window.location.reload();
-        } catch (e) {
-            console.error('Failed to clear data', e);
-            alert('Failed to clear data. Please check console.');
-        }
-    };
-
     return (
         <div className="space-y-8">
             {/* Section 1: App Sync */}
@@ -267,137 +257,166 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                     </div>
                 </div>
 
-                {/* Provider Selection */}
-                <div className="space-y-4 mb-6">
-                    <div className="space-y-2">
-                        <Label htmlFor="sync-provider-select" className="text-sm font-medium">Sync Provider</Label>
-                        <Select value={syncProvider} onValueChange={(val) => onSyncProviderChange(val as 'none' | 'firebase')}>
-                            <SelectTrigger id="sync-provider-select">
-                                <SelectValue placeholder="Select sync provider" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="none">Disabled</SelectItem>
-                                <SelectItem value="firebase">Firebase (Recommended)</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                            {syncProvider === 'firebase' && 'Real-time sync with automatic conflict resolution.'}
-                            {syncProvider === 'none' && 'Sync is disabled. Data is stored locally only.'}
-                        </p>
-                    </div>
-                </div>
-
-                {/* Advanced Sync Settings */}
-                <div className="space-y-4 mb-6 pb-6 border-b border-border">
-                    <h4 className="text-sm font-medium">Developer Options</h4>
-                    <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                            <Label htmlFor="force-dev-instance-switch">Force Dev Instance</Label>
-                            <p className="text-xs text-muted-foreground">
-                                Use the development Firestore database instead of the main production database.
-                            </p>
-                        </div>
-                        <Switch
-                            id="force-dev-instance-switch"
-                            checked={forceDevInstance}
-                            onCheckedChange={handleForceDevInstanceToggle}
-                        />
-                    </div>
-                </div>
-
                 {/* Firebase Section */}
-                {syncProvider === 'firebase' && (
-                    <div className="space-y-4 p-4 border border-border rounded-lg bg-muted/30">
-                        <h4 className="text-sm font-medium">Firebase Configuration</h4>
+                <div className="space-y-4 p-4 border border-border rounded-lg bg-muted/30">
+                    <h4 className="text-sm font-medium">Firebase Configuration</h4>
 
-                        {!isFirebaseAvailable ? (
-                            /* Configuration Form */
-                            <div className="space-y-3">
-                                <p className="text-sm text-muted-foreground">
-                                    Paste your Firebase configuration snippet from the Firebase Console.
-                                </p>
-                                <div className="space-y-2">
-                                    <Label htmlFor="firebase-config-paste">Paste Firebase Config</Label>
-                                    <textarea
-                                        id="firebase-config-paste"
-                                        className="w-full h-32 p-2 text-xs font-mono border border-input rounded-md bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-                                        placeholder="// Paste your Firebase config here"
-                                        onChange={(e) => parseFirebaseConfig(e.target.value)}
-                                        data-testid="firebase-config-paste"
-                                    />
-                                </div>
-                                <div className="border-t border-border pt-3 mt-2">
-                                    <p className="text-xs text-muted-foreground mb-3">Or edit fields individually:</p>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="firebase-api-key">API Key</Label>
-                                    <PasswordInput
-                                        id="firebase-api-key"
-                                        value={firebaseConfig.apiKey}
-                                        onChange={(e) => onFirebaseConfigChange({ apiKey: e.target.value })}
-                                        placeholder="AIza..."
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="firebase-project-id">Project ID</Label>
-                                    <Input
-                                        id="firebase-project-id"
-                                        type="text"
-                                        value={firebaseConfig.projectId}
-                                        onChange={(e) => onFirebaseConfigChange({ projectId: e.target.value })}
-                                        placeholder="your-project-id"
-                                    />
-                                </div>
+                    {!isFirebaseAvailable ? (
+                        /* Configuration Form */
+                        <div className="space-y-3">
+                            <p className="text-sm text-muted-foreground">
+                                Paste your Firebase configuration snippet from the Firebase Console.
+                            </p>
+                            <div className="space-y-2">
+                                <Label htmlFor="firebase-config-paste">Paste Firebase Config</Label>
+                                <textarea
+                                    id="firebase-config-paste"
+                                    className="w-full h-32 p-2 text-xs font-mono border border-input rounded-md bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                                    placeholder="// Paste your Firebase config here"
+                                    onChange={(e) => parseFirebaseConfig(e.target.value)}
+                                    data-testid="firebase-config-paste"
+                                />
                             </div>
-                        ) : firebaseAuthStatus === 'signed-in' ? (
-                            /* Connected State */
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded-md">
-                                    <div className="space-y-0.5">
-                                        <p className="text-sm font-medium text-success">
-                                            {firestoreStatus === 'connected' ? '✓ Connected' : 'Connecting...'}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            Signed in as {firebaseUserEmail}
-                                        </p>
-                                    </div>
-                                    <Button variant="outline" size="sm" onClick={onFirebaseSignOut}>
-                                        Sign Out
-                                    </Button>
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                    Your data is syncing automatically in real-time.
-                                </p>
+                            <div className="border-t border-border pt-3 mt-2">
+                                <p className="text-xs text-muted-foreground mb-3">Or edit fields individually:</p>
                             </div>
-                        ) : (
-                            /* Sign In State */
-                            <div className="space-y-3">
-                                <p className="text-sm text-muted-foreground">
-                                    Sign in with your Google account to enable real-time sync.
-                                </p>
-                                <Button
-                                    onClick={onFirebaseSignIn}
-                                    disabled={isFirebaseSigningIn}
-                                    className="w-full"
-                                >
-                                    {isFirebaseSigningIn ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                                            Signing in...
-                                        </>
-                                    ) : (
-                                        'Sign in with Google'
-                                    )}
+                            <div className="space-y-2">
+                                <Label htmlFor="firebase-api-key">API Key</Label>
+                                <PasswordInput
+                                    id="firebase-api-key"
+                                    value={firebaseConfig.apiKey}
+                                    onChange={(e) => onFirebaseConfigChange({ apiKey: e.target.value })}
+                                    placeholder="AIza..."
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="firebase-project-id">Project ID</Label>
+                                <Input
+                                    id="firebase-project-id"
+                                    type="text"
+                                    value={firebaseConfig.projectId}
+                                    onChange={(e) => onFirebaseConfigChange({ projectId: e.target.value })}
+                                    placeholder="your-project-id"
+                                />
+                            </div>
+                        </div>
+                    ) : firebaseAuthStatus === 'signed-in' ? (
+                        /* Connected State */
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded-md">
+                                <div className="space-y-0.5">
+                                    <p className="text-sm font-medium text-success">
+                                        {firestoreStatus === 'connected' ? '✓ Connected' : 'Connecting...'}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        Signed in as {firebaseUserEmail}
+                                    </p>
+                                </div>
+                                <Button variant="outline" size="sm" onClick={onFirebaseSignOut}>
+                                    Sign Out
                                 </Button>
-                                <div className="flex justify-center pt-2">
-                                    <Button variant="ghost" size="sm" onClick={onClearConfig}>
-                                        Clear Configuration
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Your data is syncing automatically in real-time.
+                            </p>
+
+                            {/* Workspace Management */}
+                            <div className="mt-4 pt-4 border-t border-border space-y-3">
+                                <h5 className="text-sm font-medium">Workspaces</h5>
+                                <p className="text-xs text-muted-foreground">
+                                    Switch between different data contexts.
+                                    Active: <strong>
+                                        {workspaces.find(w => w.workspaceId === (activeWorkspaceId || FirestoreSyncManager.getDefaultWorkspaceId()))?.name || 'Default'}
+                                    </strong>
+                                </p>
+
+                                {/* Workspace List */}
+                                {isLoadingWorkspaces ? (
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                                        Loading workspaces...
+                                    </div>
+                                ) : workspaces.length > 0 ? (
+                                    <div className="space-y-1">
+                                        {workspaces.map(ws => (
+                                            <div key={ws.workspaceId} className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm">
+                                                <div>
+                                                    <span className="font-medium">{ws.name}</span>
+                                                    <span className="ml-2 text-xs text-muted-foreground mr-1">({ws.workspaceId})</span>
+                                                </div>
+                                                {ws.workspaceId === activeWorkspaceId ? (
+                                                    <span className="text-xs text-success pr-2 font-medium">● Active</span>
+                                                ) : (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleSwitchWorkspace(ws.workspaceId)}
+                                                        disabled={isSwitchingWorkspace !== null}
+                                                    >
+                                                        {isSwitchingWorkspace === ws.workspaceId ? (
+                                                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                                                        ) : 'Switch'}
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-muted-foreground italic">
+                                        No additional workspaces. Create one below.
+                                    </p>
+                                )}
+
+                                {/* Create Workspace */}
+                                <div className="flex items-center gap-2 pt-2">
+                                    <Input
+                                        value={newWorkspaceName}
+                                        onChange={(e) => setNewWorkspaceName(e.target.value)}
+                                        placeholder="New workspace name"
+                                        className="flex-1 h-8 text-sm"
+                                        onKeyDown={(e) => e.key === 'Enter' && handleCreateWorkspace()}
+                                    />
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={handleCreateWorkspace}
+                                        disabled={isCreatingWorkspace || !newWorkspaceName.trim()}
+                                    >
+                                        {isCreatingWorkspace ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                                        ) : 'Create'}
                                     </Button>
                                 </div>
                             </div>
-                        )}
-                    </div>
-                )}
+                        </div>
+                    ) : (
+                        /* Sign In State */
+                        <div className="space-y-3">
+                            <p className="text-sm text-muted-foreground">
+                                Sign in with your Google account to enable real-time sync.
+                            </p>
+                            <Button
+                                onClick={onFirebaseSignIn}
+                                disabled={isFirebaseSigningIn}
+                                className="w-full"
+                            >
+                                {isFirebaseSigningIn ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                                        Signing in...
+                                    </>
+                                ) : (
+                                    'Sign in with Google'
+                                )}
+                            </Button>
+                            <div className="flex justify-center pt-2">
+                                <Button variant="ghost" size="sm" onClick={onClearConfig}>
+                                    Clear Configuration
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Section 2: Cloud Integrations */}
