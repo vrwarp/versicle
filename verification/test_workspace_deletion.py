@@ -53,7 +53,7 @@ const firebaseConfig = {
     page.get_by_role("button", name="Create").click()
     
     # Wait for creation (it automatically switches)
-    expect(page.get_by_text(f"Workspace \"{ws_name}\" created!")).to_be_visible()
+    expect(page.get_by_text(f'Workspace "{ws_name}" created!')).to_be_visible()
     print(f"Created workspace: {ws_name}")
 
     # Get the workspace ID
@@ -86,7 +86,7 @@ const firebaseConfig = {
     # For now, let's create a second workspace so I can delete the first one.
     page.get_by_placeholder("New workspace name").fill("Safe Workspace")
     page.get_by_role("button", name="Create").click()
-    expect(page.get_by_text("Workspace \"Safe Workspace\" created!")).to_be_visible()
+    expect(page.get_by_text('Workspace "Safe Workspace" created!')).to_be_visible()
     
     # Wait for UI to settle and lists to refresh
     page.wait_for_timeout(2000)
@@ -108,7 +108,7 @@ const firebaseConfig = {
     page.once("dialog", lambda dialog: (print(f"DIALOG: {dialog.message}"), dialog.accept()))
     delete_btn.click(force=True)
     
-    expect(page.get_by_text(f"Workspace \"{ws_name}\" deleted.")).to_be_visible(timeout=15000)
+    expect(page.get_by_text(f'Workspace "{ws_name}" deleted.')).to_be_visible(timeout=15000)
     print("Workspace deleted successfully")
 
     # Verify it's gone from the list
