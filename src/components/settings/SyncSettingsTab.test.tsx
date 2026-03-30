@@ -47,8 +47,6 @@ describe('SyncSettingsTab', () => {
         currentDeviceId: 'device-123',
         currentDeviceName: 'My Device',
         onDeviceRename: vi.fn(),
-        syncProvider: 'none',
-        onSyncProviderChange: vi.fn(),
         isFirebaseAvailable: false,
         firebaseAuthStatus: 'signed-out',
         firestoreStatus: 'disconnected',
@@ -125,20 +123,8 @@ describe('SyncSettingsTab', () => {
         expect(onDeviceRename).not.toHaveBeenCalled();
     });
 
-    it('renders provider selection', () => {
-        render(<SyncSettingsTab {...defaultProps} />);
-
-        expect(screen.getByText('Sync Provider')).toBeInTheDocument();
-    });
-
-    it('hides Firebase section when provider is none', () => {
-        render(<SyncSettingsTab {...defaultProps} syncProvider="none" />);
-
-        expect(screen.queryByText('Firebase Configuration')).not.toBeInTheDocument();
-    });
-
     it('shows Firebase config form when not available', () => {
-        render(<SyncSettingsTab {...defaultProps} syncProvider="firebase" isFirebaseAvailable={false} />);
+        render(<SyncSettingsTab {...defaultProps} isFirebaseAvailable={false} />);
 
         expect(screen.getByText('Firebase Configuration')).toBeInTheDocument();
         expect(screen.getByTestId('firebase-config-paste')).toBeInTheDocument();
@@ -149,7 +135,6 @@ describe('SyncSettingsTab', () => {
         render(
             <SyncSettingsTab
                 {...defaultProps}
-                syncProvider="firebase"
                 isFirebaseAvailable={true}
                 firebaseAuthStatus="signed-out"
             />

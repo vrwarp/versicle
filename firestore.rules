@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper to check if a workspace is tombstoned
+    function isTombstoned(userId, workspaceId) {
+      return get(/databases/$(database)/documents/users/$(userId)/versicle/$(workspaceId)).data.isDeleted == true;
+    }
+
+    match /users/{userId}/versicle/{workspaceId} {
+      // Allow read so pre-flight check works
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // Prevent any updates to the root document if it's already a tombstone, 
+      // UNLESS the operation is explicitly planting the tombstone (initial delete).
+      // Or if the document doesn't exist yet.
+      allow write: if request.auth != null && request.auth.uid == userId && 
+                   (!resource.exists || resource.data.isDeleted != true || request.resource.data.isDeleted == true);
+      
+      match /updates/{updateId} {
+        // Prevent writing new updates to a tombstoned workspace
+        allow write: if request.auth != null && request.auth.uid == userId && 
+                     (!exists(/databases/$(database)/documents/users/$(userId)/versicle/$(workspaceId)) || 
+                      !isTombstoned(userId, workspaceId));
+        // Allow read for sync
+        allow read: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Workspace Metadata (Workspaces list)
+    match /users/{userId}/workspaces/{workspaceId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Default catch-all for other user data
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
