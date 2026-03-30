@@ -23,8 +23,8 @@
 *   **Language**: TypeScript 5.9.3
 *   **Testing**: Vitest 4.0.16
 *   **Linting**: ESLint 9.39.2
-*   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (Custom Fork)
-*   **Sync**: `y-cinder` (Custom Fork / Firestore 11.10.0) + Android Backup Service + Google Drive API
+*   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (github:vrwarp/zustand-middleware-yjs#master)
+*   **Sync**: `y-cinder` (github:vrwarp/y-cinder#main / Firestore 11.10.0) + Android Backup Service + Google Drive API
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API / LemonFox.ai
@@ -32,7 +32,7 @@
 *   **Mobile**: Capacitor 7.1.1 (Android) + `@capacitor/filesystem` + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login` + `@capacitor-community/text-to-speech`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4.1.18 + Radix UI
-*   **Tools**: `browser-image-compression`, `JSZip`, `react-lazy-load-image-component`, `react-window`, `dompurify`
+*   **Tools**: `browser-image-compression`, `JSZip`, `lucide-react`, `react-lazy-load-image-component`, `react-window`, `dompurify`
 *   **Dev Tools**: `vite-plugin-mkcert` (Local HTTPS)
 
 ## Features
@@ -49,7 +49,7 @@
 *   **Zero-Latency Parsing**: Uses a specialized zero-allocation text scanner (`TextScanningTrie`) to process text instantly without garbage collection pauses.
 *   **Instant Resume**: Remembers the last open book and restores your place immediately on launch, bypassing heavy sync checks.
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker. Features smart offloading of XML parsing and direct EPUB archive extraction (with rendering fallback) to keep the UI buttery smooth during indexing.
-*   **Annotations**: Highlights and notes.
+*   **Annotations**: Full support for text highlighting and adding notes. Includes **Markdown Annotation Export** to easily extract all notes for a book to a `.md` file or copy directly to the clipboard.
 
 ### Listening (The "Listening Room")
 *   **Unified Control Bar**: Seamless audio control with the "Compass Pill" UI.
@@ -64,9 +64,10 @@
 *   **Bible Lexicon**: Specialized pronunciation rules for Bible verses (e.g., "Gen 1:1"), enabled by default in settings.
 *   **Offline Cache**: Generated audio is cached locally to save bandwidth and costs.
 *   **Transactional Download**: Piper voice models are downloaded, verified, and cached transactionally to prevent corruption.
+*   **Hardware Acceleration**: Uses WebGPU via ONNX Runtime Web for fast, local Piper voice generation, falling back to WebAssembly (WASM) when unavailable.
 *   **Background Play**: Keeps playing when the screen is off (Mobile via Foreground Service) with optional White Noise generation.
     *   **Background Audio Mode**: Configurable options (Silence, White Noise, Off) to ensure the OS keeps the app alive during playback.
-*   **Battery Guard**: Explicitly checks and warns about aggressive Android battery optimizations that might kill background playback.
+*   **Battery Guard**: Explicitly checks and warns about aggressive Android battery optimizations that might kill background playback using `BatteryOptimization`.
 *   **Lock Screen Controls**: Full support for OS-level media controls (Play, Pause, Seek, Artwork) via Media Session API.
 
 ### Management (The "Engine Room")
@@ -83,17 +84,18 @@
 *   **Reading History**: Detailed session tracking with timeline visualization. Includes **Smart Session Merging** to intelligently group related reading events.
 *   **Reading List**: Persistent "Shadow Inventory" tracking status (Read, Reading, Want to Read) and Rating for books, even if the file is deleted.
     *   **CSV Import/Export**: Import/Export your reading list via CSV, with intelligent filename matching (ISBN/Title fallback) to restore your library context.
+    *   **Entity Resolution**: A deterministic normalization pipeline that seamlessly matches your reading list entries to library books even when filenames disagree (stripping extensions, brackets, and structural punctuation from titles/authors).
 *   **Lexicon Management**:
     *   **CSV Import/Export**: Bulk manage pronunciation rules using CSV files.
 *   **Backups & Export**:
     *   **Light Backup**: Fast JSON export of your `user_` metadata, settings, and Yjs snapshot (without heavy book files).
-    *   **Full Backup**: ZIP archive including all book files, powered by a **V2 Binary Snapshot** (`Y.encodeStateAsUpdate(yDoc)`) that perfectly preserves the Yjs state without merge conflicts. Restores destructively by clearing `yjsPersistence.clearData()`.
+    *   **Full Backup**: ZIP archive including all book files (optimizing space by ignoring offloaded books), powered by a **V2 Binary Snapshot** (`Y.encodeStateAsUpdate(yDoc)`) that perfectly preserves the Yjs state without merge conflicts. Restores destructively by clearing `yjsPersistence.clearData()`.
     *   **Unified Export**: Share files natively (AirDrop, Nearby Share) or download via browser.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
 *   **Checkpoint Forensics**: Inspect the exact data difference between your live state and any backup checkpoint.
 *   **Safe Mode**: A fallback UI that activates on critical database initialization failures, allowing users to export debug info or perform a factory reset to recover usability.
-*   **Schema Quarantine (`ObsoleteLockView`)**: A safety mechanism that locks the app and severs cloud connections if a remote database with a newer schema version is detected, preventing outdated clients from corrupting upgraded data structures.
+*   **Schema Quarantine (`ObsoleteLockView`)**: A safety mechanism that locks the app and severs cloud connections if a remote database with a newer schema version (currently V4) is detected, preventing outdated clients from corrupting upgraded data structures.
 
 ## Setup & Development
 

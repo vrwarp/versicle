@@ -12,6 +12,8 @@ import { TTSProviderManager } from './TTSProviderManager';
 import { PlatformIntegration } from './PlatformIntegration';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useToastStore } from '../../store/useToastStore';
+import { type SectionAnalysis, type TableAdaptation, useContentAnalysisStore } from '../../store/useContentAnalysisStore';
+import { useGenAIStore } from '../../store/useGenAIStore';
 import { createLogger } from '../logger';
 import { requestNotificationPermission } from '../permissions';
 
@@ -86,10 +88,16 @@ export class AudioPlayerService {
     private sessionRestored: boolean = false;
     private prerollEnabled: boolean = false;
     private isPreviewing: boolean = false;
+    private lastAppliedAnalysisTimestamp: number = 0;
 
     private constructor() {
         this.syncEngine = new SyncEngine();
         this.lexiconService = LexiconService.getInstance();
+
+        // Subscribe to content analysis changes (Reactive Injection)
+        useContentAnalysisStore.subscribe((state) => {
+            this.handleContentAnalysisUpdate(state);
+        });
 
         this.platformIntegration = new PlatformIntegration({
             onPlay: () => this.resume(),
@@ -183,11 +191,12 @@ export class AudioPlayerService {
 
             this.currentBookId = bookId;
             this.sessionRestored = false;
+            this.lastAppliedAnalysisTimestamp = 0;
             this.stateManager.setBookId(bookId);
 
             if (bookId) {
                 this.playlistPromise = dbService.getSections(bookId).then(sections => {
-                    this.playlist = sections;
+                    if (this.currentBookId !== bookId) return; this.playlist = sections;
                     this.restoreQueue(bookId);
                 }).catch(e => logger.error("Failed to load playlist", e));
             } else {
@@ -254,34 +263,13 @@ export class AudioPlayerService {
                     // Trigger background content analysis (GenAI) for the restored section
                     if (sectionIndex >= 0 && sectionIndex < this.playlist.length) {
                         const section = this.playlist[sectionIndex];
-                        const currentSectionId = section.sectionId;
 
-                        const onMaskFound = (mask: Set<number>) => {
-                            this.enqueue(async () => {
-                                if (this.currentBookId !== bookId) return;
-                                const activeSection = this.playlist[this.stateManager.currentSectionIndex];
-                                if (activeSection && activeSection.sectionId === currentSectionId) {
-                                    this.stateManager.applySkippedMask(mask, currentSectionId);
-                                }
-                            });
-                        };
-
-                        const onAdaptationsFound = (adaptations: { indices: number[], text: string }[]) => {
-                            this.enqueue(async () => {
-                                if (this.currentBookId !== bookId) return;
-                                const activeSection = this.playlist[this.stateManager.currentSectionIndex];
-                                if (activeSection && activeSection.sectionId === currentSectionId) {
-                                    this.stateManager.applyTableAdaptations(adaptations);
-                                }
-                            });
-                        };
+                        this.applyCachedAnalysis(bookId, section.sectionId);
 
                         this.contentPipeline.triggerAnalysis(
                             bookId,
                             section.sectionId,
-                            undefined, // will fetch from DB
-                            onMaskFound,
-                            onAdaptationsFound
+                            undefined // will fetch from DB
                         );
                     }
                 }
@@ -357,7 +345,10 @@ export class AudioPlayerService {
 
     public loadSectionBySectionId(sectionId: string, autoPlay: boolean = true, sectionTitle?: string) {
         return this.enqueue(async () => {
+            const originalBookId = this.currentBookId;
             if (this.playlistPromise) await this.playlistPromise;
+            if (this.currentBookId !== originalBookId) return;
+
             const index = this.playlist.findIndex(s => s.sectionId === sectionId);
             if (index !== -1) {
                 // Optimization: If the section is already loaded (e.g. from restore) and we are not forcing playback,
@@ -440,10 +431,14 @@ export class AudioPlayerService {
             return this.resumeInternal();
         }
 
-        if (this.status === 'stopped' && this.currentBookId && !this.sessionRestored) {
+        const initialBookId = this.currentBookId;
+
+        if (this.status === 'stopped' && initialBookId && !this.sessionRestored) {
             this.sessionRestored = true;
             try {
-                const book = await dbService.getBookMetadata(this.currentBookId);
+                const book = await dbService.getBookMetadata(initialBookId);
+                if (this.currentBookId !== initialBookId) return;
+
                 if (book) {
                     if (book.lastPlayedCfi && this.stateManager.currentIndex === 0) {
                         const index = this.stateManager.queue.findIndex(item => item.cfi === book.lastPlayedCfi);
@@ -465,6 +460,8 @@ export class AudioPlayerService {
 
         if (this.status !== 'playing') {
             const engaged = await this.engageBackgroundMode(item);
+            if (this.currentBookId !== initialBookId) return;
+
             if (!engaged && Capacitor.getPlatform() === 'android') {
                 this.setStatus('stopped');
                 this.notifyError("Cannot play in background");
@@ -480,7 +477,8 @@ export class AudioPlayerService {
             const voiceId = this.voiceId || '';
 
             if (!this.activeLexiconRules) {
-                this.activeLexiconRules = await this.lexiconService.getRules(this.currentBookId || undefined);
+                this.activeLexiconRules = await this.lexiconService.getRules(initialBookId || undefined);
+                if (this.currentBookId !== initialBookId) return;
             }
             const rules = this.activeLexiconRules;
 
@@ -520,7 +518,7 @@ export class AudioPlayerService {
         return this.enqueue(async () => {
             this.providerManager.pause();
             this.setStatus('paused');
-            await this.persistPlaybackState('paused');
+            await this.savePlaybackState('paused');
         });
     }
 
@@ -531,7 +529,7 @@ export class AudioPlayerService {
     }
 
     private async stopInternal() {
-        await this.persistPlaybackState('stopped');
+        await this.savePlaybackState('stopped');
         await this.platformIntegration.stop();
         this.setStatus('stopped');
         this.providerManager.stop();
@@ -686,18 +684,80 @@ export class AudioPlayerService {
     }
 
     subscribe(listener: PlaybackListener) {
+        let isSubscribed = true;
         this.listeners.push(listener);
         const currentCfi = this.stateManager.getCurrentItem()?.cfi || null;
         setTimeout(() => {
-            listener(this.status, currentCfi, this.stateManager.currentIndex, this.stateManager.queue, null);
+            if (isSubscribed) {
+                listener(this.status, currentCfi, this.stateManager.currentIndex, this.stateManager.queue, null);
+            }
         }, 0);
         return () => {
+            isSubscribed = false;
             this.listeners = this.listeners.filter(l => l !== listener);
         };
     }
 
     private notifyListeners(activeCfi: string | null) {
         this.listeners.forEach(l => l(this.status, activeCfi, this.stateManager.currentIndex, this.stateManager.queue, null));
+    }
+
+    private handleContentAnalysisUpdate(state: { sections: Record<string, SectionAnalysis> }) {
+        const bookId = this.currentBookId;
+        if (!bookId) return;
+
+        const sectionIndex = this.stateManager.currentSectionIndex;
+        if (sectionIndex === -1) return;
+
+        const section = this.playlist[sectionIndex];
+        if (!section) return;
+
+        const key = `${bookId}/${section.sectionId}`;
+        const analysis = state.sections[key];
+
+        if (analysis && analysis.status === 'success') {
+            // Skip if we've already processed this exact analysis update
+            if (analysis.generatedAt <= this.lastAppliedAnalysisTimestamp) return;
+
+            // Update timestamp synchronously to prevent concurrent duplicate enqueueing
+            this.lastAppliedAnalysisTimestamp = analysis.generatedAt;
+
+            this.enqueue(async () => {
+                // Validate current context
+                if (this.currentBookId !== bookId) return;
+                const activeSection = this.playlist[this.stateManager.currentSectionIndex];
+                if (!activeSection || activeSection.sectionId !== section.sectionId) return;
+
+                const genAISettings = useGenAIStore.getState();
+
+                // 1. Apply Skip Mask if needed
+                if (genAISettings.isEnabled && genAISettings.isContentAnalysisEnabled && genAISettings.contentFilterSkipTypes.length > 0) {
+                    const mask = await this.contentPipeline.detectContentSkipMask(bookId, section.sectionId, genAISettings.contentFilterSkipTypes);
+                    if (mask.size > 0 && this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
+                        this.stateManager.applySkippedMask(mask, section.sectionId);
+                    }
+                }
+
+                // 2. Apply Table Adaptations if needed
+                if (genAISettings.isEnabled && genAISettings.isTableAdaptationEnabled && analysis.tableAdaptations) {
+                    const ttsContent = await dbService.getTTSContent(bookId, section.sectionId);
+                    if (ttsContent && this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
+                        const adaptations = this.contentPipeline.tableProcessor.mapSentencesToAdaptations(
+                            ttsContent.sentences,
+                            new Map(analysis.tableAdaptations.map((a: TableAdaptation) => [a.rootCfi, a.text]))
+                        );
+                        this.stateManager.applyTableAdaptations(adaptations);
+                    }
+                }
+            });
+        }
+    }
+
+    private applyCachedAnalysis(bookId: string, sectionId: string) {
+        const analysis = useContentAnalysisStore.getState().getAnalysis(bookId, sectionId);
+        if (analysis && analysis.status === 'success') {
+            this.handleContentAnalysisUpdate(useContentAnalysisStore.getState());
+        }
     }
 
     private notifyError(message: string) {
@@ -726,34 +786,6 @@ export class AudioPlayerService {
         if (!this.currentBookId || sectionIndex < 0 || sectionIndex >= this.playlist.length) return false;
 
         const section = this.playlist[sectionIndex];
-        const currentBookId = this.currentBookId;
-        const currentSectionId = section.sectionId;
-
-        // Callback for async mask updates
-        const onMaskFound = (mask: Set<number>) => {
-            this.enqueue(async () => {
-                // Verify validity before applying
-                if (this.currentBookId !== currentBookId) return;
-
-                const activeSection = this.playlist[this.stateManager.currentSectionIndex];
-                if (activeSection && activeSection.sectionId === currentSectionId) {
-                    this.stateManager.applySkippedMask(mask, currentSectionId);
-                }
-            });
-        };
-
-        // Callback for Table Adaptations
-        const onAdaptationsFound = (adaptations: { indices: number[], text: string }[]) => {
-            this.enqueue(async () => {
-                // Verify validity before applying
-                if (this.currentBookId !== currentBookId) return;
-
-                const activeSection = this.playlist[this.stateManager.currentSectionIndex];
-                if (activeSection && activeSection.sectionId === currentSectionId) {
-                    this.stateManager.applyTableAdaptations(adaptations);
-                }
-            });
-        };
 
         const newQueue = await this.contentPipeline.loadSection(
             this.currentBookId,
@@ -761,15 +793,13 @@ export class AudioPlayerService {
             sectionIndex,
             this.prerollEnabled,
             this.speed,
-            sectionTitle || section.title,
-            onMaskFound,
-            onAdaptationsFound
+            sectionTitle || section.title
         );
 
         if (newQueue && newQueue.length > 0) {
             if (autoPlay) {
                 this.providerManager.stop();
-                await this.persistPlaybackState('stopped');
+                await this.savePlaybackState('stopped');
                 this.setStatus('loading');
             } else {
                 await this.stopInternal();
@@ -782,6 +812,8 @@ export class AudioPlayerService {
                 await this.playInternal();
             }
 
+            this.applyCachedAnalysis(this.currentBookId, section.sectionId);
+            this.contentPipeline.triggerAnalysis(this.currentBookId, section.sectionId, undefined);
             this.contentPipeline.triggerNextChapterAnalysis(this.currentBookId, sectionIndex, this.playlist);
             return true;
         }
@@ -821,7 +853,8 @@ export class AudioPlayerService {
         }
         return false;
     }
-    private async persistPlaybackState(status: TTSStatus) {
+
+    private async savePlaybackState(status: TTSStatus) {
         if (!this.currentBookId) return;
 
         // updatePlaybackPosition in Yjs

@@ -81,7 +81,7 @@ describe('ContentAnalysisLegend', () => {
   it('renders correctly when debug mode is enabled', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     render(<ContentAnalysisLegend rendition={mockRendition as any} />);
-    expect(screen.getByText('Debug Panel')).toBeInTheDocument();
+    expect(screen.getByText('GenAI Debug Panel')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('epubcfi(...)')).toBeInTheDocument();
   });
 
@@ -93,13 +93,13 @@ describe('ContentAnalysisLegend', () => {
     expect(screen.getByText('Current CFI')).toBeInTheDocument();
 
     // Click toggle
-    fireEvent.click(screen.getByText('Debug Panel'));
+    fireEvent.click(screen.getByText('GenAI Debug Panel'));
 
     // Should be collapsed (content hidden)
     expect(screen.queryByText('Current CFI')).toBeNull();
 
     // Click toggle again
-    fireEvent.click(screen.getByText('Debug Panel'));
+    fireEvent.click(screen.getByText('GenAI Debug Panel'));
     expect(screen.getByText('Current CFI')).toBeInTheDocument();
   });
 

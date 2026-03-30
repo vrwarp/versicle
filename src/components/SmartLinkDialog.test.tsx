@@ -81,11 +81,14 @@ describe('SmartLinkDialog', () => {
     });
 
     it('displays error message if GenAI service fails', async () => {
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
         (genAIService.mapReadingListToLibrary as Mock).mockRejectedValue(new Error('AI Error'));
 
         render(<SmartLinkDialog open={true} onOpenChange={vi.fn()} />);
 
         expect(await screen.findByText('AI Error')).toBeInTheDocument();
+
+        consoleSpy.mockRestore();
     });
 
     it('shows no mappings message when no unmapped entries exist', async () => {

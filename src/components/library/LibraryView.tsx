@@ -42,12 +42,6 @@ import { useDebounce } from '../../hooks/useDebounce';
  */
 const logger = createLogger('LibraryView');
 
-// OPTIMIZATION: Cache for search strings to avoid redundant normalization/allocations
-// Key is the book object reference (which is stable thanks to selectors optimization).
-// Value is the cached search item object.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const searchCache = new WeakMap<object, { book: any, searchString: string }>();
-
 export const LibraryView: React.FC = () => {
   // OPTIMIZATION: Use useShallow to prevent re-renders when importProgress/uploadProgress changes
   const books = useAllBooks();
@@ -334,21 +328,12 @@ export const LibraryView: React.FC = () => {
   // OPTIMIZATION: Create a search index to avoid expensive re-calculation on every render
   // This memoized value updates only when the books array changes, not on every search keystroke.
   // This avoids calling toLowerCase() N times per frame during typing.
+  // REACT PREDICTABILITY: Instead of mutating a cache during render, we just derive it purely.
   const searchableBooks = useMemo(() => {
-    return books.map(book => {
-      if (searchCache.has(book)) {
-        return searchCache.get(book)!;
-      }
-
-      const item = {
-        book,
-        // Pre-compute normalized strings
-        searchString: `${(book.title || '').toLowerCase()} ${(book.author || '').toLowerCase()}`
-      };
-
-      searchCache.set(book, item);
-      return item;
-    });
+    return books.map(book => ({
+      book,
+      searchString: `${(book.title || '').toLowerCase()} ${(book.author || '').toLowerCase()}`
+    }));
   }, [books]);
 
   // OPTIMIZATION: Memoize filtered and sorted books
@@ -453,6 +438,7 @@ export const LibraryView: React.FC = () => {
         accept=".epub"
         className="hidden"
         data-testid="hidden-file-input"
+        aria-label="Upload EPUB file"
       />
 
 
@@ -557,7 +543,10 @@ export const LibraryView: React.FC = () => {
                   data-testid="header-add-button"
                 >
                   {isImporting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      <span className="sr-only">Importing...</span>
+                    </>
                   ) : (
                     <Upload className="w-4 h-4" />
                   )}
@@ -609,7 +598,7 @@ export const LibraryView: React.FC = () => {
               </div>
               {/* Live region for screen readers */}
               <div role="status" aria-live="polite" className="sr-only">
-                {searchQuery ? (
+                {debouncedSearchQuery ? (
                   filteredAndSortedBooks.length === 0
                     ? 'No books found'
                     : `${filteredAndSortedBooks.length} books found`
@@ -682,6 +671,7 @@ export const LibraryView: React.FC = () => {
           aria-label="Loading library"
         >
           <Loader2 className="h-12 w-12 animate-spin text-primary" aria-hidden="true" />
+          <span className="sr-only">Loading library...</span>
         </div>
       ) : activeContext === 'notes' ? (
         <GlobalNotesView onContentMissing={(bookId) => {
@@ -694,7 +684,7 @@ export const LibraryView: React.FC = () => {
             <EmptyLibrary onImport={triggerFileUpload} />
           ) : filteredAndSortedBooks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <p className="text-lg">No books found matching "{searchQuery}"</p>
+              <p className="text-lg">No books found matching "{debouncedSearchQuery}"</p>
               <Button
                 variant="link"
                 onClick={() => setSearchQuery('')}

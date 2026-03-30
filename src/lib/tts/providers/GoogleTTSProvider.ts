@@ -78,7 +78,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
       throw new Error('Google Cloud API Key is missing');
     }
 
-    const url = `https://texttospeech.googleapis.com/v1/text:synthesize`;
+    const url = `https://texttospeech.googleapis.com/v1beta1/text:synthesize`;
 
     const requestBody = {
       input: { text },
@@ -87,7 +87,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
         audioEncoding: 'MP3',
         speakingRate: options.speed,
       },
-      enableTimepointing: ["SSML_MARK"]
+      enableTimePointing: ["SSML_MARK"]
     };
 
     const response = await fetch(url, {

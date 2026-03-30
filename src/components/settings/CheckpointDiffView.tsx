@@ -65,9 +65,10 @@ export const CheckpointDiffView: React.FC<CheckpointDiffViewProps> = ({
               <div className="font-mono opacity-70 mb-0.5 flex items-center gap-2">
                 <span>{key}:</span>
                 <button
-                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-primary/20 rounded"
+                  className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none transition-opacity p-0.5 hover:bg-primary/20 rounded"
                   onClick={() => setSelectedDiff({ title: key, old: value.old, new: value.new })}
                   title="View detailed diff"
+                  aria-label={`View detailed diff for ${key}`}
                 >
                   <Maximize2 className="w-3 h-3 text-primary" />
                 </button>
@@ -122,8 +123,10 @@ export const CheckpointDiffView: React.FC<CheckpointDiffViewProps> = ({
             return (
               <div key={storeName} className="border rounded-lg overflow-hidden">
                 <button
-                  className="w-full flex items-center justify-between p-3 bg-muted/30 hover:bg-muted/50 transition-colors"
+                  className="w-full flex items-center justify-between p-3 bg-muted/30 hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
                   onClick={() => toggleStore(storeName)}
+                  aria-expanded={isExpanded}
+                  aria-controls={`diff-section-${storeName}`}
                 >
                   <div className="flex items-center gap-2">
                     {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -137,7 +140,7 @@ export const CheckpointDiffView: React.FC<CheckpointDiffViewProps> = ({
                 </button>
 
                 {isExpanded && (
-                  <div className="p-3 border-t space-y-2">
+                  <div id={`diff-section-${storeName}`} className="p-3 border-t space-y-2">
                     {renderDiffSection('To Be Recovered (Added)', result.added, 'border-success/20 bg-success/10 text-success', <Plus className="w-3 h-3" />)}
                     {renderDiffSection('To Be Lost (Removed)', result.removed, 'border-destructive/20 bg-destructive/10 text-destructive', <Minus className="w-3 h-3" />)}
                     {renderModifiedSection(result.modified)}

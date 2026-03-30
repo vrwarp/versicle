@@ -18,7 +18,7 @@ describe('GoogleTTSProvider', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (!global.window) global.window = {} as any;
     if (!global.window.atob) {
-        global.window.atob = (str: string) => Buffer.from(str, 'base64').toString('binary');
+      global.window.atob = (str: string) => Buffer.from(str, 'base64').toString('binary');
     }
   });
 
@@ -74,8 +74,8 @@ describe('GoogleTTSProvider', () => {
       expect(voices[0].id).toBe('en-US-Standard-A');
     });
 
-     it('should handle fetch error gracefully', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    it('should handle fetch error gracefully', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
       (global.fetch as Mock).mockResolvedValue({
         ok: false,
         statusText: 'Internal Server Error'
@@ -89,7 +89,7 @@ describe('GoogleTTSProvider', () => {
 
   describe('getVoices', () => {
     it('should fetch voices if not already loaded and api key exists', async () => {
-       (global.fetch as Mock).mockResolvedValue({
+      (global.fetch as Mock).mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({
           voices: [
@@ -131,7 +131,7 @@ describe('GoogleTTSProvider', () => {
       const result = await provider.fetchAudioData('Hello', options);
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://texttospeech.googleapis.com/v1/text:synthesize',
+        'https://texttospeech.googleapis.com/v1beta1/text:synthesize',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
@@ -144,7 +144,7 @@ describe('GoogleTTSProvider', () => {
               audioEncoding: 'MP3',
               speakingRate: 1.0,
             },
-            enableTimepointing: ["SSML_MARK"]
+            enableTimePointing: ["SSML_MARK"]
           })
         })
       );

@@ -160,7 +160,7 @@ export const BookCover: React.FC<BookCoverProps & { showActions?: boolean }> = R
                                 className={cn(
                                     "rounded-full bg-black/50 text-white hover:bg-black/70 hover:text-white transition-opacity",
                                     "h-11 w-11", // Minimum 44px touch target
-                                    "opacity-100 md:opacity-0 md:group-hover:opacity-100", // Always visible on mobile
+                                    "opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 focus-visible:opacity-100 md:focus-within:opacity-100", // Always visible on mobile
                                     "touch-manipulation"
                                 )}
                                 data-testid="book-menu-trigger"

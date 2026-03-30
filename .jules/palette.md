@@ -80,3 +80,22 @@
 ## 2026-03-03 - Accessibility of Action Buttons in Lists and Cards
 **Learning:** When using icon-only buttons for actions like "Copy", "Edit", or "Delete" within repeated UI elements like lists or cards (e.g., `AnnotationList`, `AnnotationCard`), native `<button>` elements often lack accessible names. Furthermore, styling them manually leads to inconsistencies with standard hover/focus states provided by the design system.
 **Action:** Always replace native icon-only `<button>` tags with the `<Button variant="ghost" size="icon">` component from the design system, and critically, attach a descriptive `aria-label` attribute (e.g., `aria-label="Edit Note"`) to ensure assistive technologies can correctly interpret the action regardless of the visual icon.
+
+## 2026-03-03 - Focus Visibility for Hover-Revealed Elements
+**Learning:** Elements hidden via `opacity-0` and revealed on hover (`group-hover:opacity-100`) often become inaccessible to keyboard users because tabbing to them doesn't trigger the hover state, leaving focused elements invisible.
+**Action:** Always pair `opacity-0 group-hover:opacity-100` with focus visibility classes (e.g., `focus-within:opacity-100` for containers or `focus-visible:opacity-100` for the element itself) to ensure they are visible when navigated to via keyboard.
+
+## 2026-03-03 - Keyboard Accessibility for Hover-Revealed Elements
+**Learning:** Elements hidden via `opacity-0` and revealed on hover (`group-hover:opacity-100`) often become inaccessible to keyboard users because tabbing to them doesn't trigger the hover state. Furthermore, if the hidden element is inside a wrapper that actually receives focus (like a Radix `DropdownMenuTrigger`), applying `focus-visible:opacity-100` to the hidden element itself is insufficient.
+**Action:** Always pair `opacity-0 group-hover:opacity-100` with focus visibility classes. For elements wrapped in focusable containers, use `focus-within:opacity-100` on the hidden element so it becomes visible when the wrapper receives keyboard focus. For directly focusable elements, use `focus-visible:opacity-100 focus-visible:ring-2`.
+
+## 2025-06-03 - Accessible Loading States in Buttons
+**Learning:** Using an icon like `Loader2` to indicate a loading state in a button is visually clear, but without `sr-only` text, screen reader users might only hear the original button text (e.g., "Delete") while the action is actually "Deleting...".
+**Action:** Always pair a spinning loading icon inside a button with `<span className="sr-only">Loading...</span>` (or context-specific text like "Deleting...") so screen readers announce the state change. Also, hide the original button text using `aria-hidden={isLoading}` if it remains in the DOM.
+
+## 2026-03-21 - Accessible Hidden File Inputs
+**Learning:** Hidden `<input type="file">` elements triggered by visible buttons are often missed by accessibility tools and lack names in the accessibility tree.
+**Action:** Always add an `aria-label` to hidden file inputs to ensure they have an accessible name, even when they are not visually rendered.
+## 2026-03-28 - Hidden Input ARIA Labels
+**Learning:** Added `aria-label` attributes to visually hidden `<input type="file">` elements that are triggered by other visible proxy buttons.
+**Action:** Always ensure that hidden file inputs have proper ARIA labels so they have an accessible name in the accessibility tree, even if they aren't visually rendered. However, do not add `aria-label` to elements with `display: none` (like Tailwind's `hidden` class) as they are completely removed from the accessibility tree, making the label ineffective.

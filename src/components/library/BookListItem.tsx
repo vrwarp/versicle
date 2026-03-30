@@ -180,11 +180,13 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
                         <div
                             className={cn(
                                 "p-2 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors focus:opacity-100 touch-manipulation cursor-pointer",
-                                "opacity-100 md:opacity-0 md:group-hover:opacity-100" // Always visible on mobile
+                                "opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 focus-visible:opacity-100 md:focus-within:opacity-100" // Always visible on mobile
                             )}
                             data-testid={`book-actions-${book.id}`}
+                            aria-label={`Options for ${book.title}`}
                         >
                             <MoreVertical className="w-4 h-4" />
+                            <span className="sr-only">Book options</span>
                         </div>
                     </BookActionMenu>
                 </div>

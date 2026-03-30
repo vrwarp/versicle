@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useGenAIStore } from '../../store/useGenAIStore';
+import { useContentAnalysisStore } from '../../store/useContentAnalysisStore';
 import { useShallow } from 'zustand/react/shallow';
 import { X, Copy, ChevronRight, ChevronDown, RotateCcw, Loader2, FileText } from 'lucide-react';
 import { TYPE_COLORS } from '../../types/content-analysis';
@@ -43,6 +44,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
     const [highlightedCfi, setHighlightedCfi] = useState<string | null>(null);
 
     const currentBookId = useReaderUIStore(state => state.currentBookId);
+    const sections = useContentAnalysisStore(state => state.sections);
 
     // Helper to clear URLs
     const clearUrls = () => {
@@ -270,7 +272,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                     className="flex items-center gap-1 font-semibold hover:text-primary"
                 >
                     {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    Debug Panel
+                    GenAI Debug Panel
                 </button>
                 <button
                     onClick={() => setDebugModeEnabled(false)}
@@ -318,7 +320,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                     placeholder="epubcfi(...)"
                                     className="flex-1 bg-muted p-1 rounded border border-input text-[10px] font-mono"
                                 />
-                                <button onClick={copyCfi} className="p-1 hover:bg-accent rounded" title="Copy CFI">
+                                <button onClick={copyCfi} className="p-1 hover:bg-accent rounded" title="Copy CFI" aria-label="Copy CFI">
                                     <Copy className="h-3 w-3" />
                                 </button>
                             </div>
@@ -336,6 +338,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                     onClick={copyContent}
                                     className="absolute top-1 right-1 p-1 bg-background/80 hover:bg-accent rounded shadow-sm"
                                     title="Copy Content"
+                                    aria-label="Copy Content"
                                 >
                                     <Copy className="h-3 w-3" />
                                 </button>
@@ -350,29 +353,52 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                 Table Images ({tableImages.length})
                             </div>
                             <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
-                                {tableImages.map((img) => imageUrls[img.id] ? (
-                                    <div key={img.id} className="snap-start shrink-0 w-24 flex flex-col gap-1">
-                                        <div className="aspect-video bg-muted rounded overflow-hidden relative group">
-                                            <img
-                                                src={imageUrls[img.id]}
-                                                alt="Table snapshot"
-                                                className="w-full h-full object-cover"
-                                            />
-                                            <button
-                                                onClick={() => jumpToTable(img.cfi)}
-                                                className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white font-bold transition-opacity"
-                                            >
-                                                JUMP
-                                            </button>
+                                {tableImages.map((img) => {
+                                    if (!imageUrls[img.id]) return null;
+
+                                    // Find matching table adaptation if any
+                                    let adaptationText = '';
+                                    if (currentBookId) {
+                                        for (const [key, section] of Object.entries(sections)) {
+                                            if (key.startsWith(`${currentBookId}/`) && section.tableAdaptations) {
+                                                const match = section.tableAdaptations.find(a => a.rootCfi === img.cfi);
+                                                if (match) {
+                                                    adaptationText = match.text;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    return (
+                                        <div key={img.id} className="snap-start shrink-0 w-32 flex flex-col gap-1">
+                                            <div className="aspect-video bg-muted rounded overflow-hidden relative group">
+                                                <img
+                                                    src={imageUrls[img.id]}
+                                                    alt="Table snapshot"
+                                                    className="w-full h-full object-cover"
+                                                />
+                                                <button
+                                                    onClick={() => jumpToTable(img.cfi)}
+                                                    className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 flex items-center justify-center text-white font-bold transition-opacity"
+                                                >
+                                                    JUMP
+                                                </button>
+                                            </div>
+                                            <div className="text-[9px] font-mono truncate text-muted-foreground" title={img.cfi}>
+                                                {img.cfi}
+                                            </div>
+                                            <div className="flex justify-between items-center text-[9px] text-muted-foreground">
+                                                <span>{(img.imageBlob.size / 1024).toFixed(1)} KB</span>
+                                            </div>
+                                            {adaptationText && (
+                                                <div className="mt-1 p-1 bg-muted/50 rounded border border-border/50 text-[8px] max-h-16 overflow-y-auto leading-tight" title={adaptationText}>
+                                                    {adaptationText}
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="text-[9px] font-mono truncate text-muted-foreground" title={img.cfi}>
-                                            {img.cfi}
-                                        </div>
-                                        <div className="text-[9px] text-muted-foreground">
-                                            {(img.imageBlob.size / 1024).toFixed(1)} KB
-                                        </div>
-                                    </div>
-                                ) : null)}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

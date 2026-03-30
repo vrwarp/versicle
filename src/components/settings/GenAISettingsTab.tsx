@@ -186,24 +186,8 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                                 ))}
                                             </div>
 
-                                            <div className="pt-4">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="space-y-0.5">
-                                                        <label htmlFor="genai-debug" className="text-sm font-medium">Enable Content Analysis Debugging</label>
-                                                        <p className="text-xs text-muted-foreground">
-                                                            Highlights content based on its detected type.
-                                                        </p>
-                                                    </div>
-                                                    <Switch
-                                                        id="genai-debug"
-                                                        checked={isDebugModeEnabled}
-                                                        onCheckedChange={onDebugModeChange}
-                                                    />
-                                                </div>
-                                            </div>
-
                                             <div className="pt-2">
-                                                <Button variant="outline" size="sm" onClick={onClearContentAnalysis}>
+                                                <Button variant="outline" size="sm" onClick={onClearContentAnalysis} aria-label="Clear content analysis cache">
                                                     Clear Content Analysis Cache
                                                 </Button>
                                             </div>
@@ -221,6 +205,20 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                             id="genai-table-adaptation"
                                             checked={isTableAdaptationEnabled}
                                             onCheckedChange={onTableAdaptationChange}
+                                        />
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-0.5">
+                                            <label htmlFor="genai-debug" className="text-sm font-medium">Enable GenAI Debug Panel</label>
+                                            <p className="text-xs text-muted-foreground">
+                                                Shows a debug panel for content analysis and table teleprompter features.
+                                            </p>
+                                        </div>
+                                        <Switch
+                                            id="genai-debug"
+                                            checked={isDebugModeEnabled}
+                                            onCheckedChange={onDebugModeChange}
                                         />
                                     </div>
                                 </div>
@@ -242,11 +240,11 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                                 onChange={(e) => onMaxLogsChange(parseInt(e.target.value) || 100)}
                                             />
                                         </div>
-                                        <Button variant="outline" size="sm" onClick={onClearLogs} disabled={logs.length === 0}>
+                                        <Button variant="outline" size="sm" onClick={onClearLogs} disabled={logs.length === 0} aria-label="Clear GenAI debug logs">
                                             Clear Logs
                                         </Button>
-                                        <Button variant="outline" size="sm" onClick={onDownloadLogs} disabled={logs.length === 0}>
-                                            <Download className="h-4 w-4 mr-2" />
+                                        <Button variant="outline" size="sm" onClick={onDownloadLogs} disabled={logs.length === 0} aria-label="Download GenAI debug logs">
+                                            <Download className="h-4 w-4 mr-2" aria-hidden="true" />
                                             Download Logs
                                         </Button>
                                     </div>

@@ -108,6 +108,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
                 className="h-8 w-8 rounded-full shadow-md bg-background/80 backdrop-blur-sm"
                 onClick={(e) => e.stopPropagation()}
                 data-testid="book-context-menu-trigger"
+                aria-label="Book options"
               >
                 <MoreVertical className="h-4 w-4" />
                 <span className="sr-only">Book options</span>
@@ -123,6 +124,9 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
               {onResume && (
                 <RemoteSessionsSubMenu
                   bookId={book.id}
+
+
+          allProgress={((book as unknown) as { allProgress?: Record<string, { percentage: number; currentCfi: string; lastRead: number }> }).allProgress}
                   onResumeClick={handleResumeClick}
                 />
               )}
@@ -159,6 +163,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
       {onResume && (
         <ResumeBadge
           bookId={book.id}
+          allProgress={((book as unknown) as { allProgress?: Record<string, { percentage: number; currentCfi: string; lastRead: number }> }).allProgress}
           onResumeClick={handleResumeClick}
         />
       )}

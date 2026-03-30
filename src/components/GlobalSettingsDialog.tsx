@@ -7,7 +7,7 @@ import { useReadingStateStore } from '../store/useReadingStateStore';
 import { usePreferencesStore } from '../store/usePreferencesStore';
 import { useToastStore } from '../store/useToastStore';
 import { useShallow } from 'zustand/react/shallow';
-import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from './ui/Modal';
+import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalClose } from './ui/Modal';
 import { Button } from './ui/Button';
 
 
@@ -25,7 +25,7 @@ import { useFirestoreSync } from '../lib/sync/hooks/useFirestoreSync';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
 import { exportFile } from '../lib/export';
 import { ReadingListDialog } from './ReadingListDialog';
-import { Loader2 } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { useDeviceStore } from '../store/useDeviceStore';
 import { getDeviceId } from '../lib/device-id';
@@ -92,8 +92,7 @@ export const GlobalSettingsDialog = () => {
 
     const {
         setFirebaseEnabled, firestoreStatus, firebaseAuthStatus, firebaseUserEmail,
-        syncProvider, setSyncProvider, firebaseConfig, setFirebaseConfig,
-        forceDevInstance, setForceDevInstance
+        firebaseConfig, setFirebaseConfig
     } = useSyncStore();
     const { signIn: firebaseSignIn, signOut: firebaseSignOut, isConfigured: isFirebaseAvailable } = useFirestoreSync();
     const [isFirebaseSigningIn, setIsFirebaseSigningIn] = useState(false);
@@ -391,11 +390,23 @@ export const GlobalSettingsDialog = () => {
 
                     const store = useReadingListStore.getState();
                     const rsStore = useReadingStateStore.getState();
+
+                    // Pre-compute a mapping of sourceFilename -> bookId to avoid O(N*M) lookups in the loop
+                    const libraryBooks = useBookStore.getState().books;
+                    const filenameToBookId: Record<string, string> = {};
+                    // Iterate over Object.values to match the original behavior exactly (finding the book object directly)
+                    for (const book of Object.values(libraryBooks)) {
+                        if (book && book.sourceFilename && !filenameToBookId[book.sourceFilename]) {
+                            // Only set if not already set, to match original .find() behavior (first match wins)
+                            filenameToBookId[book.sourceFilename] = book.bookId;
+                        }
+                    }
+
                     for (const entry of entries) {
                         store.upsertEntry(entry);
                         if (entry.percentage !== undefined) {
-                            const book = Object.values(useBookStore.getState().books).find(b => b.sourceFilename === entry.filename);
-                            const targetId = book ? book.bookId : entry.filename;
+                            const bookId = filenameToBookId[entry.filename];
+                            const targetId = bookId || entry.filename;
                             rsStore.updateLocation(targetId, '', entry.percentage);
                         }
                     }
@@ -445,7 +456,7 @@ export const GlobalSettingsDialog = () => {
     return (
         <>
             <Modal open={isGlobalSettingsOpen} onOpenChange={setGlobalSettingsOpen}>
-                <ModalContent className="max-w-3xl h-[90vh] sm:h-[600px] flex flex-col sm:flex-row p-0 overflow-hidden gap-0 sm:rounded-lg" aria-describedby="global-settings-desc">
+                <ModalContent hideCloseButton className="max-w-3xl h-[90vh] sm:h-[600px] flex flex-col sm:flex-row p-0 overflow-hidden gap-0 sm:rounded-lg" aria-describedby="global-settings-desc">
                     <VisuallyHidden>
                         <ModalHeader>
                             <ModalTitle>Global Settings</ModalTitle>
@@ -467,6 +478,11 @@ export const GlobalSettingsDialog = () => {
                             )}
                         </div>
                     )}
+
+                    <ModalClose className="absolute right-2 top-2 sm:right-4 sm:top-4 z-[60] rounded-full bg-background/80 backdrop-blur-sm p-2 shadow-sm border border-border opacity-100 hover:bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+                        <X className="h-4 w-4" />
+                        <span className="sr-only">Close</span>
+                    </ModalClose>
 
                     {/* Sidebar */}
                     <div className="w-full sm:w-1/4 bg-muted/30 border-b sm:border-r sm:border-b-0 p-2 sm:p-4 flex flex-row sm:flex-col gap-2 overflow-x-auto sm:overflow-visible items-center sm:items-stretch shrink-0">
@@ -594,8 +610,6 @@ export const GlobalSettingsDialog = () => {
                                         showToast('Device registered to mesh', 'success');
                                     }
                                 }}
-                                syncProvider={syncProvider}
-                                onSyncProviderChange={setSyncProvider}
                                 isFirebaseAvailable={isFirebaseAvailable}
                                 firebaseAuthStatus={firebaseAuthStatus}
                                 firestoreStatus={firestoreStatus}
@@ -603,8 +617,6 @@ export const GlobalSettingsDialog = () => {
                                 isFirebaseSigningIn={isFirebaseSigningIn}
                                 firebaseConfig={firebaseConfig}
                                 onFirebaseConfigChange={(updates) => setFirebaseConfig({ ...firebaseConfig, ...updates })}
-                                forceDevInstance={forceDevInstance}
-                                onForceDevInstanceChange={setForceDevInstance}
                                 onFirebaseSignIn={async () => {
                                     setIsFirebaseSigningIn(true);
                                     try {

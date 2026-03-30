@@ -300,7 +300,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                     <Button data-testid="lexicon-import-btn" asChild variant="ghost" size="sm" title="Import from CSV">
                         <label className="cursor-pointer flex items-center">
                             <Upload size={14} className="mr-1" /> Import
-                            <input data-testid="lexicon-import-input" ref={fileInputRef} type="file" className="hidden" accept=".csv" onChange={handleImport} />
+                            <input data-testid="lexicon-import-input" ref={fileInputRef} type="file" className="hidden" accept=".csv" onChange={handleImport} aria-label="Import lexicon from CSV" />
                         </label>
                     </Button>
                 </div>
@@ -429,7 +429,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                 data-testid={`lexicon-move-up-${index}`}
                                                 onClick={() => moveRule(index, 'up')}
                                                 disabled={index === 0}
-                                                className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                                                className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
                                             >
                                                 <ArrowUp size={12} />
                                             </button>
@@ -438,13 +438,13 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                 data-testid={`lexicon-move-down-${index}`}
                                                 onClick={() => moveRule(index, 'down')}
                                                 disabled={index === rules.length - 1}
-                                                className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                                                className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
                                             >
                                                 <ArrowDown size={12} />
                                             </button>
                                         </div>
-                                        <button onClick={() => setEditingRule({ ...rule, matchType: rule.matchType || (rule.isRegex ? 'regex' : 'ignore_case') })} className="text-xs text-primary hover:underline">Edit</button>
-                                        <button aria-label="Delete rule" onClick={() => handleDelete(rule.id)} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 size={16} /></button>
+                                        <button aria-label="Edit rule" onClick={() => setEditingRule({ ...rule, matchType: rule.matchType || (rule.isRegex ? 'regex' : 'ignore_case') })} className="text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded">Edit</button>
+                                        <button aria-label="Delete rule" onClick={() => handleDelete(rule.id)} className="text-destructive hover:bg-destructive/10 p-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Trash2 size={16} /></button>
                                     </div>
                                 </>
                             )}

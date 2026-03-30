@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
+
 import { useDeviceStore } from '../../store/useDeviceStore';
 import { getDeviceId } from '../../lib/device-id';
 import { DeviceIcon } from '../devices/DeviceIcon';
@@ -7,6 +7,7 @@ import { Button } from '../ui/Button';
 
 interface ResumeBadgeProps {
   bookId: string;
+  allProgress?: Record<string, { percentage: number; currentCfi: string; lastRead: number }>;
   onResumeClick: (deviceId: string, cfi: string) => void;
 }
 
@@ -14,12 +15,10 @@ interface ResumeBadgeProps {
  * A badge that appears on a book card when a remote device has further reading progress.
  * Separated from BookCard to isolate useDeviceStore updates.
  */
-export const ResumeBadge: React.FC<ResumeBadgeProps> = React.memo(({ bookId, onResumeClick }) => {
+export const ResumeBadge: React.FC<ResumeBadgeProps> = React.memo(({ allProgress, onResumeClick }) => {
   const currentDeviceId = getDeviceId();
 
-  // Get raw progress from all devices
-  // This selector is fine because it's specific to the book
-  const allProgress = useReadingStateStore((state) => state.progress?.[bookId]);
+
 
   // This selector returns the entire devices object, causing re-renders on ANY device update.
   // By isolating this in ResumeBadge, we prevent the heavy BookCard from re-rendering.
