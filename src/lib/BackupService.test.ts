@@ -256,6 +256,7 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
 
       const tx = db.transaction(['updates'], 'readonly');
       const store = tx.objectStore('updates');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const allUpdates = await new Promise<any[]>((resolve, reject) => {
         const req = store.getAll();
         req.onsuccess = () => resolve(req.result);

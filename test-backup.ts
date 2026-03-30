@@ -2,7 +2,6 @@ import { backupService } from './src/lib/BackupService';
 import { useAnnotationStore } from './src/store/useAnnotationStore';
 import { yjsPersistence, waitForYjsSync } from './src/store/yjs-provider';
 import * as Y from 'yjs';
-import fs from 'fs';
 import 'fake-indexeddb/auto'; // Polyfill IndexedDB for Node.js
 
 async function runTest() {
@@ -43,8 +42,8 @@ async function runTest() {
   // `versicle-yjs` DB was populated by `processManifest`.
   // Let's create a new Y.Doc and IndexeddbPersistence and see if it loads
   const newYDoc = new Y.Doc();
-  const { IndexeddbPersistence } = require('y-indexeddb');
-  const newPersistence = new IndexeddbPersistence('versicle-yjs', newYDoc);
+  const yIndexeddb = await import('y-indexeddb');
+  const newPersistence = new yIndexeddb.IndexeddbPersistence('versicle-yjs', newYDoc);
 
   await new Promise(resolve => {
     newPersistence.once('synced', resolve);
