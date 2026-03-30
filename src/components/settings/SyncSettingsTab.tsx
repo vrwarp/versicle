@@ -3,7 +3,7 @@ import { Label } from '../ui/Label';
 import { Input } from '../ui/Input';
 import { PasswordInput } from '../ui/PasswordInput';
 import { Button } from '../ui/Button';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Trash2 } from 'lucide-react';
 
 export interface FirebaseConfig {
     apiKey: string;
@@ -114,6 +114,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     const [newWorkspaceName, setNewWorkspaceName] = React.useState('');
     const [isCreatingWorkspace, setIsCreatingWorkspace] = React.useState(false);
     const [isSwitchingWorkspace, setIsSwitchingWorkspace] = React.useState<string | null>(null);
+    const [isDeletingWorkspace, setIsDeletingWorkspace] = React.useState<string | null>(null);
     const activeWorkspaceId = useSyncStore(state => state.activeWorkspaceId);
 
     // Load workspaces when signed in
@@ -153,6 +154,26 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
         } catch (err) {
             console.error('Failed to switch workspace:', err);
             setIsSwitchingWorkspace(null);
+        }
+    };
+
+    const handleDeleteWorkspace = async (workspaceId: string, name: string) => {
+        if (!confirm(`Are you sure you want to delete workspace "${name}"?\n\nThis will permanently reclaim cloud storage for this workspace. Your local data will be preserved but sync will be disabled for this workspace ID.`)) {
+            return;
+        }
+
+        setIsDeletingWorkspace(workspaceId);
+        try {
+            await getFirestoreSyncManager().deleteWorkspace(workspaceId);
+            showToast(`Workspace "${name}" deleted.`, 'success');
+            // Refresh workspace list
+            const updated = await getFirestoreSyncManager().listWorkspaces();
+            setWorkspaces(updated);
+        } catch (err) {
+            console.error('Failed to delete workspace:', err);
+            showToast('Failed to delete workspace.', 'error');
+        } finally {
+            setIsDeletingWorkspace(null);
         }
     };
 
@@ -325,7 +346,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                             <div className="mt-4 pt-4 border-t border-border space-y-3">
                                 <h5 className="text-sm font-medium">Workspaces</h5>
                                 <p className="text-xs text-muted-foreground">
-                                    Switch between different data contexts.
+                                    Switch between different data contexts.<br />
                                     Active: <strong>
                                         {workspaces.find(w => w.workspaceId === (activeWorkspaceId || FirestoreSyncManager.getDefaultWorkspaceId()))?.name || 'Default'}
                                     </strong>
@@ -341,25 +362,40 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                     <div className="space-y-1">
                                         {workspaces.map(ws => (
                                             <div key={ws.workspaceId} className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm">
-                                                <div>
+                                                <div className="flex flex-col">
                                                     <span className="font-medium">{ws.name}</span>
-                                                    <span className="ml-2 text-xs text-muted-foreground mr-1">({ws.workspaceId})</span>
+                                                    <span className="text-[10px] text-muted-foreground leading-tight px-0.5 opacity-70">ID: {ws.workspaceId}</span>
                                                 </div>
                                                 {ws.workspaceId === activeWorkspaceId ? (
                                                     <span className="text-xs text-success pr-2 font-medium">● Active</span>
                                                 ) : ws.schemaVersion > CURRENT_SCHEMA_VERSION ? (
                                                     <span className="text-xs text-destructive pr-2 font-medium shrink-0">Update App to Connect</span>
                                                 ) : (
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => handleSwitchWorkspace(ws.workspaceId)}
-                                                        disabled={isSwitchingWorkspace !== null}
-                                                    >
-                                                        {isSwitchingWorkspace === ws.workspaceId ? (
-                                                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                                                        ) : 'Switch'}
-                                                    </Button>
+                                                    <div className="flex items-center gap-1">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleSwitchWorkspace(ws.workspaceId)}
+                                                            disabled={isSwitchingWorkspace !== null || isDeletingWorkspace !== null}
+                                                        >
+                                                            {isSwitchingWorkspace === ws.workspaceId ? (
+                                                                <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                                                            ) : 'Switch'}
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                                                            onClick={() => handleDeleteWorkspace(ws.workspaceId, ws.name)}
+                                                            disabled={isSwitchingWorkspace !== null || isDeletingWorkspace !== null}
+                                                        >
+                                                            {isDeletingWorkspace === ws.workspaceId ? (
+                                                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                                                            ) : (
+                                                                <Trash2 className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
+                                                    </div>
                                                 )}
                                             </div>
                                         ))}

@@ -17,8 +17,9 @@ import { CheckpointService } from './CheckpointService';
 import { MigrationStateService } from './MigrationStateService';
 import * as Y from 'yjs';
 import { useBookStore } from '../../store/useBookStore';
-import { doc, getDoc, setDoc, collection, getDocs, query, limit } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, query, limit, writeBatch } from 'firebase/firestore';
 import type { WorkspaceMetadata } from '../../types/workspace';
+import { WorkspaceDeletedError } from '../../types/errors';
 
 import {
     getFirebaseApp,
@@ -119,13 +120,9 @@ class FirestoreSyncManager {
         const w = typeof window !== 'undefined' ? (window as any) : null;
         if (w && w.__VERSICLE_MOCK_FIRESTORE__) {
             logger.info('Mock mode detected. Simulating auth and connection.');
-            this.setAuthStatus('signed-in');
-
             const mockUid = w.__VERSICLE_MOCK_USER_ID__ || 'mock-user';
-
-            // Simulate a mock user
-            this.currentUser = { uid: mockUid, email: `${mockUid}@example.com` } as User;
-            this.connectFireProvider(mockUid);
+            const mockUser = { uid: mockUid, email: `${mockUid}@example.com` } as User;
+            this.handleAuthStateChange(mockUser);
             return;
         }
 
@@ -171,6 +168,48 @@ class FirestoreSyncManager {
     }
 
     /**
+     * Pre-flight validation: Check if the workspace has been tombstoned.
+     * Returns true if workspace is safe to sync, false if tombstoned.
+     */
+    private async validateWorkspaceIsAlive(uid: string, workspaceId: string): Promise<boolean> {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+        if (isMock) {
+            // Check both metadata list and document snapshot
+            const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
+            const workspaces: WorkspaceMetadata[] = JSON.parse(raw);
+            const ws = workspaces.find(w => w.workspaceId === workspaceId);
+            if (ws && ws.deletedAt) return false;
+
+            const snapshotStr = localStorage.getItem('versicle_mock_firestore_snapshot') || '{}';
+            const snapshot = JSON.parse(snapshotStr);
+            const path = `users/${uid}/versicle/${workspaceId}`;
+            if (snapshot[path]?.isDeleted) return false;
+
+            return true;
+        }
+
+        const db = getFirestoreDb();
+        if (!db) return true; // Fail-safe (let it pass to allow offline queuing if config is missing)
+
+        const docRef = doc(db, `users/${uid}/versicle/${workspaceId}`);
+        try {
+            const snapshot = await getDoc(docRef);
+            if (snapshot.exists()) {
+                const data = snapshot.data();
+                if (data?.isDeleted === true) {
+                    return false; // Tombstone found
+                }
+            }
+            return true; // Doc missing or not deleted
+        } catch (error) {
+            logger.error('Failed to validate workspace state', error);
+            // If offline, let it pass to allow offline queuing
+            return true;
+        }
+    }
+
+    /**
      * Handle Firebase auth state changes
      */
     private handleAuthStateChange(user: User | null): void {
@@ -199,6 +238,20 @@ class FirestoreSyncManager {
      * Connect y-fire provider for the given user
      */
     private async connectFireProvider(uid: string): Promise<void> {
+        const workspaceId = useSyncStore.getState().activeWorkspaceId || FirestoreSyncManager.getDefaultWorkspaceId();
+
+        // Check for Tombstone BEFORE connecting
+        const isAlive = await this.validateWorkspaceIsAlive(uid, workspaceId);
+
+        if (!isAlive) {
+            logger.warn(`Sync aborted: Workspace ${workspaceId} is tombstoned.`);
+            // Sever local tie
+            useSyncStore.getState().setActiveWorkspaceId(null);
+            useToastStore.getState().showToast('Sync disconnected: Remote workspace was deleted. Operating offline.', 'error', 8000);
+            this.setStatus('disconnected');
+            throw new WorkspaceDeletedError();
+        }
+
         if (this.fireProvider) {
             const currentApp = getFirebaseApp();
             if (currentApp !== this.currentApp) {
@@ -244,7 +297,6 @@ class FirestoreSyncManager {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const maxWaitTime = (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || this.config.maxWaitFirestoreTime;
 
-        const workspaceId = useSyncStore.getState().activeWorkspaceId || FirestoreSyncManager.getDefaultWorkspaceId();
         const path = `users/${uid}/versicle/${workspaceId}`;
 
         const isCleanClient = Object.keys(useBookStore.getState().books || {}).length === 0;
@@ -589,7 +641,7 @@ class FirestoreSyncManager {
 
         // Reconnect with new path (empty remote = local becomes source of truth)
         this.disconnectFireProvider();
-        this.connectFireProvider(user.uid);
+        await this.connectFireProvider(user.uid);
 
         return workspaceId;
     }
@@ -610,6 +662,13 @@ class FirestoreSyncManager {
 
         logger.info(`Switching workspace: ${currentWorkspaceId} → ${targetWorkspaceId}`);
         const toast = useToastStore.getState().showToast;
+
+        // Step 0: Pre-flight validation
+        const isAlive = await this.validateWorkspaceIsAlive(user.uid, targetWorkspaceId);
+        if (!isAlive) {
+            toast('Cannot switch: This workspace has been deleted.', 'error');
+            throw new WorkspaceDeletedError();
+        }
 
         try {
             // Step 1: Backup current state
@@ -729,8 +788,9 @@ class FirestoreSyncManager {
 
         if (isMock) {
             const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
-            const workspaces = JSON.parse(raw);
-            if (workspaces.length === 0) {
+            const workspaces: WorkspaceMetadata[] = JSON.parse(raw);
+            const filtered = workspaces.filter(ws => !ws.deletedAt);
+            if (filtered.length === 0) {
                 return [{
                     workspaceId: FirestoreSyncManager.getDefaultWorkspaceId(),
                     name: 'Default',
@@ -738,7 +798,7 @@ class FirestoreSyncManager {
                     schemaVersion: 4
                 }];
             }
-            return workspaces;
+            return filtered;
         }
 
         const db = getFirestoreDb();
@@ -747,11 +807,94 @@ class FirestoreSyncManager {
         try {
             const workspacesRef = collection(db, `users/${user.uid}/workspaces`);
             const snapshot = await getDocs(workspacesRef);
-            return snapshot.docs.map(d => d.data() as WorkspaceMetadata);
+            return snapshot.docs
+                .map(d => d.data() as WorkspaceMetadata)
+                .filter(ws => !ws.deletedAt); // Filter out tombstoned workspaces
         } catch (error) {
             logger.error('Failed to list workspaces:', error);
             return [];
         }
+    }
+
+    /**
+     * Delete a workspace (Tombstone Pattern).
+     * Reclaims storage but preserves a tombstone to prevent resurrection.
+     */
+    public async deleteWorkspace(workspaceId: string): Promise<void> {
+        const user = this.getCurrentUser();
+        if (!user) throw new Error('Must be authenticated to delete workspace');
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+
+        if (isMock) {
+            const uid = user.uid;
+            // Mock Deletion logic: update localStorage
+            const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
+            const workspaces: WorkspaceMetadata[] = JSON.parse(raw);
+            const updated = workspaces.map(ws => 
+                ws.workspaceId === workspaceId ? { ...ws, deletedAt: Date.now() } : ws
+            );
+            localStorage.setItem('__VERSICLE_WORKSPACES__', JSON.stringify(updated));
+
+            // Mock tombstone in snapshot storage
+            const mockDataStr = localStorage.getItem('versicle_mock_firestore_snapshot') || '{}';
+            const mockData = JSON.parse(mockDataStr);
+            const path = `users/${uid}/versicle/${workspaceId}`;
+            mockData[path] = { isDeleted: true, deletedAt: Date.now() };
+            localStorage.setItem('versicle_mock_firestore_snapshot', JSON.stringify(mockData));
+            
+            logger.info(`[Mock] Workspace deleted and tombstoned: ${workspaceId}`);
+            
+            // Only clear if it was active
+            const activeWorkspaceId = useSyncStore.getState().activeWorkspaceId;
+            if (activeWorkspaceId === workspaceId) {
+                useSyncStore.getState().setActiveWorkspaceId(null);
+            }
+            return;
+        }
+
+        const db = getFirestoreDb();
+        if (!db) throw new Error('Firestore not initialized');
+
+        const uid = user.uid;
+        
+        // 1. Terminate active connection to prevent resurrection
+        this.destroy();
+
+        // 2. Reclaim Storage: Recursively delete the updates subcollection
+        // (This happens background, but we await the batches)
+        const updatesRef = collection(db, `users/${uid}/versicle/${workspaceId}/updates`);
+        let isDeleting = true;
+
+        while (isDeleting) {
+            const q = query(updatesRef, limit(500));
+            const snapshot = await getDocs(q);
+
+            if (snapshot.size === 0) {
+                isDeleting = false;
+                break;
+            }
+
+            const batch = writeBatch(db);
+            snapshot.docs.forEach((docSnap) => {
+                batch.delete(docSnap.ref);
+            });
+            await batch.commit();
+        }
+
+        // 3. Plant Tombstone on the root document
+        const rootDocRef = doc(db, `users/${uid}/versicle/${workspaceId}`);
+        await setDoc(rootDocRef, { isDeleted: true, deletedAt: Date.now() }, { merge: true });
+
+        // 4. Update Metadata Index (Filter it out from future lists)
+        const metaDocRef = doc(db, `users/${uid}/workspaces`, workspaceId);
+        await setDoc(metaDocRef, { deletedAt: Date.now() }, { merge: true });
+
+        // 5. Sever Local Tie
+        useSyncStore.getState().setActiveWorkspaceId(null);
+        
+        logger.info(`Workspace deleted and tombstoned: ${workspaceId}`);
     }
 
     // --- Status Management ---

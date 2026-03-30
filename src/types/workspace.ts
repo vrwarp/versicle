@@ -11,6 +11,15 @@ export interface WorkspaceMetadata {
     name: string;           // User-defined label
     createdAt: number;      // Epoch timestamp
     schemaVersion: number;  // CURRENT_SCHEMA_VERSION at creation/last migration
+    deletedAt?: number;     // Filters out deleted workspaces from UI lists
+}
+
+/**
+ * Internal Firestore representation of the root Yjs document
+ */
+export interface YjsRootDocument {
+    isDeleted?: boolean; // The explicit tombstone flag
+    deletedAt?: number;
 }
 
 /**
