@@ -173,6 +173,20 @@ function App() {
       MigrationStateService.clear();
     }
 
+    // Zombie backup cleanup: prune extremely old pre-migration backups that were abandoned
+    CheckpointService.listCheckpoints().then(checkpoints => {
+      const now = Date.now();
+      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+      checkpoints.forEach(cp => {
+        if (cp.trigger === 'pre-migration' && now - cp.timestamp > SEVEN_DAYS) {
+          logger.info(`Cleaning up zombie pre-migration backup checkpoint #${cp.id}`);
+          CheckpointService.deleteCheckpoint(cp.id).catch(err => {
+            logger.warn('Failed to clean up zombie backup:', err);
+          });
+        }
+      });
+    }).catch(err => logger.warn('Failed to list zombie backups:', err));
+
     // Standard Boot: Initialize Sync Manager
     const manager = getFirestoreSyncManager();
     manager.initialize();

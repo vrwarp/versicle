@@ -314,26 +314,27 @@ class FirestoreSyncManager {
             await new Promise<void>((resolve) => {
                 let resolved = false;
 
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                let tempProvider: any = null;
+
+                const syncHandler = (isSynced: boolean) => {
+                    if (isSynced && !resolved) {
+                        logger.info('Received sync complete event from temp provider.');
+                        resolved = true;
+                        clearTimeout(timeout);
+                        if (tempProvider) tempProvider.off('sync', syncHandler);
+                        resolve();
+                    }
+                };
+
                 const timeout = setTimeout(() => {
                     if (!resolved) {
                         logger.warn('Clean sync timeout reached. Proceeding.');
                         resolved = true;
+                        if (tempProvider) tempProvider.off('sync', syncHandler);
                         resolve();
                     }
-                }, 8000);
-
-                tempDoc.on('update', () => {
-                    if (!resolved) {
-                        logger.info('Received cloud data chunk into tempDoc.');
-                        setTimeout(() => {
-                            if (!resolved) {
-                                clearTimeout(timeout);
-                                resolved = true;
-                                resolve();
-                            }
-                        }, 1000);
-                    }
-                });
+                }, 15000);
 
                 const providerConfig = {
                     firebaseApp: app,
@@ -343,8 +344,6 @@ class FirestoreSyncManager {
                     maxUpdatesThreshold: this.config.maxUpdatesThreshold
                 };
 
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                let tempProvider: any = null;
                 try {
                     if (isMock) {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -352,6 +351,7 @@ class FirestoreSyncManager {
                     } else {
                         tempProvider = new FireProvider(providerConfig);
                     }
+                    tempProvider.on('sync', syncHandler);
                 } catch (e) {
                     logger.error('Failed to connect temp provider:', e);
                     if (!resolved) {
@@ -363,8 +363,6 @@ class FirestoreSyncManager {
 
                 // Expose to outer scope for cleanup if it doesn't resolve inside
                 if (tempProvider) {
-                    // We just let it load. It will emit 'update' on tempDoc.
-                    // Cleanup is handled after Promise resolves.
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     (tempDoc as any)._tempProvider = tempProvider;
                 }
@@ -646,25 +644,27 @@ class FirestoreSyncManager {
             const remoteBlob = await new Promise<Uint8Array>((resolve, reject) => {
                 let resolved = false;
 
-                const timeout = setTimeout(() => {
-                    if (!resolved) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                let tempProvider: any;
+
+                const syncHandler = (isSynced: boolean) => {
+                    if (isSynced && !resolved) {
+                        logger.info('Received sync complete event from temp workspace provider.');
                         resolved = true;
-                        // Empty remote = new workspace, just resolve with current tempDoc state
+                        clearTimeout(timeout);
+                        if (tempProvider) tempProvider.off('sync', syncHandler);
                         resolve(Y.encodeStateAsUpdate(tempDoc));
                     }
-                }, 8000);
+                };
 
-                tempDoc.on('update', () => {
+                const timeout = setTimeout(() => {
                     if (!resolved) {
-                        setTimeout(() => {
-                            if (!resolved) {
-                                clearTimeout(timeout);
-                                resolved = true;
-                                resolve(Y.encodeStateAsUpdate(tempDoc));
-                            }
-                        }, 1000);
+                        logger.warn('Workspace sync timeout reached. Assuming empty or unreachable remote.');
+                        resolved = true;
+                        if (tempProvider) tempProvider.off('sync', syncHandler);
+                        resolve(Y.encodeStateAsUpdate(tempDoc));
                     }
-                });
+                }, 15000);
 
                 const providerConfig = {
                     firebaseApp: app || ({} as FirebaseApp),
@@ -675,14 +675,13 @@ class FirestoreSyncManager {
                 };
 
                 try {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    let tempProvider: any;
                     if (isMock) {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         tempProvider = new MockFireProvider(providerConfig as any);
                     } else {
                         tempProvider = new FireProvider(providerConfig);
                     }
+                    tempProvider.on('sync', syncHandler);
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     (tempDoc as any)._tempProvider = tempProvider;
                 } catch (e) {

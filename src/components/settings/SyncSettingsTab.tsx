@@ -44,6 +44,7 @@ import { DriveScannerService } from '../../lib/drive/DriveScannerService';
 import { useToastStore } from '../../store/useToastStore';
 import { getFirestoreSyncManager, FirestoreSyncManager } from '../../lib/sync/FirestoreSyncManager';
 import { useSyncStore } from '../../lib/sync/hooks/useSyncStore';
+import { CURRENT_SCHEMA_VERSION } from '../../store/yjs-provider';
 import type { WorkspaceMetadata } from '../../types/workspace';
 
 export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
@@ -346,6 +347,8 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                                 </div>
                                                 {ws.workspaceId === activeWorkspaceId ? (
                                                     <span className="text-xs text-success pr-2 font-medium">● Active</span>
+                                                ) : ws.schemaVersion > CURRENT_SCHEMA_VERSION ? (
+                                                    <span className="text-xs text-destructive pr-2 font-medium shrink-0">Update App to Connect</span>
                                                 ) : (
                                                     <Button
                                                         variant="outline"

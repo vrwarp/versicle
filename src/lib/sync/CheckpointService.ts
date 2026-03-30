@@ -95,7 +95,7 @@ export class CheckpointService {
       // 1. Wipe existing persistence
       await yjsPersistence.clearData();
 
-      // 2. Disconnect current persistence to release locks
+      // 2. Disconnect current persistence to close IDB connections and release locks
       await disconnectYjs();
 
       // 3. Create a temporary Doc/Persistence to write the snapshot to IDB
@@ -158,7 +158,7 @@ export class CheckpointService {
       // 1. Wipe existing persistence
       await yjsPersistence.clearData();
 
-      // 2. Disconnect current persistence to release locks
+      // 2. Disconnect current persistence to close IDB connections and release locks
       await disconnectYjs();
 
       // 3. Write remote state to IDB via temp Doc
