@@ -130,3 +130,7 @@
 ## 2026-03-28 - [LibraryView Empty State Debouncing]
 **Learning:** When a component uses both a rapid-firing state (e.g., `searchQuery`) and a debounced version of it (`debouncedSearchQuery`) to render a filtered list, conditional rendering blocks that depend on the list's length (like empty states or screen reader live regions) must refer to the *debounced* state. Using the rapid-firing state alongside the debounced list size causes inconsistent UI (e.g., showing 'No results for [rapid-query]' while the list is still frozen) and unnecessary intermediate renders.
 **Action:** Always map search-related conditional text and ARIA live regions directly to the debounced variable driving the list filter.
+
+## 2024-03-30 - [Optimize `useAllBooks` Fallback Matching]
+**Learning:** Found a performance bottleneck in Zustand selector overhead (`useAllBooks`). For books without an exact filename match in the `readingListEntries` store, it fell back to generating a fuzzy match key `generateMatchKey(book.title, book.author)` inside a `baseBooks.map` loop. Because `progressMap` updates on every page turn, this map loop executed frequently, re-running the expensive fallback string generation for all books, even though `readingListEntries` had not changed.
+**Action:** Always check if dependent stores (like `readingListEntries`) are referentially unchanged before executing costly lookups inside a mapping loop. Using a `useRef` cache and conditionally evaluating `rawReadingListEntry` only when necessary prevents O(N*M) string allocations on every page turn.

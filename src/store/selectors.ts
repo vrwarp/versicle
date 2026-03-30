@@ -240,22 +240,32 @@ export const useAllBooks = () => {
         const currentDeviceId = getDeviceId();
 
         // eslint-disable-next-line react-hooks/refs
+        const readingListUnchanged = lastPhase2DepsRef.current.readingListEntries === readingListEntries;
+
+        // eslint-disable-next-line react-hooks/refs
         const result = baseBooks.map(book => {
             const rawBookProgress = progressMap[book.id];
-            // Lookup by exact filename first
-            let rawReadingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
+            const prev = cache[book.id];
 
-            // Fallback: If missing, try matching by normalized title+author
-            if (!rawReadingListEntry && (book.title || book.author)) {
-                const bookKey = generateMatchKey(book.title || '', book.author || '');
+            // BOLT OPTIMIZATION: Skip expensive fallback matching (generateMatchKey) if reading list hasn't changed
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let rawReadingListEntry: any;
 
-                if (bookKey) {
-                    rawReadingListEntry = readingListMatchMap.get(bookKey);
+            if (prev && prev.base === book && readingListUnchanged) {
+                rawReadingListEntry = prev.rawReadingListEntry;
+            } else {
+                // Lookup by exact filename first
+                rawReadingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
+
+                // Fallback: If missing, try matching by normalized title+author
+                if (!rawReadingListEntry && (book.title || book.author)) {
+                    const bookKey = generateMatchKey(book.title || '', book.author || '');
+
+                    if (bookKey) {
+                        rawReadingListEntry = readingListMatchMap.get(bookKey);
+                    }
                 }
             }
-
-            // Check cache for reuse
-            const prev = cache[book.id];
 
             // Reuse if:
             // 1. Previous entry exists
