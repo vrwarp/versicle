@@ -334,22 +334,30 @@ export const useBook = (id: string | null) => {
     // Get reading list entry (with fallback)
     const sourceFilename = book?.sourceFilename;
 
+    // Memoize the bookKey calculation outside the selector so it isn't re-run
+    // on every irrelevant state update to useReadingListStore.
+    const bookKey = useMemo(() => {
+        if (sourceFilename) return null; // We'll just use sourceFilename
+        if (book?.title || book?.author) {
+            return generateMatchKey(book.title || '', book.author || '');
+        }
+        return null;
+    }, [sourceFilename, book?.title, book?.author]);
+
     // BOLT OPTIMIZATION: Combine sourceFilename and fallback lookups into a single selector.
     // This avoids subscribing to the entire `state.entries` object, preventing unnecessary
     // re-renders of the component whenever *any* reading list entry is updated.
+    // We also avoid O(N) string parsing inside the selector by pre-calculating the bookKey.
     const readingListEntry = useReadingListStore(state => {
         if (!state.entries) return undefined;
         if (sourceFilename && state.entries[sourceFilename]) {
             return state.entries[sourceFilename];
         }
-        if (book?.title || book?.author) {
-            const bookKey = generateMatchKey(book.title || '', book.author || '');
-            if (bookKey) {
-                for (const key in state.entries) {
-                    const entry = state.entries[key];
-                    if (generateMatchKey(entry.title, entry.author) === bookKey) {
-                        return entry;
-                    }
+        if (bookKey) {
+            for (const key in state.entries) {
+                const entry = state.entries[key];
+                if (generateMatchKey(entry.title, entry.author) === bookKey) {
+                    return entry;
                 }
             }
         }
