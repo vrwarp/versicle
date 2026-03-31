@@ -35,6 +35,11 @@ function splitLongSentence(text: string, maxLen: number): string[] {
         const clauseRegex = /[,;:—–]/g;
         let match;
         while ((match = clauseRegex.exec(currentText.substring(0, maxLen))) !== null) {
+            if (match[0].length === 0) {
+                clauseRegex.lastIndex++;
+                continue;
+            }
+
             splitIndex = match.index + 1; // Inclusive of punctuation
         }
 
