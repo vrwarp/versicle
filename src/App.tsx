@@ -85,10 +85,19 @@ function App() {
   const [swInitialized, setSwInitialized] = useState(false);
   const [swError, setSwError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('Initializing...');
-  const [migrationPending, setMigrationPending] = useState<{
+  const [migrationPending] = useState<{
     targetWorkspaceId: string;
     backupCheckpointId: number;
-  } | null>(null);
+  } | null>(() => {
+    const migrationState = MigrationStateService.getState();
+    if (migrationState?.status === 'AWAITING_CONFIRMATION') {
+      return {
+        targetWorkspaceId: migrationState.targetWorkspaceId || 'unknown',
+        backupCheckpointId: migrationState.backupCheckpointId || 0,
+      };
+    }
+    return null;
+  });
 
   const hydrateStaticMetadata = useLibraryStore(state => state.hydrateStaticMetadata);
 
@@ -154,11 +163,8 @@ function App() {
 
       if (migrationState.status === 'AWAITING_CONFIRMATION') {
         // Flow B, Step 6: Show confirmation modal, do NOT initialize sync
-        logger.info('Boot interceptor: AWAITING_CONFIRMATION detected, showing modal...');
-        setMigrationPending({
-          targetWorkspaceId: migrationState.targetWorkspaceId || 'unknown',
-          backupCheckpointId: migrationState.backupCheckpointId || 0,
-        });
+        // Handled during initial state setup for migrationPending
+        logger.info('Boot interceptor: AWAITING_CONFIRMATION detected, HALT sync init...');
         return; // HALT — do not initialize sync
       }
     }
