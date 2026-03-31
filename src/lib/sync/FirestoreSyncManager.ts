@@ -960,7 +960,7 @@ class FirestoreSyncManager {
                 this.currentUser = auth.currentUser;
                 return this.currentUser;
             }
-        } catch (e) {
+        } catch {
             // Ignore if Firebase isn't initialized yet
         }
 
