@@ -131,6 +131,7 @@ function App() {
   // Check for Firebase Auth Redirect Result on startup
   // ── Boot Interceptor: Migration State Machine ──
   useEffect(() => {
+    let isMounted = true;
     const migrationState = MigrationStateService.getState();
 
     if (migrationState) {
@@ -155,10 +156,15 @@ function App() {
       if (migrationState.status === 'AWAITING_CONFIRMATION') {
         // Flow B, Step 6: Show confirmation modal, do NOT initialize sync
         logger.info('Boot interceptor: AWAITING_CONFIRMATION detected, showing modal...');
-        setMigrationPending({
-          targetWorkspaceId: migrationState.targetWorkspaceId || 'unknown',
-          backupCheckpointId: migrationState.backupCheckpointId || 0,
-        });
+        // Defer state update to avoid cascading render warning
+        setTimeout(() => {
+          if (isMounted) {
+            setMigrationPending({
+              targetWorkspaceId: migrationState.targetWorkspaceId || 'unknown',
+              backupCheckpointId: migrationState.backupCheckpointId || 0,
+            });
+          }
+        }, 0);
         return; // HALT — do not initialize sync
       }
     }
@@ -190,6 +196,10 @@ function App() {
     // Standard Boot: Initialize Sync Manager
     const manager = getFirestoreSyncManager();
     manager.initialize();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Main Initialization (DB + Migration)
