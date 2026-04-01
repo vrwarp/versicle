@@ -44,6 +44,15 @@ export const SmartLinkDialog: React.FC<SmartLinkDialogProps> = ({ open, onOpenCh
         });
     }, [libraryBooks, readingListEntries]);
 
+    // Pre-compute lookups to prevent O(N * M) inside render loops
+    const unmappedEntriesMap = React.useMemo(() => {
+        return new Map(unmappedEntries.map(e => [e.filename, e]));
+    }, [unmappedEntries]);
+
+    const unmappedBooksMap = React.useMemo(() => {
+        return new Map(unmappedBooks.map(b => [b.bookId, b]));
+    }, [unmappedBooks]);
+
     useEffect(() => {
         if (!open) {
             // Reset state when closed
@@ -173,8 +182,8 @@ export const SmartLinkDialog: React.FC<SmartLinkDialogProps> = ({ open, onOpenCh
                     <div className="flex-1 overflow-auto">
                         <div className="space-y-3">
                             {mappings.map((mapping) => {
-                                const entry = unmappedEntries.find(e => e.filename === mapping.readingListFilename);
-                                const book = unmappedBooks.find(b => b.bookId === mapping.libraryBookId);
+                                const entry = unmappedEntriesMap.get(mapping.readingListFilename);
+                                const book = unmappedBooksMap.get(mapping.libraryBookId);
                                 if (!entry || !book) return null;
 
                                 return (
