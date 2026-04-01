@@ -99,3 +99,7 @@
 ## 2026-03-28 - Hidden Input ARIA Labels
 **Learning:** Added `aria-label` attributes to visually hidden `<input type="file">` elements that are triggered by other visible proxy buttons.
 **Action:** Always ensure that hidden file inputs have proper ARIA labels so they have an accessible name in the accessibility tree, even if they aren't visually rendered. However, do not add `aria-label` to elements with `display: none` (like Tailwind's `hidden` class) as they are completely removed from the accessibility tree, making the label ineffective.
+
+## 2026-04-01 - Consistent Keyboard Accessibility for Custom Buttons
+**Learning:** Custom interactive elements (like tabs or icon buttons) using native `<button>` tags without explicit focus styles can become invisible to keyboard users when navigating via Tab. Relying solely on hover states or generic browser outlines leads to an inconsistent and often inaccessible experience.
+**Action:** Always apply the standard design system focus ring pattern (`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`) to all custom interactive elements and native buttons to ensure clear, consistent visual feedback for keyboard navigation.
