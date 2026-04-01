@@ -96,7 +96,7 @@ export const DataRecoveryView: React.FC = () => {
                 <div className="flex space-x-2">
                     <Button onClick={loadData} disabled={status === 'loading'} size="sm" variant="outline">
                         <RefreshCw className={`h-4 w-4 mr-2 ${status === 'loading' ? 'animate-spin' : ''}`} />
-                        {status === 'success' ? 'Reload Data' : 'Load Data'}
+                        {status === 'loading' ? 'Loading...' : status === 'success' ? 'Reload Data' : 'Load Data'}
                     </Button>
                     <Button onClick={handleDownload} disabled={!rawData} size="sm">
                         <Download className="h-4 w-4 mr-2" />

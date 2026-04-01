@@ -155,6 +155,7 @@ function App() {
       if (migrationState.status === 'AWAITING_CONFIRMATION') {
         // Flow B, Step 6: Show confirmation modal, do NOT initialize sync
         logger.info('Boot interceptor: AWAITING_CONFIRMATION detected, showing modal...');
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setMigrationPending({
           targetWorkspaceId: migrationState.targetWorkspaceId || 'unknown',
           backupCheckpointId: migrationState.backupCheckpointId || 0,

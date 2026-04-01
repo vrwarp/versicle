@@ -99,3 +99,7 @@
 ## 2026-03-28 - Hidden Input ARIA Labels
 **Learning:** Added `aria-label` attributes to visually hidden `<input type="file">` elements that are triggered by other visible proxy buttons.
 **Action:** Always ensure that hidden file inputs have proper ARIA labels so they have an accessible name in the accessibility tree, even if they aren't visually rendered. However, do not add `aria-label` to elements with `display: none` (like Tailwind's `hidden` class) as they are completely removed from the accessibility tree, making the label ineffective.
+
+## 2024-04-01 - Fix Toast Button Focus Ring and Button Loading State
+**Learning:** Native `<button>` elements naturally miss out on the global Tailwind `focus-visible` ring utilities integrated into the shared `<Button>` component (`src/components/ui/Button.tsx`). Utilizing the shared `Button` with `variant="ghost" size="icon"` achieves the identical layout of an unstyled icon button while inherently gaining full keyboard focus accessibility.
+**Action:** Always prefer replacing native `<button>` elements with `<Button variant="ghost" size="icon">` when implementing small close/dismiss actions to guarantee consistent keyboard navigation focus states across the application.
