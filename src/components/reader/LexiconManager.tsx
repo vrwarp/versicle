@@ -274,7 +274,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                         role="tab"
                         aria-selected={scope === 'global'}
                         onClick={() => setScope('global')}
-                        className={`pb-1 px-2 ${scope === 'global' ? 'border-b-2 border-primary font-bold text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                        className={`pb-1 px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded ${scope === 'global' ? 'border-b-2 border-primary font-bold text-primary' : 'text-muted-foreground hover:text-foreground'}`}
                     >
                         Global
                     </button>
@@ -283,7 +283,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                             role="tab"
                             aria-selected={scope === 'book'}
                             onClick={() => setScope('book')}
-                            className={`pb-1 px-2 ${scope === 'book' ? 'border-b-2 border-primary font-bold text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                            className={`pb-1 px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded ${scope === 'book' ? 'border-b-2 border-primary font-bold text-primary' : 'text-muted-foreground hover:text-foreground'}`}
                         >
                             This Book
                         </button>
@@ -320,7 +320,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                     aria-pressed={biblePreference === 'default'}
                                     data-testid="lexicon-pref-default"
                                     onClick={() => handleBiblePreferenceChange('default')}
-                                    className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'default' ? 'bg-background shadow-sm font-medium' : 'hover:bg-background/50 text-muted-foreground'}`}
+                                    className={`px-3 py-1 text-xs rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${biblePreference === 'default' ? 'bg-background shadow-sm font-medium' : 'hover:bg-background/50 text-muted-foreground'}`}
                                 >
                                     Default
                                 </button>
@@ -329,7 +329,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                     aria-pressed={biblePreference === 'on'}
                                     data-testid="lexicon-pref-on"
                                     onClick={() => handleBiblePreferenceChange('on')}
-                                    className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'on' ? 'bg-background shadow-sm font-medium text-green-600' : 'hover:bg-background/50 text-muted-foreground'}`}
+                                    className={`px-3 py-1 text-xs rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${biblePreference === 'on' ? 'bg-background shadow-sm font-medium text-green-600' : 'hover:bg-background/50 text-muted-foreground'}`}
                                 >
                                     On
                                 </button>
@@ -338,7 +338,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                     aria-pressed={biblePreference === 'off'}
                                     data-testid="lexicon-pref-off"
                                     onClick={() => handleBiblePreferenceChange('off')}
-                                    className={`px-3 py-1 text-xs rounded transition-colors ${biblePreference === 'off' ? 'bg-background shadow-sm font-medium text-destructive' : 'hover:bg-background/50 text-muted-foreground'}`}
+                                    className={`px-3 py-1 text-xs rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${biblePreference === 'off' ? 'bg-background shadow-sm font-medium text-destructive' : 'hover:bg-background/50 text-muted-foreground'}`}
                                 >
                                     Off
                                 </button>
@@ -402,8 +402,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                 )}
                                             </div>
                                             <div className="flex gap-2">
-                                                <button aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-500/10 rounded"><Save size={18} /></button>
-                                                <button aria-label="Cancel editing" data-testid="lexicon-cancel-rule-btn" onClick={() => setEditingRule(null)} className="p-1 text-destructive hover:bg-destructive/10 rounded"><X size={18} /></button>
+                                                <button aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-500/10 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Save size={18} /></button>
+                                                <button aria-label="Cancel editing" data-testid="lexicon-cancel-rule-btn" onClick={() => setEditingRule(null)} className="p-1 text-destructive hover:bg-destructive/10 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><X size={18} /></button>
                                             </div>
                                         </div>
                                     </div>
@@ -512,8 +512,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                 )}
                             </div>
                             <div className="flex gap-2">
-                                <button aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-500/10 rounded"><Save size={18} /></button>
-                                <button aria-label="Cancel adding" data-testid="lexicon-cancel-rule-btn" onClick={() => { setIsAdding(false); setEditingRule(null); }} className="p-1 text-destructive hover:bg-destructive/10 rounded"><X size={18} /></button>
+                                <button aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-500/10 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Save size={18} /></button>
+                                <button aria-label="Cancel adding" data-testid="lexicon-cancel-rule-btn" onClick={() => { setIsAdding(false); setEditingRule(null); }} className="p-1 text-destructive hover:bg-destructive/10 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><X size={18} /></button>
                             </div>
                         </div>
                     </div>
@@ -599,7 +599,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                                 setIsAdding(false);
                                                             }
                                                         }}
-                                                        className="font-mono font-semibold text-primary hover:underline truncate text-left"
+                                                        className="font-mono font-semibold text-primary hover:underline truncate text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
                                                         title="Click to edit rule"
                                                     >
                                                         {item.rule.original} &rarr; {item.rule.replacement}
