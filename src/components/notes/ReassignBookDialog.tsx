@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { ScrollArea } from '../ui/ScrollArea';
 import { useAllBooks } from '../../store/selectors';
+import { useDebounce } from '../../hooks/useDebounce';
 
 interface ReassignBookDialogProps {
     isOpen: boolean;
@@ -20,6 +21,7 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
     const books = useAllBooks();
     const [selectedBookId, setSelectedBookId] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState('');
+    const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
     useEffect(() => {
         if (isOpen) {
@@ -32,12 +34,12 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
     const filteredBooks = useMemo(() => {
         return books
             .filter((book) => {
-                const titleMatch = (book.title || 'Untitled').toLowerCase().includes(searchQuery.toLowerCase());
-                const authorMatch = (book.author || '').toLowerCase().includes(searchQuery.toLowerCase());
+                const titleMatch = (book.title || 'Untitled').toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+                const authorMatch = (book.author || '').toLowerCase().includes(debouncedSearchQuery.toLowerCase());
                 return titleMatch || authorMatch;
             })
             .sort((a, b) => (a.title || 'Untitled').localeCompare(b.title || 'Untitled'));
-    }, [books, searchQuery]);
+    }, [books, debouncedSearchQuery]);
 
     const handleConfirm = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -82,11 +84,19 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
                 </div>
+                {/* Live region for screen readers */}
+                <div role="status" aria-live="polite" className="sr-only">
+                    {debouncedSearchQuery ? (
+                        filteredBooks.length === 0
+                            ? 'No books found'
+                            : `${filteredBooks.length} books found`
+                    ) : ''}
+                </div>
                 <ScrollArea className="h-[200px] border rounded-md p-2">
                     <div className="flex flex-col gap-1">
                         {filteredBooks.length === 0 ? (
                             <p className="text-sm text-muted-foreground text-center py-4">
-                                No books found matching "{searchQuery}"
+                                No books found matching "{debouncedSearchQuery}"
                             </p>
                         ) : (
                             filteredBooks.map((book) => (
