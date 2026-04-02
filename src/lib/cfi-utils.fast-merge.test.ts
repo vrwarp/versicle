@@ -51,8 +51,13 @@ describe('tryFastMergeCfi', () => {
         it('merges Point + Point (common parent)', () => {
             const left = `epubcfi(${parent}/1:0)`;
             const right = `epubcfi(${parent}/1:10)`;
+            const fastMerged = tryFastMergeCfi(left, right);
+
+            // Explicitly check the string output to ensure fast merge built it directly
+            expect(fastMerged).toBe(`epubcfi(${parent}/1,:0,:10)`);
+
             const expected = mergeCfiSlow(left, right);
-            assertCfiEqual(tryFastMergeCfi(left, right), expected);
+            assertCfiEqual(fastMerged, expected);
         });
     });
 
