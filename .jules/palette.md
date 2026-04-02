@@ -103,3 +103,7 @@
 ## 2026-04-01 - Consistent Keyboard Accessibility for Custom Buttons
 **Learning:** Custom interactive elements (like tabs or icon buttons) using native `<button>` tags without explicit focus styles can become invisible to keyboard users when navigating via Tab. Relying solely on hover states or generic browser outlines leads to an inconsistent and often inaccessible experience.
 **Action:** Always apply the standard design system focus ring pattern (`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`) to all custom interactive elements and native buttons to ensure clear, consistent visual feedback for keyboard navigation.
+
+## 2026-04-02 - WCAG 2.5.3 Label in Name & Native Button Consistency
+**Learning:** Adding an `aria-label` to a button that differs from its visible text violates WCAG 2.5.3 (Label in Name), breaking the experience for voice control users. Additionally, native HTML `<button>` elements lacking explicit focus classes (like `focus-visible:ring-2`) become invisible to keyboard users.
+**Action:** Rely on visible text for accessible names when descriptive, and never use `aria-label`s that conflict with visible text. Always replace native `<button>` tags with the design system's `<Button>` component to guarantee consistent focus rings and styling.

@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../../lib/tts/TextSegmenter';
 import { X, Plus, RotateCcw, Download, Upload } from 'lucide-react';
 import { SimpleListCSV } from '../../lib/tts/CsvUtils';
+import { Button } from '../ui/Button';
 
 interface StringListManagerProps {
     /** Title of the list section. */
@@ -153,14 +154,15 @@ const StringListManager: React.FC<StringListManagerProps> = ({
                             placeholder={placeholder}
                             className={`flex-1 text-xs p-1 border rounded bg-background text-foreground ${error ? 'border-red-500' : 'border-border'}`}
                         />
-                        <button
+                        <Button
+                            size="icon"
                             onClick={handleAdd}
                             disabled={!newItem.trim()}
-                            className="p-1 bg-primary text-background rounded hover:opacity-90 disabled:opacity-50"
+                            className="h-7 w-7"
                             aria-label={`Add to ${title}`}
                         >
                             <Plus className="w-4 h-4" />
-                        </button>
+                        </Button>
                     </div>
                     {error && <span className="text-[10px] text-red-500">{error}</span>}
                 </div>
@@ -172,44 +174,52 @@ const StringListManager: React.FC<StringListManagerProps> = ({
                     {items.map((item) => (
                         <div key={item} className="flex items-center gap-1 bg-background border border-border px-2 py-1 rounded text-xs">
                             <span>{item}</span>
-                            <button
+                            <Button
+                                variant="ghost"
+                                size="icon"
                                 onClick={() => handleRemove(item)}
-                                className="text-muted-foreground hover:text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+                                className="h-4 w-4 text-muted-foreground hover:text-red-500 hover:bg-transparent"
                                 aria-label={`Remove ${item}`}
                             >
                                 <X className="w-3 h-3" />
-                            </button>
+                            </Button>
                         </div>
                     ))}
                 </div>
             </div>
 
             <div className="flex justify-between items-center">
-                <button
+                <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={handleReset}
-                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+                    className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
                 >
-                    <RotateCcw className="w-3 h-3" />
+                    <RotateCcw className="w-3 h-3 mr-1" />
                     Reset
-                </button>
+                </Button>
 
                 <div className="flex gap-2">
-                     <button
+                     <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={handleDownload}
-                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+                        className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
                         title="Download CSV"
                     >
-                        <Download className="w-3 h-3" />
+                        <Download className="w-3 h-3 mr-1" />
                         Export
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={handleUploadClick}
-                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+                        className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
                         title="Upload CSV"
                     >
-                        <Upload className="w-3 h-3" />
+                        <Upload className="w-3 h-3 mr-1" />
                         Import
-                    </button>
+                    </Button>
                     <input
                         type="file"
                         accept=".csv"
