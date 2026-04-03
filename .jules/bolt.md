@@ -133,3 +133,7 @@
 ## 2026-03-31 - [ReassignBookDialog Empty State Debouncing]
 **Learning:** When a component uses both a rapid-firing state (e.g., `searchQuery`) and a debounced version of it (`debouncedSearchQuery`) to render a filtered list, conditional rendering blocks that depend on the list's length (like empty states or screen reader live regions) must refer to the *debounced* state. Using the rapid-firing state alongside the debounced list size causes inconsistent UI (e.g., showing 'No results for [rapid-query]' while the list is still frozen) and unnecessary intermediate renders.
 **Action:** Always map search-related conditional text and ARIA live regions directly to the debounced variable driving the list filter.
+
+## 2026-04-03 - [Substring Allocation in Regex Execution Loop]
+**Learning:** Passing `string.substring(...)` directly into `regex.exec()` within a `while` loop condition forces the JavaScript engine to allocate a new substring object in memory on *every single iteration* of the loop, resulting in unnecessary memory overhead and GC pressure.
+**Action:** Always hoist the `substring()` call outside of the `while` loop condition when the boundary constraints are constant.
