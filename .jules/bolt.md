@@ -133,3 +133,6 @@
 ## 2026-03-31 - [ReassignBookDialog Empty State Debouncing]
 **Learning:** When a component uses both a rapid-firing state (e.g., `searchQuery`) and a debounced version of it (`debouncedSearchQuery`) to render a filtered list, conditional rendering blocks that depend on the list's length (like empty states or screen reader live regions) must refer to the *debounced* state. Using the rapid-firing state alongside the debounced list size causes inconsistent UI (e.g., showing 'No results for [rapid-query]' while the list is still frozen) and unnecessary intermediate renders.
 **Action:** Always map search-related conditional text and ARIA live regions directly to the debounced variable driving the list filter.
+## 2026-04-03 - [O(N*M) Loop Fixes in React Components]
+**Learning:** When trying to fix O(N*M) array iterations within React components using Sets or Maps for O(1) lookups, ensure that the Map/Set itself is properly pre-computed using `useMemo` and that `.has()` is used correctly.
+**Action:** Always verify the structure of pre-computed lookups. For example, replacing `.some()` over arrays with `.has()` on Maps or Sets created right above the loop to guarantee O(N+M) complexity.
