@@ -155,7 +155,7 @@ function runMigrationsImpl(): void {
  * reads and modifies stale state, which can lead to overwriting the incoming remote map.
  */
 export function runMigrations(): void {
-    setTimeout(runMigrationsImpl, 0);
+    queueMicrotask(runMigrationsImpl);
 }
 
 // ─── Shared Middleware Options ───────────────────────────────────────────────
