@@ -133,3 +133,7 @@
 ## 2026-03-31 - [ReassignBookDialog Empty State Debouncing]
 **Learning:** When a component uses both a rapid-firing state (e.g., `searchQuery`) and a debounced version of it (`debouncedSearchQuery`) to render a filtered list, conditional rendering blocks that depend on the list's length (like empty states or screen reader live regions) must refer to the *debounced* state. Using the rapid-firing state alongside the debounced list size causes inconsistent UI (e.g., showing 'No results for [rapid-query]' while the list is still frozen) and unnecessary intermediate renders.
 **Action:** Always map search-related conditional text and ARIA live regions directly to the debounced variable driving the list filter.
+
+## 2026-04-03 - [Math.max Map Allocation]
+**Learning:** When finding the maximum value in a collection that has just been sorted, using `Math.max(...array.map())` causes an unnecessary `O(N)` array allocation and a full iteration, plus risk of stack overflow on large arrays.
+**Action:** Use the last element of the already sorted array (e.g., `sortedArray[sortedArray.length - 1]`) to find the maximum in `O(1)` time without allocating memory.
