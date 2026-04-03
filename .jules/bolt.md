@@ -133,3 +133,6 @@
 ## 2026-03-31 - [ReassignBookDialog Empty State Debouncing]
 **Learning:** When a component uses both a rapid-firing state (e.g., `searchQuery`) and a debounced version of it (`debouncedSearchQuery`) to render a filtered list, conditional rendering blocks that depend on the list's length (like empty states or screen reader live regions) must refer to the *debounced* state. Using the rapid-firing state alongside the debounced list size causes inconsistent UI (e.g., showing 'No results for [rapid-query]' while the list is still frozen) and unnecessary intermediate renders.
 **Action:** Always map search-related conditional text and ARIA live regions directly to the debounced variable driving the list filter.
+## 2026-04-03 - [ReassignBookDialog VDOM caching]
+**Learning:** React re-renders `filteredBooks.map(...)` on every keystroke when inside the main render block of `ReassignBookDialog.tsx`, causing O(N) array allocation overhead before the debounce triggers.
+**Action:** Always wrap array `.map()` calls returning JSX inside `useMemo` when working with frequently changing local state (like input queries) to bypass expensive VDOM generation during rapid events.
