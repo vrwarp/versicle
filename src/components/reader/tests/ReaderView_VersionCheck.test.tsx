@@ -77,13 +77,25 @@ vi.mock('../../../store/useUIStore', () => ({
     })
 }));
 vi.mock('../../../store/useAnnotationStore', () => ({
-    useAnnotationStore: () => ({
-        annotations: [],
-        loadAnnotations: vi.fn(),
-        showPopover: vi.fn(),
-        hidePopover: vi.fn(),
-        popover: { visible: false }
-    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    useAnnotationStore: (selector: any) => {
+        if (selector) {
+            return selector({
+                annotations: {},
+                loadAnnotations: vi.fn(),
+                showPopover: vi.fn(),
+                hidePopover: vi.fn(),
+                popover: { visible: false }
+            });
+        }
+        return {
+            annotations: {},
+            loadAnnotations: vi.fn(),
+            showPopover: vi.fn(),
+            hidePopover: vi.fn(),
+            popover: { visible: false }
+        };
+    }
 }));
 vi.mock('../../../store/useGenAIStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

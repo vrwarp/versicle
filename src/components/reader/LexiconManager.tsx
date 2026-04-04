@@ -300,7 +300,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                     <Button data-testid="lexicon-import-btn" asChild variant="ghost" size="sm" title="Import from CSV">
                         <label className="cursor-pointer flex items-center">
                             <Upload size={14} className="mr-1" /> Import
-                            <input data-testid="lexicon-import-input" ref={fileInputRef} type="file" className="hidden" accept=".csv" onChange={handleImport} aria-label="Import lexicon from CSV" />
+                            <input data-testid="lexicon-import-input" ref={fileInputRef} type="file" className="hidden" accept=".csv" onChange={handleImport} />
                         </label>
                     </Button>
                 </div>
@@ -402,8 +402,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                 )}
                                             </div>
                                             <div className="flex gap-2">
-                                                <button aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-500/10 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Save size={18} /></button>
-                                                <button aria-label="Cancel editing" data-testid="lexicon-cancel-rule-btn" onClick={() => setEditingRule(null)} className="p-1 text-destructive hover:bg-destructive/10 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><X size={18} /></button>
+                                                <Button variant="ghost" size="icon" aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="h-7 w-7 text-green-600 hover:bg-green-500/10 hover:text-green-600"><Save size={18} /></Button>
+                                                <Button variant="ghost" size="icon" aria-label="Cancel editing" data-testid="lexicon-cancel-rule-btn" onClick={() => setEditingRule(null)} className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"><X size={18} /></Button>
                                             </div>
                                         </div>
                                     </div>
@@ -424,27 +424,31 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                     </div>
                                     <div className="flex gap-2 items-center">
                                         <div className="flex flex-col mr-2">
-                                            <button
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
                                                 aria-label="Move rule up"
                                                 data-testid={`lexicon-move-up-${index}`}
                                                 onClick={() => moveRule(index, 'up')}
                                                 disabled={index === 0}
-                                                className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+                                                className="h-5 w-5 text-muted-foreground hover:text-foreground"
                                             >
                                                 <ArrowUp size={12} />
-                                            </button>
-                                            <button
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
                                                 aria-label="Move rule down"
                                                 data-testid={`lexicon-move-down-${index}`}
                                                 onClick={() => moveRule(index, 'down')}
                                                 disabled={index === rules.length - 1}
-                                                className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
+                                                className="h-5 w-5 text-muted-foreground hover:text-foreground"
                                             >
                                                 <ArrowDown size={12} />
-                                            </button>
+                                            </Button>
                                         </div>
-                                        <button aria-label="Edit rule" onClick={() => setEditingRule({ ...rule, matchType: rule.matchType || (rule.isRegex ? 'regex' : 'ignore_case') })} className="text-xs text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded">Edit</button>
-                                        <button aria-label="Delete rule" onClick={() => handleDelete(rule.id)} className="text-destructive hover:bg-destructive/10 p-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Trash2 size={16} /></button>
+                                        <Button variant="ghost" size="sm" aria-label="Edit rule" onClick={() => setEditingRule({ ...rule, matchType: rule.matchType || (rule.isRegex ? 'regex' : 'ignore_case') })} className="h-7 px-2 text-xs text-primary hover:text-primary hover:bg-primary/10">Edit</Button>
+                                        <Button variant="ghost" size="icon" aria-label="Delete rule" onClick={() => handleDelete(rule.id)} className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"><Trash2 size={16} /></Button>
                                     </div>
                                 </>
                             )}
@@ -512,8 +516,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                 )}
                             </div>
                             <div className="flex gap-2">
-                                <button aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="p-1 text-green-600 hover:bg-green-500/10 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><Save size={18} /></button>
-                                <button aria-label="Cancel adding" data-testid="lexicon-cancel-rule-btn" onClick={() => { setIsAdding(false); setEditingRule(null); }} className="p-1 text-destructive hover:bg-destructive/10 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"><X size={18} /></button>
+                                <Button variant="ghost" size="icon" aria-label="Save rule" data-testid="lexicon-save-rule-btn" onClick={handleSave} className="h-7 w-7 text-green-600 hover:bg-green-500/10 hover:text-green-600"><Save size={18} /></Button>
+                                <Button variant="ghost" size="icon" aria-label="Cancel adding" data-testid="lexicon-cancel-rule-btn" onClick={() => { setIsAdding(false); setEditingRule(null); }} className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"><X size={18} /></Button>
                             </div>
                         </div>
                     </div>

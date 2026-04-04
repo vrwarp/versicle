@@ -50,6 +50,23 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
         }
     };
 
+    // OPTIMIZATION: Memoize rendered VDOM items to prevent O(N) allocation on every keystroke in the search bar.
+    const renderedBooks = useMemo(() => {
+        return filteredBooks.map((book) => (
+            <Button
+                key={book.id}
+                variant={selectedBookId === book.id ? "secondary" : "ghost"}
+                className="w-full h-auto font-normal justify-start text-left flex-col items-start py-2 px-3"
+                onClick={() => setSelectedBookId(book.id)}
+            >
+                <span className="font-medium line-clamp-1">{book.title || 'Untitled'}</span>
+                {book.author && (
+                    <span className="text-xs text-muted-foreground line-clamp-1">{book.author}</span>
+                )}
+            </Button>
+        ));
+    }, [filteredBooks, selectedBookId]);
+
     return (
         <Dialog
             isOpen={isOpen}
@@ -92,19 +109,7 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
                                 No books found matching "{debouncedSearchQuery}"
                             </p>
                         ) : (
-                            filteredBooks.map((book) => (
-                                <Button
-                                    key={book.id}
-                                    variant={selectedBookId === book.id ? "secondary" : "ghost"}
-                                    className="w-full h-auto font-normal justify-start text-left flex-col items-start py-2 px-3"
-                                    onClick={() => setSelectedBookId(book.id)}
-                                >
-                                    <span className="font-medium line-clamp-1">{book.title || 'Untitled'}</span>
-                                    {book.author && (
-                                        <span className="text-xs text-muted-foreground line-clamp-1">{book.author}</span>
-                                    )}
-                                </Button>
-                            ))
+                            renderedBooks
                         )}
                     </div>
                 </ScrollArea>
