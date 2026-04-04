@@ -46,6 +46,22 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
     const currentBookId = useReaderUIStore(state => state.currentBookId);
     const sections = useContentAnalysisStore(state => state.sections);
 
+    // OPTIMIZATION: Pre-compute table adaptations for the current book to O(1) map.
+    // This prevents an O(N_sections * M_adaptations) nested loop on every render of the table images array.
+    const tableAdaptationsMap = React.useMemo(() => {
+        const map = new Map<string, string>();
+        if (!currentBookId) return map;
+        const prefix = `${currentBookId}/`;
+        for (const [key, section] of Object.entries(sections)) {
+            if (key.startsWith(prefix) && section.tableAdaptations) {
+                for (const adaptation of section.tableAdaptations) {
+                    map.set(adaptation.rootCfi, adaptation.text);
+                }
+            }
+        }
+        return map;
+    }, [currentBookId, sections]);
+
     // Helper to clear URLs
     const clearUrls = () => {
         Object.values(generatedUrls.current).forEach(url => URL.revokeObjectURL(url));
@@ -357,19 +373,8 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                 {tableImages.map((img) => {
                                     if (!imageUrls[img.id]) return null;
 
-                                    // Find matching table adaptation if any
-                                    let adaptationText = '';
-                                    if (currentBookId) {
-                                        for (const [key, section] of Object.entries(sections)) {
-                                            if (key.startsWith(`${currentBookId}/`) && section.tableAdaptations) {
-                                                const match = section.tableAdaptations.find(a => a.rootCfi === img.cfi);
-                                                if (match) {
-                                                    adaptationText = match.text;
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    }
+                                    // Fetch pre-computed adaptation text in O(1)
+                                    const adaptationText = tableAdaptationsMap.get(img.cfi) || '';
 
                                     return (
                                         <div key={img.id} className="snap-start shrink-0 w-32 flex flex-col gap-1">
