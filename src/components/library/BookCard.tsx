@@ -66,6 +66,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
+      if (e.target !== e.currentTarget) return;
       e.preventDefault();
       handleCardClick();
     }

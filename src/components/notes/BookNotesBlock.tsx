@@ -49,6 +49,7 @@ export const BookNotesBlock: React.FC<BookNotesBlockProps> = ({ group, onNavigat
                 onClick={handleCoverClick}
                 onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
+                        if (e.target !== e.currentTarget) return;
                         e.preventDefault();
                         handleCoverClick(e);
                     }
