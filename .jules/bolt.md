@@ -134,6 +134,9 @@
 **Learning:** When a component uses both a rapid-firing state (e.g., `searchQuery`) and a debounced version of it (`debouncedSearchQuery`) to render a filtered list, conditional rendering blocks that depend on the list's length (like empty states or screen reader live regions) must refer to the *debounced* state. Using the rapid-firing state alongside the debounced list size causes inconsistent UI (e.g., showing 'No results for [rapid-query]' while the list is still frozen) and unnecessary intermediate renders.
 **Action:** Always map search-related conditional text and ARIA live regions directly to the debounced variable driving the list filter.
 
+## 2026-04-03 - [Substring Allocation in Regex Execution Loop]
+**Learning:** Passing `string.substring(...)` directly into `regex.exec()` within a `while` loop condition forces the JavaScript engine to allocate a new substring object in memory on *every single iteration* of the loop, resulting in unnecessary memory overhead and GC pressure.
+**Action:** Always hoist the `substring()` call outside of the `while` loop condition when the boundary constraints are constant.
 ## 2026-04-02 - [Eliminating O(N*M) loop in React Map]
 **Learning:** In `ContentAnalysisLegend.tsx`, rendering an array of table images using `.map()` contained an internal `O(N)` scan (`Object.entries()`) and an array `.find()` to locate a corresponding adaptation text. This created an `O(N * M)` search operation evaluated on every render loop for every image, severely degrading UI responsiveness.
 **Action:** When a React component needs to map over a list and join data from another object or collection, extract the secondary lookup into a `useMemo` block that constructs an `O(1)` access structure (like a `Map` or `Set`). Then use `.get()` within the `.map()` loop instead of performing nested array/object iterations.
