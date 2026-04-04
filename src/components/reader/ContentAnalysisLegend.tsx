@@ -286,6 +286,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                 <button
                     onClick={() => setIsExpanded(!isExpanded)}
                     className="flex items-center gap-1 font-semibold hover:text-primary"
+                    aria-expanded={isExpanded}
                 >
                     {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     GenAI Debug Panel
