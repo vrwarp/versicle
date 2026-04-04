@@ -648,7 +648,7 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **`useDeviceStore` (Sync Mesh)**:
     *   **Strategy**: Maintains a Yjs Map of active devices in the mesh.
     *   **Logic**:
-        *   **User Agent Parsing**: Uses `UAParser` to automatically generate human-readable device names (e.g., "Chrome on Windows") upon registration.
+        *   **User Agent Parsing**: Uses `ua-parser-js` (`UAParser`) to automatically generate human-readable device names (e.g., "Chrome on Windows") upon registration.
         *   **Heartbeat Throttling**: Updates the `lastActive` timestamp with a 5-minute throttle (`HEARTBEAT_THROTTLE_MS`) to prevent excessive CRDT updates while maintaining online status visibility.
     *   **Why**: Enables "Send to Device" features and provides visibility into the sync network.
 *   **`useReaderStore`**: (Conceptual Facade) Aggregates ephemeral UI state (`useReaderUIStore`) and persistent settings (`usePreferencesStore`) for easier component consumption.
