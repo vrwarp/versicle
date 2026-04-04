@@ -291,6 +291,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         onClick={onClick}
         onKeyDown={(e) => {
           if (onClick && (e.key === 'Enter' || e.key === ' ')) {
+            if (e.target !== e.currentTarget) return;
             e.preventDefault();
             onClick();
           }
@@ -381,6 +382,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
       >
         <div className="flex items-center gap-3 flex-1 min-w-0" onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
+            if (e.target !== e.currentTarget) return;
             e.preventDefault();
             if (onClick) onClick();
           }
@@ -443,6 +445,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         onClick={handleTogglePlay}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
+            if (e.target !== e.currentTarget) return;
             e.preventDefault();
             handleTogglePlay(e as unknown as React.MouseEvent);
           }

@@ -80,8 +80,8 @@ export const SmartLinkDialog: React.FC<SmartLinkDialogProps> = ({ open, onOpenCh
 
                 // Filter mappings to ensure they are valid
                 const validMappings = generatedMappings.filter(m => {
-                    const entryExists = unmappedEntries.some(e => e.filename === m.readingListFilename);
-                    const bookExists = unmappedBooks.some(b => b.bookId === m.libraryBookId);
+                    const entryExists = unmappedEntriesMap.has(m.readingListFilename);
+                    const bookExists = unmappedBooksMap.has(m.libraryBookId);
                     return entryExists && bookExists;
                 });
 

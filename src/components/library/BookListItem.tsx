@@ -87,6 +87,7 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
                 onClick={handleOpen}
                 onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
+                        if (e.target !== e.currentTarget) return;
                         e.preventDefault();
                         handleOpen();
                     }

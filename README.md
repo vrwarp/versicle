@@ -132,7 +132,7 @@ npm run build
 #### Unit Tests (Vitest)
 ```bash
 # Run all tests
-npm run test
+vitest run
 
 # Run specific test file
 npx vitest src/lib/ingestion.test.ts
