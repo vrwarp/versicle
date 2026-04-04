@@ -231,12 +231,9 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         // Use Store state first (synchronous check to avoid race conditions with recent adds)
         const books = useBookStore.getState().books;
         let existingId: string | undefined;
-        for (const key in books) {
-          if (!Object.prototype.hasOwnProperty.call(books, key)) continue;
-          if (books[key].sourceFilename === file.name) {
-            existingId = books[key].bookId;
-            break;
-          }
+        const matchingBook = Object.values(books).find(b => b.sourceFilename === file.name);
+        if (matchingBook) {
+          existingId = matchingBook.bookId;
         }
 
         // If not found in store (e.g. not fully synced?), try DB as backup
@@ -342,17 +339,14 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           // Note: We use `get().staticMetadata` inside the loop to ensure we read the latest state
           // to avoid race conditions if rapid sequential imports happen.
           const staticMeta = get().staticMetadata;
-          let ghostMatch: UserInventoryItem | undefined;
-          for (const key in books) {
-            if (!Object.prototype.hasOwnProperty.call(books, key)) continue;
-            const b = books[key];
+          const metaTitleTrimmed = meta.title.trim();
+          const metaAuthorTrimmed = meta.author.trim();
+
+          const ghostMatch = Object.values(books).find(b => {
             const isGhost = !staticMeta[b.bookId];
-            const isMatch = b.title.trim() === meta.title.trim() && b.author.trim() === meta.author.trim();
-            if (isGhost && isMatch) {
-              ghostMatch = b;
-              break;
-            }
-          }
+            const isMatch = b.title.trim() === metaTitleTrimmed && b.author.trim() === metaAuthorTrimmed;
+            return isGhost && isMatch;
+          });
 
           if (ghostMatch) {
             logger.info(`Found Ghost Book match by metadata for file "${file.name}": "${ghostMatch.title}" (${ghostMatch.bookId}). Linking binary file to existing Yjs record...`);
@@ -578,8 +572,13 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         set((state) => {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { [id]: _removedMeta, ...remainingMeta } = state.staticMetadata;
+
+          const nextOffloadedBookIds = new Set(state.offloadedBookIds);
+          nextOffloadedBookIds.delete(id);
+
           return {
-            staticMetadata: remainingMeta
+            staticMetadata: remainingMeta,
+            offloadedBookIds: nextOffloadedBookIds
           };
         });
 
