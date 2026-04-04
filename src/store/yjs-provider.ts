@@ -153,9 +153,12 @@ function runMigrationsImpl(): void {
  * Defers the execution of migrations to ensure zustand-middleware-yjs has fully processed
  * the inbound snapshot into the local state via its microtask queue. Otherwise, migration logic
  * reads and modifies stale state, which can lead to overwriting the incoming remote map.
+ *
+ * We use nested queueMicrotask instead of setTimeout to ensure migrations run immediately
+ * after the state update microtask but before any macrotasks (like React renders) can interleave.
  */
 export function runMigrations(): void {
-    queueMicrotask(runMigrationsImpl);
+    queueMicrotask(() => queueMicrotask(runMigrationsImpl));
 }
 
 // ─── Shared Middleware Options ───────────────────────────────────────────────

@@ -16,6 +16,7 @@ describe('Yjs Provider - runMigrations race condition', () => {
 
         runMigrations();
 
+        // Should be queued twice to jump behind zustand-middleware-yjs's microtask
         expect(queueMicrotaskSpy).toHaveBeenCalled();
         expect(setTimeoutSpy).not.toHaveBeenCalledWith(expect.any(Function), 0);
     });
