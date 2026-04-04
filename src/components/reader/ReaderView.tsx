@@ -146,16 +146,28 @@ export const ReaderView: React.FC = () => {
     const isDebugModeEnabled = useGenAIStore(state => state.isDebugModeEnabled);
 
     const {
-        annotations,
         loadAnnotations,
         showPopover,
         hidePopover
 } = useAnnotationStore(useShallow(state => ({
-        annotations: state.annotations,
         loadAnnotations: state.loadAnnotations,
         showPopover: state.showPopover,
         hidePopover: state.hidePopover
     })));
+
+    // BOLT OPTIMIZATION: Fine-grained selector for annotations
+    // Only re-render when annotations for THIS specific book change, not when any annotation in the library changes.
+    const annotationList = useAnnotationStore(useShallow(state => {
+        const list = [];
+        for (const key in state.annotations) {
+            if (Object.prototype.hasOwnProperty.call(state.annotations, key)) {
+                if (state.annotations[key].bookId === bookId) {
+                    list.push(state.annotations[key]);
+                }
+            }
+        }
+        return list;
+    }));
 
     const [historyTick, setHistoryTick] = useState(0);
 
@@ -571,7 +583,6 @@ export const ReaderView: React.FC = () => {
 
     useEffect(() => {
         if (rendition && isRenditionReady) {
-const annotationList = Object.values(annotations).filter(a => a.bookId === bookId);
             const currentIds = new Set(annotationList.map(a => a.id));
 
             // 1. Remove deleted annotations (Highlights and Markers)
@@ -668,7 +679,7 @@ const annotationList = Object.values(annotations).filter(a => a.bookId === bookI
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (window as any).__reader_added_annotations_count = addedAnnotations.current.size;
         }
-    }, [annotations, isRenditionReady, rendition, showPopover, bookId]);
+    }, [annotationList, isRenditionReady, rendition, showPopover, bookId]);
 
     // Handle TTS Errors
     const showToast = useToastStore(state => state.showToast);
