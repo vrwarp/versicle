@@ -231,7 +231,14 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         // Use Store state first (synchronous check to avoid race conditions with recent adds)
         const books = useBookStore.getState().books;
         let existingId: string | undefined;
-        const matchingBook = Object.values(books).find(b => b.sourceFilename === file.name);
+        let matchingBook;
+        for (const key in books) {
+          if (!Object.prototype.hasOwnProperty.call(books, key)) continue;
+          if (books[key] && books[key].sourceFilename === file.name) {
+            matchingBook = books[key];
+            break;
+          }
+        }
         if (matchingBook) {
           existingId = matchingBook.bookId;
         }
@@ -339,14 +346,21 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           // Note: We use `get().staticMetadata` inside the loop to ensure we read the latest state
           // to avoid race conditions if rapid sequential imports happen.
           const staticMeta = get().staticMetadata;
-          const metaTitleTrimmed = meta.title.trim();
-          const metaAuthorTrimmed = meta.author.trim();
+          const metaTitleTrimmed = meta?.title?.trim() || '';
+          const metaAuthorTrimmed = meta?.author?.trim() || '';
 
-          const ghostMatch = Object.values(books).find(b => {
+          let ghostMatch;
+          for (const key in books) {
+            if (!Object.prototype.hasOwnProperty.call(books, key)) continue;
+            const b = books[key];
+            if (!b || !b.bookId) continue;
             const isGhost = !staticMeta[b.bookId];
-            const isMatch = b.title.trim() === metaTitleTrimmed && b.author.trim() === metaAuthorTrimmed;
-            return isGhost && isMatch;
-          });
+            const isMatch = !!b.title && !!b.author && b.title.trim() === metaTitleTrimmed && b.author.trim() === metaAuthorTrimmed;
+            if (isGhost && isMatch) {
+              ghostMatch = b;
+              break;
+            }
+          }
 
           if (ghostMatch) {
             logger.info(`Found Ghost Book match by metadata for file "${file.name}": "${ghostMatch.title}" (${ghostMatch.bookId}). Linking binary file to existing Yjs record...`);
