@@ -99,3 +99,18 @@
 ## 2026-03-28 - Hidden Input ARIA Labels
 **Learning:** Added `aria-label` attributes to visually hidden `<input type="file">` elements that are triggered by other visible proxy buttons.
 **Action:** Always ensure that hidden file inputs have proper ARIA labels so they have an accessible name in the accessibility tree, even if they aren't visually rendered. However, do not add `aria-label` to elements with `display: none` (like Tailwind's `hidden` class) as they are completely removed from the accessibility tree, making the label ineffective.
+
+## 2026-04-01 - Consistent Keyboard Accessibility for Custom Buttons
+**Learning:** Custom interactive elements (like tabs or icon buttons) using native `<button>` tags without explicit focus styles can become invisible to keyboard users when navigating via Tab. Relying solely on hover states or generic browser outlines leads to an inconsistent and often inaccessible experience.
+**Action:** Always apply the standard design system focus ring pattern (`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`) to all custom interactive elements and native buttons to ensure clear, consistent visual feedback for keyboard navigation.
+
+## 2026-04-02 - WCAG 2.5.3 Label in Name & Native Button Consistency
+**Learning:** Adding an `aria-label` to a button that differs from its visible text violates WCAG 2.5.3 (Label in Name), breaking the experience for voice control users. Additionally, native HTML `<button>` elements lacking explicit focus classes (like `focus-visible:ring-2`) become invisible to keyboard users.
+**Action:** Rely on visible text for accessible names when descriptive, and never use `aria-label`s that conflict with visible text. Always replace native `<button>` tags with the design system's `<Button>` component to guarantee consistent focus rings and styling.
+## 2026-04-03 - Event target checks in custom keyboard handlers
+**Learning:** When using custom `onKeyDown` handlers (e.g., for Enter/Space to mimic button behavior) on container elements that wrap other focusable elements (like DropdownMenuTrigger or child Buttons), pressing Enter/Space while focused on the child element can unintentionally trigger the container's event handler due to event bubbling. This causes double-actions or incorrect actions.
+**Action:** Always include an `if (e.target !== e.currentTarget) return;` check in custom `onKeyDown` handlers applied to container elements. This ensures the action only fires when the container itself has keyboard focus, and safely ignores events bubbling up from child interactive elements.
+
+## $(date +%Y-%m-%d) - Keyboard Accessibility for JsonDiffViewer
+**Learning:** Found an expandable tree node `<div>` in `JsonDiffViewer.tsx` that lacked keyboard accessibility. It used an `onClick` handler but had no `role="button"`, `tabIndex`, or `onKeyDown` handler, meaning it couldn't be toggled via keyboard navigation.
+**Action:** When implementing custom clickable elements like tree nodes or accordions with `div` or `span` tags, always make them fully keyboard accessible. Add `role="button"`, `tabIndex={0}`, an `onKeyDown` handler that toggles state on Enter/Space (including an event target check), `aria-expanded` (if it toggles visibility), and focus-visible styling (e.g., `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`).

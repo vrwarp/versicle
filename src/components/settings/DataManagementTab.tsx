@@ -94,7 +94,6 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                         accept=".csv"
                         onChange={handleCsvChange}
                         data-testid="reading-list-csv-input"
-                        aria-label="Upload CSV"
                     />
                 </div>
             </div>
@@ -124,7 +123,6 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                         accept=".zip,.json,.vbackup"
                         onChange={handleBackupChange}
                         data-testid="backup-file-input"
-                        aria-label="Restore Backup"
                     />
                     {backupStatus && (
                         <p className="text-sm text-primary font-medium animate-pulse">

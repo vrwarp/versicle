@@ -31,7 +31,9 @@ export const useGroupedAnnotations = (searchQuery: string): BookAnnotationGroup[
         // 3. Sort intra-group (ascending by created) and inter-group (descending by latest)
         return Array.from(grouped.entries()).map(([bookId, anns]) => {
             const sortedAnns = anns.sort((a, b) => a.created - b.created);
-            const latestActivity = Math.max(...sortedAnns.map(a => a.created));
+            // OPTIMIZATION: sortedAnns is already sorted ascending, so max is the last element.
+            // This avoids O(N) array allocation and iteration from Math.max(...map())
+            const latestActivity = sortedAnns[sortedAnns.length - 1].created;
             return { bookId, annotations: sortedAnns, latestActivity };
         }).sort((a, b) => b.latestActivity - a.latestActivity);
     }, [annotations, searchQuery]);

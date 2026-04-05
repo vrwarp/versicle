@@ -119,6 +119,14 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
                             autoFocus
                         />
                     </div>
+                    {/* Live region for screen readers */}
+                    <div role="status" aria-live="polite" className="sr-only">
+                        {debouncedSearchQuery ? (
+                            filteredFiles.length === 0
+                                ? 'No matching files found'
+                                : `${filteredFiles.length} files found`
+                        ) : ''}
+                    </div>
                     <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
                         <span>
                             {index?.length || 0} files indexed • Last scan: {formatRelativeTime(lastScanTime)}
