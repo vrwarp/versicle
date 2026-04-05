@@ -340,29 +340,27 @@ function App() {
   // Combined Loading Screen
   if (dbStatus === 'loading' || !swInitialized) {
     return (
-      <>
-        <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
-          <div className="flex flex-col items-center gap-4">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-            <p className="text-sm font-medium text-muted-foreground animate-pulse">
-              {statusMessage}
-            </p>
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm font-medium text-muted-foreground animate-pulse">
+            {statusMessage}
+          </p>
         </div>
-        {migrationPending && (
-          <WorkspaceMigrationConfirmModal
-            targetWorkspaceId={migrationPending.targetWorkspaceId}
-            backupCheckpointId={migrationPending.backupCheckpointId}
-            onResolved={() => window.location.reload()}
-          />
-        )}
-      </>
+      </div>
     );
   }
 
   return (
     <>
       <ObsoleteLockView />
+      {migrationPending && (
+        <WorkspaceMigrationConfirmModal
+          targetWorkspaceId={migrationPending.targetWorkspaceId}
+          backupCheckpointId={migrationPending.backupCheckpointId}
+          onResolved={() => window.location.reload()}
+        />
+      )}
       <RouterProvider router={router} />
     </>
   );
