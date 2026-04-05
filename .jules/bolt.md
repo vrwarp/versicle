@@ -151,3 +151,6 @@
 ## 2026-04-04 - [Pre-computed Maps for Array Validation Lookups]
 **Learning:** In `SmartLinkDialog`, the `genAIService.mapReadingListToLibrary` output was validated using `unmappedEntries.some(...)` and `unmappedBooks.some(...)` inside a `.filter` block. This caused an `O(N * M)` nested search space during validation. Since `unmappedEntriesMap` and `unmappedBooksMap` were already pre-computed for rendering purposes earlier in the component, they could have been reused for validation.
 **Action:** When validating generated data or filtering arrays based on the existence of properties in another array, always reuse pre-computed `Map` or `Set` lookups instead of using `Array.prototype.some`. This reduces the validation complexity from `O(N * M)` to `O(N)`.
+## 2026-04-04 - [O(1) latest activity lookup for annotations]
+**Learning:** In `useGroupedAnnotations`, finding the maximum `created` timestamp was previously done using `Math.max(...sortedAnns.map(a => a.created))`. This caused an `O(N)` array allocation and mapping operation, despite `sortedAnns` already being sorted in ascending order.
+**Action:** When finding the maximum value in a collection that is already sorted, avoid using `Math.max(...)` with an array map. Instead, use an `O(1)` access to the last element of the sorted array (e.g., `array.length > 0 ? array[array.length - 1].created : 0`).
