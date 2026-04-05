@@ -46,19 +46,9 @@ const DiffNodeView: React.FC<{ node: DiffNode; level?: number }> = ({ node, leve
     return (
       <div className="my-0.5">
         <div
-          className="flex items-center cursor-pointer hover:bg-muted/50 rounded p-1 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="flex items-center cursor-pointer hover:bg-muted/50 rounded p-1 select-none"
           style={{ marginLeft: indent }}
           onClick={() => setIsExpanded(!isExpanded)}
-          role="button"
-          tabIndex={0}
-          aria-expanded={isExpanded}
-          onKeyDown={(e) => {
-            if (e.target !== e.currentTarget) return;
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              setIsExpanded(!isExpanded);
-            }
-          }}
         >
           {isExpanded ? <ChevronDown className="w-3 h-3 mr-1" /> : <ChevronRight className="w-3 h-3 mr-1" />}
           <span className="font-mono text-xs font-bold text-primary">{node.key}</span>

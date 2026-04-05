@@ -104,11 +104,6 @@ export class SearchEngine {
 
             let match;
             while ((match = regex.exec(text)) !== null) {
-                if (match[0].length === 0) {
-                    regex.lastIndex++;
-                    continue;
-                }
-
                 results.push({
                     href: href,
                     excerpt: this.getExcerpt(text, match.index, match[0].length)

@@ -3,6 +3,11 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { FirestoreSyncStatus, FirebaseAuthStatus } from '../FirestoreSyncManager';
 
 /**
+ * Sync provider types
+ */
+export type SyncProvider = 'none' | 'firebase';
+
+/**
  * Firebase configuration stored in settings
  */
 export interface FirebaseConfigSettings {
@@ -16,9 +21,10 @@ export interface FirebaseConfigSettings {
 }
 
 interface SyncStore {
-    // === Onboarding ===
-    hasCompletedOnboarding: boolean;
-    setHasCompletedOnboarding: (completed: boolean) => void;
+    // === Provider Selection ===
+    /** Which sync provider is active */
+    syncProvider: SyncProvider;
+    setSyncProvider: (provider: SyncProvider) => void;
 
     // === Firebase Configuration ===
     /** Firebase config (API key, project ID, etc.) */
@@ -42,15 +48,14 @@ interface SyncStore {
     firebaseUserEmail: string | null;
     setFirebaseUserEmail: (email: string | null) => void;
 
-    // === Workspace ===
-    /** Active workspace ID (null = legacy default path) */
-    activeWorkspaceId: string | null;
-    setActiveWorkspaceId: (id: string | null) => void;
-
     // === Shared State ===
     /** Timestamp of last successful sync */
     lastSyncTime: number | null;
     setLastSyncTime: (time: number) => void;
+
+    /** Force using the dev instance of Firestore */
+    forceDevInstance: boolean;
+    setForceDevInstance: (force: boolean) => void;
 }
 
 const defaultFirebaseConfig: FirebaseConfigSettings = {
@@ -65,9 +70,9 @@ const defaultFirebaseConfig: FirebaseConfigSettings = {
 export const useSyncStore = create<SyncStore>()(
     persist(
         (set) => ({
-            // Onboarding
-            hasCompletedOnboarding: false,
-            setHasCompletedOnboarding: (completed) => set({ hasCompletedOnboarding: completed }),
+            // Provider selection
+            syncProvider: 'none',
+            setSyncProvider: (provider) => set({ syncProvider: provider }),
 
             // Firebase Configuration
             firebaseConfig: defaultFirebaseConfig,
@@ -88,30 +93,27 @@ export const useSyncStore = create<SyncStore>()(
             firebaseUserEmail: null,
             setFirebaseUserEmail: (email) => set({ firebaseUserEmail: email }),
 
-            // Workspace
-            activeWorkspaceId: null,
-            setActiveWorkspaceId: (id) => set({ activeWorkspaceId: id }),
-
             // Shared
             lastSyncTime: null,
             setLastSyncTime: (time) => set({ lastSyncTime: time }),
+
+            forceDevInstance: false,
+            setForceDevInstance: (force) => set({ forceDevInstance: force }),
         }),
         {
             name: 'sync-storage',
             storage: createJSONStorage(() => localStorage),
             partialize: (state) => ({
-                // Persist onboarding
-                hasCompletedOnboarding: state.hasCompletedOnboarding,
+                // Persist provider selection
+                syncProvider: state.syncProvider,
 
                 // Persist Firebase configuration
                 firebaseConfig: state.firebaseConfig,
                 firebaseEnabled: state.firebaseEnabled,
 
-                // Persist workspace
-                activeWorkspaceId: state.activeWorkspaceId,
-
                 // Persist shared settings
                 lastSyncTime: state.lastSyncTime,
+                forceDevInstance: state.forceDevInstance,
             }),
         }
     )

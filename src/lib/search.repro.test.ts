@@ -35,10 +35,7 @@ describe('SearchClient Race Condition', () => {
         const p1 = searchClient.search('query1', 'book1');
         const p2 = searchClient.search('query2', 'book1');
 
-        let timeoutId: NodeJS.Timeout | undefined;
-        const timeout = new Promise((_, reject) => {
-            timeoutId = setTimeout(() => reject(new Error('Timeout')), 200);
-        });
+        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 200));
 
         try {
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,7 +44,6 @@ describe('SearchClient Race Condition', () => {
              // Verify correct mapping
              expect(results[0][0].excerpt).toBe('Result for query1');
              expect(results[1][0].excerpt).toBe('Result for query2');
-             clearTimeout(timeoutId);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (e: any) {

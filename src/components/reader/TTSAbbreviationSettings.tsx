@@ -4,7 +4,6 @@ import { useShallow } from 'zustand/react/shallow';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../../lib/tts/TextSegmenter';
 import { X, Plus, RotateCcw, Download, Upload } from 'lucide-react';
 import { SimpleListCSV } from '../../lib/tts/CsvUtils';
-import { Button } from '../ui/Button';
 
 interface StringListManagerProps {
     /** Title of the list section. */
@@ -154,15 +153,14 @@ const StringListManager: React.FC<StringListManagerProps> = ({
                             placeholder={placeholder}
                             className={`flex-1 text-xs p-1 border rounded bg-background text-foreground ${error ? 'border-red-500' : 'border-border'}`}
                         />
-                        <Button
-                            size="icon"
+                        <button
                             onClick={handleAdd}
                             disabled={!newItem.trim()}
-                            className="h-7 w-7"
+                            className="p-1 bg-primary text-background rounded hover:opacity-90 disabled:opacity-50"
                             aria-label={`Add to ${title}`}
                         >
                             <Plus className="w-4 h-4" />
-                        </Button>
+                        </button>
                     </div>
                     {error && <span className="text-[10px] text-red-500">{error}</span>}
                 </div>
@@ -174,52 +172,44 @@ const StringListManager: React.FC<StringListManagerProps> = ({
                     {items.map((item) => (
                         <div key={item} className="flex items-center gap-1 bg-background border border-border px-2 py-1 rounded text-xs">
                             <span>{item}</span>
-                            <Button
-                                variant="ghost"
-                                size="icon"
+                            <button
                                 onClick={() => handleRemove(item)}
-                                className="h-4 w-4 text-muted-foreground hover:text-red-500 hover:bg-transparent"
+                                className="text-muted-foreground hover:text-red-500"
                                 aria-label={`Remove ${item}`}
                             >
                                 <X className="w-3 h-3" />
-                            </Button>
+                            </button>
                         </div>
                     ))}
                 </div>
             </div>
 
             <div className="flex justify-between items-center">
-                <Button
-                    variant="ghost"
-                    size="sm"
+                <button
                     onClick={handleReset}
-                    className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                 >
-                    <RotateCcw className="w-3 h-3 mr-1" />
+                    <RotateCcw className="w-3 h-3" />
                     Reset
-                </Button>
+                </button>
 
                 <div className="flex gap-2">
-                     <Button
-                        variant="ghost"
-                        size="sm"
+                     <button
                         onClick={handleDownload}
-                        className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                         title="Download CSV"
                     >
-                        <Download className="w-3 h-3 mr-1" />
+                        <Download className="w-3 h-3" />
                         Export
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
+                    </button>
+                    <button
                         onClick={handleUploadClick}
-                        className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
                         title="Upload CSV"
                     >
-                        <Upload className="w-3 h-3 mr-1" />
+                        <Upload className="w-3 h-3" />
                         Import
-                    </Button>
+                    </button>
                     <input
                         type="file"
                         accept=".csv"
@@ -227,7 +217,6 @@ const StringListManager: React.FC<StringListManagerProps> = ({
                         style={{ display: 'none' }}
                         onChange={handleFileChange}
                         data-testid={`csv-upload-${title.toLowerCase().replace(/\s+/g, '-')}`}
-                        aria-label={`Upload CSV for ${title}`}
                     />
                 </div>
             </div>

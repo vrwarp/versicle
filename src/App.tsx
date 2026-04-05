@@ -26,10 +26,6 @@ import { DriveScannerService } from './lib/drive/DriveScannerService';
 
 import './App.css';
 
-import { MigrationStateService } from './lib/sync/MigrationStateService';
-import { CheckpointService } from './lib/sync/CheckpointService';
-import { WorkspaceMigrationConfirmModal } from './components/sync/WorkspaceMigrationConfirmModal';
-
 const logger = createLogger('App');
 
 // Define router outside of the component to avoid recreation on render
@@ -85,19 +81,6 @@ function App() {
   const [swInitialized, setSwInitialized] = useState(false);
   const [swError, setSwError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState('Initializing...');
-  const [migrationPending] = useState<{
-    targetWorkspaceId: string;
-    backupCheckpointId: number;
-  } | null>(() => {
-    const migrationState = MigrationStateService.getState();
-    if (migrationState?.status === 'AWAITING_CONFIRMATION') {
-      return {
-        targetWorkspaceId: migrationState.targetWorkspaceId || 'unknown',
-        backupCheckpointId: migrationState.backupCheckpointId || 0,
-      };
-    }
-    return null;
-  });
 
   const hydrateStaticMetadata = useLibraryStore(state => state.hydrateStaticMetadata);
 
@@ -138,62 +121,8 @@ function App() {
   }, []);
 
   // Check for Firebase Auth Redirect Result on startup
-  // ── Boot Interceptor: Migration State Machine ──
   useEffect(() => {
-    const migrationState = MigrationStateService.getState();
-
-    if (migrationState) {
-      if (migrationState.status === 'RESTORING_BACKUP') {
-        // Flow C: Execute rollback immediately
-        logger.info('Boot interceptor: RESTORING_BACKUP detected, rolling back...');
-        MigrationStateService.clear();
-        if (migrationState.backupCheckpointId != null) {
-          CheckpointService.restoreCheckpoint(migrationState.backupCheckpointId)
-            .catch(err => {
-              logger.error('Rollback failed:', err);
-              // Clear state and reload as last resort
-              window.location.reload();
-            });
-        } else {
-          logger.error('No backup checkpoint ID for rollback, reloading...');
-          window.location.reload();
-        }
-        return; // HALT — restoreCheckpoint will reload
-      }
-
-      if (migrationState.status === 'AWAITING_CONFIRMATION') {
-        // Flow B, Step 6: Show confirmation modal, do NOT initialize sync
-        // Handled during initial state setup for migrationPending
-        logger.info('Boot interceptor: AWAITING_CONFIRMATION detected, HALT sync init...');
-        return; // HALT — do not initialize sync
-      }
-    }
-
-    // Dangling backup cleanup
-    const danglingId = MigrationStateService.getDanglingBackupId();
-    if (danglingId != null) {
-      logger.info(`Cleaning up dangling backup checkpoint #${danglingId}`);
-      CheckpointService.deleteCheckpoint(danglingId).catch(err => {
-        logger.warn('Failed to clean up dangling backup:', err);
-      });
-      MigrationStateService.clear();
-    }
-
-    // Zombie backup cleanup: prune extremely old pre-migration backups that were abandoned
-    CheckpointService.listCheckpoints().then(checkpoints => {
-      const now = Date.now();
-      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-      checkpoints.forEach(cp => {
-        if (cp.trigger === 'pre-migration' && now - cp.timestamp > SEVEN_DAYS) {
-          logger.info(`Cleaning up zombie pre-migration backup checkpoint #${cp.id}`);
-          CheckpointService.deleteCheckpoint(cp.id).catch(err => {
-            logger.warn('Failed to clean up zombie backup:', err);
-          });
-        }
-      });
-    }).catch(err => logger.warn('Failed to list zombie backups:', err));
-
-    // Standard Boot: Initialize Sync Manager
+    // Initialize Sync Manager which handles auth state and redirect results
     const manager = getFirestoreSyncManager();
     manager.initialize();
   }, []);
@@ -354,13 +283,6 @@ function App() {
   return (
     <>
       <ObsoleteLockView />
-      {migrationPending && (
-        <WorkspaceMigrationConfirmModal
-          targetWorkspaceId={migrationPending.targetWorkspaceId}
-          backupCheckpointId={migrationPending.backupCheckpointId}
-          onResolved={() => window.location.reload()}
-        />
-      )}
       <RouterProvider router={router} />
     </>
   );

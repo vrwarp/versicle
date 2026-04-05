@@ -30,7 +30,7 @@ export const BookNotesBlock: React.FC<BookNotesBlockProps> = ({ group, onNavigat
         exportNotesToMarkdown(title, group.annotations);
     };
 
-    const handleCoverClick = (e: React.MouseEvent | React.KeyboardEvent) => {
+    const handleCoverClick = (e: React.MouseEvent) => {
         e.stopPropagation();
         onOpenBook(group.bookId);
     }
@@ -45,18 +45,8 @@ export const BookNotesBlock: React.FC<BookNotesBlockProps> = ({ group, onNavigat
         <div className="bg-card text-card-foreground rounded-xl border shadow-sm overflow-hidden mb-6 flex flex-col" data-testid="book-notes-block">
             {/* Header */}
             <div
-                className="bg-muted/30 px-4 py-3 border-b flex items-center justify-between gap-4 cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                className="bg-muted/30 px-4 py-3 border-b flex items-center justify-between gap-4 cursor-pointer hover:bg-muted/50 transition-colors"
                 onClick={handleCoverClick}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        if (e.target !== e.currentTarget) return;
-                        e.preventDefault();
-                        handleCoverClick(e);
-                    }
-                }}
-                role="button"
-                tabIndex={0}
-                aria-label={`Open book: ${title}`}
             >
                 <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-14 shrink-0 shadow-sm rounded overflow-hidden relative border border-border/50 bg-muted flex items-center justify-center">

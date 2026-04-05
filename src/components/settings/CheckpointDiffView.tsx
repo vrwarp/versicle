@@ -64,16 +64,14 @@ export const CheckpointDiffView: React.FC<CheckpointDiffViewProps> = ({
             <div key={key} className="group relative">
               <div className="font-mono opacity-70 mb-0.5 flex items-center gap-2">
                 <span>{key}:</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-5 w-5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none transition-opacity hover:bg-primary/20 rounded"
+                <button
+                  className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none transition-opacity p-0.5 hover:bg-primary/20 rounded"
                   onClick={() => setSelectedDiff({ title: key, old: value.old, new: value.new })}
                   title="View detailed diff"
                   aria-label={`View detailed diff for ${key}`}
                 >
                   <Maximize2 className="w-3 h-3 text-primary" />
-                </Button>
+                </button>
               </div>
               <div
                 className="grid grid-cols-2 gap-2 text-[10px] cursor-pointer hover:opacity-80 transition-opacity"

@@ -58,13 +58,7 @@ export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNa
             role="button"
             tabIndex={0}
             data-testid={`annotation-card-${annotation.id}`}
-            onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    if (e.target !== e.currentTarget) return;
-                    e.preventDefault();
-                    onNavigate(annotation.cfiRange);
-                }
-            }}
+            onKeyDown={(e) => { if (e.key === 'Enter') onNavigate(annotation.cfiRange); }}
         >
             <div className="flex-1 min-w-0">
                 {isEditing ? (

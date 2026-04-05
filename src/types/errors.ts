@@ -49,13 +49,3 @@ export class DuplicateBookError extends AppError {
     this.name = 'DuplicateBookError';
   }
 }
-
-/**
- * Error thrown when a workspace has been tombstoned.
- */
-export class WorkspaceDeletedError extends Error {
-  constructor(message: string = "This workspace has been deleted.") {
-    super(message);
-    this.name = "WorkspaceDeletedError";
-  }
-}

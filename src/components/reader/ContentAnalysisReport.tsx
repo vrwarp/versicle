@@ -163,7 +163,6 @@ export const ContentAnalysisReport: React.FC<ContentAnalysisReportProps> = ({ is
                                 <button
                                     onClick={() => toggleSection(section.sectionId)}
                                     className="w-full flex items-center justify-between p-3 hover:bg-accent/50 transition-colors text-left"
-                                    aria-expanded={expandedSections.has(section.sectionId)}
                                 >
                                     <div className="flex items-center gap-2 font-medium">
                                         {expandedSections.has(section.sectionId) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
