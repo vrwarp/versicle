@@ -550,27 +550,57 @@ export function tryFastMergeCfi(left: string, right: string): string | null {
             } else {
                 // Point + Point (Case 4)
                 // Both are points (e.g. epubcfi(/6/14!/4/2/1:0) and epubcfi(/6/14!/4/2/1:10))
-                // Find common parent prefix.
-                // We assume parent ends at the last slash of the LEFT point.
-                const lastSlash = left.lastIndexOf('/');
-                if (lastSlash > 8) { // Ensure slash is after "epubcfi("
-                    // Check if right matches prefix up to lastSlash (including the slash)
-                    const prefix = left.slice(0, lastSlash + 1);
-                    if (right.startsWith(prefix)) {
-                        // Common parent found!
-                        // Construct Range: epubcfi(P, S, E)
-                        // P is prefix without the trailing slash (passed as part of S/E to ensure structure)
-                        // Actually, standard range structure is epubcfi(P, /S, /E).
-                        // Our prefix is "epubcfi(P/"
-                        // So we take P as left.slice(0, lastSlash)
-                        // And append ",/" + S + ",/" + E
 
-                        const parentPrefix = left.slice(0, lastSlash);
-                        const leftSuffix = left.slice(lastSlash + 1, -1); // Remove closing paren
-                        const rightSuffix = right.slice(lastSlash + 1, -1); // Remove closing paren
+                // Find the first index where left and right differ
+                let i = 0;
+                while (i < left.length && i < right.length && left[i] === right[i]) {
+                    i++;
+                }
 
-                        return `${parentPrefix},/${leftSuffix},/${rightSuffix})`;
+                // Backtrack to the nearest delimiter to capture the full parent string.
+                let j = i;
+                while (j > 8) {
+                    const char = left[j];
+                    if (char === '/' || char === '!' || char === ':' || char === '[') {
+                        break;
                     }
+                    j--;
+                }
+
+                if (j > 8) {
+                    let common = left.slice(8, j); // remove epubcfi(
+                    let startRel = left.slice(j, -1);
+                    let endRel = right.slice(j, -1);
+
+                    // Epub.js standard generator formatting rules:
+                    // When combining point CFIs where diff is the deepest terminal index,
+                    // it builds `epubcfi(/6/14!/4/2/1,:0,:10)` instead of `epubcfi(/6/14!/4/2,/1:0,/1:10)`.
+                    // To adhere strictly to standard format expected by viewers, we use the character AFTER the split
+                    // to determine how to format the path relative items.
+                    const isTerminalDiff = startRel.startsWith(':') && endRel.startsWith(':');
+
+                    if (!isTerminalDiff) {
+                        // Standard block path separation formatting: `epubcfi(P, /S, /E)`
+                        // Ensure parent has no trailing delimiter by walking it back
+                        if (common.endsWith('/') || common.endsWith(':')) {
+                           common = common.slice(0, -1);
+                        }
+                        if (startRel.startsWith('/') || startRel.startsWith(':') || startRel.startsWith('!')) {
+                           startRel = startRel.slice(1);
+                        }
+                        if (endRel.startsWith('/') || endRel.startsWith(':') || endRel.startsWith('!')) {
+                           endRel = endRel.slice(1);
+                        }
+
+                        // We must re-include the trailing delimiter into the relatives
+                        const delimiter = left[j];
+                        if (delimiter && delimiter !== '[') {
+                           startRel = delimiter + startRel;
+                           endRel = delimiter + endRel;
+                        }
+                    }
+
+                    return `epubcfi(${common},${startRel},${endRel})`;
                 }
         }
     }
