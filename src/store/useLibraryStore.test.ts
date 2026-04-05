@@ -85,9 +85,11 @@ describe('useLibraryStore', () => {
   };
 
   let useLibraryStore: ReturnType<typeof createLibraryStore>;
+  const mockExtractBookMetadata = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockExtractBookMetadata.mockResolvedValue({ title: 'New Book', author: 'Author' });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useLibraryStore = createLibraryStore(mockDBService as any);
     useLibraryStore.setState({
