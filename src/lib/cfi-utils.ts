@@ -550,8 +550,59 @@ export function tryFastMergeCfi(left: string, right: string): string | null {
             } else {
                 // Point + Point (Case 4)
                 // Both are points (e.g. epubcfi(/6/14!/4/2/1:0) and epubcfi(/6/14!/4/2/1:10))
-                return generateCfiRange(left, right);
-            }
+
+                // Find the first index where left and right differ
+                let i = 0;
+                while (i < left.length && i < right.length && left[i] === right[i]) {
+                    i++;
+                }
+
+                // Backtrack to the nearest delimiter to capture the full parent string.
+                let j = i;
+                while (j > 8) {
+                    const char = left[j];
+                    if (char === '/' || char === '!' || char === ':' || char === '[') {
+                        break;
+                    }
+                    j--;
+                }
+
+                if (j > 8) {
+                    let common = left.slice(8, j); // remove epubcfi(
+                    let startRel = left.slice(j, -1);
+                    let endRel = right.slice(j, -1);
+
+                    // Epub.js standard generator formatting rules:
+                    // When combining point CFIs where diff is the deepest terminal index,
+                    // it builds `epubcfi(/6/14!/4/2/1,:0,:10)` instead of `epubcfi(/6/14!/4/2,/1:0,/1:10)`.
+                    // To adhere strictly to standard format expected by viewers, we use the character AFTER the split
+                    // to determine how to format the path relative items.
+                    const isTerminalDiff = startRel.startsWith(':') && endRel.startsWith(':');
+
+                    if (!isTerminalDiff) {
+                        // Standard block path separation formatting: `epubcfi(P, /S, /E)`
+                        // Ensure parent has no trailing delimiter by walking it back
+                        if (common.endsWith('/') || common.endsWith(':')) {
+                           common = common.slice(0, -1);
+                        }
+                        if (startRel.startsWith('/') || startRel.startsWith(':') || startRel.startsWith('!')) {
+                           startRel = startRel.slice(1);
+                        }
+                        if (endRel.startsWith('/') || endRel.startsWith(':') || endRel.startsWith('!')) {
+                           endRel = endRel.slice(1);
+                        }
+
+                        // We must re-include the trailing delimiter into the relatives
+                        const delimiter = left[j];
+                        if (delimiter && delimiter !== '[') {
+                           startRel = delimiter + startRel;
+                           endRel = delimiter + endRel;
+                        }
+                    }
+
+                    return `epubcfi(${common},${startRel},${endRel})`;
+                }
+        }
     }
 
     return null;

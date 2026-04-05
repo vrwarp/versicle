@@ -48,6 +48,18 @@ describe('tryFastMergeCfi', () => {
             assertCfiEqual(tryFastMergeCfi(left, right), expected);
         });
 
+        it('merges Point + Point (deep divergence)', () => {
+            const left = `epubcfi(/6/14[chapter1]!/4:0)`;
+            const right = `epubcfi(/6/14[chapter1]!/5:0)`;
+            const fastMerged = tryFastMergeCfi(left, right);
+
+            // Explicitly check the string output to ensure fast merge built it directly and preserves !
+            expect(fastMerged).toBe(`epubcfi(/6/14[chapter1]!,/4:0,/5:0)`);
+
+            const expected = mergeCfiSlow(left, right);
+            assertCfiEqual(fastMerged, expected);
+        });
+
         it('merges Point + Point (common parent)', () => {
             const left = `epubcfi(${parent}/1:0)`;
             const right = `epubcfi(${parent}/1:10)`;
