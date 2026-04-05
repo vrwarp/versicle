@@ -35,7 +35,7 @@ vi.mock('zustand/middleware', async (importOriginal) => {
 // Mock ingestion
 vi.mock('../lib/ingestion', () => ({
   extractBookData: vi.fn(),
-  extractBookMetadata: vi.fn().mockResolvedValue({ title: "Test Book", author: "Test Author", description: "", fileHash: "hash" }),
+  extractBookMetadata: vi.fn().mockResolvedValue({ title: 'Test Book', author: 'Test Author', description: 'Desc', fileHash: 'hash' }),
 }));
 
 // Mock batch ingestion
