@@ -25,15 +25,9 @@ export class WebSpeechProvider implements ITTSProvider {
 
     return new Promise((resolve) => {
       let resolved = false;
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
       const finish = () => {
         if (resolved) return;
         resolved = true;
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-          timeoutId = null;
-        }
         this.voices = this.synth.getVoices();
         if (this.voices.length > 0) this.voicesLoaded = true;
         resolve();
@@ -56,7 +50,7 @@ export class WebSpeechProvider implements ITTSProvider {
               onVoicesChanged();
           };
       }
-      timeoutId = setTimeout(() => {
+      setTimeout(() => {
           if (!resolved) {
               console.warn('WebSpeechProvider: Voice loading timed out or no voices available.');
               finish();

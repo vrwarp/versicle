@@ -5,7 +5,6 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { ScrollArea } from '../ui/ScrollArea';
 import { useAllBooks } from '../../store/selectors';
-import { useDebounce } from '../../hooks/useDebounce';
 
 interface ReassignBookDialogProps {
     isOpen: boolean;
@@ -21,7 +20,6 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
     const books = useAllBooks();
     const [selectedBookId, setSelectedBookId] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState('');
-    const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
     useEffect(() => {
         if (isOpen) {
@@ -32,15 +30,14 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
     }, [isOpen]);
 
     const filteredBooks = useMemo(() => {
-        const query = debouncedSearchQuery.toLowerCase();
         return books
             .filter((book) => {
-                const titleMatch = (book.title || 'Untitled').toLowerCase().includes(query);
-                const authorMatch = (book.author || '').toLowerCase().includes(query);
+                const titleMatch = (book.title || 'Untitled').toLowerCase().includes(searchQuery.toLowerCase());
+                const authorMatch = (book.author || '').toLowerCase().includes(searchQuery.toLowerCase());
                 return titleMatch || authorMatch;
             })
             .sort((a, b) => (a.title || 'Untitled').localeCompare(b.title || 'Untitled'));
-    }, [books, debouncedSearchQuery]);
+    }, [books, searchQuery]);
 
     const handleConfirm = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -49,23 +46,6 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
             onClose();
         }
     };
-
-    // OPTIMIZATION: Memoize rendered VDOM items to prevent O(N) allocation on every keystroke in the search bar.
-    const renderedBooks = useMemo(() => {
-        return filteredBooks.map((book) => (
-            <Button
-                key={book.id}
-                variant={selectedBookId === book.id ? "secondary" : "ghost"}
-                className="w-full h-auto font-normal justify-start text-left flex-col items-start py-2 px-3"
-                onClick={() => setSelectedBookId(book.id)}
-            >
-                <span className="font-medium line-clamp-1">{book.title || 'Untitled'}</span>
-                {book.author && (
-                    <span className="text-xs text-muted-foreground line-clamp-1">{book.author}</span>
-                )}
-            </Button>
-        ));
-    }, [filteredBooks, selectedBookId]);
 
     return (
         <Dialog
@@ -106,10 +86,22 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
                     <div className="flex flex-col gap-1">
                         {filteredBooks.length === 0 ? (
                             <p className="text-sm text-muted-foreground text-center py-4">
-                                No books found matching "{debouncedSearchQuery}"
+                                No books found matching "{searchQuery}"
                             </p>
                         ) : (
-                            renderedBooks
+                            filteredBooks.map((book) => (
+                                <Button
+                                    key={book.id}
+                                    variant={selectedBookId === book.id ? "secondary" : "ghost"}
+                                    className="w-full h-auto font-normal justify-start text-left flex-col items-start py-2 px-3"
+                                    onClick={() => setSelectedBookId(book.id)}
+                                >
+                                    <span className="font-medium line-clamp-1">{book.title || 'Untitled'}</span>
+                                    {book.author && (
+                                        <span className="text-xs text-muted-foreground line-clamp-1">{book.author}</span>
+                                    )}
+                                </Button>
+                            ))
                         )}
                     </div>
                 </ScrollArea>

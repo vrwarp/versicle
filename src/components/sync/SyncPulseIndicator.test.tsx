@@ -1,9 +1,8 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import '@testing-library/jest-dom';
 import { SyncPulseIndicator } from './SyncPulseIndicator';
 import { useSyncStore } from '../../lib/sync/hooks/useSyncStore';
-import { describe, it, expect, vi } from 'vitest';
+import { vi } from 'vitest';
 
 // Mock the store hook
 vi.mock('../../lib/sync/hooks/useSyncStore');
@@ -12,6 +11,8 @@ vi.mock('../../lib/sync/hooks/useSyncStore');
 type SyncStoreState = ReturnType<typeof useSyncStore>;
 
 const defaultMockState: SyncStoreState = {
+  syncProvider: 'none',
+  setSyncProvider: vi.fn(),
   firebaseConfig: {
     apiKey: '',
     authDomain: '',
@@ -31,8 +32,6 @@ const defaultMockState: SyncStoreState = {
   setFirebaseUserEmail: vi.fn(),
   lastSyncTime: null,
   setLastSyncTime: vi.fn(),
-  activeWorkspaceId: null,
-  setActiveWorkspaceId: vi.fn(),
 };
 
 describe('SyncPulseIndicator', () => {

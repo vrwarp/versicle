@@ -648,7 +648,7 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **`useDeviceStore` (Sync Mesh)**:
     *   **Strategy**: Maintains a Yjs Map of active devices in the mesh.
     *   **Logic**:
-        *   **User Agent Parsing**: Uses `ua-parser-js` (`UAParser`) to automatically generate human-readable device names (e.g., "Chrome on Windows") upon registration.
+        *   **User Agent Parsing**: Uses `UAParser` to automatically generate human-readable device names (e.g., "Chrome on Windows") upon registration.
         *   **Heartbeat Throttling**: Updates the `lastActive` timestamp with a 5-minute throttle (`HEARTBEAT_THROTTLE_MS`) to prevent excessive CRDT updates while maintaining online status visibility.
     *   **Why**: Enables "Send to Device" features and provides visibility into the sync network.
 *   **`useReaderStore`**: (Conceptual Facade) Aggregates ephemeral UI state (`useReaderUIStore`) and persistent settings (`usePreferencesStore`) for easier component consumption.
@@ -676,11 +676,6 @@ State is managed using **Zustand** with specialized strategies for different dat
         *   **Rules**: Stored in a Yjs Map (`lexicon`).
         *   **Ordering**: Rules have an explicit `order` field to ensure deterministic application order.
         *   **Settings**: Stores book-specific preferences (e.g., enable Bible Lexicon) in a nested map.
-*   **`yjs-provider.ts` (Deterministic Migration)**:
-    *   **Goal**: Ensure backwards compatibility across schema changes.
-    *   **Logic**:
-        *   **Atomic Key**: Uses `__schemaVersion` as an atomic key (via `disableYText` and `atomicKeys`) to prevent `Y.Text` overhead and ensure integer stability.
-        *   **Sequential Upgrade**: Implements `runMigrationsImpl` which runs strictly deterministic Zustand state transformations to upgrade the local schema (e.g., pruning legacy reading history for `v2`, bumping to `v4`). Because transforms are identical across clients, Yjs LWW merges concurrent upgrades safely.
 *   **`useContentAnalysisStore` (Synced)**:
     *   **Goal**: Sync expensive AI artifacts (Table Adaptations) across devices.
     *   **Logic**: Maps `${bookId}/${sectionId}` to a `SectionAnalysis` object containing the teleprompter scripts. It also stores `referenceStartCfi` to define the boundary where references begin, replacing deprecated granular arrays (like semantic maps) to save space.
@@ -716,7 +711,7 @@ State is managed using **Zustand** with specialized strategies for different dat
 
 *   **Database Resilience**: `DBService` wraps `QuotaExceededError` into a unified `StorageFullError` for consistent UI handling.
 *   **Safe Mode**: If critical database initialization fails, the app boots into `SafeModeView`, providing a "Factory Reset" (`deleteDB`) option to unblock the user.
-*   **Schema Quarantine (`ObsoleteLockView`)**: When the application detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION = 4`), it renders `ObsoleteLockView` to lock the UI permanently.
+*   **Schema Quarantine (`ObsoleteLockView`)**: When the application detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION`), it renders `ObsoleteLockView` to lock the UI permanently.
     *   **Why**: Prevents a down-level client from inadvertently overwriting or corrupting newer data structures introduced by an updated app version.
     *   **Trade-off**: The user is completely locked out of the app until they update to the latest version.
 *   **Service Worker**: The app verifies `waitForServiceWorkerController` on launch to ensure image serving infrastructure is active, failing fast if the SW is broken.

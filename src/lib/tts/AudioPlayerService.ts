@@ -714,9 +714,6 @@ export class AudioPlayerService {
             // Skip if we've already processed this exact analysis update
             if (analysis.generatedAt <= this.lastAppliedAnalysisTimestamp) return;
 
-            // Update timestamp synchronously to prevent concurrent duplicate enqueueing
-            this.lastAppliedAnalysisTimestamp = analysis.generatedAt;
-
             this.enqueue(async () => {
                 // Validate current context
                 if (this.currentBookId !== bookId) return;
@@ -744,6 +741,8 @@ export class AudioPlayerService {
                         this.stateManager.applyTableAdaptations(adaptations);
                     }
                 }
+
+                this.lastAppliedAnalysisTimestamp = analysis.generatedAt;
             });
         }
     }

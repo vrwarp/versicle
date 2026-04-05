@@ -1,10 +1,7 @@
-import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 // A generic way to broadcast local storage changes on the same tab
 const LOCAL_STORAGE_CHANGE_EVENT = 'local-storage-change';
-
-// Polyfill for SSR
-const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 /**
  * A custom React hook for persisting state to localStorage.
@@ -49,20 +46,12 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
     setStoredValue(currentValue);
   }
 
-  // We use a stateRef to accumulate sequential synchronous calls to setter
-  const stateRef = useRef(currentValue);
-
-  // Safely update refs after render to maintain concurrent mode predictability
-  // using useLayoutEffect ensures it's updated synchronously before browser paint
-  // and before any subsequent user actions
-  useIsomorphicLayoutEffect(() => {
-    keyRef.current = key;
-    stateRef.current = currentValue;
-  }, [key, currentValue]);
-
   // Subscribe to changes to localStorage so that this state reflects updates from:
   // 1. Other browser tabs (StorageEvent)
   // 2. Other hook instances on the same page (CustomEvent)
+  useEffect(() => {
+    keyRef.current = key;
+  }, [key]);
 
   useEffect(() => {
     const handleStorageChange = (e: Event) => {
@@ -97,6 +86,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
   // We use a ref for the latest state so we can reliably get it in `setValue`
   // without creating stale closures.
   const stateRef = useRef<T>(currentValue);
+  // eslint-disable-next-line react-hooks/refs
   stateRef.current = currentValue;
 
   // Return a wrapped version of useState's setter function that ...

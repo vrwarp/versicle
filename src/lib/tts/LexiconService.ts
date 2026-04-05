@@ -11,29 +11,6 @@ interface CompiledLexiconRule {
     replacement: string;
 }
 
-const INITIALISM_PHONETIC_MAP: Record<string, string> = {
-    'A': 'Eigh',
-    // Future additions mapped here only as specific failures are identified
-};
-
-/**
- * Transforms initialisms to prevent prosodic breaks and phonetic errors.
- * Example: "A. W. Tozer" -> "Eigh W Tozer"
- */
-export function processInitialisms(text: string): string {
-    const initialismRegex = /\b([A-Z])\.\s+(?=[A-Z])/g;
-    
-    return text.replace(initialismRegex, (_match, letter) => {
-        const replacement = INITIALISM_PHONETIC_MAP[letter];
-        if (replacement) {
-            // Replace the letter and strip the period, maintaining the trailing space
-            return `${replacement} `; 
-        }
-        // If no phonetic patch is needed, just strip the period to fix prosody
-        return `${letter} `;
-    });
-}
-
 /**
  * Service for managing pronunciation lexicon rules.
  * Handles CRUD operations via the Yjs-backed useLexiconStore.
@@ -265,9 +242,7 @@ export class LexiconService {
     }
 
     applyLexiconWithTrace(text: string, rules: LexiconRule[]): { final: string, trace: { rule: LexiconRule, before: string, after: string }[] } {
-        // Pre-process for initialisms first
-        let processedText = processInitialisms(text);
-        processedText = processedText.normalize('NFKD');
+        let processedText = text.normalize('NFKD');
         const trace: { rule: LexiconRule, before: string, after: string }[] = [];
         const compiledRules = this.getCompiledRules(rules);
 
@@ -285,8 +260,7 @@ export class LexiconService {
     }
 
     applyLexicon(text: string, rules: LexiconRule[]): string {
-        let processedText = processInitialisms(text);
-        processedText = processedText.normalize('NFKD');
+        let processedText = text.normalize('NFKD');
         const compiledRules = this.getCompiledRules(rules);
 
         for (const compiled of compiledRules) {

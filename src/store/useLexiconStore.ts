@@ -42,14 +42,7 @@ export const useLexiconStore = create<LexiconState>()(
             addRule: (rule) => set((state) => {
                 const id = uuidv4();
                 // Determine order: max(existing) + 1
-                let maxOrder = -1;
-                for (const key in state.rules) {
-                    if (!Object.prototype.hasOwnProperty.call(state.rules, key)) continue;
-                    const r = state.rules[key];
-                    if ((r.order || 0) > maxOrder) {
-                        maxOrder = r.order || 0;
-                    }
-                }
+                const maxOrder = Object.values(state.rules).reduce((max, r) => (r.order || 0) > max ? (r.order || 0) : max, -1);
 
                 const newRule: LexiconRule = {
                     ...rule,

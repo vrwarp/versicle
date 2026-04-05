@@ -87,6 +87,7 @@ export const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({
                     className="hidden"
                     onChange={handleFileChange}
                     data-testid="zip-import-input"
+                    aria-label="Import ZIP Archive"
                 />
                 <input
                     type="file"
@@ -97,6 +98,7 @@ export const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({
                     className="hidden"
                     onChange={handleFileChange}
                     data-testid="folder-import-input"
+                    aria-label="Import Folder"
                 />
 
                 {isImporting && (

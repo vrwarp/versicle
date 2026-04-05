@@ -54,15 +54,11 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
     <div className="flex-1 overflow-y-auto">
       <ul className="divide-y divide-border">
         {annotationList.map((annotation) => (
-          <li
-            key={annotation.id}
-            data-testid={`annotation-item-${annotation.id}`}
-            className="p-3 hover:bg-accent/50 group"
-          >
+          <li key={annotation.id} data-testid={`annotation-item-${annotation.id}`} className="p-3 hover:bg-accent/50 cursor-pointer group" onClick={() => onNavigate(annotation.cfiRange)}>
             <div className="flex justify-between items-start gap-2">
               <div className="flex-1 min-w-0">
                 {editingId === annotation.id ? (
-                  <div className="mb-2">
+                  <div className="mb-2" onClick={(e) => e.stopPropagation()}>
                     <label htmlFor={`edit-annotation-${annotation.id}`} className="sr-only">Edit annotation note</label>
                     <input
                       id={`edit-annotation-${annotation.id}`}
@@ -85,20 +81,7 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
                     </div>
                   </div>
                 ) : (
-                  <div
-                    className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
-                    onClick={() => onNavigate(annotation.cfiRange)}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Navigate to annotation: ${annotation.text.substring(0, 50)}${annotation.text.length > 50 ? '...' : ''}`}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        if (e.target !== e.currentTarget) return;
-                        e.preventDefault();
-                        onNavigate(annotation.cfiRange);
-                      }
-                    }}
-                  >
+                  <>
                     {annotation.note && (
                       <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
                         <StickyNote className="w-3 h-3" />
@@ -111,7 +94,7 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
                     <p className="text-xs text-muted-foreground mt-1">
                       {new Date(annotation.created).toLocaleDateString()}
                     </p>
-                  </div>
+                  </>
                 )}
               </div>
               <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">

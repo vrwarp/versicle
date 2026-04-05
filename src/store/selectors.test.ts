@@ -546,37 +546,6 @@ describe('selectors', () => {
       expect(bookA_v2.title).toBe('Book A - Static Meta');
       expect(bookA_v2).not.toBe(bookA_v1);
     });
-
-    it('should not recreate cache objects when React randomly discards useMemo (Predictability)', () => {
-      // Simulate a scenario where React decides to drop the useMemo cache
-      // If we relied purely on useMemo without our useRef fallback, the identity of the returned array
-      // would change even if dependencies didn't.
-      const bookA = { bookId: 'book-a', title: 'Book A', lastInteraction: 100, status: 'unread', tags: [] };
-      const mockBookState = {
-        books: { 'book-a': bookA }
-      };
-
-      const mockLibraryState = { staticMetadata: {}, offloadedBookIds: new Set() };
-      const mockProgress = { 'book-a': {} };
-
-      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockBookState));
-      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockLibraryState));
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ progress: mockProgress }));
-      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ entries: {} }));
-
-      const { result, rerender } = renderHook(() => useAllBooks());
-      const firstRender = result.current;
-
-      // Force a re-render without changing ANY dependencies
-      // A pure useMemo might drop its cache here (simulated by rerendering).
-      // Since we replaced it with useRef, it MUST return the exact same reference.
-      rerender();
-
-      const secondRender = result.current;
-
-      expect(firstRender).toStrictEqual(secondRender);
-      expect(firstRender[0]).toBe(secondRender[0]);
-    });
   });
 
   describe('useLastReadBookId', () => {

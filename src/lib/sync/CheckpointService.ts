@@ -95,7 +95,7 @@ export class CheckpointService {
       // 1. Wipe existing persistence
       await yjsPersistence.clearData();
 
-      // 2. Disconnect current persistence to close IDB connections and release locks
+      // 2. Disconnect current persistence to release locks
       await disconnectYjs();
 
       // 3. Create a temporary Doc/Persistence to write the snapshot to IDB
@@ -137,57 +137,6 @@ export class CheckpointService {
         Y.applyUpdate(yDoc, checkpoint.blob);
       }, 'restore-checkpoint');
     }
-  }
-
-  /**
-   * Applies a downloaded remote state vector to the primary IDB persistence.
-   * Destroys existing data, writes the new state, and triggers a reload.
-   * Used during workspace context switching.
-   */
-  static async applyRemoteState(remoteBlob: Uint8Array): Promise<void> {
-    // 0. Disconnect cloud sync to prevent concurrent modifications
-    try {
-      getFirestoreSyncManager().destroy();
-      logger.info('Firestore disconnected for remote state application');
-    } catch (e) {
-      logger.warn('Failed to disconnect Firestore during remote state apply', e);
-    }
-
-    if (yjsPersistence) {
-      logger.info('Applying remote state via Hard Reset...');
-      // 1. Wipe existing persistence
-      await yjsPersistence.clearData();
-
-      // 2. Disconnect current persistence to close IDB connections and release locks
-      await disconnectYjs();
-
-      // 3. Write remote state to IDB via temp Doc
-      const tempDoc = new Y.Doc();
-      Y.applyUpdate(tempDoc, remoteBlob);
-
-      const tempProvider = new IndexeddbPersistence('versicle-yjs', tempDoc);
-      await tempProvider.whenSynced;
-
-      // 4. Cleanup and reload
-      await tempProvider.destroy();
-      tempDoc.destroy();
-
-      logger.info('Remote state applied. Reloading...');
-      window.location.reload();
-    } else {
-      logger.error('Cannot apply remote state: Yjs Persistence not active.');
-      throw new Error('Yjs Persistence not active. Cannot apply remote state.');
-    }
-  }
-
-  /**
-   * Deletes a specific checkpoint by ID.
-   * Used to clean up migration backups after successful switch.
-   */
-  static async deleteCheckpoint(id: number): Promise<void> {
-    const db = await getDB();
-    await db.delete('checkpoints', id);
-    logger.info(`Deleted checkpoint #${id}`);
   }
 
   /**
