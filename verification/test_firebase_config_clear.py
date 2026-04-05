@@ -21,17 +21,6 @@ def test_firebase_config_clear(page: Page):
     # Go to Sync tab
     page.get_by_role("button", name="Sync & Cloud").click()
 
-    # Select Firebase provider
-    # The select trigger shows the current value (likely Disabled or Select sync provider)
-    # We find it by looking for the select in the Sync Provider section
-    # Based on code: <SelectTrigger><SelectValue placeholder="Select sync provider" /></SelectTrigger>
-    # It might be easier to use the label to find the select
-    # page.get_by_label("Sync Provider").click() # Not sure if label is associated correctly
-
-    # Let's try to find the select by the text in it, which defaults to "Disabled" (value="none")
-    page.get_by_role("combobox").first.click()
-    page.get_by_role("option", name="Firebase (Recommended)").click()
-
     # Verify Firebase Config section appears
     expect(page.get_by_role("heading", name="Firebase Configuration")).to_be_visible()
 

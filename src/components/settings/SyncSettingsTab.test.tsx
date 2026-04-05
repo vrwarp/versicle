@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { SyncSettingsTab, SyncSettingsTabProps } from './SyncSettingsTab';
 
@@ -17,38 +17,42 @@ vi.mock('../ui/Select', () => ({
 }));
 
 // Mock Google Services Store
-const mockSetGoogleClientId = vi.fn();
-const mockSetGoogleIosClientId = vi.fn();
+export const mockSetGoogleClientId = vi.fn();
+export const mockSetGoogleIosClientId = vi.fn();
 
-vi.mock('../../store/useGoogleServicesStore', () => ({
-    useGoogleServicesStore: Object.assign(
-        () => ({
-            isServiceConnected: vi.fn().mockReturnValue(false),
-            googleClientId: 'mock-web-id',
-            googleIosClientId: 'mock-ios-id',
-        }),
-        {
-            getState: () => ({
-                setGoogleClientId: mockSetGoogleClientId,
-                setGoogleIosClientId: mockSetGoogleIosClientId,
+vi.mock('../../store/useGoogleServicesStore', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../store/useGoogleServicesStore')>();
+    return {
+        ...actual,
+        useGoogleServicesStore: Object.assign(
+            () => ({
+                isServiceConnected: vi.fn().mockReturnValue(false),
                 googleClientId: 'mock-web-id',
                 googleIosClientId: 'mock-ios-id',
-                // Mock other used actions if necessary
-                connectService: vi.fn(),
-                disconnectService: vi.fn(),
-                isServiceConnected: vi.fn().mockReturnValue(false),
+                setGoogleClientId: mockSetGoogleClientId,
+                setGoogleIosClientId: mockSetGoogleIosClientId,
             }),
-        }
-    ),
-}));
+            {
+                getState: () => ({
+                    setGoogleClientId: mockSetGoogleClientId,
+                    setGoogleIosClientId: mockSetGoogleIosClientId,
+                    googleClientId: 'mock-web-id',
+                    googleIosClientId: 'mock-ios-id',
+                    // Mock other used actions if necessary
+                    connectService: vi.fn(),
+                    disconnectService: vi.fn(),
+                    isServiceConnected: vi.fn().mockReturnValue(false),
+                }),
+            }
+        ),
+    };
+});
 
 describe('SyncSettingsTab', () => {
     const defaultProps: SyncSettingsTabProps = {
         currentDeviceId: 'device-123',
         currentDeviceName: 'My Device',
         onDeviceRename: vi.fn(),
-        syncProvider: 'none',
-        onSyncProviderChange: vi.fn(),
         isFirebaseAvailable: false,
         firebaseAuthStatus: 'signed-out',
         firestoreStatus: 'disconnected',
@@ -125,20 +129,8 @@ describe('SyncSettingsTab', () => {
         expect(onDeviceRename).not.toHaveBeenCalled();
     });
 
-    it('renders provider selection', () => {
-        render(<SyncSettingsTab {...defaultProps} />);
-
-        expect(screen.getByText('Sync Provider')).toBeInTheDocument();
-    });
-
-    it('hides Firebase section when provider is none', () => {
-        render(<SyncSettingsTab {...defaultProps} syncProvider="none" />);
-
-        expect(screen.queryByText('Firebase Configuration')).not.toBeInTheDocument();
-    });
-
     it('shows Firebase config form when not available', () => {
-        render(<SyncSettingsTab {...defaultProps} syncProvider="firebase" isFirebaseAvailable={false} />);
+        render(<SyncSettingsTab {...defaultProps} isFirebaseAvailable={false} />);
 
         expect(screen.getByText('Firebase Configuration')).toBeInTheDocument();
         expect(screen.getByTestId('firebase-config-paste')).toBeInTheDocument();
@@ -149,7 +141,6 @@ describe('SyncSettingsTab', () => {
         render(
             <SyncSettingsTab
                 {...defaultProps}
-                syncProvider="firebase"
                 isFirebaseAvailable={true}
                 firebaseAuthStatus="signed-out"
             />
@@ -158,17 +149,19 @@ describe('SyncSettingsTab', () => {
         expect(screen.getByText('Sign in with Google')).toBeInTheDocument();
     });
 
-    it('shows connected state when signed in', () => {
-        render(
-            <SyncSettingsTab
-                {...defaultProps}
-                syncProvider="firebase"
-                isFirebaseAvailable={true}
-                firebaseAuthStatus="signed-in"
-                firestoreStatus="connected"
-                firebaseUserEmail="user@example.com"
-            />
-        );
+    it('shows connected state when signed in', async () => {
+        await act(async () => {
+            render(
+                <SyncSettingsTab
+                    {...defaultProps}
+                    syncProvider="firebase"
+                    isFirebaseAvailable={true}
+                    firebaseAuthStatus="signed-in"
+                    firestoreStatus="connected"
+                    firebaseUserEmail="user@example.com"
+                />
+            );
+        });
 
         expect(screen.getByText('✓ Connected')).toBeInTheDocument();
         expect(screen.getByText('Signed in as user@example.com')).toBeInTheDocument();
@@ -204,18 +197,20 @@ describe('SyncSettingsTab', () => {
         expect(onFirebaseSignIn).toHaveBeenCalled();
     });
 
-    it('calls onFirebaseSignOut when sign out clicked', () => {
+    it('calls onFirebaseSignOut when sign out clicked', async () => {
         const onFirebaseSignOut = vi.fn();
-        render(
-            <SyncSettingsTab
-                {...defaultProps}
-                syncProvider="firebase"
-                isFirebaseAvailable={true}
-                firebaseAuthStatus="signed-in"
-                firebaseUserEmail="user@example.com"
-                onFirebaseSignOut={onFirebaseSignOut}
-            />
-        );
+        await act(async () => {
+            render(
+                <SyncSettingsTab
+                    {...defaultProps}
+                    syncProvider="firebase"
+                    isFirebaseAvailable={true}
+                    firebaseAuthStatus="signed-in"
+                    firebaseUserEmail="user@example.com"
+                    onFirebaseSignOut={onFirebaseSignOut}
+                />
+            );
+        });
 
         fireEvent.click(screen.getByText('Sign Out'));
         expect(onFirebaseSignOut).toHaveBeenCalled();

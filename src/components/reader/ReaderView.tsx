@@ -54,11 +54,13 @@ const logger = createLogger('ReaderView');
 const DEFAULT_CUSTOM_THEME = { bg: '#ffffff', fg: '#000000' };
 
 export const ReaderView: React.FC = () => {
-    const { id } = useParams<{ id: string }>();
+    const { id: bookId } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { activeSidebar, setSidebar } = useSidebarState();
     const viewerRef = useRef<HTMLDivElement>(null);
     const previousLocation = useRef<{ start: string; end: string; timestamp: number } | null>(null);
+    const touchStartRef = useRef<{y: number, x: number} | null>(null);
+    const scrollWrapperRef = useRef<HTMLDivElement>(null);
 
     const {
         currentTheme,
@@ -114,7 +116,7 @@ export const ReaderView: React.FC = () => {
     }, [readerViewMode, currentSectionTitle]);
 
     // Select current book metadata and progress from stores (Phase 2)
-    const rawBookMetadata = useBook(id || null);
+    const rawBookMetadata = useBook(bookId || null);
     const bookMetadata = useMemo(() => {
         if (!rawBookMetadata) return null;
         return {
@@ -129,8 +131,8 @@ export const ReaderView: React.FC = () => {
     // Optimization: Read initial location once on mount/id change, avoiding subscription to progress updates
     const initialLocation = useMemo(() => {
         if (cfiOverride) return decodeURIComponent(cfiOverride);
-        return id ? useReadingStateStore.getState().getProgress(id)?.currentCfi : undefined;
-    }, [id, cfiOverride]);
+        return bookId ? useReadingStateStore.getState().getProgress(bookId)?.currentCfi : undefined;
+    }, [bookId, cfiOverride]);
 
     const reset = useCallback(() => {
         resetUI();
@@ -144,11 +146,28 @@ export const ReaderView: React.FC = () => {
     const isDebugModeEnabled = useGenAIStore(state => state.isDebugModeEnabled);
 
     const {
-        annotations,
         loadAnnotations,
         showPopover,
         hidePopover
-    } = useAnnotationStore();
+} = useAnnotationStore(useShallow(state => ({
+        loadAnnotations: state.loadAnnotations,
+        showPopover: state.showPopover,
+        hidePopover: state.hidePopover
+    })));
+
+    // BOLT OPTIMIZATION: Fine-grained selector for annotations
+    // Only re-render when annotations for THIS specific book change, not when any annotation in the library changes.
+    const annotationList = useAnnotationStore(useShallow(state => {
+        const list = [];
+        for (const key in state.annotations) {
+            if (Object.prototype.hasOwnProperty.call(state.annotations, key)) {
+                if (state.annotations[key].bookId === bookId) {
+                    list.push(state.annotations[key]);
+                }
+            }
+        }
+        return list;
+    }));
 
     const [historyTick, setHistoryTick] = useState(0);
 
@@ -187,7 +206,7 @@ export const ReaderView: React.FC = () => {
             // And current position is effectively start.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const meta = metadataRef.current as any;
-            if (meta && !meta.currentCfi && meta.progress > 0 && !hasPromptedForImport.current && id) {
+            if (meta && !meta.currentCfi && meta.progress > 0 && !hasPromptedForImport.current && bookId) {
                 // We only trigger if we are at the start (percentage ~0)
                 if (percentage < 0.01) {
                     setImportJumpTarget(meta.progress);
@@ -200,14 +219,14 @@ export const ReaderView: React.FC = () => {
             hasPromptedForImport.current = true; // Ensure we only check once per session
 
             // Prevent infinite loop if CFI hasn't changed (handled in store usually, but double check)
-            const currentProgress = useReadingStateStore.getState().getProgress(id || '');
+            const currentProgress = useReadingStateStore.getState().getProgress(bookId || '');
             if (location.start.cfi === (currentProgress?.currentCfi || '')) return;
 
             // Reading History Calculation
             // We use a promise to handle the potential async nature of snapCfiToSentence for the PREVIOUS range,
             // while bundling it with the synchronous update for the CURRENT range.
             const prepareUpdates = async () => {
-                if (!id) return;
+                if (!bookId) return;
 
                 const updates: import('../../store/useReadingStateStore').SessionUpdate[] = [];
 
@@ -256,7 +275,7 @@ export const ReaderView: React.FC = () => {
 
                 // 3. Single Atomic Update
                 useReadingStateStore.getState().updateReadingSession(
-                    id,
+                    bookId,
                     location.start.cfi,
                     percentage,
                     updates
@@ -313,7 +332,7 @@ export const ReaderView: React.FC = () => {
         fontSize,
         lineHeight,
         shouldForceFont,
-        id,
+        bookId,
         // updateLocation,
         setToc,
         showPopover,
@@ -331,7 +350,7 @@ export const ReaderView: React.FC = () => {
         isLoading: hookLoading,
         metadata,
         error: hookError
-    } = useEpubReader(id, viewerRef as React.RefObject<HTMLElement>, readerOptions);
+    } = useEpubReader(bookId, viewerRef as React.RefObject<HTMLElement>, readerOptions);
 
     useEffect(() => {
         metadataRef.current = metadata;
@@ -339,11 +358,11 @@ export const ReaderView: React.FC = () => {
         // Check version and redirect if outdated
         if (metadata) {
             const effectiveVersion = metadata.version ?? 0;
-            if (effectiveVersion < CURRENT_BOOK_VERSION && id) {
-                navigate('/', { state: { reprocessBookId: id } });
+            if (effectiveVersion < CURRENT_BOOK_VERSION && bookId) {
+                navigate('/', { state: { reprocessBookId: bookId } });
             }
         }
-    }, [metadata, id, navigate]);
+    }, [metadata, bookId, navigate]);
 
     const bookRef = useRef(book);
     useEffect(() => {
@@ -393,16 +412,16 @@ export const ReaderView: React.FC = () => {
 
     // Set Book ID and Audio Service context
     useEffect(() => {
-        if (id) {
-            AudioPlayerService.getInstance().setBookId(id);
-            setCurrentBookId(id);
+        if (bookId) {
+            AudioPlayerService.getInstance().setBookId(bookId);
+            setCurrentBookId(bookId);
         }
-    }, [id, setCurrentBookId]);
+    }, [bookId, setCurrentBookId]);
 
     // Save reading history on unmount
     useEffect(() => {
         return () => {
-            if (id && previousLocation.current) {
+            if (bookId && previousLocation.current) {
                 const prevStart = previousLocation.current.start;
                 const prevEnd = previousLocation.current.end;
                 const duration = Date.now() - previousLocation.current.timestamp;
@@ -421,7 +440,7 @@ export const ReaderView: React.FC = () => {
                     // Ignore generic "Chapter" placeholder
                     if (label !== 'Chapter') {
                         try {
-                            useReadingStateStore.getState().addCompletedRange(id, range, type, label);
+                            useReadingStateStore.getState().addCompletedRange(bookId, range, type, label);
                         } catch (e) {
                             logger.error("History panic save failed", e);
                         }
@@ -429,7 +448,7 @@ export const ReaderView: React.FC = () => {
                 }
             }
         };
-    }, [id]);
+    }, [bookId]);
 
     // Handle Unmount Cleanup
     useEffect(() => {
@@ -466,10 +485,10 @@ export const ReaderView: React.FC = () => {
 
     // Load Annotations from DB
     useEffect(() => {
-        if (id) {
-            loadAnnotations(id);
+        if (bookId) {
+            loadAnnotations(bookId);
         }
-    }, [id, loadAnnotations]);
+    }, [bookId, loadAnnotations]);
 
     const handleJumpConfirm = async () => {
         if (areLocationsReady) {
@@ -496,12 +515,12 @@ export const ReaderView: React.FC = () => {
         setShowImportJumpDialog(false);
         setIsWaitingForJump(false);
         // Explicitly save current position (0) to mark as "started"
-        if (id) {
-            const currentProgress = useReadingStateStore.getState().getProgress(id);
+        if (bookId) {
+            const currentProgress = useReadingStateStore.getState().getProgress(bookId);
             const currentCfi = currentProgress?.currentCfi;
             // updateLocation handles saving to Yjs
             if (currentCfi) {
-                useReadingStateStore.getState().updateLocation(id, currentCfi, currentProgress?.percentage || 0);
+                useReadingStateStore.getState().updateLocation(bookId, currentCfi, currentProgress?.percentage || 0);
             }
         }
     };
@@ -564,7 +583,6 @@ export const ReaderView: React.FC = () => {
 
     useEffect(() => {
         if (rendition && isRenditionReady) {
-            const annotationList = Object.values(annotations);
             const currentIds = new Set(annotationList.map(a => a.id));
 
             // 1. Remove deleted annotations (Highlights and Markers)
@@ -661,7 +679,7 @@ export const ReaderView: React.FC = () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (window as any).__reader_added_annotations_count = addedAnnotations.current.size;
         }
-    }, [annotations, isRenditionReady, rendition, showPopover]);
+    }, [annotationList, isRenditionReady, rendition, showPopover, bookId]);
 
     // Handle TTS Errors
     const showToast = useToastStore(state => state.showToast);
@@ -703,7 +721,7 @@ export const ReaderView: React.FC = () => {
                 const section = book.spine.get(currentSectionId!);
                 if (!section) return;
 
-                const analysis = await dbService.getContentAnalysis(id!, section.href);
+                const analysis = await dbService.getContentAnalysis(bookId!, section.href);
                 if (!analysis) return;
 
                 if (analysis.referenceStartCfi) {
@@ -735,7 +753,7 @@ export const ReaderView: React.FC = () => {
         applyHighlights();
 
         // Re-apply on section change or debug toggle
-    }, [rendition, isRenditionReady, isDebugModeEnabled, id, currentSectionId, book]);
+    }, [rendition, isRenditionReady, isDebugModeEnabled, bookId, currentSectionId, book]);
 
     const [useSyntheticToc, setUseSyntheticToc] = useState(false);
     const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);
@@ -778,7 +796,7 @@ export const ReaderView: React.FC = () => {
     // Smart TOC Hook
     const { enhanceTOC, isEnhancing, progress: tocProgress } = useSmartTOC(
         book,
-        id,
+        bookId,
         toc,
         setSyntheticToc
     );
@@ -804,7 +822,7 @@ export const ReaderView: React.FC = () => {
         setIsSearching(true);
         setActiveSearchQuery(searchQuery);
         try {
-            const results = await searchClient.search(searchQuery, id || '');
+            const results = await searchClient.search(searchQuery, bookId || '');
             setSearchResults(results);
         } catch (e) {
             logger.error("Search failed", e);
@@ -812,21 +830,21 @@ export const ReaderView: React.FC = () => {
         } finally {
             setIsSearching(false);
         }
-    }, [searchQuery, id, showToast]);
+    }, [searchQuery, bookId, showToast]);
 
     const handleCheckIndex = useCallback(async () => {
-        if (!id || !book) return;
-        if (searchClient.isIndexed(id)) return;
+        if (!bookId || !book) return;
+        if (searchClient.isIndexed(bookId)) return;
 
         setIsIndexing(true);
         try {
-            await searchClient.indexBook(book, id, (progress) => {
+            await searchClient.indexBook(book, bookId, (progress) => {
                 setIndexingProgress(Math.round(progress * 100));
             });
         } finally {
             setIsIndexing(false);
         }
-    }, [id, book]);
+    }, [bookId, book]);
 
     // Load synthetic TOC from metadata
     useEffect(() => {
@@ -983,8 +1001,8 @@ export const ReaderView: React.FC = () => {
 
     // Optimization: Subscribe only to OTHER devices' progress to avoid re-renders on own progress update
     const otherDevicesProgress = useReadingStateStore(useShallow(state => {
-        if (!id) return {};
-        const bookProgress = state.progress?.[id];
+        if (!bookId) return {};
+        const bookProgress = state.progress?.[bookId];
         if (!bookProgress) return {};
 
         const result: Record<string, import('../../types/db').UserProgress> = {};
@@ -999,7 +1017,7 @@ export const ReaderView: React.FC = () => {
     const deviceMarkers = useMemo(() => {
         const markers: Record<string, Array<{ id: string; name: string; platform: string }>> = {};
         // Optimization: Skip computation if TOC is hidden
-        if (!showToc || !id || !book) return markers;
+        if (!showToc || !bookId || !book) return markers;
 
         Object.entries(otherDevicesProgress).forEach(([devId, prog]) => {
             if (!prog.currentCfi) return;
@@ -1025,9 +1043,58 @@ export const ReaderView: React.FC = () => {
             }
         });
         return markers;
-    }, [showToc, id, otherDevicesProgress, book, devices]);
+    }, [showToc, bookId, otherDevicesProgress, book, devices]);
     const showAnnotations = activeSidebar === 'annotations';
     const showSearch = activeSidebar === 'search';
+
+    useEffect(() => {
+        const wrapper = scrollWrapperRef.current;
+        if (!wrapper) return;
+
+        const handleWheel = (e: WheelEvent) => {
+            if (readerViewMode !== 'scrolled') return;
+            const epubContainer = viewerRef.current?.firstElementChild as HTMLElement;
+            if (epubContainer) {
+                epubContainer.scrollBy({ top: e.deltaY, left: e.deltaX });
+                if (e.cancelable) e.preventDefault();
+            }
+        };
+
+        const handleTouchStart = (e: TouchEvent) => {
+            if (readerViewMode !== 'scrolled') return;
+            touchStartRef.current = { y: e.touches[0].clientY, x: e.touches[0].clientX };
+        };
+
+        const handleTouchMove = (e: TouchEvent) => {
+            if (readerViewMode !== 'scrolled' || !touchStartRef.current) return;
+            const deltaY = touchStartRef.current.y - e.touches[0].clientY;
+            const deltaX = touchStartRef.current.x - e.touches[0].clientX;
+            
+            const epubContainer = viewerRef.current?.firstElementChild as HTMLElement;
+            if (epubContainer) {
+                epubContainer.scrollBy({ top: deltaY, left: deltaX });
+                if (e.cancelable) e.preventDefault();
+            }
+            
+            touchStartRef.current = { y: e.touches[0].clientY, x: e.touches[0].clientX };
+        };
+
+        const handleTouchEnd = () => {
+            touchStartRef.current = null;
+        };
+
+        wrapper.addEventListener('wheel', handleWheel, { passive: false });
+        wrapper.addEventListener('touchstart', handleTouchStart, { passive: true });
+        wrapper.addEventListener('touchmove', handleTouchMove, { passive: false });
+        wrapper.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+        return () => {
+            wrapper.removeEventListener('wheel', handleWheel);
+            wrapper.removeEventListener('touchstart', handleTouchStart);
+            wrapper.removeEventListener('touchmove', handleTouchMove);
+            wrapper.removeEventListener('touchend', handleTouchEnd);
+        };
+    }, [readerViewMode]);
 
     return (
         <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
@@ -1232,7 +1299,7 @@ export const ReaderView: React.FC = () => {
                         isEnhancing={isEnhancing}
                         tocProgress={tocProgress}
                         onEnhanceTOC={enhanceTOC}
-                        bookId={id || ''}
+                        bookId={bookId || ''}
                         rendition={rendition ?? undefined}
                         historyTick={historyTick}
                         onHistoryNavigate={(cfi) => {
@@ -1248,7 +1315,7 @@ export const ReaderView: React.FC = () => {
                             <h2 className="text-lg font-bold text-foreground">Annotations</h2>
                         </div>
                         <AnnotationList
-                            bookId={id}
+                            bookId={bookId}
                             onNavigate={(cfi) => {
                                 rendition?.display(cfi);
                                 if (window.innerWidth < 768) setSidebar('none');
@@ -1280,7 +1347,10 @@ export const ReaderView: React.FC = () => {
                 )}
 
                 {/* Reader Area */}
-                <div className="flex-1 relative min-w-0 flex flex-col items-center">
+                <div 
+                    ref={scrollWrapperRef}
+                    className="flex-1 relative min-w-0 flex flex-col items-center"
+                >
                     <div
                         data-testid="reader-iframe-container"
                         ref={viewerRef}
@@ -1298,7 +1368,7 @@ export const ReaderView: React.FC = () => {
             <SyncStatusPanel
                 open={syncPanelOpen}
                 onOpenChange={setSyncPanelOpen}
-                bookId={id || ''}
+                bookId={bookId || ''}
                 onJump={(cfi) => {
                     rendition?.display(cfi);
                 }}
@@ -1307,7 +1377,7 @@ export const ReaderView: React.FC = () => {
             <HistoryHighlighter
                 rendition={rendition}
                 isRenditionReady={isRenditionReady}
-                bookId={id || null}
+                bookId={bookId || null}
                 isPlaying={isPlaying}
             />
 

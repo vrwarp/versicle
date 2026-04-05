@@ -34,7 +34,13 @@ function splitLongSentence(text: string, maxLen: number): string[] {
         // 1. Clause Boundary Scan
         const clauseRegex = /[,;:—–]/g;
         let match;
-        while ((match = clauseRegex.exec(currentText.substring(0, maxLen))) !== null) {
+        const searchChunk = currentText.substring(0, maxLen);
+        while ((match = clauseRegex.exec(searchChunk)) !== null) {
+            if (match[0].length === 0) {
+                clauseRegex.lastIndex++;
+                continue;
+            }
+
             splitIndex = match.index + 1; // Inclusive of punctuation
         }
 

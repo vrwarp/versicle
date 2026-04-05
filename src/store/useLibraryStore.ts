@@ -133,17 +133,25 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           bookIds.map(id => injectedDB.getBookMetadata(id))
         );
 
-        const staticMetadata: Record<string, BookMetadata> = {};
-        manifests.forEach(manifest => {
-          if (manifest && manifest.id) {
-            staticMetadata[manifest.id] = manifest;
-          }
-        });
+        set((state) => {
+          const currentBooks = useBookStore.getState().books;
+          const nextStaticMetadata = { ...state.staticMetadata };
 
-        set((state) => ({
-          staticMetadata: { ...staticMetadata, ...state.staticMetadata },
-          isHydrating: false
-        }));
+          manifests.forEach(manifest => {
+            if (manifest && manifest.id) {
+              // Only add if it still exists in the synced inventory (not concurrently removed)
+              // and wasn't already loaded/updated in state.
+              if (currentBooks[manifest.id] && !(manifest.id in nextStaticMetadata)) {
+                nextStaticMetadata[manifest.id] = manifest;
+              }
+            }
+          });
+
+          return {
+            staticMetadata: nextStaticMetadata,
+            isHydrating: false
+          };
+        });
 
         // Hydrate Offload Status
         try {
@@ -154,6 +162,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           });
 
           set((state) => {
+            const currentBooks = useBookStore.getState().books;
             const nextOffloadedBookIds = new Set(state.offloadedBookIds);
 
             // Only add IDs from the DB read if they weren't explicitly removed
@@ -164,6 +173,12 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
                 // Do NOT add it back from the stale DB read.
                 continue;
               }
+
+              // Ensure the book still exists in the synced inventory
+              if (!currentBooks[id]) {
+                continue;
+              }
+
               nextOffloadedBookIds.add(id);
             }
 
@@ -215,7 +230,11 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         // Check for duplicates
         // Use Store state first (synchronous check to avoid race conditions with recent adds)
         const books = useBookStore.getState().books;
-        let existingId = Object.values(books).find(b => b.sourceFilename === file.name)?.bookId;
+        let existingId: string | undefined;
+        const matchingBook = Object.values(books).find(b => b.sourceFilename === file.name);
+        if (matchingBook) {
+          existingId = matchingBook.bookId;
+        }
 
         // If not found in store (e.g. not fully synced?), try DB as backup
         if (!existingId) {
@@ -320,9 +339,12 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           // Note: We use `get().staticMetadata` inside the loop to ensure we read the latest state
           // to avoid race conditions if rapid sequential imports happen.
           const staticMeta = get().staticMetadata;
-          const ghostMatch: UserInventoryItem | undefined = Object.values(books).find(b => {
+          const metaTitleTrimmed = meta.title.trim();
+          const metaAuthorTrimmed = meta.author.trim();
+
+          const ghostMatch = Object.values(books).find(b => {
             const isGhost = !staticMeta[b.bookId];
-            const isMatch = b.title.trim() === meta.title.trim() && b.author.trim() === meta.author.trim();
+            const isMatch = b.title.trim() === metaTitleTrimmed && b.author.trim() === metaAuthorTrimmed;
             return isGhost && isMatch;
           });
 
@@ -550,8 +572,13 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         set((state) => {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { [id]: _removedMeta, ...remainingMeta } = state.staticMetadata;
+
+          const nextOffloadedBookIds = new Set(state.offloadedBookIds);
+          nextOffloadedBookIds.delete(id);
+
           return {
-            staticMetadata: remainingMeta
+            staticMetadata: remainingMeta,
+            offloadedBookIds: nextOffloadedBookIds
           };
         });
 

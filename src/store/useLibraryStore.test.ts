@@ -290,4 +290,32 @@ describe('useLibraryStore', () => {
     expect(bookState.books['b2']).toBeDefined();
     expect(bookState.books['b2'].coverPalette).toEqual([6, 7, 8, 9, 10]);
   });
+
+  describe('removeBook predictability', () => {
+    it('removes offloadedBookIds on removeBook', async () => {
+      // First, set up the store with a book and offloaded state
+      useLibraryStore.setState({
+        staticMetadata: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          'book1': { id: 'book1', version: 1, addedAt: 100 } as any
+        },
+        offloadedBookIds: new Set(['book1'])
+      });
+
+      useBookStore.setState({
+        books: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          'book1': { bookId: 'book1', title: 'Test', author: 'Author' } as any
+        }
+      });
+
+      expect(useLibraryStore.getState().offloadedBookIds.has('book1')).toBe(true);
+
+      await useLibraryStore.getState().removeBook('book1');
+
+      const state = useLibraryStore.getState();
+      expect(state.staticMetadata['book1']).toBeUndefined();
+      expect(state.offloadedBookIds.has('book1')).toBe(false);
+    });
+  });
 });

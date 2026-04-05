@@ -23,8 +23,8 @@
 *   **Language**: TypeScript 5.9.3
 *   **Testing**: Vitest 4.0.16
 *   **Linting**: ESLint 9.39.2
-*   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (Custom Fork)
-*   **Sync**: `y-cinder` (Custom Fork / Firestore 11.10.0) + Android Backup Service + Google Drive API
+*   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (github:vrwarp/zustand-middleware-yjs#master)
+*   **Sync**: `y-cinder` (github:vrwarp/y-cinder#main / Firestore 11.10.0) + Android Backup Service + Google Drive API
 *   **Storage**: IndexedDB (via `idb`)
 *   **Parsing**: epub.js + PapaParse (CSV)
 *   **Audio**: Piper (WASM) / Web Speech API / LemonFox.ai
@@ -95,7 +95,7 @@
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
 *   **Checkpoint Forensics**: Inspect the exact data difference between your live state and any backup checkpoint.
 *   **Safe Mode**: A fallback UI that activates on critical database initialization failures, allowing users to export debug info or perform a factory reset to recover usability.
-*   **Schema Quarantine (`ObsoleteLockView`)**: A safety mechanism that locks the app and severs cloud connections if a remote database with a newer schema version is detected, preventing outdated clients from corrupting upgraded data structures.
+*   **Schema Quarantine (`ObsoleteLockView`)**: A safety mechanism that locks the app and severs cloud connections if a remote database with a newer schema version (currently V4) is detected, preventing outdated clients from corrupting upgraded data structures.
 
 ## Setup & Development
 
@@ -132,7 +132,7 @@ npm run build
 #### Unit Tests (Vitest)
 ```bash
 # Run all tests
-npm run test
+vitest run
 
 # Run specific test file
 npx vitest src/lib/ingestion.test.ts
