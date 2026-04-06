@@ -148,30 +148,22 @@ export async function reprocessBook(bookId: string): Promise<void> {
     // Requires index 'by_bookId' which we added
     const prepIndex = prepStore.index('by_bookId');
     const keys = await prepIndex.getAllKeys(bookId);
-    for (const key of keys) {
-        await prepStore.delete(key);
-    }
+    await Promise.all(keys.map(key => prepStore.delete(key)));
 
-    for (const batch of ttsContentBatches) {
-        await prepStore.put({
-            id: batch.id,
-            bookId: batch.bookId,
-            sectionId: batch.sectionId,
-            sentences: batch.sentences
-        });
-    }
+    await Promise.all(ttsContentBatches.map(batch => prepStore.put({
+        id: batch.id,
+        bookId: batch.bookId,
+        sectionId: batch.sectionId,
+        sentences: batch.sentences
+    })));
 
     // Update Table Images (Cache)
     const tableStore = tx.objectStore('cache_table_images');
     const tableIndex = tableStore.index('by_bookId');
     const tableKeys = await tableIndex.getAllKeys(bookId);
-    for (const key of tableKeys) {
-        await tableStore.delete(key);
-    }
+    await Promise.all(tableKeys.map(key => tableStore.delete(key)));
 
-    for (const table of tableBatches) {
-        await tableStore.put(table);
-    }
+    await Promise.all(tableBatches.map(table => tableStore.put(table)));
 
     await tx.done;
 }

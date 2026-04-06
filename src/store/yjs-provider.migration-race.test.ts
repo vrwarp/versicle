@@ -5,6 +5,7 @@ import { useBookStore } from './useBookStore';
 describe('Yjs Provider - runMigrations race condition', () => {
     beforeEach(() => {
         vi.useFakeTimers();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         useBookStore.setState({ __schemaVersion: 1 } as any);
         vi.restoreAllMocks();
     });
