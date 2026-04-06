@@ -73,12 +73,15 @@ export class MaintenanceService {
       'readwrite'
     );
 
+    // BOLT OPTIMIZATION: Batch delete operations to avoid sequential await within IndexedDB transactions
+    const deletePromises: Promise<void>[] = [];
+
     // Prune files (static_resources)
     const filesStore = tx.objectStore('static_resources');
     const fileKeys = await filesStore.getAllKeys();
     for (const key of fileKeys) {
       if (!bookIds.has(key.toString())) {
-        await filesStore.delete(key);
+        deletePromises.push(filesStore.delete(key));
       }
     }
 
@@ -87,7 +90,7 @@ export class MaintenanceService {
     const locationKeys = await locationsStore.getAllKeys();
     for (const key of locationKeys) {
       if (!bookIds.has(key.toString())) {
-        await locationsStore.delete(key);
+        deletePromises.push(locationsStore.delete(key));
       }
     }
 
@@ -96,10 +99,12 @@ export class MaintenanceService {
     let prepCursor = await prepStore.openCursor();
     while (prepCursor) {
       if (!bookIds.has(prepCursor.value.bookId)) {
-        await prepCursor.delete();
+        deletePromises.push(prepCursor.delete());
       }
       prepCursor = await prepCursor.continue();
     }
+
+    await Promise.all(deletePromises);
 
     await tx.done;
   }

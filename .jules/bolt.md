@@ -161,3 +161,6 @@
 ## 2026-04-05 - [Eliminate O(N) array allocation overhead from Object.values().find()]
 **Learning:** Object.values(books).find(...) causes an array of all values to be allocated on every execution, which can cause garbage collection (GC) thrashing and performance drops in fast loops or frequently called functions.
 **Action:** Replaced Object.values().find() with for...in loops which allows early loop termination (break) and avoids the memory allocation overhead completely.
+## 2026-04-06 - [IndexedDB Transaction Batching]
+**Learning:** In `MaintenanceService.ts`, the `pruneOrphans()` method was executing sequential `await delete()` operations inside a `for...of` loop and a `while` loop cursor within an IndexedDB transaction. This sequential waiting leads to I/O waterfall effects, keeping the transaction open longer than necessary and blocking other database operations.
+**Action:** When performing multiple `put` or `delete` operations inside an IndexedDB transaction loop, avoid `await`ing them sequentially. Instead, collect the promises into an array and `await Promise.all(deletePromises)` after the loop to queue the operations concurrently, which shortens the transaction duration.
