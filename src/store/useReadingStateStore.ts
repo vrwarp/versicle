@@ -452,7 +452,6 @@ export const useBookProgress = (bookId: string | null) => {
             // Note: state.progress[bookId] lookup ensures we only re-render when this book's progress changes.
             // ReadingStateStore uses a nested Record for progress.
             // By accessing state.progress[bookId] we ensure reactivity is limited to this key.
-            const _trigger = state.progress?.[bookId];
             const p = state.getProgress(bookId);
             if (!p) return null;
 
