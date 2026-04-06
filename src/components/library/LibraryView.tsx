@@ -82,18 +82,11 @@ export const LibraryView: React.FC = () => {
   const { setGlobalSettingsOpen } = useUIStore();
   const showToast = useToastStore(state => state.showToast);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // const restoreFileInputRef = useRef<HTMLInputElement>(null); // Removed
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const navigate = useNavigate();
   const location = useLocation();
-
-  // (omitted modal state)
-
-  // ...
-
-  // const handleRestoreFileSelect = ... // Removed
 
   // Modal State Coordination
   const [activeModal, setActiveModal] = useState<{
