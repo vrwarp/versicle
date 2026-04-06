@@ -28,7 +28,6 @@ interface LexiconManagerProps {
  * @returns The LexiconManager dialog component.
  */
 export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManagerProps) {
-    // const [rules, setRules] = useState<LexiconRule[]>([]); // Removed: using store derived state
     const [editingRule, setEditingRule] = useState<Partial<LexiconRule> | null>(null);
     const [isAdding, setIsAdding] = useState(false);
     const lexiconService = LexiconService.getInstance();
@@ -82,8 +81,6 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
         if (!editingRule?.original || !editingRule?.replacement) return;
 
         // Preserve existing order if editing, or append to end if new
-        // const existingRule = rules.find(r => r.id === editingRule.id);
-        // const order = existingRule?.order ?? rules.length; // Handled by store addition/update implicitly
 
         await lexiconService.saveRule({
             id: editingRule.id,
@@ -250,7 +247,6 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                         applyBeforeGlobal: r.applyBeforeGlobal
                     });
                 }
-                // loadRules(); // Reactive update
             }
             // Reset input
             if (fileInputRef.current) fileInputRef.current.value = '';
