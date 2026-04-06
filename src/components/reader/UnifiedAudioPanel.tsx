@@ -161,6 +161,7 @@ export const UnifiedAudioPanel = () => {
                              onClick={handleRefreshVoices}
                              disabled={isRefreshing}
                              title="Refresh Voice List"
+                             aria-label="Refresh Voice List"
                         >
                              <RefreshCw className={`h-3 w-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
                              Refresh
