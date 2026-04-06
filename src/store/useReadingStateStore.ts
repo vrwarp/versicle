@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import yjs from 'zustand-middleware-yjs';
 import { yDoc, getYjsOptions } from './yjs-provider';
 import type { UserProgress, ReadingEventType, ReadingSession } from '../types/db';
@@ -444,12 +445,24 @@ export const useReadingStateStore = create<ReadingState>()(
  * @returns The progress object with max percentage, or null if not found.
  */
 export const useBookProgress = (bookId: string | null) => {
-    return useReadingStateStore(state => {
-        if (!bookId) return null;
+    return useReadingStateStore(
+        useShallow(state => {
+            if (!bookId) return null;
 
-        // Use the selector logic which now includes local priority
-        return state.getProgress(bookId);
-    });
+            // Note: state.progress[bookId] lookup ensures we only re-render when this book's progress changes.
+            // ReadingStateStore uses a nested Record for progress.
+            // By accessing state.progress[bookId] we ensure reactivity is limited to this key.
+            const _trigger = state.progress?.[bookId];
+            const p = state.getProgress(bookId);
+            if (!p) return null;
+
+            return {
+                ...p,
+                percentage: p.percentage,
+                currentCfi: p.currentCfi
+            };
+        })
+    );
 };
 
 /**

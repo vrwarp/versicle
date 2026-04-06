@@ -3,7 +3,7 @@ import { useReaderUIStore } from '../store/useReaderUIStore';
 import { dbService } from '../db/DBService';
 
 // Actually, looking at the project, I don't see react-query. I'll stick to a simple hook given the constraints.
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { UserProgress } from '../types/db';
 
 import { useShallow } from 'zustand/react/shallow';
@@ -14,7 +14,13 @@ export function useBookProgress(bookId: string) {
     // Select the derived progress directly to ensure full reactivity without anti-patterns
     // We pass the entire calculation into the selector so it only re-renders when the final derived value changes.
     const resolvedProgress = useReadingStateStore(
-        useShallow(state => state.getProgress(bookId))
+        useShallow(state => {
+            const p = state.getProgress(bookId);
+            return {
+                percentage: p?.percentage || 0,
+                currentCfi: p?.currentCfi || ''
+            };
+        })
     );
 
     // If the requested book is the active one, return state from store
@@ -50,15 +56,14 @@ export function useBookProgress(bookId: string) {
         };
     }, [bookId, isCurrent]);
 
-    if (isCurrent) {
-        return {
-            percentage: resolvedProgress?.percentage || 0,
-            currentCfi: resolvedProgress?.currentCfi || ''
-        };
-    }
+    return useMemo(() => {
+        if (isCurrent) {
+            return resolvedProgress;
+        }
 
-    return {
-        percentage: storedProgress?.percentage || 0,
-        currentCfi: storedProgress?.currentCfi || ''
-    };
+        return {
+            percentage: storedProgress?.percentage || 0,
+            currentCfi: storedProgress?.currentCfi || ''
+        };
+    }, [isCurrent, resolvedProgress, storedProgress?.percentage, storedProgress?.currentCfi]);
 }
