@@ -80,8 +80,6 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     const handleSave = async () => {
         if (!editingRule?.original || !editingRule?.replacement) return;
 
-        // Preserve existing order if editing, or append to end if new
-
         await lexiconService.saveRule({
             id: editingRule.id,
             original: editingRule.original,
