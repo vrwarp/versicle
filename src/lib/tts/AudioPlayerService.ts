@@ -575,7 +575,6 @@ export class AudioPlayerService {
                     return;
                 }
             }
-            // if changed, PSM auto persisted and notified.
 
             if (wasPlaying) {
                 this.providerManager.stop();
