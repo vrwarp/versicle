@@ -88,12 +88,6 @@ export const LibraryView: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // (omitted modal state)
-
-  // ...
-
-  // const handleRestoreFileSelect = ... // Removed
-
   // Modal State Coordination
   const [activeModal, setActiveModal] = useState<{
     type: 'delete' | 'offload';
