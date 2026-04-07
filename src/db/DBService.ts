@@ -266,32 +266,22 @@ class DBService {
       // User data (overrides, progress, inventory) is now handled by Yjs stores exclusively.
 
       const ttsStore = tx.objectStore('cache_tts_preparation');
-      for (const batch of data.ttsContentBatches) {
-        if (mode === 'overwrite') {
-          await ttsStore.put({
-            id: batch.id,
-            bookId: batch.bookId,
-            sectionId: batch.sectionId,
-            sentences: batch.sentences
-          });
-        } else {
-          await ttsStore.add({
-            id: batch.id,
-            bookId: batch.bookId,
-            sectionId: batch.sectionId,
-            sentences: batch.sentences
-          });
-        }
-      }
+      const ttsPromises = data.ttsContentBatches.map(batch => {
+        const item = {
+          id: batch.id,
+          bookId: batch.bookId,
+          sectionId: batch.sectionId,
+          sentences: batch.sentences
+        };
+        return mode === 'overwrite' ? ttsStore.put(item) : ttsStore.add(item);
+      });
+      await Promise.all(ttsPromises);
 
       const tableStore = tx.objectStore('cache_table_images');
-      for (const table of data.tableBatches) {
-        if (mode === 'overwrite') {
-          await tableStore.put(table);
-        } else {
-          await tableStore.add(table);
-        }
-      }
+      const tablePromises = data.tableBatches.map(table => {
+        return mode === 'overwrite' ? tableStore.put(table) : tableStore.add(table);
+      });
+      await Promise.all(tablePromises);
 
       await tx.done;
     } catch (error) {
@@ -367,11 +357,8 @@ class DBService {
         const store = tx.objectStore(storeName);
         // @ts-expect-error - index() types are tricky with generic strings
         const index = store.index(indexName);
-        let cursor = await index.openCursor(IDBKeyRange.only(id));
-        while (cursor) {
-          await cursor.delete();
-          cursor = await cursor.continue();
-        }
+        const keys = await index.getAllKeys(IDBKeyRange.only(id));
+        await Promise.all(keys.map(key => store.delete(key)));
       };
 
       await deleteFromIndex('cache_tts_preparation', 'by_bookId');
