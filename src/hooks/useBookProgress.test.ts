@@ -99,4 +99,24 @@ describe('useBookProgress predictability bug', () => {
       expect(result.current.percentage).toBe(50);
       expect(result.current.currentCfi).toBe('cfi2');
   });
+
+  it('maintains referential stability for consumers when properties do not change', () => {
+    // Setup initial state
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    useReaderUIStore.setState({ currentBookId: 'book1' } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    useReadingStateStore.setState({ progress: { 'book1': { 'device1': { percentage: 10, currentCfi: 'cfi1', lastRead: 1 } as any } } as any });
+
+    const { result, rerender } = renderHook(() => useBookProgress('book1'));
+
+    const firstResult = result.current;
+
+    // Force a re-render of the hook with same props
+    rerender();
+
+    const secondResult = result.current;
+
+    // The returned object reference should be strictly equal
+    expect(firstResult).toBe(secondResult);
+  });
 });

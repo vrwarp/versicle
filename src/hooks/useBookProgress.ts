@@ -3,7 +3,7 @@ import { useReaderUIStore } from '../store/useReaderUIStore';
 import { dbService } from '../db/DBService';
 
 // Actually, looking at the project, I don't see react-query. I'll stick to a simple hook given the constraints.
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { UserProgress } from '../types/db';
 
 import { useShallow } from 'zustand/react/shallow';
@@ -50,15 +50,17 @@ export function useBookProgress(bookId: string) {
         };
     }, [bookId, isCurrent]);
 
-    if (isCurrent) {
-        return {
-            percentage: resolvedProgress?.percentage || 0,
-            currentCfi: resolvedProgress?.currentCfi || ''
-        };
-    }
+    return useMemo(() => {
+        if (isCurrent) {
+            return {
+                percentage: resolvedProgress?.percentage || 0,
+                currentCfi: resolvedProgress?.currentCfi || ''
+            };
+        }
 
-    return {
-        percentage: storedProgress?.percentage || 0,
-        currentCfi: storedProgress?.currentCfi || ''
-    };
+        return {
+            percentage: storedProgress?.percentage || 0,
+            currentCfi: storedProgress?.currentCfi || ''
+        };
+    }, [isCurrent, resolvedProgress?.percentage, resolvedProgress?.currentCfi, storedProgress?.percentage, storedProgress?.currentCfi]);
 }
