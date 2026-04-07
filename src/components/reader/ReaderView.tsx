@@ -584,13 +584,17 @@ export const ReaderView: React.FC = () => {
     useEffect(() => {
         if (rendition && isRenditionReady) {
             // Inject audio-bookmark pending theme
-            rendition.themes.default({
-                '.versicle-audio-bookmark-pending': {
-                    'border-bottom': '2px dashed #ff9800 !important',
-                    'background-color': 'rgba(255, 152, 0, 0.1) !important',
-                    'cursor': 'pointer !important'
-                }
-            });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if ((rendition as any).themes?.default) {
+                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (rendition as any).themes.default({
+                    '.versicle-audio-bookmark-pending': {
+                        'border-bottom': '2px dashed #ff9800 !important',
+                        'background-color': 'rgba(255, 152, 0, 0.1) !important',
+                        'cursor': 'pointer !important'
+                    }
+                });
+            }
 
             const currentIds = new Set(annotationList.map(a => a.id));
 

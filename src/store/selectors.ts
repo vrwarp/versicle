@@ -4,8 +4,8 @@ import { useBookStore } from './useBookStore';
 import { useReadingStateStore, isValidProgress, getMostRecentProgress } from './useReadingStateStore';
 import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
-import type { AnnotationStore } from './useAnnotationStore';
-import type { UserProgress, UserInventoryItem, Annotation } from '../types/db';
+import type { AnnotationState } from './useAnnotationStore';
+import type { UserProgress, UserInventoryItem, UserAnnotation } from '../types/db';
 import { getDeviceId } from '../lib/device-id';
 import { generateMatchKey } from '../lib/entity-resolution';
 
@@ -406,6 +406,6 @@ export const useLastReadBook = () => {
 /**
  * Returns all pending audio bookmarks across all books.
  */
-export const selectPendingAudioBookmarks = (state: AnnotationStore): Annotation[] => {
+export const selectPendingAudioBookmarks = (state: AnnotationState): UserAnnotation[] => {
     return Object.values(state.annotations).filter(a => a.type === 'audio-bookmark');
 };

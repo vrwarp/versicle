@@ -13,7 +13,7 @@ import { LexiconManager } from './LexiconManager';
 
 import { useRemoteProgress } from '../../hooks/useRemoteProgress';
 
-export const ReaderControlBar: React.FC = () => {
+export const ReaderControlBar: React.FC<{ rendition?: any }> = ({ rendition }) => {
     // Correctly using the store-based toast
     const showToast = useToastStore(state => state.showToast);
     const navigate = useNavigate();
@@ -224,6 +224,7 @@ export const ReaderControlBar: React.FC = () => {
                                 navigate(`/read/${lastReadBook.id}`);
                             }
                         }}
+                        rendition={rendition}
                     />
                 </div>
             </div>

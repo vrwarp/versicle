@@ -43,7 +43,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   availableActions,
   rendition
 }) => {
-  const compassMode = useReaderUIStore(state => state.compassMode);
+  const compassMode = useReaderUIStore(state => state.compassMode || { mode: 'default' });
   const resetCompassMode = useReaderUIStore(state => state.resetCompassMode);
 
   const {
@@ -60,6 +60,11 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     currentIndex: state.currentIndex,
     play: state.play,
     pause: state.pause
+  })));
+
+  const { addAnnotation, removeAnnotation } = useAnnotationStore(useShallow(state => ({
+      addAnnotation: state.add,
+      removeAnnotation: state.remove
   })));
 
   const isLoading = status === 'loading';
@@ -114,9 +119,8 @@ export const CompassPill: React.FC<CompassPillProps> = ({
           const newText = currentSelection.toString();
 
           // Mutate CRDT Store: Delete dirty dragnet, insert precise highlight
-          const store = useAnnotationStore.getState();
-          store.remove(compassMode.targetAnnotation!.id);
-          store.add({
+          removeAnnotation(compassMode.targetAnnotation!.id);
+          addAnnotation({
               ...compassMode.targetAnnotation!,
               cfiRange: newCfiRange,
               text: newText,
@@ -128,8 +132,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
       };
 
       const onDiscardTriage = () => {
-          const store = useAnnotationStore.getState();
-          store.remove(compassMode.targetAnnotation!.id);
+          removeAnnotation(compassMode.targetAnnotation!.id);
           resetCompassMode();
       };
 
@@ -138,7 +141,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
               <span className="text-sm font-bold text-orange-500">Review Bookmark</span>
               <div className="flex gap-2">
                   <Button variant="ghost" onClick={onDiscardTriage}>Discard</Button>
-                  <Button variant="solid" onClick={onConfirmTriage}>Confirm</Button>
+                  <Button variant="default" onClick={onConfirmTriage}>Confirm</Button>
               </div>
           </div>
       );

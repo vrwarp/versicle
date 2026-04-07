@@ -109,7 +109,7 @@ export const GlobalNotesView: React.FC<GlobalNotesViewProps> = ({ onContentMissi
                                                     <Trash2 size={16} className="mr-2" /> Discard
                                                 </Button>
                                                 <Button
-                                                    variant="solid"
+                                                    variant="default"
                                                     size="sm"
                                                     className="flex-1 sm:flex-none bg-orange-500 hover:bg-orange-600 text-white"
                                                     onClick={() => {

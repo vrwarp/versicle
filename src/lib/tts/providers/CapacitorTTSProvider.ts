@@ -16,6 +16,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
   private lastText: string | null = null;
   private lastOptions: TTSOptions | null = null;
+  private audioContext: AudioContext | null = null;
 
   async init(): Promise<void> {
     await this.getVoices();
@@ -205,7 +206,13 @@ export class CapacitorTTSProvider implements ITTSProvider {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextClass) return;
-      const ctx = new AudioContextClass();
+      if (!this.audioContext) {
+          this.audioContext = new AudioContextClass();
+      }
+      const ctx = this.audioContext;
+      if (ctx.state === 'suspended') {
+          ctx.resume();
+      }
       const now = ctx.currentTime;
 
       const osc1 = ctx.createOscillator();

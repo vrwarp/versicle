@@ -431,8 +431,8 @@ export class AudioPlayerService {
     }
 
     private async executeDragnetCapture() {
-        const queue = this.stateManager.getQueue();
-        const currentIndex = this.stateManager.getCurrentIndex();
+        const queue = this.stateManager.queue;
+        const currentIndex = this.stateManager.currentIndex;
 
         // Boundary protection: don't cross chapter boundaries backwards
         const startIndex = Math.max(0, currentIndex - 1);
@@ -444,7 +444,7 @@ export class AudioPlayerService {
         }
 
         // 1. Concatenate Text
-        const mergedText = targetItems.map(item => item.text).join(' ');
+        const mergedText = targetItems.map((item: TTSQueueItem) => item.text).join(' ');
 
         // 2. Generate Spanning CFI
         let mergedCfi = targetItems[0].cfi;
