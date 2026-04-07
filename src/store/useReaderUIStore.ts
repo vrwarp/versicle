@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import type { NavigationItem } from '../types/db';
 
+import type { Annotation } from '../types/db';
+
+export interface CompassModeState {
+    mode: 'default' | 'audio-triage';
+    targetAnnotation?: Annotation;
+}
+
 interface ReaderUIState {
     isLoading: boolean;
     toc: NavigationItem[];
@@ -22,6 +29,10 @@ interface ReaderUIState {
     setPlayFromSelection: (callback?: (cfi: string) => void) => void;
     setJumpToLocation: (callback?: (cfi: string) => void) => void;
 
+    compassMode: CompassModeState;
+    setCompassMode: (state: CompassModeState) => void;
+    resetCompassMode: () => void;
+
     reset: () => void;
 }
 
@@ -35,6 +46,8 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
     playFromSelection: undefined,
     jumpToLocation: undefined,
 
+    compassMode: { mode: 'default' },
+
     setIsLoading: (isLoading) => set({ isLoading }),
     setToc: (toc) => set({ toc }),
     setImmersiveMode: (enabled) => set({ immersiveMode: enabled }),
@@ -42,6 +55,9 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
     setCurrentBookId: (id) => set({ currentBookId: id }),
     setPlayFromSelection: (callback) => set({ playFromSelection: callback }),
     setJumpToLocation: (callback) => set({ jumpToLocation: callback }),
+
+    setCompassMode: (state) => set({ compassMode: state }),
+    resetCompassMode: () => set({ compassMode: { mode: 'default' } }),
 
     reset: () => set({
         isLoading: false,
@@ -51,6 +67,7 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
         currentSectionId: null,
         currentBookId: null,
         playFromSelection: undefined,
-        jumpToLocation: undefined
+        jumpToLocation: undefined,
+        compassMode: { mode: 'default' }
     })
 }));

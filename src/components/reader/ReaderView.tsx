@@ -583,16 +583,27 @@ export const ReaderView: React.FC = () => {
 
     useEffect(() => {
         if (rendition && isRenditionReady) {
+            // Inject audio-bookmark pending theme
+            rendition.themes.default({
+                '.versicle-audio-bookmark-pending': {
+                    'border-bottom': '2px dashed #ff9800 !important',
+                    'background-color': 'rgba(255, 152, 0, 0.1) !important',
+                    'cursor': 'pointer !important'
+                }
+            });
+
             const currentIds = new Set(annotationList.map(a => a.id));
 
-            // 1. Remove deleted annotations (Highlights and Markers)
+            // 1. Remove deleted annotations (Highlights, Underlines, and Markers)
             addedAnnotations.current.forEach((cfi, id) => {
                 if (!currentIds.has(id)) {
                     try {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         (rendition as any).annotations.remove(cfi, 'highlight');
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        (rendition as any).annotations.remove(cfi, 'underline');
                     } catch (e) {
-                        logger.warn("Failed to remove highlight", e);
+                        logger.warn("Failed to remove highlight or underline", e);
                     }
                     addedAnnotations.current.delete(id);
                 }
@@ -607,29 +618,62 @@ export const ReaderView: React.FC = () => {
 
             // 2. Add new annotations
             annotationList.forEach(annotation => {
-                // Add Highlight if missing
+                // Add Highlight/Underline if missing
                 if (!addedAnnotations.current.has(annotation.id)) {
-                    const className = annotation.color === 'yellow' ? 'highlight-yellow' :
-                        annotation.color === 'green' ? 'highlight-green' :
-                            annotation.color === 'blue' ? 'highlight-blue' :
-                                annotation.color === 'red' ? 'highlight-red' : 'highlight-yellow';
-
                     try {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, (e: MouseEvent) => {
-                            // Handle click on highlight to show actions (delete/edit)
-                            const iframe = viewerRef.current?.querySelector('iframe');
-                            let x = e.clientX;
-                            let y = e.clientY;
+                        if (annotation.type === 'audio-bookmark') {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            (rendition as any).annotations.underline(
+                                annotation.cfiRange,
+                                {},
+                                (e: Event) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    // 1. Programmatically select the block using EPUB.js Selection API
+                                    rendition.display(annotation.cfiRange);
 
-                            if (iframe) {
-                                const iframeRect = iframe.getBoundingClientRect();
-                                x += iframeRect.left;
-                                y += iframeRect.top;
-                            }
-                            showPopover(x, y, annotation.cfiRange, annotation.text, annotation.id);
-                        }, className, getAnnotationStyles(annotation.color));
-                        addedAnnotations.current.set(annotation.id, annotation.cfiRange);
+                                    setTimeout(() => {
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        const range = (rendition as any).getRange(annotation.cfiRange);
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        const win = (rendition as any).manager?.getContents()?.[0]?.window;
+                                        if (win && range) {
+                                            win.getSelection()?.removeAllRanges();
+                                            win.getSelection()?.addRange(range);
+                                        }
+
+                                        // 2. Dispatch state to Reader UI Store to morph the CompassPill
+                                        useReaderUIStore.getState().setCompassMode({
+                                            mode: 'audio-triage',
+                                            targetAnnotation: annotation
+                                        });
+                                    }, 50);
+                                },
+                                'versicle-audio-bookmark-pending'
+                            );
+                            addedAnnotations.current.set(annotation.id, annotation.cfiRange);
+                        } else {
+                            const className = annotation.color === 'yellow' ? 'highlight-yellow' :
+                                annotation.color === 'green' ? 'highlight-green' :
+                                    annotation.color === 'blue' ? 'highlight-blue' :
+                                        annotation.color === 'red' ? 'highlight-red' : 'highlight-yellow';
+
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, (e: MouseEvent) => {
+                                // Handle click on highlight to show actions (delete/edit)
+                                const iframe = viewerRef.current?.querySelector('iframe');
+                                let x = e.clientX;
+                                let y = e.clientY;
+
+                                if (iframe) {
+                                    const iframeRect = iframe.getBoundingClientRect();
+                                    x += iframeRect.left;
+                                    y += iframeRect.top;
+                                }
+                                showPopover(x, y, annotation.cfiRange, annotation.text, annotation.id);
+                            }, className, getAnnotationStyles(annotation.color));
+                            addedAnnotations.current.set(annotation.id, annotation.cfiRange);
+                        }
                     } catch (e) {
                         logger.warn(`Failed to add annotation ${annotation.id}`, e);
                     }

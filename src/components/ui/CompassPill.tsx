@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '../../hooks/useSectionDuration';
 import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check, BookOpen, ArrowUpCircle, Smartphone, Trash2 } from 'lucide-react';
@@ -28,6 +29,8 @@ interface CompassPillProps {
     pronounce?: boolean;
     delete?: boolean;
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rendition?: any; // Pass rendition for triage operations
 }
 
 export const CompassPill: React.FC<CompassPillProps> = ({
@@ -37,8 +40,12 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   progress: overrideProgress,
   onClick,
   onAnnotationAction,
-  availableActions
+  availableActions,
+  rendition
 }) => {
+  const compassMode = useReaderUIStore(state => state.compassMode);
+  const resetCompassMode = useReaderUIStore(state => state.resetCompassMode);
+
   const {
     isPlaying,
     status,
@@ -63,10 +70,16 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   const [isCopied, setIsCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Optimize: Select only currentSectionTitle to prevent re-renders on progress/cfi updates
+  const readerSectionTitle = useReaderUIStore(state => state.currentSectionTitle);
+
+  const { timeRemaining, progress: hookProgress } = useSectionDuration();
+
   // Reset editing state when variant changes
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsEditingNote(false);
+
     setNoteText('');
   }, [variant]);
 
@@ -86,10 +99,50 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     return () => clearTimeout(timeoutId);
   }, [isCopied]);
 
-  // Optimize: Select only currentSectionTitle to prevent re-renders on progress/cfi updates
-  const readerSectionTitle = useReaderUIStore(state => state.currentSectionTitle);
+  // Audio Triage Mode
+  if (compassMode.mode === 'audio-triage' && compassMode.targetAnnotation) {
+      const onConfirmTriage = async () => {
+          if (!rendition) return;
+          // Capture the newly adjusted bounds from the iframe
+          const currentSelection = rendition.manager.getContents()[0].window.getSelection();
+          if (!currentSelection || currentSelection.rangeCount === 0) return;
 
-  const { timeRemaining, progress: hookProgress } = useSectionDuration();
+          const newCfiRange = new rendition.epubcfi().generateCfiFromRange(
+              currentSelection.getRangeAt(0),
+              rendition.manager.getContents()[0].cfiBase
+          );
+          const newText = currentSelection.toString();
+
+          // Mutate CRDT Store: Delete dirty dragnet, insert precise highlight
+          const store = useAnnotationStore.getState();
+          store.remove(compassMode.targetAnnotation!.id);
+          store.add({
+              ...compassMode.targetAnnotation!,
+              cfiRange: newCfiRange,
+              text: newText,
+              type: 'highlight' // Elevate status
+          });
+
+          currentSelection.removeAllRanges();
+          resetCompassMode();
+      };
+
+      const onDiscardTriage = () => {
+          const store = useAnnotationStore.getState();
+          store.remove(compassMode.targetAnnotation!.id);
+          resetCompassMode();
+      };
+
+      return (
+          <div data-testid="compass-pill-triage" className="relative z-50 flex items-center justify-between w-full max-w-sm h-14 px-4 mx-auto overflow-hidden transition-all border shadow-lg rounded-full bg-background/90 backdrop-blur-md border-orange-500/50 animate-in fade-in slide-in-from-bottom-2">
+              <span className="text-sm font-bold text-orange-500">Review Bookmark</span>
+              <div className="flex gap-2">
+                  <Button variant="ghost" onClick={onDiscardTriage}>Discard</Button>
+                  <Button variant="solid" onClick={onConfirmTriage}>Confirm</Button>
+              </div>
+          </div>
+      );
+  }
 
   const progress = overrideProgress !== undefined ? overrideProgress : hookProgress;
 

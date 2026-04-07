@@ -10,6 +10,9 @@ export class AudioElementPlayer {
   private onEndedCallback: (() => void) | null = null;
   private onErrorCallback: ((error: MediaError | null) => void) | null = null;
   private currentObjectUrl: string | null = null;
+  private audioContext: AudioContext | null = null;
+  private gainNode: GainNode | null = null;
+  private sourceNode: MediaElementAudioSourceNode | null = null;
 
   /**
    * Initializes a new instance of AudioElementPlayer.
@@ -182,10 +185,100 @@ export class AudioElementPlayer {
   /**
    * Destroys the player instance and clears all listeners.
    */
+  /**
+   * Ensures Web Audio API context is initialized for ducking.
+   */
+  private ensureAudioContext() {
+    if (!this.audioContext) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      if (Ctx) {
+        this.audioContext = new Ctx();
+        this.gainNode = this.audioContext.createGain();
+        this.sourceNode = this.audioContext.createMediaElementSource(this.audio);
+        this.sourceNode.connect(this.gainNode);
+        this.gainNode.connect(this.audioContext.destination);
+      }
+    }
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      this.audioContext.resume();
+    }
+  }
+
+  /**
+   * Plays an earcon, automatically ducking the main audio if playing.
+   */
+  public playEarcon(type: 'bookmark_captured' | 'bookmark_failed') {
+    this.ensureAudioContext();
+    if (!this.audioContext || !this.gainNode) return;
+
+    const now = this.audioContext.currentTime;
+
+    // 1. Duck the main TTS volume
+    this.gainNode.gain.cancelScheduledValues(now);
+    this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+    this.gainNode.gain.linearRampToValueAtTime(0.3, now + 0.1);
+    this.gainNode.gain.linearRampToValueAtTime(1.0, now + 0.6);
+
+    // 2. Play earcon using Oscillator
+    const osc1 = this.audioContext.createOscillator();
+    const osc2 = this.audioContext.createOscillator();
+    const gain = this.audioContext.createGain();
+
+    if (type === 'bookmark_captured') {
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(440, now);
+        osc1.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(660, now + 0.15);
+        osc2.frequency.exponentialRampToValueAtTime(1100, now + 0.25);
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.5, now + 0.05);
+        gain.gain.linearRampToValueAtTime(0, now + 0.1);
+        gain.gain.setValueAtTime(0, now + 0.15);
+        gain.gain.linearRampToValueAtTime(0.5, now + 0.2);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(this.audioContext.destination);
+
+        osc1.start(now);
+        osc1.stop(now + 0.1);
+        osc2.start(now + 0.15);
+        osc2.stop(now + 0.3);
+    } else {
+        osc1.type = 'square';
+        osc1.frequency.setValueAtTime(200, now);
+        osc1.frequency.exponentialRampToValueAtTime(150, now + 0.3);
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.5, now + 0.1);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+
+        osc1.connect(gain);
+        gain.connect(this.audioContext.destination);
+
+        osc1.start(now);
+        osc1.stop(now + 0.3);
+    }
+  }
+
   public destroy() {
       this.stop();
       this.audio.ontimeupdate = null;
       this.audio.onended = null;
       this.audio.onerror = null;
+      if (this.sourceNode) {
+          this.sourceNode.disconnect();
+      }
+      if (this.gainNode) {
+          this.gainNode.disconnect();
+      }
+      if (this.audioContext) {
+          this.audioContext.close();
+      }
   }
 }

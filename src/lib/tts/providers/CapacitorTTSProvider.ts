@@ -199,6 +199,60 @@ export class CapacitorTTSProvider implements ITTSProvider {
       this.eventListeners.push(callback);
   }
 
+  playEarcon(type: 'bookmark_captured' | 'bookmark_failed'): void {
+      // Fallback for CapacitorTTSProvider
+      // Similar to WebSpeechProvider, ducks other audio if we have an AudioContext, but native TTS volume cannot be easily ducked this way
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const now = ctx.currentTime;
+
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      if (type === 'bookmark_captured') {
+          osc1.type = 'sine';
+          osc1.frequency.setValueAtTime(440, now);
+          osc1.frequency.exponentialRampToValueAtTime(880, now + 0.1);
+
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(660, now + 0.15);
+          osc2.frequency.exponentialRampToValueAtTime(1100, now + 0.25);
+
+          gain.gain.setValueAtTime(0, now);
+          gain.gain.linearRampToValueAtTime(0.5, now + 0.05);
+          gain.gain.linearRampToValueAtTime(0, now + 0.1);
+          gain.gain.setValueAtTime(0, now + 0.15);
+          gain.gain.linearRampToValueAtTime(0.5, now + 0.2);
+          gain.gain.linearRampToValueAtTime(0, now + 0.3);
+
+          osc1.connect(gain);
+          osc2.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc1.start(now);
+          osc1.stop(now + 0.1);
+          osc2.start(now + 0.15);
+          osc2.stop(now + 0.3);
+      } else {
+          osc1.type = 'square';
+          osc1.frequency.setValueAtTime(200, now);
+          osc1.frequency.exponentialRampToValueAtTime(150, now + 0.3);
+
+          gain.gain.setValueAtTime(0, now);
+          gain.gain.linearRampToValueAtTime(0.5, now + 0.1);
+          gain.gain.linearRampToValueAtTime(0, now + 0.3);
+
+          osc1.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc1.start(now);
+          osc1.stop(now + 0.3);
+      }
+  }
+
   private emit(event: TTSEvent) {
       this.eventListeners.forEach(l => l(event));
   }

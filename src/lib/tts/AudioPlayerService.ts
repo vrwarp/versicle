@@ -14,6 +14,8 @@ import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useToastStore } from '../../store/useToastStore';
 import { type SectionAnalysis, type TableAdaptation, useContentAnalysisStore } from '../../store/useContentAnalysisStore';
 import { useGenAIStore } from '../../store/useGenAIStore';
+import { useAnnotationStore } from '../../store/useAnnotationStore';
+import { generateCfiRange } from '../cfi-utils';
 import { createLogger } from '../logger';
 
 const logger = createLogger('AudioPlayerService');
@@ -88,6 +90,7 @@ export class AudioPlayerService {
     private prerollEnabled: boolean = false;
     private isPreviewing: boolean = false;
     private lastAppliedAnalysisTimestamp: number = 0;
+    private lastUserPauseTimestamp: number | null = null;
 
     private constructor() {
         this.syncEngine = new SyncEngine();
@@ -418,7 +421,53 @@ export class AudioPlayerService {
     }
 
     async play(): Promise<void> {
+        const now = Date.now();
+        if (this.lastUserPauseTimestamp && (now - this.lastUserPauseTimestamp <= 5000)) {
+            await this.executeDragnetCapture();
+        }
+        this.lastUserPauseTimestamp = null;
+
         return this.enqueue(() => this.playInternal());
+    }
+
+    private async executeDragnetCapture() {
+        const queue = this.stateManager.getQueue();
+        const currentIndex = this.stateManager.getCurrentIndex();
+
+        // Boundary protection: don't cross chapter boundaries backwards
+        const startIndex = Math.max(0, currentIndex - 1);
+        const targetItems = queue.slice(startIndex, currentIndex + 1);
+
+        if (targetItems.length === 0 || !this.currentBookId) {
+            this.providerManager.playEarcon('bookmark_failed');
+            return;
+        }
+
+        // 1. Concatenate Text
+        const mergedText = targetItems.map(item => item.text).join(' ');
+
+        // 2. Generate Spanning CFI
+        let mergedCfi = targetItems[0].cfi;
+        if (targetItems.length > 1 && targetItems[0].cfi && targetItems[1].cfi) {
+            mergedCfi = generateCfiRange(targetItems[0].cfi, targetItems[1].cfi);
+        }
+
+        if (!mergedCfi) {
+            this.providerManager.playEarcon('bookmark_failed');
+            return;
+        }
+
+        // 3. Audio Feedback (Earcon)
+        this.providerManager.playEarcon('bookmark_captured');
+
+        // 4. Dispatch to Yjs Store
+        useAnnotationStore.getState().add({
+            bookId: this.currentBookId,
+            cfiRange: mergedCfi,
+            type: 'audio-bookmark',
+            text: mergedText,
+            color: '#ff9800' // Default color, won't be strictly used due to custom CSS
+        });
     }
 
     private async playInternal(force: boolean = false): Promise<void> {
@@ -510,6 +559,7 @@ export class AudioPlayerService {
     }
 
     pause() {
+        this.lastUserPauseTimestamp = Date.now();
         return this.enqueue(async () => {
             this.providerManager.pause();
             this.setStatus('paused');
