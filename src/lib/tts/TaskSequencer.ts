@@ -14,16 +14,16 @@ export class TaskSequencer {
      * @param {() => Promise<T>} task The function to execute.
      * @returns {Promise<T | void>} A promise that resolves with the task's result or void if the sequencer is destroyed or the task fails safely.
      */
-    enqueue<T>(task: () => Promise<T>): Promise<T | void> {
+    enqueue<T>(task: () => Promise<T>): Promise<T> {
         const resultPromise = this.pendingPromise.then(async () => {
-            if (this.isDestroyed) return;
+            if (this.isDestroyed) return Promise.reject(new Error("TaskSequencer is destroyed"));
             return await task();
         });
 
         this.pendingPromise = resultPromise.then(() => { }).catch((err) => {
             console.error("TaskSequencer task failed safely:", err);
         });
-        return resultPromise as Promise<T | void>;
+        return resultPromise as Promise<T>;
     }
 
     /**
