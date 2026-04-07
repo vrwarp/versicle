@@ -114,3 +114,6 @@
 ## $(date +%Y-%m-%d) - Keyboard Accessibility for JsonDiffViewer
 **Learning:** Found an expandable tree node `<div>` in `JsonDiffViewer.tsx` that lacked keyboard accessibility. It used an `onClick` handler but had no `role="button"`, `tabIndex`, or `onKeyDown` handler, meaning it couldn't be toggled via keyboard navigation.
 **Action:** When implementing custom clickable elements like tree nodes or accordions with `div` or `span` tags, always make them fully keyboard accessible. Add `role="button"`, `tabIndex={0}`, an `onKeyDown` handler that toggles state on Enter/Space (including an event target check), `aria-expanded` (if it toggles visibility), and focus-visible styling (e.g., `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`).
+## 2024-04-07 - Add aria-labels to clear buttons and search input
+**Learning:** Found that generic icon buttons (e.g. "✕") for clearing inputs and search inputs lacking visible labels often miss ARIA labels, creating a poor experience for screen reader users who cannot deduce the button's or input's specific context.
+**Action:** Always ensure that icon-only clear buttons (like those inside input fields) and inputs without visible labels have descriptive `aria-label`s (e.g., "Clear Web Client ID", "Search by filename") to provide necessary context for assistive technologies.

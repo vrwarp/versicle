@@ -585,6 +585,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                                     className="h-8 px-2 text-muted-foreground"
                                                     onClick={() => setGoogleClientId('')}
                                                     title="Clear"
+                                                    aria-label="Clear Web Client ID"
                                                 >
                                                     ✕
                                                 </Button>
@@ -611,6 +612,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                                     className="h-8 px-2 text-muted-foreground"
                                                     onClick={() => setGoogleIosClientId('')}
                                                     title="Clear"
+                                                    aria-label="Clear iOS Client ID"
                                                 >
                                                     ✕
                                                 </Button>
