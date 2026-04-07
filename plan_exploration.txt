@@ -1,5 +1,0 @@
-Fix:
-1. `compassMode` might be undefined in tests since mock store is missing it.
-I'll change `if (compassMode.mode === 'audio-triage' ...)` to `if (compassMode?.mode === 'audio-triage' ...)`
-2. `rendition.themes.default` in ReaderView.tsx:
-I'll change `rendition.themes.default` to `rendition.themes?.default`

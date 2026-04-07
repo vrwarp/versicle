@@ -1,7 +1,52 @@
-1. **Extend Domain Data Model:** Add `'audio-bookmark'` to the `AnnotationType` union inside `src/types/db.ts`. Also, update `src/store/selectors.ts` to expose `selectPendingAudioBookmarks` (which queries the global annotations for the `audio-bookmark` type).
-2. **Implement Ducking in `AudioElementPlayer`**: In `src/lib/tts/AudioElementPlayer.ts`, use the `AudioContext` and `GainNode` API to support a volume ducking effect combined with a direct oscillator-based playback for earcons (`bookmark_captured` and `bookmark_failed`). This ensures that during rapid earcon playback, the TTS primary web audio is briefly ducked seamlessly instead of completely paused. Also, update `ITTSProvider` and `TTSProviderManager` to pass `playEarcon` down to `BaseCloudProvider` (which holds the `AudioElementPlayer`).
-3. **Capture Logic & Splicing in `AudioPlayerService`**: Introduce variables to track the last pause timestamp inside `src/lib/tts/AudioPlayerService.ts`. Intercept `pause()` and `play()`, detect the double-tap pattern within the 5-second window, and trigger `executeDragnetCapture`. In this function, gather the previous and current `TTSQueueItem`, merge their CFIs using `generateCfiRange` from `cfi-utils.ts`, generate the earcon via the `providerManager`, and insert an `audio-bookmark` annotation to the Yjs store.
-4. **Setup CSS Themes in ReaderView**: Inject the requested `versicle-audio-bookmark-pending` styles into EPUB.js themes using `rendition.themes.default(...)` (or registering it) in `src/components/reader/ReaderView.tsx`. In the annotations rendering effect, render `audio-bookmark` items using `rendition.annotations.underline` with a custom click handler.
-5. **Handle Selection Triage (CompassPill & ReaderView)**: In `src/store/useReaderUIStore.ts`, extend `ReaderUIState` with a `compassMode` state (`audio-triage` vs `default`). When the user clicks an `audio-bookmark` in `ReaderView.tsx`, update the selection manually via the iframe window, and set `compassMode` to `audio-triage` (storing the active rendition logic in the callback for confirming triage). Modify `src/components/ui/CompassPill.tsx` to conditionally render the "Review Bookmark" actions (Confirm/Discard) whenever `compassMode` is active.
-6. **Integrate Global Inbox Triage**: In `src/components/notes/GlobalNotesView.tsx`, query the `selectPendingAudioBookmarks` selector. Render an Inbox section at the top of the view that displays all pending captures with action buttons to "Keep" (elevating to standard highlight) or "Discard".
-7. **Complete pre-commit steps**: Complete pre-commit steps to ensure proper testing, verification, review, and reflection are done.
+# Versicle: Technical Roadmap & Master Plan
+
+## 1. Project Overview
+Versicle is a web-based EPUB manager and reader designed for a "Local-First" experience. It leverages `epub.js` for rendering and various TTS engines (Web Speech, Google, OpenAI, Piper) for audio.
+
+**Core Principles:**
+- **Local-First:** Heavy reliance on IndexedDB for storage.
+- **Privacy-Centric:** Local processing where possible.
+- **Hybrid-Ready:** Designed to work as a PWA and a Capacitor Android app.
+- **Simplicity:** Prefers standard Web APIs (Promises, Comlink, File API) over complex custom orchestrators.
+
+## 2. Roadmap
+
+### 2.1 Active Priorities: TTS v2 Engine
+We are building the next generation of audio features, moving from `AudioElement` to a Web Audio Graph.
+*Ref: `plan/tts_v2_roadmap.md`*
+
+| Feature | Plan File | Status |
+| :--- | :--- | :--- |
+| **Web Audio Graph** | [`tts_v2_plan01_audio_graph.md`](plan/tts_v2_plan01_audio_graph.md) | **Pending** (Foundation) |
+| **Sleep Timer** | [`tts_v2_plan05_sleep_timer.md`](plan/tts_v2_plan05_sleep_timer.md) | Pending |
+| **Smart Speed** | [`tts_v2_plan06_smart_speed.md`](plan/tts_v2_plan06_smart_speed.md) | Pending (Requires Plan 01) |
+| **Voice Switching** | [`tts_v2_plan07_voice_switching.md`](plan/tts_v2_plan07_voice_switching.md) | Pending |
+| **Car Mode** | [`tts_v2_plan09_car_mode.md`](plan/tts_v2_plan09_car_mode.md) | Pending |
+
+### 2.2 Future Enhancements
+- **Ambient Sounds** (`plan/tts_v2_plan11_ambient_sounds.md`)
+- **Export MP3** (`plan/tts_v2_plan14_export_mp3.md`)
+
+## 3. Completed Initiatives (Archive)
+*Historical plans and completed features can be found in `plan/archive/`.*
+
+### Major Milestone: Architectural Simplification (2025)
+Ref: `plan/archive/2025_simplification/`
+- **Ingestion**: Replaced crypto-hashing with "3-Point Fingerprint" (O(1) checks).
+- **Concurrency**: Replaced Mutex locks with Sequential Promise Chains in `AudioPlayerService`.
+- **Worker Management**: Replaced Supervisor pattern with "Let It Crash" Error Boundaries.
+- **Search**: Replaced custom RPC with `Comlink`.
+
+### Other Completed Features
+- **Semantic Reading History**: Event-based history with sentence snapping (`plan/archive/completed/event-based-history.md`).
+- **Reading List**: Import/Export independent reading progress (`plan/archive/completed/reading-list.md`).
+- **Performance**: Optimized ReaderView re-renders (`plan/archive/completed/performance_reader_optimization.md`).
+- **TTS v2 Foundations**:
+    - Media Session Integration
+    - Text Sanitization
+    - Smart Resume
+    - Pronunciation Lexicon
+    - Gesture Pad
+
+## 4. Architecture Reference
+See [`architecture.md`](architecture.md) for the current detailed technical design, updated to reflect the Simplification milestone.
