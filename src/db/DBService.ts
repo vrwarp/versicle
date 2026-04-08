@@ -90,7 +90,7 @@ class DBService {
       const inventoryBooks = useBookStore.getState().books;
 
       // Map results back preserving index and handling missing records
-      return ids.map((id, index) => {
+      return ids.map((_id, index) => {
           const manifest = manifests[index];
           if (!manifest) return undefined;
 
