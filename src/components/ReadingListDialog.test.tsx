@@ -62,19 +62,24 @@ const mockEntries = {
     }
 };
 
-const { mockRemoveEntry } = vi.hoisted(() => ({
+const { mockRemoveEntry, mockUpsertEntry } = vi.hoisted(() => ({
     mockRemoveEntry: vi.fn(),
+    mockUpsertEntry: vi.fn()
 }));
 
 vi.mock('../store/useReadingListStore', () => ({
     useReadingListStore: Object.assign(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (selector: any) => selector ? selector({ entries: mockEntries }) : { entries: mockEntries },
+        (selector: any) => selector ? selector({
+            entries: mockEntries,
+            removeEntry: mockRemoveEntry,
+            upsertEntry: mockUpsertEntry
+        }) : { entries: mockEntries, removeEntry: mockRemoveEntry, upsertEntry: mockUpsertEntry },
         {
             getState: () => ({
                 entries: mockEntries,
                 removeEntry: mockRemoveEntry,
-                upsertEntry: vi.fn()
+                upsertEntry: mockUpsertEntry
             })
         }
     )
