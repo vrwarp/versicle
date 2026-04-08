@@ -67,6 +67,61 @@ class DBService {
 
 
   /**
+   * Retrieves metadata for multiple books in a single transaction.
+   * Optimized for bulk hydration by querying specifically requested IDs within one transaction.
+   * Preserves the exact index mapping of the input array.
+   */
+  async getBookMetadataBulk(ids: string[]): Promise<(BookMetadata | undefined)[]> {
+    try {
+      if (ids.length === 0) return [];
+      const db = await this.getDB();
+      const tx = db.transaction(['static_manifests', 'static_resources'], 'readonly');
+
+      const manifestStore = tx.objectStore('static_manifests');
+      const resourceStore = tx.objectStore('static_resources');
+
+      // Execute multiple parallel `.get` and `.getKey` queries within the single transaction
+      const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
+      const resourceKeysPromise = Promise.all(ids.map(id => resourceStore.getKey(id)));
+
+      const [manifests, resourceKeys] = await Promise.all([manifestsPromise, resourceKeysPromise]);
+      await tx.done;
+
+      const inventoryBooks = useBookStore.getState().books;
+
+      // Map results back preserving index and handling missing records
+      return ids.map((id, index) => {
+          const manifest = manifests[index];
+          if (!manifest) return undefined;
+
+          const resourceKey = resourceKeys[index];
+          const inventory = inventoryBooks[manifest.bookId];
+
+          return {
+            id: manifest.bookId,
+            title: inventory?.customTitle || inventory?.title || manifest.title,
+            author: inventory?.customAuthor || inventory?.author || manifest.author,
+            description: manifest.description,
+            coverBlob: manifest.coverBlob,
+            addedAt: inventory?.addedAt || Date.now(),
+
+            bookId: manifest.bookId,
+            filename: inventory?.sourceFilename || 'unknown.epub',
+            fileHash: manifest.fileHash,
+            fileSize: manifest.fileSize,
+            totalChars: manifest.totalChars,
+            version: manifest.schemaVersion,
+
+            isOffloaded: !resourceKey
+          };
+      });
+    } catch (error) {
+      this.handleError(error);
+    }
+    return ids.map(() => undefined);
+  }
+
+  /**
    * Retrieves only the metadata for a specific book.
    * Post-Yjs migration: user_inventory is in Yjs (useBookStore), not IndexedDB.
    */
