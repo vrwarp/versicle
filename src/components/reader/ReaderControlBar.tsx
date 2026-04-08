@@ -76,13 +76,13 @@ export const ReaderControlBar: React.FC<{ rendition?: any }> = ({ rendition }) =
     // If audio queue has items, we are active.
     const isReaderActive = !!currentBookId;
 
-    const compassMode = useReaderUIStore(state => state.compassMode || { mode: 'default' });
+    const compassState = useReaderUIStore(state => state.compassState || {});
 
     // Logic:
     let variant: 'annotation' | 'active' | 'summary' | 'compact' | 'sync-alert' | 'audio-triage' | null = null;
 
-    if (compassMode.mode === 'audio-triage') {
-        variant = 'audio-triage';
+    if (compassState.variant) {
+        variant = compassState.variant;
     } else if (isSyncAlert) {
         variant = 'sync-alert';
     } else if (isAnnotationMode) {

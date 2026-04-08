@@ -43,8 +43,8 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   availableActions,
   rendition
 }) => {
-  const compassMode = useReaderUIStore(state => state.compassMode || { variant: 'default' });
-  const resetCompassMode = useReaderUIStore(state => state.resetCompassMode);
+  const compassState = useReaderUIStore(state => state.compassState || {});
+  const resetCompassState = useReaderUIStore(state => state.resetCompassState);
 
   const {
     isPlaying,
@@ -105,7 +105,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   }, [isCopied]);
 
   // Audio Triage Mode
-  if (variant === 'audio-triage' && compassMode.targetAnnotation) {
+  if (variant === 'audio-triage' && compassState.targetAnnotation) {
       const onConfirmTriage = async () => {
           if (!rendition) return;
           // Capture the newly adjusted bounds from the iframe
@@ -119,21 +119,21 @@ export const CompassPill: React.FC<CompassPillProps> = ({
           const newText = currentSelection.toString();
 
           // Mutate CRDT Store: Delete dirty dragnet, insert precise highlight
-          removeAnnotation(compassMode.targetAnnotation!.id);
+          removeAnnotation(compassState.targetAnnotation!.id);
           addAnnotation({
-              ...compassMode.targetAnnotation!,
+              ...compassState.targetAnnotation!,
               cfiRange: newCfiRange,
               text: newText,
               type: 'highlight' // Elevate status
           });
 
           currentSelection.removeAllRanges();
-          resetCompassMode();
+          resetCompassState();
       };
 
       const onDiscardTriage = () => {
-          removeAnnotation(compassMode.targetAnnotation!.id);
-          resetCompassMode();
+          removeAnnotation(compassState.targetAnnotation!.id);
+          resetCompassState();
       };
 
       return (

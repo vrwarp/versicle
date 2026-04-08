@@ -2,15 +2,17 @@ import os
 from playwright.sync_api import sync_playwright
 
 def run_cuj(page):
-    # Adjust to standard Vite port (https)
+    # Navigate to app
     page.goto("https://localhost:5173")
-
-    # Since playwright often hangs on IndexedDB initialize in headless mode for this app (known issue mentioned in memory),
-    # we'll inject a script to bypass the loading screen or mock the DB ready state if possible,
-    # but the simplest way to prove the component rendering logic is safe is our unit tests.
-
-    # We will take a screenshot of the loading state as a fallback
     page.wait_for_timeout(2000)
+
+    try:
+        # Click the Notes tab (the global inbox)
+        page.get_by_role("button", name="Notes").click()
+    except Exception as e:
+        print("Could not find Notes button:", e)
+
+    page.wait_for_timeout(1000)
     page.screenshot(path="/app/verification/screenshots/audio_bookmark_inbox.png")
     page.wait_for_timeout(1000)
 
