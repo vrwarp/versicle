@@ -18,7 +18,7 @@ export type ActionType =
   | 'dismiss';   // Payload: null
 
 interface CompassPillProps {
-  variant: 'active' | 'summary' | 'compact' | 'annotation' | 'sync-alert';
+  variant: 'active' | 'summary' | 'compact' | 'annotation' | 'sync-alert' | 'audio-triage';
   title?: string;
   subtitle?: string;
   progress?: number;
@@ -43,7 +43,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   availableActions,
   rendition
 }) => {
-  const compassMode = useReaderUIStore(state => state.compassMode || { mode: 'default' });
+  const compassMode = useReaderUIStore(state => state.compassMode || { variant: 'default' });
   const resetCompassMode = useReaderUIStore(state => state.resetCompassMode);
 
   const {
@@ -105,7 +105,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   }, [isCopied]);
 
   // Audio Triage Mode
-  if (compassMode.mode === 'audio-triage' && compassMode.targetAnnotation) {
+  if (variant === 'audio-triage' && compassMode.targetAnnotation) {
       const onConfirmTriage = async () => {
           if (!rendition) return;
           // Capture the newly adjusted bounds from the iframe

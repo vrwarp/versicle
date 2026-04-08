@@ -4,7 +4,7 @@ import type { NavigationItem } from '../types/db';
 import type { Annotation } from '../types/db';
 
 export interface CompassModeState {
-    mode: 'default' | 'audio-triage';
+    variant: 'default' | 'audio-triage';
     targetAnnotation?: Annotation;
 }
 
@@ -46,7 +46,7 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
     playFromSelection: undefined,
     jumpToLocation: undefined,
 
-    compassMode: { mode: 'default' },
+    compassMode: { variant: 'default' },
 
     setIsLoading: (isLoading) => set({ isLoading }),
     setToc: (toc) => set({ toc }),
@@ -57,7 +57,7 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
     setJumpToLocation: (callback) => set({ jumpToLocation: callback }),
 
     setCompassMode: (state) => set({ compassMode: state }),
-    resetCompassMode: () => set({ compassMode: { mode: 'default' } }),
+    resetCompassMode: () => set({ compassMode: { variant: 'default' } }),
 
     reset: () => set({
         isLoading: false,
@@ -68,6 +68,6 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
         currentBookId: null,
         playFromSelection: undefined,
         jumpToLocation: undefined,
-        compassMode: { mode: 'default' }
+        compassMode: { variant: 'default' }
     })
 }));
