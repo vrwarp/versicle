@@ -1,4 +1,6 @@
 
+import { playEarconOscillators } from './earcons';
+
 /**
  * Wrapper around the HTML5 Audio element to handle playback of Blobs and URLs.
  * Provides a consistent interface for controlling playback, volume, and rate,
@@ -183,9 +185,6 @@ export class AudioElementPlayer {
   }
 
   /**
-   * Destroys the player instance and clears all listeners.
-   */
-  /**
    * Ensures Web Audio API context is initialized for ducking.
    */
   private ensureAudioContext() {
@@ -221,51 +220,12 @@ export class AudioElementPlayer {
     this.gainNode.gain.linearRampToValueAtTime(1.0, now + 0.6);
 
     // 2. Play earcon using Oscillator
-    const osc1 = this.audioContext.createOscillator();
-    const osc2 = this.audioContext.createOscillator();
-    const gain = this.audioContext.createGain();
-
-    if (type === 'bookmark_captured') {
-        osc1.type = 'sine';
-        osc1.frequency.setValueAtTime(440, now);
-        osc1.frequency.exponentialRampToValueAtTime(880, now + 0.1);
-
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(660, now + 0.15);
-        osc2.frequency.exponentialRampToValueAtTime(1100, now + 0.25);
-
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.5, now + 0.05);
-        gain.gain.linearRampToValueAtTime(0, now + 0.1);
-        gain.gain.setValueAtTime(0, now + 0.15);
-        gain.gain.linearRampToValueAtTime(0.5, now + 0.2);
-        gain.gain.linearRampToValueAtTime(0, now + 0.3);
-
-        osc1.connect(gain);
-        osc2.connect(gain);
-        gain.connect(this.audioContext.destination);
-
-        osc1.start(now);
-        osc1.stop(now + 0.1);
-        osc2.start(now + 0.15);
-        osc2.stop(now + 0.3);
-    } else {
-        osc1.type = 'square';
-        osc1.frequency.setValueAtTime(200, now);
-        osc1.frequency.exponentialRampToValueAtTime(150, now + 0.3);
-
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.5, now + 0.1);
-        gain.gain.linearRampToValueAtTime(0, now + 0.3);
-
-        osc1.connect(gain);
-        gain.connect(this.audioContext.destination);
-
-        osc1.start(now);
-        osc1.stop(now + 0.3);
-    }
+    playEarconOscillators(this.audioContext, type, this.audioContext.destination);
   }
 
+  /**
+   * Destroys the player instance and clears all listeners.
+   */
   public destroy() {
       this.stop();
       this.audio.ontimeupdate = null;

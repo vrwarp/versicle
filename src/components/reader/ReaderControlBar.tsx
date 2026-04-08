@@ -76,10 +76,18 @@ export const ReaderControlBar: React.FC<{ rendition?: any }> = ({ rendition }) =
     // If audio queue has items, we are active.
     const isReaderActive = !!currentBookId;
 
+    const compassMode = useReaderUIStore(state => state.compassMode || { mode: 'default' });
+
     // Logic:
+    // We override everything else if we are in a special compass mode (e.g. audio triage)
+    // Audio triage replaces the compass pill entirely with a different set of buttons,
+    // but the `CompassPill` handles this internally if we just pass a normal variant.
+    // The variant doesn't matter for audio-triage as CompassPill takes over rendering.
     let variant: 'annotation' | 'active' | 'summary' | 'compact' | 'sync-alert' | null = null;
 
-    if (isSyncAlert) {
+    if (compassMode.mode === 'audio-triage') {
+        variant = 'active'; // dummy variant, CompassPill intercepts it
+    } else if (isSyncAlert) {
         variant = 'sync-alert';
     } else if (isAnnotationMode) {
         variant = 'annotation';
