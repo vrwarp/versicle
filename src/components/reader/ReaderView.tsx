@@ -648,7 +648,7 @@ export const ReaderView: React.FC = () => {
 
                                         // 2. Dispatch state to Reader UI Store to morph the CompassPill
                                         useReaderUIStore.getState().setCompassMode({
-                                            variant: 'audio-triage',
+                                            mode: 'audio-triage',
                                             targetAnnotation: annotation
                                         });
                                     }, 50);
