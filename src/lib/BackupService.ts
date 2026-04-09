@@ -272,9 +272,7 @@ export class BackupService {
       onProgress?.(40, 'Restoring metadata...');
       const tx = db.transaction(['static_manifests'], 'readwrite');
       const store = tx.objectStore('static_manifests');
-      for (const m of manifest.staticManifests) {
-        await store.put(m);
-      }
+      await Promise.all(manifest.staticManifests.map(m => store.put(m)));
       await tx.done;
     }
 
@@ -283,12 +281,10 @@ export class BackupService {
       onProgress?.(60, 'Restoring locations...');
       const tx = db.transaction(['cache_render_metrics'], 'readwrite');
       const locStore = tx.objectStore('cache_render_metrics');
-      for (const loc of manifest.locations) {
-        await locStore.put({
-          bookId: loc.bookId,
-          locations: loc.locations
-        });
-      }
+      await Promise.all(manifest.locations.map(loc => locStore.put({
+        bookId: loc.bookId,
+        locations: loc.locations
+      })));
       await tx.done;
     }
 

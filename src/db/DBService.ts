@@ -573,9 +573,7 @@ class DBService {
         const tx = db.transaction('cache_session_state', 'readwrite');
         const store = tx.objectStore('cache_session_state');
 
-        for (const state of Object.values(pending)) {
-          await store.put(state);
-        }
+        await Promise.all(Object.values(pending).map(state => store.put(state)));
         await tx.done;
       } catch (error) {
         logger.error('Failed to save TTS state', error);
