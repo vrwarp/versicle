@@ -12,6 +12,7 @@ import type { TableImage } from '../../types/db';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { reprocessBook } from '../../lib/ingestion';
 import { ContentAnalysisReport } from './ContentAnalysisReport';
+import { Button } from '../ui/Button';
 
 interface ContentAnalysisLegendProps {
     rendition?: Rendition | null;
@@ -283,21 +284,25 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
     return (
         <div className="fixed bottom-20 left-4 z-50 bg-background/95 backdrop-blur-sm border rounded-lg shadow-lg p-3 text-xs w-72 max-h-[80vh] overflow-y-auto flex flex-col gap-3 transition-all duration-300">
             <div className="flex items-center justify-between border-b pb-2">
-                <button
+                <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setIsExpanded(!isExpanded)}
-                    className="flex items-center gap-1 font-semibold hover:text-primary"
+                    className="flex items-center gap-1 font-semibold hover:text-primary p-0 h-auto hover:bg-transparent"
                     aria-expanded={isExpanded}
                 >
                     {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     GenAI Debug Panel
-                </button>
-                <button
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => setDebugModeEnabled(false)}
-                    className="hover:bg-muted rounded p-0.5"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
                     aria-label="Close debug legend"
                 >
                     <X className="h-4 w-4" />
-                </button>
+                </Button>
             </div>
 
             {isExpanded && (
@@ -306,22 +311,25 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                     <div className="flex items-center justify-between bg-muted/50 p-2 rounded">
                         <span className="font-semibold text-muted-foreground">Actions</span>
                         <div className="flex gap-1">
-                            <button
+                            <Button
+                                variant="secondary"
+                                size="sm"
                                 onClick={() => setIsReportOpen(true)}
-                                className="flex items-center gap-1 px-2 py-1 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 text-[10px]"
+                                className="flex items-center gap-1 h-6 px-2 text-[10px]"
                                 title="View Content Analysis Report"
                             >
                                 <FileText className="h-3 w-3" />
                                 Report
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                                size="sm"
                                 onClick={handleReprocess}
                                 disabled={isReprocessing}
-                                className="flex items-center gap-1 px-2 py-1 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 text-[10px]"
+                                className="flex items-center gap-1 h-6 px-2 text-[10px]"
                             >
                                 {isReprocessing ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <RotateCcw className="h-3 w-3" />}
                                 Reprocess
-                            </button>
+                            </Button>
                         </div>
                     </div>
 
@@ -337,9 +345,16 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                     placeholder="epubcfi(...)"
                                     className="flex-1 bg-muted p-1 rounded border border-input text-[10px] font-mono"
                                 />
-                                <button onClick={copyCfi} className="p-1 hover:bg-accent rounded" title="Copy CFI" aria-label="Copy CFI">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={copyCfi}
+                                    className="h-6 w-6 hover:bg-accent"
+                                    title="Copy CFI"
+                                    aria-label="Copy CFI"
+                                >
                                     <Copy className="h-3 w-3" />
-                                </button>
+                                </Button>
                             </div>
                         </div>
 
@@ -351,14 +366,16 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                     value={mergedContent}
                                     className="w-full h-20 bg-muted p-1 rounded border border-input text-[10px] resize-none"
                                 />
-                                <button
+                                <Button
+                                    variant="secondary"
+                                    size="icon"
                                     onClick={copyContent}
-                                    className="absolute top-1 right-1 p-1 bg-background/80 hover:bg-accent rounded shadow-sm"
+                                    className="absolute top-1 right-1 h-6 w-6 bg-background/80 hover:bg-accent shadow-sm"
                                     title="Copy Content"
                                     aria-label="Copy Content"
                                 >
                                     <Copy className="h-3 w-3" />
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -384,12 +401,13 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                                     alt="Table snapshot"
                                                     className="w-full h-full object-cover"
                                                 />
-                                                <button
+                                                <Button
+                                                    variant="ghost"
                                                     onClick={() => jumpToTable(img.cfi)}
-                                                    className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 flex items-center justify-center text-white font-bold transition-opacity"
+                                                    className="absolute inset-0 bg-black/50 hover:bg-black/60 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 flex items-center justify-center text-white font-bold transition-opacity rounded-none h-full w-full"
                                                 >
                                                     JUMP
-                                                </button>
+                                                </Button>
                                             </div>
                                             <div className="text-[9px] font-mono truncate text-muted-foreground" title={img.cfi}>
                                                 {img.cfi}
