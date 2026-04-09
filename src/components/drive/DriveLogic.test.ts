@@ -58,6 +58,8 @@ describe('Drive Integration', () => {
             await DriveService.listFolders();
 
             expect(googleIntegrationManager.getValidToken).toHaveBeenCalledTimes(2);
+            expect(googleIntegrationManager.getValidToken).toHaveBeenNthCalledWith(1, 'drive');
+            expect(googleIntegrationManager.getValidToken).toHaveBeenNthCalledWith(2, 'drive', true);
             expect(global.fetch).toHaveBeenCalledTimes(2);
             expect(global.fetch).toHaveBeenLastCalledWith(
                 expect.any(String),
