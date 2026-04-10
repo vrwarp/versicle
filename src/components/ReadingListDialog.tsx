@@ -173,6 +173,9 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
         setDeleteConfirmation({ type: 'single', filename });
     }, []);
 
+    const removeEntry = useReadingListStore(state => state.removeEntry);
+    const upsertEntry = useReadingListStore(state => state.upsertEntry);
+
     const handleBatchDelete = () => {
         setDeleteConfirmation({ type: 'batch' });
     };
@@ -181,7 +184,7 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
         if (!deleteConfirmation) return;
 
         if (deleteConfirmation.type === 'single') {
-            useReadingListStore.getState().removeEntry(deleteConfirmation.filename);
+            removeEntry(deleteConfirmation.filename);
             setSelectedEntries(prev => {
                 const newSet = new Set(prev);
                 newSet.delete(deleteConfirmation.filename);
@@ -189,7 +192,7 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
             });
         } else if (deleteConfirmation.type === 'batch') {
             const batch = Array.from(selectedEntries);
-            batch.forEach(f => useReadingListStore.getState().removeEntry(f));
+            batch.forEach(f => removeEntry(f));
             setSelectedEntries(new Set());
         }
         setDeleteConfirmation(null);
@@ -226,7 +229,7 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
     };
 
     const handleEditSave = async (updatedEntry: ReadingListEntry) => {
-        useReadingListStore.getState().upsertEntry(updatedEntry);
+        upsertEntry(updatedEntry);
     };
 
     return (

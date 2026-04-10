@@ -35,25 +35,7 @@ export const DriveService = {
         // Handle 401 Unauthorized: Refresh token and retry once
         if (response.status === 401) {
             console.warn("Drive API 401: Refreshing token and retrying...");
-            // Force refresh by 'connecting' again or we need a way to force refresh in manager.
-            // Actually getValidToken might return a cached invalid token if we don't have a way to validate it locally.
-            // We can try to disconnect and reconnect to force refresh.
-            // Or better, `getValidToken` should handles this? 
-            // The current `getValidToken` implementation relies on the strategy. 
-            // Web strategy returns cached token if valid. 
-            // We need a way to invalidate the cache.
-
-            // For now, let's assume calling connectService might refresh if we implement it that way, 
-            // but `getValidToken` is the standard way. 
-            // If `getValidToken` returns the same token, we might fail again.
-            // We'll treat this as a "fatal" 401 for this request if we can't refresh easily without user interaction.
-            // However, the Native strategy will refresh automatically via the OS.
-            // For Web, GIS handles it. 
-
-            // Let's try to get a "fresh" token if possible. 
-            // We can add a forceRefresh flag to getValidToken in the future.
-            // For now, we will just try getting the token again, maybe the previous one expired just now.
-            token = await googleIntegrationManager.getValidToken('drive');
+            token = await googleIntegrationManager.getValidToken('drive', true);
             response = await makeRequest(token);
         }
 

@@ -103,6 +103,7 @@ interface IDBService {
   offloadBook: (id: string) => Promise<void>;
   restoreBook: (id: string, file: File) => Promise<void>;
   getBookMetadata: (id: string) => Promise<BookMetadata | undefined>;
+  getBookMetadataBulk?: (ids: string[]) => Promise<(BookMetadata | undefined)[]>;
   getOffloadedStatus: (bookIds?: string[]) => Promise<Map<string, boolean>>;
   getBookIdByFilename: (filename: string) => string | undefined;
 }
@@ -129,9 +130,14 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         // to detect concurrent removals that occur while waiting for the DB.
         const initialOffloadedBookIds = get().offloadedBookIds;
 
-        const manifests = await Promise.all(
-          bookIds.map(id => injectedDB.getBookMetadata(id))
-        );
+        let manifests: (BookMetadata | undefined)[];
+        if (injectedDB.getBookMetadataBulk) {
+           manifests = await injectedDB.getBookMetadataBulk(bookIds);
+        } else {
+           manifests = await Promise.all(
+             bookIds.map(id => injectedDB.getBookMetadata(id))
+           );
+        }
 
         set((state) => {
           const currentBooks = useBookStore.getState().books;
