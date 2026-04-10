@@ -64,7 +64,7 @@ def test_journey_visual_reading(page: Page):
     # --- Test Issue B: Tap Navigation Disabled in Standard Mode ---
     print("Testing Standard Mode Tap Restriction...")
     # Right 10% of READER width
-    tap_x_right = reader_x + (reader_w * 0.9)
+    tap_x_right = reader_x + (reader_w * 0.95)
     tap_y = reader_y + (reader_h / 2)
 
     page.mouse.click(tap_x_right, tap_y)
@@ -94,8 +94,8 @@ def test_journey_visual_reading(page: Page):
     reader_w = box['width']
     reader_h = box['height']
     tap_y = reader_y + (reader_h / 2)
-    tap_x_right = reader_x + (reader_w * 0.9)
-    tap_x_left = reader_x + (reader_w * 0.1)
+    tap_x_right = reader_x + (reader_w * 0.95)
+    tap_x_left = reader_x + (reader_w * 0.05)
 
     # Capture CFI before navigation
     cfi_before = page.evaluate("window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'")

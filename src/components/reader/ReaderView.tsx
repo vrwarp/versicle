@@ -330,8 +330,10 @@ export const ReaderView: React.FC = () => {
                 useReaderUIStore.getState().resetCompassState();
 
                 if (useReaderUIStore.getState().immersiveMode) {
-                    const iframe = viewerRef.current?.querySelector('iframe');
-                    const width = iframe?.clientWidth || e.view?.innerWidth || window.innerWidth;
+                    if ((e.target as HTMLElement)?.closest('a')) return; // Ignore link clicks
+
+                    // Because this event fires INSIDE the iframe, e.clientX and e.view.innerWidth are relative to the iframe.
+                    const width = e.view?.innerWidth || window.innerWidth;
                     const x = e.clientX;
                     if (x > width * 0.8) {
                         renditionRef.current?.next();
