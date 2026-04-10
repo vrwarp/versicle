@@ -110,7 +110,7 @@ export const ReaderView: React.FC = () => {
     })));
 
     logger.debug(`viewMode: ${readerViewMode}, immersive: ${immersiveMode}`);
-    
+
     useEffect(() => {
         if (activeSidebar !== 'none' || immersiveMode) {
             resetCompassState();
@@ -580,16 +580,7 @@ export const ReaderView: React.FC = () => {
         noteMarkers.current.clear();
     }, [rendition]);
 
-    // Helper to get annotation styles object for epub.js
-    const getAnnotationStyles = (color: string) => {
-        switch (color) {
-            case 'red': return { fill: 'red', 'fill-opacity': '0.3' };
-            case 'green': return { fill: 'green', 'fill-opacity': '0.3' };
-            case 'blue': return { fill: 'blue', 'fill-opacity': '0.3' };
-            case 'striped': return { fill: 'url(#striped-highlight)', 'fill-opacity': '0.3' };
-            default: return { fill: 'yellow', 'fill-opacity': '0.3' };
-        }
-    };
+
 
     useEffect(() => {
         if (rendition && isRenditionReady) {
@@ -649,8 +640,7 @@ export const ReaderView: React.FC = () => {
                                         });
                                     }, 50);
                                 },
-                                'versicle-audio-bookmark-pending',
-                                getAnnotationStyles("striped")
+                                'versicle-audio-bookmark-pending'
                             );
                             addedAnnotations.current.set(annotation.id, annotation.cfiRange);
                         }
@@ -673,7 +663,7 @@ export const ReaderView: React.FC = () => {
                                     y += iframeRect.top;
                                 }
                                 showPopover(x, y, annotation.cfiRange, annotation.text, annotation.id);
-                            }, className, getAnnotationStyles(annotation.color));
+                            }, className);
                             addedAnnotations.current.set(annotation.id, annotation.cfiRange);
                         }
                     } catch (e) {
@@ -1442,6 +1432,14 @@ export const ReaderView: React.FC = () => {
                     </pattern>
                 </defs>
             </svg>
+            {/* Highlights CSS styles */}
+            <style>{`
+                .highlight-red { fill: red; fill-opacity: 0.3; }
+                .highlight-green { fill: green; fill-opacity: 0.3; }
+                .highlight-blue { fill: blue; fill-opacity: 0.3; }
+                .highlight-yellow { fill: yellow; fill-opacity: 0.3; }
+                .versicle-audio-bookmark-pending { fill: url(#striped-highlight); fill-opacity: 0.3; }
+            `}</style>
         </div >
     );
 };
