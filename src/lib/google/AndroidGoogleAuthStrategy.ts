@@ -9,8 +9,8 @@ export class AndroidGoogleAuthStrategy {
         return this.getValidToken(serviceId, loginHint);
     }
 
-    async getValidToken(serviceId: string, loginHint?: string): Promise<string> {
-        if (this.accessToken && this.tokenExpiration && Date.now() < this.tokenExpiration) {
+    async getValidToken(serviceId: string, loginHint?: string, forceRefresh?: boolean): Promise<string> {
+        if (!forceRefresh && this.accessToken && this.tokenExpiration && Date.now() < this.tokenExpiration) {
             return this.accessToken;
         }
 
