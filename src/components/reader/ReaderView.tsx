@@ -59,7 +59,7 @@ export const ReaderView: React.FC = () => {
     const { activeSidebar, setSidebar } = useSidebarState();
     const viewerRef = useRef<HTMLDivElement>(null);
     const previousLocation = useRef<{ start: string; end: string; timestamp: number } | null>(null);
-    const touchStartRef = useRef<{y: number, x: number} | null>(null);
+    const touchStartRef = useRef<{ y: number, x: number } | null>(null);
     const scrollWrapperRef = useRef<HTMLDivElement>(null);
 
     const {
@@ -149,7 +149,7 @@ export const ReaderView: React.FC = () => {
         loadAnnotations,
         showPopover,
         hidePopover
-} = useAnnotationStore(useShallow(state => ({
+    } = useAnnotationStore(useShallow(state => ({
         loadAnnotations: state.loadAnnotations,
         showPopover: state.showPopover,
         hidePopover: state.hidePopover
@@ -574,40 +574,26 @@ export const ReaderView: React.FC = () => {
     // Helper to get annotation styles object for epub.js
     const getAnnotationStyles = (color: string) => {
         switch (color) {
-            case 'red': return { fill: 'red', backgroundColor: 'rgba(255, 0, 0, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
-            case 'green': return { fill: 'green', backgroundColor: 'rgba(0, 255, 0, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
-            case 'blue': return { fill: 'blue', backgroundColor: 'rgba(0, 0, 255, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
-            default: return { fill: 'yellow', backgroundColor: 'rgba(255, 255, 0, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
+            case 'red': return { fill: 'red', 'fill-opacity': '0.3' };
+            case 'green': return { fill: 'green', 'fill-opacity': '0.3' };
+            case 'blue': return { fill: 'blue', 'fill-opacity': '0.3' };
+            case 'striped': return { fill: 'url(#striped-highlight)', 'fill-opacity': '0.3' };
+            default: return { fill: 'yellow', 'fill-opacity': '0.3' };
         }
     };
 
     useEffect(() => {
         if (rendition && isRenditionReady) {
-            // Inject audio-bookmark pending theme
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            if ((rendition as any).themes?.default) {
-                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (rendition as any).themes.default({
-                    '.versicle-audio-bookmark-pending': {
-                        'border-bottom': '2px dashed #ff9800 !important',
-                        'background-color': 'rgba(255, 152, 0, 0.1) !important',
-                        'cursor': 'pointer !important'
-                    }
-                });
-            }
-
             const currentIds = new Set(annotationList.map(a => a.id));
 
-            // 1. Remove deleted annotations (Highlights, Underlines, and Markers)
+            // 1. Remove deleted annotations (Highlights, and Markers)
             addedAnnotations.current.forEach((cfi, id) => {
                 if (!currentIds.has(id)) {
                     try {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         (rendition as any).annotations.remove(cfi, 'highlight');
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        (rendition as any).annotations.remove(cfi, 'underline');
                     } catch (e) {
-                        logger.warn("Failed to remove highlight or underline", e);
+                        logger.warn("Failed to remove highlight", e);
                     }
                     addedAnnotations.current.delete(id);
                 }
@@ -628,7 +614,7 @@ export const ReaderView: React.FC = () => {
                         if (annotation.type === 'audio-bookmark') {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             (rendition as any).annotations.add(
-                                'underline',
+                                'highlight',
                                 annotation.cfiRange,
                                 {},
                                 (e: Event) => {
@@ -654,11 +640,12 @@ export const ReaderView: React.FC = () => {
                                         });
                                     }, 50);
                                 },
-                                'versicle-audio-bookmark-pending'
+                                'versicle-audio-bookmark-pending',
+                                getAnnotationStyles("striped")
                             );
                             addedAnnotations.current.set(annotation.id, annotation.cfiRange);
                         }
- else {
+                        else {
                             const className = annotation.color === 'yellow' ? 'highlight-yellow' :
                                 annotation.color === 'green' ? 'highlight-green' :
                                     annotation.color === 'blue' ? 'highlight-blue' :
@@ -1119,13 +1106,13 @@ export const ReaderView: React.FC = () => {
             if (readerViewMode !== 'scrolled' || !touchStartRef.current) return;
             const deltaY = touchStartRef.current.y - e.touches[0].clientY;
             const deltaX = touchStartRef.current.x - e.touches[0].clientX;
-            
+
             const epubContainer = viewerRef.current?.firstElementChild as HTMLElement;
             if (epubContainer) {
                 epubContainer.scrollBy({ top: deltaY, left: deltaX });
                 if (e.cancelable) e.preventDefault();
             }
-            
+
             touchStartRef.current = { y: e.touches[0].clientY, x: e.touches[0].clientX };
         };
 
@@ -1397,7 +1384,7 @@ export const ReaderView: React.FC = () => {
                 )}
 
                 {/* Reader Area */}
-                <div 
+                <div
                     ref={scrollWrapperRef}
                     className="flex-1 relative min-w-0 flex flex-col items-center"
                 >
@@ -1433,8 +1420,13 @@ export const ReaderView: React.FC = () => {
 
             {/* Smart Resume Toast */}
 
-
-
+            <svg xmlns="http://www.w3.org/2000/svg" id="epubjs-custom-defs" style={{ width: 0, height: 0, position: 'absolute' }} aria-hidden="true">
+                <defs>
+                    <pattern id="striped-highlight" patternUnits="userSpaceOnUse" width="16" height="10" patternTransform="rotate(45)">
+                        <rect width="8" height="10" fill="orange" />
+                    </pattern>
+                </defs>
+            </svg>
         </div >
     );
 };

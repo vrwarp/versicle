@@ -15,7 +15,7 @@ import { useToastStore } from '../../store/useToastStore';
 import { type SectionAnalysis, type TableAdaptation, useContentAnalysisStore } from '../../store/useContentAnalysisStore';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
-import { generateCfiRange } from '../cfi-utils';
+import { mergeCfiSlow } from '../cfi-utils';
 import { createLogger } from '../logger';
 
 const logger = createLogger('AudioPlayerService');
@@ -457,7 +457,7 @@ export class AudioPlayerService {
         // 2. Generate Spanning CFI
         let mergedCfi = targetItems[0].cfi;
         if (targetItems.length > 1 && targetItems[0].cfi && targetItems[1].cfi) {
-            mergedCfi = generateCfiRange(targetItems[0].cfi, targetItems[1].cfi);
+            mergedCfi = mergeCfiSlow(targetItems[0].cfi, targetItems[1].cfi);
         }
 
         if (!mergedCfi) {
