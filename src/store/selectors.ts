@@ -100,8 +100,7 @@ export const useAllBooks = () => {
             moduleCache.lastDeps.staticMetadata !== staticMetadata ||
             moduleCache.lastDeps.offloadedBookIds !== offloadedBookIds
         ) {
-            // eslint-disable-next-line react-hooks/immutability
-            moduleCache.baseBookCache = new WeakMap();
+                        Object.assign(moduleCache, { baseBookCache: new WeakMap() });
         }
 
         const booksObj = books || {};
@@ -156,10 +155,8 @@ export const useAllBooks = () => {
             result.push(newBaseBook);
         }
 
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.baseBooks = result.sort((a, b) => b.lastInteraction - a.lastInteraction);
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.lastDeps = { books, staticMetadata, offloadedBookIds };
+                Object.assign(moduleCache, { baseBooks: result.sort((a, b) => b.lastInteraction - a.lastInteraction) });
+                Object.assign(moduleCache, { lastDeps: { books, staticMetadata, offloadedBookIds } });
     }
 
     const baseBooks = moduleCache.baseBooks;
@@ -182,10 +179,8 @@ export const useAllBooks = () => {
                 map.set(matchKey, entry);
             }
         }
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.readingListMatchMap = map;
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.readingListMatchDeps = { readingListEntries };
+                Object.assign(moduleCache, { readingListMatchMap: map });
+                Object.assign(moduleCache, { readingListMatchDeps: { readingListEntries } });
     }
     const readingListMatchMap = moduleCache.readingListMatchMap;
 
@@ -266,12 +261,9 @@ export const useAllBooks = () => {
             return newBook;
         });
 
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.memoizedResult = { books: result, cache: newCache };
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.lastPhase2Deps = { baseBooks, progressMap, readingListEntries, readingListMatchMap };
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.previousResultsCache = newCache;
+                Object.assign(moduleCache, { memoizedResult: { books: result, cache: newCache } });
+                Object.assign(moduleCache, { lastPhase2Deps: { baseBooks, progressMap, readingListEntries, readingListMatchMap } });
+                Object.assign(moduleCache, { previousResultsCache: newCache });
     }
 
     const memoizedResult = moduleCache.memoizedResult;

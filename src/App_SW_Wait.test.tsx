@@ -38,8 +38,7 @@ vi.mock('@capacitor/app', () => ({
 // Mock useLibraryStore
 vi.mock('./store/useLibraryStore', () => {
   const hydrate = vi.fn().mockResolvedValue(undefined);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const useLibraryStore = (selector: any) => {
+  const useLibraryStore = (selector: (state: unknown) => unknown) => {
     return selector({
       hydrateStaticMetadata: hydrate,
       books: {},
@@ -67,8 +66,7 @@ vi.mock('./store/useLibraryStore', () => {
 });
 
 vi.mock('zustand/react/shallow', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  useShallow: (selector: any) => selector
+  useShallow: (selector: (state: unknown) => unknown) => selector
 }));
 
 // Mock sub-components
@@ -119,8 +117,7 @@ describe('App Service Worker Wait (Refactored)', () => {
 
   it('initializes successfully when SW controller is ready (mocked)', async () => {
     // Mock successful resolution
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (waitForServiceWorkerController as any).mockResolvedValue(undefined);
+    (waitForServiceWorkerController as import('vitest').Mock).mockResolvedValue(undefined);
 
     render(<App />);
 
@@ -136,8 +133,7 @@ describe('App Service Worker Wait (Refactored)', () => {
   it('shows critical error if SW controller wait fails', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     // Mock failure
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (waitForServiceWorkerController as any).mockRejectedValue(new Error('Controller missing'));
+    (waitForServiceWorkerController as import('vitest').Mock).mockRejectedValue(new Error('Controller missing'));
 
     render(<App />);
 

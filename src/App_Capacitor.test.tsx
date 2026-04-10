@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import { render, act } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -47,20 +46,20 @@ vi.mock('./lib/tts/AudioPlayerService', () => ({
 }));
 vi.mock('./store/useToastStore', () => {
   const showToastMock = vi.fn();
-  const useToastStoreMock = (selector: any) => selector({ showToast: showToastMock });
+  const useToastStoreMock = (selector: (state: unknown) => unknown) => selector({ showToast: showToastMock });
   useToastStoreMock.getState = () => ({ showToast: showToastMock });
   return { useToastStore: useToastStoreMock };
 });
 
 vi.mock('./store/useReaderUIStore', () => ({
-  useReaderUIStore: (selector: any) => selector({
+  useReaderUIStore: (selector: (state: unknown) => unknown) => selector({
     immersiveMode: false,
     currentSectionTitle: null,
   }),
 }));
 
 vi.mock('./store/useReadingStateStore', () => {
-  const useReadingStateStore = (selector: any) => selector({
+  const useReadingStateStore = (selector: (state: unknown) => unknown) => selector({
     currentBookId: null,
     progress: {},
     getProgress: () => null,
@@ -75,7 +74,7 @@ vi.mock('./store/useReadingStateStore', () => {
 });
 
 vi.mock('./store/useLibraryStore', () => ({
-  useLibraryStore: (selector: any) => selector({
+  useLibraryStore: (selector: (state: unknown) => unknown) => selector({
     books: {},
     hydrateStaticMetadata: vi.fn(),
   }),
@@ -87,7 +86,7 @@ vi.mock('./store/selectors', () => ({
 }));
 
 vi.mock('./store/useAnnotationStore', () => ({
-  useAnnotationStore: (selector: any) => selector({
+  useAnnotationStore: (selector: (state: unknown) => unknown) => selector({
     popover: { visible: false },
     addAnnotation: vi.fn(),
     hidePopover: vi.fn(),
@@ -95,7 +94,7 @@ vi.mock('./store/useAnnotationStore', () => ({
 }));
 
 vi.mock('./store/useTTSStore', () => ({
-  useTTSStore: (selector: any) => selector({ queue: [], isPlaying: false }),
+  useTTSStore: (selector: (state: unknown) => unknown) => selector({ queue: [], isPlaying: false }),
 }));
 
 // Mock ReaderControlBar to avoid internal logic issues
@@ -105,9 +104,9 @@ vi.mock('./components/reader/ReaderControlBar', () => ({
 
 vi.mock('react-router-dom', () => ({
   useNavigate: vi.fn(),
-  BrowserRouter: ({ children }: any) => <div>{children}</div>,
-  Routes: ({ children }: any) => <div>{children}</div>,
-  Route: ({ element }: any) => <div>{element}</div>,
+  BrowserRouter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Routes: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Route: ({ element }: { element: React.ReactNode }) => <div>{element}</div>,
 }));
 
 
@@ -129,8 +128,8 @@ describe('App Capacitor Initialization', () => {
   });
 
   it('renders correctly on Capacitor platform', async () => {
-    (Capacitor.getPlatform as any).mockReturnValue('android');
-    (Capacitor.isNativePlatform as any).mockReturnValue(true);
+    (Capacitor.getPlatform as import('vitest').Mock).mockReturnValue('android');
+    (Capacitor.isNativePlatform as import('vitest').Mock).mockReturnValue(true);
 
     await act(async () => {
       // Validates that Capacitor mocks don't crash the test environment
@@ -140,7 +139,7 @@ describe('App Capacitor Initialization', () => {
   });
 
   it('renders correctly on Web platform', async () => {
-    (Capacitor.getPlatform as any).mockReturnValue('web');
+    (Capacitor.getPlatform as import('vitest').Mock).mockReturnValue('web');
     await act(async () => {
       render(<div>Test Web Environment</div>);
     });

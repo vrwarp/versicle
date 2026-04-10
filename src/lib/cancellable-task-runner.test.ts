@@ -145,8 +145,8 @@ describe('runCancellable', () => {
     });
 
     it('should handle errors thrown by generator by rejecting the result promise', async () => {
-        // eslint-disable-next-line require-yield
         const generatorFn = function* () {
+             yield undefined;
              throw new Error('Test error');
         };
 
