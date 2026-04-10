@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '../../hooks/useSectionDuration';
 import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check, BookOpen, ArrowUpCircle, Smartphone, Trash2 } from 'lucide-react';
@@ -17,7 +18,7 @@ export type ActionType =
   | 'dismiss';   // Payload: null
 
 interface CompassPillProps {
-  variant: 'active' | 'summary' | 'compact' | 'annotation' | 'sync-alert';
+  variant: 'active' | 'summary' | 'compact' | 'annotation' | 'sync-alert' | 'audio-triage';
   title?: string;
   subtitle?: string;
   progress?: number;
@@ -28,6 +29,8 @@ interface CompassPillProps {
     pronounce?: boolean;
     delete?: boolean;
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rendition?: any; // Pass rendition for triage operations
 }
 
 export const CompassPill: React.FC<CompassPillProps> = ({
@@ -37,8 +40,12 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   progress: overrideProgress,
   onClick,
   onAnnotationAction,
-  availableActions
+  availableActions,
+  rendition
 }) => {
+  const compassState = useReaderUIStore(state => state.compassState || {});
+  const resetCompassState = useReaderUIStore(state => state.resetCompassState);
+
   const {
     isPlaying,
     status,
@@ -55,6 +62,11 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     pause: state.pause
   })));
 
+  const { addAnnotation, removeAnnotation } = useAnnotationStore(useShallow(state => ({
+      addAnnotation: state.add,
+      removeAnnotation: state.remove
+  })));
+
   const isLoading = status === 'loading';
 
   // Internal state for note editing
@@ -63,10 +75,16 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   const [isCopied, setIsCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Optimize: Select only currentSectionTitle to prevent re-renders on progress/cfi updates
+  const readerSectionTitle = useReaderUIStore(state => state.currentSectionTitle);
+
+  const { timeRemaining, progress: hookProgress } = useSectionDuration();
+
   // Reset editing state when variant changes
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsEditingNote(false);
+
     setNoteText('');
   }, [variant]);
 
@@ -86,10 +104,71 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     return () => clearTimeout(timeoutId);
   }, [isCopied]);
 
-  // Optimize: Select only currentSectionTitle to prevent re-renders on progress/cfi updates
-  const readerSectionTitle = useReaderUIStore(state => state.currentSectionTitle);
+  // Audio Triage Mode
+  if (variant === 'audio-triage' && compassState.targetAnnotation) {
+      const onConfirmTriage = async () => {
+          const target = compassState.targetAnnotation!;
+          let newCfiRange = target.cfiRange;
+          let newText = target.text;
 
-  const { timeRemaining, progress: hookProgress } = useSectionDuration();
+          // If the user adjusted the selection, use the new bounds.
+          // Otherwise, fall back to the original annotation data.
+          if (rendition) {
+              try {
+                  const contents = rendition.manager?.getContents();
+                  const currentSelection = contents?.[0]?.window?.getSelection();
+                  if (currentSelection && currentSelection.rangeCount > 0 && currentSelection.toString().trim()) {
+                      newCfiRange = new rendition.epubcfi().generateCfiFromRange(
+                          currentSelection.getRangeAt(0),
+                          contents[0].cfiBase
+                      );
+                      newText = currentSelection.toString();
+                      currentSelection.removeAllRanges();
+                  }
+              } catch (e) {
+                  // Selection extraction failed; use original annotation data
+              }
+          }
+
+          // Mutate CRDT Store: Delete dirty dragnet, insert precise highlight
+          removeAnnotation(target.id);
+          addAnnotation({
+              ...target,
+              cfiRange: newCfiRange,
+              text: newText,
+              type: 'highlight' // Elevate status
+          });
+
+          resetCompassState();
+      };
+
+      const onDiscardTriage = () => {
+          removeAnnotation(compassState.targetAnnotation!.id);
+          resetCompassState();
+      };
+
+      return (
+          <div data-testid="compass-pill-triage" className="relative z-50 flex items-center justify-between w-full max-w-sm h-14 px-4 mx-auto overflow-hidden transition-all border shadow-lg rounded-full bg-background/90 backdrop-blur-md border-orange-500/50 animate-in fade-in slide-in-from-bottom-2">
+              <span className="text-sm font-bold text-orange-500">Review Bookmark</span>
+              <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                      <Button variant="ghost" size="sm" onClick={onDiscardTriage}>Discard</Button>
+                      <Button variant="default" size="sm" onClick={onConfirmTriage}>Confirm</Button>
+                  </div>
+                  <div className="w-px h-6 bg-border mx-1" />
+                  <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full w-8 h-8 text-muted-foreground mr-[-4px]"
+                      onClick={() => resetCompassState()}
+                      aria-label="Dismiss review"
+                  >
+                      <X size={16} />
+                  </Button>
+              </div>
+          </div>
+      );
+  }
 
   const progress = overrideProgress !== undefined ? overrideProgress : hookProgress;
 

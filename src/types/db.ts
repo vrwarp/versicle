@@ -171,7 +171,7 @@ export interface UserAnnotation {
   /** The selected text. */
   text: string;
   /** Type of annotation. */
-  type: 'highlight' | 'note';
+  type: 'highlight' | 'note' | 'audio-bookmark';
   /** Color code. */
   color: string;
   /** User note. */
@@ -489,7 +489,7 @@ export interface Annotation {
   /** The actual text content that was selected. */
   text: string;
   /** The type of annotation. */
-  type: 'highlight' | 'note';
+  type: 'highlight' | 'note' | 'audio-bookmark';
   /** The color code (e.g., hex) for the highlight. */
   color: string;
   /** Optional user-written note associated with the highlight. */

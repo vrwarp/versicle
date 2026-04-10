@@ -130,6 +130,10 @@ export abstract class BaseCloudProvider implements ITTSProvider {
       this.eventListeners.forEach(l => l(event));
   }
 
+    public playEarcon(type: 'bookmark_captured' | 'bookmark_failed'): void {
+        this.audioPlayer.playEarcon(type);
+    }
+
   /**
    * Abstract method for subclasses to implement the API call.
    */

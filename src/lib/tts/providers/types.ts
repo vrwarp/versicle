@@ -102,4 +102,9 @@ export interface ITTSProvider {
   stop(): void;
 
   on(callback: (event: TTSEvent) => void): void;
+
+  /**
+   * Plays an earcon, automatically ducking the main audio if playing.
+   */
+  playEarcon?(type: 'bookmark_captured' | 'bookmark_failed'): void;
 }

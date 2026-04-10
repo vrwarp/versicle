@@ -1,6 +1,7 @@
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice } from './types';
 import type { PluginListenerHandle } from '@capacitor/core';
+import { playEarconOscillators } from '../earcons';
 
 export class CapacitorTTSProvider implements ITTSProvider {
   id = 'local';
@@ -16,6 +17,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
   private lastText: string | null = null;
   private lastOptions: TTSOptions | null = null;
+  private audioContext: AudioContext | null = null;
 
   async init(): Promise<void> {
     await this.getVoices();
@@ -197,6 +199,22 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
   on(callback: (event: TTSEvent) => void): void {
       this.eventListeners.push(callback);
+  }
+
+  playEarcon(type: 'bookmark_captured' | 'bookmark_failed'): void {
+      // Fallback for CapacitorTTSProvider
+      // Similar to WebSpeechProvider, ducks other audio if we have an AudioContext, but native TTS volume cannot be easily ducked this way
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      if (!this.audioContext) {
+          this.audioContext = new AudioContextClass();
+      }
+      const ctx = this.audioContext;
+      if (ctx.state === 'suspended') {
+          ctx.resume();
+      }
+      playEarconOscillators(ctx, type);
   }
 
   private emit(event: TTSEvent) {

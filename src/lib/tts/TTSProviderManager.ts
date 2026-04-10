@@ -211,6 +211,15 @@ export class TTSProviderManager {
         return this.provider.id;
     }
 
+    /**
+     * Plays an earcon and ducks the underlying TTS audio if supported.
+     */
+    playEarcon(type: 'bookmark_captured' | 'bookmark_failed'): void {
+        if (typeof this.provider.playEarcon === 'function') {
+            this.provider.playEarcon(type);
+        }
+    }
+
     // Proxy other methods if needed (downloadVoice, etc)
     // Casting to any for provider specific methods as per original code
     async downloadVoice(voiceId: string): Promise<void> {
