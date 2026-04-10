@@ -330,7 +330,8 @@ export const ReaderView: React.FC = () => {
                 useReaderUIStore.getState().resetCompassState();
 
                 if (useReaderUIStore.getState().immersiveMode) {
-                    const width = e.view?.innerWidth || window.innerWidth;
+                    const iframe = viewerRef.current?.querySelector('iframe');
+                    const width = iframe?.clientWidth || e.view?.innerWidth || window.innerWidth;
                     const x = e.clientX;
                     if (x > width * 0.8) {
                         renditionRef.current?.next();
