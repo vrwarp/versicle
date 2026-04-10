@@ -319,6 +319,7 @@ export const ReaderView: React.FC = () => {
             const selection = e.view?.getSelection();
             if (!selection || selection.isCollapsed) {
                 hidePopover();
+                useReaderUIStore.getState().resetCompassState();
             }
         },
         onError: (msg) => {
@@ -1387,6 +1388,10 @@ export const ReaderView: React.FC = () => {
                 <div
                     ref={scrollWrapperRef}
                     className="flex-1 relative min-w-0 flex flex-col items-center"
+                    onClick={() => {
+                        hidePopover();
+                        useReaderUIStore.getState().resetCompassState();
+                    }}
                 >
                     <div
                         data-testid="reader-iframe-container"

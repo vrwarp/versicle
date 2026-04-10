@@ -150,9 +150,21 @@ export const CompassPill: React.FC<CompassPillProps> = ({
       return (
           <div data-testid="compass-pill-triage" className="relative z-50 flex items-center justify-between w-full max-w-sm h-14 px-4 mx-auto overflow-hidden transition-all border shadow-lg rounded-full bg-background/90 backdrop-blur-md border-orange-500/50 animate-in fade-in slide-in-from-bottom-2">
               <span className="text-sm font-bold text-orange-500">Review Bookmark</span>
-              <div className="flex gap-2">
-                  <Button variant="ghost" onClick={onDiscardTriage}>Discard</Button>
-                  <Button variant="default" onClick={onConfirmTriage}>Confirm</Button>
+              <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                      <Button variant="ghost" size="sm" onClick={onDiscardTriage}>Discard</Button>
+                      <Button variant="default" size="sm" onClick={onConfirmTriage}>Confirm</Button>
+                  </div>
+                  <div className="w-px h-6 bg-border mx-1" />
+                  <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full w-8 h-8 text-muted-foreground mr-[-4px]"
+                      onClick={() => resetCompassState()}
+                      aria-label="Dismiss review"
+                  >
+                      <X size={16} />
+                  </Button>
               </div>
           </div>
       );
