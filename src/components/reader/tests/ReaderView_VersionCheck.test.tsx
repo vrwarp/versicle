@@ -139,7 +139,6 @@ vi.mock('../../../hooks/useSidebarState', () => ({
 
 // Mock Child Components
 vi.mock('../ReaderTTSController', () => ({ ReaderTTSController: () => null }));
-vi.mock('../UnifiedInputController', () => ({ UnifiedInputController: () => null }));
 vi.mock('../UnifiedAudioPanel', () => ({ UnifiedAudioPanel: () => null }));
 vi.mock('../AnnotationList', () => ({ AnnotationList: () => null }));
 vi.mock('../LexiconManager', () => ({ LexiconManager: () => null }));

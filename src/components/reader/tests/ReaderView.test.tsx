@@ -69,15 +69,6 @@ vi.mock('../../../lib/search', () => ({
   }
 }));
 
-// Mock UnifiedInputController to isolate ReaderView testing
-vi.mock('../UnifiedInputController', () => ({
-  UnifiedInputController: ({ onPrev, onNext }: { onPrev: () => void, onNext: () => void }) => (
-    <div data-testid="unified-input-controller">
-      <button data-testid="mock-prev" onClick={onPrev}>Prev</button>
-      <button data-testid="mock-next" onClick={onNext}>Next</button>
-    </div>
-  )
-}));
 
 describe('ReaderView', () => {
   const mockRenderTo = vi.fn();
@@ -198,25 +189,6 @@ describe('ReaderView', () => {
       expect(mockRenderTo).toHaveBeenCalled();
       expect(mockDisplay).toHaveBeenCalled();
     });
-  });
-
-  it('handles navigation (next/prev) via UnifiedInputController', async () => {
-    renderComponent();
-
-    await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
-
-    // Wait for the mock component to appear
-    await waitFor(() => expect(screen.getByTestId('unified-input-controller')).toBeInTheDocument());
-
-    // Click mock buttons exposed by UnifiedInputController mock
-    const prevBtn = screen.getByTestId('mock-prev');
-    const nextBtn = screen.getByTestId('mock-next');
-
-    fireEvent.click(prevBtn);
-    expect(mockPrev).toHaveBeenCalled();
-
-    fireEvent.click(nextBtn);
-    expect(mockNext).toHaveBeenCalled();
   });
 
   it('toggles TOC', async () => {

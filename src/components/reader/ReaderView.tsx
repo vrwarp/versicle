@@ -14,7 +14,6 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationList } from './AnnotationList';
 import { LexiconManager } from './LexiconManager';
 import { VisualSettings } from './VisualSettings';
-import { UnifiedInputController } from './UnifiedInputController';
 import { useToastStore } from '../../store/useToastStore';
 import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
@@ -61,6 +60,7 @@ export const ReaderView: React.FC = () => {
     const previousLocation = useRef<{ start: string; end: string; timestamp: number } | null>(null);
     const touchStartRef = useRef<{ y: number, x: number } | null>(null);
     const scrollWrapperRef = useRef<HTMLDivElement>(null);
+    const renditionRef = useRef<import('epubjs').Rendition | null>(null);
 
     const {
         currentTheme,
@@ -328,6 +328,16 @@ export const ReaderView: React.FC = () => {
             if (!selection || selection.isCollapsed) {
                 hidePopover();
                 useReaderUIStore.getState().resetCompassState();
+
+                if (useReaderUIStore.getState().immersiveMode) {
+                    const width = e.view?.innerWidth || window.innerWidth;
+                    const x = e.clientX;
+                    if (x > width * 0.8) {
+                        renditionRef.current?.next();
+                    } else if (x < width * 0.2) {
+                        renditionRef.current?.prev();
+                    }
+                }
             }
         },
         onError: (msg) => {
@@ -572,6 +582,8 @@ export const ReaderView: React.FC = () => {
     const addedAnnotations = useRef<Map<string, string>>(new Map());
     // Map of ID -> DOM Element for note markers
     const noteMarkers = useRef<Map<string, HTMLElement>>(new Map());
+
+    useEffect(() => { renditionRef.current = rendition; }, [rendition]);
 
     // Clear tracked annotations if rendition changes (e.g. re-initialization)
     useEffect(() => {
@@ -1169,15 +1181,7 @@ export const ReaderView: React.FC = () => {
                 onNext={handleNext}
             />
 
-            {/* Unified Input Controller (Flow Mode) */}
-            <UnifiedInputController
-                rendition={rendition}
-                currentSectionTitle={currentSectionTitle || ''}
-                onPrev={handlePrev}
-                onNext={handleNext}
-                onToggleHUD={() => setImmersiveMode(!immersiveMode)}
-                immersiveMode={immersiveMode}
-            />
+
 
             {/* Immersive Mode Exit Button */}
             {immersiveMode && (
@@ -1397,7 +1401,7 @@ export const ReaderView: React.FC = () => {
                     <div
                         data-testid="reader-iframe-container"
                         ref={viewerRef}
-                        className={`w-full max-w-2xl overflow-hidden px-6 md:px-8 transition-opacity duration-300 ${isPlaying && immersiveMode ? 'opacity-40' : 'opacity-100'}`}
+                        className={`w-full max-w-2xl overflow-hidden px-6 md:px-8 transition-opacity duration-300 opacity-100`}
                         style={{ height: readerViewMode === 'paginated' ? 'calc(100% - 100px)' : '100%' }}
                     />
 
