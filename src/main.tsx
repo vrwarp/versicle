@@ -6,6 +6,17 @@ import './index.css'
 import { SocialLogin } from '@capgo/capacitor-social-login';
 
 import { useGoogleServicesStore } from './store/useGoogleServicesStore';
+import { useTTSStore } from './store/useTTSStore';
+import { useAnnotationStore } from './store/useAnnotationStore';
+import { useReaderUIStore } from './store/useReaderUIStore';
+
+// Expose stores to window for verification tests
+if (typeof window !== 'undefined') {
+  (window as any).useTTSStore = useTTSStore;
+  (window as any).useAnnotationStore = useAnnotationStore;
+  (window as any).useGoogleServicesStore = useGoogleServicesStore;
+  (window as any).useReaderUIStore = useReaderUIStore;
+}
 
 const initializeSocialLogin = async () => {
   const { googleClientId, googleIosClientId } = useGoogleServicesStore.getState();

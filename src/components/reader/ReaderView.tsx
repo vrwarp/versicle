@@ -627,7 +627,8 @@ export const ReaderView: React.FC = () => {
                     try {
                         if (annotation.type === 'audio-bookmark') {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            (rendition as any).annotations.underline(
+                            (rendition as any).annotations.add(
+                                'underline',
                                 annotation.cfiRange,
                                 {},
                                 (e: Event) => {
@@ -656,7 +657,8 @@ export const ReaderView: React.FC = () => {
                                 'versicle-audio-bookmark-pending'
                             );
                             addedAnnotations.current.set(annotation.id, annotation.cfiRange);
-                        } else {
+                        }
+ else {
                             const className = annotation.color === 'yellow' ? 'highlight-yellow' :
                                 annotation.color === 'green' ? 'highlight-green' :
                                     annotation.color === 'blue' ? 'highlight-blue' :

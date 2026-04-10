@@ -207,6 +207,7 @@ export class AudioPlayerService {
             }
 
             this.activeLexiconRules = null;
+            this.lastUserPauseTimestamp = null;
         }
     }
 
@@ -422,7 +423,9 @@ export class AudioPlayerService {
 
     async play(): Promise<void> {
         const now = Date.now();
+        logger.debug(`Play called. lastUserPauseTimestamp: ${this.lastUserPauseTimestamp}, diff: ${this.lastUserPauseTimestamp ? now - this.lastUserPauseTimestamp : 'N/A'}`);
         if (this.lastUserPauseTimestamp && (now - this.lastUserPauseTimestamp <= 5000)) {
+            logger.debug('Triggering Dragnet Capture');
             await this.executeDragnetCapture();
         }
         this.lastUserPauseTimestamp = null;
@@ -434,11 +437,16 @@ export class AudioPlayerService {
         const queue = this.stateManager.queue;
         const currentIndex = this.stateManager.currentIndex;
 
+        logger.debug(`executeDragnetCapture. currentIndex: ${currentIndex}, queueLength: ${queue.length}, currentBookId: ${this.currentBookId}`);
+
         // Boundary protection: don't cross chapter boundaries backwards
         const startIndex = Math.max(0, currentIndex - 1);
         const targetItems = queue.slice(startIndex, currentIndex + 1);
 
+        logger.debug(`targetItems count: ${targetItems.length}`);
+
         if (targetItems.length === 0 || !this.currentBookId) {
+            logger.warn('Dragnet Capture failed: no target items or no bookId');
             this.providerManager.playEarcon('bookmark_failed');
             return;
         }
@@ -828,6 +836,9 @@ export class AudioPlayerService {
 
     private async loadSectionInternal(sectionIndex: number, autoPlay: boolean, sectionTitle?: string): Promise<boolean> {
         if (!this.currentBookId || sectionIndex < 0 || sectionIndex >= this.playlist.length) return false;
+
+        // Clear dragnet state on navigation to prevent capturing previous section context
+        this.lastUserPauseTimestamp = null;
 
         const section = this.playlist[sectionIndex];
 

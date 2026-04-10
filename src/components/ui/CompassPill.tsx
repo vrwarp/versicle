@@ -107,27 +107,38 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   // Audio Triage Mode
   if (variant === 'audio-triage' && compassState.targetAnnotation) {
       const onConfirmTriage = async () => {
-          if (!rendition) return;
-          // Capture the newly adjusted bounds from the iframe
-          const currentSelection = rendition.manager.getContents()[0].window.getSelection();
-          if (!currentSelection || currentSelection.rangeCount === 0) return;
+          const target = compassState.targetAnnotation!;
+          let newCfiRange = target.cfiRange;
+          let newText = target.text;
 
-          const newCfiRange = new rendition.epubcfi().generateCfiFromRange(
-              currentSelection.getRangeAt(0),
-              rendition.manager.getContents()[0].cfiBase
-          );
-          const newText = currentSelection.toString();
+          // If the user adjusted the selection, use the new bounds.
+          // Otherwise, fall back to the original annotation data.
+          if (rendition) {
+              try {
+                  const contents = rendition.manager?.getContents();
+                  const currentSelection = contents?.[0]?.window?.getSelection();
+                  if (currentSelection && currentSelection.rangeCount > 0 && currentSelection.toString().trim()) {
+                      newCfiRange = new rendition.epubcfi().generateCfiFromRange(
+                          currentSelection.getRangeAt(0),
+                          contents[0].cfiBase
+                      );
+                      newText = currentSelection.toString();
+                      currentSelection.removeAllRanges();
+                  }
+              } catch (e) {
+                  // Selection extraction failed; use original annotation data
+              }
+          }
 
           // Mutate CRDT Store: Delete dirty dragnet, insert precise highlight
-          removeAnnotation(compassState.targetAnnotation!.id);
+          removeAnnotation(target.id);
           addAnnotation({
-              ...compassState.targetAnnotation!,
+              ...target,
               cfiRange: newCfiRange,
               text: newText,
               type: 'highlight' // Elevate status
           });
 
-          currentSelection.removeAllRanges();
           resetCompassState();
       };
 
