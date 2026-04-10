@@ -10,12 +10,21 @@ import { useTTSStore } from './store/useTTSStore';
 import { useAnnotationStore } from './store/useAnnotationStore';
 import { useReaderUIStore } from './store/useReaderUIStore';
 
+declare global {
+  interface Window {
+    useTTSStore: typeof useTTSStore;
+    useAnnotationStore: typeof useAnnotationStore;
+    useGoogleServicesStore: typeof useGoogleServicesStore;
+    useReaderUIStore: typeof useReaderUIStore;
+  }
+}
+
 // Expose stores to window for verification tests
 if (typeof window !== 'undefined') {
-  (window as any).useTTSStore = useTTSStore;
-  (window as any).useAnnotationStore = useAnnotationStore;
-  (window as any).useGoogleServicesStore = useGoogleServicesStore;
-  (window as any).useReaderUIStore = useReaderUIStore;
+  window.useTTSStore = useTTSStore;
+  window.useAnnotationStore = useAnnotationStore;
+  window.useGoogleServicesStore = useGoogleServicesStore;
+  window.useReaderUIStore = useReaderUIStore;
 }
 
 const initializeSocialLogin = async () => {
