@@ -91,6 +91,7 @@ export const ReaderView: React.FC = () => {
         setPlayFromSelection,
         setCurrentSection,
         setCurrentBookId,
+        resetCompassState,
         resetUI
     } = useReaderUIStore(useShallow(state => ({
         toc: state.toc,
@@ -104,10 +105,17 @@ export const ReaderView: React.FC = () => {
         setJumpToLocation: state.setJumpToLocation,
         setCurrentSection: state.setCurrentSection,
         setCurrentBookId: state.setCurrentBookId,
+        resetCompassState: state.resetCompassState,
         resetUI: state.reset
     })));
 
     logger.debug(`viewMode: ${readerViewMode}, immersive: ${immersiveMode}`);
+    
+    useEffect(() => {
+        if (activeSidebar !== 'none' || immersiveMode) {
+            resetCompassState();
+        }
+    }, [activeSidebar, immersiveMode, resetCompassState]);
 
     const panicSaveState = useRef({ readerViewMode, currentSectionTitle });
 
@@ -1135,7 +1143,14 @@ export const ReaderView: React.FC = () => {
     }, [readerViewMode]);
 
     return (
-        <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
+        <div
+            data-testid="reader-view"
+            className="flex flex-col h-screen bg-background text-foreground relative"
+            onClick={() => {
+                hidePopover();
+                useReaderUIStore.getState().resetCompassState();
+            }}
+        >
             <Dialog
                 isOpen={showImportJumpDialog}
                 onClose={handleJumpCancel}
@@ -1388,10 +1403,6 @@ export const ReaderView: React.FC = () => {
                 <div
                     ref={scrollWrapperRef}
                     className="flex-1 relative min-w-0 flex flex-col items-center"
-                    onClick={() => {
-                        hidePopover();
-                        useReaderUIStore.getState().resetCompassState();
-                    }}
                 >
                     <div
                         data-testid="reader-iframe-container"

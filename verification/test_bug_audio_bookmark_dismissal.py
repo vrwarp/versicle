@@ -32,10 +32,12 @@ def test_audio_bookmark_dismissal(page: Page):
     expect(page.get_by_test_id("compass-pill-triage")).to_be_visible(timeout=5000)
     print("Triage mode active.")
 
-    # 3. Click elsewhere (on the iframe container or margins)
+    # 3. Click elsewhere (on the reader header)
     print("Clicking elsewhere to dismiss...")
-    # Click on the reader header or some other non-interactive area
-    page.get_by_test_id("reader-header").click()
+    utils.capture_screenshot(page, "dismiss_before_header_click")
+    # Click on the header, but at a position that's likely empty in mobile (avoiding icons)
+    page.get_by_test_id("reader-header").click(position={'x': 2, 'y': 2})
+    utils.capture_screenshot(page, "dismiss_after_header_click")
 
     # 4. Expect dismissal
     print("Verifying dismissal...")
@@ -59,10 +61,28 @@ def test_audio_bookmark_dismissal(page: Page):
     """)
     expect(page.get_by_test_id("compass-pill-triage")).to_be_visible(timeout=5000)
     
-    # Click inside the iframe (using a generic coordinate if needed, but a click on the container should propagate if we fix it there too)
-    # For now let's just test the container click which is easier to target
+    # Click inside the iframe container click
     page.get_by_test_id("reader-iframe-container").click(position={'x': 10, 'y': 10})
-    
+    expect(page.get_by_test_id("compass-pill-triage")).not_to_be_visible(timeout=5000)
+
+    # 6. Test X button dismissal
+    print("Testing X button dismissal...")
+    page.evaluate("""
+        () => {
+            window.useReaderUIStore.getState().setCompassState({
+                variant: 'audio-triage',
+                targetAnnotation: {
+                    id: 'test-id',
+                    type: 'audio-bookmark',
+                    cfiRange: 'epubcfi(/6/4[chap1]!/4/2/2)',
+                    text: 'test text',
+                    bookId: 'test-book-id'
+                }
+            });
+        }
+    """)
+    expect(page.get_by_test_id("compass-pill-triage")).to_be_visible(timeout=5000)
+    page.get_by_label("Dismiss review").click()
     expect(page.get_by_test_id("compass-pill-triage")).not_to_be_visible(timeout=5000)
 
     print("Audio Bookmark Dismissal Test Passed!")
