@@ -484,17 +484,22 @@ class DBService {
   async getOffloadedStatus(bookIds?: string[]): Promise<Map<string, boolean>> {
     try {
       const db = await this.getDB();
-      const resourceKeys = await db.getAllKeys('static_resources');
-      const resourceSet = new Set(resourceKeys);
       const result = new Map<string, boolean>();
 
       // If specific IDs requested
       if (bookIds && bookIds.length > 0) {
-        for (const id of bookIds) {
-          const exists = resourceSet.has(id);
-          logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists} (Keys: ${resourceKeys.length})`);
+        const tx = db.transaction('static_resources', 'readonly');
+        const store = tx.objectStore('static_resources');
+
+        const resourceKeysPromise = Promise.all(bookIds.map(id => store.getKey(id)));
+        const resourceKeysResult = await resourceKeysPromise;
+        await tx.done;
+
+        bookIds.forEach((id, index) => {
+          const exists = resourceKeysResult[index] !== undefined;
+          logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists}`);
           result.set(id, !exists);
-        }
+        });
       } else {
         // Return for all resources (inverse: if in set, not offloaded)
         // Ideally we need the list of ALL books to know which are offloaded (missing from set)
