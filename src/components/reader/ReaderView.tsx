@@ -1418,8 +1418,7 @@ export const ReaderView: React.FC = () => {
                 isPlaying={isPlaying}
             />
 
-            {/* Smart Resume Toast */}
-
+            {/* Striped highlight pattern */}
             <svg xmlns="http://www.w3.org/2000/svg" id="epubjs-custom-defs" style={{ width: 0, height: 0, position: 'absolute' }} aria-hidden="true">
                 <defs>
                     <pattern id="striped-highlight" patternUnits="userSpaceOnUse" width="16" height="10" patternTransform="rotate(45)">
