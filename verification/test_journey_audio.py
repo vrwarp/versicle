@@ -70,17 +70,11 @@ def test_journey_audio(page: Page):
     # --- Enhanced Queue Assertions ---
     print("Verifying queue content...")
     queue_items = page.locator("[data-testid^='tts-queue-item-']")
-    expect(queue_items.first).to_be_visible(timeout=10000)
-
-    # Wait for queue to populate (at least 2 items)
-    try:
-        expect(queue_items.nth(1)).to_be_visible(timeout=5000)
-    except:
-        pass
+    expect(queue_items.first).to_be_visible(timeout=5000)
 
     queue_count = queue_items.count()
     print(f"Queue contains {queue_count} items")
-    assert queue_count >= 1, f"Expected at least 1 queue items, got {queue_count}"
+    assert queue_count >= 3, f"Expected at least 3 queue items, got {queue_count}"
 
     # Verify first item has text content (not empty)
     first_item_text = page.get_by_test_id("tts-queue-item-0").inner_text()
@@ -89,10 +83,6 @@ def test_journey_audio(page: Page):
 
     utils.capture_screenshot(page, "audio_2b_queue_verified")
 
-    # Start Play via Audio Deck before closing
-    print("Starting Play via Audio Deck...")
-    page.get_by_role("dialog").get_by_label("Play").click()
-
     # Close Audio Deck
     page.keyboard.press("Escape")
     expect(page.get_by_test_id("tts-panel")).not_to_be_visible()
@@ -100,10 +90,14 @@ def test_journey_audio(page: Page):
     # --- Part 3: Flow Mode (Listening State) ---
     print("--- Testing Flow Mode ---")
 
+    # Start Play via Pill (assuming we fixed it)
+    play_button.click()
+
     # Enter Immersive Mode (required for Flow Mode overlay)
     print("Entering Immersive Mode...")
     page.get_by_test_id("reader-immersive-enter-button").click()
 
+    # Wait for layout shift to complete
     page.wait_for_timeout(1000)
     utils.capture_screenshot(page, "audio_3_flow_mode_active")
 
@@ -111,12 +105,17 @@ def test_journey_audio(page: Page):
     print("Exiting Immersive Mode...")
     page.get_by_test_id("reader-immersive-exit-button").click()
 
+    # Stop Audio
+    print("Stopping Audio...")
+    page.wait_for_timeout(1000)
+    page.get_by_test_id("compass-pill-active").get_by_label("Pause").click()
+
     # --- Part 4: Summary Mode in Library ---
     print("--- Testing Summary Mode in Library ---")
     page.get_by_test_id("reader-back-button").click()
 
     # Wait for Library
-    expect(page).to_have_url("http://localhost:5173/")
+    expect(page).to_have_url(re.compile(r".*localhost.*/$"))
 
     # Check for Summary Pill
     expect(page.get_by_test_id("compass-pill-summary")).to_be_visible()
