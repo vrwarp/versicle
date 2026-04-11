@@ -41,7 +41,7 @@
 *   **Adaptive Contrast**: The UI automatically adapts to your book covers using **Weighted K-Means Clustering** to extract dominant colors, creating beautiful gradients and text themes.
 *   **Satellite FAB**: A dedicated floating action button for quick access to playback controls and menu actions.
 *   **Customizable**: Fonts, themes, line height, margins via a dedicated Visual Settings interface.
-*   **Formats**: EPUB, ZIP (Batch Import), Folder Import (Batch).
+*   **Formats**: EPUB, ZIP (Batch Import via JSZip), Folder Import (Batch).
 *   **Drag & Drop**: Drag files anywhere to import.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata.
 *   **Ghost Books**: Library items with missing files (offloaded) are preserved as "Ghost Books" using synced metadata. Importing a file with matching metadata will automatically link it to the existing record instead of creating duplicates.
