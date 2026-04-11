@@ -54,6 +54,20 @@ describe('tryFastMergeCfi', () => {
             const expected = mergeCfiSlow(left, right);
             assertCfiEqual(tryFastMergeCfi(left, right), expected);
         });
+
+        it('merges Point + Point (common path but different ids)', () => {
+            const left = `epubcfi(${parent}/1[id1]:0)`;
+            const right = `epubcfi(${parent}/1[id2]:10)`;
+            const expected = mergeCfiSlow(left, right);
+            assertCfiEqual(tryFastMergeCfi(left, right), expected);
+        });
+
+        it('merges Point + Point (common path but identical ids)', () => {
+            const left = `epubcfi(${parent}/1[id1]:0)`;
+            const right = `epubcfi(${parent}/1[id1]:10)`;
+            const expected = mergeCfiSlow(left, right);
+            assertCfiEqual(tryFastMergeCfi(left, right), expected);
+        });
     });
 
     describe('Bail-out Cases (Should return null)', () => {
