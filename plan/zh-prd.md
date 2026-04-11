@@ -47,7 +47,10 @@ For users who speak Mandarin but require reading assistance---specifically the c
 
 -   **Metadata Parsing:** On import, read `<dc:language>`. Default to `en` if missing or malformed.
 
--   **Schema Update:** Add `language: string` to the `Book` interface in `useBookStore`.
+-   **Schema Update:** Add `language: string` to the `UserInventoryItem` interface in `useBookStore`.
+
+> [!IMPORTANT]
+> **Codebase Finding:** The plan originally called for modifying `src/types/db.ts`. Upon inspection, the canonical per-book user data lives in `UserInventoryItem` (synced via Yjs through `useBookStore`). The `language` field MUST be added here—NOT to the legacy `Book` interface—to ensure cross-device synchronization. The `StaticBookManifest` in IndexedDB should also store the raw `<dc:language>` value from the EPUB OPF for ingestion reference.
 
 -   **Explicit Override:** The user must be able to override this value manually, which dictates the downstream TTS and Lexicon behavior.
 
@@ -57,19 +60,34 @@ For users who speak Mandarin but require reading assistance---specifically the c
 
 -   **DOM Mutation:** Within the `useEpubReader` hook, implement a pre-render text processing step that wraps Chinese text nodes in `<ruby>` and `<rt>` tags when Pinyin is enabled.
 
+> [!WARNING]
+> **Codebase Finding:** The `useEpubReader` hook (688 lines) already hooks into `rendition.hooks.content` for injecting styles and spacers. Any Pinyin/Traditional overlay MUST be injected through this same hook pattern. Direct text node manipulation will break epub.js CFI generation and cause TTS audio/visual desynchronization. The non-destructive overlay approach (CSS `::after` with `data-pinyin` attributes or a transparent absolute-positioned overlay div) is mandatory.
+
 ### 4.3 Text Segmentation Refactor
 
 -   **CJK Punctuation:** Update `TextSegmenter.ts` to split on `。`, `！`, `？`, `；`, `，`, and `、`.
+
+> [!NOTE]
+> **Codebase Finding:** `TextSegmenter.ts` already uses `Intl.Segmenter` with a locale parameter (defaults to `'en'`). Passing `'zh'` to the constructor activates CJK-aware segmentation automatically. The main work is: (1) using the book's language to select the correct locale, and (2) adjusting the fallback regex `RE_SENTENCE_FALLBACK` which currently only handles `.!?`. The `segmenter-cache.ts` already caches segmenters by locale.
 
 -   **Chunk Sizing:** Ensure Chinese character chunks respect the Piper worker's memory limits without splitting idioms (成语) or hyphenated concepts.
 
 ### 4.4 TTS & Lexicon Language Scoping
 
--   **State Restructure:** Refactor `useTTSStore` from singular state variables (`voice`, `rate`) to a dictionary of profiles keyed by language code.
+-   **State Restructure:** Refactor `useTTSStore` from singular state variables (`voice`, `rate`, `pitch`) to a dictionary of profiles keyed by language code.
+
+> [!IMPORTANT]
+> **Codebase Finding:** `useTTSStore` (372 lines) is a Zustand store persisted to `localStorage` via `zustand/middleware/persist`. It uses `partialize` to select fields for serialization. The refactor must: (1) introduce a `profiles: Record<string, TTSProfile>` field in the partialised state, (2) add an `activeLanguage: string` field, and (3) provide migration logic in the `version` option of the persist config to hydrate legacy flat `voice/rate/pitch` into `profiles.en`. The `onRehydrateStorage` callback must also be updated to restore from the active profile.
 
 -   **Piper Provider:** Remove the `en_US` hardcode in `PiperProvider.ts`. Expose single-speaker `zh_CN` models.
 
+> [!NOTE]
+> **Codebase Finding:** `PiperProvider.ts` line 89 contains `if (!key.startsWith('en_US')) continue;`. This is a single-line filter that must be expanded to also allow `zh_CN` prefixes. The voice data structure (`PiperVoiceInfo.language`) already includes `code`, `family`, `region`, and `name_english`—no schema changes needed. The HuggingFace `voices.json` already contains zh_CN models.
+
 -   **Lexicon Schema:** Add `language: string` to Lexicon entries. The `AudioContentPipeline` must filter the lexicon array by the active book's language before processing.
+
+> [!NOTE]
+> **Codebase Finding:** `LexiconRule` in `src/types/db.ts` currently has `bookId?: string` for scoping. Adding `language?: string` is additive and backward-compatible. `LexiconService.getRules()` already supports filtering by `bookId`; adding a `language` parameter is a small extension. The `useLexiconStore` (Yjs-backed) will propagate the new field automatically.
 
 5\. UX Designs & Interface Modifications
 ----------------------------------------
@@ -77,6 +95,9 @@ For users who speak Mandarin but require reading assistance---specifically the c
 ### 5.1 Reader Menu: Language Override
 
 **Location:** Inside the `ReaderControlBar.tsx` (or Book Info modal). **Element:** A straightforward `<Select>` dropdown labeled "Book Language". **Behavior:** Defaults to the imported `<dc:language>`. Changing this immediately reloads the active TTS profile and Lexicon scope.
+
+> [!NOTE]
+> **Codebase Finding:** `ReaderControlBar.tsx` delegates all display to the `CompassPill` component. The language selector should be surfaced as a new action in the annotation popover or as a new sub-panel in the `LexiconManager.tsx` dialog (which is already opened from the ReaderControlBar). Alternatively, it could be placed in the `VisualSettings.tsx` popover which already contains reader-specific toggles. The latter is recommended to keep the CompassPill focused.
 
 ### 5.2 Visual Settings Tab
 
@@ -88,6 +109,9 @@ For users who speak Mandarin but require reading assistance---specifically the c
 
 3.  **Pinyin Size:** A slider (50% to 150%) to independently scale the `<rt>` ruby text size relative to the base character.
 
+> [!NOTE]
+> **Codebase Finding:** `VisualSettings.tsx` (132 lines) uses `usePreferencesStore` (Yjs-synced). The new Chinese-specific toggles should also be added to `usePreferencesStore`. The component already imports `Switch`, `Slider`, `Select`, and `Label` from the UI library—all needed for the new elements. The new settings section should be conditionally rendered based on the active book's language.
+
 ### 5.3 Global TTS Settings
 
 **Location:** `TTSSettingsTab.tsx` in the Global Settings dialog. **Redesign:**
@@ -98,6 +122,9 @@ For users who speak Mandarin but require reading assistance---specifically the c
 
 -   **Empty State:** If the user selects "Chinese" but has no voice downloaded, display a prominent warning: *"No Mandarin voice installed. Audio playback will fail for Chinese books."*
 
+> [!NOTE]
+> **Codebase Finding:** `TTSSettingsTab.tsx` (281 lines) is a controlled component receiving all state via props from `GlobalSettingsDialog.tsx`. The language profile selector must be added to the props interface (`TTSSettingsTabProps`) and wired through `GlobalSettingsDialog.tsx` which reads from `useTTSStore`. The Piper voice list already contains a `lang` field that can be used to filter voices per language profile.
+
 ### 5.4 Lexicon Manager
 
 **Location:** `LexiconManager.tsx` in Global Settings. **Redesign:**
@@ -105,6 +132,9 @@ For users who speak Mandarin but require reading assistance---specifically the c
 -   **List View Filter:** Add a "Filter by Language" dropdown at the top of the rule list. Defaults to the language of the currently active book (if any).
 
 -   **Creation Form:** Add a mandatory "Target Language" dropdown to the "Add New Rule" form.
+
+> [!NOTE]
+> **Codebase Finding:** `LexiconManager.tsx` is 37,357 bytes (~1000+ lines). It's a complex component with drag-and-drop reordering, CSV import/export, and inline editing. The language filter should be implemented as a `<Select>` above the existing rule list, and the creation form needs a new `language` field. The existing `useLexiconStore` actions (`addRule`, `updateRule`) will propagate the new field through Yjs automatically.
 
 6\. Critical User Journeys (CUJs)
 ---------------------------------
