@@ -1,0 +1,85 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile.verification
+#1 transferring dockerfile: 1.34kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.11-slim-bookworm
+#2 DONE 0.3s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 192B done
+#3 DONE 0.0s
+
+#4 [ 1/13] FROM docker.io/library/python:3.11-slim-bookworm@sha256:9c6f90801e6b68e772b7c0ca74260cbf7af9f320acec894e26fccdaccfbe3b47
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 34.65kB 0.0s done
+#5 DONE 0.0s
+
+#6 [ 7/13] RUN npm ci --legacy-peer-deps
+#6 CACHED
+
+#7 [ 6/13] COPY scripts ./scripts
+#7 CACHED
+
+#8 [ 2/13] WORKDIR /app
+#8 CACHED
+
+#9 [ 5/13] COPY package.json package-lock.json ./
+#9 CACHED
+
+#10 [11/13] RUN npm run build
+#10 CACHED
+
+#11 [10/13] COPY . .
+#11 CACHED
+
+#12 [ 4/13] RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - &&     apt-get install -y nodejs &&     node --version &&     npm --version
+#12 CACHED
+
+#13 [ 8/13] RUN pip install --no-cache-dir pytest pytest-playwright pytest-xdist playwright==1.49.0
+#13 CACHED
+
+#14 [ 9/13] RUN playwright install --with-deps
+#14 CACHED
+
+#15 [ 3/13] RUN apt-get update &&     apt-get install -y curl gnupg build-essential lsb-release &&     rm -rf /var/lib/apt/lists/*
+#15 CACHED
+
+#16 [12/13] COPY verification/docker_entrypoint.sh /app/verification/docker_entrypoint.sh
+#16 CACHED
+
+#17 [13/13] RUN chmod +x /app/verification/docker_entrypoint.sh
+#17 CACHED
+
+#18 exporting to image
+#18 exporting layers done
+#18 writing image sha256:086c4db4e5b9189feafbf366218df164f7ca0a57908c2e65b30d7954fa0dafd9 done
+#18 naming to docker.io/library/versicle-verify done
+#18 DONE 0.0s
+🏃 Running verification tests...
+🚀 Starting Vite Preview Server...
+⏳ Waiting for application to be ready at http://localhost:5173...
+
+> versicle@0.0.0 preview
+> vite preview --port 5173 --host
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://172.17.0.3:5173/
+✅ Application is ready!
+🧪 Running verification suite...
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.3, pluggy-1.6.0
+rootdir: /app
+plugins: base-url-2.1.0, playwright-0.7.2, xdist-3.8.0
+created: 4/4 workers
+4 workers [6 items]
+
+......                                                                   [100%]
+============================== 6 passed in 50.72s ==============================
+🚀 Running verification tests with pytest...
+Executing: /usr/local/bin/python -m pytest -n auto verification/test_journey_firestore_sync.py
+🏁 Tests finished with exit code 0
+🏁 Verification tests completed with exit code: 0
