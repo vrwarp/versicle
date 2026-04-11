@@ -1,7 +1,8 @@
 import React from 'react';
 import { Input } from '../../ui/Input';
 import { Button } from '../../ui/Button';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, X } from 'lucide-react';
+import { cn } from '../../../lib/utils';
 
 export interface SearchResult {
     href: string;
@@ -38,20 +39,33 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                     <h2 className="text-lg font-bold text-foreground">Search</h2>
                 </div>
                 <div className="flex gap-2">
-                    <Input
-                        data-testid="search-input"
-                        aria-label="Search query"
-                        type="search"
-                        value={searchQuery}
-                        onChange={(e) => onSearchQueryChange(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                onSearch();
-                            }
-                        }}
-                        placeholder="Search in book..."
-                        className="bg-background"
-                    />
+                    <div className="relative flex-1">
+                        <Input
+                            data-testid="search-input"
+                            aria-label="Search query"
+                            type="search"
+                            value={searchQuery}
+                            onChange={(e) => onSearchQueryChange(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    onSearch();
+                                }
+                            }}
+                            placeholder="Search in book..."
+                            className={cn("bg-background", searchQuery && "pr-9")}
+                        />
+                        {searchQuery && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
+                                onClick={() => onSearchQueryChange('')}
+                                aria-label="Clear query"
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
                     <Button
                         size="icon"
                         variant="ghost"
