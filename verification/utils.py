@@ -39,6 +39,11 @@ def reset_app(page: Page):
     # Explicitly clear IDB, LocalStorage, and Unregister Service Workers
     page.evaluate("""
         async () => {
+            // Disconnect Yjs to release IDB locks
+            if (typeof window.__DISCONNECT_YJS__ === 'function') {
+                await window.__DISCONNECT_YJS__();
+            }
+
             // Unregister Service Workers
             if ('serviceWorker' in navigator) {
                 const registrations = await navigator.serviceWorker.getRegistrations();

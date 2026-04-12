@@ -27,6 +27,11 @@ def clear_data_and_reload(page: Page, base_url: str):
     page.goto(base_url)
     page.evaluate("""
         async () => {
+            // Disconnect Yjs to release IDB locks
+            if (typeof window.__DISCONNECT_YJS__ === 'function') {
+                await window.__DISCONNECT_YJS__();
+            }
+
             const dbs = await window.indexedDB.databases();
             for (const db of dbs) {
                 await new Promise(resolve => {

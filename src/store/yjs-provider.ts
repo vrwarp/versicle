@@ -215,3 +215,8 @@ export const disconnectYjs = async () => {
         logger.info('Persistence disconnected.');
     }
 };
+
+if (typeof window !== 'undefined') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__DISCONNECT_YJS__ = disconnectYjs;
+}
