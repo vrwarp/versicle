@@ -12,7 +12,7 @@ export class TaskSequencer {
      *
      * @template T The return type of the task.
      * @param {() => Promise<T>} task The function to execute.
-     * @returns {Promise<T | void>} A promise that resolves with the task's result or void if the sequencer is destroyed or the task fails safely.
+     * @returns {Promise<T>} A promise that resolves with the task's result or rejects with the task's error or an error if the sequencer is destroyed.
      */
     enqueue<T>(task: () => Promise<T>): Promise<T> {
         const resultPromise = this.pendingPromise.then(async () => {
