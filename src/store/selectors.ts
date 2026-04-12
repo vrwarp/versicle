@@ -4,31 +4,12 @@ import { useBookStore } from './useBookStore';
 import { useReadingStateStore, isValidProgress, getMostRecentProgress } from './useReadingStateStore';
 import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
-import type { UserProgress, UserInventoryItem } from '../types/db';
+import type { UserProgress } from '../types/db';
 import { getDeviceId } from '../lib/device-id';
 import { generateMatchKey } from '../lib/entity-resolution';
 
 // Module-level caches for useAllBooks to avoid strict-mode ref mutation issues
 // Using a function cache prevents React ESLint from tracking mutations.
-const createModuleCache = () => ({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    baseBookCache: new WeakMap<UserInventoryItem, any>(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    baseBooks: [] as any[],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    lastDeps: { books: null, staticMetadata: null, offloadedBookIds: null } as { books: any, staticMetadata: any, offloadedBookIds: any },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    previousResultsCache: {} as Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }>,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    readingListMatchDeps: { readingListEntries: null } as { readingListEntries: any },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    readingListMatchMap: new Map<string, any>(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    lastPhase2Deps: { baseBooks: null, progressMap: null, readingListEntries: null, readingListMatchMap: null } as { baseBooks: any, progressMap: any, readingListEntries: any, readingListMatchMap: any },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    memoizedResult: { books: [], cache: {} } as { books: any[], cache: any }
-});
-const moduleCache = createModuleCache();
 
 /**
  * Resolves the progress for a book using the "Local Priority > Global Recent" strategy.
@@ -91,18 +72,8 @@ export const useAllBooks = () => {
     // By keeping the caches at the module level, we guarantee strict referential equality
     // for `baseBooks` without mutating hook refs during render.
 
-    const needsRebuildPhase1 = moduleCache.lastDeps.books !== books ||
-        moduleCache.lastDeps.staticMetadata !== staticMetadata ||
-        moduleCache.lastDeps.offloadedBookIds !== offloadedBookIds;
-
-    if (needsRebuildPhase1) {
-        if (
-            moduleCache.lastDeps.staticMetadata !== staticMetadata ||
-            moduleCache.lastDeps.offloadedBookIds !== offloadedBookIds
-        ) {
-                        Object.assign(moduleCache, { baseBookCache: new WeakMap() });
-        }
-
+    // Phase 1 - Base Books
+    const baseBooks = useMemo(() => {
         const booksObj = books || {};
         const staticMetadataObj = staticMetadata || {};
         const offloadedBookIdsSet = offloadedBookIds || new Set();
@@ -112,64 +83,33 @@ export const useAllBooks = () => {
         for (const key in booksObj) {
             if (!Object.prototype.hasOwnProperty.call(booksObj, key)) continue;
             const book = booksObj[key];
-            // Check cache
-            const cached = moduleCache.baseBookCache.get(book);
-            if (cached) {
-                result.push(cached);
-                continue;
-            }
-
-            if (!staticMetadataObj) {
-                console.error('staticMetadata is undefined in useAllBooks');
-            }
-            if (!book) {
-                console.error('book is undefined in useAllBooks iteration');
-            }
+            if (!staticMetadataObj) console.error('staticMetadata is undefined in useAllBooks');
+            if (!book) console.error('book is undefined in useAllBooks iteration');
 
             const hasCoverBlob = staticMetadataObj?.[book.bookId]?.coverBlob instanceof Blob;
 
             const newBaseBook = {
                 ...book,
-                // Merge static metadata if available, otherwise use Ghost Book snapshots
-                id: book.bookId,  // Alias for backwards compatibility
-                // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
+                id: book.bookId,
                 title: book.customTitle || staticMetadataObj[book.bookId]?.title || book.title,
                 author: book.customAuthor || staticMetadataObj[book.bookId]?.author || book.author,
                 coverBlob: staticMetadataObj[book.bookId]?.coverBlob || undefined,
                 version: staticMetadataObj[book.bookId]?.version || undefined,
-                // OPTIMIZATION: Use Service Worker route for covers instead of creating blob URLs.
-                // This prevents memory leaks from unrevoked createObjectURL calls and avoids sync overhead.
-                coverUrl: hasCoverBlob
-                    ? `/__versicle__/covers/${book.bookId}`
-                    : undefined,
-                // Add other static fields for compatibility
+                coverUrl: hasCoverBlob ? `/__versicle__/covers/${book.bookId}` : undefined,
                 fileHash: staticMetadataObj[book.bookId]?.fileHash,
                 fileSize: staticMetadataObj[book.bookId]?.fileSize,
                 totalChars: staticMetadataObj[book.bookId]?.totalChars,
-
-                // Derive offloaded status from local set
                 isOffloaded: offloadedBookIdsSet.has(book.bookId),
             };
 
-            moduleCache.baseBookCache.set(book, newBaseBook);
             result.push(newBaseBook);
         }
 
-                Object.assign(moduleCache, { baseBooks: result.sort((a, b) => b.lastInteraction - a.lastInteraction) });
-                Object.assign(moduleCache, { lastDeps: { books, staticMetadata, offloadedBookIds } });
-    }
+        return result.sort((a, b) => b.lastInteraction - a.lastInteraction);
+    }, [books, staticMetadata, offloadedBookIds]);
 
-    const baseBooks = moduleCache.baseBooks;
 
-    const previousResultsCache = moduleCache.previousResultsCache;
-
-    // BOLT OPTIMIZATION: Pre-compute match keys for reading list entries to avoid O(N * M)
-    // string parsing (generateMatchKey) inside the baseBooks.map fallback loop.
-    // Memoized separately to prevent rebuilding the Map on every page turn (when progressMap updates).
-    // We iterate using for...in to avoid the array allocation overhead of Object.values().
-
-    const needsRebuildMatchMap = moduleCache.readingListMatchDeps.readingListEntries !== readingListEntries;
-    if (needsRebuildMatchMap) {
+    const readingListMatchMap = useMemo(() => {
         const map = new Map<string, typeof readingListEntries[string]>();
         for (const key in readingListEntries) {
             if (!Object.prototype.hasOwnProperty.call(readingListEntries, key)) continue;
@@ -179,10 +119,8 @@ export const useAllBooks = () => {
                 map.set(matchKey, entry);
             }
         }
-                Object.assign(moduleCache, { readingListMatchMap: map });
-                Object.assign(moduleCache, { readingListMatchDeps: { readingListEntries } });
-    }
-    const readingListMatchMap = moduleCache.readingListMatchMap;
+        return map;
+    }, [readingListEntries]);
 
     // OPTIMIZATION: Phase 2 - Progress Merge
     // This runs when 'progressMap' updates (frequently).
@@ -190,85 +128,43 @@ export const useAllBooks = () => {
     // BOLT OPTIMIZATION: Use raw reference checks (rawBookProgress) BEFORE calculating derived progress.
     // This skips calling resolveProgress() (which involves localStorage access via getDeviceId) for unchanged books.
 
-    const needsRebuildPhase2 = moduleCache.lastPhase2Deps.baseBooks !== baseBooks ||
-        moduleCache.lastPhase2Deps.progressMap !== progressMap ||
-        moduleCache.lastPhase2Deps.readingListEntries !== readingListEntries ||
-        moduleCache.lastPhase2Deps.readingListMatchMap !== readingListMatchMap;
-
-    if (needsRebuildPhase2) {
+    // Phase 2 - Merge transient states
+    const finalBooks = useMemo(() => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const newCache: Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }> = {};
+        const result: any[] = [];
 
-        const cache = previousResultsCache;
+        for (let i = 0; i < baseBooks.length; i++) {
+            const baseBook = baseBooks[i];
+            const deviceId = getDeviceId();
 
-        const currentDeviceId = getDeviceId();
+            const localProgress = resolveProgress(progressMap[baseBook.bookId], deviceId);
+            const globalProgress = resolveGlobalProgress(progressMap[baseBook.bookId], deviceId);
 
-        const result = baseBooks.map(book => {
-            const rawBookProgress = progressMap[book.id];
-            // Lookup by exact filename first
-            let rawReadingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
-
-            // Fallback: If missing, try matching by normalized title+author
-            if (!rawReadingListEntry && (book.title || book.author)) {
-                const bookKey = generateMatchKey(book.title || '', book.author || '');
-
-                if (bookKey) {
-                    rawReadingListEntry = readingListMatchMap.get(bookKey);
+            // Compute reading list entry match
+            let entry = null;
+            if (baseBook.sourceFilename && readingListEntries[baseBook.sourceFilename]) {
+                entry = readingListEntries[baseBook.sourceFilename];
+            } else if (baseBook.title && baseBook.author) {
+                const matchKey = generateMatchKey(baseBook.title, baseBook.author);
+                if (matchKey && readingListMatchMap.has(matchKey)) {
+                    entry = readingListMatchMap.get(matchKey);
                 }
             }
 
-            // Check cache for reuse
-            const prev = cache[book.id];
-
-            // Reuse if:
-            // 1. Previous entry exists
-            // 2. Base book object is referentially identical (Phase 1 didn't change it)
-            // 3. Raw input references are identical (avoiding expensive resolveProgress)
-            if (prev &&
-                prev.base === book &&
-                prev.rawBookProgress === rawBookProgress &&
-                prev.rawReadingListEntry === rawReadingListEntry
-            ) {
-                newCache[book.id] = prev;
-                return prev.result;
-            }
-
-            // Cache Miss: Calculate derived values
-            // This involves resolveProgress which calls getDeviceId -> localStorage.getItem (slow)
-            const bookProgress = resolveProgress(rawBookProgress, currentDeviceId);
-            const progress = bookProgress?.percentage || rawReadingListEntry?.percentage || 0;
-            const currentCfi = bookProgress?.currentCfi || undefined;
-            const lastRead = bookProgress?.lastRead || rawReadingListEntry?.lastUpdated || 0;
-
-            // Create new object
             const newBook = {
-                ...book,
-                // Merge progress from reading state store (max across all devices)
-                // Fallback to reading list progress if no device progress is found
-                progress: progress,
-                currentCfi: currentCfi,
-                lastRead: lastRead,
-                allProgress: rawBookProgress
+                ...baseBook,
+                localProgress,
+                globalProgress,
+                readingListEntry: entry || undefined
             };
 
-            newCache[book.id] = {
-                result: newBook,
-                base: book,
-                rawBookProgress,
-                rawReadingListEntry
-            };
+            result.push(newBook);
+        }
 
-            return newBook;
-        });
+        return result;
+    }, [baseBooks, progressMap, readingListEntries, readingListMatchMap]);
 
-                Object.assign(moduleCache, { memoizedResult: { books: result, cache: newCache } });
-                Object.assign(moduleCache, { lastPhase2Deps: { baseBooks, progressMap, readingListEntries, readingListMatchMap } });
-                Object.assign(moduleCache, { previousResultsCache: newCache });
-    }
-
-    const memoizedResult = moduleCache.memoizedResult;
-
-    return memoizedResult.books;
+    return finalBooks;
 };
 
 /**
