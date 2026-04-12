@@ -168,7 +168,7 @@ export const UnifiedAudioPanel = () => {
                         </Button>
                     </div>
                     <Select value={voice?.id || 'default'} onValueChange={handleVoiceChange}>
-                       <SelectTrigger id="voice-select"><SelectValue placeholder="Select Voice" /></SelectTrigger>
+                       <SelectTrigger id="voice-select" aria-label="Select voice"><SelectValue placeholder="Select Voice" /></SelectTrigger>
                        <SelectContent>
                           <SelectItem value="default">Default</SelectItem>
                           {voices.map(v => (
