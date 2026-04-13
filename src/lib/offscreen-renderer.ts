@@ -66,12 +66,12 @@ export async function extractContentOffscreen(
       manager: 'default' // Display one chapter at a time
     });
 
-    // PATCH: Ensure iframe has allow-scripts to prevent blocking in strict environments
+    // PATCH: Ensure iframe has allow-same-origin to allow content access
     const iframe = container.querySelector('iframe');
     if (iframe) {
       const sandbox = iframe.getAttribute('sandbox') || '';
-      if (!sandbox.includes('allow-scripts')) {
-        iframe.setAttribute('sandbox', (sandbox + ' allow-scripts allow-same-origin').trim());
+      if (!sandbox.includes('allow-same-origin')) {
+        iframe.setAttribute('sandbox', (sandbox + ' allow-same-origin').trim());
       }
     }
 
