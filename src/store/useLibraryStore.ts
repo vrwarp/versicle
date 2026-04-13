@@ -105,6 +105,7 @@ interface IDBService {
   getBookMetadata: (id: string) => Promise<BookMetadata | undefined>;
   getBookMetadataBulk?: (ids: string[]) => Promise<(BookMetadata | undefined)[]>;
   getOffloadedStatus: (bookIds?: string[]) => Promise<Map<string, boolean>>;
+  getAvailableResourceIds?: () => Promise<Set<string>>;
   getBookIdByFilename: (filename: string) => string | undefined;
 }
 
@@ -161,11 +162,21 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
 
         // Hydrate Offload Status
         try {
-          const offloadedMap = await injectedDB.getOffloadedStatus(bookIds);
           const offloadedSet = new Set<string>();
-          offloadedMap.forEach((isOffloaded, id) => {
-            if (isOffloaded) offloadedSet.add(id);
-          });
+
+          if (injectedDB.getAvailableResourceIds) {
+            const availableSet = await injectedDB.getAvailableResourceIds();
+            for (const id of bookIds) {
+              if (!availableSet.has(id)) {
+                offloadedSet.add(id);
+              }
+            }
+          } else {
+            const offloadedMap = await injectedDB.getOffloadedStatus(bookIds);
+            offloadedMap.forEach((isOffloaded, id) => {
+              if (isOffloaded) offloadedSet.add(id);
+            });
+          }
 
           set((state) => {
             const currentBooks = useBookStore.getState().books;
