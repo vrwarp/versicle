@@ -352,6 +352,11 @@ Handles the complex task of importing an EPUB file.
     4.  **Adaptive Contrast**: Generates a **Cover Palette** via `cover-palette.ts`.
         *   **Logic**: Uses **Weighted K-Means Clustering** (manual implementation) on the cover image to extract dominant colors. It prioritizes colors based on spatial distribution (corners vs. center) to ensure UI elements don't clash with key visual areas.
 
+#### Batch Ingestion (`src/lib/batch-ingestion.ts`)
+*   **Goal**: Allow users to import large collections of EPUBs simultaneously via ZIP archives, bypassing tedious one-by-one file selection.
+*   **Logic**: Uses `JSZip` (`extractEpubsFromZip`) to recursively scan the archive for `.epub` extensions and extract them as distinct `File` objects for standard ingestion processing.
+*   **Trade-offs**: Processing massive ZIP files entirely in the browser consumes significant RAM, risking memory exhaustion or tab crashes on low-end mobile devices.
+
 #### Entity Resolution (`src/lib/entity-resolution.ts`)
 *   **Goal**: Deterministically match reading list entries to library books when their primary filenames differ.
 *   **Logic**:
@@ -378,7 +383,7 @@ Handles the complex task of importing an EPUB file.
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
 Implements full-text search off the main thread.
 
-*   **Logic**: Uses a **RegExp** scanning approach over in-memory text via `SearchEngine` class, exposed via `Comlink`.
+*   **Logic**: Uses a **RegExp** scanning approach over in-memory text via `SearchEngine` class. The engine is exposed directly within `src/workers/search.worker.ts` via `Comlink.expose(engine)` to allow off-main-thread text parsing and prevent UI freezing.
     *   **Batching & Offloading**: `SearchClient` sends sections to the worker in batches. To prevent blocking the main thread, XML parsing is offloaded to the Web Worker via `supportsXmlParsing()`.
     *   **Extraction Strategy**: First attempts to extract raw XML directly from the EPUB archive (`book.archive.getBlob`) for speed. If this fails, it falls back to the `epub.js` rendering pipeline (`book.load()`), which is slower but resolves external resources.
 *   **Trade-off**: The index is **transient** (in-memory only) and rebuilt on demand.
@@ -622,7 +627,7 @@ Manages the virtual playback timeline.
 
 State is managed using **Zustand** with specialized strategies for different data types.
 
-*   **`useBookStore` (Synced)**: Manages **User Inventory**. Backed by Yjs Map.
+*   **`useBookStore` (Synced)**: Manages **User Inventory**. Backed by Yjs Map. Holds the `__schemaVersion` atomic key and the `books` inventory state synchronized via Yjs.
 *   **`useReadingListStore` (Synced)**:
     *   **Goal**: Functions as a **"Shadow Inventory"**.
     *   **Logic**: Tracks book status (Read, Reading, Want to Read) and Rating independently of the file existence. Persists even if the book file is offloaded or deleted.

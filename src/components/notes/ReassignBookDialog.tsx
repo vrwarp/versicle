@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { ScrollArea } from '../ui/ScrollArea';
 import { useAllBooks } from '../../store/selectors';
 import { useDebounce } from '../../hooks/useDebounce';
+import { cn } from '../../lib/utils';
 
 interface ReassignBookDialogProps {
     isOpen: boolean;
@@ -97,10 +98,21 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
                         type="search"
                         placeholder="Search books..."
                         aria-label="Search books"
-                        className="pl-9"
+                        className={cn("pl-9", searchQuery && "pr-9")}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
+                    {searchQuery && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
+                            onClick={() => setSearchQuery('')}
+                            aria-label="Clear query"
+                        >
+                            <X className="h-4 w-4" />
+                        </Button>
+                    )}
                 </div>
                 <ScrollArea className="h-[200px] border rounded-md p-2">
                     <div className="flex flex-col gap-1">

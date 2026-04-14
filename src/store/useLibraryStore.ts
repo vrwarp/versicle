@@ -292,21 +292,33 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
             }
 
             // 4. Update Static Metadata (Local)
-            set((state) => ({
-              staticMetadata: {
-                ...state.staticMetadata,
-                [existingId!]: {
-                  ...manifest,
-                  id: existingId!,
-                  version: manifest.schemaVersion,
-                  addedAt: existingBook?.addedAt || Date.now()
-                } as BookMetadata
-              },
-              offloadedBookIds: new Set([...state.offloadedBookIds].filter(id => id !== existingId)),
-              isImporting: false,
-              importProgress: 0,
-              importStatus: ''
-            }));
+            set((state) => {
+              const currentBooks = useBookStore.getState().books;
+              // Prevent resurrecting deleted books (zombies)
+              if (!currentBooks[existingId!]) {
+                return {
+                  ...state,
+                  isImporting: false,
+                  importProgress: 0,
+                  importStatus: ''
+                };
+              }
+              return {
+                staticMetadata: {
+                  ...state.staticMetadata,
+                  [existingId!]: {
+                    ...manifest,
+                    id: existingId!,
+                    version: manifest.schemaVersion,
+                    addedAt: existingBook?.addedAt || Date.now()
+                  } as BookMetadata
+                },
+                offloadedBookIds: new Set([...state.offloadedBookIds].filter(id => id !== existingId)),
+                isImporting: false,
+                importProgress: 0,
+                importStatus: ''
+              };
+            });
 
             // 5. Update Reading List (Merge)
             // We want to keep the percentage/location, but update title/author if changed.
@@ -386,21 +398,33 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
 
             // Update Static Metadata
             // Important: using functional updater `set((state) => ...)` to avoid race conditions.
-            set((state) => ({
-              staticMetadata: {
-                ...state.staticMetadata,
-                [manifest.bookId]: {
-                  ...manifest,
-                  id: manifest.bookId,
-                  version: manifest.schemaVersion,
-                  addedAt: ghostMatch?.addedAt || Date.now()
-                } as BookMetadata
-              },
-              offloadedBookIds: new Set([...state.offloadedBookIds].filter(id => id !== manifest.bookId)),
-              isImporting: false,
-              importProgress: 0,
-              importStatus: ''
-            }));
+            set((state) => {
+              const currentBooks = useBookStore.getState().books;
+              // Prevent resurrecting deleted books (zombies)
+              if (!currentBooks[manifest.bookId]) {
+                return {
+                  ...state,
+                  isImporting: false,
+                  importProgress: 0,
+                  importStatus: ''
+                };
+              }
+              return {
+                staticMetadata: {
+                  ...state.staticMetadata,
+                  [manifest.bookId]: {
+                    ...manifest,
+                    id: manifest.bookId,
+                    version: manifest.schemaVersion,
+                    addedAt: ghostMatch?.addedAt || Date.now()
+                  } as BookMetadata
+                },
+                offloadedBookIds: new Set([...state.offloadedBookIds].filter(id => id !== manifest.bookId)),
+                isImporting: false,
+                importProgress: 0,
+                importStatus: ''
+              };
+            });
             return; // Stop here, we served the request
           }
         } catch (e) {
@@ -440,25 +464,37 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         // Always use the functional updater pattern `set((state) => ({ ... }))` when updating objects or arrays
         // derived from existing state (like staticMetadata and offloadedBookIds). This prevents stale closures
         // and race conditions, especially during concurrent automated ingestions.
-        set((state) => ({
-          staticMetadata: {
-            ...state.staticMetadata,
-            // Map StaticBookManifest to BookMetadata-compatible object
-            [manifest.bookId]: {
-              ...manifest,
-              id: manifest.bookId,  // Alias bookId to id for BookMetadata compatibility
-              version: manifest.schemaVersion,  // Alias schemaVersion to version
-              addedAt: Date.now()  // Required for Book type
-            } as BookMetadata
-          },
-          // Ensure new book is NOT marked as offloaded
-          offloadedBookIds: new Set(
-            [...state.offloadedBookIds].filter(id => id !== manifest.bookId)
-          ),
-          isImporting: false,
-          importProgress: 0,
-          importStatus: ''
-        }));
+        set((state) => {
+          const currentBooks = useBookStore.getState().books;
+          // Prevent resurrecting deleted books (zombies)
+          if (!currentBooks[manifest.bookId]) {
+            return {
+              ...state,
+              isImporting: false,
+              importProgress: 0,
+              importStatus: ''
+            };
+          }
+          return {
+            staticMetadata: {
+              ...state.staticMetadata,
+              // Map StaticBookManifest to BookMetadata-compatible object
+              [manifest.bookId]: {
+                ...manifest,
+                id: manifest.bookId,  // Alias bookId to id for BookMetadata compatibility
+                version: manifest.schemaVersion,  // Alias schemaVersion to version
+                addedAt: Date.now()  // Required for Book type
+              } as BookMetadata
+            },
+            // Ensure new book is NOT marked as offloaded
+            offloadedBookIds: new Set(
+              [...state.offloadedBookIds].filter(id => id !== manifest.bookId)
+            ),
+            isImporting: false,
+            importProgress: 0,
+            importStatus: ''
+          };
+        });
 
         // 5. Add to Reading List
         const readingListStore = useReadingListStore.getState();
@@ -666,17 +702,25 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
 
           // Update static metadata with the new manifest
           // Use functional updater to guarantee we don't clobber concurrent static metadata additions.
-          set((state) => ({
-            staticMetadata: {
-              ...state.staticMetadata,
-              [id]: {
-                ...manifest,
-                id: id,
-                version: manifest.schemaVersion,
-                addedAt: existingBook?.addedAt || Date.now()
-              } as BookMetadata
+          set((state) => {
+            const currentBooks = useBookStore.getState().books;
+            // Prevent resurrecting deleted books (zombies)
+            if (!currentBooks[id]) {
+                return state;
             }
-          }));
+
+            return {
+              staticMetadata: {
+                ...state.staticMetadata,
+                [id]: {
+                  ...manifest,
+                  id: id,
+                  version: manifest.schemaVersion,
+                  addedAt: existingBook?.addedAt || Date.now()
+                } as BookMetadata
+              }
+            };
+          });
         }
 
         // Re-hydrate to get the restored cover

@@ -125,7 +125,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
                       newText = currentSelection.toString();
                       currentSelection.removeAllRanges();
                   }
-              } catch (e) {
+              } catch {
                   // Selection extraction failed; use original annotation data
               }
           }

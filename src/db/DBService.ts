@@ -81,20 +81,22 @@ class DBService {
       const resourceStore = tx.objectStore('static_resources');
 
       // Execute multiple parallel `.get` and `.getKey` queries within the single transaction
-      const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
-      const resourceKeysPromise = Promise.all(ids.map(id => resourceStore.getKey(id)));
+      const manifestsPromise = manifestStore.getAll();
+      const resourceKeysPromise = resourceStore.getAllKeys().then(keys => new Set(keys));
 
-      const [manifests, resourceKeys] = await Promise.all([manifestsPromise, resourceKeysPromise]);
+      const [allManifests, resourceKeysSet] = await Promise.all([manifestsPromise, resourceKeysPromise]);
       await tx.done;
+
+      const manifestsMap = new Map(allManifests.map(m => [m.bookId, m]));
 
       const inventoryBooks = useBookStore.getState().books;
 
       // Map results back preserving index and handling missing records
-      return ids.map((_id, index) => {
-          const manifest = manifests[index];
+      return ids.map((id) => {
+          const manifest = manifestsMap.get(id);
           if (!manifest) return undefined;
 
-          const resourceKey = resourceKeys[index];
+          const resourceKey = resourceKeysSet.has(manifest.bookId) ? manifest.bookId : undefined;
           const inventory = inventoryBooks[manifest.bookId];
 
           return {
@@ -484,17 +486,22 @@ class DBService {
   async getOffloadedStatus(bookIds?: string[]): Promise<Map<string, boolean>> {
     try {
       const db = await this.getDB();
-      const resourceKeys = await db.getAllKeys('static_resources');
-      const resourceSet = new Set(resourceKeys);
       const result = new Map<string, boolean>();
 
       // If specific IDs requested
       if (bookIds && bookIds.length > 0) {
-        for (const id of bookIds) {
-          const exists = resourceSet.has(id);
-          logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists} (Keys: ${resourceKeys.length})`);
+        const tx = db.transaction('static_resources', 'readonly');
+        const store = tx.objectStore('static_resources');
+
+        const allKeys = await store.getAllKeys();
+        const keySet = new Set(allKeys as string[]);
+        await tx.done;
+
+        bookIds.forEach((id) => {
+          const exists = keySet.has(id);
+          logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists}`);
           result.set(id, !exists);
-        }
+        });
       } else {
         // Return for all resources (inverse: if in set, not offloaded)
         // Ideally we need the list of ALL books to know which are offloaded (missing from set)

@@ -51,6 +51,11 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     page_a.goto(base_url)
     page_a.evaluate("""
         async () => {
+            // Disconnect Yjs to release IDB locks
+            if (typeof window.__DISCONNECT_YJS__ === 'function') {
+                await window.__DISCONNECT_YJS__();
+            }
+
             // Clear all IndexedDB databases
             const dbs = await window.indexedDB.databases();
             for (const db of dbs) {
@@ -308,6 +313,11 @@ def test_firestore_sync_offload_status_hydration(browser: Browser, browser_conte
     page_a.goto(base_url)
     page_a.evaluate("""
         async () => {
+            // Disconnect Yjs to release IDB locks
+            if (typeof window.__DISCONNECT_YJS__ === 'function') {
+                await window.__DISCONNECT_YJS__();
+            }
+
             const dbs = await window.indexedDB.databases();
             for (const db of dbs) {
                 await new Promise((resolve) => {
