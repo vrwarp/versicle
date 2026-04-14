@@ -1,4 +1,6 @@
 import { usePreferencesStore } from "../../store/usePreferencesStore"
+import { useBookStore } from "../../store/useBookStore"
+import { useReaderUIStore } from "../../store/useReaderUIStore"
 import { useShallow } from 'zustand/react/shallow';
 import { PopoverContent, PopoverClose } from "../ui/Popover"
 import { Button } from "../ui/Button"
@@ -23,7 +25,10 @@ export const VisualSettings = () => {
     fontFamily, setFontFamily,
     lineHeight, setLineHeight,
     shouldForceFont, setShouldForceFont,
-    readerViewMode, setReaderViewMode
+    readerViewMode, setReaderViewMode,
+    forceTraditionalChinese, setForceTraditionalChinese,
+    showPinyin, setShowPinyin,
+    pinyinSize, setPinyinSize
   } = usePreferencesStore(useShallow(state => ({
     currentTheme: state.currentTheme,
     setTheme: state.setTheme,
@@ -36,8 +41,19 @@ export const VisualSettings = () => {
     shouldForceFont: state.shouldForceFont,
     setShouldForceFont: state.setShouldForceFont,
     readerViewMode: state.readerViewMode || 'paginated',
-    setReaderViewMode: state.setReaderViewMode
+    setReaderViewMode: state.setReaderViewMode,
+    forceTraditionalChinese: state.forceTraditionalChinese,
+    setForceTraditionalChinese: state.setForceTraditionalChinese,
+    showPinyin: state.showPinyin,
+    setShowPinyin: state.setShowPinyin,
+    pinyinSize: state.pinyinSize,
+    setPinyinSize: state.setPinyinSize
   })));
+
+  const activeBookId = useReaderUIStore(state => state.activeBookId);
+  const currentBook = useBookStore(state => activeBookId ? state.books[activeBookId] : undefined);
+  const updateBook = useBookStore(state => state.updateBook);
+  const bookLang = currentBook?.language || 'en';
 
   return (
     <PopoverContent className="w-80 p-5 relative" onOpenAutoFocus={(e) => e.preventDefault()}>
@@ -47,6 +63,72 @@ export const VisualSettings = () => {
           <span className="sr-only">Close</span>
         </Button>
       </PopoverClose>
+
+
+      {/* Book Language Override */}
+      <div className="mb-6 space-y-3">
+        <Label className="text-sm font-medium">Book Language</Label>
+        <Select value={bookLang} onValueChange={(val) => activeBookId && updateBook(activeBookId, { language: val })}>
+          <SelectTrigger data-testid="book-language-select">
+            <SelectValue placeholder="Language" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="en">English (en)</SelectItem>
+            <SelectItem value="zh">Chinese (zh)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {bookLang === 'zh' && (
+        <div className="mb-6 space-y-4 rounded-md bg-accent/50 p-3">
+          <Label className="block text-sm font-medium text-foreground">Chinese Reading</Label>
+
+          <div className="flex items-center justify-between">
+            <Label htmlFor="force-traditional" className="text-sm cursor-pointer">Force Traditional Characters</Label>
+            <Switch
+              id="force-traditional"
+              checked={forceTraditionalChinese}
+              onCheckedChange={setForceTraditionalChinese}
+              data-testid="force-traditional-switch"
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <Label htmlFor="show-pinyin" className="text-sm cursor-pointer">Show Pinyin</Label>
+            <Switch
+              id="show-pinyin"
+              checked={showPinyin}
+              onCheckedChange={setShowPinyin}
+              data-testid="show-pinyin-switch"
+            />
+          </div>
+
+          {showPinyin && (
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm text-muted-foreground">Pinyin Size</Label>
+                <span className="text-xs text-muted-foreground w-12 text-right">{pinyinSize}%</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => setPinyinSize(Math.max(50, pinyinSize - 10))}>
+                  <Minus className="h-3 w-3" />
+                </Button>
+                <Slider
+                  min={50}
+                  max={150}
+                  step={10}
+                  value={[pinyinSize]}
+                  onValueChange={([val]) => setPinyinSize(val)}
+                  className="flex-1"
+                />
+                <Button variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => setPinyinSize(Math.min(150, pinyinSize + 10))}>
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 1. The "Ambience" Row (Themes) */}
       <div className="mb-6">

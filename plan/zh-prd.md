@@ -258,3 +258,11 @@ For users who speak Mandarin but require reading assistance---specifically the c
 - Added book language injection to `AudioPlayerService.ts` when initializing TTS.
 - **Discovery:** I used TS ignores/expect-errors in `VisualSettings.tsx` and `AudioPlayerService.ts` to avoid calling `setActiveLanguage` because Phase 1 was skipped in this instruction set, so the `useTTSStore` does not fully implement Phase 1 logic yet.
 - **Deviation:** I initialized a simplified `TTSProfile` definition in `useTTSStore.ts` and implemented a stub `setActiveLanguage` to enable correct compilation and data structure mapping in components.
+
+## Implementation Notes (Phase 3 & 4 completed)
+- Created `ChineseTextProcessor.ts` wrapping `opencc-js` and `pinyin-pro` with dynamic imports.
+- Added `injectChineseOverlay` to `useEpubReader.ts` generating CSS-based ruby text on `data-pinyin` to preserve original DOM text.
+- Re-added missing state fields to `usePreferencesStore.ts` and `VisualSettings.tsx` UI (these were missing in the `main` branch despite the Phase 2 claim).
+- Updated `PiperProvider.ts` to accept `zh_CN` voices and dynamically reduce chunk size to 100 characters for CJK texts.
+- Added CJK boundary fallback regex to `TextSegmenter.ts`.
+- Added `PiperProvider.test.ts` and `TextSegmenter.test.ts` to verify the behavior.
