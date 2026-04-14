@@ -7,6 +7,7 @@ import { Plus, Trash2, Save, X, Download, Upload, ArrowUp, ArrowDown, Play, Refr
 import { Button } from '../ui/Button';
 import { Dialog as UiDialog } from '../ui/Dialog';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useBookStore } from '../../store/useBookStore';
 import { LEXICON_SAMPLE_CSV } from '../../lib/tts/lexiconSample';
 import { LexiconCSV } from '../../lib/tts/CsvUtils';
 import { exportFile } from '../../lib/export';
@@ -33,7 +34,10 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     const lexiconService = LexiconService.getInstance();
 
     const currentBookId = useReaderUIStore(state => state.currentBookId);
+    const inventory = useBookStore(state => currentBookId ? state.books[currentBookId] : undefined);
+    const bookLanguage = inventory?.language || 'en';
     const [scope, setScope] = useState<'global' | 'book'>('global');
+    const [languageFilter, setLanguageFilter] = useState<string>(bookLanguage);
 
     const [testInput, setTestInput] = useState('');
     const [testOutput, setTestOutput] = useState('');
@@ -46,13 +50,24 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
 
     const rules = useMemo(() => {
         const list = Object.values(rulesMap || {}).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        let filtered = list;
         if (scope === 'global') {
-            return list.filter(r => !r.bookId || r.bookId === 'global');
+            filtered = list.filter(r => !r.bookId || r.bookId === 'global');
         } else if (currentBookId) {
-            return list.filter(r => r.bookId === currentBookId);
+            filtered = list.filter(r => r.bookId === currentBookId);
+        } else {
+            filtered = [];
         }
-        return [];
-    }, [rulesMap, scope, currentBookId]);
+
+        if (languageFilter && languageFilter !== 'all') {
+            if (languageFilter === 'unscoped') {
+                filtered = filtered.filter(r => !r.language);
+            } else {
+                filtered = filtered.filter(r => r.language === languageFilter || !r.language);
+            }
+        }
+        return filtered;
+    }, [rulesMap, scope, currentBookId, languageFilter]);
 
     const biblePreference = currentBookId ? (settings[currentBookId]?.bibleLexiconEnabled || 'default') : 'default';
 
@@ -263,7 +278,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
             }
         >
             <div className="flex justify-between items-center mb-4 border-b border-border pb-2 overflow-x-auto gap-4">
-                <div className="flex space-x-4 shrink-0" role="tablist" aria-label="Lexicon Scope">
+                <div className="flex items-center gap-4 shrink-0">
+                    <div className="flex space-x-4" role="tablist" aria-label="Lexicon Scope">
                     <button
                         role="tab"
                         aria-selected={scope === 'global'}
@@ -282,6 +298,18 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                             This Book
                         </button>
                     )}
+                    </div>
+                    <select
+                        className="h-8 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        value={languageFilter}
+                        onChange={(e) => setLanguageFilter(e.target.value)}
+                        aria-label="Filter by Language"
+                    >
+                        <option value="all">All Languages</option>
+                        <option value="en">English</option>
+                        <option value="zh">Chinese</option>
+                        <option value="unscoped">Unscoped (Legacy)</option>
+                    </select>
                 </div>
 
                 <div className="flex gap-2 shrink-0">
@@ -367,8 +395,20 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                 />
                                             </div>
                                         </div>
-                                        <div className="flex items-center justify-between gap-2 mt-2">
-                                            <div className="flex gap-4">
+                                        <div className="flex items-center justify-between gap-2 mt-2 flex-wrap">
+                                            <div className="flex items-center gap-4 flex-wrap">
+                                                <div className="flex items-center gap-2">
+                                                    <label className="text-xs font-medium text-muted-foreground">Lang:</label>
+                                                    <select
+                                                        className="h-7 text-xs rounded border border-input bg-transparent px-2 py-1"
+                                                        value={editingRule.language || ''}
+                                                        onChange={e => setEditingRule({ ...editingRule, language: e.target.value || undefined })}
+                                                    >
+                                                        <option value="">All</option>
+                                                        <option value="en">en</option>
+                                                        <option value="zh">zh</option>
+                                                    </select>
+                                                </div>
                                                 <select
                                                     data-testid="lexicon-match-type-select"
                                                     value={editingRule.matchType || (editingRule.isRegex ? 'regex' : 'ignore_case')}
@@ -480,7 +520,19 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                             </div>
                         </div>
                         <div className="flex items-center justify-between gap-2 mt-2 flex-wrap">
-                            <div className="flex gap-4">
+                            <div className="flex items-center gap-4 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs font-medium text-muted-foreground">Lang:</label>
+                                    <select
+                                        className="h-7 text-xs rounded border border-input bg-transparent px-2 py-1"
+                                        value={editingRule?.language || ''}
+                                        onChange={e => setEditingRule({ ...editingRule, language: e.target.value || undefined })}
+                                    >
+                                        <option value="">All</option>
+                                        <option value="en">en</option>
+                                        <option value="zh">zh</option>
+                                    </select>
+                                </div>
                                 <select
                                     data-testid="lexicon-match-type-select"
                                     value={editingRule?.matchType || (editingRule?.isRegex ? 'regex' : 'ignore_case')}

@@ -197,6 +197,15 @@ export class AudioPlayerService {
             this.stateManager.setBookId(bookId);
 
             if (bookId) {
+                import('../../store/useBookStore').then(({ useBookStore }) => {
+                    const inventory = useBookStore.getState().books[bookId];
+                    if (inventory?.language) {
+                        import('../../store/useTTSStore').then(({ useTTSStore }) => {
+                            // @ts-expect-error - To be implemented in Phase 1
+                            useTTSStore.getState().setActiveLanguage?.(inventory.language);
+                        });
+                    }
+                });
                 this.playlistPromise = dbService.getSections(bookId).then(sections => {
                     if (this.currentBookId !== bookId) return; this.playlist = sections;
                     this.restoreQueue(bookId);
@@ -529,7 +538,10 @@ export class AudioPlayerService {
             const voiceId = this.voiceId || '';
 
             if (!this.activeLexiconRules) {
-                this.activeLexiconRules = await this.lexiconService.getRules(initialBookId || undefined);
+                const { useBookStore } = await import('../../store/useBookStore');
+                const bookInventory = initialBookId ? useBookStore.getState().books[initialBookId] : undefined;
+                const bookLang = bookInventory?.language || 'en';
+                this.activeLexiconRules = await this.lexiconService.getRules(initialBookId || undefined, bookLang);
                 if (this.currentBookId !== initialBookId) return;
             }
             const rules = this.activeLexiconRules;
