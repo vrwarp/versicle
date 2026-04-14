@@ -15,6 +15,8 @@ For users who speak Mandarin but require reading assistance---specifically the c
 
 -   **Structural Isolation:** A phonetic override for English must not inadvertently corrupt Chinese text. TTS profiles and Lexicon dictionaries must be strictly scoped by language.
 
+-   **Unified Language Context:** The book language is the single source of truth. All downstream systems—audio profile, visual rendering defaults, text segmentation, and lexicon scoping—must derive from the book's language assignment. Users should never need to independently synchronize the audio language and the book language; changing one changes both.
+
 -   **Performance:** DOM mutations for Pinyin injection must be performed efficiently without freezing the reader thread.
 
 3\. Goals & Non-Goals
@@ -89,15 +91,48 @@ For users who speak Mandarin but require reading assistance---specifically the c
 > [!NOTE]
 > **Codebase Finding:** `LexiconRule` in `src/types/db.ts` currently has `bookId?: string` for scoping. Adding `language?: string` is additive and backward-compatible. `LexiconService.getRules()` already supports filtering by `bookId`; adding a `language` parameter is a small extension. The `useLexiconStore` (Yjs-backed) will propagate the new field automatically.
 
+### 4.5 Unified Book Language ↔ Audio Language Profile
+
+-   **Problem:** The current implementation maintains two independent language selectors: the "Book Language" dropdown in `VisualSettings.tsx` and the "Active Language Profile" selector in both `UnifiedAudioPanel.tsx` and `TTSSettingsTab.tsx`. Users can set a book to Chinese while the audio language profile remains on English, causing the wrong TTS voice to be loaded and lexicon rules to be misapplied.
+
+-   **Requirement:** The book's `language` field (in `UserInventoryItem`) is the **single source of truth**. The TTS store's `activeLanguage` must be a **derived value**, not an independent setting.
+
+-   **Behavior:**
+    1. When a book is opened in the reader, the system sets `useTTSStore.activeLanguage` to match the book's language. *(Already implemented in `AudioPlayerService.setBookId()`.)*
+    2. When the user changes the "Book Language" in `VisualSettings.tsx`, the system must **also** update `useTTSStore.activeLanguage` to the new value.
+    3. The standalone "Active Language Profile" selector in `UnifiedAudioPanel.tsx` must be **removed**. It is a source of desynchronization. Users should change the book's language from `VisualSettings`, and the audio profile follows automatically.
+    4. The "Language Profile" selector in `TTSSettingsTab.tsx` (Global Settings) is retained for **configuration purposes only** (e.g., downloading voices, adjusting speed presets for a language). It does NOT affect which profile is active during playback—that is always determined by the open book's language.
+
+> [!IMPORTANT]
+> **Codebase Finding:** `UnifiedAudioPanel.tsx` currently imports `activeLanguage` and `setActiveLanguage` from `useTTSStore` and renders a full language selector in its settings view (lines 38–39, 147–158). This selector must be removed. `VisualSettings.tsx` already calls `updateBook(currentBookId, { language: lang })` on line 143 but does NOT call `useTTSStore.setActiveLanguage()`, creating the desync. The fix is to add a `setActiveLanguage(lang)` call inside the `VisualSettings` language change handler, and remove the redundant selector from `UnifiedAudioPanel`.
+
+### 4.6 Language-Dependent Font Rendering Defaults
+
+-   **Problem:** The current `usePreferencesStore` stores a single global `fontSize` (percentage) and `lineHeight` value. Chinese text rendered at the same font size as English text is harder to read because CJK glyphs are structurally more complex and visually denser. Similarly, the optimal line height differs: Latin text reads well at 1.5× line height, but CJK text typically requires 1.6–1.8× for comfortable reading due to the visual weight and stroke density of characters.
+
+-   **Requirement:** Font rendering parameters (`fontSize`, `lineHeight`) must be stored **per language**, similar to how TTS profiles are stored per language.
+
+-   **Behavior:**
+    1. The `usePreferencesStore` introduces a `fontProfiles: Record<string, { fontSize: number; lineHeight: number }>` map.
+    2. When the user adjusts font size or line height in `VisualSettings.tsx`, the change is saved to the profile matching the current book's language.
+    3. When the user opens a book or switches the book's language, the renderer loads the font profile for that language.
+    4. Default profiles are provided: `en: { fontSize: 100, lineHeight: 1.5 }`, `zh: { fontSize: 120, lineHeight: 1.8 }`.
+    5. The existing global `fontSize` and `lineHeight` fields are retained for backward compatibility and migrate into `fontProfiles.en` on first load.
+
+> [!NOTE]
+> **Codebase Finding:** `usePreferencesStore.ts` stores `fontSize: number` (default 100) and `lineHeight: number` (default 1.5) as flat top-level fields (lines 17–18). These are consumed by `useEpubReader.ts` to inject styles into the epub.js iframe. The refactor must: (1) add a `fontProfiles` map alongside the existing flat fields, (2) add a helper `getFontProfile(lang: string)` that returns the profile for a language (falling back to the global defaults), (3) update `VisualSettings.tsx` to read/write through the profile keyed by the current book's language, and (4) update `useEpubReader.ts` to apply the language-specific profile.
+
 5\. UX Designs & Interface Modifications
 ----------------------------------------
 
 ### 5.1 Reader Menu: Language Override
 
-**Location:** Inside the `ReaderControlBar.tsx` (or Book Info modal). **Element:** A straightforward `<Select>` dropdown labeled "Book Language". **Behavior:** Defaults to the imported `<dc:language>`. Changing this immediately reloads the active TTS profile and Lexicon scope.
+**Location:** Inside the `ReaderControlBar.tsx` (or Book Info modal). **Element:** A straightforward `<Select>` dropdown labeled "Book Language". **Behavior:** Defaults to the imported `<dc:language>`. Changing this immediately reloads the active TTS profile, Lexicon scope, **and font rendering profile**.
 
 > [!NOTE]
 > **Codebase Finding:** `ReaderControlBar.tsx` delegates all display to the `CompassPill` component. The language selector should be surfaced as a new action in the annotation popover or as a new sub-panel in the `LexiconManager.tsx` dialog (which is already opened from the ReaderControlBar). Alternatively, it could be placed in the `VisualSettings.tsx` popover which already contains reader-specific toggles. The latter is recommended to keep the CompassPill focused.
+>
+> **Update (Post-Implementation):** The selector was placed in `VisualSettings.tsx` as recommended. Changing the book language must now also: (1) call `useTTSStore.setActiveLanguage()` to couple the audio profile, and (2) load the corresponding font rendering profile from `usePreferencesStore.fontProfiles`.
 
 ### 5.2 Visual Settings Tab
 
@@ -110,7 +145,10 @@ For users who speak Mandarin but require reading assistance---specifically the c
 3.  **Pinyin Size:** A slider (50% to 150%) to independently scale the `<rt>` ruby text size relative to the base character.
 
 > [!NOTE]
-> **Codebase Finding:** `VisualSettings.tsx` (132 lines) uses `usePreferencesStore` (Yjs-synced). The new Chinese-specific toggles should also be added to `usePreferencesStore`. The component already imports `Switch`, `Slider`, `Select`, and `Label` from the UI library—all needed for the new elements. The new settings section should be conditionally rendered based on the active book's language.
+> **Codebase Finding:** `VisualSettings.tsx` (now ~210 lines) uses `usePreferencesStore` (Yjs-synced). The new Chinese-specific toggles should also be added to `usePreferencesStore`. The component already imports `Switch`, `Slider`, `Select`, and `Label` from the UI library—all needed for the new elements. The new settings section should be conditionally rendered based on the active book's language.
+
+> [!IMPORTANT]
+> **Update (Post-Implementation):** The font size slider and line height controls in the "Legibility" and "Layout" sections must now read from and write to the **language-specific font profile** (`fontProfiles[currentLanguage]`), not the global flat fields. This ensures that adjusting font size while reading a Chinese book does not alter the English font size, and vice versa.
 
 ### 5.3 Global TTS Settings
 
@@ -186,3 +224,27 @@ For users who speak Mandarin but require reading assistance---specifically the c
 4.  **Resume:** The user saves the rule and resumes playback.
 
 5.  **Result:** The `AudioContentPipeline` applies the `zh`-scoped rule. The TTS engine now correctly pronounces the word. English books are unaffected because the rule is isolated to the Chinese scope.
+
+### CUJ 4: Seamless Language Context Switching
+
+**Actor:** A user who reads books in both English and Chinese on the same device.
+
+1.  **Setup:** The user has an English book configured with a serif font at 100% size, line height 1.5, and an English TTS voice at 1.2× speed. They also have a Chinese book configured with a sans-serif font at 120% size, line height 1.8, and a Chinese TTS voice at 1.0× speed.
+
+2.  **Opening English Book:** The user opens their English novel. The reader loads the English font profile (100%, 1.5 line height) and the English TTS profile (voice + speed). Everything matches.
+
+3.  **Switching to Chinese Book:** The user returns to the library and opens a Chinese book. Without any manual intervention, the reader loads the Chinese font profile (120%, 1.8 line height) and the Chinese TTS profile. The lexicon rules are scoped to Chinese.
+
+4.  **Result:** The user never has to manually switch the "Active Language Profile" for audio. They never have to readjust font sizes when switching languages. Each book carries its language, and all downstream rendering and audio settings follow automatically.
+
+### CUJ 5: Correcting a Misclassified Book Language
+
+**Actor:** A user who imports a book with incorrect or missing `<dc:language>` metadata.
+
+1.  **Import:** The user imports a Chinese EPUB that has `<dc:language>en</dc:language>` (incorrectly tagged).
+
+2.  **Open:** The book opens with English defaults—wrong font profile, no Chinese settings visible.
+
+3.  **Correction:** The user opens Visual Settings and changes the "Book Language" to Chinese.
+
+4.  **Result:** Immediately, the font profile switches to Chinese defaults (larger size, more line spacing), the Chinese settings section appears (Pinyin, Traditional conversion), and the TTS audio language profile switches to Chinese. A single action corrects everything.
