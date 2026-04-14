@@ -146,6 +146,48 @@ describe('ingestion', () => {
     expect(data.manifest.coverBlob).toBeUndefined();
   });
 
+  it('should extract correct language from metadata', async () => {
+    vi.resetModules();
+    const epubjs = await import('epubjs');
+    (epubjs.default as any).mockImplementation(() => ({
+      ready: Promise.resolve(),
+      opened: Promise.resolve(),
+      loaded: {
+        metadata: Promise.resolve({
+          language: 'zh-CN'
+        }),
+      },
+      coverUrl: vi.fn(() => Promise.resolve(null)),
+      destroy: vi.fn(),
+    }));
+
+    const file = createMockFile();
+    const data = await extractBookData(file);
+    expect(data.inventory.language).toBe('zh');
+    expect(data.manifest.language).toBe('zh');
+  });
+
+  it('should default to english for malformed language metadata', async () => {
+    vi.resetModules();
+    const epubjs = await import('epubjs');
+    (epubjs.default as any).mockImplementation(() => ({
+      ready: Promise.resolve(),
+      opened: Promise.resolve(),
+      loaded: {
+        metadata: Promise.resolve({
+          language: 'invalidlanguage'
+        }),
+      },
+      coverUrl: vi.fn(() => Promise.resolve(null)),
+      destroy: vi.fn(),
+    }));
+
+    const file = createMockFile();
+    const data = await extractBookData(file);
+    expect(data.inventory.language).toBe('en');
+    expect(data.manifest.language).toBe('en');
+  });
+
   it('should use default values when metadata is missing', async () => {
     vi.resetModules();
     const epubjs = await import('epubjs');
