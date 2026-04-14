@@ -5,6 +5,7 @@ let pinyinModule: any = null;
 
 export async function getOpenCC() {
   if (!openccInstance) {
+    // @ts-expect-error - no types for opencc-js
     const OpenCC = await import('opencc-js');
     openccInstance = OpenCC.Converter({ from: 'cn', to: 'tw' });
   }

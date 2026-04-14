@@ -50,7 +50,7 @@ export const VisualSettings = () => {
     setPinyinSize: state.setPinyinSize
   })));
 
-  const activeBookId = useReaderUIStore(state => state.activeBookId);
+  const activeBookId = useReaderUIStore(state => state.currentBookId);
   const currentBook = useBookStore(state => activeBookId ? state.books[activeBookId] : undefined);
   const updateBook = useBookStore(state => state.updateBook);
   const bookLang = currentBook?.language || 'en';
