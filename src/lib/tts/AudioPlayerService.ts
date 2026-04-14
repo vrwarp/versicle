@@ -102,7 +102,7 @@ export class AudioPlayerService {
         });
 
         this.platformIntegration = new PlatformIntegration({
-            onPlay: () => this.resume(),
+            onPlay: () => this.play(),
             onPause: () => this.pause(),
             onStop: () => this.stop(),
             onPrev: () => this.prev(),
