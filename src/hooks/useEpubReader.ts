@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { usePreferencesStore } from '../store/usePreferencesStore';
+import { useBookStore } from '../store/useBookStore';
+import { getPinyin, toTraditional } from '../lib/chinese/ChineseTextProcessor';
 import ePub, { type Book, type Rendition, type Location, type NavigationItem } from 'epubjs';
 import { dbService } from '../db/DBService';
 import type { BookMetadata } from '../types/db';
@@ -438,6 +441,88 @@ export function useEpubReader(
         };
 
         // Manual selection listener fallback
+
+
+        const injectChineseOverlay = async (contents: unknown) => {
+          const doc = (contents as { document: Document }).document;
+          if (!doc) return;
+
+          const prefs = usePreferencesStore.getState();
+          const inventory = useBookStore.getState().books[bookId];
+          const bookLang = inventory?.language || 'en';
+
+          if (bookLang !== 'zh') return;
+
+          // Remove previous overlay if settings changed
+          const existingOverlay = doc.getElementById('pinyin-overlay-styles');
+          if (existingOverlay) existingOverlay.remove();
+
+          if (prefs.showPinyin || prefs.forceTraditionalChinese) {
+            // Process text nodes
+            const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+            const textNodes: Text[] = [];
+            let node: Text | null;
+            while ((node = walker.nextNode() as Text)) {
+              if (node.textContent && /[\u4e00-\u9fff]/.test(node.textContent)) {
+                textNodes.push(node);
+              }
+            }
+
+            for (const textNode of textNodes) {
+              const parent = textNode.parentElement;
+              if (!parent || parent.tagName === 'RT' || parent.tagName === 'RUBY') continue;
+
+              const text = textNode.textContent || '';
+              const chars = [...text];
+
+              // Wrap each Chinese character in a <span> with data-pinyin
+              const fragment = doc.createDocumentFragment();
+              for (const char of chars) {
+                if (/[\u4e00-\u9fff]/.test(char)) {
+                  const span = doc.createElement('span');
+                  span.textContent = prefs.forceTraditionalChinese
+                    ? await toTraditional(char)
+                    : char;
+                  if (prefs.showPinyin) {
+                    const py = await getPinyin(char);
+                    span.setAttribute('data-pinyin', py[0] || '');
+                  }
+                  span.classList.add('zh-annotated');
+                  fragment.appendChild(span);
+                } else {
+                  fragment.appendChild(doc.createTextNode(char));
+                }
+              }
+              parent.replaceChild(fragment, textNode);
+            }
+
+            // Inject CSS for ruby rendering
+            const style = doc.createElement('style');
+            style.id = 'pinyin-overlay-styles';
+            style.textContent = `
+              .zh-annotated {
+                position: relative;
+                display: inline-block;
+              }
+              .zh-annotated[data-pinyin]::before {
+                content: attr(data-pinyin);
+                position: absolute;
+                top: -1.2em;
+                left: 50%;
+                transform: translateX(-50%);
+                font-size: ${prefs.pinyinSize || 100}%;
+                color: inherit;
+                opacity: 0.7;
+                white-space: nowrap;
+                pointer-events: none;
+              }
+              body { padding-top: 1.5em !important; }
+            `;
+            doc.head.appendChild(style);
+          }
+        };
+
+        // Manual selection listener fallback
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const attachListeners = (contents: any) => {
           const doc = contents.document;
@@ -485,10 +570,15 @@ export function useEpubReader(
         (newRendition.hooks.content as any).register(injectExtras);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (newRendition.hooks.content as any).register(attachListeners);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (newRendition.hooks.content as any).register(injectChineseOverlay);
+
 
         // Manually trigger extras for initially loaded content
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (newRendition as any).getContents().forEach((contents: any) => injectExtras(contents));
+        (newRendition as unknown as { getContents: () => unknown[] }).getContents().forEach((contents: unknown) => injectChineseOverlay(contents));
+
 
       } catch (err) {
         if (err instanceof CancellationError) {
@@ -680,7 +770,10 @@ export function useEpubReader(
     options.fontFamily,
     options.lineHeight,
     options.viewMode,
-    options.shouldForceFont
+    options.shouldForceFont,
+    usePreferencesStore.getState().showPinyin,
+    usePreferencesStore.getState().forceTraditionalChinese,
+    usePreferencesStore.getState().pinyinSize
   ]);
 
   return { book, rendition, isReady, areLocationsReady, isLoading, metadata, toc, error };
