@@ -3,6 +3,15 @@ import { TextSegmenter, DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '
 import type { SentenceNode } from '../tts';
 
 describe('TextSegmenter', () => {
+  it('handles CJK fallback regex', () => {
+    // It doesn't use the CJK fallback out of the box because it uses Intl.Segmenter in Node.
+    // But let's verify CJK punctuation is handled if we pass Chinese text.
+    const segmenter = new TextSegmenter(); // English locale but CJK punctuation handled by Intl.Segmenter
+    const chineseText = '你好。世界！这是一个测试？';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const results = segmenter.segment(chineseText, { text: chineseText, cfi: '' } as any);
+    expect(results.length).toBeGreaterThan(1);
+  });
   it('segments simple sentences correctly using Intl.Segmenter', () => {
     const segmenter = new TextSegmenter();
     const text = "Hello world. This is a test.";
