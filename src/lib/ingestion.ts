@@ -207,6 +207,11 @@ export async function extractBookData(
     const metadata = await (book.loaded as any).metadata;
     const coverUrl = await book.coverUrl();
 
+    // Extract language (ISO 639-1), normalize, default to 'en'
+    let rawLanguage: string = metadata.language || metadata.lang || 'en';
+    rawLanguage = rawLanguage.trim().toLowerCase().split('-')[0]; // 'zh-CN' -> 'zh'
+    if (!/^[a-z]{2,3}$/.test(rawLanguage)) rawLanguage = 'en';
+
     let coverBlob: Blob | undefined;
     let thumbnailBlob: Blob | undefined;
     let coverPalette: number[] | undefined;
@@ -333,7 +338,8 @@ export async function extractBookData(
         schemaVersion: CURRENT_BOOK_VERSION,
         isbn: undefined,
         coverBlob: thumbnailBlob || coverBlob,
-        coverPalette
+        coverPalette,
+        language: rawLanguage
     };
 
     const resource: StaticResource = {
@@ -360,7 +366,8 @@ export async function extractBookData(
         tags: [],
         status: 'unread',
         lastInteraction: Date.now(),
-        coverPalette
+        coverPalette,
+        language: rawLanguage
     };
 
     const progress: UserProgress = {
