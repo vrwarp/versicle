@@ -20,7 +20,7 @@ import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
 import { dbService } from '../../db/DBService';
-import { searchClient, type SearchResult } from '../../lib/search';
+import { searchClient } from '../../lib/search';
 import { SyncStatusPanel } from './SyncStatusPanel';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
@@ -843,44 +843,7 @@ export const ReaderView: React.FC = () => {
     const { setGlobalSettingsOpen } = useUIStore();
 
     // Search State
-    const [searchQuery, setSearchQuery] = useState('');
-    const [activeSearchQuery, setActiveSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-    const [isSearching, setIsSearching] = useState(false);
     const [syncPanelOpen, setSyncPanelOpen] = useState(false);
-
-    // Indexing State
-    const [isIndexing, setIsIndexing] = useState(false);
-    const [indexingProgress, setIndexingProgress] = useState(0);
-
-    const handleSearch = useCallback(async () => {
-        if (!searchQuery.trim()) return;
-        setIsSearching(true);
-        setActiveSearchQuery(searchQuery);
-        try {
-            const results = await searchClient.search(searchQuery, bookId || '');
-            setSearchResults(results);
-        } catch (e) {
-            logger.error("Search failed", e);
-            showToast("Search failed", "error");
-        } finally {
-            setIsSearching(false);
-        }
-    }, [searchQuery, bookId, showToast]);
-
-    const handleCheckIndex = useCallback(async () => {
-        if (!bookId || !book) return;
-        if (searchClient.isIndexed(bookId)) return;
-
-        setIsIndexing(true);
-        try {
-            await searchClient.indexBook(book, bookId, (progress) => {
-                setIndexingProgress(Math.round(progress * 100));
-            });
-        } finally {
-            setIsIndexing(false);
-        }
-    }, [bookId, book]);
 
     // Load synthetic TOC from metadata
     useEffect(() => {
@@ -1249,7 +1212,6 @@ export const ReaderView: React.FC = () => {
                                     setSidebar('none');
                                 } else {
                                     setSidebar('search');
-                                    handleCheckIndex();
                                 }
                             }}
                             className="rounded-full text-muted-foreground"
@@ -1370,19 +1332,13 @@ export const ReaderView: React.FC = () => {
                 {/* Search Sidebar */}
                 {showSearch && (
                     <SearchPanel
-                        searchQuery={searchQuery}
-                        onSearchQueryChange={setSearchQuery}
-                        onSearch={handleSearch}
-                        isSearching={isSearching}
-                        searchResults={searchResults}
-                        activeSearchQuery={activeSearchQuery}
-                        isIndexing={isIndexing}
-                        indexingProgress={indexingProgress}
-                        onResultClick={async (result) => {
+                        bookId={bookId}
+                        book={book}
+                        onNavigate={async (href, query) => {
                             if (rendition) {
-                                await rendition.display(result.href);
+                                await rendition.display(href);
                                 setTimeout(() => {
-                                    scrollToText(activeSearchQuery);
+                                    scrollToText(query);
                                 }, 500);
                             }
                         }}
