@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Search, X } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
@@ -22,15 +22,16 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
     const books = useAllBooks();
     const [selectedBookId, setSelectedBookId] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState('');
+    const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
     const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
-    useEffect(() => {
+    if (isOpen !== prevIsOpen) {
+        setPrevIsOpen(isOpen);
         if (isOpen) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedBookId('');
             setSearchQuery('');
         }
-    }, [isOpen]);
+    }
 
     const filteredBooks = useMemo(() => {
         const query = debouncedSearchQuery.toLowerCase();
