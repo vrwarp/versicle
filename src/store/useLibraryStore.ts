@@ -279,8 +279,10 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
             // We update title/author/sourceFilename from new file, but KEEP addedAt, status, tags, rating, ranking.
             // lastInteraction is updated to now.
             if (existingBook) {
+              // Fetch the LATEST state to avoid stale closure (concurrent update race condition)
+              const latestExistingBook = useBookStore.getState().books[existingId!];
               const updatedInventoryItem: UserInventoryItem = {
-                ...existingBook,
+                ...latestExistingBook,
                 title: manifest.title,
                 author: manifest.author,
                 sourceFilename: file.name,
@@ -416,7 +418,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
                     ...manifest,
                     id: manifest.bookId,
                     version: manifest.schemaVersion,
-                    addedAt: ghostMatch?.addedAt || Date.now()
+                    addedAt: useBookStore.getState().books[manifest.bookId]?.addedAt || ghostMatch?.addedAt || Date.now()
                   } as BookMetadata
                 },
                 offloadedBookIds: new Set([...state.offloadedBookIds].filter(id => id !== manifest.bookId)),

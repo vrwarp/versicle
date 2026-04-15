@@ -1,0 +1,55 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createLibraryStore, useBookStore } from './useLibraryStore';
+
+describe('LibraryStore overwrite race conditions', () => {
+  beforeEach(() => {
+    useBookStore.setState({ books: {} });
+  });
+
+  it('should not overwrite concurrent updates during book overwrite', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let resolveImport: any;
+    const importPromise = new Promise((resolve) => { resolveImport = resolve; });
+
+    const mockDb = {
+      getBookIdByFilename: vi.fn(async () => 'existing-id'),
+      importBookWithId: vi.fn(() => importPromise),
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const useLibraryStore = createLibraryStore(mockDb as any);
+
+    // Initial state
+    useBookStore.setState({
+      books: {
+        'existing-id': {
+          bookId: 'existing-id',
+          sourceFilename: 'test.epub',
+          title: 'Old',
+          author: 'Old',
+          addedAt: 500,
+          lastInteraction: 500,
+          status: 'unread',
+          tags: []
+        } as any
+      }
+    });
+
+    const file = new File([''], 'test.epub', { type: 'application/epub+zip' });
+
+    // Start overwrite (reads existing book, then awaits import)
+    const addPromise = useLibraryStore.getState().addBook(file, { overwrite: true });
+
+    // Concurrently update the book in the sync store
+    useBookStore.getState().updateBook('existing-id', { tags: ['concurrent-tag'] });
+
+    // Resolve the import
+    resolveImport({ bookId: 'existing-id', title: 'New', author: 'A', schemaVersion: 1 });
+
+    await addPromise;
+
+    // The concurrent update should not be lost
+    const book = useBookStore.getState().books['existing-id'];
+    expect(book.tags).toContain('concurrent-tag');
+  });
+});
