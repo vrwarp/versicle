@@ -219,7 +219,7 @@ describe('batch-ingestion', () => {
     });
 
     describe('concurrency limit', () => {
-        it('should chunk extraction and yield to main thread', async () => {
+        it('should chunk extraction and yield to main thread for large zips', async () => {
             const zipFile = new File(['dummy zip content'], 'books.zip', { type: 'application/zip' });
 
             const numFiles = 15; // > concurrency limit of 5
