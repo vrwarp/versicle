@@ -897,3 +897,5 @@ Ensure no TypeScript compilation errors from the new optional fields.
 - The `useEpubReader.ts` was updated to parse and dynamically wrap Chinese characters in `data-pinyin` spans, rendering pinyin via CSS pseudo-elements.
 - `PiperProvider.ts` now respects CJK semantic density by reducing `MAX_CHARS` to 100 for texts matching `/[\u4e00-\u9fff]/`.
 - CJK clause boundaries have been added to the fallback regex and `splitLongSentence` routines.
+- Confirmed `PiperProvider` initializes its `TextSegmenter` with `activeLanguage` from the TTS store.
+- **Known Limitation:** Pinyin phonetic accuracy during TTS playback using Piper may not match visual Pinyin if a Lexicon rule modifies a Chinese word. Full phonetic integration to prevent this audio/visual desync would require passing exact Pinyin (or phonemes) into Piper, which is model-dependent and not supported in v1.

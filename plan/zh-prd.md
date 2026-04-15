@@ -266,3 +266,5 @@ For users who speak Mandarin but require reading assistance---specifically the c
 - Updated `PiperProvider.ts` to accept `zh_CN` voices and dynamically reduce chunk size to 100 characters for CJK texts.
 - Added CJK boundary fallback regex to `TextSegmenter.ts`.
 - Added `PiperProvider.test.ts` and `TextSegmenter.test.ts` to verify the behavior.
+- Confirmed `PiperProvider` initializes its `TextSegmenter` with `activeLanguage` from the TTS store.
+- **Known Limitation:** Pinyin phonetic accuracy during TTS playback using Piper may not match visual Pinyin if a Lexicon rule modifies a Chinese word. Full phonetic integration to prevent this audio/visual desync would require passing exact Pinyin (or phonemes) into Piper, which is model-dependent and not supported in v1.
