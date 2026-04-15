@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SearchPanel, SearchPanelProps } from './SearchPanel';
 import { searchClient } from '../../../lib/search';
@@ -94,7 +94,9 @@ describe('SearchPanel', () => {
         expect(searchingText).toBeInTheDocument();
         expect(searchingText).toHaveAttribute('role', 'status');
 
-        resolveSearch([]); // Resolve to cleanup
+        await act(async () => {
+            resolveSearch([]); // Resolve to cleanup
+        });
     });
 
     it('triggers indexing on mount if not indexed', async () => {
@@ -106,12 +108,19 @@ describe('SearchPanel', () => {
 
         vi.mocked(searchClient.indexBook).mockImplementation(async (book, bookId, onProgress) => {
             if (onProgress) {
-                onProgress(0.45);
+                // Must not be synchronous inside mock to avoid suspended-in-act warnings
+                setTimeout(() => {
+                    act(() => {
+                        onProgress(0.45);
+                    });
+                }, 0);
             }
             return indexingPromise as Promise<void>;
         });
 
-        render(<SearchPanel {...defaultProps} />);
+        await act(async () => {
+            render(<SearchPanel {...defaultProps} />);
+        });
 
         await waitFor(() => {
             expect(searchClient.indexBook).toHaveBeenCalledWith(defaultProps.book, defaultProps.bookId, expect.any(Function));
@@ -128,7 +137,9 @@ describe('SearchPanel', () => {
         expect(progressBar).toHaveAttribute('aria-valuemax', '100');
         expect(progressBar).toHaveAttribute('aria-label', 'Indexing progress');
 
-        resolveIndexing();
+        await act(async () => {
+            resolveIndexing();
+        });
     });
 
     it('renders search results', async () => {
