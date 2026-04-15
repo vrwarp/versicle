@@ -46,13 +46,19 @@ export async function extractEpubsFromZip(
             zipContent = await zip.loadAsync(file);
         }
 
-        const processingPromises: Promise<void>[] = [];
+        const validEntries: JSZip.JSZipObject[] = [];
 
         zipContent.forEach((_, zipEntry) => {
             if (zipEntry.dir) return; // Skip directories
             if (!zipEntry.name.toLowerCase().endsWith('.epub')) return; // Skip non-epubs
+            validEntries.push(zipEntry);
+        });
 
-            const promise = async () => {
+        const CONCURRENCY_LIMIT = 5;
+        for (let i = 0; i < validEntries.length; i += CONCURRENCY_LIMIT) {
+            const chunk = validEntries.slice(i, i + CONCURRENCY_LIMIT);
+
+            const chunkPromises = chunk.map(async (zipEntry) => {
                 const blob = await zipEntry.async('blob');
                 // Reconstruct a File object
                 // We use the full relative path as the name to avoid collisions,
@@ -62,11 +68,13 @@ export async function extractEpubsFromZip(
                     type: 'application/epub+zip'
                 });
                 epubFiles.push(epubFile);
-            };
-            processingPromises.push(promise());
-        });
+            });
 
-        await Promise.all(processingPromises);
+            await Promise.all(chunkPromises);
+
+            // Yield to main thread to prevent UI freezing
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
 
     } catch (e) {
         console.error("Failed to process ZIP file:", e);
