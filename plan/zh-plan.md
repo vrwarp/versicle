@@ -885,11 +885,11 @@ Ensure no TypeScript compilation errors from the new optional fields.
 
 5.  **Font Profile Migration:** When `fontProfiles` is introduced, existing users will have their `fontSize` and `lineHeight` values only in the global flat fields. The `getFontProfile()` fallback ensures these users see no change. However, the first time they adjust font settings while reading a book in a specific language, the new per-language profile will be created. This is a safe, progressive migration.
 
-## Implementation Notes (Phase 2 completed)
-- Successfully wired UI context across Visual Settings, TTS Settings, and Lexicon Manager.
-- Implemented conditional rendering of Chinese toggles and language-dependent UI components.
-- **Deviation:** Added a partial stub implementation of Phase 1 to `useTTSStore` (`activeLanguage`, `profiles`, `setActiveLanguage`) to allow Phase 2 components to compile and function.
-- Added language to `LexiconService.getRules` and updated `AudioPlayerService` to properly pass the active language to the lexicon service.
+## Implementation Notes (Phase 2 completion)
+- Replaced the standalone flat configuration with the `fontProfiles` mapping array, extending `usePreferencesStore.ts` with `setFontProfile` and `getFontProfile`.
+- Handled the UI injection of font adjustments dynamically tied to the specific book language scope within `VisualSettings.tsx`.
+- Applied correct `fontProfile.lineHeight` and `fontProfile.fontSize` overrides directly in `useEpubReader.ts` CSS theme injections.
+- Designed the "Language Profile" `<Select>` in `TTSSettingsTab.tsx`, ensuring proper voice model filtering relative to the active target configuration language.
 
 ## Implementation Notes (Phase 3 & 4 completed)
 - Discovered that the Phase 2 fields (`forceTraditionalChinese`, `showPinyin`, `pinyinSize`) were missing from `usePreferencesStore.ts` and `VisualSettings.tsx` in the `main` branch. I manually injected them.

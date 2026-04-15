@@ -622,6 +622,11 @@ export class AudioPlayerService {
         });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    setLanguage(_lang: string) {
+        // Expose a way to notify the pipeline or segmenter if needed
+    }
+
     setSpeed(speed: number) {
         this.speed = speed;
         return this.enqueue(async () => {

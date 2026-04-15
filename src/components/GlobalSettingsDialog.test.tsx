@@ -160,8 +160,9 @@ describe('GlobalSettingsDialog - Piper TTS', () => {
         useTTSStore.mockReturnValue({
             ...defaultStore,
             providerId: 'piper',
-            voices: [{ id: 'piper:v1', name: 'Piper Voice 1' }],
-            voice: { id: 'piper:v1', name: 'Piper Voice 1' }
+            activeLanguage: 'en',
+            voices: [{ id: 'piper:v1', name: 'Piper Voice 1', lang: 'en-US' }],
+            voice: { id: 'piper:v1', name: 'Piper Voice 1', lang: 'en-US' }
         });
 
         render(<GlobalSettingsDialog />);
@@ -182,8 +183,9 @@ describe('GlobalSettingsDialog - Piper TTS', () => {
         useTTSStore.mockReturnValue({
             ...defaultStore,
             providerId: 'piper',
-            voices: [{ id: 'piper:v1', name: 'Piper Voice 1' }],
-            voice: { id: 'piper:v1', name: 'Piper Voice 1' },
+            activeLanguage: 'en',
+            voices: [{ id: 'piper:v1', name: 'Piper Voice 1', lang: 'en-US' }],
+            voice: { id: 'piper:v1', name: 'Piper Voice 1', lang: 'en-US' },
             isDownloading: true,
             downloadProgress: 45,
             downloadStatus: 'Downloading models...'
@@ -202,8 +204,9 @@ describe('GlobalSettingsDialog - Piper TTS', () => {
         useTTSStore.mockReturnValue({
             ...defaultStore,
             providerId: 'piper',
-            voices: [{ id: 'piper:v1', name: 'Piper Voice 1' }],
-            voice: { id: 'piper:v1', name: 'Piper Voice 1' },
+            activeLanguage: 'en',
+            voices: [{ id: 'piper:v1', name: 'Piper Voice 1', lang: 'en-US' }],
+            voice: { id: 'piper:v1', name: 'Piper Voice 1', lang: 'en-US' },
         });
 
         render(<GlobalSettingsDialog />);
