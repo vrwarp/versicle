@@ -88,4 +88,13 @@ describe('CompassPill Accessibility', () => {
      const playButton = screen.getByLabelText('Play Compact Book');
      expect(playButton).toBeInTheDocument();
   });
+
+  it('Sync Alert Mode: aria-label check', () => {
+    const title = "Pick up from Phone?";
+    const subtitle = "Jump to 45%";
+    render(<CompassPill variant="sync-alert" title={title} subtitle={subtitle} />);
+
+    const alertButton = screen.getByRole('button', { name: `${title}. ${subtitle}` });
+    expect(alertButton).toBeInTheDocument();
+  });
 });
