@@ -890,3 +890,10 @@ Ensure no TypeScript compilation errors from the new optional fields.
 - Implemented conditional rendering of Chinese toggles and language-dependent UI components.
 - **Deviation:** Added a partial stub implementation of Phase 1 to `useTTSStore` (`activeLanguage`, `profiles`, `setActiveLanguage`) to allow Phase 2 components to compile and function.
 - Added language to `LexiconService.getRules` and updated `AudioPlayerService` to properly pass the active language to the lexicon service.
+
+## Implementation Notes (Phase 3 & 4 completed)
+- Discovered that the Phase 2 fields (`forceTraditionalChinese`, `showPinyin`, `pinyinSize`) were missing from `usePreferencesStore.ts` and `VisualSettings.tsx` in the `main` branch. I manually injected them.
+- Successfully integrated `opencc-js` and `pinyin-pro` via `src/lib/chinese/ChineseTextProcessor.ts`.
+- The `useEpubReader.ts` was updated to parse and dynamically wrap Chinese characters in `data-pinyin` spans, rendering pinyin via CSS pseudo-elements.
+- `PiperProvider.ts` now respects CJK semantic density by reducing `MAX_CHARS` to 100 for texts matching `/[\u4e00-\u9fff]/`.
+- CJK clause boundaries have been added to the fallback regex and `splitLongSentence` routines.

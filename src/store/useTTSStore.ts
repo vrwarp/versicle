@@ -267,7 +267,8 @@ export const useTTSStore = create<TTSState>()(
                     } else if (providerId === 'lemonfox') {
                         newProvider = new LemonFoxProvider(apiKeys.lemonfox);
                     } else if (providerId === 'piper') {
-                        newProvider = new PiperProvider();
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        newProvider = new PiperProvider((get() as any).activeLanguage || 'en');
                     } else {
                         if (Capacitor.isNativePlatform()) {
                             newProvider = new CapacitorTTSProvider();

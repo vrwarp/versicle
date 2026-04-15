@@ -77,7 +77,7 @@ export const RE_TRAILING_PUNCTUATION = /[.,!?;:]$/;
 //   [.!?]+ = one or more sentence-ending punctuation characters
 // /g = global flag to find all matches
 // Used when Intl.Segmenter is not available.
-export const RE_SENTENCE_FALLBACK = /([^.!?]+[.!?]+)/g;
+export const RE_SENTENCE_FALLBACK = /([^.!?。！？]+[.!?。！？]+)/g;
 
 // Matches a single letter (a-z, A-Z) or Roman numeral (1-9) followed by a period and optional whitespace.
 // Used to identify abbreviations that should not trigger a sentence break unless followed by a starter.

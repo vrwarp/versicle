@@ -22,6 +22,11 @@ interface PreferencesState {
     libraryFilterMode: 'all' | 'downloaded';
     activeContext: 'library' | 'notes';
 
+    // === CHINESE READING ===
+    forceTraditionalChinese: boolean;
+    showPinyin: boolean;
+    pinyinSize: number;
+
     // === ACTIONS (not synced to Yjs) ===
     setTheme: (theme: 'light' | 'dark' | 'sepia') => void;
     setCustomTheme: (theme: { bg: string; fg: string }) => void;
@@ -33,6 +38,10 @@ interface PreferencesState {
     setLibraryLayout: (layout: 'grid' | 'list') => void;
     setLibraryFilterMode: (mode: 'all' | 'downloaded') => void;
     setActiveContext: (context: 'library' | 'notes') => void;
+
+    setForceTraditionalChinese: (force: boolean) => void;
+    setShowPinyin: (show: boolean) => void;
+    setPinyinSize: (size: number) => void;
 }
 
 const defaultPreferences = {
@@ -45,7 +54,11 @@ const defaultPreferences = {
     readerViewMode: 'paginated' as const,
     libraryLayout: 'grid' as const,
     libraryFilterMode: 'all' as const,
-    activeContext: 'library' as const
+    activeContext: 'library' as const,
+
+    forceTraditionalChinese: false,
+    showPinyin: false,
+    pinyinSize: 100
 };
 
 /**
@@ -71,6 +84,10 @@ export const usePreferencesStore = create<PreferencesState>()(
             setLibraryLayout: (layout) => set({ libraryLayout: layout }),
             setLibraryFilterMode: (mode) => set({ libraryFilterMode: mode }),
             setActiveContext: (context) => set({ activeContext: context }),
+
+            setForceTraditionalChinese: (force) => set({ forceTraditionalChinese: force }),
+            setShowPinyin: (show) => set({ showPinyin: show }),
+            setPinyinSize: (size) => set({ pinyinSize: size }),
         }),
         getYjsOptions()
     )
