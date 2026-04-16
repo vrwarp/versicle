@@ -18,6 +18,10 @@ export type TTSApiKeyProvider = 'google' | 'openai' | 'lemonfox';
 export type BackgroundAudioMode = 'silence' | 'noise' | 'off';
 
 export interface TTSSettingsTabProps {
+    /** Currently selected language profile */
+    activeLanguage: string;
+    /** Callback when user switches language profile */
+    onActiveLanguageChange: (lang: string) => void;
     // Provider
     providerId: TTSProviderId;
     onProviderChange: (providerId: TTSProviderId) => void;
@@ -45,6 +49,8 @@ export interface TTSSettingsTabProps {
 }
 
 export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
+    activeLanguage,
+    onActiveLanguageChange,
     providerId,
     onProviderChange,
     apiKeys,
@@ -80,6 +86,19 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
 
     return (
         <div className="space-y-6">
+            <div className="space-y-2 mb-6">
+                <Label htmlFor="tts-language-select" className="text-sm font-medium">Language Profile</Label>
+                <Select value={activeLanguage} onValueChange={onActiveLanguageChange}>
+                    <SelectTrigger id="tts-language-select" data-testid="tts-language-select">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="en">English</SelectItem>
+                        <SelectItem value="zh">Chinese (Mandarin)</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+
             <div>
                 <h3 className="text-lg font-medium mb-4">Provider Configuration</h3>
                 <div className="space-y-4">
@@ -145,11 +164,16 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                                 }}>
                                     <SelectTrigger id="tts-voice-select"><SelectValue placeholder="Select a voice" /></SelectTrigger>
                                     <SelectContent>
-                                        {voices.map(v => (
+                                        {voices.filter(v => v.lang?.startsWith(activeLanguage)).map(v => (
                                             <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
+                                {activeLanguage === 'zh' && voices.filter(v => v.lang?.startsWith('zh')).length === 0 && (
+                                    <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md text-sm text-yellow-800 dark:text-yellow-200 mt-2">
+                                        ⚠️ No Mandarin voice installed. Audio playback will fail for Chinese books.
+                                    </div>
+                                )}
                             </div>
 
                             {voice && (

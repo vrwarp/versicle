@@ -92,10 +92,19 @@ describe('useTTSStore Platform Detection', () => {
         vi.clearAllMocks();
         // Reset store state
         useTTSStore.setState({
+            activeLanguage: 'en',
+            profiles: {
+                en: { voiceId: null, rate: 1, pitch: 1, volume: 1 }
+            },
             providerId: 'local',
             apiKeys: { google: '', openai: '' },
             backgroundAudioMode: 'silence',
-            whiteNoiseVolume: 0.1
+            whiteNoiseVolume: 0.1,
+            rate: 1,
+            pitch: 1,
+            voice: null,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            voices: [{ id: 'test-en', name: 'Test English', lang: 'en-US', provider: 'local' } as any]
         });
     });
 

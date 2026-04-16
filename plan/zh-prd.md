@@ -249,15 +249,12 @@ For users who speak Mandarin but require reading assistance---specifically the c
 
 4.  **Result:** Immediately, the font profile switches to Chinese defaults (larger size, more line spacing), the Chinese settings section appears (Pinyin, Traditional conversion), and the TTS audio language profile switches to Chinese. A single action corrects everything.
 
-## Implementation Notes (Phase 2 completed)
-- Added `fontProfiles`, `forceTraditionalChinese`, `showPinyin`, and `pinyinSize` to `usePreferencesStore.ts`.
-- Added Language Profile select to `TTSSettingsTab.tsx` and configured filtering voices by selected language.
-- Added Book Language select to `VisualSettings.tsx` and synced it with the TTS language.
-- Updated `useEpubReader.ts` to fetch font sizes and line heights from the respective `fontProfile` based on the book's language.
-- Added Language filtering and rule targeting to `LexiconManager.tsx` and `LexiconService.ts`.
-- Added book language injection to `AudioPlayerService.ts` when initializing TTS.
-- **Discovery:** I used TS ignores/expect-errors in `VisualSettings.tsx` and `AudioPlayerService.ts` to avoid calling `setActiveLanguage` because Phase 1 was skipped in this instruction set, so the `useTTSStore` does not fully implement Phase 1 logic yet.
-- **Deviation:** I initialized a simplified `TTSProfile` definition in `useTTSStore.ts` and implemented a stub `setActiveLanguage` to enable correct compilation and data structure mapping in components.
+## Implementation Notes (Phase 2 completion)
+- Migrated legacy `fontSize` and `lineHeight` state into a `fontProfiles: Record<string, FontProfile>` map within `usePreferencesStore.ts` with `en` and `zh` specific sensible defaults.
+- Added `getFontProfile` and `setFontProfile` to properly access rendering metadata on a language-contextual level, eliminating independent styling settings.
+- Wired `useEpubReader.ts` and `VisualSettings.tsx` to utilize `fontProfiles` based on the actively loaded book's semantic language.
+- Updated `TTSSettingsTab.tsx` to include a dropdown dictating the `activeLanguage` for the settings context, and implemented the list filtration of valid `zh_CN` and `en_US` model voices per selection alongside a warning empty-state.
+- Handled propagation of `<TTSSettingsTab>`'s new `activeLanguage` props downward via `GlobalSettingsDialog.tsx`.
 
 ## Implementation Notes (Phase 3 & 4 completed)
 - Created `ChineseTextProcessor.ts` wrapping `opencc-js` and `pinyin-pro` with dynamic imports.
@@ -266,3 +263,9 @@ For users who speak Mandarin but require reading assistance---specifically the c
 - Updated `PiperProvider.ts` to accept `zh_CN` voices and dynamically reduce chunk size to 100 characters for CJK texts.
 - Added CJK boundary fallback regex to `TextSegmenter.ts`.
 - Added `PiperProvider.test.ts` and `TextSegmenter.test.ts` to verify the behavior.
+
+## Implementation Notes (Phase 1 completion)
+- Completed the migration in `useTTSStore.ts` converting the flat `voice`, `pitch`, and `rate` configuration into language-specific profiles under `profiles` record, driven by `activeLanguage`.
+- Replaced the stubbed `setActiveLanguage` with the full implementation, correctly applying new properties from the newly selected language profile, and updating the state and underlying player.
+- Updated `useTTSStore` property setters to also mutate the active profile so user configurations persist independently by language.
+- Set up migration configurations (`version`, `migrate`) so previous storage structures resolve gracefully into the `en` active language profile on load.
