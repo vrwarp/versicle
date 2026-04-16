@@ -217,4 +217,46 @@ describe('batch-ingestion', () => {
             expect(onUploadProgress).toHaveBeenLastCalledWith(100, expect.stringContaining('All files processed'));
         });
     });
+
+    describe('concurrency limit', () => {
+        it('should chunk extraction and yield to main thread for large zips', async () => {
+            const zipFile = new File(['dummy zip content'], 'books.zip', { type: 'application/zip' });
+
+            const numFiles = 15; // > concurrency limit of 5
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const files: Record<string, any> = {};
+            for (let i = 0; i < numFiles; i++) {
+                files[`book${i}.epub`] = { dir: false, name: `book${i}.epub`, async: mockAsync };
+            }
+
+            const mockZipObject = {
+                files,
+                forEach: (cb: (relativePath: string, file: unknown) => void) => {
+                    Object.keys(files).forEach((key) => {
+                        cb(key, files[key]);
+                    });
+                }
+            };
+
+            mockLoadAsync.mockResolvedValue(mockZipObject);
+
+            let activeCalls = 0;
+            let maxActiveCalls = 0;
+
+            mockAsync.mockImplementation(async () => {
+                activeCalls++;
+                maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+                await new Promise(resolve => setTimeout(resolve, 10));
+                activeCalls--;
+                return new Blob(['dummy epub content']);
+            });
+
+            vi.spyOn(global, 'setTimeout');
+
+            await extractEpubsFromZip(zipFile);
+
+            expect(maxActiveCalls).toBeLessThanOrEqual(5);
+            expect(global.setTimeout).toHaveBeenCalled();
+        });
+    });
 });
