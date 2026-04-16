@@ -129,7 +129,7 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                             <div className="space-y-2">
                                 <Label htmlFor="genai-model-select" className="text-sm font-medium">Model</Label>
                                 <Select value={model} onValueChange={onModelChange} disabled={isModelRotationEnabled}>
-                                    <SelectTrigger id="genai-model-select"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger id="genai-model-select" aria-label="Select generative AI model"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="gemini-flash-lite-latest">Gemini Flash-Lite Latest (Recommended)</SelectItem>
                                         <SelectItem value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</SelectItem>
