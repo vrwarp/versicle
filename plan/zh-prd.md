@@ -264,6 +264,12 @@ For users who speak Mandarin but require reading assistance---specifically the c
 - Added CJK boundary fallback regex to `TextSegmenter.ts`.
 - Added `PiperProvider.test.ts` and `TextSegmenter.test.ts` to verify the behavior.
 
+## Implementation Notes (Phase 5 completion)
+- Completed the multi-lingual pipeline verifications.
+- Modified `src/lib/tts.ts` and `src/lib/ingestion.ts` to ensure `rawLanguage` is extracted from metadata and correctly passed down to `TextSegmenter` during sentence extraction.
+- Developed `verification/test_journey_chinese.py` Playwright E2E script covering Chinese EPUB upload, rendering adjustments (Pinyin and Traditional modes), and correctly identifying the TTS Mandarin profile empty state without breaking English contexts.
+- Added data-testid to settings warnings to resolve brittle React text selectors in Playwright.
+
 ## Implementation Notes (Phase 1 completion)
 - Completed the migration in `useTTSStore.ts` converting the flat `voice`, `pitch`, and `rate` configuration into language-specific profiles under `profiles` record, driven by `activeLanguage`.
 - Replaced the stubbed `setActiveLanguage` with the full implementation, correctly applying new properties from the newly selected language profile, and updating the state and underlying player.

@@ -66,12 +66,18 @@ export async function reprocessBook(bookId: string): Promise<void> {
     const book = (ePub as any)(fileBlob, { replacements: 'none' });
     await book.ready;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const metadata = await (book.loaded as any).metadata;
+    let rawLanguage: string = metadata.language || metadata.lang || 'en';
+    rawLanguage = rawLanguage.trim().toLowerCase().split('-')[0]; // 'zh-CN' -> 'zh'
+    if (!/^[a-z]{2,3}$/.test(rawLanguage)) rawLanguage = 'en';
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const navigation = await (book.loaded as any).navigation;
     const realToc: NavigationItem[] = navigation ? navigation.toc : [];
     await book.opened.catch(() => { });
     book.destroy();
 
-    const chapters = await extractContentOffscreen(fileBlob, {});
+    const chapters = await extractContentOffscreen(fileBlob, { locale: rawLanguage });
 
     const syntheticToc: NavigationItem[] = [];
     const sections: SectionMetadata[] = [];
@@ -252,7 +258,8 @@ export async function extractBookData(
     await book.opened.catch(() => { });
     book.destroy();
 
-    const chapters = await extractContentOffscreen(file, ttsOptions, onProgress);
+    const optionsWithLocale = { ...ttsOptions, locale: rawLanguage };
+    const chapters = await extractContentOffscreen(file, optionsWithLocale, onProgress);
 
     const bookId = uuidv4();
     const syntheticToc: NavigationItem[] = [];
