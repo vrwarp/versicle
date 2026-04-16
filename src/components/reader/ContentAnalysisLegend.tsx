@@ -287,8 +287,9 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                     onClick={() => setIsExpanded(!isExpanded)}
                     className="flex items-center gap-1 font-semibold hover:text-primary"
                     aria-expanded={isExpanded}
+                    aria-label="GenAI Debug Panel"
                 >
-                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    {isExpanded ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
                     GenAI Debug Panel
                 </button>
                 <button
@@ -310,16 +311,18 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                 onClick={() => setIsReportOpen(true)}
                                 className="flex items-center gap-1 px-2 py-1 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80 text-[10px]"
                                 title="View Content Analysis Report"
+                                aria-label="View Content Analysis Report"
                             >
-                                <FileText className="h-3 w-3" />
+                                <FileText className="h-3 w-3" aria-hidden="true" />
                                 Report
                             </button>
                             <button
                                 onClick={handleReprocess}
                                 disabled={isReprocessing}
                                 className="flex items-center gap-1 px-2 py-1 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 text-[10px]"
+                                aria-label={isReprocessing ? "Reprocessing Book..." : "Reprocess Book"}
                             >
-                                {isReprocessing ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <RotateCcw className="h-3 w-3" />}
+                                {isReprocessing ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <RotateCcw className="h-3 w-3" aria-hidden="true" />}
                                 Reprocess
                             </button>
                         </div>
@@ -338,7 +341,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                     className="flex-1 bg-muted p-1 rounded border border-input text-[10px] font-mono"
                                 />
                                 <button onClick={copyCfi} className="p-1 hover:bg-accent rounded" title="Copy CFI" aria-label="Copy CFI">
-                                    <Copy className="h-3 w-3" />
+                                    <Copy className="h-3 w-3" aria-hidden="true" />
                                 </button>
                             </div>
                         </div>
@@ -357,7 +360,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                     title="Copy Content"
                                     aria-label="Copy Content"
                                 >
-                                    <Copy className="h-3 w-3" />
+                                    <Copy className="h-3 w-3" aria-hidden="true" />
                                 </button>
                             </div>
                         </div>
@@ -387,6 +390,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                                 <button
                                                     onClick={() => jumpToTable(img.cfi)}
                                                     className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 flex items-center justify-center text-white font-bold transition-opacity"
+                                                    aria-label={`Jump to table at ${img.cfi}`}
                                                 >
                                                     JUMP
                                                 </button>
