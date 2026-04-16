@@ -897,3 +897,9 @@ Ensure no TypeScript compilation errors from the new optional fields.
 - The `useEpubReader.ts` was updated to parse and dynamically wrap Chinese characters in `data-pinyin` spans, rendering pinyin via CSS pseudo-elements.
 - `PiperProvider.ts` now respects CJK semantic density by reducing `MAX_CHARS` to 100 for texts matching `/[\u4e00-\u9fff]/`.
 - CJK clause boundaries have been added to the fallback regex and `splitLongSentence` routines.
+
+## Implementation Notes (Phase 5 completion)
+- Completed the multi-lingual pipeline verifications.
+- Modified `src/lib/tts.ts` and `src/lib/ingestion.ts` to ensure `rawLanguage` is extracted from metadata and correctly passed down to `TextSegmenter` during sentence extraction.
+- Developed `verification/test_journey_chinese.py` Playwright E2E script covering Chinese EPUB upload, rendering adjustments (Pinyin and Traditional modes), and correctly identifying the TTS Mandarin profile empty state without breaking English contexts.
+- Added data-testid to settings warnings to resolve brittle React text selectors in Playwright.
