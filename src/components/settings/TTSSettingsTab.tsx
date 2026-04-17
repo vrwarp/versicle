@@ -105,7 +105,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                     <div className="space-y-2">
                         <Label htmlFor="tts-provider-select" className="text-sm font-medium">Active Provider</Label>
                         <Select value={providerId} onValueChange={onProviderChange}>
-                            <SelectTrigger id="tts-provider-select" data-testid="tts-provider-select"><SelectValue /></SelectTrigger>
+                            <SelectTrigger id="tts-provider-select" data-testid="tts-provider-select" aria-label="Select TTS provider"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="local">Web Speech (Local)</SelectItem>
                                 <SelectItem value="piper">Piper (High Quality Local)</SelectItem>
@@ -127,7 +127,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                         <div className="space-y-2">
                             <Label htmlFor="tts-mode-select" className="text-sm font-medium">Mode</Label>
                             <Select value={backgroundAudioMode} onValueChange={onBackgroundAudioModeChange}>
-                                <SelectTrigger id="tts-mode-select"><SelectValue /></SelectTrigger>
+                                <SelectTrigger id="tts-mode-select" aria-label="Select background audio mode"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="silence">Silence (Default)</SelectItem>
                                     <SelectItem value="noise">White Noise</SelectItem>
@@ -162,7 +162,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                                     const v = voices.find(v => v.id === val);
                                     onVoiceChange(v || null);
                                 }}>
-                                    <SelectTrigger id="tts-voice-select"><SelectValue placeholder="Select a voice" /></SelectTrigger>
+                                    <SelectTrigger id="tts-voice-select" aria-label="Select voice"><SelectValue placeholder="Select a voice" /></SelectTrigger>
                                     <SelectContent>
                                         {voices.filter(v => v.lang?.startsWith(activeLanguage)).map(v => (
                                             <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>

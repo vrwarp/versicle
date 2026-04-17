@@ -94,7 +94,7 @@ export const EditReadingListEntryDialog: React.FC<EditReadingListEntryDialogProp
                         </Label>
                         <div className="col-span-3">
                             <Select value={status} onValueChange={(val) => setStatus(val as 'read' | 'currently-reading' | 'to-read')}>
-                                <SelectTrigger id="status">
+                                <SelectTrigger id="status" aria-label="Select reading status">
                                     <SelectValue placeholder="Select status" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -129,7 +129,7 @@ export const EditReadingListEntryDialog: React.FC<EditReadingListEntryDialogProp
                                 value={rating?.toString() || '0'}
                                 onValueChange={(val) => setRating(val === '0' ? undefined : parseInt(val))}
                             >
-                                <SelectTrigger id="rating">
+                                <SelectTrigger id="rating" aria-label="Select rating">
                                     <SelectValue placeholder="Select rating" />
                                 </SelectTrigger>
                                 <SelectContent>

@@ -1,20 +1,35 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SearchPanel, SearchPanelProps } from './SearchPanel';
+import { searchClient } from '../../../lib/search';
+
+// Mock the search client
+vi.mock('../../../lib/search', () => ({
+    searchClient: {
+        isIndexed: vi.fn(),
+        indexBook: vi.fn(),
+        search: vi.fn()
+    }
+}));
+
+// Mock the toast store
+vi.mock('../../../store/useToastStore', () => ({
+    useToastStore: vi.fn(() => ({ showToast: vi.fn() }))
+}));
 
 describe('SearchPanel', () => {
     const defaultProps: SearchPanelProps = {
-        searchQuery: '',
-        onSearchQueryChange: vi.fn(),
-        onSearch: vi.fn(),
-        isSearching: false,
-        searchResults: [],
-        activeSearchQuery: '',
-        isIndexing: false,
-        indexingProgress: 0,
-        onResultClick: vi.fn()
+        bookId: 'test-book-id',
+        book: {} as unknown as import('epubjs').Book,
+        onNavigate: vi.fn()
     };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(searchClient.isIndexed).mockReturnValue(true);
+        vi.mocked(searchClient.search).mockResolvedValue([]);
+    });
 
     it('renders search panel with input', () => {
         render(<SearchPanel {...defaultProps} />);
@@ -24,60 +39,95 @@ describe('SearchPanel', () => {
         expect(screen.getByText('Search')).toBeInTheDocument();
     });
 
-    it('shows search query value', () => {
-        render(<SearchPanel {...defaultProps} searchQuery="test query" />);
+    it('shows search query value when typing', () => {
+        render(<SearchPanel {...defaultProps} />);
 
-        expect(screen.getByTestId('search-input')).toHaveValue('test query');
+        const input = screen.getByTestId('search-input');
+        fireEvent.change(input, { target: { value: 'test query' } });
+
+        expect(input).toHaveValue('test query');
     });
 
-    it('calls onSearchQueryChange when typing', () => {
-        const onSearchQueryChange = vi.fn();
-        render(<SearchPanel {...defaultProps} onSearchQueryChange={onSearchQueryChange} />);
+    it('calls searchClient.search when Enter pressed', async () => {
+        render(<SearchPanel {...defaultProps} />);
 
-        fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'new query' } });
-        expect(onSearchQueryChange).toHaveBeenCalledWith('new query');
+        const input = screen.getByTestId('search-input');
+        fireEvent.change(input, { target: { value: 'test query' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+
+        await waitFor(() => {
+            expect(searchClient.search).toHaveBeenCalledWith('test query', 'test-book-id');
+        });
     });
 
-    it('calls onSearch when Enter pressed', () => {
-        const onSearch = vi.fn();
-        render(<SearchPanel {...defaultProps} searchQuery="test" onSearch={onSearch} />);
+    it('calls searchClient.search when search button clicked', async () => {
+        render(<SearchPanel {...defaultProps} />);
 
-        fireEvent.keyDown(screen.getByTestId('search-input'), { key: 'Enter' });
-        expect(onSearch).toHaveBeenCalled();
-    });
-
-    it('calls onSearch when search button clicked', () => {
-        const onSearch = vi.fn();
-        render(<SearchPanel {...defaultProps} searchQuery="test" onSearch={onSearch} />);
-
+        const input = screen.getByTestId('search-input');
+        fireEvent.change(input, { target: { value: 'test query' } });
         fireEvent.click(screen.getByLabelText('Search'));
-        expect(onSearch).toHaveBeenCalled();
+
+        await waitFor(() => {
+            expect(searchClient.search).toHaveBeenCalledWith('test query', 'test-book-id');
+        });
     });
 
     it('disables search button when query is empty', () => {
-        render(<SearchPanel {...defaultProps} searchQuery="" />);
-
+        render(<SearchPanel {...defaultProps} />);
         expect(screen.getByLabelText('Search')).toBeDisabled();
     });
 
-    it('disables search button while searching', () => {
-        render(<SearchPanel {...defaultProps} searchQuery="test" isSearching={true} />);
+    it('shows searching indicator while searching', async () => {
+        // Delay the search promise to keep it in searching state
+        let resolveSearch: (results: unknown[]) => void = () => {};
+        vi.mocked(searchClient.search).mockImplementation(() => new Promise(resolve => {
+            resolveSearch = resolve;
+        }));
 
-        expect(screen.getByLabelText('Search')).toBeDisabled();
-    });
+        render(<SearchPanel {...defaultProps} />);
 
-    it('shows searching indicator', () => {
-        render(<SearchPanel {...defaultProps} isSearching={true} />);
+        const input = screen.getByTestId('search-input');
+        fireEvent.change(input, { target: { value: 'test query' } });
+        fireEvent.click(screen.getByLabelText('Search'));
 
-        const searchingText = screen.getByText('Searching...');
+        const searchingText = await screen.findByText('Searching...');
         expect(searchingText).toBeInTheDocument();
         expect(searchingText).toHaveAttribute('role', 'status');
+
+        await act(async () => {
+            resolveSearch([]); // Resolve to cleanup
+        });
     });
 
-    it('shows indexing progress', () => {
-        render(<SearchPanel {...defaultProps} isIndexing={true} indexingProgress={45} />);
+    it('triggers indexing on mount if not indexed', async () => {
+        vi.mocked(searchClient.isIndexed).mockReturnValue(false);
+        let resolveIndexing: (value?: void) => void = () => {};
+        const indexingPromise = new Promise<void>(resolve => {
+            resolveIndexing = resolve;
+        });
 
-        expect(screen.getByText('Indexing book...')).toBeInTheDocument();
+        vi.mocked(searchClient.indexBook).mockImplementation(async (book, bookId, onProgress) => {
+            if (onProgress) {
+                // Must not be synchronous inside mock to avoid suspended-in-act warnings
+                setTimeout(() => {
+                    act(() => {
+                        onProgress(0.45);
+                    });
+                }, 0);
+            }
+            return indexingPromise as Promise<void>;
+        });
+
+        await act(async () => {
+            render(<SearchPanel {...defaultProps} />);
+        });
+
+        await waitFor(() => {
+            expect(searchClient.indexBook).toHaveBeenCalledWith(defaultProps.book, defaultProps.bookId, expect.any(Function));
+        });
+
+        const indexingText = await screen.findByText('Indexing book...');
+        expect(indexingText).toBeInTheDocument();
         expect(screen.getByText('45%')).toBeInTheDocument();
 
         const progressBar = screen.getByRole('progressbar');
@@ -86,43 +136,70 @@ describe('SearchPanel', () => {
         expect(progressBar).toHaveAttribute('aria-valuemin', '0');
         expect(progressBar).toHaveAttribute('aria-valuemax', '100');
         expect(progressBar).toHaveAttribute('aria-label', 'Indexing progress');
+
+        await act(async () => {
+            resolveIndexing();
+        });
     });
 
-    it('renders search results', () => {
+    it('renders search results', async () => {
         const searchResults = [
             { href: 'ch1.xhtml', excerpt: 'This is the first result' },
             { href: 'ch2.xhtml', excerpt: 'This is the second result' }
         ];
-        render(<SearchPanel {...defaultProps} searchResults={searchResults} />);
+        vi.mocked(searchClient.search).mockResolvedValue(searchResults);
 
-        expect(screen.getByText('This is the first result')).toBeInTheDocument();
-        expect(screen.getByText('This is the second result')).toBeInTheDocument();
+        render(<SearchPanel {...defaultProps} />);
+
+        const input = screen.getByTestId('search-input');
+        fireEvent.change(input, { target: { value: 'test query' } });
+        fireEvent.click(screen.getByLabelText('Search'));
+
+        await waitFor(() => {
+            expect(screen.getByText('This is the first result')).toBeInTheDocument();
+            expect(screen.getByText('This is the second result')).toBeInTheDocument();
+        });
+
         expect(screen.getByText('Result 1')).toBeInTheDocument();
         expect(screen.getByText('Result 2')).toBeInTheDocument();
     });
 
-    it('calls onResultClick when result clicked', () => {
-        const onResultClick = vi.fn();
+    it('calls onNavigate when result clicked', async () => {
         const searchResults = [
             { href: 'ch1.xhtml', excerpt: 'First result' }
         ];
-        render(<SearchPanel {...defaultProps} searchResults={searchResults} onResultClick={onResultClick} />);
+        vi.mocked(searchClient.search).mockResolvedValue(searchResults);
+
+        render(<SearchPanel {...defaultProps} />);
+
+        const input = screen.getByTestId('search-input');
+        fireEvent.change(input, { target: { value: 'test query' } });
+        fireEvent.click(screen.getByLabelText('Search'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('search-result-0')).toBeInTheDocument();
+        });
 
         fireEvent.click(screen.getByTestId('search-result-0'));
-        expect(onResultClick).toHaveBeenCalledWith(searchResults[0]);
+        expect(defaultProps.onNavigate).toHaveBeenCalledWith('ch1.xhtml', 'test query');
     });
 
-    it('shows no results message when search returns empty', () => {
-        render(<SearchPanel {...defaultProps} searchResults={[]} activeSearchQuery="test" />);
+    it('shows no results message when search returns empty', async () => {
+        vi.mocked(searchClient.search).mockResolvedValue([]);
 
-        const noResults = screen.getByText('No results found');
+        render(<SearchPanel {...defaultProps} />);
+
+        const input = screen.getByTestId('search-input');
+        fireEvent.change(input, { target: { value: 'test query' } });
+        fireEvent.click(screen.getByLabelText('Search'));
+
+        const noResults = await screen.findByText('No results found');
         expect(noResults).toBeInTheDocument();
         expect(noResults).toHaveAttribute('role', 'status');
     });
 
-    it('does not show no results message when query is empty', () => {
-        render(<SearchPanel {...defaultProps} searchResults={[]} activeSearchQuery="" />);
-
+    it('does not show no results message initially', () => {
+        render(<SearchPanel {...defaultProps} />);
         expect(screen.queryByText('No results found')).not.toBeInTheDocument();
     });
 });
