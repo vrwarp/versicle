@@ -124,3 +124,4 @@
 ## 2026-04-14 - Enhanced Dropzone Feedback
 **Learning:** Found that changing text on hover/drag for dropzones provides very satisfying immediate feedback and makes the UI feel highly responsive. The combination of icon scaling (scale-110), color shifting (text-primary), and explicit text ('Release to drop files here') creates a clear micro-interaction that confirms system state.
 **Action:** Always look for opportunities to provide explicit visual and textual feedback during drag-and-drop operations, utilizing CSS transitions for smoothness.
+## 2026-04-17 - Clear Button ARIA Labels\n**Learning:** The 'aria-label' for search clear buttons across the app used technical jargon ('Clear query') or lacked consistency. Changing this to 'Clear search' provides a more universally understood and accessible experience.\n**Action:** Use 'Clear search' for all search input clear buttons instead of technical jargon like 'Clear query' to improve accessibility.
