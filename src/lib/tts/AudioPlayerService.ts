@@ -200,8 +200,9 @@ export class AudioPlayerService {
                 import('../../store/useBookStore').then(({ useBookStore }) => {
                     const inventory = useBookStore.getState().books[bookId];
                     if (inventory?.language) {
+                        const lang = inventory.language;
                         import('../../store/useTTSStore').then(({ useTTSStore }) => {
-                            useTTSStore.getState().setActiveLanguage?.(inventory.language);
+                            useTTSStore.getState().setActiveLanguage?.(lang);
                         });
                     }
                 });
