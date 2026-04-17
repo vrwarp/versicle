@@ -903,3 +903,8 @@ Ensure no TypeScript compilation errors from the new optional fields.
 - Modified `src/lib/tts.ts` and `src/lib/ingestion.ts` to ensure `rawLanguage` is extracted from metadata and correctly passed down to `TextSegmenter` during sentence extraction.
 - Developed `verification/test_journey_chinese.py` Playwright E2E script covering Chinese EPUB upload, rendering adjustments (Pinyin and Traditional modes), and correctly identifying the TTS Mandarin profile empty state without breaking English contexts.
 - Added data-testid to settings warnings to resolve brittle React text selectors in Playwright.
+
+## Implementation Notes (Final Verification & Fixes)
+- Discovered and addressed a missing implementation in Phase 2 concerning `fontProfiles`. Extended `usePreferencesStore` to manage `fontProfiles` properly (with `setFontProfile` and `getFontProfile`) instead of relying solely on flat global `fontSize` and `lineHeight`. Wired this logic accurately in `VisualSettings.tsx` and `ReaderView.tsx`.
+- Discovered and addressed a missing implementation in Phase 4. `AudioContentPipeline.ts` did not correctly pull and apply Lexicon rules contextual to the `bookLang` within the `loadSection()` scope as outlined in the plan. Wired `useBookStore` to extract language state dynamically, effectively tying `activeLanguage` scope across `getBibleLexiconPreference` and Lexicon application correctly.
+- Added successful verification coverage validating the aforementioned modifications.

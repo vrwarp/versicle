@@ -270,6 +270,11 @@ For users who speak Mandarin but require reading assistance---specifically the c
 - Developed `verification/test_journey_chinese.py` Playwright E2E script covering Chinese EPUB upload, rendering adjustments (Pinyin and Traditional modes), and correctly identifying the TTS Mandarin profile empty state without breaking English contexts.
 - Added data-testid to settings warnings to resolve brittle React text selectors in Playwright.
 
+## Implementation Notes (Final Verification & Fixes)
+- Discovered and addressed a missing implementation in Phase 2 concerning `fontProfiles`. Extended `usePreferencesStore` to manage `fontProfiles` properly (with `setFontProfile` and `getFontProfile`) instead of relying solely on flat global `fontSize` and `lineHeight`. Wired this logic accurately in `VisualSettings.tsx` and `ReaderView.tsx`.
+- Discovered and addressed a missing implementation in Phase 4. `AudioContentPipeline.ts` did not correctly pull and apply Lexicon rules contextual to the `bookLang` within the `loadSection()` scope as outlined in the plan. Wired `useBookStore` to extract language state dynamically, effectively tying `activeLanguage` scope across `getBibleLexiconPreference` and Lexicon application correctly.
+- Added successful verification coverage validating the aforementioned modifications.
+
 ## Implementation Notes (Phase 1 completion)
 - Completed the migration in `useTTSStore.ts` converting the flat `voice`, `pitch`, and `rate` configuration into language-specific profiles under `profiles` record, driven by `activeLanguage`.
 - Replaced the stubbed `setActiveLanguage` with the full implementation, correctly applying new properties from the newly selected language profile, and updating the state and underlying player.
