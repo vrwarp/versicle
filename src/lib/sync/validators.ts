@@ -14,6 +14,7 @@ export const UserInventoryItemSchema = z.object({
     status: z.enum(['unread', 'reading', 'completed', 'abandoned']),
     customTitle: z.string().optional(),
     customAuthor: z.string().optional(),
+    language: z.string().optional().default('en'),
     coverPalette: z.array(z.number().int().min(0).max(65535)).length(5).optional(),
 });
 
@@ -66,6 +67,7 @@ export const UserOverridesSchema = z.object({
         isRegex: z.boolean().optional(),
         matchType: z.enum(['ignore_case', 'match_case', 'regex']).optional(),
         applyBeforeGlobal: z.boolean().optional(),
+        language: z.string().optional(),
         created: z.number(),
     })),
     lexiconConfig: z.object({

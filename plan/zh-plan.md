@@ -903,3 +903,8 @@ Ensure no TypeScript compilation errors from the new optional fields.
 - Modified `src/lib/tts.ts` and `src/lib/ingestion.ts` to ensure `rawLanguage` is extracted from metadata and correctly passed down to `TextSegmenter` during sentence extraction.
 - Developed `verification/test_journey_chinese.py` Playwright E2E script covering Chinese EPUB upload, rendering adjustments (Pinyin and Traditional modes), and correctly identifying the TTS Mandarin profile empty state without breaking English contexts.
 - Added data-testid to settings warnings to resolve brittle React text selectors in Playwright.
+
+## Implementation Notes (Agent Completion)
+- Discovered that the Phase 1 schema updates to `src/lib/sync/validators.ts` were missing. I manually added the `language` field to `UserInventoryItemSchema` and the `lexicon` array inside `UserOverridesSchema`.
+- Discovered that the Phase 1.5 wiring to sync the `activeLanguage` from the loaded book context into the TTS store upon opening a book was missing. I added the logic to `useEpubReader.ts` and successfully removed the `@ts-expect-error` inside `AudioPlayerService.ts`.
+- Verified that `AudioContentPipeline.ts` accurately passes the book language down to `LexiconService`.

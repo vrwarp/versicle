@@ -201,7 +201,6 @@ export class AudioPlayerService {
                     const inventory = useBookStore.getState().books[bookId];
                     if (inventory?.language) {
                         import('../../store/useTTSStore').then(({ useTTSStore }) => {
-                            // @ts-expect-error - To be implemented in Phase 1
                             useTTSStore.getState().setActiveLanguage?.(inventory.language);
                         });
                     }

@@ -275,3 +275,8 @@ For users who speak Mandarin but require reading assistance---specifically the c
 - Replaced the stubbed `setActiveLanguage` with the full implementation, correctly applying new properties from the newly selected language profile, and updating the state and underlying player.
 - Updated `useTTSStore` property setters to also mutate the active profile so user configurations persist independently by language.
 - Set up migration configurations (`version`, `migrate`) so previous storage structures resolve gracefully into the `en` active language profile on load.
+
+## Implementation Notes (Agent Completion)
+- Discovered that the Phase 1 schema updates to `src/lib/sync/validators.ts` were missing. I manually added the `language` field to `UserInventoryItemSchema` and the `lexicon` array inside `UserOverridesSchema`.
+- Discovered that the Phase 1.5 wiring to sync the `activeLanguage` from the loaded book context into the TTS store upon opening a book was missing. I added the logic to `useEpubReader.ts` and successfully removed the `@ts-expect-error` inside `AudioPlayerService.ts`.
+- Verified that `AudioContentPipeline.ts` accurately passes the book language down to `LexiconService`.

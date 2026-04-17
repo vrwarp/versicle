@@ -178,6 +178,14 @@ export function useEpubReader(
       setIsLoading(true);
       setError(null);
       setIsReady(false);
+
+      // Sync active language to TTS store
+      import('../store/useTTSStore').then(({ useTTSStore }) => {
+        const inventory = useBookStore.getState().books[currentBookId];
+        if (inventory?.language) {
+          useTTSStore.getState().setActiveLanguage?.(inventory.language);
+        }
+      });
       setAreLocationsReady(false);
 
       try {
