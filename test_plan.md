@@ -1,0 +1,33 @@
+1. **Set up vitest mocking:**
+   - Mock `useLibraryStore` to provide mocked `staticMetadata` and `offloadedBookIds`.
+   - Mock `useAnnotationStore` to provide mock `annotations` and the `remove`/`add` methods.
+   - Mock `useBookStore` just in case.
+   - Mock sub-components like `BookNotesBlock` and `NotesSearchBar` optionally, or shallow render them? No, since it's `GlobalNotesView.tsx`, we can probably let them render normally or mock them. Mocking them is easier to check props. Let's mock `BookNotesBlock`, `NotesSearchBar`, `BookOpen`, `Mic`, `Check`, `Trash2`. Actually, `lucide-react` doesn't strictly need mocking.
+   - We need to test the logic of filtering `pendingBookmarks`. The selector `selectPendingAudioBookmarks` needs to return properly.
+2. **Test Cases:**
+   - **Empty State (No Annotations):**
+     - Given no annotations and no pending bookmarks.
+     - Should display "No annotations yet".
+   - **Empty State (Search No Results):**
+     - Given annotations, but searching for something that doesn't match.
+     - Should display "No results found" and the clear search button.
+   - **Displays BookNotesBlocks:**
+     - Given annotations.
+     - Should render `BookNotesBlock` for each grouped book.
+   - **Displays Pending Audio Bookmarks:**
+     - Given pending audio bookmarks (type='audio_bookmark', pending=true).
+     - Should render the audio bookmarks inbox.
+     - Should allow discarding a bookmark.
+     - Should allow keeping a bookmark (changes to 'highlight').
+   - **Navigation Logic:**
+     - When `onNavigate` or `onOpenBook` is called from `BookNotesBlock`:
+       - If book is valid, navigate to the read page using `useNavigate` mock.
+       - If book is missing/ghost (not in `staticMetadata` and not in `offloadedBookIds` OR in `offloadedBookIds`), call `onContentMissing`.
+3. **Execution Plan Steps:**
+   - Create `src/components/notes/__tests__/GlobalNotesView.test.tsx`.
+   - Set up all mocks (Zustand stores, `useNavigate`, `lucide-react` icons).
+   - Write the test cases listed above.
+   - Run tests `npm test -- GlobalNotesView` to verify they pass.
+   - `npm run lint` and verify testing logic.
+   - Follow `pre_commit_instructions`.
+   - Commit & Submit.
