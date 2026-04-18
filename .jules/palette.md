@@ -118,6 +118,9 @@
 **Learning:** Found that generic icon buttons (e.g. "✕") for clearing inputs and search inputs lacking visible labels often miss ARIA labels, creating a poor experience for screen reader users who cannot deduce the button's or input's specific context.
 **Action:** Always ensure that icon-only clear buttons (like those inside input fields) and inputs without visible labels have descriptive `aria-label`s (e.g., "Clear Web Client ID", "Search by filename") to provide necessary context for assistive technologies.
 
+## 2024-04-10 - Add tooltip and ARIA label to workspace delete button
+**Learning:** Icon-only buttons lacking `aria-label` or `title` attributes are completely inaccessible to screen readers and lack visual cues for mouse users.
+**Action:** Always provide `aria-label` and `title` attributes for icon-only action buttons.
 ## 2026-05-24 - Clear Buttons on Search Inputs
 **Learning:** Added clear buttons (X) to search inputs in DriveImportDialog, ReassignBookDialog, and SearchPanel to improve usability and follow existing design patterns (like LibraryView). The `pr-9` class is needed on the `Input` when a clear button is present to prevent text from overlapping the absolute-positioned button.
 **Action:** When adding search inputs in the future, always include a clear button using the `Button` with `size="icon"` and `variant="ghost"`, and ensure the input has proper right-padding when the button is visible.
@@ -128,3 +131,6 @@
 ## 2026-04-18 - Focus-Visible vs Focus for Mouse/Keyboard Dual Accessibility
 **Learning:** Found that using standard `focus:` tailwind pseudo-classes on custom buttons or list items creates an annoying visual bug where the focus ring persists after a mouse user clicks the element. However, omitting focus styles entirely breaks keyboard navigation.
 **Action:** Always prefer `focus-visible:` over `focus:` (e.g., `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`) for custom interactive elements. This ensures the focus ring is only shown when the user is navigating via keyboard, keeping the UI clean for mouse/touch users while maintaining full accessibility.
+## 2024-05-18 - Avoid Static Aria-Labels on Dynamic Buttons
+**Learning:** Static `aria-label` attributes completely override a button's inner text for screen readers. If a button dynamically changes its text to indicate a loading state (e.g., using a visually hidden `sr-only` span), the static `aria-label` will mask this change, causing screen readers to falsely announce the default state instead of the loading state.
+**Action:** Remove redundant static `aria-label` attributes if the button's visible text is perfectly descriptive. Rely on the DOM structure and `aria-hidden` bindings on spans to cleanly swap semantic visibility of states (like default vs. loading).

@@ -339,7 +339,12 @@ export class AudioPlayerService {
     }
 
     public loadSection(sectionIndex: number, autoPlay: boolean = true) {
-        return this.enqueue(() => this.loadSectionInternal(sectionIndex, autoPlay));
+        return this.enqueue(async () => {
+            const originalBookId = this.currentBookId;
+            if (this.playlistPromise) await this.playlistPromise;
+            if (this.currentBookId !== originalBookId) return;
+            return this.loadSectionInternal(sectionIndex, autoPlay);
+        });
     }
 
     public loadSectionBySectionId(sectionId: string, autoPlay: boolean = true, sectionTitle?: string) {

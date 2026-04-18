@@ -392,6 +392,8 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                                             className="h-8 w-8 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
                                                             onClick={() => handleDeleteWorkspace(ws.workspaceId, ws.name)}
                                                             disabled={isSwitchingWorkspace !== null || isDeletingWorkspace !== null}
+                                                            aria-label={`Delete workspace ${ws.name}`}
+                                                            title="Delete workspace"
                                                         >
                                                             {isDeletingWorkspace === ws.workspaceId ? (
                                                                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
