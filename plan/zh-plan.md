@@ -885,18 +885,28 @@ Ensure no TypeScript compilation errors from the new optional fields.
 
 5.  **Font Profile Migration:** When `fontProfiles` is introduced, existing users will have their `fontSize` and `lineHeight` values only in the global flat fields. The `getFontProfile()` fallback ensures these users see no change. However, the first time they adjust font settings while reading a book in a specific language, the new per-language profile will be created. This is a safe, progressive migration.
 
+## Implementation Notes (Phase 1 completion)
+- Completed the migration in `useTTSStore.ts` converting the flat `voice`, `pitch`, and `rate` configuration into language-specific profiles under `profiles` record, driven by `activeLanguage`.
+- Replaced the stubbed `setActiveLanguage` with the full implementation, correctly applying new properties from the newly selected language profile, and updating the state and underlying player.
+- Updated `useTTSStore` property setters to also mutate the active profile so user configurations persist independently by language.
+- Set up migration configurations (`version`, `migrate`) so previous storage structures resolve gracefully into the `en` active language profile on load.
+
 ## Implementation Notes (Phase 2 completion)
-- Replaced the standalone flat configuration with the `fontProfiles` mapping array, extending `usePreferencesStore.ts` with `setFontProfile` and `getFontProfile`.
-- Handled the UI injection of font adjustments dynamically tied to the specific book language scope within `VisualSettings.tsx`.
-- Applied correct `fontProfile.lineHeight` and `fontProfile.fontSize` overrides directly in `useEpubReader.ts` CSS theme injections.
-- Designed the "Language Profile" `<Select>` in `TTSSettingsTab.tsx`, ensuring proper voice model filtering relative to the active target configuration language.
+- Migrated legacy `fontSize` and `lineHeight` state into a `fontProfiles: Record<string, FontProfile>` map within `usePreferencesStore.ts` with `en` and `zh` specific sensible defaults.
+- Added `getFontProfile` and `setFontProfile` to properly access rendering metadata on a language-contextual level, eliminating independent styling settings.
+- Wired `useEpubReader.ts` and `VisualSettings.tsx` to utilize `fontProfiles` based on the actively loaded book's semantic language.
+- Updated `TTSSettingsTab.tsx` to include a dropdown dictating the `activeLanguage` for the settings context, and implemented the list filtration of valid `zh_CN` and `en_US` model voices per selection alongside a warning empty-state.
+- Handled propagation of `<TTSSettingsTab>`'s new `activeLanguage` props downward via `GlobalSettingsDialog.tsx`.
+- Updated `LexiconManager.tsx` to include `languageFilter` and `editingRule.language` fields for rules.
+- Wired `useLexiconStore`'s `getRules` to accurately use the new `language` filtering capabilities.
 
 ## Implementation Notes (Phase 3 & 4 completed)
-- Discovered that the Phase 2 fields (`forceTraditionalChinese`, `showPinyin`, `pinyinSize`) were missing from `usePreferencesStore.ts` and `VisualSettings.tsx` in the `main` branch. I manually injected them.
-- Successfully integrated `opencc-js` and `pinyin-pro` via `src/lib/chinese/ChineseTextProcessor.ts`.
-- The `useEpubReader.ts` was updated to parse and dynamically wrap Chinese characters in `data-pinyin` spans, rendering pinyin via CSS pseudo-elements.
-- `PiperProvider.ts` now respects CJK semantic density by reducing `MAX_CHARS` to 100 for texts matching `/[\u4e00-\u9fff]/`.
-- CJK clause boundaries have been added to the fallback regex and `splitLongSentence` routines.
+- Created `ChineseTextProcessor.ts` wrapping `opencc-js` and `pinyin-pro` with dynamic imports.
+- Added `injectChineseOverlay` to `useEpubReader.ts` generating CSS-based ruby text on `data-pinyin` to preserve original DOM text.
+- Re-added missing state fields to `usePreferencesStore.ts` and `VisualSettings.tsx` UI (these were missing in the `main` branch despite the Phase 2 claim).
+- Updated `PiperProvider.ts` to accept `zh_CN` voices and dynamically reduce chunk size to 100 characters for CJK texts.
+- Added CJK boundary fallback regex to `TextSegmenter.ts`.
+- Added `PiperProvider.test.ts` and `TextSegmenter.test.ts` to verify the behavior.
 
 ## Implementation Notes (Phase 5 completion)
 - Completed the multi-lingual pipeline verifications.
