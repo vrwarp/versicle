@@ -107,4 +107,9 @@ export interface ITTSProvider {
    * Plays an earcon, automatically ducking the main audio if playing.
    */
   playEarcon?(type: 'bookmark_captured' | 'bookmark_failed'): void;
+
+  /**
+   * Sets the locale for text segmentation and voice selection.
+   */
+  setLocale?(locale: string): void;
 }

@@ -42,7 +42,11 @@ vi.mock('../../../store/usePreferencesStore', () => ({
         lineHeight: 1.5,
         fontSize: 100,
         shouldForceFont: false,
-        readerViewMode: 'paginated'
+        readerViewMode: 'paginated',
+        fontProfiles: {
+            en: { fontSize: 100, lineHeight: 1.5 }
+        },
+        setFontProfile: vi.fn()
     })
 }));
 const MOCK_PROGRESS = { completedRanges: [] };

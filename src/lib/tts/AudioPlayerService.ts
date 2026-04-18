@@ -199,10 +199,10 @@ export class AudioPlayerService {
             if (bookId) {
                 import('../../store/useBookStore').then(({ useBookStore }) => {
                     const inventory = useBookStore.getState().books[bookId];
-                    if (inventory?.language) {
+                    const lang = inventory?.language;
+                    if (lang) {
                         import('../../store/useTTSStore').then(({ useTTSStore }) => {
-                            // @ts-expect-error - To be implemented in Phase 1
-                            useTTSStore.getState().setActiveLanguage?.(inventory.language);
+                            useTTSStore.getState().setActiveLanguage(lang);
                         });
                     }
                 });
@@ -622,9 +622,8 @@ export class AudioPlayerService {
         });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    setLanguage(_lang: string) {
-        // Expose a way to notify the pipeline or segmenter if needed
+    setLanguage(lang: string) {
+        this.providerManager.setLocale(lang);
     }
 
     setSpeed(speed: number) {

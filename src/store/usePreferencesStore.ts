@@ -9,6 +9,11 @@ import { getDeviceId } from '../lib/device-id';
  * Phase 2 (Yjs Migration): This store is wrapped with yjs() middleware.
  * All preferences are synced across devices automatically.
  */
+export interface FontProfile {
+    fontSize: number;
+    lineHeight: number;
+}
+
 interface PreferencesState {
     // === SYNCED STATE (persisted to Yjs) ===
     currentTheme: 'light' | 'dark' | 'sepia';
@@ -21,6 +26,9 @@ interface PreferencesState {
     libraryLayout: 'grid' | 'list';
     libraryFilterMode: 'all' | 'downloaded';
     activeContext: 'library' | 'notes';
+
+    // === LANGUAGE SCOPED FONT RENDERING ===
+    fontProfiles: Record<string, FontProfile>;
 
     // === CHINESE READING ===
     forceTraditionalChinese: boolean;
@@ -42,6 +50,8 @@ interface PreferencesState {
     setForceTraditionalChinese: (force: boolean) => void;
     setShowPinyin: (show: boolean) => void;
     setPinyinSize: (size: number) => void;
+
+    setFontProfile: (lang: string, profile: Partial<FontProfile>) => void;
 }
 
 const defaultPreferences = {
@@ -58,7 +68,12 @@ const defaultPreferences = {
 
     forceTraditionalChinese: false,
     showPinyin: false,
-    pinyinSize: 100
+    pinyinSize: 100,
+
+    fontProfiles: {
+        en: { fontSize: 100, lineHeight: 1.5 },
+        zh: { fontSize: 110, lineHeight: 1.8 }
+    }
 };
 
 /**
@@ -88,6 +103,16 @@ export const usePreferencesStore = create<PreferencesState>()(
             setForceTraditionalChinese: (force) => set({ forceTraditionalChinese: force }),
             setShowPinyin: (show) => set({ showPinyin: show }),
             setPinyinSize: (size) => set({ pinyinSize: size }),
+
+            setFontProfile: (lang, profile) => set((state) => {
+                const current = state.fontProfiles[lang] || { fontSize: state.fontSize, lineHeight: state.lineHeight };
+                return {
+                    fontProfiles: {
+                        ...state.fontProfiles,
+                        [lang]: { ...current, ...profile }
+                    }
+                };
+            }),
         }),
         getYjsOptions()
     )

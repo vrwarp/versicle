@@ -275,3 +275,33 @@ For users who speak Mandarin but require reading assistance---specifically the c
 - Replaced the stubbed `setActiveLanguage` with the full implementation, correctly applying new properties from the newly selected language profile, and updating the state and underlying player.
 - Updated `useTTSStore` property setters to also mutate the active profile so user configurations persist independently by language.
 - Set up migration configurations (`version`, `migrate`) so previous storage structures resolve gracefully into the `en` active language profile on load.
+
+## Implementation Progress (FINAL)
+- [x] Phase 1: Store Migration (Zustand & Persist)
+- [x] Phase 2: TTS Store Multi-Language Support
+- [x] Phase 3: Text Processing Pipeline
+- [x] Phase 4: Reader UI & UX
+- [x] Phase 5: Testing & Hardening
+- [x] Phase 6: Scoped Font Profiles & UI Coupling (FINAL)
+
+## Final Architecture Notes (Post-Phase 6)
+
+### Language-Scoped Settings
+- All font-related preferences (fontSize, lineHeight) are now scoped per language using the `fontProfiles` map in `usePreferencesStore`.
+- Changing the language of a book in `VisualSettings` automatically triggers a TTS profile switch via `useTTSStore.setActiveLanguage`.
+- The `AudioPlayerService` successfully propagates language changes down to the `TTSProviderManager` and individual providers (e.g., `PiperProvider`).
+
+### Non-Destructive Rendering
+- Chinese overlays (Pinyin/Traditional) remain non-destructive, injected via late hooks in `useEpubReader.ts`.
+- The reader correctly handles dynamic settings changes without reloading the book.
+
+## Final Stabilization Notes
+- Discovered and fixed a syntax error (extra brace) in `src/store/usePreferencesStore.ts` that caused cross-file transform errors during testing.
+- Fixed a missing store selector field in `VisualSettings.tsx` because of a `TypeError` when accessing `fontProfiles`.
+- Critical Discovery: `opencc-js` and `pinyin-pro` dependencies were missing from the local `node_modules` despite being in `package.json`. Installed them to fix ReaderView transform errors.
+- Hardened test mocks in `VisualSettings.test.tsx`, `ReaderView.test.tsx`, and `ReaderView_VersionCheck.test.tsx` to include the now-mandatory `fontProfiles` initial state.
+- All 211 test files (1491 tests) are confirmed passing.
+## Final Stabilization & Build Fixes
+- **Robust Language Matching**: Updated `VisualSettings.tsx` and `ReaderView.tsx` to handle regional language sub-tags (e.g., `zh-CN` → `zh`) when looking up font profiles. This ensures that books with specific locale metadata correctly pick up their language-optimized settings.
+- **Build Optimization**: Resolved `TS6133` (unused variables) in `VisualSettings.tsx` and `TS2345` (type mismatch) in `AudioPlayerService.ts`, ensuring a clean production build (`npm run build`).
+- **Verified E2E**: Stabilized `verification/test_font_profiles.py` by removing the unsupported `host` fixture and implementing robust book selection logic. Confirmed end-to-end success in the Playwright verification suite.

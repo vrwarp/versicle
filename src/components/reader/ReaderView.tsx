@@ -68,6 +68,7 @@ export const ReaderView: React.FC = () => {
         fontFamily,
         lineHeight,
         fontSize,
+        fontProfiles,
         shouldForceFont,
         readerViewMode
     } = usePreferencesStore(useShallow(state => ({
@@ -76,6 +77,7 @@ export const ReaderView: React.FC = () => {
         fontFamily: state.fontFamily,
         lineHeight: state.lineHeight || 1.5,
         fontSize: state.fontSize,
+        fontProfiles: state.fontProfiles,
         shouldForceFont: state.shouldForceFont,
         readerViewMode: state.readerViewMode || 'paginated'
     })));
@@ -194,8 +196,8 @@ export const ReaderView: React.FC = () => {
         currentTheme,
         customTheme,
         fontFamily,
-        fontSize,
-        lineHeight,
+        fontSize: fontProfiles[(bookMetadata?.language || 'en').split('-')[0]]?.fontSize || fontSize,
+        lineHeight: fontProfiles[(bookMetadata?.language || 'en').split('-')[0]]?.lineHeight || lineHeight,
         shouldForceFont,
         initialLocation,
         metadata: bookMetadata,
@@ -340,6 +342,7 @@ export const ReaderView: React.FC = () => {
         fontFamily,
         fontSize,
         lineHeight,
+        fontProfiles,
         shouldForceFont,
         bookId,
         // updateLocation,
