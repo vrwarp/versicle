@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useLastReadBook } from '../../store/selectors';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useShallow } from 'zustand/react/shallow';
 import { CompassPill } from '../ui/CompassPill';
 import { SatelliteFAB } from './SatelliteFAB';
@@ -41,8 +40,7 @@ export const AudioReaderHUD: React.FC = () => {
     }
 
     // Get progress for the last read book
-    const lastReadProgress = lastReadBook ?
-        useReadingStateStore.getState().getProgress(lastReadBook.bookId)?.percentage || 0 : 0;
+    const lastReadProgress = lastReadBook?.progress || 0;
 
     return (
         <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-[40] flex flex-col items-center justify-end pb-6">
