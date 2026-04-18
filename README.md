@@ -76,6 +76,7 @@
         *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates.
         *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
         *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses a smart **Heuristic Sync** (`viewedByMeTime` vs `lastScanTime`) to skip unnecessary expensive API scans, and optimizes memory by mapping heavy API objects to a lightweight file indexing strategy to speed up "New Book" diffing. Forces a full scan if the Cloud Index is empty. Automatically syncs recursive folders.
+    *   **Workspace Context Switching**: Safely handles migrating states between remote workspaces, securely bridging page reloads and offering recovery from dangling backups.
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
         *   **Sync Mesh**: Real-time visibility of active devices in the network with "Last Active" status and peer awareness.
     *   **Per-Device Progress**: Tracks reading position separately for each device (Phone, Tablet) so you never lose your place, while intelligently aggregating the most recent position across the mesh.
