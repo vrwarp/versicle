@@ -74,6 +74,7 @@ graph TD
         AndroidBackup[AndroidBackupService]
         Checkpoint[CheckpointService]
         Inspector[CheckpointInspector]
+        MigrationState[MigrationStateService]
         DriveScanner[DriveScannerService]
         GoogleAuth[GoogleIntegrationManager]
     end
@@ -149,6 +150,8 @@ graph TD
     YjsProvider --> FireSync
     FireSync --> FireProvider
     FireSync --> Checkpoint
+    FireSync --> MigrationState
+    MigrationState --> SyncStore
     DeviceStore --> SyncMesh
     LibStore --> AndroidBackup
     GlobalSettings --> Inspector
@@ -286,6 +289,14 @@ Versicle implements a strategy combining **Real-Time Sync** (via Firestore) for 
     *   **Destructive Restore**: Clears all existing shared types (Map, Array, XmlText) in the Yjs document before applying the binary snapshot to ensure a clean state.
     *   **Before Sync**: Automatically creates a `pre-sync` checkpoint immediately before connecting to Firestore.
     *   **Rotation**: Maintains a rolling buffer of the last 10 checkpoints.
+
+#### `MigrationStateService.ts` (Workspace Context Migration)
+*   **Goal**: Manages the state machine bridging page reloads during workspace context switches, safely delaying normal sync boot sequences while a migration is in-flight.
+*   **Logic**:
+    *   **localStorage State**: Persists migration states (`AWAITING_CONFIRMATION`, `RESTORING_BACKUP`) and tracking details (target workspace, backup checkpoint ID) to `localStorage`, protecting state across browser reloads.
+    *   **Boot Blocking**: Integrates into the app boot sequence; if the service reports `isBlocked()`, standard Yjs/Firestore sync initialization is halted until the migration concludes or fails.
+    *   **Dangling Check**: Recovers gracefully by providing `getDanglingBackupId()` to clean up residual checkpoint states if a migration crashes or completes abnormally.
+*   **Trade-offs**: Heavily relies on browser `localStorage`. If a user manually clears local data mid-migration, the client could be left in an inconsistent workspace state.
 
 #### `FirestoreSyncManager.ts` (Real-Time Cloud)
 Provides a "Cloud Overlay" for real-time synchronization.
@@ -721,6 +732,7 @@ State is managed using **Zustand** with specialized strategies for different dat
 
 *   **Database Resilience**: `DBService` wraps `QuotaExceededError` into a unified `StorageFullError` for consistent UI handling.
 *   **Safe Mode**: If critical database initialization fails, the app boots into `SafeModeView`, providing a "Factory Reset" (`deleteDB`) option to unblock the user.
+*   **Workspace Migration Locks**: Safely halts background synchronization operations via `MigrationStateService` when transitioning between cloud workspaces to prevent split-brain states or data corruption. Recovery UI (`CriticalMigrationFailureView`) catches unhandled exceptions to rollback state safely.
 *   **Schema Quarantine (`ObsoleteLockView`)**: When the application detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION = 4`), it renders `ObsoleteLockView` to lock the UI permanently.
     *   **Why**: Prevents a down-level client from inadvertently overwriting or corrupting newer data structures introduced by an updated app version.
     *   **Trade-off**: The user is completely locked out of the app until they update to the latest version.
