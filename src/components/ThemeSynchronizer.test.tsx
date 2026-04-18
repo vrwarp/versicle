@@ -17,7 +17,7 @@ describe('ThemeSynchronizer', () => {
   });
 
   it('adds "light" class to document when currentTheme is "light"', () => {
-    vi.mocked(usePreferencesStore).mockImplementation((selector: any) =>
+    vi.mocked(usePreferencesStore).mockImplementation((selector: (state: ReturnType<typeof usePreferencesStore["getState"]>) => unknown) =>
       selector({ currentTheme: 'light' })
     );
 
@@ -29,7 +29,7 @@ describe('ThemeSynchronizer', () => {
   });
 
   it('adds "dark" class to document when currentTheme is "dark"', () => {
-    vi.mocked(usePreferencesStore).mockImplementation((selector: any) =>
+    vi.mocked(usePreferencesStore).mockImplementation((selector: (state: ReturnType<typeof usePreferencesStore["getState"]>) => unknown) =>
       selector({ currentTheme: 'dark' })
     );
 
@@ -40,7 +40,7 @@ describe('ThemeSynchronizer', () => {
   });
 
   it('adds "sepia" class to document when currentTheme is "sepia"', () => {
-    vi.mocked(usePreferencesStore).mockImplementation((selector: any) =>
+    vi.mocked(usePreferencesStore).mockImplementation((selector: (state: ReturnType<typeof usePreferencesStore["getState"]>) => unknown) =>
       selector({ currentTheme: 'sepia' })
     );
 
@@ -50,7 +50,7 @@ describe('ThemeSynchronizer', () => {
   });
 
   it('adds "light" class to document when currentTheme is "custom"', () => {
-    vi.mocked(usePreferencesStore).mockImplementation((selector: any) =>
+    vi.mocked(usePreferencesStore).mockImplementation((selector: (state: ReturnType<typeof usePreferencesStore["getState"]>) => unknown) =>
       selector({ currentTheme: 'custom' })
     );
 
@@ -61,7 +61,7 @@ describe('ThemeSynchronizer', () => {
 
   it('removes previous theme class when theme changes', () => {
     // Start with dark theme
-    vi.mocked(usePreferencesStore).mockImplementation((selector: any) =>
+    vi.mocked(usePreferencesStore).mockImplementation((selector: (state: ReturnType<typeof usePreferencesStore["getState"]>) => unknown) =>
       selector({ currentTheme: 'dark' })
     );
 
@@ -69,7 +69,7 @@ describe('ThemeSynchronizer', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(true);
 
     // Change to sepia theme
-    vi.mocked(usePreferencesStore).mockImplementation((selector: any) =>
+    vi.mocked(usePreferencesStore).mockImplementation((selector: (state: ReturnType<typeof usePreferencesStore["getState"]>) => unknown) =>
       selector({ currentTheme: 'sepia' })
     );
 
@@ -80,7 +80,7 @@ describe('ThemeSynchronizer', () => {
   });
 
   it('defaults to "light" theme if currentTheme is null or undefined', () => {
-    vi.mocked(usePreferencesStore).mockImplementation((selector: any) =>
+    vi.mocked(usePreferencesStore).mockImplementation((selector: (state: ReturnType<typeof usePreferencesStore["getState"]>) => unknown) =>
       selector({ currentTheme: undefined })
     );
 
