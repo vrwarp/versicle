@@ -124,3 +124,6 @@
 ## 2026-04-14 - Enhanced Dropzone Feedback
 **Learning:** Found that changing text on hover/drag for dropzones provides very satisfying immediate feedback and makes the UI feel highly responsive. The combination of icon scaling (scale-110), color shifting (text-primary), and explicit text ('Release to drop files here') creates a clear micro-interaction that confirms system state.
 **Action:** Always look for opportunities to provide explicit visual and textual feedback during drag-and-drop operations, utilizing CSS transitions for smoothness.
+## 2024-05-18 - Avoid Static Aria-Labels on Dynamic Buttons
+**Learning:** Static `aria-label` attributes completely override a button's inner text for screen readers. If a button dynamically changes its text to indicate a loading state (e.g., using a visually hidden `sr-only` span), the static `aria-label` will mask this change, causing screen readers to falsely announce the default state instead of the loading state.
+**Action:** Remove redundant static `aria-label` attributes if the button's visible text is perfectly descriptive. Rely on the DOM structure and `aria-hidden` bindings on spans to cleanly swap semantic visibility of states (like default vs. loading).

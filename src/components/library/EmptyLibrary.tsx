@@ -66,30 +66,32 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
           onClick={onImport}
           disabled={isImporting}
           className="font-medium gap-2 h-12 px-6 transition-all touch-manipulation w-full sm:w-auto"
-          aria-label="Browse files to import"
         >
-          <Upload className="h-4 w-4" aria-hidden="true" />
-          Browse Files
+          {isImporting ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              <span className="sr-only">Importing...</span>
+            </>
+          ) : (
+            <Upload className="h-4 w-4" aria-hidden="true" />
+          )}
+          <span aria-hidden={isImporting}>{isImporting ? "Importing..." : "Browse Files"}</span>
         </Button>
         <Button
           variant="outline"
           onClick={handleLoadDemo}
           disabled={isImporting}
           className="text-primary font-medium gap-2 h-12 px-6 border-primary/20 hover:bg-primary/5 hover:text-primary transition-all touch-manipulation w-full sm:w-auto"
-          aria-label="Load demo book"
         >
           {isImporting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               <span className="sr-only">Loading...</span>
-              <span aria-hidden="true">Loading...</span>
             </>
           ) : (
-            <>
-              <BookOpen className="h-4 w-4" aria-hidden="true" />
-              Load Demo Book (Alice in Wonderland)
-            </>
+            <BookOpen className="h-4 w-4" aria-hidden="true" />
           )}
+          <span aria-hidden={isImporting}>{isImporting ? "Loading..." : "Load Demo Book (Alice in Wonderland)"}</span>
         </Button>
       </div>
     </div>
