@@ -77,7 +77,7 @@ export const DriveFolderPicker: React.FC<DriveFolderPickerProps> = ({ onSelect, 
                                         onClick={() => !isLast && navigateUp()}
                                         disabled={isLast}
                                         className={cn(
-                                            "hover:underline transition-colors shrink-0 text-sm",
+                                            "hover:underline transition-colors shrink-0 text-sm rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                                             isLast ? "font-semibold text-foreground pointer-events-none" : "text-muted-foreground hover:text-foreground"
                                         )}
                                     >
@@ -123,7 +123,7 @@ export const DriveFolderPicker: React.FC<DriveFolderPickerProps> = ({ onSelect, 
                             <button
                                 key={folder.id}
                                 onClick={() => openFolder(folder.id, folder.name)}
-                                className="w-full flex items-center p-2 rounded-lg hover:bg-accent transition-colors text-left group focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary/20"
+                                className="w-full flex items-center p-2 rounded-lg hover:bg-accent transition-colors text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/20"
                             >
                                 {/* Folder Icon */}
                                 <div className="mr-3 shrink-0">
