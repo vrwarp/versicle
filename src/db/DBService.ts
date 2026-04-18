@@ -80,14 +80,26 @@ class DBService {
       const manifestStore = tx.objectStore('static_manifests');
       const resourceStore = tx.objectStore('static_resources');
 
-      // Execute multiple parallel `.get` and `.getKey` queries within the single transaction
-      const manifestsPromise = manifestStore.getAll();
-      const resourceKeysPromise = resourceStore.getAllKeys().then(keys => new Set(keys));
+      // Hybrid approach: use getAll for large sets (it's faster), targeted reads for small sets
+      let allManifests: (StaticBookManifest | undefined)[];
+      let resourceKeysSet: Set<IDBValidKey>;
 
-      const [allManifests, resourceKeysSet] = await Promise.all([manifestsPromise, resourceKeysPromise]);
+      if (ids.length > 50) {
+        const manifestsPromise = manifestStore.getAll();
+        const resourceKeysPromise = resourceStore.getAllKeys().then(keys => new Set(keys));
+        [allManifests, resourceKeysSet] = await Promise.all([manifestsPromise, resourceKeysPromise]);
+      } else {
+        const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
+        const resourceKeysPromise = Promise.all(ids.map(id => resourceStore.getKey(id)));
+
+        const [manifests, keys] = await Promise.all([manifestsPromise, resourceKeysPromise]);
+        allManifests = manifests.filter(Boolean) as StaticBookManifest[];
+        resourceKeysSet = new Set(keys.filter(Boolean) as IDBValidKey[]);
+      }
+
       await tx.done;
 
-      const manifestsMap = new Map(allManifests.map(m => [m.bookId, m]));
+      const manifestsMap = new Map(allManifests.map(m => [m!.bookId, m]));
 
       const inventoryBooks = useBookStore.getState().books;
 
