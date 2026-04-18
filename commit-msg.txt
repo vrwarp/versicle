@@ -1,0 +1,10 @@
+Fix predictable loading behavior of loadSection in AudioPlayerService
+
+This change ensures that `loadSection` behaves consistently by validating
+the context (bookId) has not changed after resolving the playlistPromise.
+This prevents enqueued background load requests from firing on the wrong book
+when rapidly switching active books, analogous to what was already done for
+`loadSectionBySectionId`.
+
+It also adds an explicit test for `loadSection` race conditions mimicking
+the fix previously provided for `loadSectionBySectionId`.
