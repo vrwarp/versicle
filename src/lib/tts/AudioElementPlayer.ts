@@ -1,4 +1,6 @@
 
+import { playEarconOscillators } from './earcons';
+
 /**
  * Wrapper around the HTML5 Audio element to handle playback of Blobs and URLs.
  * Provides a consistent interface for controlling playback, volume, and rate,
@@ -10,6 +12,9 @@ export class AudioElementPlayer {
   private onEndedCallback: (() => void) | null = null;
   private onErrorCallback: ((error: MediaError | null) => void) | null = null;
   private currentObjectUrl: string | null = null;
+  private audioContext: AudioContext | null = null;
+  private gainNode: GainNode | null = null;
+  private sourceNode: MediaElementAudioSourceNode | null = null;
 
   /**
    * Initializes a new instance of AudioElementPlayer.
@@ -180,6 +185,45 @@ export class AudioElementPlayer {
   }
 
   /**
+   * Ensures Web Audio API context is initialized for ducking.
+   */
+  private ensureAudioContext() {
+    if (!this.audioContext) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      if (Ctx) {
+        this.audioContext = new Ctx();
+        this.gainNode = this.audioContext.createGain();
+        this.sourceNode = this.audioContext.createMediaElementSource(this.audio);
+        this.sourceNode.connect(this.gainNode);
+        this.gainNode.connect(this.audioContext.destination);
+      }
+    }
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      this.audioContext.resume();
+    }
+  }
+
+  /**
+   * Plays an earcon, automatically ducking the main audio if playing.
+   */
+  public playEarcon(type: 'bookmark_captured' | 'bookmark_failed') {
+    this.ensureAudioContext();
+    if (!this.audioContext || !this.gainNode) return;
+
+    const now = this.audioContext.currentTime;
+
+    // 1. Duck the main TTS volume
+    this.gainNode.gain.cancelScheduledValues(now);
+    this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+    this.gainNode.gain.linearRampToValueAtTime(0.3, now + 0.1);
+    this.gainNode.gain.linearRampToValueAtTime(1.0, now + 0.6);
+
+    // 2. Play earcon using Oscillator
+    playEarconOscillators(this.audioContext, type, this.audioContext.destination);
+  }
+
+  /**
    * Destroys the player instance and clears all listeners.
    */
   public destroy() {
@@ -187,5 +231,14 @@ export class AudioElementPlayer {
       this.audio.ontimeupdate = null;
       this.audio.onended = null;
       this.audio.onerror = null;
+      if (this.sourceNode) {
+          this.sourceNode.disconnect();
+      }
+      if (this.gainNode) {
+          this.gainNode.disconnect();
+      }
+      if (this.audioContext) {
+          this.audioContext.close();
+      }
   }
 }

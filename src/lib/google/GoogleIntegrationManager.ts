@@ -26,7 +26,7 @@ class GoogleIntegrationManager {
         }
     }
 
-    async getValidToken(serviceId: string): Promise<string> {
+    async getValidToken(serviceId: string, forceRefresh?: boolean): Promise<string> {
         // Initial check if service is 'supposed' to be connected
         if (!useGoogleServicesStore.getState().isServiceConnected(serviceId)) {
             throw new Error(`Service ${serviceId} is not connected.`);
@@ -34,7 +34,7 @@ class GoogleIntegrationManager {
 
         try {
             const email = useSyncStore.getState().firebaseUserEmail;
-            return await this.strategy.getValidToken(serviceId, email || undefined);
+            return await this.strategy.getValidToken(serviceId, email || undefined, forceRefresh);
         } catch (error) {
             console.error(`Failed to get token for ${serviceId}, disconnecting...`, error);
             // Auto-disconnect on fatal auth errors (like revocation)

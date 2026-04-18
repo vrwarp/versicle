@@ -121,3 +121,12 @@
 ## 2024-04-10 - Add tooltip and ARIA label to workspace delete button
 **Learning:** Icon-only buttons lacking `aria-label` or `title` attributes are completely inaccessible to screen readers and lack visual cues for mouse users.
 **Action:** Always provide `aria-label` and `title` attributes for icon-only action buttons.
+## 2026-05-24 - Clear Buttons on Search Inputs
+**Learning:** Added clear buttons (X) to search inputs in DriveImportDialog, ReassignBookDialog, and SearchPanel to improve usability and follow existing design patterns (like LibraryView). The `pr-9` class is needed on the `Input` when a clear button is present to prevent text from overlapping the absolute-positioned button.
+**Action:** When adding search inputs in the future, always include a clear button using the `Button` with `size="icon"` and `variant="ghost"`, and ensure the input has proper right-padding when the button is visible.
+## 2026-04-14 - Enhanced Dropzone Feedback
+**Learning:** Found that changing text on hover/drag for dropzones provides very satisfying immediate feedback and makes the UI feel highly responsive. The combination of icon scaling (scale-110), color shifting (text-primary), and explicit text ('Release to drop files here') creates a clear micro-interaction that confirms system state.
+**Action:** Always look for opportunities to provide explicit visual and textual feedback during drag-and-drop operations, utilizing CSS transitions for smoothness.
+## 2024-05-18 - Avoid Static Aria-Labels on Dynamic Buttons
+**Learning:** Static `aria-label` attributes completely override a button's inner text for screen readers. If a button dynamically changes its text to indicate a loading state (e.g., using a visually hidden `sr-only` span), the static `aria-label` will mask this change, causing screen readers to falsely announce the default state instead of the loading state.
+**Action:** Remove redundant static `aria-label` attributes if the button's visible text is perfectly descriptive. Rely on the DOM structure and `aria-hidden` bindings on spans to cleanly swap semantic visibility of states (like default vs. loading).

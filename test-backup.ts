@@ -8,7 +8,7 @@ async function runTest() {
   console.log('1. Adding note');
   // Need to ensure Yjs is ready in Node
   await waitForYjsSync();
-  
+
   const id = useAnnotationStore.getState().add({
     bookId: 'book1',
     cfiRange: 'epubcfi(/2/2/2)',
@@ -28,13 +28,13 @@ async function runTest() {
   console.log('Manifest yjsSnapshot length:', manifest.yjsSnapshot.length);
 
   console.log('3. Simulating restore on a fresh device');
-  
+
   // Clear the state
   useAnnotationStore.setState({ annotations: {} });
   if (yjsPersistence) {
     await yjsPersistence.clearData();
   }
-  
+
   // Actually, restore uses processManifest
   await backupService.processManifest(manifest);
 

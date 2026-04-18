@@ -255,14 +255,18 @@ export const FileUploader: React.FC = () => {
         ) : (
           <div className="flex flex-col items-center justify-center space-y-3 pointer-events-none">
             <div className={cn(
-              "p-4 rounded-full bg-muted transition-colors",
-              dragActive ? "bg-background" : "group-hover:bg-background"
+              "p-4 rounded-full bg-muted transition-all duration-200",
+              dragActive ? "bg-background scale-110" : "group-hover:bg-background"
             )}>
-              <UploadCloud className="h-8 w-8 text-muted-foreground" />
+              <UploadCloud className={cn("h-8 w-8 text-muted-foreground transition-colors", dragActive && "text-primary")} />
             </div>
             <div className="space-y-1">
               <p className="text-lg font-medium text-foreground">
-                Drop EPUBs or ZIPs here, or <span className="text-primary hover:underline">browse</span>
+                {dragActive ? (
+                  "Release to drop files here"
+                ) : (
+                  <>Drop EPUBs or ZIPs here, or <span className="text-primary hover:underline">browse</span></>
+                )}
               </p>
               <p className="text-sm text-muted-foreground">
                 Supports .epub and .zip archives

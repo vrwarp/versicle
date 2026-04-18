@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import type { NavigationItem } from '../types/db';
 
+import type { Annotation } from '../types/db';
+
+export interface CompassState {
+    variant?: 'active' | 'summary' | 'compact' | 'annotation' | 'sync-alert' | 'audio-triage';
+    targetAnnotation?: Annotation;
+}
+
 interface ReaderUIState {
     isLoading: boolean;
     toc: NavigationItem[];
@@ -22,6 +29,10 @@ interface ReaderUIState {
     setPlayFromSelection: (callback?: (cfi: string) => void) => void;
     setJumpToLocation: (callback?: (cfi: string) => void) => void;
 
+    compassState: CompassState;
+    setCompassState: (state: CompassState) => void;
+    resetCompassState: () => void;
+
     reset: () => void;
 }
 
@@ -35,6 +46,8 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
     playFromSelection: undefined,
     jumpToLocation: undefined,
 
+    compassState: {},
+
     setIsLoading: (isLoading) => set({ isLoading }),
     setToc: (toc) => set({ toc }),
     setImmersiveMode: (enabled) => set({ immersiveMode: enabled }),
@@ -42,6 +55,9 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
     setCurrentBookId: (id) => set({ currentBookId: id }),
     setPlayFromSelection: (callback) => set({ playFromSelection: callback }),
     setJumpToLocation: (callback) => set({ jumpToLocation: callback }),
+
+    setCompassState: (state) => set({ compassState: state }),
+    resetCompassState: () => set({ compassState: {} }),
 
     reset: () => set({
         isLoading: false,
@@ -51,6 +67,7 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
         currentSectionId: null,
         currentBookId: null,
         playFromSelection: undefined,
-        jumpToLocation: undefined
+        jumpToLocation: undefined,
+        compassState: {}
     })
 }));

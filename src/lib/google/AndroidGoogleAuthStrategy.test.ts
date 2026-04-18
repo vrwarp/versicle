@@ -120,6 +120,24 @@ describe('AndroidGoogleAuthStrategy', () => {
         expect(SocialLogin.login).toHaveBeenCalledTimes(2);
     });
 
+    it('should bypass cache when forceRefresh is true', async () => {
+        const mockResult1 = { result: { responseType: 'online', accessToken: { token: 'cached-token' } } };
+        const mockResult2 = { result: { responseType: 'online', accessToken: { token: 'new-token' } } };
+
+        const loginMock = (SocialLogin.login as unknown as Mock);
+        loginMock.mockResolvedValueOnce(mockResult1)
+            .mockResolvedValueOnce(mockResult2);
+
+        // First call
+        const token1 = await strategy.getValidToken('drive');
+        expect(token1).toBe('cached-token');
+
+        // Second call with forceRefresh = true
+        const token2 = await strategy.getValidToken('drive', undefined, true);
+        expect(token2).toBe('new-token');
+        expect(SocialLogin.login).toHaveBeenCalledTimes(2);
+    });
+
     it('should clear cache on disconnect', async () => {
         const mockResult = {
             result: {

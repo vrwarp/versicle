@@ -20,7 +20,7 @@ import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
 import { dbService } from '../../db/DBService';
-import { searchClient, type SearchResult } from '../../lib/search';
+import { searchClient } from '../../lib/search';
 import { SyncStatusPanel } from './SyncStatusPanel';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';
 import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
@@ -59,7 +59,7 @@ export const ReaderView: React.FC = () => {
     const { activeSidebar, setSidebar } = useSidebarState();
     const viewerRef = useRef<HTMLDivElement>(null);
     const previousLocation = useRef<{ start: string; end: string; timestamp: number } | null>(null);
-    const touchStartRef = useRef<{y: number, x: number} | null>(null);
+    const touchStartRef = useRef<{ y: number, x: number } | null>(null);
     const scrollWrapperRef = useRef<HTMLDivElement>(null);
 
     const {
@@ -91,6 +91,7 @@ export const ReaderView: React.FC = () => {
         setPlayFromSelection,
         setCurrentSection,
         setCurrentBookId,
+        resetCompassState,
         resetUI
     } = useReaderUIStore(useShallow(state => ({
         toc: state.toc,
@@ -104,10 +105,17 @@ export const ReaderView: React.FC = () => {
         setJumpToLocation: state.setJumpToLocation,
         setCurrentSection: state.setCurrentSection,
         setCurrentBookId: state.setCurrentBookId,
+        resetCompassState: state.resetCompassState,
         resetUI: state.reset
     })));
 
     logger.debug(`viewMode: ${readerViewMode}, immersive: ${immersiveMode}`);
+
+    useEffect(() => {
+        if (activeSidebar !== 'none' || immersiveMode) {
+            resetCompassState();
+        }
+    }, [activeSidebar, immersiveMode, resetCompassState]);
 
     const panicSaveState = useRef({ readerViewMode, currentSectionTitle });
 
@@ -149,7 +157,7 @@ export const ReaderView: React.FC = () => {
         loadAnnotations,
         showPopover,
         hidePopover
-} = useAnnotationStore(useShallow(state => ({
+    } = useAnnotationStore(useShallow(state => ({
         loadAnnotations: state.loadAnnotations,
         showPopover: state.showPopover,
         hidePopover: state.hidePopover
@@ -319,6 +327,7 @@ export const ReaderView: React.FC = () => {
             const selection = e.view?.getSelection();
             if (!selection || selection.isCollapsed) {
                 hidePopover();
+                useReaderUIStore.getState().resetCompassState();
             }
         },
         onError: (msg) => {
@@ -571,21 +580,13 @@ export const ReaderView: React.FC = () => {
         noteMarkers.current.clear();
     }, [rendition]);
 
-    // Helper to get annotation styles object for epub.js
-    const getAnnotationStyles = (color: string) => {
-        switch (color) {
-            case 'red': return { fill: 'red', backgroundColor: 'rgba(255, 0, 0, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
-            case 'green': return { fill: 'green', backgroundColor: 'rgba(0, 255, 0, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
-            case 'blue': return { fill: 'blue', backgroundColor: 'rgba(0, 0, 255, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
-            default: return { fill: 'yellow', backgroundColor: 'rgba(255, 255, 0, 0.3)', fillOpacity: '0.3', mixBlendMode: 'multiply' };
-        }
-    };
+
 
     useEffect(() => {
         if (rendition && isRenditionReady) {
             const currentIds = new Set(annotationList.map(a => a.id));
 
-            // 1. Remove deleted annotations (Highlights and Markers)
+            // 1. Remove deleted annotations (Highlights, and Markers)
             addedAnnotations.current.forEach((cfi, id) => {
                 if (!currentIds.has(id)) {
                     try {
@@ -607,29 +608,64 @@ export const ReaderView: React.FC = () => {
 
             // 2. Add new annotations
             annotationList.forEach(annotation => {
-                // Add Highlight if missing
+                // Add Highlight/Underline if missing
                 if (!addedAnnotations.current.has(annotation.id)) {
-                    const className = annotation.color === 'yellow' ? 'highlight-yellow' :
-                        annotation.color === 'green' ? 'highlight-green' :
-                            annotation.color === 'blue' ? 'highlight-blue' :
-                                annotation.color === 'red' ? 'highlight-red' : 'highlight-yellow';
-
                     try {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, (e: MouseEvent) => {
-                            // Handle click on highlight to show actions (delete/edit)
-                            const iframe = viewerRef.current?.querySelector('iframe');
-                            let x = e.clientX;
-                            let y = e.clientY;
+                        if (annotation.type === 'audio-bookmark') {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            (rendition as any).annotations.add(
+                                'highlight',
+                                annotation.cfiRange,
+                                {},
+                                (e: Event) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    // 1. Programmatically select the block using EPUB.js Selection API
+                                    rendition.display(annotation.cfiRange);
 
-                            if (iframe) {
-                                const iframeRect = iframe.getBoundingClientRect();
-                                x += iframeRect.left;
-                                y += iframeRect.top;
-                            }
-                            showPopover(x, y, annotation.cfiRange, annotation.text, annotation.id);
-                        }, className, getAnnotationStyles(annotation.color));
-                        addedAnnotations.current.set(annotation.id, annotation.cfiRange);
+                                    setTimeout(() => {
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        const range = (rendition as any).getRange(annotation.cfiRange);
+                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                        const win = (rendition as any).manager?.getContents()?.[0]?.window;
+                                        if (win && range) {
+                                            win.getSelection()?.removeAllRanges();
+                                            win.getSelection()?.addRange(range);
+                                        }
+
+                                        // 2. Dispatch state to Reader UI Store to morph the CompassPill
+                                        useReaderUIStore.getState().setCompassState({
+                                            variant: 'audio-triage',
+                                            targetAnnotation: annotation
+                                        });
+                                    }, 50);
+                                },
+                                'versicle-audio-bookmark-pending'
+                            );
+                            addedAnnotations.current.set(annotation.id, annotation.cfiRange);
+                        }
+                        else {
+                            const className = annotation.color === 'yellow' ? 'highlight-yellow' :
+                                annotation.color === 'green' ? 'highlight-green' :
+                                    annotation.color === 'blue' ? 'highlight-blue' :
+                                        annotation.color === 'red' ? 'highlight-red' : 'highlight-yellow';
+
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, (e: MouseEvent) => {
+                                // Handle click on highlight to show actions (delete/edit)
+                                const iframe = viewerRef.current?.querySelector('iframe');
+                                let x = e.clientX;
+                                let y = e.clientY;
+
+                                if (iframe) {
+                                    const iframeRect = iframe.getBoundingClientRect();
+                                    x += iframeRect.left;
+                                    y += iframeRect.top;
+                                }
+                                showPopover(x, y, annotation.cfiRange, annotation.text, annotation.id);
+                            }, className);
+                            addedAnnotations.current.set(annotation.id, annotation.cfiRange);
+                        }
                     } catch (e) {
                         logger.warn(`Failed to add annotation ${annotation.id}`, e);
                     }
@@ -807,44 +843,7 @@ export const ReaderView: React.FC = () => {
     const { setGlobalSettingsOpen } = useUIStore();
 
     // Search State
-    const [searchQuery, setSearchQuery] = useState('');
-    const [activeSearchQuery, setActiveSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-    const [isSearching, setIsSearching] = useState(false);
     const [syncPanelOpen, setSyncPanelOpen] = useState(false);
-
-    // Indexing State
-    const [isIndexing, setIsIndexing] = useState(false);
-    const [indexingProgress, setIndexingProgress] = useState(0);
-
-    const handleSearch = useCallback(async () => {
-        if (!searchQuery.trim()) return;
-        setIsSearching(true);
-        setActiveSearchQuery(searchQuery);
-        try {
-            const results = await searchClient.search(searchQuery, bookId || '');
-            setSearchResults(results);
-        } catch (e) {
-            logger.error("Search failed", e);
-            showToast("Search failed", "error");
-        } finally {
-            setIsSearching(false);
-        }
-    }, [searchQuery, bookId, showToast]);
-
-    const handleCheckIndex = useCallback(async () => {
-        if (!bookId || !book) return;
-        if (searchClient.isIndexed(bookId)) return;
-
-        setIsIndexing(true);
-        try {
-            await searchClient.indexBook(book, bookId, (progress) => {
-                setIndexingProgress(Math.round(progress * 100));
-            });
-        } finally {
-            setIsIndexing(false);
-        }
-    }, [bookId, book]);
 
     // Load synthetic TOC from metadata
     useEffect(() => {
@@ -1069,13 +1068,13 @@ export const ReaderView: React.FC = () => {
             if (readerViewMode !== 'scrolled' || !touchStartRef.current) return;
             const deltaY = touchStartRef.current.y - e.touches[0].clientY;
             const deltaX = touchStartRef.current.x - e.touches[0].clientX;
-            
+
             const epubContainer = viewerRef.current?.firstElementChild as HTMLElement;
             if (epubContainer) {
                 epubContainer.scrollBy({ top: deltaY, left: deltaX });
                 if (e.cancelable) e.preventDefault();
             }
-            
+
             touchStartRef.current = { y: e.touches[0].clientY, x: e.touches[0].clientX };
         };
 
@@ -1097,7 +1096,14 @@ export const ReaderView: React.FC = () => {
     }, [readerViewMode]);
 
     return (
-        <div data-testid="reader-view" className="flex flex-col h-screen bg-background text-foreground relative">
+        <div
+            data-testid="reader-view"
+            className="flex flex-col h-screen bg-background text-foreground relative"
+            onClick={() => {
+                hidePopover();
+                useReaderUIStore.getState().resetCompassState();
+            }}
+        >
             <Dialog
                 isOpen={showImportJumpDialog}
                 onClose={handleJumpCancel}
@@ -1206,7 +1212,6 @@ export const ReaderView: React.FC = () => {
                                     setSidebar('none');
                                 } else {
                                     setSidebar('search');
-                                    handleCheckIndex();
                                 }
                             }}
                             className="rounded-full text-muted-foreground"
@@ -1327,19 +1332,13 @@ export const ReaderView: React.FC = () => {
                 {/* Search Sidebar */}
                 {showSearch && (
                     <SearchPanel
-                        searchQuery={searchQuery}
-                        onSearchQueryChange={setSearchQuery}
-                        onSearch={handleSearch}
-                        isSearching={isSearching}
-                        searchResults={searchResults}
-                        activeSearchQuery={activeSearchQuery}
-                        isIndexing={isIndexing}
-                        indexingProgress={indexingProgress}
-                        onResultClick={async (result) => {
+                        bookId={bookId}
+                        book={book}
+                        onNavigate={async (href, query) => {
                             if (rendition) {
-                                await rendition.display(result.href);
+                                await rendition.display(href);
                                 setTimeout(() => {
-                                    scrollToText(activeSearchQuery);
+                                    scrollToText(query);
                                 }, 500);
                             }
                         }}
@@ -1347,7 +1346,7 @@ export const ReaderView: React.FC = () => {
                 )}
 
                 {/* Reader Area */}
-                <div 
+                <div
                     ref={scrollWrapperRef}
                     className="flex-1 relative min-w-0 flex flex-col items-center"
                 >
@@ -1381,10 +1380,22 @@ export const ReaderView: React.FC = () => {
                 isPlaying={isPlaying}
             />
 
-            {/* Smart Resume Toast */}
-
-
-
+            {/* Striped highlight pattern */}
+            <svg xmlns="http://www.w3.org/2000/svg" id="epubjs-custom-defs" style={{ width: 0, height: 0, position: 'absolute' }} aria-hidden="true">
+                <defs>
+                    <pattern id="striped-highlight" patternUnits="userSpaceOnUse" width="16" height="10" patternTransform="rotate(45)">
+                        <rect width="8" height="10" fill="orange" />
+                    </pattern>
+                </defs>
+            </svg>
+            {/* Highlights CSS styles */}
+            <style>{`
+                .highlight-red { fill: red; fill-opacity: 0.3; }
+                .highlight-green { fill: green; fill-opacity: 0.3; }
+                .highlight-blue { fill: blue; fill-opacity: 0.3; }
+                .highlight-yellow { fill: yellow; fill-opacity: 0.3; }
+                .versicle-audio-bookmark-pending { fill: url(#striped-highlight); fill-opacity: 0.3; }
+            `}</style>
         </div >
     );
 };

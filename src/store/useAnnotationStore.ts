@@ -26,7 +26,7 @@ interface PopoverState {
  * - `popover`: Transient UI state (not synced)
  * - Actions (functions): Not synced, local-only
  */
-interface AnnotationState {
+export interface AnnotationState {
   // === SYNCED STATE (persisted to Yjs) ===
   /** Map of annotations keyed by UUID. */
   annotations: Record<string, UserAnnotation>;

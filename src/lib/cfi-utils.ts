@@ -550,7 +550,20 @@ export function tryFastMergeCfi(left: string, right: string): string | null {
             } else {
                 // Point + Point (Case 4)
                 // Both are points (e.g. epubcfi(/6/14!/4/2/1:0) and epubcfi(/6/14!/4/2/1:10))
-                // Find common parent prefix.
+
+                // Fast path for identical path up to the colon
+                const leftColon = left.lastIndexOf(':');
+                if (leftColon !== -1) {
+                    const leftPath = left.slice(0, leftColon); // e.g. epubcfi(/6/14!/4/2/1
+                    if (right.startsWith(leftPath) && right[leftColon] === ':') {
+                        // Same path! Extract offsets
+                        const leftOffset = left.slice(leftColon, -1); // :0
+                        const rightOffset = right.slice(leftColon, -1); // :10
+                        return `${leftPath},${leftOffset},${rightOffset})`;
+                    }
+                }
+
+                // Fallback to finding common parent prefix via last slash.
                 // We assume parent ends at the last slash of the LEFT point.
                 const lastSlash = left.lastIndexOf('/');
                 if (lastSlash > 8) { // Ensure slash is after "epubcfi("

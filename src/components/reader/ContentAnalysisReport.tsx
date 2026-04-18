@@ -164,12 +164,13 @@ export const ContentAnalysisReport: React.FC<ContentAnalysisReportProps> = ({ is
                                     onClick={() => toggleSection(section.sectionId)}
                                     className="w-full flex items-center justify-between p-3 hover:bg-accent/50 transition-colors text-left"
                                     aria-expanded={expandedSections.has(section.sectionId)}
+                                    aria-label={`Section ${section.displayTitle}`}
                                 >
                                     <div className="flex items-center gap-2 font-medium">
-                                        {expandedSections.has(section.sectionId) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                        {expandedSections.has(section.sectionId) ? <ChevronDown className="w-4 h-4" aria-hidden="true" /> : <ChevronRight className="w-4 h-4" aria-hidden="true" />}
                                         <span className="truncate">{section.displayTitle}</span>
                                     </div>
-                                    <span className="text-xs bg-muted px-2 py-1 rounded-full text-muted-foreground shrink-0">
+                                    <span className="text-xs bg-muted px-2 py-1 rounded-full text-muted-foreground shrink-0" aria-label="1 item in section">
                                         1 item
                                     </span>
                                 </button>
@@ -179,6 +180,7 @@ export const ContentAnalysisReport: React.FC<ContentAnalysisReportProps> = ({ is
                                         <button
                                             onClick={() => handleJump(section.referenceStartCfi!)}
                                             className="w-full flex items-center justify-between p-2 pl-8 hover:bg-accent transition-colors text-xs group"
+                                            aria-label={`Jump to reference start for ${section.displayTitle}`}
                                         >
                                             <div className="flex items-center gap-2">
                                                 <div

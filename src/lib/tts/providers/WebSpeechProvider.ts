@@ -1,4 +1,5 @@
 import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice } from './types';
+import { playEarconOscillators } from '../earcons';
 
 /**
  * TTS Provider implementation using the browser's native Web Speech API.
@@ -11,6 +12,7 @@ export class WebSpeechProvider implements ITTSProvider {
   private voicesLoaded = false;
   private lastText: string | null = null;
   private lastOptions: TTSOptions | null = null;
+  private audioContext: AudioContext | null = null;
 
   constructor() {
     this.synth = window.speechSynthesis;
@@ -144,6 +146,22 @@ export class WebSpeechProvider implements ITTSProvider {
 
   on(callback: (event: TTSEvent) => void): void {
       this.eventListeners.push(callback);
+  }
+
+  playEarcon(type: 'bookmark_captured' | 'bookmark_failed'): void {
+      // Fallback for WebSpeechProvider (which doesn't use AudioElementPlayer)
+      // This will just play the earcon without ducking the native Web Speech API volume
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      if (!this.audioContext) {
+          this.audioContext = new AudioContextClass();
+      }
+      const ctx = this.audioContext;
+      if (ctx.state === 'suspended') {
+          ctx.resume();
+      }
+      playEarconOscillators(ctx, type);
   }
 
   private emit(event: TTSEvent) {

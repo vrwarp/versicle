@@ -80,21 +80,35 @@ class DBService {
       const manifestStore = tx.objectStore('static_manifests');
       const resourceStore = tx.objectStore('static_resources');
 
-      // Execute multiple parallel `.get` and `.getKey` queries within the single transaction
-      const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
-      const resourceKeysPromise = Promise.all(ids.map(id => resourceStore.getKey(id)));
+      // Hybrid approach: use getAll for large sets (it's faster), targeted reads for small sets
+      let allManifests: (StaticBookManifest | undefined)[];
+      let resourceKeysSet: Set<IDBValidKey>;
 
-      const [manifests, resourceKeys] = await Promise.all([manifestsPromise, resourceKeysPromise]);
+      if (ids.length > 50) {
+        const manifestsPromise = manifestStore.getAll();
+        const resourceKeysPromise = resourceStore.getAllKeys().then(keys => new Set(keys));
+        [allManifests, resourceKeysSet] = await Promise.all([manifestsPromise, resourceKeysPromise]);
+      } else {
+        const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
+        const resourceKeysPromise = Promise.all(ids.map(id => resourceStore.getKey(id)));
+
+        const [manifests, keys] = await Promise.all([manifestsPromise, resourceKeysPromise]);
+        allManifests = manifests.filter(Boolean) as StaticBookManifest[];
+        resourceKeysSet = new Set(keys.filter(Boolean) as IDBValidKey[]);
+      }
+
       await tx.done;
+
+      const manifestsMap = new Map(allManifests.map(m => [m!.bookId, m]));
 
       const inventoryBooks = useBookStore.getState().books;
 
       // Map results back preserving index and handling missing records
-      return ids.map((_id, index) => {
-          const manifest = manifests[index];
+      return ids.map((id) => {
+          const manifest = manifestsMap.get(id);
           if (!manifest) return undefined;
 
-          const resourceKey = resourceKeys[index];
+          const resourceKey = resourceKeysSet.has(manifest.bookId) ? manifest.bookId : undefined;
           const inventory = inventoryBooks[manifest.bookId];
 
           return {
@@ -484,17 +498,22 @@ class DBService {
   async getOffloadedStatus(bookIds?: string[]): Promise<Map<string, boolean>> {
     try {
       const db = await this.getDB();
-      const resourceKeys = await db.getAllKeys('static_resources');
-      const resourceSet = new Set(resourceKeys);
       const result = new Map<string, boolean>();
 
       // If specific IDs requested
       if (bookIds && bookIds.length > 0) {
-        for (const id of bookIds) {
-          const exists = resourceSet.has(id);
-          logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists} (Keys: ${resourceKeys.length})`);
+        const tx = db.transaction('static_resources', 'readonly');
+        const store = tx.objectStore('static_resources');
+
+        const allKeys = await store.getAllKeys();
+        const keySet = new Set(allKeys as string[]);
+        await tx.done;
+
+        bookIds.forEach((id) => {
+          const exists = keySet.has(id);
+          logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists}`);
           result.set(id, !exists);
-        }
+        });
       } else {
         // Return for all resources (inverse: if in set, not offloaded)
         // Ideally we need the list of ALL books to know which are offloaded (missing from set)
@@ -573,9 +592,7 @@ class DBService {
         const tx = db.transaction('cache_session_state', 'readwrite');
         const store = tx.objectStore('cache_session_state');
 
-        for (const state of Object.values(pending)) {
-          await store.put(state);
-        }
+        await Promise.all(Object.values(pending).map(state => store.put(state)));
         await tx.done;
       } catch (error) {
         logger.error('Failed to save TTS state', error);

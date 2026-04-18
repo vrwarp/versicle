@@ -11,8 +11,15 @@ import DOMPurify from 'dompurify';
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   // Fix Reverse Tabnabbing Vulnerability
   // Ensure all links with target="_blank" have rel="noopener noreferrer"
-  if ('target' in node && node.getAttribute('target') === '_blank') {
-    node.setAttribute('rel', 'noopener noreferrer');
+  if ('getAttribute' in node) {
+    const target = node.getAttribute('target');
+    if (target && target.toLowerCase() === '_blank') {
+      const currentRel = node.getAttribute('rel') || '';
+      const rels = new Set(currentRel.toLowerCase().split(/\s+/).filter(Boolean));
+      rels.add('noopener');
+      rels.add('noreferrer');
+      node.setAttribute('rel', Array.from(rels).join(' '));
+    }
   }
 
   // Security Hardening: Prevent External CSS Injection
