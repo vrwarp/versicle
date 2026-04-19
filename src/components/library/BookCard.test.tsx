@@ -167,13 +167,6 @@ describe('BookCard', () => {
   it('should trigger onDelete when delete menu item is clicked', async () => {
     renderCard();
 
-    // 1. Trigger might be clicked (optional with mock)
-    // const trigger = screen.getByTestId('book-context-menu-trigger');
-    // await act(async () => {
-    //   fireEvent.click(trigger);
-    // });
-
-    // 2. Click the delete option (always visible with mock)
     const deleteButton = screen.getByTestId('menu-delete');
 
     await act(async () => {
