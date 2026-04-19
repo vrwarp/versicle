@@ -6,19 +6,18 @@ import { createLogger } from '../../lib/logger';
 import { useToastStore } from '../../store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
+import { LibrarySearchBar } from './LibrarySearchBar';
 import { EmptyLibrary } from './EmptyLibrary';
 import { SyncPulseIndicator } from '../sync/SyncPulseIndicator';
-import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search, Loader2, X } from 'lucide-react';
+import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Loader2 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
-import { cn } from '../../lib/utils';
 import { GlobalNotesView } from '../notes/GlobalNotesView';
 import { ImportSourceDialog } from './ImportSourceDialog';
 import { ContentMissingDialog } from './ContentMissingDialog';
 import { DriveImportDialog } from '../drive/DriveImportDialog';
 import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
-import { Input } from '../ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { useShallow } from 'zustand/react/shallow';
 import { DeleteBookDialog } from './DeleteBookDialog';
@@ -31,7 +30,7 @@ import { DuplicateBookError } from '../../types/errors';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
 import { useNavigationGuard } from '../../hooks/useNavigationGuard';
 import { BackButtonPriority } from '../../store/useBackNavigationStore';
-import { useDebounce } from '../../hooks/useDebounce';
+
 
 /**
  * The main library view component.
@@ -83,8 +82,7 @@ export const LibraryView: React.FC = () => {
   const showToast = useToastStore(state => state.showToast);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -318,26 +316,29 @@ export const LibraryView: React.FC = () => {
 
 
 
-  // OPTIMIZATION: Create a search index to avoid expensive re-calculation on every render
-  // This memoized value updates only when the books array changes, not on every search keystroke.
-  // This avoids calling toLowerCase() N times per frame during typing.
-  // REACT PREDICTABILITY: Instead of mutating a cache during render, we just derive it purely.
-  const searchableBooks = useMemo(() => {
-    return books.map(book => ({
-      book,
-      searchString: `${(book.title || '').toLowerCase()} ${(book.author || '').toLowerCase()}`
-    }));
-  }, [books]);
-
   // OPTIMIZATION: Memoize filtered and sorted books
   const filteredAndSortedBooks = useMemo(() => {
-    // BOLT OPTIMIZATION: Use debounced search query to prevent filtering/sorting on every keystroke
-    const query = debouncedSearchQuery.toLowerCase();
+    const query = debouncedSearchQuery.toLowerCase().trim();
 
-    // 1. Filter using the pre-computed index (fast string check)
-    let filtered = searchableBooks
-      .filter(item => item.searchString.includes(query))
-      .map(item => item.book);
+    // BOLT OPTIMIZATION: Mapless single-pass fast filter.
+    // Instead of mapping the entire library to an array of lowercase string objects (which causes O(N) allocation and GC thrashing),
+    // we do a simple inline check.
+    let filtered = [];
+    for (let i = 0; i < books.length; i++) {
+        const book = books[i];
+
+        if (!query) {
+            filtered.push(book);
+            continue;
+        }
+
+        const titleLower = book.title ? book.title.toLowerCase() : '';
+        const authorLower = book.author ? book.author.toLowerCase() : '';
+
+        if (titleLower.includes(query) || authorLower.includes(query)) {
+            filtered.push(book);
+        }
+    }
 
     // 2. Apply "On Device" filter
     if (libraryFilterMode === 'downloaded') {
@@ -373,7 +374,7 @@ export const LibraryView: React.FC = () => {
           return 0;
       }
     });
-  }, [searchableBooks, debouncedSearchQuery, sortOrder, libraryFilterMode, staticMetadata]);
+  }, [books, debouncedSearchQuery, sortOrder, libraryFilterMode, staticMetadata]);
 
   // OPTIMIZATION: Memoize rendered VDOM items to prevent O(N) allocation on every keystroke in the search bar.
   // When `searchQuery` updates (keystroke), LibraryView re-renders immediately, but `debouncedSearchQuery`
@@ -569,29 +570,10 @@ export const LibraryView: React.FC = () => {
           <div className="flex flex-col gap-4 md:flex-row-reverse md:items-center md:justify-between">
             {/* Search Bar */}
             <div className="w-full md:w-72">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input
-                  type="search"
-                  placeholder="Search library..."
-                  aria-label="Search library"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={cn("pl-9", searchQuery && "pr-9")}
-                  data-testid="library-search-input"
-                />
-                {searchQuery && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
-                    onClick={() => setSearchQuery('')}
-                    aria-label="Clear query"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
+              <LibrarySearchBar
+                initialValue={debouncedSearchQuery}
+                onSearchChange={setDebouncedSearchQuery}
+              />
               {/* Live region for screen readers */}
               <div role="status" aria-live="polite" className="sr-only">
                 {debouncedSearchQuery ? (
@@ -683,7 +665,7 @@ export const LibraryView: React.FC = () => {
               <p className="text-lg">No books found matching "{debouncedSearchQuery}"</p>
               <Button
                 variant="link"
-                onClick={() => setSearchQuery('')}
+                onClick={() => setDebouncedSearchQuery('')}
                 className="mt-2"
               >
                 Clear search
