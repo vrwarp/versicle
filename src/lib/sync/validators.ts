@@ -15,6 +15,7 @@ export const UserInventoryItemSchema = z.object({
     customTitle: z.string().optional(),
     customAuthor: z.string().optional(),
     coverPalette: z.array(z.number().int().min(0).max(65535)).length(5).optional(),
+    language: z.string().optional(),
 });
 
 export const ReadingListEntrySchema = z.object({
@@ -67,6 +68,7 @@ export const UserOverridesSchema = z.object({
         matchType: z.enum(['ignore_case', 'match_case', 'regex']).optional(),
         applyBeforeGlobal: z.boolean().optional(),
         created: z.number(),
+        language: z.string().optional(),
     })),
     lexiconConfig: z.object({
         applyBefore: z.boolean(),

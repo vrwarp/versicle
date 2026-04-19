@@ -72,7 +72,7 @@ const defaultPreferences = {
 
     fontProfiles: {
         en: { fontSize: 100, lineHeight: 1.5 },
-        zh: { fontSize: 110, lineHeight: 1.8 }
+        zh: { fontSize: 120, lineHeight: 1.8 }
     }
 };
 

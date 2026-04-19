@@ -170,13 +170,12 @@ export const GlobalSettingsDialog = () => {
         backgroundAudioMode, setBackgroundAudioMode,
         whiteNoiseVolume, setWhiteNoiseVolume,
         voice, voices, setVoice,
-        activeLanguage, setActiveLanguage,
+        activeLanguage,
         downloadVoice, deleteVoice, downloadProgress, downloadStatus, isDownloading, checkVoiceDownloaded,
         minSentenceLength, setMinSentenceLength
     } = useTTSStore(useShallow(state => ({
         // Optimization: Use shallow selector to avoid re-renders on activeCfi/progress updates during playback
         activeLanguage: state.activeLanguage,
-        setActiveLanguage: state.setActiveLanguage,
         providerId: state.providerId,
         setProviderId: state.setProviderId,
         apiKeys: state.apiKeys,
@@ -541,7 +540,6 @@ export const GlobalSettingsDialog = () => {
                         {activeTab === 'tts' && (
                             <TTSSettingsTab
                                 activeLanguage={activeLanguage}
-                                onActiveLanguageChange={setActiveLanguage}
                                 providerId={providerId}
                                 onProviderChange={setProviderId}
                                 apiKeys={apiKeys}

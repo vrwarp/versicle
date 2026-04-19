@@ -18,10 +18,8 @@ export type TTSApiKeyProvider = 'google' | 'openai' | 'lemonfox';
 export type BackgroundAudioMode = 'silence' | 'noise' | 'off';
 
 export interface TTSSettingsTabProps {
-    /** Currently selected language profile */
+    /** Currently active language profile (from store, driven by book context) */
     activeLanguage: string;
-    /** Callback when user switches language profile */
-    onActiveLanguageChange: (lang: string) => void;
     // Provider
     providerId: TTSProviderId;
     onProviderChange: (providerId: TTSProviderId) => void;
@@ -50,7 +48,6 @@ export interface TTSSettingsTabProps {
 
 export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
     activeLanguage,
-    onActiveLanguageChange,
     providerId,
     onProviderChange,
     apiKeys,
@@ -71,6 +68,9 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
     minSentenceLength,
     onMinSentenceLengthChange
 }) => {
+    // Local-only language state for configuration view. Changing this does NOT
+    // affect the active playback profile — that is always set by the open book's language.
+    const [configLanguage, setConfigLanguage] = useState(activeLanguage);
     const [voiceToDelete, setVoiceToDelete] = useState<string | null>(null);
 
     const handleConfirmDelete = () => {
@@ -88,7 +88,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
         <div className="space-y-6">
             <div className="space-y-2 mb-6">
                 <Label htmlFor="tts-language-select" className="text-sm font-medium">Language Profile</Label>
-                <Select value={activeLanguage} onValueChange={onActiveLanguageChange}>
+                <Select value={configLanguage} onValueChange={setConfigLanguage}>
                     <SelectTrigger id="tts-language-select" data-testid="tts-language-select">
                         <SelectValue />
                     </SelectTrigger>
@@ -164,12 +164,12 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                                 }}>
                                     <SelectTrigger id="tts-voice-select" aria-label="Select voice"><SelectValue placeholder="Select a voice" /></SelectTrigger>
                                     <SelectContent>
-                                        {voices.filter(v => v.lang?.startsWith(activeLanguage)).map(v => (
+                                        {voices.filter(v => v.lang?.startsWith(configLanguage)).map(v => (
                                             <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                {activeLanguage === 'zh' && voices.filter(v => v.lang?.startsWith('zh')).length === 0 && (
+                                {configLanguage === 'zh' && voices.filter(v => v.lang?.startsWith('zh')).length === 0 && (
                                     <div data-testid="mandarin-voice-warning" className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md text-sm text-yellow-800 dark:text-yellow-200 mt-2">
                                         ⚠️ No Mandarin voice installed. Audio playback will fail for Chinese books.
                                     </div>

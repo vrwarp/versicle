@@ -150,10 +150,9 @@ export class TextSegmenter {
      * Helper to merge two text strings with appropriate separation.
      * Uses manual scanning to avoid expensive trimEnd() and regex allocations.
      */
-    private static mergeText(left: string, right: string): string {
+    private static mergeText(left: string, right: string, locale: string = 'en'): string {
+        const isCJK = locale.startsWith('zh') || locale.startsWith('ja') || locale.startsWith('ko');
         let i = left.length - 1;
-        // Check for whitespace (Space, NBSP, Tab, LF, CR)
-        // Optimization: Use Trie's lookup table for O(1) whitespace check and avoid repeated charCodeAt calls
         while (i >= 0) {
             const code = left.charCodeAt(i);
             if (TextScanningTrie.isWhitespace(code)) {
@@ -163,16 +162,18 @@ export class TextSegmenter {
             }
         }
 
-        let separator = '. ';
+        let separator = isCJK ? '。' : '. ';
         if (i >= 0) {
             const code = left.charCodeAt(i);
-            // Check for punctuation: . , ! ? ; :
-            if (code === 46 || code === 44 || code === 33 || code === 63 || code === 59 || code === 58) {
+            // Check for punctuation: . , ! ? ; : AND CJK equivalents 。 ， ！ ？ ； ：
+            if (
+                code === 46 || code === 44 || code === 33 || code === 63 || code === 59 || code === 58 ||
+                code === 12290 || code === 65292 || code === 65281 || code === 65311 || code === 65307 || code === 65306
+            ) {
                 separator = ' ';
             }
             return left.substring(0, i + 1) + separator + right;
         } else {
-            // Left was empty or all whitespace
             return right;
         }
     }
@@ -234,7 +235,8 @@ export class TextSegmenter {
         abbreviations: string[],
         alwaysMerge: string[],
         sentenceStarters: string[],
-        minSentenceLength: number = 0
+        minSentenceLength: number = 0,
+        locale: string = 'en'
     ): SentenceNode[] {
         if (!sentences || sentences.length === 0) return [];
 
@@ -329,7 +331,7 @@ export class TextSegmenter {
             return merged;
         }
 
-        return this.mergeByLength(merged, minSentenceLength);
+        return this.mergeByLength(merged, minSentenceLength, locale);
     }
 
     /**
@@ -339,7 +341,7 @@ export class TextSegmenter {
      * @param minLength - The minimum character length.
      * @returns A new list of merged sentences.
      */
-    public static mergeByLength(sentences: SentenceNode[], minLength: number): SentenceNode[] {
+    public static mergeByLength(sentences: SentenceNode[], minLength: number, locale: string = 'en'): SentenceNode[] {
         if (!sentences || sentences.length === 0) return [];
 
         const lengthMerged: SentenceNode[] = [];
@@ -356,7 +358,7 @@ export class TextSegmenter {
             // Check if buffer is too short
             if (buffer.text.length < minLength) {
                 // Merge current into buffer
-                buffer.text = TextSegmenter.mergeText(buffer.text, current.text);
+                buffer.text = TextSegmenter.mergeText(buffer.text, current.text, locale);
 
                 // Merge CFIs
                 const fastMergedCfi = tryFastMergeCfi(buffer.cfi, current.cfi);
@@ -384,7 +386,7 @@ export class TextSegmenter {
             if (buffer.text.length < minLength && lengthMerged.length > 0) {
                 const last = lengthMerged[lengthMerged.length - 1];
 
-                last.text = TextSegmenter.mergeText(last.text, buffer.text);
+                last.text = TextSegmenter.mergeText(last.text, buffer.text, locale);
 
                 const fastMergedCfi = tryFastMergeCfi(last.cfi, buffer.cfi);
                 if (fastMergedCfi) {

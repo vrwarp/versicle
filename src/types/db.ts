@@ -370,6 +370,8 @@ export interface Book {
    * 5 integers representing the cover regions (TL, TR, BL, BR, Center).
    */
   coverPalette?: number[];
+  /** ISO 639-1 language code (e.g., 'en', 'zh'). */
+  language?: string;
 }
 
 /**
@@ -419,6 +421,8 @@ export interface BookState {
   isOffloaded?: boolean;
   /** Status of AI analysis for the book. */
   aiAnalysisStatus?: 'none' | 'partial' | 'complete';
+  /** ISO 639-1 language code (e.g., 'en', 'zh'). */
+  language?: string;
 }
 
 /**

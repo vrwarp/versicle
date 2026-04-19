@@ -114,7 +114,8 @@ class DBService {
             totalChars: manifest.totalChars,
             version: manifest.schemaVersion,
 
-            isOffloaded: !resourceKey
+            isOffloaded: !resourceKey,
+            language: inventory?.language || manifest.language
           };
       });
     } catch (error) {
@@ -159,7 +160,8 @@ class DBService {
         totalChars: manifest.totalChars,
         version: manifest.schemaVersion,
 
-        isOffloaded: !resourceKey
+        isOffloaded: !resourceKey,
+        language: inventory?.language || manifest.language
       };
     } catch (error) {
       this.handleError(error);

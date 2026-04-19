@@ -97,7 +97,8 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
             expect.arrayContaining([...BIBLE_ABBREVIATIONS, 'Dr.']),
             expect.anything(), // alwaysMerge
             expect.anything(), // sentenceStarters
-            expect.anything()  // minSentenceLength
+            expect.anything(), // minSentenceLength
+            expect.anything()  // locale
         );
     });
 
@@ -115,6 +116,7 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
         expect(TextSegmenter.refineSegments).toHaveBeenCalledWith(
             expect.anything(),
             ['Dr.'], // Only custom
+            expect.anything(),
             expect.anything(),
             expect.anything(),
             expect.anything()
@@ -139,6 +141,7 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
         expect(TextSegmenter.refineSegments).toHaveBeenCalledWith(
             expect.anything(),
             expect.arrayContaining([...BIBLE_ABBREVIATIONS, 'Dr.']),
+            expect.anything(),
             expect.anything(),
             expect.anything(),
             expect.anything()
