@@ -339,8 +339,8 @@ export class AudioPlayerService {
     }
 
     public loadSection(sectionIndex: number, autoPlay: boolean = true) {
+        const originalBookId = this.currentBookId;
         return this.enqueue(async () => {
-            const originalBookId = this.currentBookId;
             if (this.playlistPromise) await this.playlistPromise;
             if (this.currentBookId !== originalBookId) return;
             return this.loadSectionInternal(sectionIndex, autoPlay);
@@ -348,8 +348,8 @@ export class AudioPlayerService {
     }
 
     public loadSectionBySectionId(sectionId: string, autoPlay: boolean = true, sectionTitle?: string) {
+        const originalBookId = this.currentBookId;
         return this.enqueue(async () => {
-            const originalBookId = this.currentBookId;
             if (this.playlistPromise) await this.playlistPromise;
             if (this.currentBookId !== originalBookId) return;
 
