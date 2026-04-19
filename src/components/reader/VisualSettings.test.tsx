@@ -14,7 +14,10 @@ vi.mock('../../store/useReaderUIStore', () => ({
   useReaderUIStore: vi.fn(),
 }));
 vi.mock('../../store/useBookStore', () => ({
-  useBookStore: vi.fn(),
+  useBookStore: Object.assign(vi.fn(), {
+    getState: vi.fn(),
+    subscribe: vi.fn(),
+  }),
 }));
 
 // Mock zustand shallow

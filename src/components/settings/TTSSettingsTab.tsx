@@ -49,7 +49,8 @@ export interface TTSSettingsTabProps {
 }
 
 export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
-    activeLanguage,
+    activeLanguage = 'en',
+    profiles = {},
     providerId,
     onProviderChange,
     apiKeys,
@@ -58,7 +59,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
     onBackgroundAudioModeChange,
     whiteNoiseVolume,
     onWhiteNoiseVolumeChange,
-    voice,
+    voice: _voice,
     voices,
     onVoiceChange,
     isVoiceReady,
@@ -74,9 +75,12 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
     // affect the active playback profile — that is always set by the open book's language.
     const [configLanguage, setConfigLanguage] = useState(activeLanguage);
     
-    // Derive the voice for the currently viewed config language from the profiles
-    const configProfile = profiles[configLanguage];
-    const configVoice = configProfile?.voiceId ? voices.find(v => v.id === configProfile.voiceId) || null : null;
+    // Derive the voice for the currently viewed config language from the profiles.
+    // Fall back to the legacy 'voice' prop if we are looking at the active language 
+    // and no specific profile exists yet.
+    const configProfile = profiles?.[configLanguage];
+    const configVoiceId = configProfile?.voiceId || (configLanguage === activeLanguage ? _voice?.id : null);
+    const configVoice = configVoiceId ? voices.find(v => v.id === configVoiceId) || null : null;
 
     const [voiceToDelete, setVoiceToDelete] = useState<string | null>(null);
 
@@ -204,7 +208,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                                         ) : (
                                             <div className="flex gap-2">
                                                 <Button
-                                                    onClick={() => onDownloadVoice(voice.id)}
+                                                    onClick={() => configVoice && onDownloadVoice(configVoice.id)}
                                                     variant={isVoiceReady ? "outline" : "default"}
                                                     disabled={isVoiceReady}
                                                     size="sm"
@@ -214,7 +218,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                                                 </Button>
                                                 {isVoiceReady && (
                                                     <Button
-                                                        onClick={() => setVoiceToDelete(voice.id)}
+                                                        onClick={() => configVoice && setVoiceToDelete(configVoice.id)}
                                                         variant="destructive"
                                                         size="icon"
                                                         title="Delete Voice Data"

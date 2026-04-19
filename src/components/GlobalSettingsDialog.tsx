@@ -165,6 +165,7 @@ export const GlobalSettingsDialog = () => {
     };
 
     const {
+        profiles,
         providerId, setProviderId,
         apiKeys, setApiKey,
         backgroundAudioMode, setBackgroundAudioMode,

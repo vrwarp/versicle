@@ -70,7 +70,9 @@ export const ReaderView: React.FC = () => {
         fontSize,
         fontProfiles,
         shouldForceFont,
-        readerViewMode
+        readerViewMode,
+        forceTraditionalChinese,
+        showPinyin
     } = usePreferencesStore(useShallow(state => ({
         currentTheme: state.currentTheme,
         customTheme: state.customTheme || DEFAULT_CUSTOM_THEME,
@@ -79,7 +81,9 @@ export const ReaderView: React.FC = () => {
         fontSize: state.fontSize,
         fontProfiles: state.fontProfiles || {},
         shouldForceFont: state.shouldForceFont,
-        readerViewMode: state.readerViewMode || 'paginated'
+        readerViewMode: state.readerViewMode || 'paginated',
+        forceTraditionalChinese: state.forceTraditionalChinese,
+        showPinyin: state.showPinyin
     })));
 
     const {
@@ -308,17 +312,26 @@ export const ReaderView: React.FC = () => {
         onTocLoaded: (newToc) => setToc(newToc),
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         onSelection: (cfiRange, range, _contents) => {
-            console.log("Selection", cfiRange, range);
-            const rect = range.getBoundingClientRect();
-            const iframe = viewerRef.current?.querySelector('iframe');
-            if (iframe) {
-                const iframeRect = iframe.getBoundingClientRect();
-                showPopover(
-                    rect.left + iframeRect.left,
-                    rect.top + iframeRect.top,
-                    cfiRange,
-                    range.toString()
-                );
+            try {
+                // Pre-flight check: ensure range is valid and has dimensions
+                if (!range || typeof range.getBoundingClientRect !== 'function') return;
+
+                const rect = range.getBoundingClientRect();
+                // If the selection has no width/height (e.g. collapsed or detached), skip
+                if (rect.width === 0 && rect.height === 0) return;
+
+                const iframe = viewerRef.current?.querySelector('iframe');
+                if (iframe) {
+                    const iframeRect = iframe.getBoundingClientRect();
+                    showPopover(
+                        rect.left + iframeRect.left,
+                        rect.top + iframeRect.top,
+                        cfiRange,
+                        range.toString()
+                    );
+                }
+            } catch (e) {
+                logger.warn("Selection measurement failed (likely DOM mutation)", e);
             }
         },
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -429,6 +442,12 @@ export const ReaderView: React.FC = () => {
             setCurrentBookId(bookId);
         }
     }, [bookId, setCurrentBookId]);
+
+    // Hide selection popover when Chinese reading settings change.
+    // This prevents "orphaned" popovers that point to nodes we are about to replace in DOM.
+    useEffect(() => {
+        hidePopover();
+    }, [forceTraditionalChinese, showPinyin, hidePopover]);
 
     // Save reading history on unmount
     useEffect(() => {

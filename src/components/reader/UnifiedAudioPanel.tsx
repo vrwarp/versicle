@@ -34,7 +34,8 @@ export const UnifiedAudioPanel = () => {
     sanitizationEnabled,
     setSanitizationEnabled,
     prerollEnabled,
-    setPrerollEnabled
+    setPrerollEnabled,
+    activeLanguage
   } = useTTSStore(useShallow(state => ({
     isPlaying: state.isPlaying,
     play: state.play,

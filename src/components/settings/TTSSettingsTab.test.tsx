@@ -30,6 +30,7 @@ vi.mock('../ui/Slider', () => ({
 describe('TTSSettingsTab', () => {
     const defaultProps: TTSSettingsTabProps = {
         activeLanguage: 'en',
+        profiles: { en: { voiceId: 'voice1', rate: 1.0, pitch: 1.0, volume: 1.0 } },
         providerId: 'local',
         onProviderChange: vi.fn(),
         apiKeys: {},

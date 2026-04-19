@@ -20,7 +20,10 @@ vi.mock('./useLibraryStore', () => ({
 }));
 
 vi.mock('./useBookStore', () => ({
-  useBookStore: vi.fn(),
+  useBookStore: Object.assign(vi.fn(), {
+    getState: vi.fn(),
+    subscribe: vi.fn(),
+  }),
 }));
 
 vi.mock('./useReadingStateStore', () => ({

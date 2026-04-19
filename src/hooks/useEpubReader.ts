@@ -449,6 +449,10 @@ export function useEpubReader(
           const doc = contents.document;
           if (!doc) return;
 
+          // Clear any active selection to prevent crashes during DOM mutation 
+          // (orphaned ranges can cause getClientRects errors)
+          contents.window.getSelection()?.removeAllRanges();
+
           const prefs = usePreferencesStore.getState();
           const bookLang = bookId ? useBookStore.getState().books[bookId]?.language || 'en' : 'en';
 
