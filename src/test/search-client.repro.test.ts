@@ -4,11 +4,11 @@ import { Book } from 'epubjs';
 
 // Mock Worker class
 class MockWorker {
-    onmessage: any;
+    onmessage: ((this: Worker, ev: MessageEvent) => unknown) | null = null;
     postMessage() {}
     terminate() {}
 }
-global.Worker = MockWorker as any;
+global.Worker = MockWorker as unknown as typeof Worker;
 
 describe('SearchClient Concurrent Indexing', () => {
     beforeEach(() => {
@@ -34,7 +34,7 @@ describe('SearchClient Concurrent Indexing', () => {
         } as unknown as Book;
 
         // Mock comlink worker engine
-        vi.spyOn(searchClient as any, 'getEngine').mockReturnValue({
+        vi.spyOn(searchClient as unknown as { getEngine: () => unknown }, 'getEngine').mockReturnValue({
             initIndex: vi.fn().mockResolvedValue(undefined),
             supportsXmlParsing: vi.fn().mockResolvedValue(true),
             addDocuments: vi.fn().mockResolvedValue(undefined)
