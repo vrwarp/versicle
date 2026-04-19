@@ -74,6 +74,7 @@ graph TD
         AndroidBackup[AndroidBackupService]
         Checkpoint[CheckpointService]
         Inspector[CheckpointInspector]
+        MigrationState[MigrationStateService]
         DriveScanner[DriveScannerService]
         GoogleAuth[GoogleIntegrationManager]
     end
@@ -149,6 +150,8 @@ graph TD
     YjsProvider --> FireSync
     FireSync --> FireProvider
     FireSync --> Checkpoint
+    FireSync --> MigrationState
+    MigrationState --> SyncStore
     DeviceStore --> SyncMesh
     LibStore --> AndroidBackup
     GlobalSettings --> Inspector
@@ -287,6 +290,14 @@ Versicle implements a strategy combining **Real-Time Sync** (via Firestore) for 
     *   **Before Sync**: Automatically creates a `pre-sync` checkpoint immediately before connecting to Firestore.
     *   **Rotation**: Maintains a rolling buffer of the last 10 checkpoints.
 
+#### `MigrationStateService.ts` (Workspace Context Migration)
+*   **Goal**: Manages the state machine bridging page reloads during workspace context switches, safely delaying normal sync boot sequences while a migration is in-flight.
+*   **Logic**:
+    *   **localStorage State**: Persists migration states (`AWAITING_CONFIRMATION`, `RESTORING_BACKUP`) and tracking details (target workspace, backup checkpoint ID) to `localStorage`, protecting state across browser reloads.
+    *   **Boot Blocking**: Integrates into the app boot sequence; if the service reports `isBlocked()`, standard Yjs/Firestore sync initialization is halted until the migration concludes or fails.
+    *   **Dangling Check**: Recovers gracefully by providing `getDanglingBackupId()` to clean up residual checkpoint states if a migration crashes or completes abnormally.
+*   **Trade-offs**: Heavily relies on browser `localStorage`. If a user manually clears local data mid-migration, the client could be left in an inconsistent workspace state.
+
 #### `FirestoreSyncManager.ts` (Real-Time Cloud)
 Provides a "Cloud Overlay" for real-time synchronization.
 
@@ -352,6 +363,11 @@ Handles the complex task of importing an EPUB file.
     4.  **Adaptive Contrast**: Generates a **Cover Palette** via `cover-palette.ts`.
         *   **Logic**: Uses **Weighted K-Means Clustering** (manual implementation) on the cover image to extract dominant colors. It prioritizes colors based on spatial distribution (corners vs. center) to ensure UI elements don't clash with key visual areas.
 
+#### Batch Ingestion (`src/lib/batch-ingestion.ts`)
+*   **Goal**: Allow users to import large collections of EPUBs simultaneously via ZIP archives, bypassing tedious one-by-one file selection.
+*   **Logic**: Uses `JSZip` (`extractEpubsFromZip`) to recursively scan the archive for `.epub` extensions and extract them as distinct `File` objects for standard ingestion processing.
+*   **Trade-offs**: Processing massive ZIP files entirely in the browser consumes significant RAM, risking memory exhaustion or tab crashes on low-end mobile devices.
+
 #### Entity Resolution (`src/lib/entity-resolution.ts`)
 *   **Goal**: Deterministically match reading list entries to library books when their primary filenames differ.
 *   **Logic**:
@@ -378,7 +394,7 @@ Handles the complex task of importing an EPUB file.
 #### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
 Implements full-text search off the main thread.
 
-*   **Logic**: Uses a **RegExp** scanning approach over in-memory text via `SearchEngine` class, exposed via `Comlink`.
+*   **Logic**: Uses a **RegExp** scanning approach over in-memory text via `SearchEngine` class. The engine is exposed directly within `src/workers/search.worker.ts` via `Comlink.expose(engine)` to allow off-main-thread text parsing and prevent UI freezing.
     *   **Batching & Offloading**: `SearchClient` sends sections to the worker in batches. To prevent blocking the main thread, XML parsing is offloaded to the Web Worker via `supportsXmlParsing()`.
     *   **Extraction Strategy**: First attempts to extract raw XML directly from the EPUB archive (`book.archive.getBlob`) for speed. If this fails, it falls back to the `epub.js` rendering pipeline (`book.load()`), which is slower but resolves external resources.
 *   **Trade-off**: The index is **transient** (in-memory only) and rebuilt on demand.
@@ -622,7 +638,7 @@ Manages the virtual playback timeline.
 
 State is managed using **Zustand** with specialized strategies for different data types.
 
-*   **`useBookStore` (Synced)**: Manages **User Inventory**. Backed by Yjs Map.
+*   **`useBookStore` (Synced)**: Manages **User Inventory**. Backed by Yjs Map. Holds the `__schemaVersion` atomic key and the `books` inventory state synchronized via Yjs.
 *   **`useReadingListStore` (Synced)**:
     *   **Goal**: Functions as a **"Shadow Inventory"**.
     *   **Logic**: Tracks book status (Read, Reading, Want to Read) and Rating independently of the file existence. Persists even if the book file is offloaded or deleted.
@@ -716,6 +732,7 @@ State is managed using **Zustand** with specialized strategies for different dat
 
 *   **Database Resilience**: `DBService` wraps `QuotaExceededError` into a unified `StorageFullError` for consistent UI handling.
 *   **Safe Mode**: If critical database initialization fails, the app boots into `SafeModeView`, providing a "Factory Reset" (`deleteDB`) option to unblock the user.
+*   **Workspace Migration Locks**: Safely halts background synchronization operations via `MigrationStateService` when transitioning between cloud workspaces to prevent split-brain states or data corruption. Recovery UI (`CriticalMigrationFailureView`) catches unhandled exceptions to rollback state safely.
 *   **Schema Quarantine (`ObsoleteLockView`)**: When the application detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION = 4`), it renders `ObsoleteLockView` to lock the UI permanently.
     *   **Why**: Prevents a down-level client from inadvertently overwriting or corrupting newer data structures introduced by an updated app version.
     *   **Trade-off**: The user is completely locked out of the app until they update to the latest version.

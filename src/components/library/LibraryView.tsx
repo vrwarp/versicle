@@ -532,7 +532,6 @@ export const LibraryView: React.FC = () => {
                   onClick={() => setIsImportSourceOpen(true)}
                   disabled={isImporting}
                   className="gap-2 shadow-sm"
-                  aria-label="Import book"
                   data-testid="header-add-button"
                 >
                   {isImporting ? (
@@ -541,10 +540,14 @@ export const LibraryView: React.FC = () => {
                       <span className="sr-only">Importing...</span>
                     </>
                   ) : (
-                    <Upload className="w-4 h-4" />
+                    <Upload className="w-4 h-4" aria-hidden="true" />
                   )}
-                  <span className="font-medium hidden sm:inline">Import Book</span>
-                  <span className="font-medium sm:hidden">Import</span>
+                  <span aria-hidden={isImporting} className="font-medium hidden sm:inline">
+                    {isImporting ? "Importing..." : "Import Book"}
+                  </span>
+                  <span aria-hidden={isImporting} className="font-medium sm:hidden">
+                    {isImporting ? "Importing..." : "Import"}
+                  </span>
                 </Button>
               </>
             )}
@@ -583,7 +586,7 @@ export const LibraryView: React.FC = () => {
                     size="icon"
                     className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
                     onClick={() => setSearchQuery('')}
-                    aria-label="Clear query"
+                    aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
                   </Button>

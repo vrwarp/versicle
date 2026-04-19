@@ -22,7 +22,7 @@ export const TTSQueueItem = memo(forwardRef<HTMLButtonElement, TTSQueueItemProps
                 ref={ref}
                 onClick={() => onJump(index)}
                 className={cn(
-                    "text-left text-sm p-2 rounded transition-all duration-200 w-full",
+                    "text-left text-sm p-2 rounded transition-all duration-200 w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
                     isActive
                         ? "bg-primary/20 text-foreground border-l-4 border-primary font-medium shadow-sm"
                         : "text-muted-foreground opacity-60 hover:opacity-100 hover:bg-muted/10",

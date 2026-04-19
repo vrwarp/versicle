@@ -2,7 +2,8 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
-import { Search, Download, Loader2, Cloud } from 'lucide-react';
+import { Search, Download, Loader2, Cloud, X } from 'lucide-react';
+import { cn } from '../../lib/utils';
 import { useDriveStore, type DriveFileIndex } from '../../store/useDriveStore';
 import { DriveScannerService } from '../../lib/drive/DriveScannerService';
 import { useToastStore } from '../../store/useToastStore';
@@ -116,9 +117,20 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
                             aria-label="Search by filename"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9"
+                            className={cn("pl-9", searchQuery && "pr-9")}
                             autoFocus
                         />
+                        {searchQuery && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
+                                onClick={() => setSearchQuery('')}
+                                aria-label="Clear search"
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+                        )}
                     </div>
                     {/* Live region for screen readers */}
                     <div role="status" aria-live="polite" className="sr-only">

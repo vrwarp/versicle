@@ -14,7 +14,7 @@ class SearchClient {
     private engine: Comlink.Remote<SearchEngine> | null = null;
     private parser: DOMParser | undefined;
     private indexedBooks = new Set<string>();
-    private pendingIndexes = new Map<string, Promise<void>>();
+    private pendingIndexes = new Map<string, { task: Promise<void>, callbacks: ((percent: number) => void)[] }>();
 
     /**
      * Retrieves the existing Web Worker instance or creates a new one if it doesn't exist.
@@ -56,19 +56,33 @@ class SearchClient {
 
         if (this.pendingIndexes.has(bookId)) {
             // Wait for pending index
-            await this.pendingIndexes.get(bookId);
+            const pending = this.pendingIndexes.get(bookId)!;
+            if (onProgress) pending.callbacks.push(onProgress);
+            await pending.task;
             if (onProgress) onProgress(1.0);
             return;
         }
 
-        const task = this.indexBookInternal(book, bookId, onProgress);
-        this.pendingIndexes.set(bookId, task);
+        const pendingEntry = { task: Promise.resolve(), callbacks: onProgress ? [onProgress] : [] };
+        this.pendingIndexes.set(bookId, pendingEntry);
+
+        const task = this.indexBookInternal(book, bookId);
+        pendingEntry.task = task;
 
         try {
             await task;
             this.indexedBooks.add(bookId);
         } finally {
             this.pendingIndexes.delete(bookId);
+        }
+    }
+
+    private notifyProgress(bookId: string, progress: number) {
+        const pending = this.pendingIndexes.get(bookId);
+        if (pending) {
+            for (const callback of pending.callbacks) {
+                callback(progress);
+            }
         }
     }
 
@@ -79,7 +93,7 @@ class SearchClient {
         return this.parser;
     }
 
-    private async indexBookInternal(book: Book, bookId: string, onProgress?: (percent: number) => void) {
+    private async indexBookInternal(book: Book, bookId: string) {
         const engine = this.getEngine();
         await book.ready;
         // Init/Clear index
@@ -154,9 +168,7 @@ class SearchClient {
                 await engine.addDocuments(bookId, sections);
             }
 
-            if (onProgress) {
-                onProgress(Math.min(1.0, (i + batch.length) / total));
-            }
+            this.notifyProgress(bookId, Math.min(1.0, (i + batch.length) / total));
 
             // Yield to main thread
             await new Promise(resolve => setTimeout(resolve, 0));

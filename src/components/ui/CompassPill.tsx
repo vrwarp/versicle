@@ -125,7 +125,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
                       newText = currentSelection.toString();
                       currentSelection.removeAllRanges();
                   }
-              } catch (e) {
+              } catch {
                   // Selection extraction failed; use original annotation data
               }
           }
@@ -459,7 +459,13 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         className="relative z-50 flex items-center justify-between w-full max-w-sm h-14 px-4 mx-auto overflow-hidden transition-all border shadow-lg rounded-full bg-background/90 backdrop-blur-md border-primary/20 animate-in fade-in slide-in-from-bottom-2"
         role="alert"
       >
-        <div className="flex items-center gap-3 flex-1 min-w-0" onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => {
+        <div
+          className="flex items-center gap-3 flex-1 min-w-0"
+          onClick={onClick}
+          role="button"
+          tabIndex={0}
+          aria-label={title && subtitle ? `${title}. ${subtitle}` : "Reading Progress Updated"}
+          onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             if (e.target !== e.currentTarget) return;
             e.preventDefault();

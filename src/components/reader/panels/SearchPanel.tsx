@@ -1,36 +1,84 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import type { Book } from 'epubjs';
 import { Input } from '../../ui/Input';
 import { Button } from '../../ui/Button';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, X } from 'lucide-react';
+import { cn } from '../../../lib/utils';
+import { searchClient, type SearchResult } from '../../../lib/search';
+import { useToastStore } from '../../../store/useToastStore';
+import { createLogger } from '../../../lib/logger';
 
-export interface SearchResult {
-    href: string;
-    excerpt: string;
-}
+const logger = createLogger('SearchPanel');
 
 export interface SearchPanelProps {
-    searchQuery: string;
-    onSearchQueryChange: (query: string) => void;
-    onSearch: () => void;
-    isSearching: boolean;
-    searchResults: SearchResult[];
-    activeSearchQuery: string;
-    isIndexing: boolean;
-    indexingProgress: number;
-    onResultClick: (result: SearchResult) => void;
+    bookId: string | undefined;
+    book: Book | null;
+    onNavigate: (href: string, query: string) => void;
 }
 
 export const SearchPanel: React.FC<SearchPanelProps> = ({
-    searchQuery,
-    onSearchQueryChange,
-    onSearch,
-    isSearching,
-    searchResults,
-    activeSearchQuery,
-    isIndexing,
-    indexingProgress,
-    onResultClick
+    bookId,
+    book,
+    onNavigate
 }) => {
+    // Search State
+    const [searchQuery, setSearchQuery] = useState('');
+    const [activeSearchQuery, setActiveSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+
+    // Indexing State
+    const [isIndexing, setIsIndexing] = useState(false);
+    const [indexingProgress, setIndexingProgress] = useState(0);
+
+    const { showToast } = useToastStore();
+
+    useEffect(() => {
+        if (!bookId || !book) return;
+        if (searchClient.isIndexed(bookId)) return;
+
+        let mounted = true;
+
+        const performIndexing = async () => {
+            if (!mounted) return;
+            setIsIndexing(true);
+            try {
+                await searchClient.indexBook(book, bookId, (progress) => {
+                    if (mounted) {
+                        setIndexingProgress(Math.round(progress * 100));
+                    }
+                });
+            } catch (e) {
+                logger.error("Indexing failed", e);
+            } finally {
+                if (mounted) {
+                    setIsIndexing(false);
+                }
+            }
+        };
+
+        performIndexing();
+
+        return () => {
+            mounted = false;
+        };
+    }, [bookId, book]);
+
+    const handleSearch = useCallback(async () => {
+        if (!searchQuery.trim() || !bookId) return;
+        setIsSearching(true);
+        setActiveSearchQuery(searchQuery);
+        try {
+            const results = await searchClient.search(searchQuery, bookId);
+            setSearchResults(results);
+        } catch (e) {
+            logger.error("Search failed", e);
+            showToast("Search failed", "error");
+        } finally {
+            setIsSearching(false);
+        }
+    }, [searchQuery, bookId, showToast]);
+
     return (
         <div data-testid="reader-search-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 md:static flex flex-col">
             <div className="p-4 border-b border-border">
@@ -38,24 +86,37 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                     <h2 className="text-lg font-bold text-foreground">Search</h2>
                 </div>
                 <div className="flex gap-2">
-                    <Input
-                        data-testid="search-input"
-                        aria-label="Search query"
-                        type="search"
-                        value={searchQuery}
-                        onChange={(e) => onSearchQueryChange(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                                onSearch();
-                            }
-                        }}
-                        placeholder="Search in book..."
-                        className="bg-background"
-                    />
+                    <div className="relative flex-1">
+                        <Input
+                            data-testid="search-input"
+                            aria-label="Search query"
+                            type="search"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    handleSearch();
+                                }
+                            }}
+                            placeholder="Search in book..."
+                            className={cn("bg-background", searchQuery && "pr-9")}
+                        />
+                        {searchQuery && (
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
+                                onClick={() => setSearchQuery('')}
+                                aria-label="Clear search"
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+                        )}
+                    </div>
                     <Button
                         size="icon"
                         variant="ghost"
-                        onClick={onSearch}
+                        onClick={handleSearch}
                         disabled={isSearching || !searchQuery}
                         aria-label="Search"
                         className="shrink-0"
@@ -96,7 +157,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                                     variant="ghost"
                                     data-testid={`search-result-${idx}`}
                                     className="text-left w-full h-auto p-2 block items-start justify-start font-normal"
-                                    onClick={() => onResultClick(result)}
+                                    onClick={() => onNavigate(result.href, activeSearchQuery)}
                                 >
                                     <p className="text-xs text-muted-foreground mb-1">Result {idx + 1}</p>
                                     <p className="text-sm text-foreground line-clamp-3 whitespace-normal break-words">

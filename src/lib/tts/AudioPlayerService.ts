@@ -102,7 +102,7 @@ export class AudioPlayerService {
         });
 
         this.platformIntegration = new PlatformIntegration({
-            onPlay: () => this.resume(),
+            onPlay: () => this.play(),
             onPause: () => this.pause(),
             onStop: () => this.stop(),
             onPrev: () => this.prev(),
@@ -339,12 +339,17 @@ export class AudioPlayerService {
     }
 
     public loadSection(sectionIndex: number, autoPlay: boolean = true) {
-        return this.enqueue(() => this.loadSectionInternal(sectionIndex, autoPlay));
+        const originalBookId = this.currentBookId;
+        return this.enqueue(async () => {
+            if (this.playlistPromise) await this.playlistPromise;
+            if (this.currentBookId !== originalBookId) return;
+            return this.loadSectionInternal(sectionIndex, autoPlay);
+        });
     }
 
     public loadSectionBySectionId(sectionId: string, autoPlay: boolean = true, sectionTitle?: string) {
+        const originalBookId = this.currentBookId;
         return this.enqueue(async () => {
-            const originalBookId = this.currentBookId;
             if (this.playlistPromise) await this.playlistPromise;
             if (this.currentBookId !== originalBookId) return;
 
