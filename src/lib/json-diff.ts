@@ -13,6 +13,26 @@ export interface DiffNode {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isDeepEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (typeof a !== 'object' || a === null || b === null) return false;
+
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+
+  for (let i = 0; i < keysA.length; i++) {
+    const k = keysA[i];
+    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+    if (!isDeepEqual(a[k], b[k])) return false;
+  }
+  return true;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const computeDiff = (oldVal: any, newVal: any, key: string = 'root'): DiffNode => {
   if (oldVal === newVal) {
     return { key, type: 'unchanged', value: oldVal };
@@ -43,7 +63,7 @@ export const computeDiff = (oldVal: any, newVal: any, key: string = 'root'): Dif
       children.push({ key: k, type: 'added', value: newV });
     } else if (newV === undefined) {
       children.push({ key: k, type: 'removed', value: oldV });
-    } else if (JSON.stringify(oldV) !== JSON.stringify(newV)) {
+    } else if (!isDeepEqual(oldV, newV)) {
         // Only recurse if different
         children.push(computeDiff(oldV, newV, k));
     } else {

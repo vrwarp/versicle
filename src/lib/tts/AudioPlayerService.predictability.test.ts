@@ -7,7 +7,13 @@ vi.mock('../../db/DBService', () => ({
         getSections: vi.fn(),
         getBookMetadata: vi.fn(),
         getTTSState: vi.fn(),
-        getTTSContent: vi.fn().mockResolvedValue({ sections: [] })
+        getTTSContent: vi.fn().mockResolvedValue({
+            sections: [],
+            content: []
+        }),
+        getContentAnalysis: vi.fn().mockResolvedValue(null),
+        getBookStructure: vi.fn().mockResolvedValue({ toc: [] }),
+        saveTTSContent: vi.fn()
     }
 }));
 
@@ -116,5 +122,61 @@ describe('AudioPlayerService Predictability', () => {
         await service.loadSectionBySectionId('s1');
 
         expect(dbService.getTTSContent).not.toHaveBeenCalled();
+    });
+});
+
+describe('AudioPlayerService loadSection Race Condition Fix', () => {
+    let service: AudioPlayerService;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        service = AudioPlayerService.getInstance();
+        service.setBookId(null);
+    });
+
+    it('should not continue executing loadSection if bookId changes before playlist resolves', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let resolveFirst: any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const firstPromise = new Promise<any[]>(r => resolveFirst = r);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let resolveSecond: any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const secondPromise = new Promise<any[]>(r => resolveSecond = r);
+
+        vi.mocked(dbService.getSections)
+            .mockReturnValueOnce(firstPromise)
+            .mockReturnValueOnce(secondPromise);
+
+        // First book is set. DB request 1 starts.
+        service.setBookId('book1');
+
+        // user initiates play on the loading book immediately
+        // Wait, loadSection is enqueued. But we want to simulate the user pressing play *before* setBookId('book2') is called.
+        // And we want the enqueue to capture originalBookId = 'book1'
+        const loadPromise = service.loadSection(0);
+
+        // Context switches rapidly to book2
+        service.setBookId('book2');
+
+        // This is the important part! We want to clear the mock of getTTSContent to ensure we are only tracking what happens
+        // AFTER the context switches to book2.
+        vi.mocked(dbService.getTTSContent).mockClear();
+
+        // Resolve second book request first (simulating faster response for second request)
+        resolveSecond([{ sectionId: 's2', title: 'S2' }]);
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Now first book request resolves (stale response)
+        resolveFirst([{ sectionId: 's1', title: 'S1' }]);
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        await loadPromise;
+
+        // Ensure we do not proceed to try and load TTS content
+        // since the context changed to book2 while we were waiting for book1's playlist
+        // We only expect getTTSContent to be called with book2 if it does an automatic load, but
+        // wait, loadSection(0) was for book1. So we expect getTTSContent NOT to be called with book1!
+        expect(dbService.getTTSContent).not.toHaveBeenCalledWith('book1', expect.anything());
     });
 });

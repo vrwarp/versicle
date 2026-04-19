@@ -23,12 +23,6 @@ interface BookCoverProps {
 }
 
 export const BookCover: React.FC<BookCoverProps & { showActions?: boolean }> = React.memo(({ book, isGhostBook = false, onDelete, onOffload, onRestore, showActions = true }) => {
-    // We assume the service worker handles /__versicle__/covers/:id
-    // But we only want to try loading it if we know we have a cover (book.coverBlob exists)
-    // or if we have a remote coverUrl.
-    // Ideally, we shouldn't rely on 'book.coverBlob' existence check for the URL construction
-    // if we want to support pure URL based fetching, but for now, the pattern replaces useObjectUrl(blob).
-
     // If book.coverUrl is set (external URL), use it.
     // Otherwise, if we have a blob (local), use the SW route.
     const displayUrl = book.coverUrl || (book.coverBlob ? `/__versicle__/covers/${book.id}` : null);
