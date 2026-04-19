@@ -482,15 +482,31 @@ export function useEpubReader(
               if (parent.classList && parent.classList.contains('zh-annotated')) continue;
 
               const text = textNode.textContent || '';
-              // Avoid async character by character parsing
-              let pinyinArray: string[] = [];
               let traditionalText = text;
 
-              if (prefs.showPinyin) {
-                pinyinArray = await getPinyin(text);
-              }
               if (prefs.forceTraditionalChinese) {
                 traditionalText = await toTraditional(text);
+              }
+
+              // PATH A: Traditional Translation ONLY (No Pinyin)
+              if (!prefs.showPinyin && prefs.forceTraditionalChinese) {
+                const fragment = doc.createDocumentFragment();
+                const wrapper = doc.createElement('span');
+
+                // Use a new class name so it doesn't get targeted by Pinyin CSS
+                wrapper.classList.add('zh-traditional-wrapper');
+                wrapper.setAttribute('data-original-text', text);
+                wrapper.textContent = traditionalText;
+
+                fragment.appendChild(wrapper);
+                parent.replaceChild(fragment, textNode);
+                continue; // Skip the heavy Pinyin span-wrapping logic
+              }
+
+              // PATH B: Pinyin is enabled (Keep existing logic)
+              let pinyinArray: string[] = [];
+              if (prefs.showPinyin) {
+                pinyinArray = await getPinyin(text);
               }
 
               const chars = [...traditionalText];
@@ -519,36 +535,35 @@ export function useEpubReader(
               parent.replaceChild(fragment, textNode);
             }
 
-            // Inject CSS for ruby rendering
-            const style = doc.createElement('style');
-            style.id = 'pinyin-overlay-styles';
-            style.textContent = `
-              .zh-annotated {
-                position: relative;
-                display: inline-block;
-              }
-              .zh-annotated[data-pinyin]::before {
-                content: attr(data-pinyin);
-                position: absolute;
-                top: -1.2em;
-                left: 50%;
-                transform: translateX(-50%);
-                font-size: ${prefs.pinyinSize}%;
-                color: inherit;
-                opacity: 0.7;
-                white-space: nowrap;
-                pointer-events: none;
-              }
-              body { padding-top: 1.5em !important; }
-            `;
-            doc.head.appendChild(style);
+            // Only inject ruby spacing and padding if Pinyin is actively showing
+            if (prefs.showPinyin) {
+              const style = doc.createElement('style');
+              style.id = 'pinyin-overlay-styles';
+              style.textContent = `
+                .zh-annotated {
+                  position: relative;
+                  display: inline-block;
+                }
+                .zh-annotated[data-pinyin]::before {
+                  content: attr(data-pinyin);
+                  position: absolute;
+                  top: -1.2em;
+                  left: 50%;
+                  transform: translateX(-50%);
+                  font-size: ${prefs.pinyinSize}%;
+                  color: inherit;
+                  opacity: 0.7;
+                  white-space: nowrap;
+                  pointer-events: none;
+                }
+                body { padding-top: 1.5em !important; }
+              `;
+              doc.head.appendChild(style);
+            }
           } else {
             // Restore original text if toggled off
-            const wrappers = doc.querySelectorAll('.zh-annotated-wrapper');
+            const wrappers = doc.querySelectorAll('.zh-annotated-wrapper, .zh-traditional-wrapper');
             wrappers.forEach((wrapper: Element) => {
-               // This restores the text to what it was but won't revert traditional to simplified perfectly if they started with simplified.
-               // However, we didn't store the original simplified text anywhere.
-               // To fully support toggling off, we should store it.
                const originalText = wrapper.getAttribute('data-original-text') || wrapper.textContent;
                const textNode = doc.createTextNode(originalText || '');
                wrapper.parentNode?.replaceChild(textNode, wrapper);
