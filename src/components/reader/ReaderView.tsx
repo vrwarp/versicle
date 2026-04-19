@@ -77,7 +77,7 @@ export const ReaderView: React.FC = () => {
         fontFamily: state.fontFamily,
         lineHeight: state.lineHeight || 1.5,
         fontSize: state.fontSize,
-        fontProfiles: state.fontProfiles,
+        fontProfiles: state.fontProfiles || {},
         shouldForceFont: state.shouldForceFont,
         readerViewMode: state.readerViewMode || 'paginated'
     })));
@@ -196,8 +196,8 @@ export const ReaderView: React.FC = () => {
         currentTheme,
         customTheme,
         fontFamily,
-        fontSize: fontProfiles[(bookMetadata?.language || 'en').split('-')[0]]?.fontSize || fontSize,
-        lineHeight: fontProfiles[(bookMetadata?.language || 'en').split('-')[0]]?.lineHeight || lineHeight,
+        fontSize: (fontProfiles[(bookMetadata?.language || 'en').split('-')[0]] || {}).fontSize || fontSize,
+        lineHeight: (fontProfiles[(bookMetadata?.language || 'en').split('-')[0]] || {}).lineHeight || lineHeight,
         shouldForceFont,
         initialLocation,
         metadata: bookMetadata,

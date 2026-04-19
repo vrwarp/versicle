@@ -48,7 +48,7 @@ export const VisualSettings = () => {
     setShowPinyin: state.setShowPinyin,
     pinyinSize: state.pinyinSize,
     setPinyinSize: state.setPinyinSize,
-    fontProfiles: state.fontProfiles,
+    fontProfiles: state.fontProfiles || {},
     setFontProfile: state.setFontProfile
   })));
 
