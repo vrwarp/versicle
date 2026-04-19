@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { LexiconService } from './LexiconService';
+import { LexiconService, processInitialisms } from './LexiconService';
 import { LexiconRule } from '../../types/db';
 
 // Mock getDB to prevent actual DB calls (though mostly unused now)
@@ -91,6 +91,26 @@ describe('LexiconService', () => {
       // Should get global only
       expect(book2Rules.length).toBe(1);
       expect(book2Rules[0].id).toBe('2');
+    });
+  });
+
+  describe('processInitialisms', () => {
+    it('should strip periods from initialisms with spaces', () => {
+      expect(processInitialisms('C. S. Lewis')).toBe('C S Lewis');
+    });
+
+    it('should strip periods from initialisms without spaces', () => {
+      expect(processInitialisms('J.R.R. Tolkien')).toBe('J R R Tolkien');
+    });
+
+    it('should apply phonetic patches when mapped', () => {
+      expect(processInitialisms('A. W. Tozer')).toBe('Eigh W Tozer');
+    });
+
+    it('should ignore non-initialism periods', () => {
+      // The current logic strips inner periods (U S. and U K.) but leaves trailing periods
+      expect(processInitialisms('He went to the U.S. and U.K.')).toBe('He went to the U S. and U K.');
+      expect(processInitialisms('End of sentence.')).toBe('End of sentence.');
     });
   });
 

@@ -21,7 +21,7 @@ const INITIALISM_PHONETIC_MAP: Record<string, string> = {
  * Example: "A. W. Tozer" -> "Eigh W Tozer"
  */
 export function processInitialisms(text: string): string {
-    const initialismRegex = /\b([A-Z])\.\s+(?=[A-Z])/g;
+    const initialismRegex = /\b([A-Z])\.\s*(?=[A-Z])/g;
     
     return text.replace(initialismRegex, (_match, letter) => {
         const replacement = INITIALISM_PHONETIC_MAP[letter];
