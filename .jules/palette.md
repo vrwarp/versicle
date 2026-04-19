@@ -134,3 +134,7 @@
 ## 2024-05-18 - Avoid Static Aria-Labels on Dynamic Buttons
 **Learning:** Static `aria-label` attributes completely override a button's inner text for screen readers. If a button dynamically changes its text to indicate a loading state (e.g., using a visually hidden `sr-only` span), the static `aria-label` will mask this change, causing screen readers to falsely announce the default state instead of the loading state.
 **Action:** Remove redundant static `aria-label` attributes if the button's visible text is perfectly descriptive. Rely on the DOM structure and `aria-hidden` bindings on spans to cleanly swap semantic visibility of states (like default vs. loading).
+
+## 2025-04-18 - Search Clear Button ARIA Label Standardization
+**Learning:** Found multiple instances where the "clear" button for search inputs used `aria-label="Clear query"`. "Query" is a technical term that can be confusing for non-technical users relying on screen readers. "Search" is the universally understood terminology. Playwright `get_by_label` will fail if tests hardcode the incorrect label.
+**Action:** Standardized all search clear buttons to use `aria-label="Clear search"`. Will proactively look for jargon in ARIA labels in the future.
