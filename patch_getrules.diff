@@ -1,0 +1,39 @@
+--- src/lib/tts/LexiconService.ts
++++ src/lib/tts/LexiconService.ts
+@@ -47,6 +47,13 @@
+     // Prevents expensive regex re-compilation when the rule array is regenerated but the rules haven't changed.
+     private compiledRegexCache = new Map<string, CompiledLexiconRule>();
+     private globalBibleLexiconEnabled: boolean = true;
++
++    // OPTIMIZATION: Memoize getRules output based on Zustand store state references
++    private cachedGetRulesResult = new Map<string, {
++        rulesStateRef: any,
++        settingsStateRef: any,
++        result: LexiconRule[]
++    }>();
+
+     private constructor() { }
+
+@@ -62,13 +69,32 @@
+     }
+
+     /**
+      * Retrieves all rules applicable to a specific book (Global + Book Specific).
+      */
+     async getRules(bookId?: string): Promise<LexiconRule[]> {
+         // Ensure Yjs is synced before reading
+         await waitForYjsSync();
+
+         const state = useLexiconStore.getState();
++
++        const cacheKey = bookId || 'global';
++        const cached = this.cachedGetRulesResult.get(cacheKey);
++
++        // The `globalBibleLexiconEnabled` check complicates things, as it's not in the store.
++        // We also need to check it if bookId is not provided or book has bibleLexiconEnabled='default'
++
++        // Let's implement caching inside but carefully
++
+         const allRules = Object.values(state.rules);
+
+         // 1. Get Global Rules (sorted by order)
