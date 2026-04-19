@@ -95,9 +95,9 @@ interface TTSState {
     play: () => void;
     pause: () => void;
     stop: () => void;
-    setRate: (rate: number) => void;
-    setPitch: (pitch: number) => void;
-    setVoice: (voice: TTSVoice | null) => void;
+    setRate: (rate: number, lang?: string) => void;
+    setPitch: (pitch: number, lang?: string) => void;
+    setVoice: (voice: TTSVoice | null, lang?: string) => void;
     setProviderId: (id: 'local' | 'google' | 'openai' | 'lemonfox' | 'piper') => void;
     setApiKey: (provider: 'google' | 'openai' | 'lemonfox', key: string) => void;
     setCustomAbbreviations: (abbrevs: string[]) => void;
@@ -175,7 +175,23 @@ export const useTTSStore = create<TTSState>()(
                     // When we change the language context, we also update the active properties
                     // and fetch the voice objects for the underlying service
                     const profile = state.profiles[lang] || { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0 };
-                    const selectedVoice = profile.voiceId ? state.voices.find(v => v.id === profile.voiceId) || null : null;
+                    
+                    // Filter voices for this language
+                    const languageVoices = state.voices.filter(v => v.lang.startsWith(lang));
+                    
+                    let selectedVoice = languageVoices.find(v => v.id === profile.voiceId) || null;
+
+                    if (!selectedVoice && languageVoices.length > 0) {
+                        // Pick a default matching voice if the profile one is missing
+                        selectedVoice = languageVoices[0];
+                    }
+
+                    if (languageVoices.length === 0 && state.voices.length > 0) {
+                        // Warn user if no voices for this language
+                        import('./useToastStore').then(({ useToastStore }) => {
+                            useToastStore.getState().showToast(`No voices found for ${lang}. Audio playback may not work.`, 'error');
+                        });
+                    }
 
                     set((s) => ({
                         activeLanguage: lang,
@@ -184,7 +200,10 @@ export const useTTSStore = create<TTSState>()(
                         voice: selectedVoice,
                         profiles: {
                             ...s.profiles,
-                            [lang]: profile
+                            [lang]: {
+                                ...profile,
+                                voiceId: selectedVoice?.id || null
+                            }
                         }
                     }));
 
@@ -194,13 +213,6 @@ export const useTTSStore = create<TTSState>()(
                     player.setLanguage(lang);
                     if (selectedVoice) {
                         player.setVoice(selectedVoice.id);
-                    } else {
-                        // Fall back to default
-                        const defaultVoice = state.voices.find(v => v.lang.startsWith(lang)) || state.voices[0];
-                        if (defaultVoice) {
-                            player.setVoice(defaultVoice.id);
-                            set({ voice: defaultVoice });
-                        }
                     }
                 },
 
@@ -245,37 +257,47 @@ export const useTTSStore = create<TTSState>()(
                 stop: () => {
                     AudioPlayerService.getInstance().stop();
                 },
-                setRate: (rate) => {
-                    const lang = get().activeLanguage;
-                    AudioPlayerService.getInstance().setSpeed(rate);
+                setRate: (rate, lang?: string) => {
+                    const targetLang = lang || get().activeLanguage;
+                    const isActive = targetLang === get().activeLanguage;
+                    
+                    if (isActive) {
+                        AudioPlayerService.getInstance().setSpeed(rate);
+                    }
+
                     set((state) => ({
-                        rate,
+                        ...(isActive ? { rate } : {}),
                         profiles: {
                             ...state.profiles,
-                            [lang]: { ...(state.profiles[lang] || { voiceId: state.voice?.id || null, rate: 1.0, pitch: 1.0, volume: 1.0 }), rate }
+                            [targetLang]: { ...(state.profiles[targetLang] || { voiceId: state.voice?.id || null, rate: 1.0, pitch: 1.0, volume: 1.0 }), rate }
                         }
                     }));
                 },
-                setPitch: (pitch) => {
-                    const lang = get().activeLanguage;
+                setPitch: (pitch, lang?: string) => {
+                    const targetLang = lang || get().activeLanguage;
+                    const isActive = targetLang === get().activeLanguage;
+
                     set((state) => ({
-                        pitch,
+                        ...(isActive ? { pitch } : {}),
                         profiles: {
                             ...state.profiles,
-                            [lang]: { ...(state.profiles[lang] || { voiceId: state.voice?.id || null, rate: 1.0, pitch: 1.0, volume: 1.0 }), pitch }
+                            [targetLang]: { ...(state.profiles[targetLang] || { voiceId: state.voice?.id || null, rate: 1.0, pitch: 1.0, volume: 1.0 }), pitch }
                         }
                     }));
                 },
-                setVoice: (voice) => {
-                    if (voice) {
+                setVoice: (voice, lang?: string) => {
+                    const targetLang = lang || get().activeLanguage;
+                    const isActive = targetLang === get().activeLanguage;
+
+                    if (isActive && voice) {
                         AudioPlayerService.getInstance().setVoice(voice.id);
                     }
-                    const lang = get().activeLanguage;
+
                     set((state) => ({
-                        voice,
+                        ...(isActive ? { voice } : {}),
                         profiles: {
                             ...state.profiles,
-                            [lang]: { ...(state.profiles[lang] || { voiceId: null, rate: state.rate, pitch: state.pitch, volume: 1.0 }), voiceId: voice?.id || null }
+                            [targetLang]: { ...(state.profiles[targetLang] || { voiceId: null, rate: state.rate, pitch: state.pitch, volume: 1.0 }), voiceId: voice?.id || null }
                         }
                     }));
                 },

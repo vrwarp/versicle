@@ -66,7 +66,6 @@ export const VisualSettings = () => {
   const handleLanguageChange = (val: string) => {
     if (activeBookId) {
       updateBook(activeBookId, { language: val });
-      useTTSStore.getState().setActiveLanguage(val);
     }
   };
 

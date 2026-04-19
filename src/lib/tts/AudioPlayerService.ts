@@ -168,6 +168,45 @@ export class AudioPlayerService {
             this.updateMediaSessionMetadata();
             this.notifyListeners(snapshot.currentItem?.cfi || null);
         });
+
+        // Subscribe to book store changes for proactive language synchronization
+        // This ensures that if a user (or Yjs sync) updates the book's language, 
+        // the TTS system reactively switches its profile and voice.
+        import('../../store/useBookStore').then(({ useBookStore }) => {
+            let lastLang: string | undefined;
+            let lastBookId: string | null = null;
+
+            useBookStore.subscribe((state) => {
+                const bookId = this.currentBookId;
+                if (!bookId) {
+                    lastLang = undefined;
+                    lastBookId = null;
+                    return;
+                }
+
+                const currentLang = state.books[bookId]?.language;
+                
+                // Trigger sync if language changed for the CURRENT book, 
+                // OR if the book itself changed and it has a language defined.
+                if (currentLang && (bookId !== lastBookId || currentLang !== lastLang)) {
+                    logger.info(`Syncing TTS language to book: ${currentLang} (Book: ${bookId})`);
+                    import('../../store/useTTSStore').then(({ useTTSStore }) => {
+                        useTTSStore.getState().setActiveLanguage(currentLang);
+                        
+                        // Force lexicon reload for the new language
+                        this.activeLexiconRules = null;
+
+                        // If playing, restart to apply the new voice/language immediately
+                        if (this.status === 'playing' || this.status === 'loading') {
+                             this.playInternal(true);
+                        }
+                    });
+                    
+                    lastLang = currentLang;
+                    lastBookId = bookId;
+                }
+            });
+        });
     }
 
     static getInstance(): AudioPlayerService {
@@ -197,15 +236,6 @@ export class AudioPlayerService {
             this.stateManager.setBookId(bookId);
 
             if (bookId) {
-                import('../../store/useBookStore').then(({ useBookStore }) => {
-                    const inventory = useBookStore.getState().books[bookId];
-                    const lang = inventory?.language;
-                    if (lang) {
-                        import('../../store/useTTSStore').then(({ useTTSStore }) => {
-                            useTTSStore.getState().setActiveLanguage(lang);
-                        });
-                    }
-                });
                 this.playlistPromise = dbService.getSections(bookId).then(sections => {
                     if (this.currentBookId !== bookId) return; this.playlist = sections;
                     this.restoreQueue(bookId);
