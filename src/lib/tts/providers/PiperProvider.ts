@@ -32,7 +32,7 @@ function splitLongSentence(text: string, maxLen: number): string[] {
         let splitIndex = -1;
 
         // 1. Clause Boundary Scan
-        const clauseRegex = /[,;:—–]/g;
+        const clauseRegex = /[,;:—–，；：、。！？]/g;
         let match;
         const searchChunk = currentText.substring(0, maxLen);
         while ((match = clauseRegex.exec(searchChunk)) !== null) {
@@ -70,9 +70,13 @@ export class PiperProvider extends BaseCloudProvider {
   private voiceMap: Map<string, { modelPath: string; configPath: string; speakerId?: number }> = new Map();
   private segmenter: TextSegmenter;
 
-  constructor() {
+  constructor(locale?: string) {
     super();
-    this.segmenter = new TextSegmenter();
+    this.segmenter = new TextSegmenter(locale);
+  }
+
+  setLocale(locale: string) {
+    this.segmenter = new TextSegmenter(locale);
   }
 
   async init(): Promise<void> {
@@ -86,7 +90,7 @@ export class PiperProvider extends BaseCloudProvider {
       for (const [key, info] of Object.entries(data)) {
         // Filter for high quality en_US voices (single speaker preferred)
         // This avoids listing hundreds of voices and focuses on the best ones like Ryan.
-        if (!key.startsWith('en_US')) continue;
+        if (!key.startsWith('en_US') && !key.startsWith('zh_CN')) continue;
         if (info.num_speakers > 1) continue;
 
         const fileKeys = Object.keys(info.files);
@@ -203,7 +207,9 @@ export class PiperProvider extends BaseCloudProvider {
 
     // Phase 3 Hardening: Input Sanitization
     // Split long requests to prevent worker crashes
-    const MAX_CHARS = 500;
+    // Chinese characters are semantically denser; use smaller chunks to prevent OOM
+    const isCJK = /[\u4e00-\u9fff]/.test(text);
+    const MAX_CHARS = isCJK ? 100 : 500;
 
     let segments: string[] = [];
     if (text.length > MAX_CHARS) {

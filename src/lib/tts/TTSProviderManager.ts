@@ -252,4 +252,13 @@ export class TTSProviderManager {
          }
          return true;
     }
+
+    /**
+     * Sets the locale for the current provider.
+     */
+    setLocale(locale: string) {
+        if (typeof this.provider.setLocale === 'function') {
+            this.provider.setLocale(locale);
+        }
+    }
 }

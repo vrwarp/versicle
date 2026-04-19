@@ -18,6 +18,10 @@ export type TTSApiKeyProvider = 'google' | 'openai' | 'lemonfox';
 export type BackgroundAudioMode = 'silence' | 'noise' | 'off';
 
 export interface TTSSettingsTabProps {
+    /** Currently active language profile (from store, driven by book context) */
+    activeLanguage: string;
+    /** All TTS profiles for language context */
+    profiles: Record<string, import('../../store/useTTSStore').TTSProfile>;
     // Provider
     providerId: TTSProviderId;
     onProviderChange: (providerId: TTSProviderId) => void;
@@ -32,7 +36,7 @@ export interface TTSSettingsTabProps {
     // Voice (Piper)
     voice: TTSVoice | null;
     voices: TTSVoice[];
-    onVoiceChange: (voice: TTSVoice | null) => void;
+    onVoiceChange: (voice: TTSVoice | null, lang?: string) => void;
     isVoiceReady: boolean;
     isDownloading: boolean;
     downloadProgress: number;
@@ -45,6 +49,8 @@ export interface TTSSettingsTabProps {
 }
 
 export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
+    activeLanguage = 'en',
+    profiles = {},
     providerId,
     onProviderChange,
     apiKeys,
@@ -53,7 +59,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
     onBackgroundAudioModeChange,
     whiteNoiseVolume,
     onWhiteNoiseVolumeChange,
-    voice,
+    voice: _voice,
     voices,
     onVoiceChange,
     isVoiceReady,
@@ -65,6 +71,17 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
     minSentenceLength,
     onMinSentenceLengthChange
 }) => {
+    // Local-only language state for configuration view. Changing this does NOT
+    // affect the active playback profile — that is always set by the open book's language.
+    const [configLanguage, setConfigLanguage] = useState(activeLanguage);
+    
+    // Derive the voice for the currently viewed config language from the profiles.
+    // Fall back to the legacy 'voice' prop if we are looking at the active language 
+    // and no specific profile exists yet.
+    const configProfile = profiles?.[configLanguage];
+    const configVoiceId = configProfile?.voiceId || (configLanguage === activeLanguage ? _voice?.id : null);
+    const configVoice = configVoiceId ? voices.find(v => v.id === configVoiceId) || null : null;
+
     const [voiceToDelete, setVoiceToDelete] = useState<string | null>(null);
 
     const handleConfirmDelete = () => {
@@ -80,6 +97,19 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
 
     return (
         <div className="space-y-6">
+            <div className="space-y-2 mb-6">
+                <Label htmlFor="tts-language-select" className="text-sm font-medium">Language Profile</Label>
+                <Select value={configLanguage} onValueChange={setConfigLanguage}>
+                    <SelectTrigger id="tts-language-select" data-testid="tts-language-select">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="en">English</SelectItem>
+                        <SelectItem value="zh">Chinese (Mandarin)</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+
             <div>
                 <h3 className="text-lg font-medium mb-4">Provider Configuration</h3>
                 <div className="space-y-4">
@@ -139,20 +169,25 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                         <div className="space-y-4 pt-4 border-t">
                             <div className="space-y-2">
                                 <Label htmlFor="tts-voice-select" className="text-sm font-medium">Select Voice</Label>
-                                <Select value={voice?.id} onValueChange={(val) => {
+                                <Select value={configVoice?.id} onValueChange={(val) => {
                                     const v = voices.find(v => v.id === val);
-                                    onVoiceChange(v || null);
+                                    onVoiceChange(v || null, configLanguage);
                                 }}>
                                     <SelectTrigger id="tts-voice-select" aria-label="Select voice"><SelectValue placeholder="Select a voice" /></SelectTrigger>
                                     <SelectContent>
-                                        {voices.map(v => (
+                                        {voices.filter(v => v.lang?.startsWith(configLanguage)).map(v => (
                                             <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
+                                {configLanguage === 'zh' && voices.filter(v => v.lang?.startsWith('zh')).length === 0 && (
+                                    <div data-testid="mandarin-voice-warning" className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md text-sm text-yellow-800 dark:text-yellow-200 mt-2">
+                                        ⚠️ No Mandarin voice installed. Audio playback will fail for Chinese books.
+                                    </div>
+                                )}
                             </div>
 
-                            {voice && (
+                            {configVoice && (
                                 <div className="space-y-3 p-3 bg-muted/50 rounded-md">
                                     <div className="flex flex-col gap-2">
                                         <div className="flex items-center justify-between">
@@ -173,7 +208,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                                         ) : (
                                             <div className="flex gap-2">
                                                 <Button
-                                                    onClick={() => onDownloadVoice(voice.id)}
+                                                    onClick={() => configVoice && onDownloadVoice(configVoice.id)}
                                                     variant={isVoiceReady ? "outline" : "default"}
                                                     disabled={isVoiceReady}
                                                     size="sm"
@@ -183,7 +218,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                                                 </Button>
                                                 {isVoiceReady && (
                                                     <Button
-                                                        onClick={() => setVoiceToDelete(voice.id)}
+                                                        onClick={() => configVoice && setVoiceToDelete(configVoice.id)}
                                                         variant="destructive"
                                                         size="icon"
                                                         title="Delete Voice Data"

@@ -9,6 +9,7 @@ const mockGetState = vi.fn();
 vi.mock('../store/useBookStore', () => ({
     useBookStore: {
         getState: () => mockGetState(),
+        subscribe: vi.fn()
     },
 }));
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LexiconService, processInitialisms } from './LexiconService';
+import { useLexiconStore } from '../../store/useLexiconStore';
 import { LexiconRule } from '../../types/db';
 
 // Mock getDB to prevent actual DB calls (though mostly unused now)
@@ -32,6 +33,34 @@ vi.mock('../../data/bible-lexicon', () => ({
 
 
 describe('LexiconService', () => {
+  it('filters rules by language correctly', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (useLexiconStore.getState as any).mockReturnValue({
+      rules: {
+        '1': { id: '1', original: 'a', replacement: 'b', isRegex: false, order: 0 }, // no language (global)
+        '2': { id: '2', original: 'c', replacement: 'd', isRegex: false, language: 'en', order: 1 },
+        '3': { id: '3', original: 'e', replacement: 'f', isRegex: false, language: 'zh', order: 2 },
+      },
+      settings: {}
+    });
+    const service = LexiconService.getInstance();
+
+    // Unscoped request should return rules with no language and the requested language? Wait, LexiconService says:
+    // .filter(r => !r.language || !language || r.language === language)
+    // So if no language is passed, it returns all rules.
+    const allRules = await service.getRules();
+    expect(allRules).toHaveLength(3);
+
+    // Requesting 'en' should return global unscoped rules + 'en' rules
+    const enRules = await service.getRules(undefined, 'en');
+    expect(enRules).toHaveLength(2);
+    expect(enRules.map(r => r.id)).toEqual(['1', '2']);
+
+    // Requesting 'zh' should return global unscoped rules + 'zh' rules
+    const zhRules = await service.getRules(undefined, 'zh');
+    expect(zhRules).toHaveLength(2);
+    expect(zhRules.map(r => r.id)).toEqual(['1', '3']);
+  });
   let service: LexiconService;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockStore: any;

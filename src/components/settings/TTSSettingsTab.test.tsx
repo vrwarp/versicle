@@ -29,6 +29,8 @@ vi.mock('../ui/Slider', () => ({
 
 describe('TTSSettingsTab', () => {
     const defaultProps: TTSSettingsTabProps = {
+        activeLanguage: 'en',
+        profiles: { en: { voiceId: 'voice1', rate: 1.0, pitch: 1.0, volume: 1.0 } },
         providerId: 'local',
         onProviderChange: vi.fn(),
         apiKeys: {},
@@ -109,8 +111,8 @@ describe('TTSSettingsTab', () => {
             <TTSSettingsTab
                 {...defaultProps}
                 providerId="piper"
-                voices={[{ id: 'voice1', name: 'Voice 1' }]}
-                voice={{ id: 'voice1', name: 'Voice 1' }}
+                voices={[{ id: 'voice1', name: 'Voice 1', lang: 'en-US', provider: 'piper' }]}
+                voice={{ id: 'voice1', name: 'Voice 1', lang: 'en-US', provider: 'piper' }}
                 isDownloading={true}
                 downloadProgress={45}
                 downloadStatus="Downloading..."

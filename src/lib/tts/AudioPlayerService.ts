@@ -168,6 +168,45 @@ export class AudioPlayerService {
             this.updateMediaSessionMetadata();
             this.notifyListeners(snapshot.currentItem?.cfi || null);
         });
+
+        // Subscribe to book store changes for proactive language synchronization
+        // This ensures that if a user (or Yjs sync) updates the book's language, 
+        // the TTS system reactively switches its profile and voice.
+        import('../../store/useBookStore').then(({ useBookStore }) => {
+            let lastLang: string | undefined;
+            let lastBookId: string | null = null;
+
+            useBookStore.subscribe((state) => {
+                const bookId = this.currentBookId;
+                if (!bookId) {
+                    lastLang = undefined;
+                    lastBookId = null;
+                    return;
+                }
+
+                const currentLang = state.books[bookId]?.language;
+                
+                // Trigger sync if language changed for the CURRENT book, 
+                // OR if the book itself changed and it has a language defined.
+                if (currentLang && (bookId !== lastBookId || currentLang !== lastLang)) {
+                    logger.info(`Syncing TTS language to book: ${currentLang} (Book: ${bookId})`);
+                    import('../../store/useTTSStore').then(({ useTTSStore }) => {
+                        useTTSStore.getState().setActiveLanguage(currentLang);
+                        
+                        // Force lexicon reload for the new language
+                        this.activeLexiconRules = null;
+
+                        // If playing, restart to apply the new voice/language immediately
+                        if (this.status === 'playing' || this.status === 'loading') {
+                             this.playInternal(true);
+                        }
+                    });
+                    
+                    lastLang = currentLang;
+                    lastBookId = bookId;
+                }
+            });
+        });
     }
 
     static getInstance(): AudioPlayerService {
@@ -534,7 +573,10 @@ export class AudioPlayerService {
             const voiceId = this.voiceId || '';
 
             if (!this.activeLexiconRules) {
-                this.activeLexiconRules = await this.lexiconService.getRules(initialBookId || undefined);
+                const { useBookStore } = await import('../../store/useBookStore');
+                const bookInventory = initialBookId ? useBookStore.getState().books[initialBookId] : undefined;
+                const bookLang = bookInventory?.language || 'en';
+                this.activeLexiconRules = await this.lexiconService.getRules(initialBookId || undefined, bookLang);
                 if (this.currentBookId !== initialBookId) return;
             }
             const rules = this.activeLexiconRules;
@@ -613,6 +655,10 @@ export class AudioPlayerService {
                 await this.playInternal();
             }
         });
+    }
+
+    setLanguage(lang: string) {
+        this.providerManager.setLocale(lang);
     }
 
     setSpeed(speed: number) {

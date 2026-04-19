@@ -73,13 +73,13 @@ export class LexiconService {
     /**
      * Retrieves all rules applicable to a specific book (Global + Book Specific).
      */
-    async getRules(bookId?: string): Promise<LexiconRule[]> {
+    async getRules(bookId?: string, language?: string): Promise<LexiconRule[]> {
         // Ensure Yjs is synced before reading
         await waitForYjsSync();
 
         const state = useLexiconStore.getState();
 
-        const cacheKey = bookId || 'global_context';
+        const cacheKey = `${bookId || 'global'}:${language || 'any'}`;
         const cached = this.cachedGetRulesResult.get(cacheKey);
         if (cached && cached.rulesStateRef === state.rules && cached.settingsStateRef === state.settings && cached.globalBibleEnabled === this.globalBibleLexiconEnabled) {
             return cached.result;
@@ -90,6 +90,7 @@ export class LexiconService {
         // 1. Get Global Rules (sorted by order)
         const globalRules = allRules
             .filter(r => !r.bookId || r.bookId === 'global')
+            .filter(r => !r.language || !language || r.language === language)
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
         let rules: LexiconRule[] = globalRules;
@@ -97,7 +98,7 @@ export class LexiconService {
 
         if (bookId) {
             // 2. Get Book Rules
-            const bookRules = allRules.filter(r => r.bookId === bookId);
+            const bookRules = allRules.filter(r => r.bookId === bookId).filter(r => !r.language || !language || r.language === language);
 
             // Check settings
             if (state.settings[bookId]?.bibleLexiconEnabled) {

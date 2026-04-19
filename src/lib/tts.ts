@@ -21,6 +21,7 @@ export interface ExtractionOptions {
     alwaysMerge?: string[];
     sentenceStarters?: string[];
     sanitizationEnabled?: boolean;
+    locale?: string;
 }
 
 const BLOCK_TAGS = new Set([
@@ -52,7 +53,7 @@ export const extractSentencesFromNode = (
     const sanitizationEnabled = options.sanitizationEnabled !== undefined ? options.sanitizationEnabled : true;
 
     // Initialize segmenter
-    const segmenter = new TextSegmenter('en');
+    const segmenter = new TextSegmenter(options.locale || 'en');
 
     let textBuffer = '';
     let textNodes: { node: Node, length: number }[] = [];

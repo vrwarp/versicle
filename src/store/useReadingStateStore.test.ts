@@ -208,9 +208,9 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             expect(remainingSession.cfiRange).toBe('epubcfi(/6/4)');
             expect(remainingSession.startTime).toBe(now - 10000);
 
-            // Schema version should be bumped to 2 on useBookStore
+            // Schema version should be bumped to 5 on useBookStore (migrations run v1→v2→v4→v5)
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            expect((useBookStore.getState() as any).__schemaVersion).toBe(2);
+            expect((useBookStore.getState() as any).__schemaVersion).toBe(5);
         });
     });
 

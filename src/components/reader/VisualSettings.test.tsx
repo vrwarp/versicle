@@ -4,13 +4,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VisualSettings } from './VisualSettings';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useBookStore } from '../../store/useBookStore';
 
 // Mock zustand store
 vi.mock('../../store/usePreferencesStore', () => ({
   usePreferencesStore: vi.fn(),
 }));
 vi.mock('../../store/useReaderUIStore', () => ({
-  useReaderUIStore: vi.fn(() => ({})),
+  useReaderUIStore: vi.fn(),
+}));
+vi.mock('../../store/useBookStore', () => ({
+  useBookStore: Object.assign(vi.fn(), {
+    getState: vi.fn(),
+    subscribe: vi.fn(),
+  }),
 }));
 
 // Mock zustand shallow
@@ -57,6 +64,7 @@ describe('VisualSettings', () => {
   const mockSetReaderViewMode = vi.fn();
   const mockSetLineHeight = vi.fn();
   const mockSetShouldForceFont = vi.fn();
+  const mockSetFontProfile = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,10 +82,28 @@ describe('VisualSettings', () => {
       setShouldForceFont: mockSetShouldForceFont,
       readerViewMode: 'paginated',
       setReaderViewMode: mockSetReaderViewMode,
+      fontProfiles: {
+        en: { fontSize: 100, lineHeight: 1.5 },
+      },
+      setFontProfile: mockSetFontProfile,
+      forceTraditionalChinese: false,
+      showPinyin: false,
+      pinyinSize: 100,
+      setForceTraditionalChinese: vi.fn(),
+      setShowPinyin: vi.fn(),
+      setPinyinSize: vi.fn(),
     }));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (useReaderUIStore as any).mockImplementation((selector: any) => selector({
+      currentBookId: 'test-book',
+    }));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (useBookStore as any).mockImplementation((selector: any) => selector({
+      books: {
+        'test-book': { id: 'test-book', language: 'en' },
+      },
     }));
   });
 
@@ -104,7 +130,7 @@ describe('VisualSettings', () => {
   it('changes font size', () => {
     render(<VisualSettings />);
     fireEvent.click(screen.getByLabelText('Increase font size'));
-    expect(mockSetFontSize).toHaveBeenCalledWith(110);
+    expect(mockSetFontProfile).toHaveBeenCalledWith('en', { fontSize: 110 });
   });
 
   it('renders layout options', () => {

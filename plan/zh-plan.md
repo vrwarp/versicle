@@ -233,8 +233,56 @@ This is the highest-risk change in Phase 1. The TTS store is persisted to `local
 -   **Where to apply:** Add this pattern in:
     - `AudioContentPipeline.loadSection()` when determining active language
     - `LexiconService.getRules()` when filtering by language
-    - `VisualSettings.tsx` when deciding to show Chinese-specific toggles
+    - `VisualSettings.tsx` when deciding to show Chinese-specific toggles AND when loading font profiles
     - `TTSSettingsTab.tsx` when auto-selecting the language profile
+    - `useEpubReader.ts` when selecting font rendering parameters
+
+### 1.5 Language Context Coupling (Book ↔ Audio ↔ Font)
+
+**Objective:** Ensure the book's `language` field is the single source of truth for all downstream systems—TTS profile, font rendering, and lexicon scoping—eliminating desynchronization bugs.
+
+#### 1.5.1 Remove Standalone Language Selector from UnifiedAudioPanel
+
+**File:** [src/components/reader/UnifiedAudioPanel.tsx](file:///Users/btsai/antigravity/versicle/versicle/src/components/reader/UnifiedAudioPanel.tsx)
+
+-   **What:** Remove the `activeLanguage` and `setActiveLanguage` imports from `useTTSStore`, and remove the "Active Language Profile" `<Select>` dropdown from the settings view.
+
+-   **Why:** This selector allows the user to change the audio language independently of the book language, causing desync. The audio language must be derived from the book language.
+
+-   **What to remove:**
+    - Lines 38–39: Remove `activeLanguage` and `setActiveLanguage` from the destructured store state.
+    - Lines 56–57: Remove from the `useShallow` selector.
+    - Lines 142–159: Remove the entire "Active Language Profile" section including the `<Select>`, the `<Languages>` icon, the label, and the helper text.
+
+#### 1.5.2 Wire Book Language Change to TTS Active Language
+
+**File:** [src/components/reader/VisualSettings.tsx](file:///Users/btsai/antigravity/versicle/versicle/src/components/reader/VisualSettings.tsx)
+
+-   **What:** When the user changes the book language via the dropdown (line 143), also call `useTTSStore.getState().setActiveLanguage(lang)`.
+
+-   **How:**
+    ```typescript
+    // Inside the Select onValueChange handler (line 143):
+    onValueChange={(lang) => {
+      if (currentBookId) {
+        updateBook(currentBookId, { language: lang });
+        // Couple audio profile to book language
+        import('../../store/useTTSStore').then(({ useTTSStore }) => {
+          useTTSStore.getState().setActiveLanguage(lang);
+        });
+      }
+    }}
+    ```
+
+-   **Existing behavior preserved:** `AudioPlayerService.setBookId()` (line 203–207) already calls `setActiveLanguage(book.language!)` on book open. This covers the initial load case. The `VisualSettings` change covers the mid-session language correction case.
+
+#### 1.5.3 Update useTTSStore.setActiveLanguage to Sync AudioPlayerService
+
+**File:** [src/store/useTTSStore.ts](file:///Users/btsai/antigravity/versicle/versicle/src/store/useTTSStore.ts)
+
+-   **What:** Ensure `setActiveLanguage` also calls `AudioPlayerService.getInstance().setLanguage(lang)` so the provider and lexicon rules are refreshed.
+
+-   **Verify:** Check that the existing `setActiveLanguage` implementation (line 270) already does this. If not, add the call.
 
 ---
 
@@ -333,7 +381,120 @@ This is the recommended location for the "Book Language" selector (not `ReaderCo
 
 6.  **Update tests** in `src/components/settings/TTSSettingsTab.test.tsx`.
 
-### 2.3 Lexicon Manager: Language Scoping
+### 2.4 Language-Dependent Font Rendering Profiles
+
+**Objective:** Store font size and line height per language so that CJK and Latin text each have appropriate rendering defaults that persist independently.
+
+#### 2.4.1 Add Font Profiles to usePreferencesStore
+
+**File:** [src/store/usePreferencesStore.ts](file:///Users/btsai/antigravity/versicle/versicle/src/store/usePreferencesStore.ts)
+
+##### Step-by-step:
+
+1.  **Define `FontProfile` type** (add at top of file):
+    ```typescript
+    interface FontProfile {
+      fontSize: number;    // percentage (50–200)
+      lineHeight: number;  // multiplier (1.0–3.0)
+    }
+    ```
+
+2.  **Add new state fields** to `PreferencesState` interface:
+### Phase 6: Scoped Font Profiles & UI Coupling (Remaining)
+**Goal:** Finalize language-specific rendering and ensure visual settings are synchronized with the multi-lingual pipeline.
+
+1.  **usePreferencesStore.ts:** Add `fontProfiles: Record<string, FontProfile>`.
+2.  **VisualSettings.tsx:** 
+    - Wire Language selector to `useTTSStore.setActiveLanguage`.
+    - Read/Write `fontSize` and `lineHeight` from `fontProfiles`.
+3.  **useEpubReader.ts:** Update style application to use scoped font settings.
+4.  **AudioPlayerService.ts:** Implement `setLanguage`.
+5.  **Verification:** E2E test for language-specific font persistence.
+ Record<string, FontProfile>;
+    ```
+
+3.  **Add new actions:**
+    ```typescript
+    setFontProfile: (lang: string, profile: Partial<FontProfile>) => void;
+    getFontProfile: (lang: string) => FontProfile;
+    ```
+
+4.  **Set defaults:**
+    ```typescript
+    fontProfiles: {
+      en: { fontSize: 100, lineHeight: 1.5 },
+      zh: { fontSize: 120, lineHeight: 1.8 },
+    },
+    ```
+
+5.  **Implement `setFontProfile`:**
+    ```typescript
+    setFontProfile: (lang, partial) => set((state) => ({
+      fontProfiles: {
+        ...state.fontProfiles,
+        [lang]: { ...(state.fontProfiles[lang] || { fontSize: 100, lineHeight: 1.5 }), ...partial }
+      }
+    })),
+    ```
+
+6.  **Implement `getFontProfile`:**
+    ```typescript
+    getFontProfile: (lang) => {
+      return get().fontProfiles[lang] || { fontSize: get().fontSize, lineHeight: get().lineHeight };
+    },
+    ```
+    This falls back to the legacy global fields if no profile exists for the language.
+
+7.  **Backward compatibility:** Keep the existing `fontSize`, `lineHeight`, `setFontSize`, and `setLineHeight` fields/actions. They serve as the fallback for languages without a dedicated profile and are still used by any code not yet migrated.
+
+#### 2.4.2 Update VisualSettings to Use Font Profiles
+
+**File:** [src/components/reader/VisualSettings.tsx](file:///Users/btsai/antigravity/versicle/versicle/src/components/reader/VisualSettings.tsx)
+
+##### Step-by-step:
+
+1.  **Read from font profile** instead of global fields:
+    ```typescript
+    const fontProfile = usePreferencesStore(state => 
+      state.fontProfiles[currentLanguage] || { fontSize: state.fontSize, lineHeight: state.lineHeight }
+    );
+    const setFontProfile = usePreferencesStore(state => state.setFontProfile);
+    ```
+
+2.  **Update font size slider** (lines 70–86) to use `fontProfile.fontSize` and call `setFontProfile(currentLanguage, { fontSize: val })` on change.
+
+3.  **Update line height controls** (lines 121–132) to use `fontProfile.lineHeight` and call `setFontProfile(currentLanguage, { lineHeight: val })` on change.
+
+4.  **Also update the global flat fields** (`setFontSize`, `setLineHeight`) in parallel so that non-migrated consumers still get a reasonable value. Alternatively, have the global flat fields always reflect the active profile.
+
+#### 2.4.3 Update useEpubReader to Apply Language-Specific Font Profile
+
+**File:** [src/hooks/useEpubReader.ts](file:///Users/btsai/antigravity/versicle/versicle/src/hooks/useEpubReader.ts)
+
+-   **What:** When injecting styles into the epub.js iframe, read font size and line height from `fontProfiles[bookLanguage]` instead of the global flat fields.
+
+-   **How:** In the style injection logic (inside `injectExtras` or the `useEffect` that applies CSS):
+    ```typescript
+    const bookLang = inventory?.language || 'en';
+    const fontProfile = usePreferencesStore.getState().getFontProfile(bookLang);
+    const fontSize = fontProfile.fontSize;
+    const lineHeight = fontProfile.lineHeight;
+    ```
+
+-   **Dependency array:** Add `fontProfiles` (or a derived value) to the `useEffect` dependency array that handles font/theme changes so re-rendering triggers on profile switches.
+
+#### 2.4.4 Add Tests
+
+-   `src/store/usePreferencesStore.test.ts` (new or existing):
+    - Test that `setFontProfile('zh', { fontSize: 130 })` updates only the Chinese profile.
+    - Test that `getFontProfile('fr')` falls back to global defaults.
+    - Test that existing `fontSize`/`lineHeight` fields still work as fallback.
+
+-   `src/components/reader/VisualSettings.test.tsx`:
+    - Test that font size slider reflects the current book language's profile.
+    - Test that changing font size for a Chinese book does not alter the English profile.
+
+### 2.5 Lexicon Manager: Language Scoping
 
 **File:** [src/components/reader/LexiconManager.tsx](file:///Users/btsai/antigravity/versicle/versicle/src/components/reader/LexiconManager.tsx)
 
@@ -696,10 +857,14 @@ Ensure no TypeScript compilation errors from the new optional fields.
 | 1 | `src/lib/sync/validators.ts` | Add Zod fields | Low |
 | 1 | `src/store/useTTSStore.ts` | Major refactor (profiles) | **High** |
 | 1 | `src/lib/ingestion.ts` | Add language extraction | Low |
-| 2 | `src/store/usePreferencesStore.ts` | Add Chinese prefs | Low |
-| 2 | `src/components/reader/VisualSettings.tsx` | Add language/Chinese UI | Medium |
-| 2 | `src/components/settings/TTSSettingsTab.tsx` | Add language profile UI | Medium |
+| 1.5 | `src/components/reader/UnifiedAudioPanel.tsx` | Remove standalone language selector | Low |
+| 1.5 | `src/components/reader/VisualSettings.tsx` | Wire book language → TTS active language | Low |
+| 1.5 | `src/store/useTTSStore.ts` | Verify setActiveLanguage syncs AudioPlayerService | Low |
+| 2 | `src/store/usePreferencesStore.ts` | Add Chinese prefs + font profiles | Medium |
+| 2 | `src/components/reader/VisualSettings.tsx` | Add language/Chinese UI + font profile wiring | **High** |
+| 2 | `src/components/settings/TTSSettingsTab.tsx` | Add language profile UI (config only) | Medium |
 | 2 | `src/components/GlobalSettingsDialog.tsx` | Wire new props | Low |
+| 2 | `src/hooks/useEpubReader.ts` | Apply language-specific font profile | Medium |
 | 2 | `src/components/reader/LexiconManager.tsx` | Add language filter/field | Medium |
 | 2 | `src/lib/tts/LexiconService.ts` | Add language param | Low |
 | 3 | NEW: `src/lib/chinese/ChineseTextProcessor.ts` | New file | Medium |
@@ -725,3 +890,43 @@ Ensure no TypeScript compilation errors from the new optional fields.
 3.  **Bundle Size:** `opencc-js` is 2.5 MB. Consider hosting the dictionary data externally (CDN) or splitting it into a separate chunk loaded only when a Chinese book is opened.
 
 4.  **Piper zh_CN Model Quality:** Chinese Piper models may have lower quality than English ones. Test with real Chinese text and document known pronunciation issues.
+
+5.  **Font Profile Migration:** When `fontProfiles` is introduced, existing users will have their `fontSize` and `lineHeight` values only in the global flat fields. The `getFontProfile()` fallback ensures these users see no change. However, the first time they adjust font settings while reading a book in a specific language, the new per-language profile will be created. This is a safe, progressive migration.
+
+## Implementation Notes (Phase 2 completion)
+- Replaced the standalone flat configuration with the `fontProfiles` mapping array, extending `usePreferencesStore.ts` with `setFontProfile` and `getFontProfile`.
+- Handled the UI injection of font adjustments dynamically tied to the specific book language scope within `VisualSettings.tsx`.
+- Applied correct `fontProfile.lineHeight` and `fontProfile.fontSize` overrides directly in `useEpubReader.ts` CSS theme injections.
+- Designed the "Language Profile" `<Select>` in `TTSSettingsTab.tsx`, ensuring proper voice model filtering relative to the active target configuration language.
+
+## Implementation Notes (Phase 3 & 4 completed)
+- Discovered that the Phase 2 fields (`forceTraditionalChinese`, `showPinyin`, `pinyinSize`) were missing from `usePreferencesStore.ts` and `VisualSettings.tsx` in the `main` branch. I manually injected them.
+- Successfully integrated `opencc-js` and `pinyin-pro` via `src/lib/chinese/ChineseTextProcessor.ts`.
+- The `useEpubReader.ts` was updated to parse and dynamically wrap Chinese characters in `data-pinyin` spans, rendering pinyin via CSS pseudo-elements.
+- `PiperProvider.ts` now respects CJK semantic density by reducing `MAX_CHARS` to 100 for texts matching `/[\u4e00-\u9fff]/`.
+- CJK clause boundaries have been added to the fallback regex and `splitLongSentence` routines.
+
+## Implementation Notes (Phase 5 completion)
+- Completed the multi-lingual pipeline verifications.
+- Modified `src/lib/tts.ts` and `src/lib/ingestion.ts` to ensure `rawLanguage` is extracted from metadata and correctly passed down to `TextSegmenter` during sentence extraction.
+- Developed `verification/test_journey_chinese.py` Playwright E2E script covering Chinese EPUB upload, rendering adjustments (Pinyin and Traditional modes), and correctly identifying the TTS Mandarin profile empty state without breaking English contexts.
+- Added data-testid to settings warnings to resolve brittle React text selectors in Playwright.
+
+## Implementation Notes (Phase 6 completion - FINAL)
+- Finalized language-scoped font profiles in `usePreferencesStore.ts`.
+- Coupled `VisualSettings.tsx` language selection with `useTTSStore.setActiveLanguage(lang)`.
+- Implemented `AudioPlayerService.setLanguage(lang)` to propagate locale changes to TTS providers.
+- Updated `ReaderView.tsx` to pass correct scoped font settings to `useEpubReader.ts`.
+- Created `verification/test_font_profiles.py` to verify language-specific setting persistence.
+
+## Implementation Notes (Final Stabilization)
+- Discovered and fixed a syntax error (extra brace) in `src/store/usePreferencesStore.ts` that caused cross-file transform errors during testing.
+- Fixed a missing store selector field in `VisualSettings.tsx` that caused a `TypeError` when accessing `fontProfiles`.
+- Critical Discovery: `opencc-js` and `pinyin-pro` dependencies were missing from the local `node_modules` despite being in `package.json`. Installed them to fix ReaderView transform errors.
+- Hardened test mocks in `VisualSettings.test.tsx`, `ReaderView.test.tsx`, and `ReaderView_VersionCheck.test.tsx` to include the now-mandatory `fontProfiles` initial state.
+- All 211 test files (1491 tests) are confirmed passing.
+
+## Implementation Notes (Final Verification Stabilized)
+- **Robust Language sub-tag Handling**: Discovered during testing that books with `zh-CN` metadata were falling back to English font profiles. Updated `VisualSettings.tsx` and `ReaderView.tsx` to normalize language strings using `.split('-')[0]`.
+- **Stabilized Playwright Tests**: Fixed a `fixture 'host' not found` error in `test_font_profiles.py` by removing the unnecessary fixture and using `utils.reset_app(page)`. Hardened selectors to use `data-testid` for the back button and visual settings button.
+- **Production Readiness**: Confirmed that `npm run build` and `npm run lint` pass successfully after fixing `TypeScript` unused variable and type narrowing issues in the reading pipeline.

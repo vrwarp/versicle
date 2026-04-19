@@ -47,6 +47,8 @@ export interface StaticBookManifest {
    * Ghost Book metadata: Palette snapshot generated during ingestion.
    */
   coverPalette?: number[];
+  /** Raw dc:language from EPUB OPF metadata. Used as default for UserInventoryItem.language. */
+  language?: string;
 }
 
 /**
@@ -130,6 +132,8 @@ export interface UserInventoryItem {
    * Layout: [TL, TR, BL, BR, Center]
    */
   coverPalette?: number[];
+  /** ISO 639-1 language code (e.g., 'en', 'zh'). Defaults to 'en'. */
+  language?: string;
 }
 
 /**
@@ -366,6 +370,8 @@ export interface Book {
    * 5 integers representing the cover regions (TL, TR, BL, BR, Center).
    */
   coverPalette?: number[];
+  /** ISO 639-1 language code (e.g., 'en', 'zh'). */
+  language?: string;
 }
 
 /**
@@ -415,6 +421,8 @@ export interface BookState {
   isOffloaded?: boolean;
   /** Status of AI analysis for the book. */
   aiAnalysisStatus?: 'none' | 'partial' | 'complete';
+  /** ISO 639-1 language code (e.g., 'en', 'zh'). */
+  language?: string;
 }
 
 /**
@@ -574,6 +582,8 @@ export interface LexiconRule {
   applyBeforeGlobal?: boolean;
   /** Explicit order of the rule. Lower numbers run first. */
   order?: number;
+  /** ISO 639-1 language code this rule applies to. If undefined, applies to all languages. */
+  language?: string;
   /** Timestamp when the rule was created. */
   created: number;
 }
