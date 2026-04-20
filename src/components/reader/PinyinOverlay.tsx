@@ -35,7 +35,7 @@ export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({
 
   const overlayContent = (
     <div 
-      className="absolute inset-0 pointer-events-none z-[40] overflow-visible"
+      className="absolute inset-0 pointer-events-none z-[10] overflow-visible"
       aria-hidden="true"
     >
       {positions.map((pos, idx) => (
