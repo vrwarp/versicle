@@ -132,6 +132,7 @@ vi.mock('../store/useToastStore', () => ({
 
 vi.mock('../store/useTTSStore', () => ({
     useTTSStore: Object.assign(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         vi.fn((selector: any) => selector ? selector({
             profiles: {
                 en: { voiceId: 'voice1', rate: 1.0, pitch: 1.0, volume: 1.0 },
