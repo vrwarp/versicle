@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * Pinyin position entry.
@@ -15,19 +16,26 @@ export interface PinyinPosition {
 interface PinyinOverlayProps {
   positions: PinyinPosition[];
   pinyinSize: number;
+  /** The epub.js scrolling container to portal into */
+  containerNode: Element | null;
 }
 
 /**
  * A transparent overlay that renders Pinyin annotations at specific geometry coordinates.
  * This component preserves the EPUB DOM integrity by rendering annotations in an ephemeral
- * UI layer instead of mutating the book content directly.
+ * UI layer inside the EPUB's native scroll container. This ensures that Pinyin scrolls
+ * in lockstep with the text at native frame rates.
  */
-export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({ positions, pinyinSize }) => {
-  if (positions.length === 0) return null;
+export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({ 
+  positions, 
+  pinyinSize,
+  containerNode 
+}) => {
+  if (positions.length === 0 || !containerNode) return null;
 
-  return (
+  const overlayContent = (
     <div 
-      className="fixed inset-0 pointer-events-none z-[40] overflow-hidden"
+      className="absolute inset-0 pointer-events-none z-[40] overflow-visible"
       aria-hidden="true"
     >
       {positions.map((pos, idx) => (
@@ -51,4 +59,6 @@ export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({ positions, pinyinS
       ))}
     </div>
   );
+
+  return createPortal(overlayContent, containerNode);
 };

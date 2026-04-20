@@ -385,6 +385,8 @@ export const ReaderView: React.FC = () => {
         error: hookError
     } = useEpubReader(bookId, viewerRef as React.RefObject<HTMLElement>, readerOptions);
 
+    const containerNode = (rendition as any)?.manager?.container || null;
+
     useEffect(() => {
         metadataRef.current = metadata;
 
@@ -1347,6 +1349,7 @@ export const ReaderView: React.FC = () => {
                 <PinyinOverlay 
                     positions={pinyinPositions} 
                     pinyinSize={pinyinSize} 
+                    containerNode={containerNode}
                 />
 
                 {/* Annotation List Overlay */}

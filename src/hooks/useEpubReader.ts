@@ -395,11 +395,6 @@ export function useEpubReader(
           if (optionsRef.current.onLocationChange) {
             optionsRef.current.onLocationChange(location, percentage, title, sectionId);
           }
-
-          // Trigger Pinyin/Traditional update on relocation
-          (newRendition as any).getContents().forEach((contents: any) => {
-            processChineseContent(contents);
-          });
         });
 
         newRendition.on('selected', (cfiRange: string, contents: unknown) => {
@@ -474,8 +469,13 @@ export function useEpubReader(
           }
 
           const pinyinPositions: any[] = [];
-          const iframe = viewerRef.current?.querySelector('iframe');
-          const iframeRect = iframe?.getBoundingClientRect();
+          const iframe = contents.window.frameElement as HTMLIFrameElement;
+          if (!iframe) return;
+
+          // In scrolled-doc mode, several iframes might be stacked. 
+          // We need to account for each iframe's position within the manager's container.
+          const iframeOffsetTop = iframe.offsetTop;
+          const iframeOffsetLeft = iframe.offsetLeft;
 
           for (const textNode of textNodes) {
             const parent = textNode.parentElement;
@@ -514,13 +514,14 @@ export function useEpubReader(
                     range.setEnd(textNode, i + 1);
 
                     const rect = range.getBoundingClientRect();
-                    // Optimization: Skip if rect is not in viewport or has no dimensions
-                    if (rect.width > 0 && rect.height > 0 && iframeRect) {
+                    // Optimization: Skip if rect has no dimensions
+                    if (rect.width > 0 && rect.height > 0) {
                       pinyinPositions.push({
                         char,
                         pinyin: pinyinArray[i],
-                        top: rect.top + iframeRect.top,
-                        left: rect.left + iframeRect.left + (rect.width / 2), // Center of character
+                        // Use document-relative top and left by adding iframe offsets
+                        top: rect.top + iframeOffsetTop,
+                        left: rect.left + iframeOffsetLeft + (rect.width / 2), // Center of character
                         width: rect.width,
                         height: rect.height
                       });
