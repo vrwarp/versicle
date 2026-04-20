@@ -17,11 +17,21 @@ let cachedDeviceId: string | null = null;
  * Generate a random device ID
  */
 const generateDeviceId = (): string => {
-    // Use crypto.randomUUID if available, otherwise fallback
+    // Use crypto.randomUUID if available
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         return `device-${crypto.randomUUID().slice(0, 8)}`;
     }
-    // Fallback for older browsers
+
+    // Fallback to crypto.getRandomValues for older browsers that don't have randomUUID
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+        const array = new Uint32Array(1);
+        crypto.getRandomValues(array);
+        const random = array[0].toString(36).substring(0, 8).padStart(8, '0');
+        return `device-${random}`;
+    }
+
+    // Ultimate fallback for very old environments (should be rare)
+    // Note: Math.random() is NOT cryptographically secure.
     const random = Math.random().toString(36).substring(2, 10);
     return `device-${random}`;
 };
