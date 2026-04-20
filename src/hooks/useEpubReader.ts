@@ -102,6 +102,8 @@ export interface EpubReaderOptions {
   onClick?: (event: MouseEvent) => void;
   /** Callback when an error occurs. */
   onError?: (error: string) => void;
+  /** Callback when pinyin positions are calculated. */
+  onPinyinPositionsUpdate?: (positions: any[]) => void;
   /** Optional: Initial CFI location to start reading at. Overrides metadata.currentCfi. */
   initialLocation?: string;
   /** Optional: Book metadata. If not provided, some features like initial location inference may be limited. */
@@ -159,7 +161,7 @@ export function useEpubReader(
   const resizeRaf = useRef<number | null>(null);
   const applyStylesRef = useRef<() => void>(() => { });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const injectChineseOverlayRef = useRef<(contents: any) => Promise<void>>(async () => { });
+  const processChineseContentRef = useRef<(contents: any) => Promise<void>>(async () => { });
   const { forceTraditionalChinese, showPinyin, pinyinSize } = usePreferencesStore();
   const sandboxObserverRef = useRef<MutationObserver | null>(null);
 
@@ -443,121 +445,101 @@ export function useEpubReader(
           }
         };
 
-        // Manual selection listener fallback
+        // Process Chinese text without corrupting DOM structure
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const injectChineseOverlay = async (contents: any) => {
+        const processChineseContent = async (contents: any) => {
           const doc = contents.document;
           if (!doc) return;
-
-          // Clear any active selection to prevent crashes during DOM mutation 
-          // (orphaned ranges can cause getClientRects errors)
-          contents.window.getSelection()?.removeAllRanges();
 
           const prefs = usePreferencesStore.getState();
           const bookLang = bookId ? useBookStore.getState().books[bookId]?.language || 'en' : 'en';
 
-          if (bookLang !== 'zh') return;
+          if (bookLang !== 'zh') {
+            if (optionsRef.current.onPinyinPositionsUpdate) optionsRef.current.onPinyinPositionsUpdate([]);
+            return;
+          }
 
-          // Remove previous overlay if settings changed
-          const existingOverlay = doc.getElementById('pinyin-overlay-styles');
-          if (existingOverlay) existingOverlay.remove();
+          const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+          const textNodes: Text[] = [];
+          let node: Text | null;
+          while ((node = walker.nextNode() as Text)) {
+            if (node.textContent && /[\u4e00-\u9fff]/.test(node.textContent)) {
+              textNodes.push(node);
+            }
+          }
 
-          if (prefs.showPinyin || prefs.forceTraditionalChinese) {
-            // Process text nodes
-            const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
-            const textNodes: Text[] = [];
-            let node: Text | null;
-            while ((node = walker.nextNode() as Text)) {
-              if (node.textContent && /[\u4e00-\u9fff]/.test(node.textContent)) {
-                textNodes.push(node);
+          const pinyinPositions: any[] = [];
+          const iframe = contents.window.frameElement as HTMLIFrameElement;
+          if (!iframe) return;
+
+          // In scrolled-doc mode, several iframes might be stacked. 
+          // We need to account for each iframe's position within the manager's container.
+          const iframeOffsetTop = iframe.offsetTop;
+          const iframeOffsetLeft = iframe.offsetLeft;
+
+          for (const textNode of textNodes) {
+            const parent = textNode.parentElement;
+            // Skip ruby/rt elements as they might already have annotations or be part of one
+            if (!parent || parent.tagName === 'RT' || parent.tagName === 'RUBY') continue;
+
+            // 1. Cache original text for clean reversion/toggling
+            if (!(textNode as any)._originalText) {
+              (textNode as any)._originalText = textNode.nodeValue;
+            }
+            const originalText = (textNode as any)._originalText;
+
+            // 2. Handle Traditional Chinese (In-place string mutation)
+            if (prefs.forceTraditionalChinese) {
+              const translated = await toTraditional(originalText);
+              if (textNode.nodeValue !== translated) {
+                textNode.nodeValue = translated;
+              }
+            } else {
+              if (textNode.nodeValue !== originalText) {
+                textNode.nodeValue = originalText;
               }
             }
 
-            for (const textNode of textNodes) {
-              const parent = textNode.parentElement;
-              if (!parent || parent.tagName === 'RT' || parent.tagName === 'RUBY') continue;
+            // 3. Handle Pinyin (Ephemeral Geometry Collection)
+            if (prefs.showPinyin) {
+              const currentText = textNode.nodeValue || '';
+              const pinyinArray = await getPinyin(currentText);
 
-              // Skip if already annotated
-              if (parent.classList && parent.classList.contains('zh-annotated-wrapper')) continue;
-              if (parent.classList && parent.classList.contains('zh-annotated')) continue;
+              for (let i = 0; i < currentText.length; i++) {
+                const char = currentText[i];
+                if (/[\u4e00-\u9fff]/.test(char) && pinyinArray[i]) {
+                  try {
+                    const range = doc.createRange();
+                    range.setStart(textNode, i);
+                    range.setEnd(textNode, i + 1);
 
-              const text = textNode.textContent || '';
-              // Avoid async character by character parsing
-              let pinyinArray: string[] = [];
-              let traditionalText = text;
-
-              if (prefs.showPinyin) {
-                pinyinArray = await getPinyin(text);
-              }
-              if (prefs.forceTraditionalChinese) {
-                traditionalText = await toTraditional(text);
-              }
-
-              const chars = [...traditionalText];
-
-              // Wrap each Chinese character in a <span> with data-pinyin
-              const fragment = doc.createDocumentFragment();
-              const wrapper = doc.createElement('span');
-              wrapper.classList.add('zh-annotated-wrapper');
-              wrapper.setAttribute('data-original-text', text);
-
-              for (let i = 0; i < chars.length; i++) {
-                const char = chars[i];
-                if (/[\u4e00-\u9fff]/.test(char)) {
-                  const span = doc.createElement('span');
-                  span.textContent = char;
-                  if (prefs.showPinyin) {
-                    span.setAttribute('data-pinyin', pinyinArray[i] || '');
+                    const rect = range.getBoundingClientRect();
+                    // Optimization: Skip if rect has no dimensions
+                    if (rect.width > 0 && rect.height > 0) {
+                      pinyinPositions.push({
+                        char,
+                        pinyin: pinyinArray[i],
+                        // Use document-relative top and left by adding iframe offsets
+                        top: rect.top + iframeOffsetTop,
+                        left: rect.left + iframeOffsetLeft + (rect.width / 2), // Center of character
+                        width: rect.width,
+                        height: rect.height
+                      });
+                    }
+                  } catch (e) {
+                    // Range errors can happen during rapid updates
                   }
-                  span.classList.add('zh-annotated');
-                  wrapper.appendChild(span);
-                } else {
-                  wrapper.appendChild(doc.createTextNode(char));
                 }
               }
-              fragment.appendChild(wrapper);
-              parent.replaceChild(fragment, textNode);
             }
+          }
 
-            // Inject CSS for ruby rendering
-            const style = doc.createElement('style');
-            style.id = 'pinyin-overlay-styles';
-            style.textContent = `
-              .zh-annotated {
-                position: relative;
-                display: inline-block;
-              }
-              .zh-annotated[data-pinyin]::before {
-                content: attr(data-pinyin);
-                position: absolute;
-                top: -1.2em;
-                left: 50%;
-                transform: translateX(-50%);
-                font-size: ${prefs.pinyinSize}%;
-                color: inherit;
-                opacity: 0.7;
-                white-space: nowrap;
-                pointer-events: none;
-              }
-              body { padding-top: 1.5em !important; }
-            `;
-            doc.head.appendChild(style);
-          } else {
-            // Restore original text if toggled off
-            const wrappers = doc.querySelectorAll('.zh-annotated-wrapper');
-            wrappers.forEach((wrapper: Element) => {
-               // This restores the text to what it was but won't revert traditional to simplified perfectly if they started with simplified.
-               // However, we didn't store the original simplified text anywhere.
-               // To fully support toggling off, we should store it.
-               const originalText = wrapper.getAttribute('data-original-text') || wrapper.textContent;
-               const textNode = doc.createTextNode(originalText || '');
-               wrapper.parentNode?.replaceChild(textNode, wrapper);
-            });
+          if (optionsRef.current.onPinyinPositionsUpdate) {
+            optionsRef.current.onPinyinPositionsUpdate(pinyinPositions);
           }
         };
 
-
-        injectChineseOverlayRef.current = injectChineseOverlay;
+        processChineseContentRef.current = processChineseContent;
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const attachListeners = (contents: any) => {
@@ -605,7 +587,7 @@ export function useEpubReader(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (newRendition.hooks.content as any).register(injectExtras);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (newRendition.hooks.content as any).register(injectChineseOverlay);
+        (newRendition.hooks.content as any).register(processChineseContent);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (newRendition.hooks.content as any).register(attachListeners);
 
@@ -613,7 +595,7 @@ export function useEpubReader(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (newRendition as any).getContents().forEach((contents: any) => {
           injectExtras(contents);
-          injectChineseOverlay(contents);
+          processChineseContent(contents);
         });
 
       } catch (err) {
@@ -693,7 +675,7 @@ export function useEpubReader(
     // Trigger overlay re-injection on all currently loaded views
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (renditionRef.current as any).getContents().forEach((contents: any) => {
-      injectChineseOverlayRef.current(contents);
+      processChineseContentRef.current(contents);
     });
   }, [isReady, forceTraditionalChinese, showPinyin, pinyinSize]);
 
@@ -729,9 +711,10 @@ export function useEpubReader(
     themes.select(options.currentTheme);
     themes.fontSize(`${options.fontSize}%`);
     themes.font(options.fontFamily);
+    const effectiveLineHeight = showPinyin ? Math.max(options.lineHeight, 1.8) : options.lineHeight;
     themes.default({
-      p: { 'line-height': `${options.lineHeight} !important` },
-      body: { 'line-height': `${options.lineHeight} !important` }
+      p: { 'line-height': `${effectiveLineHeight} !important` },
+      body: { 'line-height': `${effectiveLineHeight} !important` }
     });
 
     // Flow

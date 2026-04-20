@@ -41,6 +41,7 @@ import { createLogger } from '../../lib/logger';
 import { useDeviceStore } from '../../store/useDeviceStore';
 import { getDeviceId } from '../../lib/device-id';
 import { HistoryHighlighter } from './HistoryHighlighter';
+import { PinyinOverlay, type PinyinPosition } from './PinyinOverlay';
 
 const logger = createLogger('ReaderView');
 
@@ -72,7 +73,8 @@ export const ReaderView: React.FC = () => {
         shouldForceFont,
         readerViewMode,
         forceTraditionalChinese,
-        showPinyin
+        showPinyin,
+        pinyinSize
     } = usePreferencesStore(useShallow(state => ({
         currentTheme: state.currentTheme,
         customTheme: state.customTheme || DEFAULT_CUSTOM_THEME,
@@ -83,7 +85,8 @@ export const ReaderView: React.FC = () => {
         shouldForceFont: state.shouldForceFont,
         readerViewMode: state.readerViewMode || 'paginated',
         forceTraditionalChinese: state.forceTraditionalChinese,
-        showPinyin: state.showPinyin
+        showPinyin: state.showPinyin,
+        pinyinSize: state.pinyinSize
     })));
 
     const {
@@ -183,7 +186,9 @@ export const ReaderView: React.FC = () => {
         return list;
     }));
 
+
     const [historyTick, setHistoryTick] = useState(0);
+    const [pinyinPositions, setPinyinPositions] = useState<PinyinPosition[]>([]);
 
     // --- Import Progress Jump Logic ---
     const [showImportJumpDialog, setShowImportJumpDialog] = useState(false);
@@ -347,6 +352,9 @@ export const ReaderView: React.FC = () => {
         },
         onError: (msg) => {
             logger.error("Reader Error:", msg);
+        },
+        onPinyinPositionsUpdate: (positions) => {
+            setPinyinPositions(positions);
         }
     }), [
         readerViewMode,
@@ -376,6 +384,8 @@ export const ReaderView: React.FC = () => {
         metadata,
         error: hookError
     } = useEpubReader(bookId, viewerRef as React.RefObject<HTMLElement>, readerOptions);
+
+    const containerNode = (rendition as any)?.manager?.container || null;
 
     useEffect(() => {
         metadataRef.current = metadata;
@@ -487,8 +497,8 @@ export const ReaderView: React.FC = () => {
             searchClient.terminate();
             setCurrentBookId(null);
             reset();
-            // Ensure popover is hidden when leaving the reader
             hidePopover();
+            setPinyinPositions(prev => prev.length === 0 ? prev : []);
         };
     }, [reset, hidePopover, setCurrentBookId]);
 
@@ -1335,7 +1345,14 @@ export const ReaderView: React.FC = () => {
                     />
                 )}
 
-                {/* Annotations Sidebar */}
+                {/* Pinyin Overlay (Ephemeral UI) */}
+                <PinyinOverlay 
+                    positions={pinyinPositions} 
+                    pinyinSize={pinyinSize} 
+                    containerNode={containerNode}
+                />
+
+                {/* Annotation List Overlay */}
                 {showAnnotations && (
                     <div data-testid="reader-annotations-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 md:static flex flex-col">
                         <div className="p-4 border-b border-border">
