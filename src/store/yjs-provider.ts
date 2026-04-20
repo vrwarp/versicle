@@ -10,7 +10,7 @@ const logger = createLogger('YjsProvider');
 // ─── Schema Version ─────────────────────────────────────────────────────────
 // Increment this when introducing breaking changes to Yjs-synced state.
 // See: Operational Runbook for Breaking Changes in the TDD.
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 // Singleton Y.Doc instance - Source of Truth for User Data
 export const yDoc = new Y.Doc();
@@ -142,8 +142,26 @@ function runMigrationsImpl(): void {
             currentVersion = 4;
         }
 
+        if (currentVersion === 4) {
+            import('./usePreferencesStore').then(({ usePreferencesStore }) => {
+                if (!usePreferencesStore) return;
+                const state = usePreferencesStore.getState();
+                if (!state.fontProfiles) {
+                    usePreferencesStore.setState({
+                        fontProfiles: {
+                            en: { fontSize: 100, lineHeight: 1.5 },
+                            zh: { fontSize: 120, lineHeight: 1.8 }
+                        }
+                    });
+                    logger.info('Migration v4 → v5 complete (fontProfiles initialized).');
+                }
+                useBookStore.setState({ __schemaVersion: 5 } as unknown as Record<string, unknown>);
+            }).catch(() => {});
+            currentVersion = 5;
+        }
+
         // Future migrations added here sequentially:
-        // if (currentVersion === 4) { ... currentVersion = 5; }
+        // if (currentVersion === 5) { ... currentVersion = 6; }
     }).catch(() => {
         // Silently ignore if useBookStore can't be imported (test env)
     });

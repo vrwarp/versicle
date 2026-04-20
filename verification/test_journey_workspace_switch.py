@@ -57,7 +57,7 @@ const firebaseConfig = {
     expect(page.get_by_text("Reading Group", exact=True).first).to_be_visible()
     
     # NOW let's test the actual multi-stage switch by switching BACK to the default workspace.
-    # The list should contain the default workspace (e.g., main4) with a Switch button.
+    # The list should contain the default workspace (e.g., main5) with a Switch button.
     page.get_by_role("button", name="Switch").first.click()
     
     # This should trigger the confirmation modal! (Wait up to 20s because empty workspaces rely on an 8s timeout before reloading)

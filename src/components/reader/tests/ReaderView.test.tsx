@@ -166,6 +166,10 @@ describe('ReaderView', () => {
     usePreferencesStore.setState({
       currentTheme: 'light',
       fontSize: 100,
+      lineHeight: 1.5,
+      fontProfiles: {
+        en: { fontSize: 100, lineHeight: 1.5 }
+      },
       shouldForceFont: false,
       readerViewMode: 'paginated',
     });

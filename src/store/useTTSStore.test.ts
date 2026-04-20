@@ -11,6 +11,7 @@ vi.mock('../lib/tts/AudioPlayerService', () => {
                 stop: vi.fn(),
                 setSpeed: vi.fn(),
                 setVoice: vi.fn(),
+                setLanguage: vi.fn(),
                 init: vi.fn(),
                 getVoices: vi.fn(() => []),
                 setProvider: vi.fn(),
@@ -31,9 +32,15 @@ describe('useTTSStore', () => {
     useTTSStore.setState({
       isPlaying: false,
       status: 'stopped',
+      activeLanguage: 'en',
+      profiles: {
+          en: { voiceId: null, rate: 1, pitch: 1, volume: 1 }
+      },
       rate: 1,
       pitch: 1,
       voice: null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      voices: [{ id: 'test-en', name: 'Test English', lang: 'en-US', provider: 'local' } as any]
     });
   });
 
@@ -103,5 +110,29 @@ describe('useTTSStore', () => {
     const voice = { id: 'test', name: 'Test Voice', lang: 'en-US', provider: 'local' } as any;
     useTTSStore.getState().setVoice(voice);
     expect(useTTSStore.getState().voice).toBe(voice);
+    expect(useTTSStore.getState().profiles['en'].voiceId).toBe('test');
+  });
+
+  it('should set active language and switch profile', () => {
+    useTTSStore.setState({
+        profiles: {
+            en: { voiceId: 'test-en', rate: 1.0, pitch: 1.0, volume: 1.0 },
+            zh: { voiceId: 'test-zh', rate: 1.5, pitch: 1.2, volume: 1.0 }
+        },
+        voices: [
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            { id: 'test-en', name: 'Test English', lang: 'en-US', provider: 'local' } as any,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            { id: 'test-zh', name: 'Test Chinese', lang: 'zh-CN', provider: 'local' } as any
+        ]
+    });
+
+    useTTSStore.getState().setActiveLanguage('zh');
+
+    const state = useTTSStore.getState();
+    expect(state.activeLanguage).toBe('zh');
+    expect(state.rate).toBe(1.5);
+    expect(state.pitch).toBe(1.2);
+    expect(state.voice?.id).toBe('test-zh');
   });
 });

@@ -13,10 +13,22 @@ import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/Text
 import { Capacitor } from '@capacitor/core';
 import { LexiconService } from '../lib/tts/LexiconService';
 
+export interface TTSProfile {
+    voiceId: string | null;
+    rate: number;
+    pitch: number;
+    volume: number;
+}
+
 /**
  * State interface for the Text-to-Speech (TTS) store.
  */
 interface TTSState {
+    /** Active language for TTS profile selection. */
+    activeLanguage: string;
+    /** Per-language TTS profiles. */
+    profiles: Record<string, TTSProfile>;
+
     /** Flag indicating if TTS is currently playing. */
     isPlaying: boolean;
     /** Current status of playback. */
@@ -83,9 +95,9 @@ interface TTSState {
     play: () => void;
     pause: () => void;
     stop: () => void;
-    setRate: (rate: number) => void;
-    setPitch: (pitch: number) => void;
-    setVoice: (voice: TTSVoice | null) => void;
+    setRate: (rate: number, lang?: string) => void;
+    setPitch: (pitch: number, lang?: string) => void;
+    setVoice: (voice: TTSVoice | null, lang?: string) => void;
     setProviderId: (id: 'local' | 'google' | 'openai' | 'lemonfox' | 'piper') => void;
     setApiKey: (provider: 'google' | 'openai' | 'lemonfox', key: string) => void;
     setCustomAbbreviations: (abbrevs: string[]) => void;
@@ -96,6 +108,9 @@ interface TTSState {
     setPrerollEnabled: (enable: boolean) => void;
     setSanitizationEnabled: (enable: boolean) => void;
     setBibleLexiconEnabled: (enable: boolean) => void;
+
+    setActiveLanguage: (lang: string) => void;
+
     loadVoices: () => Promise<void>;
     downloadVoice: (voiceId: string) => Promise<void>;
     deleteVoice: (voiceId: string) => Promise<void>;
@@ -149,6 +164,58 @@ export const useTTSStore = create<TTSState>()(
                 isBibleLexiconEnabled: true, // Default to true
                 backgroundAudioMode: 'silence',
                 whiteNoiseVolume: 0.1,
+
+                activeLanguage: 'en',
+                profiles: {
+                    en: { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0 },
+                },
+
+                setActiveLanguage: (lang) => {
+                    const state = get();
+                    // When we change the language context, we also update the active properties
+                    // and fetch the voice objects for the underlying service
+                    const profile = state.profiles[lang] || { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0 };
+                    
+                    // Filter voices for this language
+                    const languageVoices = state.voices.filter(v => v.lang.startsWith(lang));
+                    
+                    let selectedVoice = languageVoices.find(v => v.id === profile.voiceId) || null;
+
+                    if (!selectedVoice && languageVoices.length > 0) {
+                        // Pick a default matching voice if the profile one is missing
+                        selectedVoice = languageVoices[0];
+                    }
+
+                    if (languageVoices.length === 0 && state.voices.length > 0) {
+                        // Warn user if no voices for this language
+                        import('./useToastStore').then(({ useToastStore }) => {
+                            useToastStore.getState().showToast(`No voices found for ${lang}. Audio playback may not work.`, 'error');
+                        });
+                    }
+
+                    set((s) => ({
+                        activeLanguage: lang,
+                        rate: profile.rate,
+                        pitch: profile.pitch,
+                        voice: selectedVoice,
+                        profiles: {
+                            ...s.profiles,
+                            [lang]: {
+                                ...profile,
+                                voiceId: selectedVoice?.id || null
+                            }
+                        }
+                    }));
+
+                    // Update the single active audio player properties
+                    const player = AudioPlayerService.getInstance();
+                    player.setSpeed(profile.rate);
+                    player.setLanguage(lang);
+                    if (selectedVoice) {
+                        player.setVoice(selectedVoice.id);
+                    }
+                },
+
                 customAbbreviations: [
                     'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Gen.', 'Rep.', 'Sen.', 'St.', 'vs.', 'Jr.', 'Sr.',
                     'e.g.', 'i.e.'
@@ -190,18 +257,49 @@ export const useTTSStore = create<TTSState>()(
                 stop: () => {
                     AudioPlayerService.getInstance().stop();
                 },
-                setRate: (rate) => {
-                    AudioPlayerService.getInstance().setSpeed(rate);
-                    set({ rate });
+                setRate: (rate, lang?: string) => {
+                    const targetLang = lang || get().activeLanguage;
+                    const isActive = targetLang === get().activeLanguage;
+                    
+                    if (isActive) {
+                        AudioPlayerService.getInstance().setSpeed(rate);
+                    }
+
+                    set((state) => ({
+                        ...(isActive ? { rate } : {}),
+                        profiles: {
+                            ...state.profiles,
+                            [targetLang]: { ...(state.profiles[targetLang] || { voiceId: state.voice?.id || null, rate: 1.0, pitch: 1.0, volume: 1.0 }), rate }
+                        }
+                    }));
                 },
-                setPitch: (pitch) => {
-                    set({ pitch });
+                setPitch: (pitch, lang?: string) => {
+                    const targetLang = lang || get().activeLanguage;
+                    const isActive = targetLang === get().activeLanguage;
+
+                    set((state) => ({
+                        ...(isActive ? { pitch } : {}),
+                        profiles: {
+                            ...state.profiles,
+                            [targetLang]: { ...(state.profiles[targetLang] || { voiceId: state.voice?.id || null, rate: 1.0, pitch: 1.0, volume: 1.0 }), pitch }
+                        }
+                    }));
                 },
-                setVoice: (voice) => {
-                    if (voice) {
+                setVoice: (voice, lang?: string) => {
+                    const targetLang = lang || get().activeLanguage;
+                    const isActive = targetLang === get().activeLanguage;
+
+                    if (isActive && voice) {
                         AudioPlayerService.getInstance().setVoice(voice.id);
                     }
-                    set({ voice });
+
+                    set((state) => ({
+                        ...(isActive ? { voice } : {}),
+                        profiles: {
+                            ...state.profiles,
+                            [targetLang]: { ...(state.profiles[targetLang] || { voiceId: null, rate: state.rate, pitch: state.pitch, volume: 1.0 }), voiceId: voice?.id || null }
+                        }
+                    }));
                 },
                 setProviderId: (id) => {
                     set({ providerId: id });
@@ -267,7 +365,8 @@ export const useTTSStore = create<TTSState>()(
                     } else if (providerId === 'lemonfox') {
                         newProvider = new LemonFoxProvider(apiKeys.lemonfox);
                     } else if (providerId === 'piper') {
-                        newProvider = new PiperProvider();
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        newProvider = new PiperProvider((get() as any).activeLanguage || 'en');
                     } else {
                         if (Capacitor.isNativePlatform()) {
                             newProvider = new CapacitorTTSProvider();
@@ -334,8 +433,27 @@ export const useTTSStore = create<TTSState>()(
         },
         {
             name: 'tts-storage',
+            version: 2,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            migrate: (persistedState: any, version: number) => {
+                if (version < 2) {
+                    // Migrate flat fields into profiles
+                    persistedState.activeLanguage = 'en';
+                    persistedState.profiles = {
+                        en: {
+                            voiceId: persistedState.voice?.id || null,
+                            rate: persistedState.rate || 1.0,
+                            pitch: persistedState.pitch || 1.0,
+                            volume: 1.0,
+                        }
+                    };
+                }
+                return persistedState;
+            },
             storage: createJSONStorage(() => localStorage),
             partialize: (state) => ({
+                activeLanguage: state.activeLanguage,
+                profiles: state.profiles,
                 rate: state.rate,
                 pitch: state.pitch,
                 voice: state.voice,
@@ -354,6 +472,12 @@ export const useTTSStore = create<TTSState>()(
             }),
             onRehydrateStorage: () => (state) => {
                 if (state) {
+                    // Ensure active profile exists on rehydration if missing
+                    if (!state.profiles) {
+                        state.profiles = { en: { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0 } };
+                        state.activeLanguage = 'en';
+                    }
+
                     const player = AudioPlayerService.getInstance();
                     player.setBackgroundAudioMode(state.backgroundAudioMode);
                     player.setBackgroundVolume(state.whiteNoiseVolume);

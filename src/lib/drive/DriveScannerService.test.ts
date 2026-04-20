@@ -14,7 +14,8 @@ vi.mock('../../store/useDriveStore', () => ({
 
 vi.mock('../../store/useBookStore', () => ({
     useBookStore: {
-        getState: vi.fn()
+        getState: vi.fn(),
+        subscribe: vi.fn()
     }
 }));
 

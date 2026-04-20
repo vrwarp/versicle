@@ -9,6 +9,11 @@ import { getDeviceId } from '../lib/device-id';
  * Phase 2 (Yjs Migration): This store is wrapped with yjs() middleware.
  * All preferences are synced across devices automatically.
  */
+export interface FontProfile {
+    fontSize: number;
+    lineHeight: number;
+}
+
 interface PreferencesState {
     // === SYNCED STATE (persisted to Yjs) ===
     currentTheme: 'light' | 'dark' | 'sepia';
@@ -22,6 +27,14 @@ interface PreferencesState {
     libraryFilterMode: 'all' | 'downloaded';
     activeContext: 'library' | 'notes';
 
+    // === LANGUAGE SCOPED FONT RENDERING ===
+    fontProfiles: Record<string, FontProfile>;
+
+    // === CHINESE READING ===
+    forceTraditionalChinese: boolean;
+    showPinyin: boolean;
+    pinyinSize: number;
+
     // === ACTIONS (not synced to Yjs) ===
     setTheme: (theme: 'light' | 'dark' | 'sepia') => void;
     setCustomTheme: (theme: { bg: string; fg: string }) => void;
@@ -33,6 +46,12 @@ interface PreferencesState {
     setLibraryLayout: (layout: 'grid' | 'list') => void;
     setLibraryFilterMode: (mode: 'all' | 'downloaded') => void;
     setActiveContext: (context: 'library' | 'notes') => void;
+
+    setForceTraditionalChinese: (force: boolean) => void;
+    setShowPinyin: (show: boolean) => void;
+    setPinyinSize: (size: number) => void;
+
+    setFontProfile: (lang: string, profile: Partial<FontProfile>) => void;
 }
 
 const defaultPreferences = {
@@ -45,7 +64,16 @@ const defaultPreferences = {
     readerViewMode: 'paginated' as const,
     libraryLayout: 'grid' as const,
     libraryFilterMode: 'all' as const,
-    activeContext: 'library' as const
+    activeContext: 'library' as const,
+
+    forceTraditionalChinese: false,
+    showPinyin: false,
+    pinyinSize: 100,
+
+    fontProfiles: {
+        en: { fontSize: 100, lineHeight: 1.5 },
+        zh: { fontSize: 120, lineHeight: 1.8 }
+    }
 };
 
 /**
@@ -71,6 +99,20 @@ export const usePreferencesStore = create<PreferencesState>()(
             setLibraryLayout: (layout) => set({ libraryLayout: layout }),
             setLibraryFilterMode: (mode) => set({ libraryFilterMode: mode }),
             setActiveContext: (context) => set({ activeContext: context }),
+
+            setForceTraditionalChinese: (force) => set({ forceTraditionalChinese: force }),
+            setShowPinyin: (show) => set({ showPinyin: show }),
+            setPinyinSize: (size) => set({ pinyinSize: size }),
+
+            setFontProfile: (lang, profile) => set((state) => {
+                const current = state.fontProfiles[lang] || { fontSize: state.fontSize, lineHeight: state.lineHeight };
+                return {
+                    fontProfiles: {
+                        ...state.fontProfiles,
+                        [lang]: { ...current, ...profile }
+                    }
+                };
+            }),
         }),
         getYjsOptions()
     )

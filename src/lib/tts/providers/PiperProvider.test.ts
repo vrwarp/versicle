@@ -12,6 +12,15 @@ const mockVoicesJson = {
       speaker_id_map: {},
       files: { "f.onnx": {}, "f.onnx.json": {} }
   },
+  "zh_CN-huayan-medium": {
+      key: "zh_CN-huayan-medium",
+      name: "huayan",
+      language: { code: "zh_CN" },
+      quality: "medium",
+      num_speakers: 1,
+      speaker_id_map: {},
+      files: { "f.onnx": {}, "f.onnx.json": {} }
+  },
   "en_US-ryan-high": {
       key: "en_US-ryan-high",
       name: "ryan",
@@ -57,12 +66,15 @@ describe('PiperProvider Voice Filtering', () => {
         vi.restoreAllMocks();
     });
 
-    it('should filter voices to only include single speaker en_US voices', async () => {
+    it('should filter voices to only include single speaker en_US and zh_CN voices', async () => {
         await provider.init();
         const voices = await provider.getVoices();
 
         // Should include ryan
         expect(voices.find(v => v.id === 'piper:en_US-ryan-high')).toBeDefined();
+
+        // Should include huayan (zh_CN)
+        expect(voices.find(v => v.id === 'piper:zh_CN-huayan-medium')).toBeDefined();
 
         // Should NOT include kareem (wrong language)
         expect(voices.find(v => v.id.includes('kareem'))).toBeUndefined();

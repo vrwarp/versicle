@@ -34,7 +34,8 @@ export const UnifiedAudioPanel = () => {
     sanitizationEnabled,
     setSanitizationEnabled,
     prerollEnabled,
-    setPrerollEnabled
+    setPrerollEnabled,
+    activeLanguage
   } = useTTSStore(useShallow(state => ({
     isPlaying: state.isPlaying,
     play: state.play,
@@ -50,7 +51,8 @@ export const UnifiedAudioPanel = () => {
     sanitizationEnabled: state.sanitizationEnabled,
     setSanitizationEnabled: state.setSanitizationEnabled,
     prerollEnabled: state.prerollEnabled,
-    setPrerollEnabled: state.setPrerollEnabled
+    setPrerollEnabled: state.setPrerollEnabled,
+    activeLanguage: state.activeLanguage
   })));
 
   const [view, setView] = useState<'queue' | 'settings'>('queue');
@@ -171,7 +173,7 @@ export const UnifiedAudioPanel = () => {
                        <SelectTrigger id="voice-select" aria-label="Select voice"><SelectValue placeholder="Select Voice" /></SelectTrigger>
                        <SelectContent>
                           <SelectItem value="default">Default</SelectItem>
-                          {voices.map(v => (
+                          {voices.filter(v => v.lang.startsWith(activeLanguage)).map(v => (
                               <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                           ))}
                        </SelectContent>

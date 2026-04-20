@@ -145,7 +145,8 @@ export class AudioContentPipeline {
                     abbreviations,
                     settings.alwaysMerge,
                     settings.sentenceStarters,
-                    settings.minSentenceLength
+                    settings.minSentenceLength,
+                    bookMetadata?.language || 'en'
                 );
 
                 // Add Preroll if enabled
