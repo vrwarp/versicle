@@ -590,7 +590,14 @@ export function useEpubReader(
     });
 
     themes.select(options.currentTheme);
-    themes.fontSize(`${options.fontSize}%`);
+
+    const TARGET_BASE_PX = 16;
+    const bookBasePx = options.metadata?.baseFontSize || TARGET_BASE_PX;
+    const normalizationFactor = TARGET_BASE_PX / bookBasePx;
+    const userScale = options.fontSize / 100;
+    const finalScalePct = Math.round(normalizationFactor * userScale * 100);
+
+    themes.fontSize(`${finalScalePct}%`);
     themes.font(options.fontFamily);
     themes.default({
       p: { 'line-height': `${options.lineHeight} !important` },
@@ -680,7 +687,8 @@ export function useEpubReader(
     options.fontFamily,
     options.lineHeight,
     options.viewMode,
-    options.shouldForceFont
+    options.shouldForceFont,
+    options.metadata?.baseFontSize
   ]);
 
   return { book, rendition, isReady, areLocationsReady, isLoading, metadata, toc, error };

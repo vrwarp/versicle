@@ -15,6 +15,80 @@ export interface ProcessedChapter {
   tables?: Omit<TableImage, 'bookId' | 'id' | 'sectionId'>[]; // sectionId is contextually known by ProcessedChapter.href
 }
 
+export type StyleAccumulator = Map<number, { count: number; charCount: number; totalLineHeight: number }>;
+
+/**
+ * Samples the dominant font size of a single document/chapter and adds it to the global accumulator.
+ * Uses an early exit to avoid end-of-chapter footnotes.
+ */
+function accumulateChapterStyles(doc: Document, win: Window, accumulator: StyleAccumulator): void {
+  const paragraphs = Array.from(doc.querySelectorAll('p, div.paragraph, div.bodytext, div.calibre1'));
+  if (paragraphs.length === 0) return;
+
+  let totalSampledChars = 0;
+  const MAX_SAMPLE_CHARS = 5000;
+
+  for (const p of paragraphs) {
+    if (totalSampledChars >= MAX_SAMPLE_CHARS) break;
+
+    const text = p.textContent?.trim() || '';
+
+    // Filter 1: Ignore short strings (ToC, headings)
+    if (text.length < 50) continue;
+
+    // Filter 2: Ignore explicit metadata containers
+    const parentTag = p.parentElement?.tagName.toLowerCase();
+    if (parentTag === 'aside' || parentTag === 'nav' || parentTag === 'footer') {
+      continue;
+    }
+
+    const style = win.getComputedStyle(p);
+    const fontSize = parseFloat(style.fontSize);
+    let lineHeight = parseFloat(style.lineHeight);
+
+    if (isNaN(lineHeight)) {
+      lineHeight = fontSize * 1.2; // Standard browser default fallback
+    }
+
+    if (!isNaN(fontSize) && fontSize > 0) {
+      // Round to 1 decimal place to prevent floating point fragmentation mapping (e.g., 16.001px vs 16.0px)
+      const roundedSize = Math.round(fontSize * 10) / 10;
+
+      const existing = accumulator.get(roundedSize) || { count: 0, charCount: 0, totalLineHeight: 0 };
+      existing.count += 1;
+      existing.charCount += text.length;
+      existing.totalLineHeight += lineHeight;
+      accumulator.set(roundedSize, existing);
+
+      totalSampledChars += text.length;
+    }
+  }
+}
+
+/**
+ * Evaluates the global accumulator to find the mathematically dominant style.
+ */
+export function calculateDominantStyle(accumulator: StyleAccumulator): { fontSize: number; lineHeight: number } | null {
+  if (accumulator.size === 0) return null;
+
+  let dominantSize = 0;
+  let maxVolume = -1;
+
+  for (const [size, data] of accumulator.entries()) {
+    if (data.charCount > maxVolume) {
+      maxVolume = data.charCount;
+      dominantSize = size;
+    }
+  }
+
+  const dominantData = accumulator.get(dominantSize)!;
+
+  return {
+    fontSize: dominantSize,
+    lineHeight: dominantData.totalLineHeight / dominantData.count
+  };
+}
+
 /**
  * Extracts content from an EPUB file using an offscreen renderer.
  * This ensures that the extracted text and CFIs match exactly what the user sees during playback.
@@ -23,7 +97,7 @@ export async function extractContentOffscreen(
   file: File | Blob | ArrayBuffer,
   options: ExtractionOptions = {},
   onProgress?: (progress: number, message: string) => void
-): Promise<ProcessedChapter[]> {
+): Promise<{ chapters: ProcessedChapter[], baseStyles: { fontSize: number; lineHeight: number } | null }> {
   // 1. Create a hidden container
   const container = document.createElement('div');
   Object.assign(container.style, {
@@ -38,6 +112,7 @@ export async function extractContentOffscreen(
   document.body.appendChild(container);
 
   const results: ProcessedChapter[] = [];
+  const globalStyleAccumulator: StyleAccumulator = new Map();
 
   // 2. Initialize ePub
   // ePub can take File, ArrayBuffer, or URL.
@@ -110,6 +185,12 @@ export async function extractContentOffscreen(
       if (contents && contents.document && contents.document.body) {
         const doc = contents.document;
         const body = doc.body;
+        const win = contents.window || doc.defaultView;
+
+        // New logic: Accumulate styles for global evaluation
+        if (win) {
+          accumulateChapterStyles(doc, win, globalStyleAccumulator);
+        }
 
         // Determine title
         let title = '';
@@ -187,6 +268,11 @@ export async function extractContentOffscreen(
     if (container.parentNode) container.parentNode.removeChild(container);
   }
 
+  const baseStyles = calculateDominantStyle(globalStyleAccumulator);
+  if (baseStyles) {
+    logger.info(`Calculated global base font size: ${baseStyles.fontSize}px`);
+  }
+
   onProgress?.(100, 'Ingestion complete');
-  return results;
+  return { chapters: results, baseStyles };
 }

@@ -12,14 +12,17 @@ vi.mock('browser-image-compression', () => ({
 vi.mock('./offscreen-renderer', () => ({
   extractContentOffscreen: vi.fn(async (file, options, onProgress) => {
     if (onProgress) onProgress(50, 'Processing...');
-    return [
-      {
-        href: 'chapter1.html',
-        sentences: [{ text: 'Chapter Content.', cfi: 'epubcfi(/6/2!/4/2/1:0)' }],
-        textContent: 'Chapter Content.',
-        title: 'Mock Chapter 1'
-      }
-    ];
+    return {
+      chapters: [
+        {
+          href: 'chapter1.html',
+          sentences: [{ text: 'Chapter Content.', cfi: 'epubcfi(/6/2!/4/2/1:0)' }],
+          textContent: 'Chapter Content.',
+          title: 'Mock Chapter 1'
+        }
+      ],
+      baseStyles: { fontSize: 16, lineHeight: 19.2 }
+    };
   })
 }));
 

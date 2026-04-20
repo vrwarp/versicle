@@ -38,6 +38,10 @@ export interface StaticBookManifest {
   totalChars: number;
   /** The version of the ingestion pipeline used. */
   schemaVersion: number;
+  /** The global base font size of the book calculated during ingestion. */
+  baseFontSize?: number;
+  /** The global base line height of the book calculated during ingestion. */
+  baseLineHeight?: number;
   /**
    * The binary Blob of the cover image (thumbnail).
    * Moved here to allow fast loading in library view without fetching heavy resources.
@@ -421,7 +425,7 @@ export interface BookState {
  * Composite type representing the full view of a book.
  * Maintains backward compatibility with the application layer.
  */
-export type BookMetadata = Book & Partial<BookSource> & Partial<BookState>;
+export type BookMetadata = Book & Partial<BookSource> & Partial<BookState> & { baseFontSize?: number; baseLineHeight?: number };
 
 export interface TableAdaptation {
   rootCfi: string; // The EPUB CFI key for the table block

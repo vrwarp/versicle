@@ -613,8 +613,7 @@ export const ReaderView: React.FC = () => {
                     try {
                         if (annotation.type === 'audio-bookmark') {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            (rendition as any).annotations.add(
-                                'highlight',
+                            (rendition as any).annotations.underline(
                                 annotation.cfiRange,
                                 {},
                                 (e: Event) => {
@@ -1394,7 +1393,7 @@ export const ReaderView: React.FC = () => {
                 .highlight-green { fill: green; fill-opacity: 0.3; }
                 .highlight-blue { fill: blue; fill-opacity: 0.3; }
                 .highlight-yellow { fill: yellow; fill-opacity: 0.3; }
-                .versicle-audio-bookmark-pending { fill: url(#striped-highlight); fill-opacity: 0.3; }
+                .versicle-audio-bookmark-pending { border-bottom: 2px dashed #ff9800; background-color: rgba(255, 152, 0, 0.1); cursor: pointer; }
             `}</style>
         </div >
     );

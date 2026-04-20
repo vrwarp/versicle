@@ -71,7 +71,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
     await book.opened.catch(() => { });
     book.destroy();
 
-    const chapters = await extractContentOffscreen(fileBlob, {});
+    const { chapters } = await extractContentOffscreen(fileBlob, {});
 
     const syntheticToc: NavigationItem[] = [];
     const sections: SectionMetadata[] = [];
@@ -247,7 +247,7 @@ export async function extractBookData(
     await book.opened.catch(() => { });
     book.destroy();
 
-    const chapters = await extractContentOffscreen(file, ttsOptions, onProgress);
+    const { chapters, baseStyles } = await extractContentOffscreen(file, ttsOptions, onProgress);
 
     const bookId = uuidv4();
     const syntheticToc: NavigationItem[] = [];
@@ -331,6 +331,8 @@ export async function extractBookData(
         fileSize: file.size,
         totalChars,
         schemaVersion: CURRENT_BOOK_VERSION,
+        baseFontSize: baseStyles?.fontSize,
+        baseLineHeight: baseStyles?.lineHeight,
         isbn: undefined,
         coverBlob: thumbnailBlob || coverBlob,
         coverPalette

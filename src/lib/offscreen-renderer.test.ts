@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { extractContentOffscreen } from './offscreen-renderer';
+import { extractContentOffscreen, calculateDominantStyle, StyleAccumulator } from './offscreen-renderer';
 import ePub from 'epubjs';
 import { snapdom } from '@zumer/snapdom';
 
@@ -105,7 +105,7 @@ describe('extractContentOffscreen', () => {
     (snapdom.toBlob as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockBlob);
 
     const file = new Blob(['dummy content']);
-    const results = await extractContentOffscreen(file);
+    const { chapters } = await extractContentOffscreen(file);
 
     expect(snapdom.toBlob).toHaveBeenCalledWith(table, expect.objectContaining({
       type: 'webp',
@@ -113,8 +113,8 @@ describe('extractContentOffscreen', () => {
       scale: 0.5
     }));
 
-    expect(results[0].tables).toHaveLength(1);
-    expect(results[0].tables?.[0]).toEqual({
+    expect(chapters[0].tables).toHaveLength(1);
+    expect(chapters[0].tables?.[0]).toEqual({
       cfi: 'epubcfi(/6/2!/4/2)',
       imageBlob: mockBlob
     });
@@ -139,11 +139,38 @@ describe('extractContentOffscreen', () => {
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
     const file = new Blob(['dummy content']);
-    const results = await extractContentOffscreen(file);
+    const { chapters } = await extractContentOffscreen(file);
 
-    expect(results[0].tables).toHaveLength(0);
+    expect(chapters[0].tables).toHaveLength(0);
     expect(consoleSpy).toHaveBeenCalledWith('[OffscreenRenderer]', 'Failed to snap table', error);
 
     consoleSpy.mockRestore();
+  });
+});
+
+describe('calculateDominantStyle', () => {
+  it('should calculate the dominant style based on volume', () => {
+    const accumulator: StyleAccumulator = new Map();
+
+    // Minor front-matter styles (small font)
+    accumulator.set(12, { count: 10, charCount: 500, totalLineHeight: 144 });
+
+    // Body styles (dominant volume)
+    accumulator.set(18, { count: 50, charCount: 15000, totalLineHeight: 1080 }); // 1080 / 50 = 21.6 lineHeight
+
+    // Footnote styles (tiny font, medium volume)
+    accumulator.set(10, { count: 20, charCount: 2000, totalLineHeight: 240 });
+
+    const result = calculateDominantStyle(accumulator);
+
+    expect(result).not.toBeNull();
+    expect(result?.fontSize).toBe(18);
+    expect(result?.lineHeight).toBe(21.6);
+  });
+
+  it('should return null for an empty accumulator', () => {
+    const accumulator: StyleAccumulator = new Map();
+    const result = calculateDominantStyle(accumulator);
+    expect(result).toBeNull();
   });
 });

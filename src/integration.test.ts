@@ -21,14 +21,17 @@ vi.mock('zustand/middleware', async (importOriginal) => {
 // Mock offscreen renderer
 vi.mock('./lib/offscreen-renderer', () => ({
   extractContentOffscreen: vi.fn(async () => {
-    return [
-      {
-        href: 'chapter1.html',
-        sentences: [{ text: 'Mock Sentence', cfi: 'epubcfi(/6/2!/4/2/1:0)' }],
-        textContent: 'Mock Content',
-        title: 'Mock Chapter'
-      }
-    ];
+    return {
+      chapters: [
+        {
+          href: 'chapter1.html',
+          sentences: [{ text: 'Mock Sentence', cfi: 'epubcfi(/6/2!/4/2/1:0)' }],
+          textContent: 'Mock Content',
+          title: 'Mock Chapter'
+        }
+      ],
+      baseStyles: { fontSize: 16, lineHeight: 19.2 }
+    };
   })
 }));
 
