@@ -49,20 +49,34 @@ export const DriveService = {
         const query = `'${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
         const params = new URLSearchParams({
             q: query,
-            fields: 'files(id, name, mimeType, parents)',
+            fields: 'nextPageToken, files(id, name, mimeType, parents)',
             orderBy: 'folder,name_natural',
             pageSize: '1000' // Should be enough for most folders
         });
 
-        const response = await this.fetchWithAuth(`${DRIVE_API_BASE}/files?${params.toString()}`);
+        let allFolders: DriveFile[] = [];
+        let pageToken: string | undefined = undefined;
 
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
-            throw new Error(error.error?.message || `Failed to list folders: ${response.status}`);
-        }
+        do {
+            if (pageToken) {
+                params.set('pageToken', pageToken);
+            } else {
+                params.delete('pageToken');
+            }
 
-        const data = await response.json();
-        return data.files || [];
+            const response = await this.fetchWithAuth(`${DRIVE_API_BASE}/files?${params.toString()}`);
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
+                throw new Error(error.error?.message || `Failed to list folders: ${response.status}`);
+            }
+
+            const data = await response.json();
+            allFolders = allFolders.concat(data.files || []);
+            pageToken = data.nextPageToken;
+        } while (pageToken);
+
+        return allFolders;
     },
 
     /**
@@ -100,20 +114,34 @@ export const DriveService = {
 
         const params = new URLSearchParams({
             q: query,
-            fields: 'files(id, name, mimeType, parents, size, md5Checksum, modifiedTime, viewedByMeTime)',
+            fields: 'nextPageToken, files(id, name, mimeType, parents, size, md5Checksum, modifiedTime, viewedByMeTime)',
             orderBy: 'viewedByMeTime desc',
             pageSize: '1000'
         });
 
-        const response = await this.fetchWithAuth(`${DRIVE_API_BASE}/files?${params.toString()}`);
+        let allFiles: DriveFile[] = [];
+        let pageToken: string | undefined = undefined;
 
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
-            throw new Error(error.error?.message || `Failed to list files: ${response.status}`);
-        }
+        do {
+            if (pageToken) {
+                params.set('pageToken', pageToken);
+            } else {
+                params.delete('pageToken');
+            }
 
-        const data = await response.json();
-        return data.files || [];
+            const response = await this.fetchWithAuth(`${DRIVE_API_BASE}/files?${params.toString()}`);
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
+                throw new Error(error.error?.message || `Failed to list files: ${response.status}`);
+            }
+
+            const data = await response.json();
+            allFiles = allFiles.concat(data.files || []);
+            pageToken = data.nextPageToken;
+        } while (pageToken);
+
+        return allFiles;
     },
 
     /**

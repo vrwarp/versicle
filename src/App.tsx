@@ -2,7 +2,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { LibraryView } from './components/library/LibraryView';
 import { ReaderView } from './components/reader/ReaderView';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { getDB } from './db/db';
 import { dbService } from './db/DBService';
 import { SafeModeView } from './components/SafeModeView';
@@ -81,6 +81,7 @@ const router = createBrowserRouter([
  */
 function App() {
   const [dbStatus, setDbStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [dbError, setDbError] = useState<unknown>(null);
   const [swInitialized, setSwInitialized] = useState(false);
   const [swError, setSwError] = useState<string | null>(null);
@@ -282,9 +283,8 @@ function App() {
       }
     };
 
-    // Start Heartbeat independently or track it? 
-    // To fix properly, we track the interval ID.
-    const heartbeatInterval = setInterval(() => {
+    // Start Heartbeat independently and track it via ref for proper cleanup
+    heartbeatRef.current = setInterval(() => {
       const deviceId = getDeviceId();
       useDeviceStore.getState().touchDevice(deviceId);
     }, 5 * 60 * 1000);
@@ -292,7 +292,10 @@ function App() {
     init();
 
     return () => {
-      clearInterval(heartbeatInterval);
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
     };
   }, [hydrateStaticMetadata]);
 

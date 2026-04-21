@@ -108,6 +108,7 @@ describe('ReaderControlBar', () => {
     mockUseAnnotationStore.mockImplementation((selector: any) => selector({
       popover: { visible: false, text: 'selected text', cfiRange: 'cfi' },
       add: vi.fn(),
+      update: vi.fn(),
       hidePopover: vi.fn(),
     }));
     mockUseTTSStore.mockImplementation((selector: any) => selector({
@@ -119,6 +120,7 @@ describe('ReaderControlBar', () => {
       immersiveMode: false,
       currentSectionTitle: null,
       currentBookId: null,
+      resetCompassState: vi.fn(),
     }));
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({ progress: {} }));
     mockUseReadingStateStore.getState = vi.fn().mockReturnValue({
@@ -152,6 +154,7 @@ describe('ReaderControlBar', () => {
       immersiveMode: false,
       currentSectionTitle: 'Chapter 1',
       currentBookId: '123',
+      resetCompassState: vi.fn(),
     }));
 
     // Mock useBook for the current book
@@ -171,6 +174,7 @@ describe('ReaderControlBar', () => {
       immersiveMode: true,
       currentSectionTitle: 'Chapter 1',
       currentBookId: '123',
+      resetCompassState: vi.fn(),
     }));
 
     mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
@@ -232,6 +236,7 @@ describe('ReaderControlBar', () => {
     mockUseReaderUIStore.mockImplementation((selector: any) => selector({
       immersiveMode: false,
       currentBookId: '123',
+      resetCompassState: vi.fn(),
     }));
 
     mockUseToastStore.mockImplementation((selector: any) => selector({

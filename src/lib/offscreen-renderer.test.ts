@@ -105,7 +105,7 @@ describe('extractContentOffscreen', () => {
     (snapdom.toBlob as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(mockBlob);
 
     const file = new Blob(['dummy content']);
-    const results = await extractContentOffscreen(file);
+    const { chapters: results } = await extractContentOffscreen(file);
 
     expect(snapdom.toBlob).toHaveBeenCalledWith(table, expect.objectContaining({
       type: 'webp',
@@ -139,7 +139,7 @@ describe('extractContentOffscreen', () => {
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
 
     const file = new Blob(['dummy content']);
-    const results = await extractContentOffscreen(file);
+    const { chapters: results } = await extractContentOffscreen(file);
 
     expect(results[0].tables).toHaveLength(0);
     expect(consoleSpy).toHaveBeenCalledWith('[OffscreenRenderer]', 'Failed to snap table', error);

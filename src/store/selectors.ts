@@ -346,6 +346,8 @@ export const useBook = (id: string | null) => {
             fileSize: staticMeta?.fileSize,
             totalChars: staticMeta?.totalChars,
             version: staticMeta?.version || undefined,
+            baseFontSize: staticMeta?.baseFontSize,
+            baseLineHeight: staticMeta?.baseLineHeight,
 
             isOffloaded,
 

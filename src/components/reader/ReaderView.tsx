@@ -41,6 +41,9 @@ import { createLogger } from '../../lib/logger';
 import { useDeviceStore } from '../../store/useDeviceStore';
 import { getDeviceId } from '../../lib/device-id';
 import { HistoryHighlighter } from './HistoryHighlighter';
+import { PinyinOverlay, type PinyinPosition } from './PinyinOverlay';
+import { useCfiCoordinates } from '../../hooks/useCfiCoordinates';
+import { AnnotationMarkerOverlay } from './AnnotationMarkerOverlay';
 
 const logger = createLogger('ReaderView');
 
@@ -72,7 +75,8 @@ export const ReaderView: React.FC = () => {
         shouldForceFont,
         readerViewMode,
         forceTraditionalChinese,
-        showPinyin
+        showPinyin,
+        pinyinSize
     } = usePreferencesStore(useShallow(state => ({
         currentTheme: state.currentTheme,
         customTheme: state.customTheme || DEFAULT_CUSTOM_THEME,
@@ -83,7 +87,8 @@ export const ReaderView: React.FC = () => {
         shouldForceFont: state.shouldForceFont,
         readerViewMode: state.readerViewMode || 'paginated',
         forceTraditionalChinese: state.forceTraditionalChinese,
-        showPinyin: state.showPinyin
+        showPinyin: state.showPinyin,
+        pinyinSize: state.pinyinSize
     })));
 
     const {
@@ -183,7 +188,9 @@ export const ReaderView: React.FC = () => {
         return list;
     }));
 
+
     const [historyTick, setHistoryTick] = useState(0);
+    const [pinyinPositions, setPinyinPositions] = useState<PinyinPosition[]>([]);
 
     // --- Import Progress Jump Logic ---
     const [showImportJumpDialog, setShowImportJumpDialog] = useState(false);
@@ -347,6 +354,9 @@ export const ReaderView: React.FC = () => {
         },
         onError: (msg) => {
             logger.error("Reader Error:", msg);
+        },
+        onPinyinPositionsUpdate: (positions) => {
+            setPinyinPositions(positions);
         }
     }), [
         readerViewMode,
@@ -376,6 +386,38 @@ export const ReaderView: React.FC = () => {
         metadata,
         error: hookError
     } = useEpubReader(bookId, viewerRef as React.RefObject<HTMLElement>, readerOptions);
+
+    // Filter annotations that have notes for overlay rendering
+    const noteAnnotations = useMemo(() => 
+        annotationList.filter(a => !!a.note), 
+        [annotationList]
+    );
+
+    const noteCfis = useMemo(() => 
+        noteAnnotations.map(a => a.cfiRange), 
+        [noteAnnotations]
+    );
+
+    // Calculate coordinates for note markers
+    const markerCoords = useCfiCoordinates(rendition, noteCfis, [fontSize, readerViewMode]);
+
+    // Merge coordinates with annotation metadata
+    const markers = useMemo(() => {
+        return markerCoords.map(coord => {
+            const annotation = noteAnnotations.find(a => a.cfiRange === coord.cfi);
+            return {
+                id: annotation?.id || '',
+                cfi: coord.cfi,
+                top: coord.top,
+                left: coord.left,
+                note: annotation?.note || '',
+                text: annotation?.text || ''
+            };
+        });
+    }, [markerCoords, noteAnnotations]);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const containerNode = (rendition as any)?.manager?.container || null;
 
     useEffect(() => {
         metadataRef.current = metadata;
@@ -487,8 +529,8 @@ export const ReaderView: React.FC = () => {
             searchClient.terminate();
             setCurrentBookId(null);
             reset();
-            // Ensure popover is hidden when leaving the reader
             hidePopover();
+            setPinyinPositions(prev => prev.length === 0 ? prev : []);
         };
     }, [reset, hidePopover, setCurrentBookId]);
 
@@ -592,14 +634,10 @@ export const ReaderView: React.FC = () => {
     // Apply Annotations to Rendition
     // Map of ID -> CFI for highlights
     const addedAnnotations = useRef<Map<string, string>>(new Map());
-    // Map of ID -> DOM Element for note markers
-    const noteMarkers = useRef<Map<string, HTMLElement>>(new Map());
 
     // Clear tracked annotations if rendition changes (e.g. re-initialization)
     useEffect(() => {
         addedAnnotations.current.clear();
-        noteMarkers.current.forEach(marker => marker.remove());
-        noteMarkers.current.clear();
     }, [rendition]);
 
 
@@ -608,7 +646,7 @@ export const ReaderView: React.FC = () => {
         if (rendition && isRenditionReady) {
             const currentIds = new Set(annotationList.map(a => a.id));
 
-            // 1. Remove deleted annotations (Highlights, and Markers)
+            // 1. Remove deleted annotations (Highlights only - markers are now in React overlay)
             addedAnnotations.current.forEach((cfi, id) => {
                 if (!currentIds.has(id)) {
                     try {
@@ -618,13 +656,6 @@ export const ReaderView: React.FC = () => {
                         logger.warn("Failed to remove highlight", e);
                     }
                     addedAnnotations.current.delete(id);
-                }
-            });
-
-            noteMarkers.current.forEach((marker, id) => {
-                if (!currentIds.has(id)) {
-                    marker.remove();
-                    noteMarkers.current.delete(id);
                 }
             });
 
@@ -690,45 +721,6 @@ export const ReaderView: React.FC = () => {
                         }
                     } catch (e) {
                         logger.warn(`Failed to add annotation ${annotation.id}`, e);
-                    }
-                }
-
-                // Add Note Marker if missing and has note
-                if (annotation.note && !noteMarkers.current.has(annotation.id)) {
-                    try {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        const range = (rendition as any).getRange(annotation.cfiRange);
-                        if (range) {
-                            const marker = document.createElement('span');
-                            marker.className = 'note-marker';
-                            marker.title = annotation.note;
-
-                            // Insert at the end safely
-                            const endRange = range.cloneRange();
-                            endRange.collapse(false);
-                            endRange.insertNode(marker);
-
-                            // Add click listener
-                            marker.addEventListener('click', (e) => {
-                                e.stopPropagation();
-                                const rect = marker.getBoundingClientRect();
-                                const iframe = viewerRef.current?.querySelector('iframe');
-                                let x = rect.left;
-                                let y = rect.top;
-
-                                if (iframe) {
-                                    const iframeRect = iframe.getBoundingClientRect();
-                                    x += iframeRect.left;
-                                    y += iframeRect.top;
-                                }
-
-                                showPopover(x, y + 20, annotation.cfiRange, annotation.text, annotation.id);
-                            });
-
-                            noteMarkers.current.set(annotation.id, marker);
-                        }
-                    } catch (e) {
-                        logger.warn("Failed to add note marker", e);
                     }
                 }
             });
@@ -1335,7 +1327,33 @@ export const ReaderView: React.FC = () => {
                     />
                 )}
 
-                {/* Annotations Sidebar */}
+                {/* Pinyin Overlay (Ephemeral UI) */}
+                <PinyinOverlay 
+                    positions={pinyinPositions} 
+                    pinyinSize={pinyinSize} 
+                    containerNode={containerNode}
+                />
+
+                {/* Note Markers Overlay */}
+                <AnnotationMarkerOverlay
+                    markers={markers}
+                    onMarkerClick={(x, y, cfi, text, id) => {
+                        // 1. Update Annotation store popover state (for color/delete etc)
+                        showPopover(x, y, cfi, text, id);
+
+                        // 2. Update Compass UI state to morph the pill
+                        const annotation = annotationList.find(a => a.id === id);
+                        if (annotation) {
+                            useReaderUIStore.getState().setCompassState({
+                                variant: 'annotation',
+                                targetAnnotation: annotation
+                            });
+                        }
+                    }}
+                    containerNode={containerNode}
+                />
+
+                {/* Annotation List Overlay */}
                 {showAnnotations && (
                     <div data-testid="reader-annotations-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 md:static flex flex-col">
                         <div className="p-4 border-b border-border">
@@ -1412,11 +1430,11 @@ export const ReaderView: React.FC = () => {
             </svg>
             {/* Highlights CSS styles */}
             <style>{`
-                .highlight-red { fill: red; fill-opacity: 0.3; }
-                .highlight-green { fill: green; fill-opacity: 0.3; }
-                .highlight-blue { fill: blue; fill-opacity: 0.3; }
-                .highlight-yellow { fill: yellow; fill-opacity: 0.3; }
-                .versicle-audio-bookmark-pending { fill: url(#striped-highlight); fill-opacity: 0.3; }
+                .highlight-red { fill: red; fill-opacity: 0.8; mix-blend-mode: multiply; }
+                .highlight-green { fill: green; fill-opacity: 0.8; mix-blend-mode: multiply; }
+                .highlight-blue { fill: blue; fill-opacity: 0.8; mix-blend-mode: multiply; }
+                .highlight-yellow { fill: yellow; fill-opacity: 0.8; mix-blend-mode: multiply; }
+                .versicle-audio-bookmark-pending { fill: url(#striped-highlight); fill-opacity: 0.8; mix-blend-mode: multiply; }
             `}</style>
         </div >
     );

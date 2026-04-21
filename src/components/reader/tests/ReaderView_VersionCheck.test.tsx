@@ -17,37 +17,46 @@ vi.mock('react-router-dom', async () => {
 });
 
 vi.mock('../../../hooks/useEpubReader');
+const MOCK_READER_UI_STATE = {
+    setToc: vi.fn(),
+    setIsLoading: vi.fn(),
+    reset: vi.fn(),
+    setImmersiveMode: vi.fn(),
+    immersiveMode: false,
+    setPlayFromSelection: vi.fn(),
+    currentSectionTitle: null,
+    currentSectionId: null,
+    setCurrentSection: vi.fn(),
+    setCurrentBookId: vi.fn(),
+    resetCompassState: vi.fn(), // Added to prevent undefined() calls
+    playFromSelection: null
+};
+
 vi.mock('../../../store/useReaderUIStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useReaderUIStore: (selector: any) => selector({
-        setToc: vi.fn(),
-        setIsLoading: vi.fn(),
-        reset: vi.fn(),
-        setImmersiveMode: vi.fn(),
-        immersiveMode: false,
-        setPlayFromSelection: vi.fn(),
-        currentSectionTitle: null,
-        currentSectionId: null,
-        setCurrentSection: vi.fn(),
-        setCurrentBookId: vi.fn(),
-        playFromSelection: null
-    })
+    useReaderUIStore: (selector: any) => selector(MOCK_READER_UI_STATE)
 }));
+
+const MOCK_PREFERENCES_STATE = {
+    currentTheme: 'light',
+    customTheme: null,
+    fontFamily: 'serif',
+    lineHeight: 1.5,
+    fontSize: 100,
+    shouldForceFont: false,
+    readerViewMode: 'paginated',
+    forceTraditionalChinese: false,
+    showPinyin: false,
+    pinyinSize: 100,
+    fontProfiles: {
+        en: { fontSize: 100, lineHeight: 1.5 }
+    },
+    setFontProfile: vi.fn()
+};
+
 vi.mock('../../../store/usePreferencesStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    usePreferencesStore: (selector: any) => selector({
-        currentTheme: 'light',
-        customTheme: null,
-        fontFamily: 'serif',
-        lineHeight: 1.5,
-        fontSize: 100,
-        shouldForceFont: false,
-        readerViewMode: 'paginated',
-        fontProfiles: {
-            en: { fontSize: 100, lineHeight: 1.5 }
-        },
-        setFontProfile: vi.fn()
-    })
+    usePreferencesStore: (selector: any) => selector(MOCK_PREFERENCES_STATE)
 }));
 const MOCK_PROGRESS = { completedRanges: [] };
 vi.mock('../../../store/useReadingStateStore', () => {
@@ -168,6 +177,8 @@ describe('ReaderView Version Check', () => {
             rendition: {
                 hooks: { content: { register: vi.fn() } },
                 on: vi.fn(),
+                off: vi.fn(),
+                manager: { container: { querySelector: vi.fn().mockReturnValue(null) } },
                 locations: { cfiFromPercentage: vi.fn() }
             },
             isReady: true,
@@ -202,6 +213,8 @@ describe('ReaderView Version Check', () => {
             rendition: {
                 hooks: { content: { register: vi.fn() } },
                 on: vi.fn(),
+                off: vi.fn(),
+                manager: { container: { querySelector: vi.fn().mockReturnValue(null) } },
                 locations: { cfiFromPercentage: vi.fn() }
             },
             isReady: true,
@@ -235,6 +248,8 @@ describe('ReaderView Version Check', () => {
             rendition: {
                 hooks: { content: { register: vi.fn() } },
                 on: vi.fn(),
+                off: vi.fn(),
+                manager: { container: { querySelector: vi.fn().mockReturnValue(null) } },
                 locations: { cfiFromPercentage: vi.fn() }
             },
             isReady: true,
