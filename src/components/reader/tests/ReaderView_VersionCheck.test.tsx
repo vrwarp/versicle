@@ -177,6 +177,8 @@ describe('ReaderView Version Check', () => {
             rendition: {
                 hooks: { content: { register: vi.fn() } },
                 on: vi.fn(),
+                off: vi.fn(),
+                manager: { container: { querySelector: vi.fn().mockReturnValue(null) } },
                 locations: { cfiFromPercentage: vi.fn() }
             },
             isReady: true,
@@ -211,6 +213,8 @@ describe('ReaderView Version Check', () => {
             rendition: {
                 hooks: { content: { register: vi.fn() } },
                 on: vi.fn(),
+                off: vi.fn(),
+                manager: { container: { querySelector: vi.fn().mockReturnValue(null) } },
                 locations: { cfiFromPercentage: vi.fn() }
             },
             isReady: true,
@@ -244,6 +248,8 @@ describe('ReaderView Version Check', () => {
             rendition: {
                 hooks: { content: { register: vi.fn() } },
                 on: vi.fn(),
+                off: vi.fn(),
+                manager: { container: { querySelector: vi.fn().mockReturnValue(null) } },
                 locations: { cfiFromPercentage: vi.fn() }
             },
             isReady: true,
