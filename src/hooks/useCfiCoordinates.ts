@@ -117,11 +117,7 @@ export function useCfiCoordinates(
 
   // Trigger recalculation on dependency changes
   useEffect(() => {
-    // Wrap in requestAnimationFrame to avoid "setState in effect" performance warning
-    const raf = requestAnimationFrame(() => {
-      calculateCoordinates();
-    });
-    return () => cancelAnimationFrame(raf);
+    calculateCoordinates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calculateCoordinates, ...dependencies]);
 
