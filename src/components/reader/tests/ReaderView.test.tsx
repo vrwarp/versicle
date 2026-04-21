@@ -123,7 +123,10 @@ describe('ReaderView', () => {
           }
         },
         manager: {
-          container: { clientWidth: 1000 }
+          container: { 
+            clientWidth: 1000,
+            querySelector: vi.fn().mockReturnValue(null)
+          }
         }
       }),
       ready: Promise.resolve(),
