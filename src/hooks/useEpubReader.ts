@@ -103,6 +103,7 @@ export interface EpubReaderOptions {
   /** Callback when an error occurs. */
   onError?: (error: string) => void;
   /** Callback when pinyin positions are calculated. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onPinyinPositionsUpdate?: (positions: any[]) => void;
   /** Optional: Initial CFI location to start reading at. Overrides metadata.currentCfi. */
   initialLocation?: string;
@@ -468,6 +469,7 @@ export function useEpubReader(
             }
           }
 
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const pinyinPositions: any[] = [];
           const iframe = contents.window.frameElement as HTMLIFrameElement;
           if (!iframe) return;
@@ -483,9 +485,12 @@ export function useEpubReader(
             if (!parent || parent.tagName === 'RT' || parent.tagName === 'RUBY') continue;
 
             // 1. Cache original text for clean reversion/toggling
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             if (!(textNode as any)._originalText) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               (textNode as any)._originalText = textNode.nodeValue;
             }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const originalText = (textNode as any)._originalText;
 
             // 2. Handle Traditional Chinese (In-place string mutation)
@@ -526,7 +531,7 @@ export function useEpubReader(
                         height: rect.height
                       });
                     }
-                  } catch (e) {
+                  } catch {
                     // Range errors can happen during rapid updates
                   }
                 }
