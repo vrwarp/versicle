@@ -1,52 +1,17 @@
-# Versicle: Technical Roadmap & Master Plan
+1. **Analyze Re-renders**:
+   The `FileUploader` uses `useLibraryStore()` directly without `useShallow` for selecting `importProgress`, `uploadProgress`, etc. Because `importProgress` rapidly changes (0 to 100 on every chunk), it causes `FileUploader` to re-render constantly.
+   Similarly, `GlobalSettingsDialog` subscribes to the whole `useLibraryStore()` just to get `importProgress`, `uploadProgress` etc. and passes them to `GeneralSettingsTab`.
 
-## 1. Project Overview
-Versicle is a web-based EPUB manager and reader designed for a "Local-First" experience. It leverages `epub.js` for rendering and various TTS engines (Web Speech, Google, OpenAI, Piper) for audio.
+   These are exact examples of "Probe React Render Granularity":
+   > "Are rapid state changes (like a playing TTS timestamp or a download progress bar) causing massive parent containers to re-render? The Fix: Isolate the fast-moving state into tiny, self-subscribing components (e.g., a <ProgressBar /> that selects its own Zustand state), leaving the parent tree completely static."
 
-**Core Principles:**
-- **Local-First:** Heavy reliance on IndexedDB for storage.
-- **Privacy-Centric:** Local processing where possible.
-- **Hybrid-Ready:** Designed to work as a PWA and a Capacitor Android app.
-- **Simplicity:** Prefers standard Web APIs (Promises, Comlink, File API) over complex custom orchestrators.
+2. **The Fix**:
+   - Create a new component `<ImportProgressOverlay />` that isolates `useLibraryStore` logic for fast-moving state (`importProgress`, `uploadStatus`, etc.).
+   - Replace the explicit progress rendering blocks in `FileUploader.tsx` with `<ImportProgressOverlay />`.
+   - Update `FileUploader.tsx` to ONLY subscribe to `isImporting`, `addBook`, `addBooks` via `useShallow`.
+   - Replace the explicit progress rendering blocks in `GeneralSettingsTab.tsx` with `<ImportProgressOverlay />`.
+   - Update `GlobalSettingsDialog.tsx` to ONLY subscribe to `isImporting`, `addBooks` via `useShallow`. Remove progress props from `GeneralSettingsTab`.
 
-## 2. Roadmap
+3. **Pre-commit**: Complete pre-commit steps to ensure proper testing, verification, review, and reflection are done.
 
-### 2.1 Active Priorities: TTS v2 Engine
-We are building the next generation of audio features, moving from `AudioElement` to a Web Audio Graph.
-*Ref: `plan/tts_v2_roadmap.md`*
-
-| Feature | Plan File | Status |
-| :--- | :--- | :--- |
-| **Web Audio Graph** | [`tts_v2_plan01_audio_graph.md`](plan/tts_v2_plan01_audio_graph.md) | **Pending** (Foundation) |
-| **Sleep Timer** | [`tts_v2_plan05_sleep_timer.md`](plan/tts_v2_plan05_sleep_timer.md) | Pending |
-| **Smart Speed** | [`tts_v2_plan06_smart_speed.md`](plan/tts_v2_plan06_smart_speed.md) | Pending (Requires Plan 01) |
-| **Voice Switching** | [`tts_v2_plan07_voice_switching.md`](plan/tts_v2_plan07_voice_switching.md) | Pending |
-| **Car Mode** | [`tts_v2_plan09_car_mode.md`](plan/tts_v2_plan09_car_mode.md) | Pending |
-
-### 2.2 Future Enhancements
-- **Ambient Sounds** (`plan/tts_v2_plan11_ambient_sounds.md`)
-- **Export MP3** (`plan/tts_v2_plan14_export_mp3.md`)
-
-## 3. Completed Initiatives (Archive)
-*Historical plans and completed features can be found in `plan/archive/`.*
-
-### Major Milestone: Architectural Simplification (2025)
-Ref: `plan/archive/2025_simplification/`
-- **Ingestion**: Replaced crypto-hashing with "3-Point Fingerprint" (O(1) checks).
-- **Concurrency**: Replaced Mutex locks with Sequential Promise Chains in `AudioPlayerService`.
-- **Worker Management**: Replaced Supervisor pattern with "Let It Crash" Error Boundaries.
-- **Search**: Replaced custom RPC with `Comlink`.
-
-### Other Completed Features
-- **Semantic Reading History**: Event-based history with sentence snapping (`plan/archive/completed/event-based-history.md`).
-- **Reading List**: Import/Export independent reading progress (`plan/archive/completed/reading-list.md`).
-- **Performance**: Optimized ReaderView re-renders (`plan/archive/completed/performance_reader_optimization.md`).
-- **TTS v2 Foundations**:
-    - Media Session Integration
-    - Text Sanitization
-    - Smart Resume
-    - Pronunciation Lexicon
-    - Gesture Pad
-
-## 4. Architecture Reference
-See [`architecture.md`](architecture.md) for the current detailed technical design, updated to reflect the Simplification milestone.
+4. **Submit**: Create PR.

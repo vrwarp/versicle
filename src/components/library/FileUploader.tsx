@@ -1,11 +1,13 @@
 import React, { useCallback, useState } from 'react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
-import { UploadCloud, Loader2 } from 'lucide-react';
+import { UploadCloud } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { validateZipSignature } from '../../lib/ingestion';
-import { Progress } from '../ui/Progress';
 import { DuplicateBookError } from '../../types/errors';
+import { ImportProgressUI } from './ImportProgressUI';
+import { useShallow } from 'zustand/react/shallow';
+import { Loader2 } from 'lucide-react';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
 import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
@@ -25,12 +27,12 @@ export const FileUploader: React.FC = () => {
   const {
     addBook,
     addBooks,
-    isImporting,
-    importProgress,
-    importStatus,
-    uploadProgress,
-    uploadStatus
-  } = useLibraryStore();
+    isImporting
+  } = useLibraryStore(useShallow(state => ({
+    addBook: state.addBook,
+    addBooks: state.addBooks,
+    isImporting: state.isImporting
+  })));
 
   const { showToast } = useToastStore();
   const [dragActive, setDragActive] = useState(false);
@@ -232,26 +234,7 @@ export const FileUploader: React.FC = () => {
         />
 
         {isImporting ? (
-          <div className="flex flex-col items-center justify-center space-y-3">
-            <div role="status" aria-label="Loading">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
-              <span className="sr-only">Processing files...</span>
-            </div>
-
-            {/* Upload/Processing Progress */}
-            <div className="w-full flex flex-col items-center space-y-1">
-              <p className="text-sm text-muted-foreground" role="status" aria-live="polite">{uploadStatus || 'Processing files...'}</p>
-              <Progress value={uploadProgress} className="w-64" aria-label="Upload progress" />
-            </div>
-
-            {/* Import Progress (only show if upload is done or if import started) */}
-            {(importProgress > 0 || uploadProgress >= 100) && (
-              <div className="w-full flex flex-col items-center space-y-1 mt-2">
-                <p className="text-muted-foreground font-medium" role="status" aria-live="polite">{importStatus || 'Importing books...'}</p>
-                <Progress value={importProgress} className="w-64" aria-label="Import progress" />
-              </div>
-            )}
-          </div>
+          <ImportProgressUI />
         ) : (
           <div className="flex flex-col items-center justify-center space-y-3 pointer-events-none">
             <div className={cn(
