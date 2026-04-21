@@ -15,6 +15,129 @@ export interface ProcessedChapter {
   tables?: Omit<TableImage, 'bookId' | 'id' | 'sectionId'>[]; // sectionId is contextually known by ProcessedChapter.href
 }
 
+export interface OffscreenExtractionResult {
+  chapters: ProcessedChapter[];
+  baseFontSize?: number;
+  baseLineHeight?: number;
+}
+
+type StyleAccumulator = Map<number, { count: number; charCount: number; totalLineHeight: number }>;
+
+function getCanvasLineHeight(element: HTMLElement, win: Window = window) {
+    const computedStyle = win.getComputedStyle(element);
+    
+    if (computedStyle.lineHeight !== "normal") {
+        return parseFloat(computedStyle.lineHeight);
+    }
+
+    // Create an off-screen canvas
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) return 0;
+    
+    // Reconstruct the exact font string (e.g., "400 16px Times")
+    context.font = `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
+    
+    // Measure a standard character
+    const metrics = context.measureText("M");
+    
+    // Calculate total pixel height based on font bounding box
+    // Note: fontBoundingBox is supported in all modern browsers
+    const actualLineHeight = metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent;
+    
+    return actualLineHeight;
+}
+
+function getActualInkHeight(element: HTMLElement, textToMeasure = "M", win: Window = window) {
+    const computedStyle = win.getComputedStyle(element);
+    
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) return 0;
+    
+    // Set the canvas font to match the element exactly
+    context.font = `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
+    
+    // Measure the exact text
+    const metrics = context.measureText(textToMeasure);
+    
+    // actualBoundingBoxAscent: pixels from the baseline to the top of the highest letter
+    // actualBoundingBoxDescent: pixels from the baseline to the bottom of the lowest letter (e.g., 'g', 'j')
+    const actualInkHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+    
+    return actualInkHeight;
+}
+
+/**
+ * Samples the dominant font size of a single document/chapter and adds it to the global accumulator.
+ * Uses an early exit to avoid end-of-chapter footnotes.
+ */
+export function accumulateChapterStyles(doc: Document, win: Window, accumulator: StyleAccumulator): void {
+  const paragraphs = Array.from(doc.querySelectorAll('p, div.paragraph, div.bodytext, div.calibre1'));
+  if (paragraphs.length === 0) return;
+
+  let totalSampledChars = 0;
+  const MAX_SAMPLE_CHARS = 5000;
+
+  for (const p of paragraphs) {
+    if (totalSampledChars >= MAX_SAMPLE_CHARS) break;
+
+    const text = p.textContent?.trim() || '';
+
+    // Filter 1: Ignore short strings (ToC, headings)
+    if (text.length < 50) continue;
+
+    // Filter 2: Ignore explicit metadata containers
+    const parentTag = p.parentElement?.tagName.toLowerCase();
+    if (parentTag === 'aside' || parentTag === 'nav' || parentTag === 'footer') {
+      continue;
+    }
+    const fontSize = getActualInkHeight(p as HTMLElement, text, win);
+    let lineHeight = getCanvasLineHeight(p as HTMLElement, win);
+
+    if (isNaN(lineHeight)) {
+      lineHeight = fontSize * 1.2; // Standard browser default fallback
+    }
+
+    if (!isNaN(fontSize) && fontSize > 0) {
+      // Round to 1 decimal place to prevent floating point fragmentation mapping (e.g., 16.001px vs 16.0px)
+      const roundedSize = Math.round(fontSize * 10) / 10;
+
+      const existing = accumulator.get(roundedSize) || { count: 0, charCount: 0, totalLineHeight: 0 };
+      existing.count += 1;
+      existing.charCount += text.length;
+      existing.totalLineHeight += lineHeight;
+      accumulator.set(roundedSize, existing);
+
+      totalSampledChars += text.length;
+    }
+  }
+}
+
+/**
+ * Evaluates the global accumulator to find the mathematically dominant style.
+ */
+export function calculateDominantStyle(accumulator: StyleAccumulator): { fontSize: number; lineHeight: number } | null {
+  if (accumulator.size === 0) return null;
+
+  let dominantSize = 0;
+  let maxVolume = -1;
+
+  for (const [size, data] of accumulator.entries()) {
+    if (data.charCount > maxVolume) {
+      maxVolume = data.charCount;
+      dominantSize = size;
+    }
+  }
+
+  const dominantData = accumulator.get(dominantSize)!;
+
+  return {
+    fontSize: dominantSize,
+    lineHeight: dominantData.totalLineHeight / dominantData.count
+  };
+}
+
 /**
  * Extracts content from an EPUB file using an offscreen renderer.
  * This ensures that the extracted text and CFIs match exactly what the user sees during playback.
@@ -23,7 +146,7 @@ export async function extractContentOffscreen(
   file: File | Blob | ArrayBuffer,
   options: ExtractionOptions = {},
   onProgress?: (progress: number, message: string) => void
-): Promise<ProcessedChapter[]> {
+): Promise<OffscreenExtractionResult> {
   // 1. Create a hidden container
   const container = document.createElement('div');
   Object.assign(container.style, {
@@ -38,6 +161,7 @@ export async function extractContentOffscreen(
   document.body.appendChild(container);
 
   const results: ProcessedChapter[] = [];
+  const globalStyleAccumulator: StyleAccumulator = new Map();
 
   // 2. Initialize ePub
   // ePub can take File, ArrayBuffer, or URL.
@@ -110,6 +234,12 @@ export async function extractContentOffscreen(
       if (contents && contents.document && contents.document.body) {
         const doc = contents.document;
         const body = doc.body;
+        const win = contents.window || doc.defaultView;
+
+        // New logic: Accumulate styles for global evaluation
+        if (win) {
+          accumulateChapterStyles(doc, win, globalStyleAccumulator);
+        }
 
         // Determine title
         let title = '';
@@ -178,7 +308,20 @@ export async function extractContentOffscreen(
       }
     }
 
-  } finally {
+    // After the for loop before finally block:
+    const baseStyles = calculateDominantStyle(globalStyleAccumulator);
+    if (baseStyles) {
+      logger.info(`Calculated global base font size: ${baseStyles.fontSize}px`);
+    }
+
+    onProgress?.(100, 'Ingestion complete');
+    return {
+      chapters: results,
+      baseFontSize: baseStyles?.fontSize,
+      baseLineHeight: baseStyles?.lineHeight
+    };
+
+    } finally {
     // Cleanup
     if (book) {
       await book.opened.catch(() => { });
@@ -186,7 +329,4 @@ export async function extractContentOffscreen(
     }
     if (container.parentNode) container.parentNode.removeChild(container);
   }
-
-  onProgress?.(100, 'Ingestion complete');
-  return results;
 }

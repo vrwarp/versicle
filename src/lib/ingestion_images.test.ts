@@ -51,20 +51,24 @@ class MockOffscreenCanvas {
 
 // Mock extractContentOffscreen
 vi.mock('./offscreen-renderer', () => ({
-  extractContentOffscreen: vi.fn().mockResolvedValue([
-    {
-      href: 'chapter1.xhtml',
-      sentences: [],
-      textContent: 'Chapter 1 content',
-      title: 'Chapter 1',
-      tables: [
-        {
-          cfi: 'epubcfi(/6/2[chapter1]!/4/2/1:0)',
-          imageBlob: new Blob(['table-image'], { type: 'image/webp' }),
-        }
-      ]
-    }
-  ]),
+  extractContentOffscreen: vi.fn().mockResolvedValue({
+    chapters: [
+      {
+        href: 'chapter1.xhtml',
+        sentences: [],
+        textContent: 'Chapter 1 content',
+        title: 'Chapter 1',
+        tables: [
+          {
+            cfi: 'epubcfi(/6/2[chapter1]!/4/2/1:0)',
+            imageBlob: new Blob(['table-image'], { type: 'image/webp' }),
+          }
+        ]
+      }
+    ],
+    baseFontSize: 16,
+    baseLineHeight: 24
+  }),
 }));
 // Mock uuid
 vi.mock('uuid', () => ({

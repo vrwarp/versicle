@@ -77,7 +77,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
     await book.opened.catch(() => { });
     book.destroy();
 
-    const chapters = await extractContentOffscreen(fileBlob, { locale: rawLanguage });
+    const { chapters, baseFontSize, baseLineHeight } = await extractContentOffscreen(fileBlob, { locale: rawLanguage });
 
     const syntheticToc: NavigationItem[] = [];
     const sections: SectionMetadata[] = [];
@@ -133,6 +133,8 @@ export async function reprocessBook(bookId: string): Promise<void> {
         manifest.totalChars = totalChars;
         // manifest.syntheticToc? v18 puts this in static_structure.
         manifest.schemaVersion = CURRENT_BOOK_VERSION;
+        manifest.baseFontSize = baseFontSize;
+        manifest.baseLineHeight = baseLineHeight;
         await manStore.put(manifest);
     }
 
@@ -259,7 +261,7 @@ export async function extractBookData(
     book.destroy();
 
     const optionsWithLocale = { ...ttsOptions, locale: rawLanguage };
-    const chapters = await extractContentOffscreen(file, optionsWithLocale, onProgress);
+    const { chapters, baseFontSize, baseLineHeight } = await extractContentOffscreen(file, optionsWithLocale, onProgress);
 
     const bookId = uuidv4();
     const syntheticToc: NavigationItem[] = [];
@@ -346,7 +348,9 @@ export async function extractBookData(
         isbn: undefined,
         coverBlob: thumbnailBlob || coverBlob,
         coverPalette,
-        language: rawLanguage
+        language: rawLanguage,
+        baseFontSize,
+        baseLineHeight
     };
 
     const resource: StaticResource = {

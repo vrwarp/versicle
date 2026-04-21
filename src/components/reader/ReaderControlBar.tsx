@@ -23,9 +23,10 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
     const [dismissedSyncAlerts, setDismissedSyncAlerts] = React.useState<Set<string>>(new Set());
 
     // Store Subscriptions
-    const { popover, add, remove, hidePopover } = useAnnotationStore(useShallow(state => ({
+    const { popover, add, update, remove, hidePopover } = useAnnotationStore(useShallow(state => ({
         popover: state.popover,
         add: state.add,
+        update: state.update,
         remove: state.remove,
         hidePopover: state.hidePopover,
     })));
@@ -35,11 +36,12 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
     const hasQueueItems = useTTSStore(state => state.queue.length > 0);
     const isPlaying = useTTSStore(state => state.isPlaying);
 
-    const { immersiveMode, currentSectionTitle, currentBookId, jumpToLocation } = useReaderUIStore(useShallow(state => ({
+    const { immersiveMode, currentSectionTitle, currentBookId, jumpToLocation, resetCompassState } = useReaderUIStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
         currentSectionTitle: state.currentSectionTitle,
         currentBookId: state.currentBookId,
-        jumpToLocation: state.jumpToLocation
+        jumpToLocation: state.jumpToLocation,
+        resetCompassState: state.resetCompassState
     })));
 
     // Check for remote progress
@@ -106,28 +108,38 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
         switch (action) {
             case 'color':
                 if (payload && currentBookId) {
-                    add({
-                        type: 'highlight',
-                        color: payload,
-                        bookId: currentBookId,
-                        text: popover.text || '',
-                        cfiRange: popover.cfiRange || ''
-                    });
+                    if (popover.id) {
+                        update(popover.id, { color: payload });
+                    } else {
+                        add({
+                            type: 'highlight',
+                            color: payload,
+                            bookId: currentBookId,
+                            text: popover.text || '',
+                            cfiRange: popover.cfiRange || ''
+                        });
+                    }
                     hidePopover();
+                    resetCompassState();
                 }
                 break;
             case 'note':
                 if (payload && currentBookId) {
-                    add({
-                        type: 'note',
-                        note: payload,
-                        bookId: currentBookId,
-                        text: popover.text || '',
-                        cfiRange: popover.cfiRange || '',
-                        color: 'yellow' // Default color for notes if not specified
-                    });
+                    if (popover.id) {
+                        update(popover.id, { note: payload, type: 'note' });
+                    } else {
+                        add({
+                            type: 'note',
+                            note: payload,
+                            bookId: currentBookId,
+                            text: popover.text || '',
+                            cfiRange: popover.cfiRange || '',
+                            color: 'yellow' // Default color for notes if not specified
+                        });
+                    }
                     showToast("Note saved", "success");
                     hidePopover();
+                    resetCompassState();
                 }
                 break;
             case 'copy':
@@ -171,6 +183,7 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
                     setDismissedSyncAlerts(prev => new Set(prev).add(remoteProgress.deviceId));
                 } else {
                     hidePopover();
+                    resetCompassState();
                 }
                 break;
         }

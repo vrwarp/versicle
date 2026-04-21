@@ -80,13 +80,16 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
   const { timeRemaining, progress: hookProgress } = useSectionDuration();
 
-  // Reset editing state when variant changes
+  // Sync editing state with variant and target annotation
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsEditingNote(false);
-
-    setNoteText('');
-  }, [variant]);
+    if (variant === 'annotation' && compassState.targetAnnotation?.note) {
+      setIsEditingNote(true);
+      setNoteText(compassState.targetAnnotation.note);
+    } else {
+      setIsEditingNote(false);
+      setNoteText('');
+    }
+  }, [variant, compassState.targetAnnotation]);
 
   // Focus textarea when entering edit mode
   useEffect(() => {
