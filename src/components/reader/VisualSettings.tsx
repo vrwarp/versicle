@@ -123,7 +123,7 @@ export const VisualSettings = () => {
                 <span className="text-xs text-muted-foreground w-12 text-right">{pinyinSize}%</span>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => setPinyinSize(Math.max(50, pinyinSize - 10))}>
+                <Button variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => setPinyinSize(Math.max(50, pinyinSize - 10))} aria-label="Decrease pinyin size">
                   <Minus className="h-3 w-3" />
                 </Button>
                 <Slider
@@ -134,7 +134,7 @@ export const VisualSettings = () => {
                   onValueChange={([val]) => setPinyinSize(val)}
                   className="flex-1"
                 />
-                <Button variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => setPinyinSize(Math.min(150, pinyinSize + 10))}>
+                <Button variant="outline" size="icon" className="h-6 w-6 rounded-full" onClick={() => setPinyinSize(Math.min(150, pinyinSize + 10))} aria-label="Increase pinyin size">
                   <Plus className="h-3 w-3" />
                 </Button>
               </div>
