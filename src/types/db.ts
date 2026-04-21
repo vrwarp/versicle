@@ -49,6 +49,10 @@ export interface StaticBookManifest {
   coverPalette?: number[];
   /** Raw dc:language from EPUB OPF metadata. Used as default for UserInventoryItem.language. */
   language?: string;
+  /** The calculated base font size of the book in pixels. */
+  baseFontSize?: number;
+  /** The calculated base line height of the book in pixels. */
+  baseLineHeight?: number;
 }
 
 /**
@@ -397,6 +401,10 @@ export interface BookSource {
    * Used to trigger reprocessing when the pipeline is updated.
    */
   version?: number;
+  /** The calculated base font size of the book in pixels. */
+  baseFontSize?: number;
+  /** The calculated base line height of the book in pixels. */
+  baseLineHeight?: number;
 }
 
 /**

@@ -127,7 +127,9 @@ class DBService {
             version: manifest.schemaVersion,
 
             isOffloaded: !resourceKey,
-            language: inventory?.language || manifest.language
+            language: inventory?.language || manifest.language,
+            baseFontSize: manifest.baseFontSize,
+            baseLineHeight: manifest.baseLineHeight
           };
       });
     } catch (error) {
@@ -173,7 +175,9 @@ class DBService {
         version: manifest.schemaVersion,
 
         isOffloaded: !resourceKey,
-        language: inventory?.language || manifest.language
+        language: inventory?.language || manifest.language,
+        baseFontSize: manifest.baseFontSize,
+        baseLineHeight: manifest.baseLineHeight
       };
     } catch (error) {
       this.handleError(error);
