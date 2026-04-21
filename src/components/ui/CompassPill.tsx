@@ -80,8 +80,14 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
   const { timeRemaining, progress: hookProgress } = useSectionDuration();
 
-  // Sync editing state with variant and target annotation
-  useEffect(() => {
+  // Keep track of previous variant and annotation to sync state during render
+  // instead of using an effect, which prevents cascading renders.
+  const [prevVariant, setPrevVariant] = useState(variant);
+  const [prevAnnotationId, setPrevAnnotationId] = useState(compassState.targetAnnotation?.id);
+
+  if (variant !== prevVariant || compassState.targetAnnotation?.id !== prevAnnotationId) {
+    setPrevVariant(variant);
+    setPrevAnnotationId(compassState.targetAnnotation?.id);
     if (variant === 'annotation' && compassState.targetAnnotation?.note) {
       setIsEditingNote(true);
       setNoteText(compassState.targetAnnotation.note);
@@ -89,7 +95,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
       setIsEditingNote(false);
       setNoteText('');
     }
-  }, [variant, compassState.targetAnnotation]);
+  }
 
   // Focus textarea when entering edit mode
   useEffect(() => {
