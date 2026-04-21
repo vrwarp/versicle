@@ -132,7 +132,7 @@ vi.mock('../store/useToastStore', () => ({
 
 vi.mock('../store/useTTSStore', () => ({
     useTTSStore: Object.assign(
-        vi.fn((selector: any) => selector ? selector({
+        vi.fn((selector: (state: unknown) => unknown) => selector ? selector({
             profiles: {
                 en: { voiceId: 'voice1', rate: 1.0, pitch: 1.0, volume: 1.0 },
                 zh: { voiceId: 'voice-zh', rate: 1.0, pitch: 1.0, volume: 1.0 }

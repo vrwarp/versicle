@@ -138,3 +138,7 @@
 ## 2025-04-18 - Search Clear Button ARIA Label Standardization
 **Learning:** Found multiple instances where the "clear" button for search inputs used `aria-label="Clear query"`. "Query" is a technical term that can be confusing for non-technical users relying on screen readers. "Search" is the universally understood terminology. Playwright `get_by_label` will fail if tests hardcode the incorrect label.
 **Action:** Standardized all search clear buttons to use `aria-label="Clear search"`. Will proactively look for jargon in ARIA labels in the future.
+
+## 2026-04-20 - Focus Ring Consistency
+**Learning:** Radix UI primitives and custom components often inherit standard `focus:` tailwind states, which causes focus rings to persist after mouse clicks. Using `focus-visible:` ensures outlines only appear during keyboard navigation, improving visual UX while maintaining full a11y compliance.
+**Action:** Always prefer `focus-visible:` over `focus:` for focus rings in interactive elements, and verify new components default to this pattern.
