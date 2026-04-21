@@ -77,13 +77,11 @@ export const GlobalSettingsDialog = () => {
 
     const {
         addBooks,
-
-        isImporting,
-        importProgress,
-        importStatus,
-        uploadProgress,
-        uploadStatus
-    } = useLibraryStore();
+        isImporting
+    } = useLibraryStore(useShallow(state => ({
+        addBooks: state.addBooks,
+        isImporting: state.isImporting
+    })));
     const showToast = useToastStore(state => state.showToast);
     const { currentTheme, setTheme } = usePreferencesStore(useShallow(state => ({
         currentTheme: state.currentTheme,
@@ -528,10 +526,6 @@ export const GlobalSettingsDialog = () => {
                                 currentTheme={currentTheme}
                                 onThemeChange={setTheme}
                                 isImporting={isImporting}
-                                importProgress={importProgress}
-                                importStatus={importStatus}
-                                uploadProgress={uploadProgress}
-                                uploadStatus={uploadStatus}
                                 onBatchImport={(files) => {
                                     addBooks(Array.from(files));
                                     setGlobalSettingsOpen(false);

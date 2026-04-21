@@ -1,8 +1,7 @@
 import React, { useRef } from 'react';
 import { ThemeSelector } from '../ThemeSelector';
 import { Button } from '../ui/Button';
-import { Loader2 } from 'lucide-react';
-import { Progress } from '../ui/Progress';
+import { ImportProgressUI } from '../library/ImportProgressUI';
 
 export type ThemeType = 'light' | 'dark' | 'sepia';
 
@@ -12,10 +11,6 @@ export interface GeneralSettingsTabProps {
     onThemeChange: (theme: ThemeType) => void;
     // Import state
     isImporting: boolean;
-    importProgress: number;
-    importStatus: string;
-    uploadProgress: number;
-    uploadStatus: string;
     // Handlers
     onBatchImport: (files: FileList) => void;
 }
@@ -24,10 +19,6 @@ export const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({
     currentTheme,
     onThemeChange,
     isImporting,
-    importProgress,
-    importStatus,
-    uploadProgress,
-    uploadStatus,
     onBatchImport
 }) => {
     const zipImportRef = useRef<HTMLInputElement>(null);
@@ -100,20 +91,8 @@ export const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({
                 />
 
                 {isImporting && (
-                    <div className="flex flex-col items-center justify-center space-y-3 mt-4 p-4 bg-muted/30 rounded-lg">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
-
-                        <div className="w-full flex flex-col items-center space-y-1">
-                            <p className="text-sm text-muted-foreground">{uploadStatus || 'Processing files...'}</p>
-                            <Progress value={uploadProgress} className="w-full" aria-label="Upload progress" />
-                        </div>
-
-                        {(importProgress > 0 || uploadProgress >= 100) && (
-                            <div className="w-full flex flex-col items-center space-y-1 mt-2">
-                                <p className="text-muted-foreground font-medium">{importStatus || 'Importing books...'}</p>
-                                <Progress value={importProgress} className="w-full" aria-label="Import progress" />
-                            </div>
-                        )}
+                    <div className="mt-4 p-4 bg-muted/30 rounded-lg">
+                        <ImportProgressUI />
                     </div>
                 )}
             </div>
