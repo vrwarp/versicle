@@ -12,7 +12,7 @@ import { FireProvider } from 'y-cinder';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
-import { yDoc, CURRENT_SCHEMA_VERSION } from '../../store/yjs-provider';
+import { yDoc, CURRENT_SCHEMA_VERSION, waitForYjsSync } from '../../store/yjs-provider';
 import { CheckpointService } from './CheckpointService';
 import { MigrationStateService } from './MigrationStateService';
 import * as Y from 'yjs';
@@ -299,6 +299,7 @@ class FirestoreSyncManager {
 
         const path = `users/${uid}/versicle/${workspaceId}`;
 
+        await waitForYjsSync();
         const isCleanClient = Object.keys(useBookStore.getState().books || {}).length === 0;
 
         if (isCleanClient) {
