@@ -56,9 +56,11 @@ vi.mock('../../store/yjs-provider', async (importOriginal) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const actualOptions = (actual as any).getYjsOptions || ((o: any) => o);
     return {
+        ...actual as any,
         yDoc: new Y.Doc(),
         getYjsOptions: actualOptions,
-        CURRENT_SCHEMA_VERSION: 3
+        CURRENT_SCHEMA_VERSION: 3,
+        waitForYjsSync: vi.fn().mockResolvedValue(undefined)
     };
 });
 
