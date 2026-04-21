@@ -333,23 +333,23 @@ export const LibraryView: React.FC = () => {
   const filteredAndSortedBooks = useMemo(() => {
     // BOLT OPTIMIZATION: Use debounced search query to prevent filtering/sorting on every keystroke
     const query = debouncedSearchQuery.toLowerCase();
+    const isDownloadedFilter = libraryFilterMode === 'downloaded';
 
-    // 1. Filter using the pre-computed index (fast string check)
-    let filtered = searchableBooks
-      .filter(item => item.searchString.includes(query))
-      .map(item => item.book);
-
-    // 2. Apply "On Device" filter
-    if (libraryFilterMode === 'downloaded') {
-      filtered = filtered.filter(book => {
-        // A book is downloaded if it's in staticMetadata OR it's been offloaded (technically offloaded means NOT on device, 
-        // but for this filter we usually mean "File Present". 
-        // Ghost Book = !staticMetadata && !offloaded. 
+    // 1 & 2. Mapless single-pass filter to prevent intermediate array allocations and GC thrashing
+    const filtered: BookMetadata[] = [];
+    for (let i = 0; i < searchableBooks.length; i++) {
+      const item = searchableBooks[i];
+      if (item.searchString.includes(query)) {
+        const book = item.book;
+        // A book is downloaded if it's in staticMetadata OR it's been offloaded (technically offloaded means NOT on device,
+        // but for this filter we usually mean "File Present".
+        // Ghost Book = !staticMetadata && !offloaded.
         // So "On Device" = staticMetadata[book.id] exists.
-        // Wait, "Offloaded" explicitly means file removed. So it is NOT on device.
-        // So we only keep books where staticMetadata[book.id] is truthy.
-        return !!staticMetadata[book.id];
-      });
+        if (isDownloadedFilter && !staticMetadata[book.id]) {
+          continue;
+        }
+        filtered.push(book);
+      }
     }
 
     // 3. Sort the filtered results
