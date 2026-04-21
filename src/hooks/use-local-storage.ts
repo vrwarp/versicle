@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
+import { StorageFullError } from '../types/errors';
 
 // A generic way to broadcast local storage changes on the same tab
 const LOCAL_STORAGE_CHANGE_EVENT = 'local-storage-change';
@@ -124,6 +125,9 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       }
     } catch (error) {
       console.warn(`Error setting localStorage key "${keyRef.current}":`, error);
+      if ((error instanceof DOMException || error instanceof Error) && error.name === 'QuotaExceededError') {
+        setTimeout(() => Promise.reject(new StorageFullError(error)), 0);
+      }
     }
   }, []);
 
