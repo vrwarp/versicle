@@ -8,17 +8,15 @@ import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
 import { SyncPulseIndicator } from '../sync/SyncPulseIndicator';
-import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Search, Loader2, X } from 'lucide-react';
+import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Loader2 } from 'lucide-react';
 import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
-import { cn } from '../../lib/utils';
 import { GlobalNotesView } from '../notes/GlobalNotesView';
 import { ImportSourceDialog } from './ImportSourceDialog';
 import { ContentMissingDialog } from './ContentMissingDialog';
 import { DriveImportDialog } from '../drive/DriveImportDialog';
 import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
-import { Input } from '../ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { useShallow } from 'zustand/react/shallow';
 import { DeleteBookDialog } from './DeleteBookDialog';
@@ -31,7 +29,7 @@ import { DuplicateBookError } from '../../types/errors';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
 import { useNavigationGuard } from '../../hooks/useNavigationGuard';
 import { BackButtonPriority } from '../../store/useBackNavigationStore';
-import { useDebounce } from '../../hooks/useDebounce';
+import { LibrarySearchBar, type LibrarySearchBarRef } from './LibrarySearchBar';
 
 /**
  * The main library view component.
@@ -81,10 +79,10 @@ export const LibraryView: React.FC = () => {
 
   const { setGlobalSettingsOpen } = useUIStore();
   const showToast = useToastStore(state => state.showToast);
+  const searchBarRef = useRef<LibrarySearchBarRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -569,37 +567,12 @@ export const LibraryView: React.FC = () => {
           <div className="flex flex-col gap-4 md:flex-row-reverse md:items-center md:justify-between">
             {/* Search Bar */}
             <div className="w-full md:w-72">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input
-                  type="search"
-                  placeholder="Search library..."
-                  aria-label="Search library"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className={cn("pl-9", searchQuery && "pr-9")}
-                  data-testid="library-search-input"
-                />
-                {searchQuery && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
-                    onClick={() => setSearchQuery('')}
-                    aria-label="Clear search"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-              {/* Live region for screen readers */}
-              <div role="status" aria-live="polite" className="sr-only">
-                {debouncedSearchQuery ? (
-                  filteredAndSortedBooks.length === 0
-                    ? 'No books found'
-                    : `${filteredAndSortedBooks.length} books found`
-                ) : ''}
-              </div>
+              <LibrarySearchBar
+                ref={searchBarRef}
+                onQueryChange={setDebouncedSearchQuery}
+                filteredCount={filteredAndSortedBooks.length}
+                isFilteredEmpty={filteredAndSortedBooks.length === 0}
+              />
             </div>
 
             <div className="flex flex-row items-center justify-between gap-2 w-full md:w-auto">
@@ -683,7 +656,7 @@ export const LibraryView: React.FC = () => {
               <p className="text-lg">No books found matching "{debouncedSearchQuery}"</p>
               <Button
                 variant="link"
-                onClick={() => setSearchQuery('')}
+                onClick={() => searchBarRef.current?.clearSearch()}
                 className="mt-2"
               >
                 Clear search
