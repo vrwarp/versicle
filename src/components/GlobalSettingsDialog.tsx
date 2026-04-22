@@ -481,7 +481,7 @@ export const GlobalSettingsDialog = () => {
                         </div>
                     )}
 
-                    <ModalClose className="absolute right-2 top-2 sm:right-4 sm:top-4 z-[60] rounded-full bg-background/80 backdrop-blur-sm p-2 shadow-sm border border-border opacity-100 hover:bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+                    <ModalClose className="absolute right-2 top-2 sm:right-4 sm:top-4 z-[60] rounded-full bg-background/80 backdrop-blur-sm p-2 shadow-sm border border-border opacity-100 hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none">
                         <X className="h-4 w-4" />
                         <span className="sr-only">Close</span>
                     </ModalClose>

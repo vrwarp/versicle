@@ -297,7 +297,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                 <Label htmlFor="firebase-config-paste">Paste Firebase Config</Label>
                                 <textarea
                                     id="firebase-config-paste"
-                                    className="w-full h-32 p-2 text-xs font-mono border border-input rounded-md bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                                    className="w-full h-32 p-2 text-xs font-mono border border-input rounded-md bg-background resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                     placeholder="// Paste your Firebase config here"
                                     onChange={(e) => parseFirebaseConfig(e.target.value)}
                                     data-testid="firebase-config-paste"

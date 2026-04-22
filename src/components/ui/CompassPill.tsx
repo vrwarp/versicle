@@ -248,7 +248,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
             value={noteText}
             onChange={(e) => setNoteText(e.target.value)}
             placeholder="Add a note..."
-            className="w-full h-24 p-2 bg-transparent resize-none focus:outline-none text-sm"
+            className="w-full h-24 p-2 bg-transparent resize-none focus-visible:outline-none text-sm"
           />
           <div className="flex justify-end gap-2 mt-2">
             <Button variant="ghost" size="sm" onClick={handleCancelNote}>

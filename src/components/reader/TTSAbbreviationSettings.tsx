@@ -287,7 +287,7 @@ export const TTSAbbreviationSettings: React.FC = () => {
                         type="checkbox"
                         checked={isBibleLexiconEnabled}
                         onChange={(e) => setBibleLexiconEnabled(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus-visible:ring-primary"
                     />
                 </div>
             </div>
