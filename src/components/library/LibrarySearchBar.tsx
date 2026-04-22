@@ -1,4 +1,4 @@
-import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Search, X } from 'lucide-react';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
