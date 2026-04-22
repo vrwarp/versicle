@@ -19,10 +19,8 @@ describe('DBService QuotaExceededError', () => {
   });
 
   it('should throw StorageFullError when IndexedDB quota is exceeded (DOMException code 22)', async () => {
-    const db = await getDB();
-
     // Mock getDB to return a proxy that throws QuotaExceededError on transaction
-    vi.spyOn(dbService as any, 'getDB').mockImplementation(async () => {
+    vi.spyOn(dbService as unknown as { getDB: () => Promise<unknown> }, 'getDB').mockImplementation(async () => {
       const originalDb = await getDB();
       return {
         ...originalDb,
@@ -36,10 +34,8 @@ describe('DBService QuotaExceededError', () => {
   });
 
   it('should throw StorageFullError when IndexedDB quota is exceeded (Error name QuotaExceededError)', async () => {
-    const db = await getDB();
-
     // Mock getDB to return a proxy that throws QuotaExceededError on transaction
-    vi.spyOn(dbService as any, 'getDB').mockImplementation(async () => {
+    vi.spyOn(dbService as unknown as { getDB: () => Promise<unknown> }, 'getDB').mockImplementation(async () => {
       const originalDb = await getDB();
       return {
         ...originalDb,

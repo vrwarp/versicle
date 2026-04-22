@@ -1,5 +1,4 @@
-import React from 'react';
-import { render, act, renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useLocalStorage } from './use-local-storage';
 
