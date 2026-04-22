@@ -142,3 +142,6 @@
 ## 2026-04-20 - Focus Ring Consistency
 **Learning:** Radix UI primitives and custom components often inherit standard `focus:` tailwind states, which causes focus rings to persist after mouse clicks. Using `focus-visible:` ensures outlines only appear during keyboard navigation, improving visual UX while maintaining full a11y compliance.
 **Action:** Always prefer `focus-visible:` over `focus:` for focus rings in interactive elements, and verify new components default to this pattern.
+## 2026-04-22 - Prefer focus-visible over focus for Interactive Elements
+**Learning:** Found several components (like `ModalClose`, `PopoverClose`, `CompassPill`'s textarea, and TTS checkbox) using standard `focus:` tailwind pseudo-classes (e.g., `focus:outline-none focus:ring-2`). This creates an annoying visual bug where the focus ring persists after a mouse user clicks the element. However, omitting focus styles entirely breaks keyboard navigation.
+**Action:** Always prefer `focus-visible:` over `focus:` (e.g., `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`) for custom interactive elements. This ensures the focus ring is only shown when the user is navigating via keyboard, keeping the UI clean for mouse/touch users while maintaining full accessibility.
