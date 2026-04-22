@@ -54,8 +54,9 @@ vi.mock('../../store/yjs-provider', async (importOriginal) => {
     const Y = await import('yjs');
     const actual = await importOriginal();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const actualOptions = (actual as any).getYjsOptions || ((o: any) => o);
+    const actualOptions = (actual as any).getYjsOptions || ((o: unknown) => o);
     return {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ...actual as any,
         yDoc: new Y.Doc(),
         getYjsOptions: actualOptions,

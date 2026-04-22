@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, act, fireEvent } from '@testing-library/react';
-import { LibrarySearchBar } from './LibrarySearchBar';
+import { LibrarySearchBar, LibrarySearchBarRef } from './LibrarySearchBar';
 import React from 'react';
 
 describe('LibrarySearchBar', () => {
@@ -68,7 +68,7 @@ describe('LibrarySearchBar', () => {
 
     it('exposes clearSearch via ref', () => {
         const onQueryChange = vi.fn();
-        const ref = React.createRef<any>();
+        const ref = React.createRef<LibrarySearchBarRef>();
 
         render(<LibrarySearchBar ref={ref} onQueryChange={onQueryChange} filteredCount={0} isFilteredEmpty={false} />);
 

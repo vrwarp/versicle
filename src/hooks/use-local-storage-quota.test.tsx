@@ -1,5 +1,4 @@
-import React from 'react';
-import { render, act, renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { useLocalStorage } from './use-local-storage';
 
@@ -17,7 +16,7 @@ describe('useLocalStorage quota exceeded', () => {
     const originalSetItem = window.localStorage.setItem;
 
     // Mock setItem to throw QuotaExceededError
-    vi.spyOn(window.localStorage, 'setItem').mockImplementation((key, value) => {
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
       const err = new DOMException('QuotaExceededError', 'QuotaExceededError');
       throw err;
     });
@@ -25,7 +24,7 @@ describe('useLocalStorage quota exceeded', () => {
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     // Mock Promise.reject to prevent unhandled rejection failing vitest
-    const rejectSpy = vi.spyOn(Promise, 'reject').mockImplementation(() => new Promise(() => {}) as any);
+    vi.spyOn(Promise, 'reject').mockImplementation(() => new Promise(() => {}) as Promise<never>);
 
     // Mock setTimeout to ensure it executes synchronously for the mock catch
     vi.useFakeTimers();
