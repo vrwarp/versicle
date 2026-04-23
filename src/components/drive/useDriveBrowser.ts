@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { DriveService, type DriveFile } from '../../lib/drive/DriveService';
 
 interface Breadcrumb {
@@ -23,18 +23,26 @@ export const useDriveBrowser = (initialFolderId = 'root'): UseDriveBrowserReturn
     const [items, setItems] = useState<DriveFile[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<Error | null>(null);
+    const requestCounter = useRef(0);
 
     const fetchItems = useCallback(async (folderId: string) => {
         setIsLoading(true);
         setError(null);
+        const currentReq = ++requestCounter.current;
         try {
             const files = await DriveService.listFolders(folderId);
-            setItems(files);
+            if (currentReq === requestCounter.current) {
+                setItems(files);
+            }
         } catch (err) {
-            console.error("Failed to list folder contents:", err);
-            setError(err instanceof Error ? err : new Error(String(err)));
+            if (currentReq === requestCounter.current) {
+                console.error("Failed to list folder contents:", err);
+                setError(err instanceof Error ? err : new Error(String(err)));
+            }
         } finally {
-            setIsLoading(false);
+            if (currentReq === requestCounter.current) {
+                setIsLoading(false);
+            }
         }
     }, []);
 
