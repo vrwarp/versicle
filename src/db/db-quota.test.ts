@@ -16,6 +16,7 @@ describe('DBService QuotaExceededError', () => {
       await tx.done;
     }
     vi.clearAllMocks();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   it('should throw StorageFullError when IndexedDB quota is exceeded (DOMException code 22)', async () => {
