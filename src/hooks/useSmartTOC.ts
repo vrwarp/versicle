@@ -54,8 +54,9 @@ export function useSmartTOC(
 
       const bookMetadata = await dbService.getBookMetadata(bookId);
       const bookTitle = bookMetadata?.title || 'Unknown Book';
+      const language = bookMetadata?.language;
 
-      const generatedTitles = await genAIService.generateTOCForBatch(sectionsToProcess, { bookTitle });
+      const generatedTitles = await genAIService.generateTOCForBatch(sectionsToProcess, { bookTitle, language });
 
       const titleMap = new Map<string, string>();
       generatedTitles.forEach(item => titleMap.set(item.id, item.title));

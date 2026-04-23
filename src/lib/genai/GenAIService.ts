@@ -211,10 +211,16 @@ class GenAIService {
    * @param sections Array of objects with id and text.
    * @returns Array of objects with id and title.
    */
-  public async generateTOCForBatch(sections: { id: string, text: string }[], context?: { bookTitle?: string }): Promise<{ id: string, title: string }[]> {
+  public async generateTOCForBatch(sections: { id: string, text: string }[], context?: { bookTitle?: string, language?: string }): Promise<{ id: string, title: string }[]> {
     if (sections.length === 0) return [];
 
-    const prompt = `Generate concise section titles (max 6 words) for the following text segments.
+    let instruction = "Generate concise section titles (max 6 words) for the following text segments.";
+    if (context?.language && !context.language.startsWith('en')) {
+      instruction = `Generate concise section titles (max 6 words) for the following text segments.
+    Important: The titles MUST be returned in English, formatted as "English Section Title Translation (Original Language Inferred Title)".`;
+    }
+
+    const prompt = `${instruction}
     Return an array of objects with 'id' (matching the input) and 'title'.
 
     Sections:
