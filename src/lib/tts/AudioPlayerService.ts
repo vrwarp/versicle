@@ -173,24 +173,21 @@ export class AudioPlayerService {
         // This ensures that if a user (or Yjs sync) updates the book's language, 
         // the TTS system reactively switches its profile and voice.
         import('../../store/useBookStore').then(({ useBookStore }) => {
-            let lastLang: string | undefined;
-            let lastBookId: string | null = null;
-
             useBookStore.subscribe((state) => {
                 const bookId = this.currentBookId;
                 if (!bookId) {
-                    lastLang = undefined;
-                    lastBookId = null;
                     return;
                 }
 
                 const currentLang = state.books[bookId]?.language;
                 
                 // Trigger sync if language changed for the CURRENT book, 
-                // OR if the book itself changed and it has a language defined.
-                if (currentLang && (bookId !== lastBookId || currentLang !== lastLang)) {
-                    logger.info(`Syncing TTS language to book: ${currentLang} (Book: ${bookId})`);
-                    import('../../store/useTTSStore').then(({ useTTSStore }) => {
+                // using activeLanguage to prevent unwarranted restarts.
+                import('../../store/useTTSStore').then(({ useTTSStore }) => {
+                    const lastLang = useTTSStore.getState().activeLanguage;
+
+                    if (currentLang && currentLang !== lastLang) {
+                        logger.info(`Syncing TTS language to book: ${currentLang} (Book: ${bookId})`);
                         useTTSStore.getState().setActiveLanguage(currentLang);
                         
                         // Force lexicon reload for the new language
@@ -200,11 +197,8 @@ export class AudioPlayerService {
                         if (this.status === 'playing' || this.status === 'loading') {
                              this.playInternal(true);
                         }
-                    });
-                    
-                    lastLang = currentLang;
-                    lastBookId = bookId;
-                }
+                    }
+                });
             });
         });
     }
@@ -222,6 +216,20 @@ export class AudioPlayerService {
 
     setBookId(bookId: string | null) {
         if (this.currentBookId !== bookId) {
+            if (bookId) {
+                // Proactively sync language to ensure proper voices are loaded before playback starts
+                Promise.all([
+                    import('../../store/useBookStore'),
+                    import('../../store/useTTSStore')
+                ]).then(([{ useBookStore }, { useTTSStore }]) => {
+                    if (this.currentBookId !== bookId) return; // Prevent race conditions if bookId changed again rapidly
+                    const currentLang = useBookStore.getState().books[bookId]?.language;
+                    if (currentLang) {
+                        useTTSStore.getState().setActiveLanguage(currentLang);
+                        this.activeLexiconRules = null; // Force lexicon reload for the new language
+                    }
+                }).catch(e => logger.error("Failed to sync language on setBookId", e));
+            }
             // Immediately stop playback and reset state to prevent leakage of old book state
             if (this.status !== 'stopped') {
                 this.setStatus('stopped');
