@@ -454,4 +454,46 @@ describe('AudioPlayerService', () => {
             expect(mask.has(1)).toBe(false);
         });
     });
+
+    describe('calculateBookProgress', () => {
+        it('should calculate book-wide progress correctly', async () => {
+            service.setBookId('book1');
+            // Mocked playlist in dbService returns: [sec1(100), sec2(0), sec3(100)] -> Total 200 chars
+            
+            // Wait for any async initialization (like playlist loading in setBookId)
+            await new Promise(resolve => setTimeout(resolve, 10));
+
+            // Case 1: Start of book
+            // @ts-expect-error Access private state manager
+            service.stateManager.setQueue([{ text: 'a', cfi: '1' }], 0, 0); 
+            // @ts-expect-error Access private
+            expect(service.calculateBookProgress()).toBe(0);
+
+            // Case 2: Middle of first section (sec1)
+            // Mock prefixSums: item 0 has 20 chars
+            // @ts-expect-error Access private
+            service.stateManager.prefixSums = [0, 20];
+            // @ts-expect-error Access private
+            service.stateManager._currentIndex = 1; 
+            // Total: 20 / 200 = 0.1
+            // @ts-expect-error Access private
+            expect(service.calculateBookProgress()).toBe(0.1);
+
+            // Case 3: Start of second section (sec2)
+            // @ts-expect-error Access private
+            service.stateManager.setQueue([{ text: 'b', cfi: '2' }], 0, 1);
+            // sec1(100) + sec2(0) = 100 / 200 = 0.5
+            // @ts-expect-error Access private
+            expect(service.calculateBookProgress()).toBe(0.5);
+
+            // Case 4: End of last section (sec3)
+            // @ts-expect-error Access private
+            service.stateManager.setQueue([{ text: 'c', cfi: '3' }], 1, 2);
+            // @ts-expect-error Access private
+            service.stateManager.prefixSums = [0, 50, 100];
+            // Total: 100 (sec1) + 0 (sec2) + 50 (sec3 current) = 150 / 200 = 0.75
+            // @ts-expect-error Access private
+            expect(service.calculateBookProgress()).toBe(0.75);
+        });
+    });
 });

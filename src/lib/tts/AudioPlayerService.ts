@@ -258,7 +258,8 @@ export class AudioPlayerService {
                 album: item.bookTitle || '',
                 artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
                 sectionIndex: this.stateManager.currentSectionIndex,
-                totalSections: this.playlist.length
+                totalSections: this.playlist.length,
+                progress: this.calculateBookProgress()
             });
             this.platformIntegration.updatePlaybackState('playing');
             return true;
@@ -326,11 +327,37 @@ export class AudioPlayerService {
                 album: item.bookTitle || '',
                 artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
                 sectionIndex: this.stateManager.currentSectionIndex,
-                totalSections: this.playlist.length
+                totalSections: this.playlist.length,
+                progress: this.calculateBookProgress()
             });
 
             this.updateSectionMediaPosition(0);
         }
+    }
+
+    private calculateBookProgress(): number {
+        if (!this.currentBookId || this.playlist.length === 0) return 0;
+
+        let totalChars = 0;
+        let completedChars = 0;
+
+        for (let i = 0; i < this.playlist.length; i++) {
+            const section = this.playlist[i];
+            totalChars += section.characterCount || 0;
+
+            if (i < this.stateManager.currentSectionIndex) {
+                completedChars += section.characterCount || 0;
+            } else if (i === this.stateManager.currentSectionIndex) {
+                // Add characters consumed within the current section
+                // prefixSums[index] gives cumulative chars before index in the current queue.
+                if (this.stateManager.prefixSums && this.stateManager.currentIndex >= 0) {
+                    completedChars += this.stateManager.prefixSums[this.stateManager.currentIndex];
+                }
+            }
+        }
+
+        if (totalChars === 0) return 0;
+        return Math.min(Math.max(completedChars / totalChars, 0), 1);
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
