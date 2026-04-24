@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
+import { useShallow } from 'zustand/react/shallow';
 import { Button } from '../ui/Button';
 import { Loader2, Library, BookOpen, Upload } from 'lucide-react';
 import { FileUploader } from './FileUploader';
@@ -24,7 +25,10 @@ interface EmptyLibraryProps {
  * @returns A React component for the empty library state.
  */
 export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
-  const { addBook, isImporting } = useLibraryStore();
+  const { addBook, isImporting } = useLibraryStore(useShallow(state => ({
+    addBook: state.addBook,
+    isImporting: state.isImporting
+  })));
   const showToast = useToastStore((state) => state.showToast);
 
   const handleLoadDemo = async () => {
