@@ -113,10 +113,15 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
                 }
             }
 
-            const date = new Date(session.startTime);
-            const dateStr = date.toLocaleDateString();
-            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const subLabel = `${dateStr} ${timeStr} • ${(percentage * 100).toFixed(0)}%`;
+            let subLabel = `${(percentage * 100).toFixed(0)}%`;
+            if (session.startTime) {
+                const date = new Date(session.startTime);
+                if (!isNaN(date.getTime())) {
+                    const dateStr = date.toLocaleDateString();
+                    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    subLabel = `${dateStr} ${timeStr} • ${subLabel}`;
+                }
+            }
 
             return {
                 range: cfi,
