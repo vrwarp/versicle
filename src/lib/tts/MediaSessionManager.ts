@@ -17,6 +17,8 @@ export interface MediaSessionMetadata {
   sectionIndex?: number;
   /** The total number of sections in the book. */
   totalSections?: number;
+  /** Explicit progress percentage (0.0 to 1.0) for the overlay. */
+  progress?: number;
 }
 
 /**
@@ -122,7 +124,12 @@ export class MediaSessionManager {
     if (artwork && artwork.length > 0) {
       try {
         // We process the first artwork item as the primary cover
-        const processedArtwork = await this.processArtwork(artwork[0], metadata.sectionIndex, metadata.totalSections);
+        const processedArtwork = await this.processArtwork(
+          artwork[0],
+          metadata.progress,
+          metadata.sectionIndex,
+          metadata.totalSections
+        );
         if (processedArtwork) {
           artwork = [processedArtwork];
         }
@@ -154,12 +161,13 @@ export class MediaSessionManager {
    */
   private async processArtwork(
     artwork: { src: string; sizes?: string; type?: string },
+    progressInput?: number,
     sectionIndex?: number,
     totalSections?: number
   ): Promise<{ src: string; sizes?: string; type?: string } | null> {
     try {
-      let progress: number | undefined;
-      if (sectionIndex !== undefined && totalSections !== undefined && totalSections > 0) {
+      let progress: number | undefined = progressInput;
+      if (progress === undefined && sectionIndex !== undefined && totalSections !== undefined && totalSections > 0) {
         progress = Math.min(Math.max(sectionIndex / totalSections, 0), 1);
       }
 
