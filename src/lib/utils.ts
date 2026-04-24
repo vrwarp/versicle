@@ -10,3 +10,15 @@ import { twMerge } from 'tailwind-merge';
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+export function containsCJK(text: string): boolean {
+  if (!text) return false;
+  // Matches standard CJK Unified Ideographs
+  return /[\u4E00-\u9FFF]/.test(text);
+}
+
+export function isCJKLanguageCode(code?: string): boolean {
+  if (!code) return false;
+  const lowerCode = code.toLowerCase();
+  return lowerCode.startsWith('zh') || lowerCode.startsWith('ja') || lowerCode.startsWith('ko');
+}

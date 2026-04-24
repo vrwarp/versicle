@@ -1,10 +1,35 @@
 import { useMemo } from 'react';
 import { useTTSStore } from '../store/useTTSStore';
+import { useReaderUIStore } from '../store/useReaderUIStore';
+import { useBookStore } from '../store/useBookStore';
+import { containsCJK, isCJKLanguageCode } from '../lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 
 export function useSectionDuration() {
   const queue = useTTSStore(state => state.queue);
   const index = useTTSStore(state => state.currentIndex);
   const rate = useTTSStore(state => state.rate);
+
+  const currentBookId = useReaderUIStore(state => state.currentBookId);
+  // Only select language to prevent excessive re-renders
+  const bookLanguage = useBookStore(
+    useShallow(state => currentBookId ? state.books[currentBookId]?.language : undefined)
+  );
+
+  // Determine if the context is CJK
+  const isCJK = useMemo(() => {
+    // Primary: Trust explicit metadata
+    if (bookLanguage) {
+      return isCJKLanguageCode(bookLanguage);
+    }
+
+    // Fallback: JIT Regex on the queue
+    if (queue && queue.length > 0 && queue[0].text) {
+      return containsCJK(queue[0].text);
+    }
+
+    return false; // Default to English/Latin
+  }, [bookLanguage, queue]);
 
   // Memoize cumulative lengths to avoid O(N) iteration on every render/sentence change.
   // This array stores the cumulative character count up to each index.
@@ -32,8 +57,9 @@ export function useSectionDuration() {
   // Progress based on sentence count as per plan
   const progress = (validIndex / (queue.length || 1)) * 100;
 
-  // Base WPM = 180. Avg chars per word = 5. -> Chars per minute = 180 * 5 = 900.
-  const charsPerMinute = 900 * (rate || 1);
+  // Apply the correct baseline multiplier based on context
+  const baseCPM = isCJK ? 300 : 900;
+  const charsPerMinute = baseCPM * (rate || 1);
   const minutesRemaining = remainingChars / charsPerMinute;
 
   return {
