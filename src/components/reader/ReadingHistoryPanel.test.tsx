@@ -189,4 +189,54 @@ describe('ReadingHistoryPanel', () => {
     const buttons = screen.getAllByRole('button');
     expect(buttons.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('renders history items with missing timestamp gracefully', () => {
+      const mockProgress = {
+          readingSessions: [
+              {
+                  cfiRange: 'epubcfi(/1)',
+                  type: 'page',
+                  label: 'Segment',
+                  // Intentionally missing startTime
+              }
+          ]
+      };
+      vi.mocked(useBookProgress).mockReturnValue(mockProgress as any);
+
+      render(
+          <ReadingHistoryPanel
+              bookId="test-book"
+              rendition={mockRendition as any}
+              onNavigate={vi.fn()}
+          />
+      );
+
+      // Should fallback cleanly, not show 'Invalid Date'
+      expect(screen.queryByText(/Invalid Date/)).toBeNull();
+  });
+
+  it('renders history items with invalid timestamp gracefully', () => {
+      const mockProgress = {
+          readingSessions: [
+              {
+                  cfiRange: 'epubcfi(/1)',
+                  type: 'page',
+                  label: 'Segment',
+                  startTime: "Not a valid date string" as unknown as number
+              }
+          ]
+      };
+      vi.mocked(useBookProgress).mockReturnValue(mockProgress as any);
+
+      render(
+          <ReadingHistoryPanel
+              bookId="test-book"
+              rendition={mockRendition as any}
+              onNavigate={vi.fn()}
+          />
+      );
+
+      // Should fallback cleanly, not show 'Invalid Date'
+      expect(screen.queryByText(/Invalid Date/)).toBeNull();
+  });
 });
