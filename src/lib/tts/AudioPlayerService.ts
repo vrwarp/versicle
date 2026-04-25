@@ -33,14 +33,8 @@ export interface TTSQueueItem {
     text: string;
     /** The Canonical Fragment Identifier (CFI) for the location in the book. */
     cfi: string | null;
-    /** Optional chapter title. */
+    /** Optional chapter title (displayed as the track title). */
     title?: string;
-    /** Optional author name. */
-    author?: string;
-    /** Optional book title. */
-    bookTitle?: string;
-    /** Optional cover image URL. */
-    coverUrl?: string;
     /** Indicates if this item is a pre-roll announcement. */
     isPreroll?: boolean;
     /** Indicates if this item should be skipped during playback. */
@@ -91,6 +85,10 @@ export class AudioPlayerService {
     private isPreviewing: boolean = false;
     private lastAppliedAnalysisTimestamp: number = 0;
     private lastUserPauseTimestamp: number | null = null;
+    private currentBookPalette: number[] | undefined = undefined;
+    private currentBookTitle: string = '';
+    private currentBookAuthor: string = '';
+    private currentBookCoverUrl: string | undefined = undefined;
 
     private constructor() {
         this.syncEngine = new SyncEngine();
@@ -241,9 +239,23 @@ export class AudioPlayerService {
             this.currentBookId = bookId;
             this.sessionRestored = false;
             this.lastAppliedAnalysisTimestamp = 0;
+            this.currentBookPalette = undefined;
+            this.currentBookTitle = '';
+            this.currentBookAuthor = '';
+            this.currentBookCoverUrl = undefined;
             this.stateManager.setBookId(bookId);
 
             if (bookId) {
+                dbService.getBookMetadata(bookId).then(metadata => {
+                    if (this.currentBookId === bookId) {
+                        this.currentBookPalette = metadata?.coverPalette;
+                        this.currentBookTitle = metadata?.title || '';
+                        this.currentBookAuthor = metadata?.author || '';
+                        this.currentBookCoverUrl = metadata?.coverUrl || (metadata?.coverBlob ? `/__versicle__/covers/${bookId}` : undefined);
+                        this.updateMediaSessionMetadata();
+                    }
+                }).catch(e => logger.warn("Failed to load book metadata", e));
+
                 this.playlistPromise = dbService.getSections(bookId).then(sections => {
                     if (this.currentBookId !== bookId) return; this.playlist = sections;
                     this.restoreQueue(bookId);
@@ -262,9 +274,10 @@ export class AudioPlayerService {
         try {
             this.platformIntegration.updateMetadata({
                 title: item.title || 'Chapter Text',
-                artist: item.author || 'Versicle',
-                album: item.bookTitle || '',
-                artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
+                artist: this.currentBookAuthor || 'Versicle',
+                album: this.currentBookTitle || '',
+                artwork: this.currentBookCoverUrl ? [{ src: this.currentBookCoverUrl }] : [],
+                coverPalette: this.currentBookPalette,
                 sectionIndex: this.stateManager.currentSectionIndex,
                 totalSections: this.playlist.length,
                 progress: this.calculateBookProgress()
@@ -331,9 +344,10 @@ export class AudioPlayerService {
         if (item) {
             this.platformIntegration.updateMetadata({
                 title: item.title || 'Chapter Text',
-                artist: item.author || 'Versicle',
-                album: item.bookTitle || '',
-                artwork: item.coverUrl ? [{ src: item.coverUrl }] : [],
+                artist: this.currentBookAuthor || 'Versicle',
+                album: this.currentBookTitle || '',
+                artwork: this.currentBookCoverUrl ? [{ src: this.currentBookCoverUrl }] : [],
+                coverPalette: this.currentBookPalette,
                 sectionIndex: this.stateManager.currentSectionIndex,
                 totalSections: this.playlist.length,
                 progress: this.calculateBookProgress()

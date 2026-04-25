@@ -153,7 +153,7 @@ describe('AudioPlayerService', () => {
         });
     });
 
-    it('should include coverUrl in queue items including Preroll', async () => {
+    it('should include chapter title in queue items including Preroll', async () => {
         // Enable preroll
         service.setPrerollEnabled(true);
         service.setBookId('book1');
@@ -169,13 +169,13 @@ describe('AudioPlayerService', () => {
 
         // Check Preroll item (first item)
         expect(queue[0].isPreroll).toBe(true);
-        expect(queue[0].coverUrl).toBe('http://example.com/cover.jpg');
+        expect(queue[0].title).toBe('Chapter 1');
 
         // Check Content item
-        expect(queue[1].coverUrl).toBe('http://example.com/cover.jpg');
+        expect(queue[1].text).toBe('Sentence sec1');
     });
 
-    it('should include coverUrl in queue items for empty chapters', async () => {
+    it('should generate preroll for empty chapters', async () => {
         service.setBookId('book1');
 
         // Load section 1 (empty content)
@@ -187,8 +187,6 @@ describe('AudioPlayerService', () => {
         const queue = service.getQueue();
         expect(queue.length).toBe(1);
         expect(queue[0].isPreroll).toBe(true); // Empty message is marked as preroll
-
-        expect(queue[0].coverUrl).toBe('http://example.com/cover.jpg');
     });
 
     it('should transition to completed status when queue finishes', async () => {

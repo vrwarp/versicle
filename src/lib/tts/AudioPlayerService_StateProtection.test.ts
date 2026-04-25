@@ -36,6 +36,11 @@ vi.mock('../../db/DBService', () => ({
         getTTSState: vi.fn(),
         saveTTSState: vi.fn(),
         getSections: vi.fn().mockResolvedValue([]),
+        getBookMetadata: vi.fn().mockResolvedValue({
+            title: 'Test Book',
+            author: 'Test Author',
+            coverUrl: 'http://example.com/cover.jpg'
+        }),
     }
 }));
 

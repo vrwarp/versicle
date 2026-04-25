@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
+import { useBookStore } from '../../store/useBookStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '../../hooks/useSectionDuration';
 import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check, BookOpen, ArrowUpCircle, Smartphone, Trash2 } from 'lucide-react';
@@ -45,6 +46,8 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 }) => {
   const compassState = useReaderUIStore(state => state.compassState || {});
   const resetCompassState = useReaderUIStore(state => state.resetCompassState);
+  const currentBookId = useReaderUIStore(state => state.currentBookId);
+  const book = useBookStore(state => currentBookId ? state.books[currentBookId] : null);
 
   const {
     isPlaying,
@@ -232,7 +235,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   // Title priority: Queue Item Title -> Reader Store Title -> "Section X"
   const sectionTitle = currentItem?.title || readerSectionTitle || `Section ${currentIndex + 1}`;
 
-  const displayTitle = title || currentItem?.bookTitle || "Current Book";
+  const displayTitle = title || book?.title || "Current Book";
   const displaySubtitle = subtitle || sectionTitle;
 
   // Annotation Mode

@@ -7,7 +7,12 @@ import { useTTSStore } from '../../store/useTTSStore';
 vi.mock('../../db/DBService', () => ({
     dbService: {
         getSections: vi.fn().mockResolvedValue([]),
-        getTTSState: vi.fn().mockResolvedValue(null)
+        getTTSState: vi.fn().mockResolvedValue(null),
+        getBookMetadata: vi.fn().mockImplementation((bookId) => {
+            if (bookId === 'book-en') return Promise.resolve({ title: 'English Book', author: 'Author' });
+            if (bookId === 'book-zh') return Promise.resolve({ title: 'Chinese Book', author: 'Author' });
+            return Promise.resolve(null);
+        })
     }
 }));
 

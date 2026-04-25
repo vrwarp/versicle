@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
+import { isPaletteBright } from '../cover-palette';
 
 /**
  * Metadata for the Media Session API.
@@ -19,6 +20,8 @@ export interface MediaSessionMetadata {
   totalSections?: number;
   /** Explicit progress percentage (0.0 to 1.0) for the overlay. */
   progress?: number;
+  /** The color palette of the current section/book. */
+  coverPalette?: number[];
 }
 
 /**
@@ -128,7 +131,8 @@ export class MediaSessionManager {
           artwork[0],
           metadata.progress,
           metadata.sectionIndex,
-          metadata.totalSections
+          metadata.totalSections,
+          metadata.coverPalette
         );
         if (processedArtwork) {
           artwork = [processedArtwork];
@@ -163,7 +167,8 @@ export class MediaSessionManager {
     artwork: { src: string; sizes?: string; type?: string },
     progressInput?: number,
     sectionIndex?: number,
-    totalSections?: number
+    totalSections?: number,
+    palette?: number[]
   ): Promise<{ src: string; sizes?: string; type?: string } | null> {
     try {
       let progress: number | undefined = progressInput;
@@ -172,7 +177,7 @@ export class MediaSessionManager {
       }
 
       // Crop to square and get base64 directly from URL
-      const base64 = await this.cropAndOverlayArtwork(artwork.src, progress);
+      const base64 = await this.cropAndOverlayArtwork(artwork.src, progress, palette);
 
       return {
         ...artwork,
@@ -189,7 +194,7 @@ export class MediaSessionManager {
    * Crops a given image URL to a center square and returns it as a base64 string.
    * Optionally applies a conic gradient overlay to indicate reading progress.
    */
-  private cropAndOverlayArtwork(src: string, progress?: number): Promise<string> {
+  private cropAndOverlayArtwork(src: string, progress?: number, palette?: number[]): Promise<string> {
     return new Promise((resolve) => {
       const img = new Image();
       img.crossOrigin = 'Anonymous'; // Needed if the source is external
@@ -233,7 +238,9 @@ export class MediaSessionManager {
               // Start from top (12 o'clock), so rotate -PI/2
               const gradient = ctx.createConicGradient(-Math.PI / 2, cx, cy);
 
-              const overlayColor = 'rgba(255, 255, 255, 0.4)';
+              // Use adaptive color based on cover luminance
+              const isBright = isPaletteBright(palette);
+              const overlayColor = isBright ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.4)';
               const transparent = 'rgba(0, 0, 0, 0)';
 
               gradient.addColorStop(0, overlayColor);

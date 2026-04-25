@@ -186,12 +186,30 @@ describe('MediaSessionManager', () => {
 
       // Verify that createConicGradient was called with correct rotation
       expect(mockContext.createConicGradient).toHaveBeenCalledWith(-Math.PI / 2, expect.any(Number), expect.any(Number));
-      
+
       // Verify that the 'progress' value (0.75) was used in the gradient stops
       expect(mockGradient.addColorStop).toHaveBeenCalledWith(0.75, 'rgba(255, 255, 255, 0.4)');
       expect(mockGradient.addColorStop).toHaveBeenCalledWith(0.75, 'rgba(0, 0, 0, 0)');
-      
+
       expect(mockContext.fillRect).toHaveBeenCalled();
+    });
+
+    it('applies dark/adaptive overlay for white covers', async () => {
+      const manager = new MediaSessionManager(callbacks);
+      const metadata = {
+        title: 'Light Cover',
+        artist: 'Artist',
+        album: 'Album',
+        artwork: [{ src: 'light.jpg' }],
+        progress: 0.5,
+        coverPalette: [0xFFFF] // Pure White
+      };
+
+      await manager.setMetadata(metadata);
+
+      // Verify that dark overlay color was used for this bright cover
+      expect(mockGradient.addColorStop).toHaveBeenCalledWith(0.5, 'rgba(0, 0, 0, 0.35)');
+      expect(mockGradient.addColorStop).not.toHaveBeenCalledWith(0.5, 'rgba(255, 255, 255, 0.4)');
     });
 
     it('updates playback state correctly', () => {

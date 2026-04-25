@@ -111,7 +111,6 @@ export class AudioContentPipeline {
             useReaderUIStore.getState().setCurrentSection(title, section.sectionId);
 
             const bookMetadata = await dbService.getBookMetadata(bookId);
-            const coverUrl = bookMetadata?.coverUrl || (bookMetadata?.coverBlob ? `/__versicle__/covers/${bookId}` : undefined);
 
             const newQueue: TTSQueueItem[] = [];
 
@@ -156,10 +155,7 @@ export class AudioContentPipeline {
                         text: prerollText,
                         cfi: null,
                         isPreroll: true,
-                        title: title,
-                        bookTitle: bookMetadata?.title,
-                        author: bookMetadata?.author,
-                        coverUrl: coverUrl
+                        title: title
                     });
                 }
 
@@ -170,10 +166,7 @@ export class AudioContentPipeline {
                             cfi: s.cfi,
                             sourceIndices: s.sourceIndices,
                             isSkipped: false,
-                            title: title,
-                            bookTitle: bookMetadata?.title,
-                            author: bookMetadata?.author,
-                            coverUrl: coverUrl
+                            title: title
                         });
                     }
                 });
@@ -195,10 +188,7 @@ export class AudioContentPipeline {
                     text: randomMessage,
                     cfi: null,
                     isPreroll: true,
-                    title: title,
-                    bookTitle: bookMetadata?.title,
-                    author: bookMetadata?.author,
-                    coverUrl: coverUrl
+                    title: title
                 });
             }
 

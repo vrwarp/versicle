@@ -74,6 +74,25 @@ export async function reprocessBook(bookId: string): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const navigation = await (book.loaded as any).navigation;
     const realToc: NavigationItem[] = navigation ? navigation.toc : [];
+
+    // Re-extract cover palette if we can find a cover
+    let reprocessedPalette: number[] | undefined;
+    try {
+        const coverUrl = await book.coverUrl();
+        if (coverUrl) {
+            const response = await fetch(coverUrl);
+            const coverBlob = await response.blob();
+            if (coverBlob) {
+                const palette = await extractCoverPalette(coverBlob);
+                if (palette && palette.length > 0) {
+                    reprocessedPalette = palette;
+                }
+            }
+        }
+    } catch (e) {
+        logger.warn("Failed to update cover palette during reprocessing", e);
+    }
+
     await book.opened.catch(() => { });
     book.destroy();
 
@@ -135,6 +154,11 @@ export async function reprocessBook(bookId: string): Promise<void> {
         manifest.schemaVersion = CURRENT_BOOK_VERSION;
         manifest.baseFontSize = baseFontSize;
         manifest.baseLineHeight = baseLineHeight;
+
+        if (reprocessedPalette) {
+            manifest.coverPalette = reprocessedPalette;
+        }
+
         await manStore.put(manifest);
     }
 

@@ -128,6 +128,7 @@ class DBService {
 
             isOffloaded: !resourceKey,
             language: inventory?.language || manifest.language,
+            coverPalette: inventory?.coverPalette || manifest.coverPalette,
             baseFontSize: manifest.baseFontSize,
             baseLineHeight: manifest.baseLineHeight
           };
@@ -176,6 +177,7 @@ class DBService {
 
         isOffloaded: !resourceKey,
         language: inventory?.language || manifest.language,
+        coverPalette: inventory?.coverPalette || manifest.coverPalette,
         baseFontSize: manifest.baseFontSize,
         baseLineHeight: manifest.baseLineHeight
       };
