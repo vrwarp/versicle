@@ -222,7 +222,7 @@ export class AudioPlayerService {
                 ]).then(([{ useBookStore }, { useTTSStore }]) => {
                     if (this.currentBookId !== bookId) return; // Prevent race conditions if bookId changed again rapidly
                     const currentLang = useBookStore.getState().books[bookId]?.language;
-                    if (currentLang) {
+                    if (currentLang && currentLang !== useTTSStore.getState().activeLanguage) {
                         useTTSStore.getState().setActiveLanguage(currentLang);
                         this.activeLexiconRules = null; // Force lexicon reload for the new language
                     }
@@ -711,6 +711,7 @@ export class AudioPlayerService {
     }
 
     setSpeed(speed: number) {
+        if (this.speed === speed) return;
         this.speed = speed;
         return this.enqueue(async () => {
             if (this.status === 'playing' || this.status === 'loading') {
@@ -767,6 +768,7 @@ export class AudioPlayerService {
     }
 
     setVoice(voiceId: string) {
+        if (this.voiceId === voiceId) return;
         this.voiceId = voiceId;
         return this.enqueue(async () => {
             if (this.status === 'playing' || this.status === 'loading') {

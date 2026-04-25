@@ -180,11 +180,15 @@ export const useTTSStore = create<TTSState>()(
                     const languageVoices = state.voices.filter(v => v.lang.startsWith(lang));
                     
                     let selectedVoice = languageVoices.find(v => v.id === profile.voiceId) || null;
-
+                    
                     if (!selectedVoice && languageVoices.length > 0) {
                         // Pick a default matching voice if the profile one is missing
                         selectedVoice = languageVoices[0];
                     }
+
+                    // Use the newly selected voice ID if we found one, 
+                    // otherwise RETAIN the existing profile voiceId if we don't have voices loaded yet.
+                    const finalVoiceId = selectedVoice ? selectedVoice.id : profile.voiceId;
 
                     if (languageVoices.length === 0 && state.voices.length > 0) {
                         // Warn user if no voices for this language
@@ -202,7 +206,7 @@ export const useTTSStore = create<TTSState>()(
                             ...s.profiles,
                             [lang]: {
                                 ...profile,
-                                voiceId: selectedVoice?.id || null
+                                voiceId: finalVoiceId
                             }
                         }
                     }));
