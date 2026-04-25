@@ -66,6 +66,7 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
           onClick={onImport}
           disabled={isImporting}
           className="font-medium gap-2 h-12 px-6 transition-all touch-manipulation w-full sm:w-auto"
+          aria-label={isImporting ? "Importing book..." : "Browse files to import"}
         >
           {isImporting ? (
             <>
@@ -82,6 +83,7 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
           onClick={handleLoadDemo}
           disabled={isImporting}
           className="text-primary font-medium gap-2 h-12 px-6 border-primary/20 hover:bg-primary/5 hover:text-primary transition-all touch-manipulation w-full sm:w-auto"
+          aria-label={isImporting ? "Loading demo book..." : "Load Demo Book (Alice in Wonderland)"}
         >
           {isImporting ? (
             <>
