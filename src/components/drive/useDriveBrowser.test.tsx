@@ -15,8 +15,8 @@ describe('useDriveBrowser race condition', () => {
     });
 
     it('ignores stale responses if folder changes rapidly', async () => {
-        let resolveFolder1: any;
-        let resolveFolder2: any;
+        let resolveFolder1: (value: unknown) => void;
+        let resolveFolder2: (value: unknown) => void;
 
         vi.mocked(DriveService.listFolders).mockImplementation(async (folderId) => {
             if (folderId === 'folder1') {

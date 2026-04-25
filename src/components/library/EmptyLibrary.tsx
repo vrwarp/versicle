@@ -66,11 +66,12 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
           onClick={onImport}
           disabled={isImporting}
           className="font-medium gap-2 h-12 px-6 transition-all touch-manipulation w-full sm:w-auto"
+          aria-label={isImporting ? "Importing book..." : "Browse files to import"}
         >
           {isImporting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              <span className="sr-only">Importing...</span>
+              <span className="sr-only" aria-live="polite">Importing...</span>
             </>
           ) : (
             <Upload className="h-4 w-4" aria-hidden="true" />
@@ -82,11 +83,12 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
           onClick={handleLoadDemo}
           disabled={isImporting}
           className="text-primary font-medium gap-2 h-12 px-6 border-primary/20 hover:bg-primary/5 hover:text-primary transition-all touch-manipulation w-full sm:w-auto"
+          aria-label={isImporting ? "Loading demo book..." : "Load Demo Book (Alice in Wonderland)"}
         >
           {isImporting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              <span className="sr-only">Loading...</span>
+              <span className="sr-only" aria-live="polite">Loading...</span>
             </>
           ) : (
             <BookOpen className="h-4 w-4" aria-hidden="true" />

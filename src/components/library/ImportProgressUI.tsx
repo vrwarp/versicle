@@ -25,7 +25,7 @@ export const ImportProgressUI: React.FC = () => {
     <div className="flex flex-col items-center justify-center space-y-3 mt-4 w-full p-4">
       <div role="status" aria-label="Loading">
         <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
-        <span className="sr-only">Processing files...</span>
+        <span className="sr-only" aria-live="polite">Processing files...</span>
       </div>
 
       {/* Upload/Processing Progress */}
