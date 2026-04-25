@@ -1355,7 +1355,7 @@ export const ReaderView: React.FC = () => {
 
                 {/* Annotation List Overlay */}
                 {showAnnotations && (
-                    <div data-testid="reader-annotations-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 md:static flex flex-col">
+                    <div data-testid="reader-annotations-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 flex flex-col">
                         <div className="p-4 border-b border-border">
                             <h2 className="text-lg font-bold text-foreground">Annotations</h2>
                         </div>
