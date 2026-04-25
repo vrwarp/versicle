@@ -82,11 +82,11 @@ This document outlines the roadmap for the next generation of Text-to-Speech fea
 **Goal:** Play subtle audio cues (beeps/clicks) for interactions like skipping or pausing, essential for headless usage.
 **Key Components:** `EarconManager`.
 
-### 13. Gesture Pad Overlay
+### 13. Gesture Pad Overlay (REMOVED)
 **Plan:** [plan/archive/tts_v2_plan13_gesture_pad.md](./archive/tts_v2_plan13_gesture_pad.md)
-**Status:** **Completed**
+**Status:** **Removed**
 **Goal:** A full-screen invisible overlay that accepts gestures (Tap, Swipe) for blind control.
-**Key Components:** `GestureOverlay`.
+**Note:** This feature was decommissioned in April 2026 to simplify the reader architecture and allow native browser interactions (text selection) during playback. Navigation has been unified via the `CompassPill`.
 
 ### 14. Export to MP3
 **Plan:** [plan/tts_v2_plan14_export_mp3.md](./tts_v2_plan14_export_mp3.md)
@@ -111,7 +111,7 @@ Most features in the roadmap are loosely coupled, but some share critical depend
 2.  **Plan 02 (Media Session)** - *Completed.*
 3.  **Plan 03 (Sanitization)** - *Completed.*
 4.  **Plan 04 (Smart Resume)** - *Completed.*
-5.  **Plan 13 (Gesture Pad)** - *Completed.*
+5.  **Plan 13 (Gesture Pad)** - *Removed.*
 6.  **Plan 08 (Lexicon)** - *Completed.*
 7.  **Plan 05 (Sleep Timer)** - *Easy logic.*
 8.  **Plan 06 (Smart Speed)** - *Requires Plan 01.*

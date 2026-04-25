@@ -1,6 +1,11 @@
 # Plan: Gesture Pad Overlay
 
-## Status: Completed
+> [!CAUTION]
+> **REMOVED (April 2026)**
+> This feature has been decommissioned to simplify the reader architecture.
+> See `plan/tts_v2_roadmap.md` for details.
+
+## Status: Removed
 
 ## Priority: Low (Delight)
 

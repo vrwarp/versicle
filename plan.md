@@ -46,7 +46,6 @@ Ref: `plan/archive/2025_simplification/`
     - Text Sanitization
     - Smart Resume
     - Pronunciation Lexicon
-    - Gesture Pad
 
 ## 4. Architecture Reference
 See [`architecture.md`](architecture.md) for the current detailed technical design, updated to reflect the Simplification milestone.

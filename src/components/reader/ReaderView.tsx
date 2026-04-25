@@ -14,7 +14,6 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationList } from './AnnotationList';
 import { LexiconManager } from './LexiconManager';
 import { VisualSettings } from './VisualSettings';
-import { UnifiedInputController } from './UnifiedInputController';
 import { useToastStore } from '../../store/useToastStore';
 import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
@@ -388,13 +387,13 @@ export const ReaderView: React.FC = () => {
     } = useEpubReader(bookId, viewerRef as React.RefObject<HTMLElement>, readerOptions);
 
     // Filter annotations that have notes for overlay rendering
-    const noteAnnotations = useMemo(() => 
-        annotationList.filter(a => !!a.note), 
+    const noteAnnotations = useMemo(() =>
+        annotationList.filter(a => !!a.note),
         [annotationList]
     );
 
-    const noteCfis = useMemo(() => 
-        noteAnnotations.map(a => a.cfiRange), 
+    const noteCfis = useMemo(() =>
+        noteAnnotations.map(a => a.cfiRange),
         [noteAnnotations]
     );
 
@@ -1152,16 +1151,6 @@ export const ReaderView: React.FC = () => {
                 onNext={handleNext}
             />
 
-            {/* Unified Input Controller (Flow Mode) */}
-            <UnifiedInputController
-                rendition={rendition}
-                currentSectionTitle={currentSectionTitle || ''}
-                onPrev={handlePrev}
-                onNext={handleNext}
-                onToggleHUD={() => setImmersiveMode(!immersiveMode)}
-                immersiveMode={immersiveMode}
-            />
-
             {/* Immersive Mode Exit Button */}
             {immersiveMode && (
                 <Button
@@ -1334,9 +1323,9 @@ export const ReaderView: React.FC = () => {
                 )}
 
                 {/* Pinyin Overlay (Ephemeral UI) */}
-                <PinyinOverlay 
-                    positions={pinyinPositions} 
-                    pinyinSize={pinyinSize} 
+                <PinyinOverlay
+                    positions={pinyinPositions}
+                    pinyinSize={pinyinSize}
                     containerNode={containerNode}
                 />
 
@@ -1399,7 +1388,7 @@ export const ReaderView: React.FC = () => {
                     <div
                         data-testid="reader-iframe-container"
                         ref={viewerRef}
-                        className={`w-full max-w-2xl overflow-hidden px-6 md:px-8 transition-opacity duration-300 ${isPlaying && immersiveMode ? 'opacity-40' : 'opacity-100'}`}
+                        className="w-full max-w-2xl overflow-hidden px-6 md:px-8 transition-opacity duration-300 opacity-100"
                         style={{ height: readerViewMode === 'paginated' ? 'calc(100% - 100px)' : '100%' }}
                     />
 
