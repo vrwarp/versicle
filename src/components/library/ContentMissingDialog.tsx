@@ -5,6 +5,9 @@ import { CloudOff, Loader2, Download, Cloud } from 'lucide-react';
 import type { BookMetadata } from '../../types/db';
 import { useDriveStore } from '../../store/useDriveStore';
 import { DriveScannerService } from '../../lib/drive/DriveScannerService';
+import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
+import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
+import { AlertCircle } from 'lucide-react';
 
 interface ContentMissingDialogProps {
     open: boolean;
@@ -22,8 +25,11 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
     isRestoring = false,
 }) => {
     const { findFile } = useDriveStore();
+    const isDriveConnected = useGoogleServicesStore((state) => state.connectedServices.includes('drive'));
     const [cloudMatch, setCloudMatch] = React.useState<ReturnType<typeof findFile>>(undefined);
     const [isCloudRestoring, setIsCloudRestoring] = React.useState(false);
+    const [isReconnecting, setIsReconnecting] = React.useState(false);
+    const [reconnectError, setReconnectError] = React.useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     React.useEffect(() => {
@@ -46,9 +52,28 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
+    const handleReconnect = async () => {
+        setIsReconnecting(true);
+        setReconnectError(null);
+        try {
+            await googleIntegrationManager.connectService('drive');
+        } catch (error) {
+            console.error('Failed to reconnect Drive:', error);
+            setReconnectError('Failed to reconnect. Please try again.');
+        } finally {
+            setIsReconnecting(false);
+        }
+    };
+
     const handleCloudRestore = async () => {
         if (!cloudMatch) return;
+        if (!isDriveConnected) {
+            setReconnectError('Please reconnect to Google Drive first.');
+            return;
+        }
+
         setIsCloudRestoring(true);
+        setReconnectError(null);
         try {
             // we bypass the parent onRestore and go direct to ScannerService -> Library
             // or we could fetch blob and pass to onRestore(new File(...))
@@ -58,6 +83,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
         } catch (error) {
             console.error(error);
             // Toast handled by service usually, but let's be safe
+            setReconnectError('Failed to download from cloud.');
         } finally {
             setIsCloudRestoring(false);
         }
@@ -74,28 +100,12 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                     <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
                         Cancel
                     </Button>
-                    {cloudMatch && (
-                        <Button
-                            variant="secondary"
-                            onClick={handleCloudRestore}
-                            disabled={isRestoring || isCloudRestoring}
-                            className="w-full sm:w-auto"
-                        >
-                            {isCloudRestoring ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                                    <span className="sr-only" aria-live="polite">Downloading...</span>
-                                    <span aria-hidden="true">Downloading...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <Cloud className="mr-2 h-4 w-4" />
-                                    Restore from Cloud
-                                </>
-                            )}
-                        </Button>
-                    )}
-                    <Button onClick={handleRestoreClick} disabled={isRestoring || isCloudRestoring} className="w-full sm:w-auto">
+                    <Button 
+                        variant={cloudMatch ? "outline" : "default"} 
+                        onClick={handleRestoreClick} 
+                        disabled={isRestoring || isCloudRestoring || isReconnecting} 
+                        className="w-full sm:w-auto"
+                    >
                         {isRestoring ? (
                             <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
@@ -109,6 +119,37 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                             </>
                         )}
                     </Button>
+                    {cloudMatch && (
+                        <Button
+                            variant="default"
+                            onClick={isDriveConnected ? handleCloudRestore : handleReconnect}
+                            disabled={isRestoring || isCloudRestoring || isReconnecting}
+                            className="w-full sm:w-auto"
+                        >
+                            {isCloudRestoring ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                                    <span className="sr-only" aria-live="polite">Downloading...</span>
+                                    <span aria-hidden="true">Downloading...</span>
+                                </>
+                            ) : isReconnecting ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                                    <span aria-hidden="true">Connecting...</span>
+                                </>
+                            ) : isDriveConnected ? (
+                                <>
+                                    <Cloud className="mr-2 h-4 w-4" />
+                                    Restore from Cloud
+                                </>
+                            ) : (
+                                <>
+                                    <Cloud className="mr-2 h-4 w-4" />
+                                    Reconnect Drive
+                                </>
+                            )}
+                        </Button>
+                    )}
                 </div>
             }
         >
@@ -124,12 +165,24 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                 </div>
 
                 {cloudMatch ? (
-                    <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg flex items-center gap-3">
-                        <Cloud className="h-5 w-5 text-primary shrink-0" />
+                    <div className={`p-3 border rounded-lg flex items-center gap-3 transition-colors ${
+                        isDriveConnected 
+                            ? "bg-primary/10 border-primary/20" 
+                            : "bg-amber-500/10 border-amber-500/20"
+                    }`}>
+                        {isDriveConnected ? (
+                            <Cloud className="h-5 w-5 text-primary shrink-0" />
+                        ) : (
+                            <CloudOff className="h-5 w-5 text-amber-500 shrink-0" />
+                        )}
                         <div className="flex-1">
-                            <p className="text-sm font-medium text-primary">Found in Google Drive</p>
+                            <p className={`text-sm font-medium ${isDriveConnected ? "text-primary" : "text-amber-600"}`}>
+                                {isDriveConnected ? "Found in Google Drive" : "Drive Disconnected"}
+                            </p>
                             <p className="text-xs text-muted-foreground break-all whitespace-normal">
-                                "{cloudMatch.name}" ({(cloudMatch.size / 1024 / 1024).toFixed(1)} MB)
+                                {isDriveConnected 
+                                    ? `"${cloudMatch.name}" (${(cloudMatch.size / 1024 / 1024).toFixed(1)} MB)`
+                                    : "Reconnect to download this book from the cloud."}
                             </p>
                         </div>
                     </div>
@@ -140,6 +193,13 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                             <li>Import the original EPUB file again</li>
                             <li>Transfer it from another device</li>
                         </ul>
+                    </div>
+                )}
+
+                {reconnectError && (
+                    <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex items-center gap-2 text-destructive text-xs animate-in fade-in slide-in-from-top-1">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        <p>{reconnectError}</p>
                     </div>
                 )}
 
