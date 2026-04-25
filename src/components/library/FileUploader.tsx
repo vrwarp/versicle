@@ -186,7 +186,7 @@ export const FileUploader: React.FC = () => {
             {isDriveConnecting ? (
               <>
                 <Loader2 className="mr-2 h-3 w-3 animate-spin" aria-hidden="true" />
-                <span className="sr-only">Connecting...</span>
+                <span className="sr-only" aria-live="polite">Connecting...</span>
               </>
             ) : null}
             Connect Google Drive

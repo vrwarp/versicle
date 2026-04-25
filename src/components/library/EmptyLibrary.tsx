@@ -70,7 +70,7 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
           {isImporting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              <span className="sr-only">Importing...</span>
+              <span className="sr-only" aria-live="polite">Importing...</span>
             </>
           ) : (
             <Upload className="h-4 w-4" aria-hidden="true" />
@@ -86,7 +86,7 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
           {isImporting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              <span className="sr-only">Loading...</span>
+              <span className="sr-only" aria-live="polite">Loading...</span>
             </>
           ) : (
             <BookOpen className="h-4 w-4" aria-hidden="true" />

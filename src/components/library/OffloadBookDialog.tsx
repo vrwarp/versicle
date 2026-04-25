@@ -69,7 +69,7 @@ export const OffloadBookDialog: React.FC<OffloadBookDialogProps> = ({ isOpen, on
                         {isOffloading && (
                             <>
                                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                                <span className="sr-only">Offloading...</span>
+                                <span className="sr-only" aria-live="polite">Offloading...</span>
                             </>
                         )}
                         <span aria-hidden={isOffloading}>{isOffloading ? "Offloading..." : "Offload"}</span>

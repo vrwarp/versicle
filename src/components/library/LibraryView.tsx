@@ -535,7 +535,7 @@ export const LibraryView: React.FC = () => {
                   {isImporting ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                      <span className="sr-only">Importing...</span>
+                      <span className="sr-only" aria-live="polite">Importing...</span>
                     </>
                   ) : (
                     <Upload className="w-4 h-4" aria-hidden="true" />
@@ -640,7 +640,7 @@ export const LibraryView: React.FC = () => {
           aria-label="Loading library"
         >
           <Loader2 className="h-12 w-12 animate-spin text-primary" aria-hidden="true" />
-          <span className="sr-only">Loading library...</span>
+          <span className="sr-only" aria-live="polite">Loading library...</span>
         </div>
       ) : activeContext === 'notes' ? (
         <GlobalNotesView onContentMissing={(bookId) => {
