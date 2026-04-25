@@ -111,7 +111,8 @@ class SearchClient {
             const batch = spineItems.slice(i, i + BATCH_SIZE);
             const sections: SearchSection[] = [];
 
-            for (const item of batch) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const processedItems = await Promise.all(batch.map(async (item: any) => {
                 let text = '';
                 let xml = '';
                 try {
@@ -151,15 +152,22 @@ class SearchClient {
                     }
 
                     if (text || xml) {
-                        sections.push({
+                        return {
                             id: item.id,
                             href: item.href,
                             text: text || undefined,
                             xml: xml || undefined
-                        });
+                        };
                     }
                 } catch (e) {
                     console.warn(`Failed to index section ${item.href}`, e);
+                }
+                return null;
+            }));
+
+            for (const item of processedItems) {
+                if (item) {
+                    sections.push(item);
                 }
             }
 
