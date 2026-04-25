@@ -43,6 +43,8 @@ import { HistoryHighlighter } from './HistoryHighlighter';
 import { PinyinOverlay, type PinyinPosition } from './PinyinOverlay';
 import { useCfiCoordinates } from '../../hooks/useCfiCoordinates';
 import { AnnotationMarkerOverlay } from './AnnotationMarkerOverlay';
+import { useReaderNavigation } from '../../hooks/useReaderNavigation';
+import { ReaderHighlightsStyles } from './ReaderHighlightsStyles';
 
 const logger = createLogger('ReaderView');
 
@@ -61,7 +63,6 @@ export const ReaderView: React.FC = () => {
     const { activeSidebar, setSidebar } = useSidebarState();
     const viewerRef = useRef<HTMLDivElement>(null);
     const previousLocation = useRef<{ start: string; end: string; timestamp: number } | null>(null);
-    const touchStartRef = useRef<{ y: number, x: number } | null>(null);
     const scrollWrapperRef = useRef<HTMLDivElement>(null);
 
     const {
@@ -1065,55 +1066,16 @@ export const ReaderView: React.FC = () => {
     const showAnnotations = activeSidebar === 'annotations';
     const showSearch = activeSidebar === 'search';
 
-    useEffect(() => {
-        const wrapper = scrollWrapperRef.current;
-        if (!wrapper) return;
-
-        const handleWheel = (e: WheelEvent) => {
-            if (readerViewMode !== 'scrolled') return;
-            const epubContainer = viewerRef.current?.firstElementChild as HTMLElement;
-            if (epubContainer) {
-                epubContainer.scrollBy({ top: e.deltaY, left: e.deltaX });
-                if (e.cancelable) e.preventDefault();
-            }
-        };
-
-        const handleTouchStart = (e: TouchEvent) => {
-            if (readerViewMode !== 'scrolled') return;
-            touchStartRef.current = { y: e.touches[0].clientY, x: e.touches[0].clientX };
-        };
-
-        const handleTouchMove = (e: TouchEvent) => {
-            if (readerViewMode !== 'scrolled' || !touchStartRef.current) return;
-            const deltaY = touchStartRef.current.y - e.touches[0].clientY;
-            const deltaX = touchStartRef.current.x - e.touches[0].clientX;
-
-            const epubContainer = viewerRef.current?.firstElementChild as HTMLElement;
-            if (epubContainer) {
-                epubContainer.scrollBy({ top: deltaY, left: deltaX });
-                if (e.cancelable) e.preventDefault();
-            }
-
-            touchStartRef.current = { y: e.touches[0].clientY, x: e.touches[0].clientX };
-        };
-
-        const handleTouchEnd = () => {
-            touchStartRef.current = null;
-        };
-
-        wrapper.addEventListener('wheel', handleWheel, { passive: false });
-        wrapper.addEventListener('touchstart', handleTouchStart, { passive: true });
-        wrapper.addEventListener('touchmove', handleTouchMove, { passive: false });
-        wrapper.addEventListener('touchend', handleTouchEnd, { passive: true });
-
-        return () => {
-            wrapper.removeEventListener('wheel', handleWheel);
-            wrapper.removeEventListener('touchstart', handleTouchStart);
-            wrapper.removeEventListener('touchmove', handleTouchMove);
-            wrapper.removeEventListener('touchend', handleTouchEnd);
-        };
-    }, [readerViewMode]);
-
+    // Navigation handling (Keyboard, Touch, Wheel)
+    useReaderNavigation({
+        rendition,
+        readerViewMode,
+        handlePrev,
+        handleNext,
+        scrollWrapperRef,
+        viewerRef
+    });
+    
     return (
         <div
             data-testid="reader-view"
@@ -1407,7 +1369,6 @@ export const ReaderView: React.FC = () => {
                     rendition?.display(cfi);
                 }}
             />
-
             <HistoryHighlighter
                 rendition={rendition}
                 isRenditionReady={isRenditionReady}
@@ -1415,22 +1376,7 @@ export const ReaderView: React.FC = () => {
                 isPlaying={isPlaying}
             />
 
-            {/* Striped highlight pattern */}
-            <svg xmlns="http://www.w3.org/2000/svg" id="epubjs-custom-defs" style={{ width: 0, height: 0, position: 'absolute' }} aria-hidden="true">
-                <defs>
-                    <pattern id="striped-highlight" patternUnits="userSpaceOnUse" width="16" height="10" patternTransform="rotate(45)">
-                        <rect width="8" height="10" fill="orange" />
-                    </pattern>
-                </defs>
-            </svg>
-            {/* Highlights CSS styles */}
-            <style>{`
-                .highlight-red { fill: red; fill-opacity: ${currentTheme === 'dark' ? 0.4 : 0.8}; mix-blend-mode: ${currentTheme === 'dark' ? 'screen' : 'multiply'}; }
-                .highlight-green { fill: green; fill-opacity: ${currentTheme === 'dark' ? 0.4 : 0.8}; mix-blend-mode: ${currentTheme === 'dark' ? 'screen' : 'multiply'}; }
-                .highlight-blue { fill: blue; fill-opacity: ${currentTheme === 'dark' ? 0.4 : 0.8}; mix-blend-mode: ${currentTheme === 'dark' ? 'screen' : 'multiply'}; }
-                .highlight-yellow { fill: yellow; fill-opacity: ${currentTheme === 'dark' ? 0.4 : 0.8}; mix-blend-mode: ${currentTheme === 'dark' ? 'screen' : 'multiply'}; }
-                .versicle-audio-bookmark-pending { fill: url(#striped-highlight); fill-opacity: ${currentTheme === 'dark' ? 0.4 : 0.8}; mix-blend-mode: ${currentTheme === 'dark' ? 'screen' : 'multiply'}; }
-            `}</style>
-        </div >
+            <ReaderHighlightsStyles currentTheme={currentTheme} />
+        </div>
     );
 };
