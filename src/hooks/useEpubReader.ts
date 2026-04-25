@@ -831,18 +831,22 @@ export function useEpubReader(
       'a': { 'color': `${options.customTheme?.fg || '#0000e'} !important` }
     });
 
+    const isDark = options.currentTheme === 'dark';
+    const highlightBlendMode = isDark ? 'screen' : 'multiply';
+    const highlightOpacity = isDark ? 0.4 : 0.3;
+
     // TTS Highlight Theme
     themes.default({
       '.tts-highlight': {
         'fill': 'yellow',
-        'background-color': 'rgba(255, 255, 0, 0.3)',
-        'fill-opacity': '0.3',
-        'mix-blend-mode': 'multiply'
+        'background-color': isDark ? 'rgba(255, 255, 0, 0.4)' : 'rgba(255, 255, 0, 0.3)',
+        'fill-opacity': highlightOpacity,
+        'mix-blend-mode': highlightBlendMode
       },
-      '.highlight-yellow': { 'fill': 'yellow', 'background-color': 'rgba(255, 255, 0, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' },
-      '.highlight-green': { 'fill': 'green', 'background-color': 'rgba(0, 255, 0, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' },
-      '.highlight-blue': { 'fill': 'blue', 'background-color': 'rgba(0, 0, 255, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' },
-      '.highlight-red': { 'fill': 'red', 'background-color': 'rgba(255, 0, 0, 0.3)', 'fill-opacity': '0.3', 'mix-blend-mode': 'multiply' }
+      '.highlight-yellow': { 'fill': 'yellow', 'background-color': isDark ? 'rgba(255, 255, 0, 0.4)' : 'rgba(255, 255, 0, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
+      '.highlight-green': { 'fill': 'green', 'background-color': isDark ? 'rgba(0, 255, 0, 0.4)' : 'rgba(0, 255, 0, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
+      '.highlight-blue': { 'fill': 'blue', 'background-color': isDark ? 'rgba(0, 0, 255, 0.4)' : 'rgba(0, 0, 255, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
+      '.highlight-red': { 'fill': 'red', 'background-color': isDark ? 'rgba(255, 0, 0, 0.4)' : 'rgba(255, 0, 0, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode }
     });
 
     themes.select(options.currentTheme);

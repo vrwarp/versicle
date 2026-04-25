@@ -792,7 +792,7 @@ export const ReaderView: React.FC = () => {
                                     fill: color,
                                     backgroundColor: color,
                                     fillOpacity: '1',
-                                    mixBlendMode: 'multiply'
+                                    mixBlendMode: currentTheme === 'dark' ? 'screen' : 'multiply'
                                 });
                                 addedDebugHighlights.current.add(highlightCfi);
                             } catch (e) {
@@ -1436,11 +1436,11 @@ export const ReaderView: React.FC = () => {
             </svg>
             {/* Highlights CSS styles */}
             <style>{`
-                .highlight-red { fill: red; fill-opacity: 0.8; mix-blend-mode: multiply; }
-                .highlight-green { fill: green; fill-opacity: 0.8; mix-blend-mode: multiply; }
-                .highlight-blue { fill: blue; fill-opacity: 0.8; mix-blend-mode: multiply; }
-                .highlight-yellow { fill: yellow; fill-opacity: 0.8; mix-blend-mode: multiply; }
-                .versicle-audio-bookmark-pending { fill: url(#striped-highlight); fill-opacity: 0.8; mix-blend-mode: multiply; }
+                .highlight-red { fill: red; fill-opacity: ${currentTheme === 'dark' ? 0.4 : 0.8}; mix-blend-mode: ${currentTheme === 'dark' ? 'screen' : 'multiply'}; }
+                .highlight-green { fill: green; fill-opacity: ${currentTheme === 'dark' ? 0.4 : 0.8}; mix-blend-mode: ${currentTheme === 'dark' ? 'screen' : 'multiply'}; }
+                .highlight-blue { fill: blue; fill-opacity: ${currentTheme === 'dark' ? 0.4 : 0.8}; mix-blend-mode: ${currentTheme === 'dark' ? 'screen' : 'multiply'}; }
+                .highlight-yellow { fill: yellow; fill-opacity: ${currentTheme === 'dark' ? 0.4 : 0.8}; mix-blend-mode: ${currentTheme === 'dark' ? 'screen' : 'multiply'}; }
+                .versicle-audio-bookmark-pending { fill: url(#striped-highlight); fill-opacity: ${currentTheme === 'dark' ? 0.4 : 0.8}; mix-blend-mode: ${currentTheme === 'dark' ? 'screen' : 'multiply'}; }
             `}</style>
         </div >
     );
