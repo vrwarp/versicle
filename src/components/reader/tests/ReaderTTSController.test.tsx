@@ -122,6 +122,7 @@ describe('ReaderTTSController', () => {
         add: annotationsAddMock,
         remove: annotationsRemoveMock,
       },
+      views: vi.fn().mockReturnValue([]),
     };
 
     render(
