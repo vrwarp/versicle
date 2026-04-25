@@ -67,7 +67,7 @@ export const DeleteBookDialog: React.FC<DeleteBookDialogProps> = ({ isOpen, onCl
                         {isDeleting && (
                             <>
                                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                                <span className="sr-only">Deleting...</span>
+                                <span className="sr-only" aria-live="polite">Deleting...</span>
                             </>
                         )}
                         <span aria-hidden={isDeleting}>{isDeleting ? "Deleting..." : "Delete"}</span>
