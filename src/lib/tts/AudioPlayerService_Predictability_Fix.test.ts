@@ -4,8 +4,12 @@ import { dbService } from '../../db/DBService';
 
 vi.mock('../../db/DBService', () => ({
     dbService: {
-        getSections: vi.fn(),
-        getBookMetadata: vi.fn(),
+        getSections: vi.fn().mockResolvedValue([]),
+        getBookMetadata: vi.fn().mockResolvedValue({
+            title: 'Test Book',
+            author: 'Test Author',
+            coverUrl: 'http://example.com/cover.jpg'
+        }),
         getTTSState: vi.fn(),
         getTTSContent: vi.fn().mockResolvedValue({ sections: [] })
     }

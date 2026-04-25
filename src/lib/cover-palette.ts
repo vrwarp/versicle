@@ -248,3 +248,22 @@ export function getOptimizedTextColor(palette: number[] | undefined): string {
     if (avgL > 30) return 'text-white';     // Hard White
     return 'text-slate-200';                // Soft Light
 }
+
+/**
+ * Determines if a color palette is predominantly bright/light.
+ * Useful for selecting contrasting overlay colors (e.g. for Media Session artwork).
+ */
+export function isPaletteBright(palette: number[] | undefined): boolean {
+    if (!palette || palette.length === 0) return false;
+
+    // Calculate Average Lightness
+    let totalL = 0;
+    for (const packed of palette) {
+        const { r, g, b } = unpackColorToRGB(packed);
+        totalL += rgbToL(r, g, b);
+    }
+    const avgL = totalL / palette.length;
+
+    // Threshold of 55 matches the "Hard Black" cutoff in getOptimizedTextColor
+    return avgL > 55;
+}
