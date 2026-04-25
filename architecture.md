@@ -93,6 +93,7 @@ graph TD
         TaskRunner[cancellable-task-runner.ts]
         MediaSession[MediaSessionManager]
         ServiceWorker[ServiceWorker]
+        ChineseTextProcessor[ChineseTextProcessor]
     end
 
     subgraph TTS [TTS Subsystem]
@@ -129,6 +130,7 @@ graph TD
     Reader --> AudioPanel
     Reader --> GlobalSettings
     Reader --> useEpub
+    useEpub --> ChineseTextProcessor
     Library --> ServiceWorker
 
     VisualSettings --> ReaderStore
@@ -398,6 +400,14 @@ Implements full-text search off the main thread.
     *   **Batching & Offloading**: `SearchClient` sends sections to the worker in batches. To prevent blocking the main thread, XML parsing is offloaded to the Web Worker via `supportsXmlParsing()`.
     *   **Extraction Strategy**: First attempts to extract raw XML directly from the EPUB archive (`book.archive.getBlob`) for speed. If this fails, it falls back to the `epub.js` rendering pipeline (`book.load()`), which is slower but resolves external resources.
 *   **Trade-off**: The index is **transient** (in-memory only) and rebuilt on demand.
+
+#### Chinese Language Support (`src/lib/chinese/` & `src/components/reader/PinyinOverlay.tsx`)
+*   **Goal**: Provide native support for Chinese readers, including on-the-fly conversion to Traditional Chinese and dynamic Pinyin pronunciation overlays.
+*   **Logic**:
+    *   **In-Place Mutation (`opencc-js`)**: Uses a `TreeWalker` to scan all text nodes within the rendered EPUB DOM. If Traditional Chinese is enabled, it mutates the `nodeValue` of the text nodes in place, avoiding structural changes that would break `epub.js` CFI mapping.
+    *   **Ephemeral Geometry Collection (`pinyinPositions`)**: For Pinyin (`pinyin-pro`), it creates a `Range` for each individual Chinese character to calculate its exact bounding rectangle (`getBoundingClientRect()`).
+    *   **Overlay Rendering (`PinyinOverlay.tsx`)**: Uses `React.createPortal` to render the Pinyin text into a transparent overlay layer *inside* the `epub.js` scroll container. This ensures the Pinyin scrolls in lockstep with the native text at 60fps without altering the underlying DOM structure, preserving text selection and TTS compatibility.
+*   **Trade-offs**: Calculating `getBoundingClientRect` for every character forces synchronous layout reflows, which can penalize chapter loading performance on slower devices.
 
 #### Backup Strategy (`src/lib/BackupService.ts` & `src/lib/sync/ExportImportService.ts`)
 Versicle employs a dual-strategy for data safety, distinguishing between "Hard Reset" backups and "Portable" exports.

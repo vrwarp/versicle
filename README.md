@@ -26,7 +26,7 @@
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (github:vrwarp/zustand-middleware-yjs#master)
 *   **Sync**: `y-cinder` (github:vrwarp/y-cinder#main / Firestore 11.10.0) + Android Backup Service + Google Drive API
 *   **Storage**: IndexedDB (via `idb`)
-*   **Parsing**: epub.js + PapaParse (CSV)
+*   **Parsing**: epub.js + PapaParse (CSV) + `opencc-js` + `pinyin-pro`
 *   **Audio**: Piper (WASM) / Web Speech API / LemonFox.ai
 *   **AI**: Google Gemini 2.5 (Flash Lite / Flash) via `@google/generative-ai`
 *   **Mobile**: Capacitor 7.1.1 (Android) + `@capacitor/filesystem` + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login` + `@capacitor-community/text-to-speech`
@@ -45,6 +45,7 @@
 *   **Drag & Drop**: Drag files anywhere to import.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata.
 *   **Ghost Books**: Library items with missing files (offloaded) are preserved as "Ghost Books" using synced metadata. Importing a file with matching metadata will automatically link it to the existing record instead of creating duplicates.
+*   **Chinese Language Support**: Native support for Chinese readers, featuring on-the-fly conversion to Traditional Chinese and dynamic Pinyin pronunciation overlays that render cleanly without breaking text selection or text-to-speech.
 *   **High-Performance Rendering**: Uses a two-stage memoization strategy to ensure the library view remains silky smooth (60fps) even with thousands of books.
 *   **Zero-Latency Parsing**: Uses a specialized zero-allocation text scanner (`TextScanningTrie`) to process text instantly without garbage collection pauses.
 *   **Instant Resume**: Remembers the last open book and restores your place immediately on launch, bypassing heavy sync checks.

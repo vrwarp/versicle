@@ -54,6 +54,7 @@ describe('AudioPlayerService - Language Sync', () => {
         expect(useTTSStore.getState().activeLanguage).toBe('en');
 
         // Set an active lexicon rule to simulate previous playback state
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (service as any).activeLexiconRules = [{ target: 'test', replacement: 'replaced' }];
 
         // Trigger book change
@@ -67,6 +68,7 @@ describe('AudioPlayerService - Language Sync', () => {
         expect(useTTSStore.getState().activeLanguage).toBe('zh');
 
         // Verify the lexicon rules were cleared to force a reload for the new language
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((service as any).activeLexiconRules).toBeNull();
     });
 
