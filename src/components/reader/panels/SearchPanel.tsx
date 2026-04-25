@@ -64,18 +64,35 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
         };
     }, [bookId, book]);
 
+    const requestCounter = React.useRef(0);
+
     const handleSearch = useCallback(async () => {
-        if (!searchQuery.trim() || !bookId) return;
+        const capturedQuery = searchQuery.trim();
+        if (!capturedQuery || !bookId) return;
+
+        // Always increment to invalidate any currently pending request
+        const currentReq = ++requestCounter.current;
+
         setIsSearching(true);
-        setActiveSearchQuery(searchQuery);
+        // Clear previous results while searching to prevent stale data from showing
+        // before the new search completes.
+        setSearchResults([]);
+
         try {
-            const results = await searchClient.search(searchQuery, bookId);
-            setSearchResults(results);
+            const results = await searchClient.search(capturedQuery, bookId);
+            // Re-verify after async operation
+            if (currentReq === requestCounter.current) {
+                setActiveSearchQuery(capturedQuery);
+                setSearchResults(results);
+                setIsSearching(false);
+            }
         } catch (e) {
-            logger.error("Search failed", e);
-            showToast("Search failed", "error");
-        } finally {
-            setIsSearching(false);
+            // Re-verify after async operation
+            if (currentReq === requestCounter.current) {
+                logger.error("Search failed", e);
+                showToast("Search failed", "error");
+                setIsSearching(false);
+            }
         }
     }, [searchQuery, bookId, showToast]);
 
