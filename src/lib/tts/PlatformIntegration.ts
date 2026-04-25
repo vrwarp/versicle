@@ -118,13 +118,38 @@ export class PlatformIntegration {
 
     /**
      * Updates the metadata displayed on the lock screen and control center.
+     * Implements a "deadband" for progress updates to prevent excessive
+     * Bluetooth head unit refreshes (flickering) on minor progress changes.
      *
      * @param {MediaSessionMetadata} metadata The new metadata.
      */
     updateMetadata(metadata: MediaSessionMetadata) {
-        if (this.lastMetadata && JSON.stringify(this.lastMetadata) === JSON.stringify(metadata)) {
-            return;
+        if (this.lastMetadata) {
+            const titleChanged = this.lastMetadata.title !== metadata.title;
+            const artistChanged = this.lastMetadata.artist !== metadata.artist;
+            const albumChanged = this.lastMetadata.album !== metadata.album;
+            const artworkSrcChanged = this.lastMetadata.artwork?.[0]?.src !== metadata.artwork?.[0]?.src;
+            const sectionChanged = this.lastMetadata.sectionIndex !== metadata.sectionIndex;
+
+            // Determine if the progress (for the conic overlay) has moved significantly (at least 5%)
+            let progressMovedSignificantly = false;
+            if (metadata.progress !== undefined) {
+                if (this.lastMetadata.progress === undefined) {
+                    progressMovedSignificantly = true;
+                } else {
+                    const diff = Math.abs(metadata.progress - this.lastMetadata.progress);
+                    if (diff >= 0.05) {
+                        progressMovedSignificantly = true;
+                    }
+                }
+            }
+
+            // If nothing important has changed and progress hasn't hit the 5% threshold, skip update
+            if (!titleChanged && !artistChanged && !albumChanged && !artworkSrcChanged && !sectionChanged && !progressMovedSignificantly) {
+                return;
+            }
         }
+
         this.mediaSessionManager.setMetadata(metadata);
         this.lastMetadata = metadata;
     }

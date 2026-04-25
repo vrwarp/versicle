@@ -67,17 +67,39 @@ describe('PlatformIntegration', () => {
         expect((platform as any).backgroundAudio.stopWithDebounce).toHaveBeenCalled();
     });
 
-    it('should update metadata only when changed', () => {
+    it('should update metadata based on significance thresholds', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const metadata = { title: 'Test' } as any;
-        platform.updateMetadata(metadata);
+        const m1 = { title: 'T1', sectionIndex: 0, progress: 0.1 } as any;
+        platform.updateMetadata(m1);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((platform as any).mediaSessionManager.setMetadata).toHaveBeenCalledWith(metadata);
+        expect((platform as any).mediaSessionManager.setMetadata).toHaveBeenCalledTimes(1);
 
-        // Call again with same metadata
+        // Case 1: Negligible progress change (0.1 -> 0.14) - Less than 5%
         vi.clearAllMocks();
-        platform.updateMetadata(metadata);
+        const m2 = { title: 'T1', sectionIndex: 0, progress: 0.14 } as any;
+        platform.updateMetadata(m2);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((platform as any).mediaSessionManager.setMetadata).not.toHaveBeenCalled();
+
+        // Case 2: Significant progress change (0.1 -> 0.16) - 6% change
+        vi.clearAllMocks();
+        const m3 = { title: 'T1', sectionIndex: 0, progress: 0.16 } as any;
+        platform.updateMetadata(m3);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((platform as any).mediaSessionManager.setMetadata).toHaveBeenCalledWith(m3);
+
+        // Case 3: Title change (progress same)
+        vi.clearAllMocks();
+        const m4 = { title: 'T2', sectionIndex: 0, progress: 0.12 } as any;
+        platform.updateMetadata(m4);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((platform as any).mediaSessionManager.setMetadata).toHaveBeenCalledWith(m4);
+
+        // Case 4: Chapter change (negligible progress change)
+        vi.clearAllMocks();
+        const m5 = { title: 'T2', sectionIndex: 1, progress: 0.121 } as any;
+        platform.updateMetadata(m5);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((platform as any).mediaSessionManager.setMetadata).toHaveBeenCalledWith(m5);
     });
 });
