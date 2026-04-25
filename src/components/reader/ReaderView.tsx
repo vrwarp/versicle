@@ -716,6 +716,12 @@ export const ReaderView: React.FC = () => {
                                     y += iframeRect.top;
                                 }
                                 showPopover(x, y, annotation.cfiRange, annotation.text, annotation.id);
+
+                                // Update Compass UI state to sync with the existing annotation
+                                useReaderUIStore.getState().setCompassState({
+                                    variant: 'annotation',
+                                    targetAnnotation: annotation
+                                });
                             }, className);
                             addedAnnotations.current.set(annotation.id, annotation.cfiRange);
                         }

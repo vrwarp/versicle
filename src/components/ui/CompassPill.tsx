@@ -72,9 +72,9 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
   const isLoading = status === 'loading';
 
-  // Internal state for note editing
-  const [isEditingNote, setIsEditingNote] = useState(false);
-  const [noteText, setNoteText] = useState('');
+  // Internal state for note editing - initialize based on target annotation if present
+  const [isEditingNote, setIsEditingNote] = useState(variant === 'annotation' && !!compassState.targetAnnotation?.note);
+  const [noteText, setNoteText] = useState((variant === 'annotation' && compassState.targetAnnotation?.note) || '');
   const [isCopied, setIsCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -293,7 +293,12 @@ export const CompassPill: React.FC<CompassPillProps> = ({
             variant="ghost"
             size="icon"
             className="rounded-full w-9 h-9"
-            onClick={() => setIsEditingNote(true)}
+            onClick={() => {
+              if (compassState.targetAnnotation?.note) {
+                setNoteText(compassState.targetAnnotation.note);
+              }
+              setIsEditingNote(true);
+            }}
             data-testid="popover-add-note-button"
             aria-label="Add Note"
           >
