@@ -40,7 +40,7 @@ export const AnnotationMarkerOverlay: React.FC<AnnotationMarkerOverlayProps> = (
           key={marker.id}
           type="button"
           data-testid="note-marker"
-          className="note-marker absolute w-4 h-4 bg-yellow-300 border border-yellow-500 rounded-sm pointer-events-auto cursor-pointer shadow-sm hover:scale-110 hover:shadow-md transition-all duration-200 mix-blend-multiply"
+          className="note-marker absolute w-4 h-4 bg-yellow-300 border border-yellow-500 rounded-sm pointer-events-auto cursor-pointer shadow-sm hover:scale-110 hover:shadow-md transition-all duration-200 mix-blend-multiply before:content-[''] before:absolute before:-inset-3"
           style={{
             top: marker.top,
             left: marker.left - 4, // 4px negative offset from the end of text
