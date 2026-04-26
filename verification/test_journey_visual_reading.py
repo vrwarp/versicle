@@ -100,10 +100,14 @@ def test_journey_visual_reading(page: Page):
     # Capture CFI before navigation
     cfi_before = page.evaluate("window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'")
 
-    # --- Test Next Page (Right Tap) in Immersive Mode ---
-    print("Tapping Right Zone (Immersive)...")
+    # --- Test Next Page (Compass Pill) in Immersive Mode ---
+    print("Clicking Next on Compass Pill (Immersive)...")
     page.wait_for_timeout(1000) # Wait for UI to settle
-    page.mouse.click(tap_x_right, tap_y)
+    
+    # Verify Compass Pill in compact mode is visible
+    expect(page.get_by_test_id("compass-pill-compact")).to_be_visible()
+    
+    page.get_by_test_id("compass-pill-compact").get_by_label("Next").click()
     page.wait_for_timeout(3000) # Wait for page turn animation/render
 
     cfi_after = page.evaluate("window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'")
@@ -131,11 +135,11 @@ def test_journey_visual_reading(page: Page):
                 page.wait_for_timeout(3000)
                 assert cfi_before != cfi_after, f"Page did not turn after retry. CFI remained {cfi_before}"
 
-    # --- Test Prev Page (Left Tap) in Immersive Mode ---
-    print(f"Tapping Left Zone (Immersive)...")
+    # --- Test Prev Page (Compass Pill) in Immersive Mode ---
+    print("Clicking Previous on Compass Pill (Immersive)...")
     page.wait_for_timeout(1000)
 
-    page.mouse.click(tap_x_left, tap_y)
+    page.get_by_test_id("compass-pill-compact").get_by_label("Previous").click()
     page.wait_for_timeout(3000)
 
     cfi_prev = page.evaluate("window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'")
@@ -147,16 +151,6 @@ def test_journey_visual_reading(page: Page):
          cfi_prev = page.evaluate("window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'")
 
          assert cfi_prev != cfi_after, f"Page did not turn back. CFI remained {cfi_after}"
-
-    # --- Test Center Tap (No Action/Exit) ---
-    # Center tap is disabled in code.
-    print("Tapping Center Zone...")
-    tap_x_center = reader_x + (reader_w * 0.5)
-    page.mouse.click(tap_x_center, tap_y)
-    page.wait_for_timeout(1000)
-
-    # Header should still be hidden (Center tap does NOT exit immersive mode anymore)
-    expect(page.locator("header")).not_to_be_visible()
 
     capture_screenshot(page, "visual_reading_immersive_active")
 

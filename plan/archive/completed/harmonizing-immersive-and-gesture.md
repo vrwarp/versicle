@@ -1,8 +1,11 @@
 Product Spec: Unified "Flow Mode" (Harmonizing Reader & Player)
 ===============================================================
 
-1\. Executive Summary
----------------------
+> [!CAUTION]
+> **OBSOLETE / DEPRECATED (April 2026)**
+> This architectural paradigm ("Flow Mode" and the `UnifiedInputController`) has been decommissioned.
+> To improve stability, predictability, and enable native browser features (like text selection), we have moved back to a simplified UI-driven model.
+> See `plan/tts_v2_roadmap.md` for current status.
 
 ### 1.1 The Problem: Modal Friction
 

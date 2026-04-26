@@ -111,7 +111,7 @@
 **Learning:** When using custom `onKeyDown` handlers (e.g., for Enter/Space to mimic button behavior) on container elements that wrap other focusable elements (like DropdownMenuTrigger or child Buttons), pressing Enter/Space while focused on the child element can unintentionally trigger the container's event handler due to event bubbling. This causes double-actions or incorrect actions.
 **Action:** Always include an `if (e.target !== e.currentTarget) return;` check in custom `onKeyDown` handlers applied to container elements. This ensures the action only fires when the container itself has keyboard focus, and safely ignores events bubbling up from child interactive elements.
 
-## $(date +%Y-%m-%d) - Keyboard Accessibility for JsonDiffViewer
+## 2026-04-26 - Keyboard Accessibility for JsonDiffViewer
 **Learning:** Found an expandable tree node `<div>` in `JsonDiffViewer.tsx` that lacked keyboard accessibility. It used an `onClick` handler but had no `role="button"`, `tabIndex`, or `onKeyDown` handler, meaning it couldn't be toggled via keyboard navigation.
 **Action:** When implementing custom clickable elements like tree nodes or accordions with `div` or `span` tags, always make them fully keyboard accessible. Add `role="button"`, `tabIndex={0}`, an `onKeyDown` handler that toggles state on Enter/Space (including an event target check), `aria-expanded` (if it toggles visibility), and focus-visible styling (e.g., `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`).
 ## 2024-04-07 - Add aria-labels to clear buttons and search input
@@ -148,3 +148,7 @@
 ## 2026-04-25 - Added aria-live to sr-only loading states
 **Learning:** Screen reader users rely on `aria-live` to be notified of dynamic loading state changes. Elements like spinners with `sr-only` text (e.g., `<span className="sr-only">Loading...</span>`) are not automatically announced when they appear unless they are accompanied by `aria-live="polite"` or a role like `status`.
 **Action:** When creating async loading components or buttons (like 'Deleting...', 'Importing...', 'Connecting...'), always ensure the screen-reader-only span has `aria-live="polite"` so the state change is actively read out.
+
+## 2026-04-26 - Dynamic ARIA Labels on Disabled Dialog Buttons
+**Learning:** Standard `disabled={true}` attributes on buttons correctly remove them from the focus order. However, for screen reader users exploring via virtual cursor, encountering a disabled "Cancel" button provides no context for *why* it is disabled.
+**Action:** When disabling buttons during async operations (e.g., `isDeleting`), apply a dynamic `aria-label` like `aria-label={isDeleting ? 'Cancel (disabled while deleting)' : 'Cancel'}` to explicitly explain the application state.

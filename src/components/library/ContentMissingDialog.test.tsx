@@ -3,11 +3,16 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, Mock } from 'vitest';
 import { ContentMissingDialog } from './ContentMissingDialog';
 import { useDriveStore } from '../../store/useDriveStore';
+import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
 import { BookMetadata } from '../../types/db';
 
 // Mock the store
 vi.mock('../../store/useDriveStore', () => ({
   useDriveStore: vi.fn(),
+}));
+
+vi.mock('../../store/useGoogleServicesStore', () => ({
+  useGoogleServicesStore: vi.fn(),
 }));
 
 // Mock the Dialog component since it uses Radix which might need setup
@@ -46,6 +51,7 @@ describe('ContentMissingDialog', () => {
           size: 1024
       }),
     });
+    (useGoogleServicesStore as unknown as Mock).mockReturnValue(true); // isDriveConnected check
 
     render(
       <ContentMissingDialog
@@ -62,7 +68,6 @@ describe('ContentMissingDialog', () => {
     expect(screen.getByText('Select File')).toBeInTheDocument();
 
     // Check classes for responsiveness
-    // Note: Button component might merge classes, so we check if the passed class is present
     const cancelButton = screen.getByText('Cancel').closest('button');
     expect(cancelButton).toHaveClass('w-full');
     expect(cancelButton).toHaveClass('sm:w-auto');
@@ -75,13 +80,32 @@ describe('ContentMissingDialog', () => {
     expect(selectButton).toHaveClass('w-full');
     expect(selectButton).toHaveClass('sm:w-auto');
 
-    // Check container classes
-    // We need to find the container div.
-    // In our mock Dialog, we render footer in a div.
-    // The footer prop itself is a div with classes.
-    // So inside data-testid="footer", there should be a div with the classes.
     const footerContainer = screen.getByTestId('footer').firstChild;
     expect(footerContainer).toHaveClass('flex-col-reverse');
     expect(footerContainer).toHaveClass('sm:flex-row');
+  });
+
+  it('renders "Reconnect Drive" when disconnected but cloud match found', () => {
+    (useDriveStore as unknown as Mock).mockReturnValue({
+      findFile: vi.fn().mockReturnValue({
+          id: 'cloud-id',
+          name: 'cloud-file.epub',
+          size: 1024
+      }),
+    });
+    (useGoogleServicesStore as unknown as Mock).mockReturnValue(false); // disconnected
+
+    render(
+      <ContentMissingDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        book={mockBook}
+        onRestore={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Reconnect Drive')).toBeInTheDocument();
+    expect(screen.getByText('Drive Disconnected')).toBeInTheDocument();
+    expect(screen.queryByText('Restore from Cloud')).not.toBeInTheDocument();
   });
 });

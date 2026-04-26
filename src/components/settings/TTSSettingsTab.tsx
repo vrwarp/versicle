@@ -8,6 +8,7 @@ import { Dialog } from '../ui/Dialog';
 import { Progress } from '../ui/Progress';
 import { Trash2 } from 'lucide-react';
 import type { TTSVoice } from '../../lib/tts/providers/types';
+import { getDefaultMinSentenceLength } from '../../store/useTTSStore';
 
 // Re-export TTSVoice for consumers
 export type { TTSVoice };
@@ -44,8 +45,7 @@ export interface TTSSettingsTabProps {
     onDownloadVoice: (voiceId: string) => void;
     onDeleteVoice: (voiceId: string) => void;
     // Text Processing
-    minSentenceLength: number;
-    onMinSentenceLengthChange: (length: number) => void;
+    onMinSentenceLengthChange: (length: number, lang: string) => void;
 }
 
 export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
@@ -68,7 +68,6 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
     downloadStatus,
     onDownloadVoice,
     onDeleteVoice,
-    minSentenceLength,
     onMinSentenceLengthChange
 }) => {
     // Local-only language state for configuration view. Changing this does NOT
@@ -81,6 +80,8 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
     const configProfile = profiles?.[configLanguage];
     const configVoiceId = configProfile?.voiceId || (configLanguage === activeLanguage ? _voice?.id : null);
     const configVoice = configVoiceId ? voices.find(v => v.id === configVoiceId) || null : null;
+
+    const currentMinSentenceLength = configProfile?.minSentenceLength ?? getDefaultMinSentenceLength(configLanguage);
 
     const [voiceToDelete, setVoiceToDelete] = useState<string | null>(null);
 
@@ -276,16 +277,16 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                                         Sentences shorter than this will be merged with adjacent ones.
                                     </p>
                                 </div>
-                                <span className="text-sm text-muted-foreground" role="status" aria-live="polite">{minSentenceLength} chars</span>
+                                <span className="text-sm text-muted-foreground" role="status" aria-live="polite">{currentMinSentenceLength} chars</span>
                             </div>
                             <Slider
                                 aria-labelledby="min-sentence-label"
                                 aria-describedby="min-sentence-desc"
-                                value={[minSentenceLength]}
+                                value={[currentMinSentenceLength]}
                                 min={0}
                                 max={120}
                                 step={6}
-                                onValueChange={(vals) => onMinSentenceLengthChange(vals[0])}
+                                onValueChange={(vals) => onMinSentenceLengthChange(vals[0], configLanguage)}
                             />
                         </div>
                     </div>

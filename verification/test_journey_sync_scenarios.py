@@ -10,15 +10,50 @@ import uuid
 from playwright.sync_api import Page, expect, Browser, BrowserContext
 
 # Helper to inject mock Firestore
-def inject_mock_firestore(page: Page, mock_user_id: str = "mock-user", snapshot=None):
-    page.add_init_script("window.__VERSICLE_MOCK_FIRESTORE__ = true;")
-    page.add_init_script(f"window.__VERSICLE_MOCK_USER_ID__ = '{mock_user_id}';")
-    page.add_init_script("window.__VERSICLE_SANITIZATION_DISABLED__ = true;")
-    page.add_init_script("window.__VERSICLE_FIRESTORE_DEBOUNCE_MS__ = 20;")
-    page.add_init_script("window.__VERSICLE_MOCK_SYNC_DELAY__ = 10;")
-    page.add_init_script(path="verification/tts-polyfill.js")
+def inject_mock_firestore(page: Page, test_uid: str, snapshot=None, workspace_id=None):
+    injection_code = f"""
+        window.__VERSICLE_MOCK_FIRESTORE__ = true;
+        window.__VERSICLE_MOCK_USER_ID__ = '{test_uid}';
+        window.__VERSICLE_SANITIZATION_DISABLED__ = true;
+        window.__VERSICLE_FIRESTORE_DEBOUNCE_MS__ = 20;
+        window.__VERSICLE_MOCK_SYNC_DELAY__ = 10;
+    """
     if snapshot:
-        page.add_init_script(f"localStorage.setItem('versicle_mock_firestore_snapshot', JSON.stringify({json.dumps(snapshot)}));")
+        snapshot_json = json.dumps(snapshot)
+        # If snapshot is string, parse it first to be safe, though usually passed as dict or string
+        if isinstance(snapshot, str):
+            snapshot_json = snapshot
+        else:
+            snapshot_json = json.dumps(snapshot)
+        injection_code += f"localStorage.setItem('versicle_mock_firestore_snapshot', `{snapshot_json}`);"
+    
+    if snapshot and not workspace_id:
+        # Auto-extract workspace ID from snapshot if not provided
+        snapshot_dict = snapshot
+        if isinstance(snapshot, str):
+            try:
+                snapshot_dict = json.loads(snapshot)
+            except:
+                snapshot_dict = {}
+        
+        if isinstance(snapshot_dict, dict):
+            for path in snapshot_dict.keys():
+                if f"users/{test_uid}/versicle/ws_" in path:
+                    workspace_id = path.split('/')[-1]
+                    break
+
+    if workspace_id:
+        injection_code += f"""
+            localStorage.setItem('__VERSICLE_WORKSPACES__', JSON.stringify([{{
+                workspaceId: '{workspace_id}',
+                name: 'My Library',
+                createdAt: Date.now(),
+                schemaVersion: 5
+            }}]));
+        """
+    
+    page.add_init_script(injection_code)
+    page.add_init_script(path="verification/tts-polyfill.js")
 
 def get_firestore_snapshot(page: Page):
     return page.evaluate("localStorage.getItem('versicle_mock_firestore_snapshot')")
@@ -142,9 +177,20 @@ def test_journey_seamless_handoff(browser: Browser, browser_context_args):
     page_a.evaluate("window.dispatchEvent(new Event('beforeunload'))")
 
     # Wait for persistence (using the Book ID or general path to ensure flush)
-    snapshot_a = poll_for_persistence(page_a, f"users/{test_uid}/versicle/main5")
+    snapshot_a = poll_for_persistence(page_a, f"users/{test_uid}/versicle/ws_")
     assert snapshot_a, "Device A failed to sync"
-    snapshot_a = json.loads(snapshot_a)
+
+    # Extract the workspace ID from Device A's snapshot
+    snapshot_dict = json.loads(snapshot_a)
+    ws_id = None
+    for path in snapshot_dict.keys():
+        # Path format: users/{uid}/versicle/ws_...
+        if f"users/{test_uid}/versicle/ws_" in path:
+            ws_id = path.split('/')[-1]
+            break
+    
+    assert ws_id, "Could not find workspace ID in Device A's snapshot"
+    print(f"[A] Verified workspace ID: {ws_id}")
 
     page_a.close()
     context_a.close()
@@ -154,9 +200,32 @@ def test_journey_seamless_handoff(browser: Browser, browser_context_args):
     context_b = browser.new_context(**browser_context_args)
     page_b = context_b.new_page()
     page_b.on("console", lambda msg: print("[Page B]", msg.text))
-    # Inject A's data
-    inject_mock_firestore(page_b, test_uid, snapshot_a)
+    # Inject A's data and the REAL workspace ID
+    inject_mock_firestore(page_b, test_uid, snapshot_a, workspace_id=ws_id)
     page_b.goto(base_url)
+    page_b.screenshot(path=f"verification/screenshots/handoff_B_initial.png")
+
+    # DEVICE B Smart Routing will halt because it sees 1 workspace but no active ID.
+    # We need to manually select it in the UI.
+    print("[B] Selecting workspace to start sync...")
+    page_b.get_by_test_id("header-settings-button").click()
+    time.sleep(1)
+    page_b.get_by_role("button", name="Sync & Cloud").click()
+    
+    # Wait for workspace list to load
+    expect(page_b.get_by_test_id("sync-halt-warning")).to_be_visible(timeout=10000)
+    page_b.get_by_role("button", name="Switch").click()
+    
+    # Switch triggers reload.
+    # We need to handle the WorkspaceMigrationConfirmModal that appears after reload.
+    print("[B] Handling migration confirmation modal...")
+    expect(page_b.get_by_text("Finalize Workspace Switch?")).to_be_visible(timeout=15000)
+    page_b.get_by_role("button", name="Yes, Finalize").click()
+
+    # Wait for reload to return to library view.
+    expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=30000)
+    print("[B] Workspace finalized and reloaded")
+    page_b.screenshot(path=f"verification/screenshots/handoff_B_synced.png")
 
     # Wait for sync
     expect(page_b.get_by_test_id("library-view")).to_be_visible()
@@ -400,7 +469,7 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     # We poll for the existence of the mock user path, AND the data payload itself which in base64 will have changed.
     # To be extremely safe, we could wait for the rule itself. In Yjs updates, plain text strings are often visible in base64.
     # We will just wait 2 additional seconds after the key exists to let any trailing debounces settle.
-    snapshot_a = poll_for_persistence(page_a, f"users/{test_uid}/versicle/main5")
+    snapshot_a = poll_for_persistence(page_a, f"users/{test_uid}/versicle/ws_")
     assert snapshot_a, "Device A failed to persist data to mock cloud"
     time.sleep(2)
     snapshot_a = page_a.evaluate("localStorage.getItem('versicle_mock_firestore_snapshot')")
@@ -415,6 +484,27 @@ def test_journey_offline_resilience(browser: Browser, browser_context_args):
     page_b.on("console", lambda msg: print(f"[Page B] {msg.text}"))
     inject_mock_firestore(page_b, test_uid, snapshot_a)
     page_b.goto(base_url)
+
+    # DEVICE B Smart Routing will halt because it sees 1 workspace but no active ID.
+    # We need to manually select it in the UI.
+    print("[B] Selecting workspace to start sync...")
+    page_b.get_by_test_id("header-settings-button").click()
+    time.sleep(1)
+    page_b.get_by_role("button", name="Sync & Cloud").click()
+    
+    # Wait for workspace list to load
+    expect(page_b.get_by_test_id("sync-halt-warning")).to_be_visible(timeout=10000)
+    page_b.get_by_role("button", name="Switch").click()
+    
+    # Switch triggers reload.
+    # We need to handle the WorkspaceMigrationConfirmModal that appears after reload.
+    print("[B] Handling migration confirmation modal...")
+    expect(page_b.get_by_text("Finalize Workspace Switch?")).to_be_visible(timeout=15000)
+    page_b.get_by_role("button", name="Yes, Finalize").click()
+
+    # Wait for reload to return to library view.
+    expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=30000)
+    print("[B] Workspace finalized and reloaded")
 
     # Wait for sync to complete (library view loads with synced data)
     expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=10000)

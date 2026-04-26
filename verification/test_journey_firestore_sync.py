@@ -118,9 +118,10 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     mock_data = json.loads(mock_data_str)
     print(f"[A] Mock Firestore data keys: {list(mock_data.keys())}")
 
-    # The path should be users/mock-user/versicle/main5
-    sync_path = "users/mock-user/versicle/main5"
-    assert sync_path in mock_data, f"Expected path '{sync_path}' not found in mock data"
+    # The path should be users/mock-user/versicle/ws_...
+    # We find the first key that matches the pattern
+    sync_path = next((k for k in mock_data.keys() if k.startswith("users/mock-user/versicle/ws_")), None)
+    assert sync_path is not None, f"Expected workspace path not found in mock data. Keys: {list(mock_data.keys())}"
 
     snapshot_b64 = mock_data[sync_path].get("snapshotBase64")
     assert snapshot_b64, "Snapshot base64 is empty"
@@ -143,21 +144,60 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
     page_b.on("pageerror", lambda err: print(f"[B ERROR] {err}"))
 
     # Injection script: Set up mock Firestore with Device A's data
-    injection_script = f"""
+    # Combine into one script to ensure ordering and atomicity
+    injection_code = f"""
         window.__VERSICLE_MOCK_FIRESTORE__ = true;
+        window.__VERSICLE_MOCK_USER_ID__ = 'mock-user';
         window.__VERSICLE_SANITIZATION_DISABLED__ = true;
         window.__VERSICLE_FIRESTORE_DEBOUNCE_MS__ = 20;
         localStorage.setItem('versicle_mock_firestore_snapshot', {json.dumps(mock_data_str)});
     """
-    page_b.add_init_script(injection_script)
+    
+    # Extract workspaceId from snapshot
+    snapshot_dict = json.loads(mock_data_str)
+    keys = list(snapshot_dict.keys())
+    path = next((k for k in keys if '/versicle/ws_' in k), None)
+    if path:
+        workspace_id = path.split('/')[-1]
+        injection_code += f"""
+            localStorage.setItem('__VERSICLE_WORKSPACES__', JSON.stringify([{{
+                workspaceId: '{workspace_id}',
+                name: 'My Library',
+                createdAt: Date.now(),
+                schemaVersion: 5
+            }}]));
+        """
+    
+    page_b.add_init_script(injection_code)
     page_b.add_init_script(path="verification/tts-polyfill.js")
 
     # Navigate to app (fresh device - no local IndexedDB)
     page_b.goto(base_url)
-
-    # Wait for app to load and sync to apply
     expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=15000)
     print("[B] Library view loaded")
+
+    # DEVICE B Smart Routing will halt because it sees 1 workspace but no active ID.
+    # We need to manually select it in the UI.
+    print("[B] Selecting workspace to start sync...")
+    page_b.get_by_test_id("header-settings-button").click()
+    
+    # Give it a moment for the sidebar to be interactive
+    time.sleep(1)
+    page_b.get_by_role("button", name="Sync & Cloud").click()
+    
+    # Wait for workspace list to load
+    expect(page_b.get_by_test_id("sync-halt-warning")).to_be_visible(timeout=10000)
+    page_b.get_by_role("button", name="Switch").click()
+    
+    # Switch triggers reload.
+    # We need to handle the WorkspaceMigrationConfirmModal that appears after reload.
+    print("[B] Handling migration confirmation modal...")
+    expect(page_b.get_by_text("Finalize Workspace Switch?")).to_be_visible(timeout=15000)
+    page_b.get_by_role("button", name="Yes, Finalize").click()
+
+    # Wait for reload to return to library view.
+    expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=30000)
+    print("[B] Workspace finalized and reloaded")
 
     # Verify the mock data was injected (check existence, not exact equality as app may have updated it)
     injected = page_b.evaluate("localStorage.getItem('versicle_mock_firestore_snapshot')")
@@ -360,16 +400,49 @@ def test_firestore_sync_offload_status_hydration(browser: Browser, browser_conte
 
     page_b.on("console", lambda msg: print(f"[B] {msg.text}"))
 
-    injection_script = f"""
-        window.__VERSICLE_MOCK_FIRESTORE__ = true;
-        window.__VERSICLE_SANITIZATION_DISABLED__ = true;
-        localStorage.setItem('versicle_mock_firestore_snapshot', {json.dumps(mock_data_str)});
-    """
-    page_b.add_init_script(injection_script)
+    page_b.add_init_script("window.__VERSICLE_MOCK_FIRESTORE__ = true;")
+    page_b.add_init_script("window.__VERSICLE_SANITIZATION_DISABLED__ = true;")
+    page_b.add_init_script(f"localStorage.setItem('versicle_mock_firestore_snapshot', {json.dumps(mock_data_str)});")
+    
+    # Parse snapshot to get workspace ID
+    snapshot_dict = json.loads(mock_data_str)
+    keys = list(snapshot_dict.keys())
+    ws_path = next((k for k in keys if '/versicle/ws_' in k), None)
+    
+    if ws_path:
+        workspace_id = ws_path.split('/')[-1]
+        page_b.add_init_script(f"""
+            localStorage.setItem('__VERSICLE_WORKSPACES__', JSON.stringify([{{
+                workspaceId: '{workspace_id}',
+                name: 'My Library',
+                createdAt: Date.now(),
+                schemaVersion: 5
+            }}]));
+        """)
     page_b.add_init_script(path="verification/tts-polyfill.js")
 
     page_b.goto(base_url)
     expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=15000)
+
+    # DEVICE B Smart Routing will halt.
+    print("[B] Selecting workspace to start sync...")
+    page_b.get_by_test_id("header-settings-button").click()
+    time.sleep(1)
+    page_b.get_by_role("button", name="Sync & Cloud").click()
+    
+    # Wait for workspace list to load
+    expect(page_b.get_by_test_id("sync-halt-warning")).to_be_visible(timeout=10000)
+    page_b.get_by_role("button", name="Switch").click()
+    
+    # Switch triggers reload.
+    # We need to handle the WorkspaceMigrationConfirmModal that appears after reload.
+    print("[B] Handling migration confirmation modal...")
+    expect(page_b.get_by_text("Finalize Workspace Switch?")).to_be_visible(timeout=15000)
+    page_b.get_by_role("button", name="Yes, Finalize").click()
+
+    # Wait for reload to return to library view.
+    expect(page_b.get_by_test_id("library-view")).to_be_visible(timeout=30000)
+    print("[B] Workspace finalized and reloaded")
 
     # Wait for sync
     for i in range(20):

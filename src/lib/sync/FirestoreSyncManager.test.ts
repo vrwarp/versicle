@@ -69,10 +69,16 @@ vi.mock('../../store/yjs-provider', async (importOriginal) => {
 vi.mock('firebase/firestore', () => ({
     doc: vi.fn(() => ({})),
     getDoc: vi.fn(() => Promise.resolve({ exists: () => false })),
+    setDoc: vi.fn(() => Promise.resolve()),
     collection: vi.fn(),
-    getDocs: vi.fn(() => Promise.resolve({ empty: true })),
+    getDocs: vi.fn(() => Promise.resolve({ empty: true, docs: [] })),
     query: vi.fn(),
-    limit: vi.fn()
+    limit: vi.fn(),
+    writeBatch: vi.fn(() => ({
+        set: vi.fn(),
+        delete: vi.fn(),
+        commit: vi.fn(() => Promise.resolve())
+    }))
 }));
 
 describe('FirestoreSyncManager', () => {

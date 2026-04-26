@@ -36,6 +36,7 @@ vi.mock('../../store/yjs-provider', () => ({
 
 // Mock TTS Store for Bible preference check
 vi.mock('../../store/useTTSStore', () => ({
+    getDefaultMinSentenceLength: () => 36,
   useTTSStore: {
     getState: () => ({ isBibleLexiconEnabled: true })
   }

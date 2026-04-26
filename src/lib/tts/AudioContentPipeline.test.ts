@@ -15,12 +15,13 @@ vi.mock('../../db/DBService', () => ({
 }));
 
 vi.mock('../../store/useTTSStore', () => ({
+    getDefaultMinSentenceLength: () => 0,
     useTTSStore: {
         getState: vi.fn(() => ({
             customAbbreviations: [],
             alwaysMerge: false,
             sentenceStarters: [],
-            minSentenceLength: 0
+            profiles: { en: { minSentenceLength: 0 } }, minSentenceLength: 0
         }))
     }
 }));

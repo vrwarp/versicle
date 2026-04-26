@@ -94,7 +94,7 @@ export const TOCPanel: React.FC<TOCPanelProps> = ({
     };
 
     return (
-        <div data-testid="reader-toc-sidebar" className="w-64 shrink-0 bg-surface border-r border-border z-50 absolute inset-y-0 left-0 md:static flex flex-col">
+        <div data-testid="reader-toc-sidebar" className="w-64 shrink-0 bg-surface border-r border-border z-50 absolute inset-y-0 left-0 flex flex-col">
             <Tabs defaultValue="chapters" className="w-full h-full flex flex-col">
                 <div className="p-4 pb-0">
                     <TabsList className="grid w-full grid-cols-2">

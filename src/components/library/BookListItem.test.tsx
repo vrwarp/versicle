@@ -76,4 +76,16 @@ describe('BookListItem', () => {
 
         expect(screen.getByText('(Offloaded)')).toBeInTheDocument();
     });
+
+    it('renders palette background when no cover image is present', () => {
+        const paletteBook = {
+            ...mockBook,
+            coverPalette: [123, 456, 789, 101, 112]
+        };
+        const { container } = renderItem(paletteBook);
+
+        const thumbnail = container.querySelector('[style*="background-image"]');
+        expect(thumbnail).toBeInTheDocument();
+        expect(thumbnail?.getAttribute('style')).toContain('radial-gradient');
+    });
 });

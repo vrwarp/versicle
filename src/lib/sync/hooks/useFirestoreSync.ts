@@ -24,6 +24,10 @@ export const useFirestoreSync = () => {
 
     // Compute if config is valid based on store state
     const isConfigured = useMemo(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+        if (isMock) return true;
+
         return !!(
             firebaseConfig.apiKey &&
             firebaseConfig.authDomain &&
