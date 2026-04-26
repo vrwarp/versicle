@@ -42,6 +42,7 @@ vi.mock('./CostEstimator', () => {
 
 // Mock useTTSStore
 vi.mock('../../store/useTTSStore', () => ({
+    getDefaultMinSentenceLength: () => 36,
     useTTSStore: {
         getState: vi.fn(() => ({
             lastPauseTime: null,

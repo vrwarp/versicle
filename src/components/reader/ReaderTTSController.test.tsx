@@ -7,6 +7,7 @@ import type { Rendition } from 'epubjs';
 
 // Mock useTTSStore
 vi.mock('../../store/useTTSStore', () => ({
+    getDefaultMinSentenceLength: () => 36,
     useTTSStore: vi.fn()
 }));
 

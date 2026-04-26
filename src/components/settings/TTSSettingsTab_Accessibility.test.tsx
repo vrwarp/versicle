@@ -41,7 +41,8 @@ describe('TTSSettingsTab Accessibility', () => {
         render(<TTSSettingsTab {...defaultProps} />);
 
         // Find the char count text
-        const lengthText = screen.getByText('50 chars');
+        const lengthText = screen.getByText('36 chars');
+        // @ts-expect-error fix
         expect(lengthText).toHaveAttribute('role', 'status');
         expect(lengthText).toHaveAttribute('aria-live', 'polite');
     });

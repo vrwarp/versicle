@@ -18,6 +18,7 @@ vi.mock('../../db/DBService', () => ({
 }));
 
 vi.mock('../../store/useTTSStore', () => ({
+    getDefaultMinSentenceLength: () => 36,
     useTTSStore: {
         getState: vi.fn(() => ({
             customAbbreviations: [],

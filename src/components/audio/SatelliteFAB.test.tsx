@@ -14,6 +14,7 @@ vi.mock('lucide-react', () => ({
 
 // Mock useTTSStore
 vi.mock('../../store/useTTSStore', () => ({
+    getDefaultMinSentenceLength: () => 36,
     useTTSStore: vi.fn()
 }));
 

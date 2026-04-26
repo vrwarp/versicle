@@ -4,6 +4,7 @@ import { MockCloudProvider } from './providers/MockCloudProvider';
 
 // Mock useTTSStore to avoid circular dependency crash
 vi.mock('../../store/useTTSStore', () => ({
+    getDefaultMinSentenceLength: () => 36,
   useTTSStore: {
     getState: vi.fn(() => ({
       settings: { customAbbreviations: [], alwaysMerge: [], sentenceStarters: [] }

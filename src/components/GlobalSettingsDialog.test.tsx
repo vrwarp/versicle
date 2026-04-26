@@ -131,6 +131,7 @@ vi.mock('../store/useToastStore', () => ({
 }));
 
 vi.mock('../store/useTTSStore', () => ({
+    getDefaultMinSentenceLength: () => 36,
     useTTSStore: Object.assign(
         vi.fn((selector: (state: unknown) => unknown) => selector ? selector({
             profiles: {
