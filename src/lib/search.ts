@@ -111,7 +111,7 @@ class SearchClient {
             const batch = spineItems.slice(i, i + BATCH_SIZE);
             const sections: SearchSection[] = [];
 
-            for (const item of batch) {
+            const processedBatch = await Promise.all(batch.map(async (item: { href: string, id: string }) => {
                 let text = '';
                 let xml = '';
                 try {
@@ -151,15 +151,22 @@ class SearchClient {
                     }
 
                     if (text || xml) {
-                        sections.push({
+                        return {
                             id: item.id,
                             href: item.href,
                             text: text || undefined,
                             xml: xml || undefined
-                        });
+                        };
                     }
                 } catch (e) {
                     console.warn(`Failed to index section ${item.href}`, e);
+                }
+                return null;
+            }));
+
+            for (const section of processedBatch) {
+                if (section) {
+                    sections.push(section);
                 }
             }
 
