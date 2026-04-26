@@ -14,5 +14,5 @@ Detailed specifications for the advanced audio features.
 *   **`tts_v2_plan*.md`**: Specific feature specifications for TTS v2, covering:
     *   **Core Audio**: Audio Graph (`plan01`), Media Session (`plan02`).
     *   **Processing**: Text Sanitization (`plan03`), Smart Resume (`plan04`), Smart Speed (`plan06`).
-    *   **Features**: Sleep Timer (`plan05`), Voice Switching (`plan07`), Pronunciation Lexicon (`plan08`), Chapter Preroll (`plan10`), Ambient Sounds (`plan11`), Earcon Feedback (`plan12`), Gesture Pad (`plan13`), MP3 Export (`plan14`).
+    *   **Features**: Sleep Timer (`plan05`), Voice Switching (`plan07`), Pronunciation Lexicon (`plan08`), Chapter Preroll (`plan10`), Ambient Sounds (`plan11`), Earcon Feedback (`plan12`), MP3 Export (`plan14`).
     *   **Modes**: Car Mode (`plan09`).

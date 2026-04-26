@@ -14,7 +14,6 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { AnnotationList } from './AnnotationList';
 import { LexiconManager } from './LexiconManager';
 import { VisualSettings } from './VisualSettings';
-import { UnifiedInputController } from './UnifiedInputController';
 import { useToastStore } from '../../store/useToastStore';
 import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
@@ -44,6 +43,8 @@ import { HistoryHighlighter } from './HistoryHighlighter';
 import { PinyinOverlay, type PinyinPosition } from './PinyinOverlay';
 import { useCfiCoordinates } from '../../hooks/useCfiCoordinates';
 import { AnnotationMarkerOverlay } from './AnnotationMarkerOverlay';
+import { useReaderNavigation } from '../../hooks/useReaderNavigation';
+import { ReaderHighlightsStyles } from './ReaderHighlightsStyles';
 
 const logger = createLogger('ReaderView');
 
@@ -62,7 +63,6 @@ export const ReaderView: React.FC = () => {
     const { activeSidebar, setSidebar } = useSidebarState();
     const viewerRef = useRef<HTMLDivElement>(null);
     const previousLocation = useRef<{ start: string; end: string; timestamp: number } | null>(null);
-    const touchStartRef = useRef<{ y: number, x: number } | null>(null);
     const scrollWrapperRef = useRef<HTMLDivElement>(null);
 
     const {
@@ -388,13 +388,13 @@ export const ReaderView: React.FC = () => {
     } = useEpubReader(bookId, viewerRef as React.RefObject<HTMLElement>, readerOptions);
 
     // Filter annotations that have notes for overlay rendering
-    const noteAnnotations = useMemo(() => 
-        annotationList.filter(a => !!a.note), 
+    const noteAnnotations = useMemo(() =>
+        annotationList.filter(a => !!a.note),
         [annotationList]
     );
 
-    const noteCfis = useMemo(() => 
-        noteAnnotations.map(a => a.cfiRange), 
+    const noteCfis = useMemo(() =>
+        noteAnnotations.map(a => a.cfiRange),
         [noteAnnotations]
     );
 
@@ -716,6 +716,12 @@ export const ReaderView: React.FC = () => {
                                     y += iframeRect.top;
                                 }
                                 showPopover(x, y, annotation.cfiRange, annotation.text, annotation.id);
+
+                                // Update Compass UI state to sync with the existing annotation
+                                useReaderUIStore.getState().setCompassState({
+                                    variant: 'annotation',
+                                    targetAnnotation: annotation
+                                });
                             }, className);
                             addedAnnotations.current.set(annotation.id, annotation.cfiRange);
                         }
@@ -786,7 +792,7 @@ export const ReaderView: React.FC = () => {
                                     fill: color,
                                     backgroundColor: color,
                                     fillOpacity: '1',
-                                    mixBlendMode: 'multiply'
+                                    mixBlendMode: currentTheme === 'dark' ? 'screen' : 'multiply'
                                 });
                                 addedDebugHighlights.current.add(highlightCfi);
                             } catch (e) {
@@ -1060,55 +1066,16 @@ export const ReaderView: React.FC = () => {
     const showAnnotations = activeSidebar === 'annotations';
     const showSearch = activeSidebar === 'search';
 
-    useEffect(() => {
-        const wrapper = scrollWrapperRef.current;
-        if (!wrapper) return;
-
-        const handleWheel = (e: WheelEvent) => {
-            if (readerViewMode !== 'scrolled') return;
-            const epubContainer = viewerRef.current?.firstElementChild as HTMLElement;
-            if (epubContainer) {
-                epubContainer.scrollBy({ top: e.deltaY, left: e.deltaX });
-                if (e.cancelable) e.preventDefault();
-            }
-        };
-
-        const handleTouchStart = (e: TouchEvent) => {
-            if (readerViewMode !== 'scrolled') return;
-            touchStartRef.current = { y: e.touches[0].clientY, x: e.touches[0].clientX };
-        };
-
-        const handleTouchMove = (e: TouchEvent) => {
-            if (readerViewMode !== 'scrolled' || !touchStartRef.current) return;
-            const deltaY = touchStartRef.current.y - e.touches[0].clientY;
-            const deltaX = touchStartRef.current.x - e.touches[0].clientX;
-
-            const epubContainer = viewerRef.current?.firstElementChild as HTMLElement;
-            if (epubContainer) {
-                epubContainer.scrollBy({ top: deltaY, left: deltaX });
-                if (e.cancelable) e.preventDefault();
-            }
-
-            touchStartRef.current = { y: e.touches[0].clientY, x: e.touches[0].clientX };
-        };
-
-        const handleTouchEnd = () => {
-            touchStartRef.current = null;
-        };
-
-        wrapper.addEventListener('wheel', handleWheel, { passive: false });
-        wrapper.addEventListener('touchstart', handleTouchStart, { passive: true });
-        wrapper.addEventListener('touchmove', handleTouchMove, { passive: false });
-        wrapper.addEventListener('touchend', handleTouchEnd, { passive: true });
-
-        return () => {
-            wrapper.removeEventListener('wheel', handleWheel);
-            wrapper.removeEventListener('touchstart', handleTouchStart);
-            wrapper.removeEventListener('touchmove', handleTouchMove);
-            wrapper.removeEventListener('touchend', handleTouchEnd);
-        };
-    }, [readerViewMode]);
-
+    // Navigation handling (Keyboard, Touch, Wheel)
+    useReaderNavigation({
+        rendition,
+        readerViewMode,
+        handlePrev,
+        handleNext,
+        scrollWrapperRef,
+        viewerRef
+    });
+    
     return (
         <div
             data-testid="reader-view"
@@ -1144,16 +1111,6 @@ export const ReaderView: React.FC = () => {
                 viewMode={readerViewMode}
                 onPrev={handlePrev}
                 onNext={handleNext}
-            />
-
-            {/* Unified Input Controller (Flow Mode) */}
-            <UnifiedInputController
-                rendition={rendition}
-                currentSectionTitle={currentSectionTitle || ''}
-                onPrev={handlePrev}
-                onNext={handleNext}
-                onToggleHUD={() => setImmersiveMode(!immersiveMode)}
-                immersiveMode={immersiveMode}
             />
 
             {/* Immersive Mode Exit Button */}
@@ -1328,9 +1285,9 @@ export const ReaderView: React.FC = () => {
                 )}
 
                 {/* Pinyin Overlay (Ephemeral UI) */}
-                <PinyinOverlay 
-                    positions={pinyinPositions} 
-                    pinyinSize={pinyinSize} 
+                <PinyinOverlay
+                    positions={pinyinPositions}
+                    pinyinSize={pinyinSize}
                     containerNode={containerNode}
                 />
 
@@ -1393,7 +1350,7 @@ export const ReaderView: React.FC = () => {
                     <div
                         data-testid="reader-iframe-container"
                         ref={viewerRef}
-                        className={`w-full max-w-2xl overflow-hidden px-6 md:px-8 transition-opacity duration-300 ${isPlaying && immersiveMode ? 'opacity-40' : 'opacity-100'}`}
+                        className="w-full max-w-2xl overflow-hidden px-6 md:px-8 transition-opacity duration-300 opacity-100"
                         style={{ height: readerViewMode === 'paginated' ? 'calc(100% - 100px)' : '100%' }}
                     />
 
@@ -1412,7 +1369,6 @@ export const ReaderView: React.FC = () => {
                     rendition?.display(cfi);
                 }}
             />
-
             <HistoryHighlighter
                 rendition={rendition}
                 isRenditionReady={isRenditionReady}
@@ -1420,22 +1376,7 @@ export const ReaderView: React.FC = () => {
                 isPlaying={isPlaying}
             />
 
-            {/* Striped highlight pattern */}
-            <svg xmlns="http://www.w3.org/2000/svg" id="epubjs-custom-defs" style={{ width: 0, height: 0, position: 'absolute' }} aria-hidden="true">
-                <defs>
-                    <pattern id="striped-highlight" patternUnits="userSpaceOnUse" width="16" height="10" patternTransform="rotate(45)">
-                        <rect width="8" height="10" fill="orange" />
-                    </pattern>
-                </defs>
-            </svg>
-            {/* Highlights CSS styles */}
-            <style>{`
-                .highlight-red { fill: red; fill-opacity: 0.8; mix-blend-mode: multiply; }
-                .highlight-green { fill: green; fill-opacity: 0.8; mix-blend-mode: multiply; }
-                .highlight-blue { fill: blue; fill-opacity: 0.8; mix-blend-mode: multiply; }
-                .highlight-yellow { fill: yellow; fill-opacity: 0.8; mix-blend-mode: multiply; }
-                .versicle-audio-bookmark-pending { fill: url(#striped-highlight); fill-opacity: 0.8; mix-blend-mode: multiply; }
-            `}</style>
-        </div >
+            <ReaderHighlightsStyles currentTheme={currentTheme} />
+        </div>
     );
 };

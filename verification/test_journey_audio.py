@@ -87,71 +87,7 @@ def test_journey_audio(page: Page):
     page.keyboard.press("Escape")
     expect(page.get_by_test_id("tts-panel")).not_to_be_visible()
 
-    # --- Part 3: Flow Mode (Listening State) ---
-    print("--- Testing Flow Mode ---")
-
-    # Start Play via Pill (assuming we fixed it)
-    play_button.click()
-
-    # Enter Immersive Mode (required for Flow Mode overlay)
-    print("Entering Immersive Mode...")
-    page.get_by_test_id("reader-immersive-enter-button").click()
-
-    # Verify Overlay Appears (Listening State)
-    expect(page.get_by_test_id("flow-mode-breathing-border")).to_be_visible(timeout=5000)
-    utils.capture_screenshot(page, "audio_3_flow_mode_active")
-
-    # Verify Text Dimming
-    container = page.get_by_test_id("reader-iframe-container")
-    expect(container).to_have_css("opacity", "0.4")
-
-    # Verify Curtain Mode
-    viewport = page.viewport_size
-    width = viewport['width'] if viewport else 1280
-    height = viewport['height'] if viewport else 720
-    center_x = width / 2
-    center_y = height / 2
-
-    # Double Tap to enable Curtain
-    print("Enabling Curtain Mode...")
-    page.mouse.click(center_x, center_y)
-    page.mouse.click(center_x, center_y)
-
-    # Verify Curtain is active (black background)
-    overlay = page.get_by_test_id("flow-mode-overlay")
-    expect(overlay).to_have_class(re.compile(r"bg-black"))
-    expect(page.get_by_test_id("flow-mode-breathing-border")).not_to_be_visible()
-
-    # Verify Peek Mode
-    print("Testing Peek Mode...")
-    time.sleep(2.0)
-    page.mouse.click(center_x, center_y)
-    expect(overlay).to_contain_text(re.compile(r"\d+:\d+")) # Check for time format
-    utils.capture_screenshot(page, "audio_4_curtain_peek")
-
-    # Disable Curtain Mode (Double Tap)
-    print("Disabling Curtain Mode...")
-    time.sleep(1.0)
-    page.mouse.click(center_x, center_y)
-    page.mouse.click(center_x, center_y)
-
-    expect(page.get_by_test_id("flow-mode-breathing-border")).to_be_visible()
-    expect(overlay).not_to_have_class(re.compile(r"bg-black"))
-
-    # Stop Audio (via Center Tap on Overlay)
-    print("Stopping Audio...")
-    time.sleep(1.0)
-    page.mouse.click(center_x, center_y)
-
-    # Verify Overlay Disappears
-    expect(page.get_by_test_id("flow-mode-breathing-border")).not_to_be_visible(timeout=5000)
-    expect(container).to_have_css("opacity", "1")
-
-    # Exit Immersive Mode to see header
-    print("Exiting Immersive Mode...")
-    page.get_by_test_id("reader-immersive-exit-button").click()
-
-    # --- Part 4: Summary Mode in Library ---
+    # --- Part 3: Summary Mode in Library ---
     print("--- Testing Summary Mode in Library ---")
     page.get_by_test_id("reader-back-button").click()
 
@@ -164,6 +100,6 @@ def test_journey_audio(page: Page):
     # Ensure active pill is gone
     expect(page.get_by_test_id("compass-pill-active")).not_to_be_visible()
 
-    utils.capture_screenshot(page, "audio_5_summary_mode")
+    utils.capture_screenshot(page, "audio_3_summary_mode")
 
     print("Audio Journey Passed!")

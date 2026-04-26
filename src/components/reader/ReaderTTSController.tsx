@@ -54,7 +54,25 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
         console.warn("[TTS] Sync skipped", err);
       });
 
-      // Add highlight
+      try {
+        // Manual DOM sweep to kill orphaned TTS highlights.
+        // epub.js occasionally orphans nested SVG annotations if inject() runs multiple times or visibilty races occur.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const views = (rendition as any).views();
+        if (views) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            views.forEach((view: any) => {
+                if (view.pane && view.pane.element) {
+                    const orphaned = view.pane.element.querySelectorAll('g.tts-highlight');
+                    orphaned.forEach((node: Element) => node.remove());
+                }
+            });
+        }
+      } catch (e) {
+        console.warn("[TTS] Manual DOM cleanup failed", e);
+      }
+
+      // Add highlight using 'highlight' type. We now rely on manual cleanup to prevent duplicates.
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (rendition as any).annotations.add('highlight', activeCfi, {}, () => {
@@ -74,6 +92,19 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (rendition as any).annotations.remove(activeCfi, 'highlight');
+
+        // Failsafe dom-sweep
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const views = (rendition as any).views();
+        if (views) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            views.forEach((view: any) => {
+                if (view.pane && view.pane.element) {
+                    const orphaned = view.pane.element.querySelectorAll('g.tts-highlight');
+                    orphaned.forEach((node: Element) => node.remove());
+                }
+            });
+        }
       } catch { /* ignore removal errors */ }
     };
   }, [activeCfi, viewMode, rendition, status]);
@@ -97,6 +128,20 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
           // Remove any existing highlight first (just in case)
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (rendition as any).annotations.remove(freshCfi, 'highlight');
+
+          // Manual DOM sweep
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const views = (rendition as any).views();
+          if (views) {
+             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             views.forEach((v: any) => {
+                 if (v.pane && v.pane.element) {
+                     const orphans = v.pane.element.querySelectorAll('g.tts-highlight');
+                     orphans.forEach((n: Element) => n.remove());
+                 }
+             });
+          }
+
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (rendition as any).annotations.add('highlight', freshCfi, {}, () => { }, 'tts-highlight');
         } catch (e) { console.warn("Reconciliation highlight failed", e); }
