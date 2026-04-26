@@ -171,7 +171,7 @@ export const GlobalSettingsDialog = () => {
         voice, voices, setVoice,
         activeLanguage,
         downloadVoice, deleteVoice, downloadProgress, downloadStatus, isDownloading, checkVoiceDownloaded,
-        minSentenceLength, setMinSentenceLength
+        setMinSentenceLength
     } = useTTSStore(useShallow(state => ({
         // Optimization: Use shallow selector to avoid re-renders on activeCfi/progress updates during playback
         activeLanguage: state.activeLanguage,
@@ -193,7 +193,6 @@ export const GlobalSettingsDialog = () => {
         downloadStatus: state.downloadStatus,
         isDownloading: state.isDownloading,
         checkVoiceDownloaded: state.checkVoiceDownloaded,
-        minSentenceLength: state.minSentenceLength,
         setMinSentenceLength: state.setMinSentenceLength
     })));
 
@@ -556,7 +555,6 @@ export const GlobalSettingsDialog = () => {
                                 onDeleteVoice={(voiceId) => {
                                     deleteVoice(voiceId).then(() => setIsVoiceReady(false));
                                 }}
-                                minSentenceLength={minSentenceLength}
                                 onMinSentenceLengthChange={setMinSentenceLength}
                             />
                         )}

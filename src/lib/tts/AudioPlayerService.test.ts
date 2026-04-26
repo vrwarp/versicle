@@ -87,12 +87,13 @@ vi.mock('./CostEstimator');
 
 // Mock useTTSStore to avoid circular dependency
 vi.mock('../../store/useTTSStore', () => ({
+    getDefaultMinSentenceLength: () => 36,
     useTTSStore: {
         getState: vi.fn().mockReturnValue({
             customAbbreviations: [],
             alwaysMerge: [],
             sentenceStarters: [],
-            minSentenceLength: 0,
+            profiles: { en: { minSentenceLength: 0 } }, minSentenceLength: 0,
             isBibleLexiconEnabled: false
         })
     }

@@ -11,6 +11,7 @@ vi.mock('./AudioContentPipeline', () => ({
 
 // Mock useTTSStore to avoid circular deps
 vi.mock('../../store/useTTSStore', () => ({
+    getDefaultMinSentenceLength: () => 36,
     useTTSStore: {
         getState: vi.fn(() => ({
             // Add any necessary state here

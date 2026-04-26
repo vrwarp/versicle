@@ -9,6 +9,7 @@ import { Sheet } from '../ui/Sheet';
 const mockUseTTSStore = vi.fn();
 
 vi.mock('../../store/useTTSStore', () => ({
+    getDefaultMinSentenceLength: () => 36,
   useTTSStore: (selector: unknown) => mockUseTTSStore(selector),
 }));
 

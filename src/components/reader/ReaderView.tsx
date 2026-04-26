@@ -809,7 +809,7 @@ export const ReaderView: React.FC = () => {
         applyHighlights();
 
         // Re-apply on section change or debug toggle
-    }, [rendition, isRenditionReady, isDebugModeEnabled, bookId, currentSectionId, book]);
+    }, [rendition, isRenditionReady, isDebugModeEnabled, bookId, currentSectionId, book, currentTheme]);
 
     const [useSyntheticToc, setUseSyntheticToc] = useState(false);
     const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);

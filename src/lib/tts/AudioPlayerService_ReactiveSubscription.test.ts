@@ -86,6 +86,7 @@ vi.mock('./providers/WebSpeechProvider', () => ({
 }));
 
 vi.mock('../../store/useTTSStore', () => ({
+    getDefaultMinSentenceLength: () => 36,
     useTTSStore: {
         getState: vi.fn(() => ({
             lastPauseTime: null,
