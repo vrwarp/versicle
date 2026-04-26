@@ -16,7 +16,8 @@ const mockRendition = {
     annotations: {
         add: vi.fn(),
         remove: vi.fn()
-    }
+    },
+    views: vi.fn().mockReturnValue([])
 };
 
 // Define mock state shape
@@ -45,6 +46,7 @@ describe('ReaderTTSController', () => {
     const mockOnPrev = vi.fn();
 
     beforeEach(() => {
+        vi.spyOn(console, 'error').mockImplementation(() => { });
         vi.clearAllMocks();
     });
 

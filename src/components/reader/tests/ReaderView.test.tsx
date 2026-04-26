@@ -83,6 +83,7 @@ describe('ReaderView', () => {
 
   beforeEach(() => {
     vi.spyOn(console, 'warn').mockImplementation(() => { });
+    vi.spyOn(console, 'error').mockImplementation(() => { });
     vi.clearAllMocks();
 
     // Mock epubjs instance
@@ -106,6 +107,7 @@ describe('ReaderView', () => {
         spread: vi.fn(),
         flow: vi.fn(),
         resize: vi.fn(),
+        views: vi.fn().mockReturnValue([]),
         hooks: {
           content: {
             register: vi.fn(),

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 
 interface UseReaderNavigationProps {
-    rendition: any;
+    rendition: unknown;
     readerViewMode: 'paginated' | 'scrolled';
     handlePrev: () => void;
     handleNext: () => void;
@@ -106,15 +106,17 @@ export function useReaderNavigation({
 
         // 2. Listen on the iframe via the epubjs rendition (active when clicking the book text)
         if (rendition) {
-            // @ts-ignore - epub.js typings might be incomplete for event names
-            rendition.on('keydown', handleKeyDown);
+            // @ts-expect-error - epub.js typings might be incomplete for event names
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (rendition as any).on('keydown', handleKeyDown);
         }
 
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
             if (rendition) {
-                // @ts-ignore
-                rendition.off('keydown', handleKeyDown);
+                // @ts-expect-error - epub.js typings might be incomplete for event names
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (rendition as any).off('keydown', handleKeyDown);
             }
         };
     }, [rendition, handlePrev, handleNext]);
