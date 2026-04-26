@@ -24,7 +24,7 @@ describe('TTSSettingsTab Accessibility', () => {
         downloadStatus: null,
         onDownloadVoice: vi.fn(),
         onDeleteVoice: vi.fn(),
-        minSentenceLength: 50,
+
         onMinSentenceLengthChange: vi.fn(),
     };
 

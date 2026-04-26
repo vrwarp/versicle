@@ -49,8 +49,10 @@ vi.mock('./AudioPlayerService', () => ({
 
 // Partially mock useTTSStore
 vi.mock('../../store/useTTSStore', () => ({
+    getDefaultMinSentenceLength: () => 0,
     useTTSStore: {
         getState: vi.fn(() => ({
+                profiles: { en: { minSentenceLength: 50 } },
             customAbbreviations: [],
             alwaysMerge: [],
             sentenceStarters: [],
@@ -76,6 +78,7 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
 
         // Ensure getState returns fresh default values
         vi.mocked(useTTSStore.getState).mockReturnValue({
+            profiles: { en: { minSentenceLength: 50 } },
             customAbbreviations: ['Dr.'],
             alwaysMerge: ['Mr.'],
             sentenceStarters: ['The'],
@@ -104,6 +107,7 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
 
     it('should NOT inject bible abbreviations when disabled globally', async () => {
         vi.mocked(useTTSStore.getState).mockReturnValue({
+            profiles: { en: { minSentenceLength: 50 } },
             customAbbreviations: ['Dr.'],
             alwaysMerge: ['Mr.'],
             sentenceStarters: ['The'],
@@ -125,6 +129,7 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
 
     it('should inject bible abbreviations when disabled globally but enabled for book', async () => {
         vi.mocked(useTTSStore.getState).mockReturnValue({
+            profiles: { en: { minSentenceLength: 50 } },
             customAbbreviations: ['Dr.'],
             alwaysMerge: ['Mr.'],
             sentenceStarters: ['The'],

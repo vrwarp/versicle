@@ -67,7 +67,7 @@ describe('TTSSettingsTab Delete Flow', () => {
         downloadStatus: null,
         onDownloadVoice: vi.fn(),
         onDeleteVoice: vi.fn(),
-        minSentenceLength: 30,
+
         onMinSentenceLengthChange: vi.fn()
     };
 

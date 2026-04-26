@@ -48,7 +48,7 @@ describe('TTSSettingsTab', () => {
         downloadStatus: null,
         onDownloadVoice: vi.fn(),
         onDeleteVoice: vi.fn(),
-        minSentenceLength: 30,
+
         onMinSentenceLengthChange: vi.fn()
     };
 
@@ -146,7 +146,7 @@ describe('TTSSettingsTab', () => {
 
         expect(screen.getByText('Text Processing')).toBeInTheDocument();
         expect(screen.getByText('Minimum Sentence Length')).toBeInTheDocument();
-        expect(screen.getByText('30 chars')).toBeInTheDocument();
+        expect(screen.getByText('36 chars')).toBeInTheDocument();
     });
 
     it('calls onDownloadVoice when download button clicked', () => {
