@@ -86,11 +86,25 @@ class DBService {
 
       if (ids.length > 50) {
         const manifestsPromise = manifestStore.getAll();
-        const resourceKeysPromise = resourceStore.getAllKeys().then(keys => new Set(keys));
+
+        // Replace getAllKeys() with mapping count() to avoid memory bloat and missing fake-indexeddb methods.
+        const resourceKeysPromise = Promise.all(
+          ids.map(async id => {
+            const count = await resourceStore.count(id);
+            return count > 0 ? id : undefined;
+          })
+        ).then(keys => new Set(keys.filter(Boolean) as IDBValidKey[]));
+
         [allManifests, resourceKeysSet] = await Promise.all([manifestsPromise, resourceKeysPromise]);
       } else {
         const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
-        const resourceKeysPromise = Promise.all(ids.map(id => resourceStore.getKey(id)));
+
+        const resourceKeysPromise = Promise.all(
+          ids.map(async id => {
+            const count = await resourceStore.count(id);
+            return count > 0 ? id : undefined;
+          })
+        );
 
         const [manifests, keys] = await Promise.all([manifestsPromise, resourceKeysPromise]);
         allManifests = manifests.filter(Boolean) as StaticBookManifest[];
@@ -149,7 +163,9 @@ class DBService {
       const tx = db.transaction(['static_manifests', 'static_resources'], 'readonly');
 
       const manifest = await tx.objectStore('static_manifests').get(id);
-      const resourceKey = await tx.objectStore('static_resources').getKey(id);
+
+      const resourceCount = await tx.objectStore('static_resources').count(id);
+      const resourceKey = resourceCount > 0 ? id : undefined;
 
       await tx.done;
 

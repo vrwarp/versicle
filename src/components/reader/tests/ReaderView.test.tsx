@@ -53,7 +53,12 @@ vi.mock('../../../db/db', () => ({
           });
           return Promise.resolve(null);
         }),
-        put: vi.fn()
+        put: vi.fn(),
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        count: vi.fn((_id) => {
+          if (name === 'static_resources') return Promise.resolve(1);
+          return Promise.resolve(0);
+        })
       })),
       done: Promise.resolve()
     }))
