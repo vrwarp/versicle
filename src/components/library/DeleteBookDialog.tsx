@@ -54,6 +54,7 @@ export const DeleteBookDialog: React.FC<DeleteBookDialogProps> = ({ isOpen, onCl
                         variant="ghost"
                         onClick={(e) => { e.stopPropagation(); onClose(); }}
                         disabled={isDeleting}
+                        aria-label={isDeleting ? "Cancel (disabled while deleting)" : "Cancel"}
                     >
                         Cancel
                     </Button>

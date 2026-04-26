@@ -54,6 +54,7 @@ export const OffloadBookDialog: React.FC<OffloadBookDialogProps> = ({ isOpen, on
                         variant="ghost"
                         onClick={(e) => { e.stopPropagation(); onClose(); }}
                         disabled={isOffloading}
+                        aria-label={isOffloading ? "Cancel (disabled while offloading)" : "Cancel"}
                     >
                         Cancel
                     </Button>

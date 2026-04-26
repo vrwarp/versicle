@@ -49,6 +49,7 @@ export const ReplaceBookDialog: React.FC<ReplaceBookDialogProps> = ({
                         variant="ghost"
                         onClick={(e) => { e.stopPropagation(); onClose(); }}
                         disabled={isReplacing}
+                        aria-label={isReplacing ? "Cancel (disabled while replacing)" : "Cancel"}
                     >
                         Cancel
                     </Button>
