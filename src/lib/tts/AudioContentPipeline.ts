@@ -1,7 +1,7 @@
 import { dbService } from '../../db/DBService';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { TextSegmenter } from './TextSegmenter';
-import { useTTSStore } from '../../store/useTTSStore';
+import { useTTSStore, getDefaultMinSentenceLength } from '../../store/useTTSStore';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { genAIService } from '../genai/GenAIService';
 import { getParentCfi, generateCfiRange, parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
@@ -144,7 +144,7 @@ export class AudioContentPipeline {
                     abbreviations,
                     settings.alwaysMerge,
                     settings.sentenceStarters,
-                    settings.minSentenceLength,
+                    settings.profiles[bookMetadata?.language || 'en']?.minSentenceLength ?? getDefaultMinSentenceLength(bookMetadata?.language || 'en'),
                     bookMetadata?.language || 'en'
                 );
 

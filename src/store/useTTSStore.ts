@@ -18,7 +18,10 @@ export interface TTSProfile {
     rate: number;
     pitch: number;
     volume: number;
+    minSentenceLength?: number;
 }
+
+export const getDefaultMinSentenceLength = (lang: string): number => lang.startsWith('zh') ? 6 : 36;
 
 /**
  * State interface for the Text-to-Speech (TTS) store.
@@ -103,7 +106,7 @@ interface TTSState {
     setCustomAbbreviations: (abbrevs: string[]) => void;
     setAlwaysMerge: (words: string[]) => void;
     setSentenceStarters: (words: string[]) => void;
-    setMinSentenceLength: (length: number) => void;
+    setMinSentenceLength: (length: number, lang?: string) => void;
     setEnableCostWarning: (enable: boolean) => void;
     setPrerollEnabled: (enable: boolean) => void;
     setSanitizationEnabled: (enable: boolean) => void;
@@ -167,14 +170,14 @@ export const useTTSStore = create<TTSState>()(
 
                 activeLanguage: 'en',
                 profiles: {
-                    en: { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0 },
+                    en: { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0, minSentenceLength: 36 },
                 },
 
                 setActiveLanguage: (lang) => {
                     const state = get();
                     // When we change the language context, we also update the active properties
                     // and fetch the voice objects for the underlying service
-                    const profile = state.profiles[lang] || { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0 };
+                    const profile = state.profiles[lang] || { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0, minSentenceLength: getDefaultMinSentenceLength(lang) };
                     
                     // Filter voices for this language
                     const languageVoices = state.voices.filter(v => v.lang.startsWith(lang));
@@ -202,6 +205,7 @@ export const useTTSStore = create<TTSState>()(
                         rate: profile.rate,
                         pitch: profile.pitch,
                         voice: selectedVoice,
+                        minSentenceLength: profile.minSentenceLength ?? getDefaultMinSentenceLength(lang),
                         profiles: {
                             ...s.profiles,
                             [lang]: {
@@ -330,8 +334,20 @@ export const useTTSStore = create<TTSState>()(
                 setSentenceStarters: (words) => {
                     set({ sentenceStarters: words });
                 },
-                setMinSentenceLength: (length) => {
-                    set({ minSentenceLength: length });
+                setMinSentenceLength: (length, lang?: string) => {
+                    const targetLang = lang || get().activeLanguage;
+                    const isActive = targetLang === get().activeLanguage;
+
+                    set((state) => ({
+                        ...(isActive ? { minSentenceLength: length } : {}),
+                        profiles: {
+                            ...state.profiles,
+                            [targetLang]: {
+                                ...(state.profiles[targetLang] || { voiceId: state.voice?.id || null, rate: 1.0, pitch: 1.0, volume: 1.0 }),
+                                minSentenceLength: length
+                            }
+                        }
+                    }));
                 },
                 setEnableCostWarning: (enable) => {
                     set({ enableCostWarning: enable });
@@ -437,7 +453,7 @@ export const useTTSStore = create<TTSState>()(
         },
         {
             name: 'tts-storage',
-            version: 2,
+            version: 3,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             migrate: (persistedState: any, version: number) => {
                 if (version < 2) {
@@ -449,8 +465,18 @@ export const useTTSStore = create<TTSState>()(
                             rate: persistedState.rate || 1.0,
                             pitch: persistedState.pitch || 1.0,
                             volume: 1.0,
+                            minSentenceLength: persistedState.minSentenceLength ?? getDefaultMinSentenceLength('en'),
                         }
                     };
+                }
+                if (version < 3) {
+                    if (persistedState.profiles) {
+                        for (const lang in persistedState.profiles) {
+                            if (persistedState.profiles[lang].minSentenceLength === undefined) {
+                                persistedState.profiles[lang].minSentenceLength = persistedState.minSentenceLength ?? getDefaultMinSentenceLength(lang);
+                            }
+                        }
+                    }
                 }
                 return persistedState;
             },
