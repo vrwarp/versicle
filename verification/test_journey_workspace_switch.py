@@ -28,28 +28,14 @@ def test_journey_workspace_switch(page: Page):
     # Go to Sync tab
     page.get_by_role("button", name="Sync & Cloud").click()
 
-    # Create dummy Firebase configuration to enable sync
-    dummy_config = """
-const firebaseConfig = {
-  apiKey: "dummy-api-key",
-  authDomain: "dummy.firebaseapp.com",
-  projectId: "dummy-project",
-  appId: "dummy-app-id"
-};
-"""
-    page.get_by_placeholder("// Paste your Firebase config here").fill(dummy_config)
-    
-    # Wait for the workspaces block to appear, which is unlocked after auth completes
-
+    # In mock mode, sync is auto-enabled without pasting config
     
     # Wait for the workspaces block to appear, which is unlocked after signIn
-    expect(page.get_by_role("heading", name="Workspaces")).to_be_visible()
-    
-    # Active workspace should be default
-    expect(page.get_by_text("Active: Default")).to_be_visible()
+    # Active workspace should be the auto-provisioned one
+    expect(page.get_by_text("Active: My Library")).to_be_visible()
     
     # Let's create a new workspace
-    page.get_by_placeholder("New Workspace Name").fill("Reading Group")
+    page.get_by_placeholder("New workspace name").fill("Reading Group")
     page.get_by_role("button", name="Create", exact=True).click()
     
     # Wait for creation to finish. It automatically switches without a modal (since it's empty)
@@ -73,5 +59,5 @@ const firebaseConfig = {
     page.get_by_test_id("header-settings-button").click()
     page.get_by_role("button", name="Sync & Cloud").click()
     
-    # The library should now be connected back to the default workspace
-    expect(page.get_by_text("Active: Default")).to_be_visible()
+    # The library should now be connected back to the first workspace
+    expect(page.get_by_text("Active: My Library")).to_be_visible()

@@ -1,11 +1,17 @@
 import React from 'react';
 import type { BookMetadata } from '../../types/db';
-import { BookOpen, HardDriveDownload, MoreVertical, CloudDownload } from 'lucide-react';
+import { BookOpen, Cloud, MoreVertical, CloudDownload } from 'lucide-react';
 import { useToastStore } from '../../store/useToastStore';
 import { cn } from '../../lib/utils';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { Progress } from '../ui/Progress';
 import { BookActionMenu } from './BookActionMenu';
+import { unpackColorToRGB } from '../../lib/cover-palette';
+
+function unpackColor(packed: number): string {
+    const { r, g, b } = unpackColorToRGB(packed);
+    return `rgb(${r}, ${g}, ${b})`;
+}
 
 /**
  * Props for the BookListItem component.
@@ -60,6 +66,27 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
 
     const displayUrl = book.coverUrl || (book.coverBlob ? `/__versicle__/covers/${book.id}` : null);
 
+    const gradientStyle = React.useMemo(() => {
+        if (!book.coverPalette || book.coverPalette.length !== 5) return undefined;
+
+        const colors = book.coverPalette.map(unpackColor);
+
+        // We use oklab interpolation for perceptually smooth transitions and to avoid muddy colors in the middle
+        // 5th color is the Center color, used as a central radial boost.
+        // Base layer is linear gradient between TL and BR.
+        return {
+            backgroundImage: `
+                radial-gradient(at top left in oklab, ${colors[0]}, transparent),
+                radial-gradient(at top right in oklab, ${colors[1]}, transparent),
+                radial-gradient(at bottom left in oklab, ${colors[2]}, transparent),
+                radial-gradient(at bottom right in oklab, ${colors[3]}, transparent),
+                radial-gradient(circle at center in oklab, ${colors[4]} 0%, transparent 125%),
+                /* Base layer is white to ensure contrast and prevent transparency */
+                linear-gradient(white, white)
+            `
+        };
+    }, [book.coverPalette]);
+
     const handleOpen = () => {
         if (book.isOffloaded) {
             showToast("Book is offloaded. Please restore it to read.", "error");
@@ -96,7 +123,10 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
                 tabIndex={0}
             >
                 {/* Thumbnail */}
-                <div className="flex-none w-10 h-14 bg-muted rounded overflow-hidden shadow-sm relative">
+                <div
+                    className="flex-none w-10 h-14 bg-muted rounded overflow-hidden shadow-sm relative flex flex-col"
+                    style={!displayUrl && gradientStyle ? gradientStyle : undefined}
+                >
                     {displayUrl ? (
                         <img
                             src={displayUrl}
@@ -106,19 +136,29 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
                                 isGhostBook && "opacity-60"
                             )}
                         />
-                    ) : (
+                    ) : !gradientStyle && (
                         <div className="w-full h-full flex items-center justify-center bg-secondary text-muted-foreground">
                             <BookOpen className="w-5 h-5" />
                         </div>
                     )}
-                    {book.isOffloaded && (
-                        <div className="absolute inset-0 bg-background/50 flex items-center justify-center">
-                            <HardDriveDownload className="w-5 h-5 text-muted-foreground" />
+
+                    {/* Offloaded overlay - file was removed to save space */}
+                    {book.isOffloaded && !isGhostBook && (
+                        <div
+                            className="absolute inset-0 bg-black/20 flex items-center justify-center"
+                            data-testid="offloaded-overlay"
+                        >
+                            <Cloud className="w-5 h-5 text-white drop-shadow-md" aria-hidden="true" />
                         </div>
                     )}
+
+                    {/* Ghost Book overlay - content not on this device */}
                     {isGhostBook && !book.isOffloaded && (
-                        <div className="absolute inset-0 bg-background/30 flex items-center justify-center">
-                            <CloudDownload className="w-6 h-6 text-primary drop-shadow-md" />
+                        <div
+                            className="absolute inset-0 bg-black/10 flex items-center justify-center"
+                            data-testid="ghost-book-overlay"
+                        >
+                            <CloudDownload className="w-6 h-6 text-white drop-shadow-md" />
                         </div>
                     )}
                 </div>

@@ -35,16 +35,7 @@ def test_workspace_deletion_tombstone(browser: Browser, browser_context_args):
     page.get_by_test_id("header-settings-button").click()
     page.get_by_role("button", name="Sync & Cloud").click()
 
-    # Create dummy Firebase configuration to enable sync (required since I reverted isConfigured as always true)
-    dummy_config = """
-const firebaseConfig = {
-  apiKey: "dummy-api-key",
-  authDomain: "dummy.firebaseapp.com",
-  projectId: "dummy-project",
-  appId: "dummy-app-id"
-};
-"""
-    page.get_by_placeholder("// Paste your Firebase config here").fill(dummy_config)
+    # In mock mode, sync is auto-enabled without pasting config
     expect(page.get_by_role("heading", name="Workspaces")).to_be_visible()
 
     # Create new workspace
