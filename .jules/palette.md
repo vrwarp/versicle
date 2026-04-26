@@ -148,3 +148,7 @@
 ## 2026-04-25 - Added aria-live to sr-only loading states
 **Learning:** Screen reader users rely on `aria-live` to be notified of dynamic loading state changes. Elements like spinners with `sr-only` text (e.g., `<span className="sr-only">Loading...</span>`) are not automatically announced when they appear unless they are accompanied by `aria-live="polite"` or a role like `status`.
 **Action:** When creating async loading components or buttons (like 'Deleting...', 'Importing...', 'Connecting...'), always ensure the screen-reader-only span has `aria-live="polite"` so the state change is actively read out.
+
+## $(date +%Y-%m-%d) - Dynamic ARIA Labels on Disabled Dialog Buttons
+**Learning:** Standard `disabled={true}` attributes on buttons correctly remove them from the focus order. However, for screen reader users exploring via virtual cursor, encountering a disabled "Cancel" button provides no context for *why* it is disabled.
+**Action:** When disabling buttons during async operations (e.g., `isDeleting`), apply a dynamic `aria-label` like `aria-label={isDeleting ? 'Cancel (disabled while deleting)' : 'Cancel'}` to explicitly explain the application state.
