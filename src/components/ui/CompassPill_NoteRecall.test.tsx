@@ -147,7 +147,7 @@ describe('CompassPill Note Recall', () => {
         // Actually, if we just render it, it WILL enter edit mode because of the auto-edit logic I just added.
         // So we simulate clicking "Cancel" first.
         
-        const { rerender } = render(<CompassPill variant="annotation" />);
+        render(<CompassPill variant="annotation" />);
         
         // Should be in edit mode initially due to my previous fix
         expect(screen.getByPlaceholderText('Add a note...')).toBeInTheDocument();
