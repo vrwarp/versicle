@@ -122,7 +122,7 @@ class FirestoreSyncManager {
             logger.info('Mock mode detected. Simulating auth and connection.');
             const mockUid = w.__VERSICLE_MOCK_USER_ID__ || 'mock-user';
             const mockUser = { uid: mockUid, email: `${mockUid}@example.com` } as User;
-            this.handleAuthStateChange(mockUser);
+            void this.handleAuthStateChange(mockUser);
             return;
         }
 
@@ -212,10 +212,8 @@ class FirestoreSyncManager {
     /**
      * Handle Firebase auth state changes
      */
-    private handleAuthStateChange(user: User | null): void {
+    private async handleAuthStateChange(user: User | null): Promise<void> {
         this.currentUser = user;
-
-        // Always update the UI store directly
         const syncStore = useSyncStore.getState();
 
         if (user) {
@@ -224,7 +222,31 @@ class FirestoreSyncManager {
             syncStore.setFirebaseEnabled(true);
             syncStore.setFirebaseAuthStatus('signed-in');
             syncStore.setFirebaseUserEmail(user.email ?? null);
-            this.connectFireProvider(user.uid);
+
+            const currentWorkspace = this.getActiveWorkspaceId();
+
+            // Smart Routing: Handle unassigned clients
+            if (!currentWorkspace) {
+                logger.info('No active workspace assigned. Querying remote...');
+                const availableWorkspaces = await this.listWorkspaces();
+
+                if (availableWorkspaces.length === 0) {
+                    logger.info('Zero remote workspaces found. Auto-provisioning "My Library"...');
+                    // createWorkspace automatically sets activeWorkspaceId and connects.
+                    await this.createWorkspace('My Library');
+                    return;
+                } else {
+                    logger.info(`${availableWorkspaces.length} workspaces found. Halting connection until user selection.`);
+                    // Leave activeWorkspaceId as null. The UI must prompt them to choose.
+                    this.setStatus('disconnected');
+                    return;
+                }
+            }
+
+            // Only connect if we have a defined destination
+            if (currentWorkspace) {
+                this.connectFireProvider(user.uid);
+            }
         } else {
             logger.info('User signed out');
             this.setAuthStatus('signed-out');
@@ -238,7 +260,13 @@ class FirestoreSyncManager {
      * Connect y-fire provider for the given user
      */
     private async connectFireProvider(uid: string): Promise<void> {
-        const workspaceId = useSyncStore.getState().activeWorkspaceId || FirestoreSyncManager.getDefaultWorkspaceId();
+        const workspaceId = this.getActiveWorkspaceId();
+
+        if (!workspaceId) {
+            logger.info('Sync halted: No active workspace explicitly selected.');
+            this.setStatus('disconnected');
+            return;
+        }
 
         // Check for Tombstone BEFORE connecting
         const isAlive = await this.validateWorkspaceIsAlive(uid, workspaceId);
@@ -581,21 +609,10 @@ class FirestoreSyncManager {
     // --- Workspace Management ---
 
     /**
-     * Returns the default workspace ID for backward compatibility.
-     * Maps to the old path structure: main${schemaSuffix} or dev${schemaSuffix}.
-     */
-    static getDefaultWorkspaceId(): string {
-        const isDev = import.meta.env.DEV;
-        const schemaSuffix = CURRENT_SCHEMA_VERSION > 1 ? `${CURRENT_SCHEMA_VERSION}` : '';
-        return isDev ? `dev${schemaSuffix}` : `main${schemaSuffix}`;
-    }
-
-    /**
      * Get the currently active workspace ID.
      */
-    getActiveWorkspaceId(): string {
-        const { activeWorkspaceId } = useSyncStore.getState();
-        return activeWorkspaceId || FirestoreSyncManager.getDefaultWorkspaceId();
+    getActiveWorkspaceId(): string | null {
+        return useSyncStore.getState().activeWorkspaceId;
     }
 
     /**
@@ -622,9 +639,6 @@ class FirestoreSyncManager {
             // Store workspace metadata in localStorage for mock mode
             const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
             const workspaces: WorkspaceMetadata[] = JSON.parse(raw);
-            if (workspaces.length === 0) {
-                workspaces.push({ workspaceId: FirestoreSyncManager.getDefaultWorkspaceId(), name: 'Default', createdAt: Date.now(), schemaVersion: 4 });
-            }
             workspaces.push(metadata);
             localStorage.setItem('__VERSICLE_WORKSPACES__', JSON.stringify(workspaces));
             logger.info(`[Mock] Created workspace: ${name} (${workspaceId})`);
@@ -771,7 +785,7 @@ class FirestoreSyncManager {
             // Clean up migration state on failure (local IDB untouched)
             MigrationStateService.clear();
             // Revert workspace ID
-            useSyncStore.getState().setActiveWorkspaceId(currentWorkspaceId === FirestoreSyncManager.getDefaultWorkspaceId() ? null : currentWorkspaceId);
+            useSyncStore.getState().setActiveWorkspaceId(currentWorkspaceId);
             toast('Workspace switch failed. Please try again.', 'error');
             throw error;
         }
@@ -790,16 +804,7 @@ class FirestoreSyncManager {
         if (isMock) {
             const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
             const workspaces: WorkspaceMetadata[] = JSON.parse(raw);
-            const filtered = workspaces.filter(ws => !ws.deletedAt);
-            if (filtered.length === 0) {
-                return [{
-                    workspaceId: FirestoreSyncManager.getDefaultWorkspaceId(),
-                    name: 'Default',
-                    createdAt: Date.now(),
-                    schemaVersion: 4
-                }];
-            }
-            return filtered;
+            return workspaces.filter(ws => !ws.deletedAt);
         }
 
         const db = getFirestoreDb();
@@ -833,7 +838,7 @@ class FirestoreSyncManager {
             // Mock Deletion logic: update localStorage
             const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
             const workspaces: WorkspaceMetadata[] = JSON.parse(raw);
-            const updated = workspaces.map(ws => 
+            const updated = workspaces.map(ws =>
                 ws.workspaceId === workspaceId ? { ...ws, deletedAt: Date.now() } : ws
             );
             localStorage.setItem('__VERSICLE_WORKSPACES__', JSON.stringify(updated));
@@ -844,9 +849,9 @@ class FirestoreSyncManager {
             const path = `users/${uid}/versicle/${workspaceId}`;
             mockData[path] = { isDeleted: true, deletedAt: Date.now() };
             localStorage.setItem('versicle_mock_firestore_snapshot', JSON.stringify(mockData));
-            
+
             logger.info(`[Mock] Workspace deleted and tombstoned: ${workspaceId}`);
-            
+
             // Only clear if it was active
             const activeWorkspaceId = useSyncStore.getState().activeWorkspaceId;
             if (activeWorkspaceId === workspaceId) {
@@ -859,7 +864,7 @@ class FirestoreSyncManager {
         if (!db) throw new Error('Firestore not initialized');
 
         const uid = user.uid;
-        
+
         // 1. Terminate active connection to prevent resurrection
         this.destroy();
 
@@ -894,7 +899,7 @@ class FirestoreSyncManager {
 
         // 5. Sever Local Tie
         useSyncStore.getState().setActiveWorkspaceId(null);
-        
+
         logger.info(`Workspace deleted and tombstoned: ${workspaceId}`);
     }
 
@@ -961,7 +966,7 @@ class FirestoreSyncManager {
                 this.currentUser = auth.currentUser;
                 return this.currentUser;
             }
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (e) {
             // Ignore if Firebase isn't initialized yet
         }

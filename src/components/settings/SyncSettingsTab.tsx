@@ -42,7 +42,7 @@ import { DriveFolderPicker } from '../drive/DriveFolderPicker';
 import { useDriveStore } from '../../store/useDriveStore';
 import { DriveScannerService } from '../../lib/drive/DriveScannerService';
 import { useToastStore } from '../../store/useToastStore';
-import { getFirestoreSyncManager, FirestoreSyncManager } from '../../lib/sync/FirestoreSyncManager';
+import { getFirestoreSyncManager } from '../../lib/sync/FirestoreSyncManager';
 import { useSyncStore } from '../../lib/sync/hooks/useSyncStore';
 import { CURRENT_SCHEMA_VERSION } from '../../store/yjs-provider';
 import type { WorkspaceMetadata } from '../../types/workspace';
@@ -350,11 +350,25 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                             <div className="mt-4 pt-4 border-t border-border space-y-3">
                                 <h5 className="text-sm font-medium">Workspaces</h5>
                                 <p className="text-xs text-muted-foreground">
-                                    Switch between different data contexts.<br />
                                     Active: <strong>
-                                        {workspaces.find(w => w.workspaceId === (activeWorkspaceId || FirestoreSyncManager.getDefaultWorkspaceId()))?.name || 'Default'}
+                                        {workspaces.find(w => w.workspaceId === activeWorkspaceId)?.name || 'None Selected'}
                                     </strong>
                                 </p>
+
+                                {/* Halt Warning Banner */}
+                                {firebaseAuthStatus === 'signed-in' && activeWorkspaceId === null && (
+                                    <div 
+                                        data-testid="sync-halt-warning"
+                                        className="flex flex-col gap-2 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-md mb-4"
+                                    >
+                                        <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">
+                                            Action Required: Select a Library
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                            You are signed in, but this device is not connected to a cloud library. Please select an existing library below to begin syncing, or create a new one.
+                                        </p>
+                                    </div>
+                                )}
 
                                 {/* Workspace List */}
                                 {isLoadingWorkspaces ? (
