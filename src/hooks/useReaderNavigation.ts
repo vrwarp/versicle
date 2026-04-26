@@ -106,7 +106,6 @@ export function useReaderNavigation({
 
         // 2. Listen on the iframe via the epubjs rendition (active when clicking the book text)
         if (rendition) {
-            // @ts-expect-error - epub.js typings might be incomplete for event names
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (rendition as any).on('keydown', handleKeyDown);
         }
@@ -114,7 +113,6 @@ export function useReaderNavigation({
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
             if (rendition) {
-                // @ts-expect-error - epub.js typings might be incomplete for event names
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (rendition as any).off('keydown', handleKeyDown);
             }
