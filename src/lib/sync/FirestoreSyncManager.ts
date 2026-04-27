@@ -30,6 +30,7 @@ import {
 } from './firebase-config';
 import { MockFireProvider } from './drivers/MockFireProvider';
 import { createLogger } from '../logger';
+import { generateSecureId } from '../crypto';
 import { signInWithGoogle, signOutWithGoogle } from './auth-helper';
 import { useToastStore } from '../../store/useToastStore';
 import { useSyncStore } from './hooks/useSyncStore';
@@ -623,7 +624,7 @@ class FirestoreSyncManager {
         const user = this.getCurrentUser();
         if (!user) throw new Error('Must be signed in to create a workspace');
 
-        const workspaceId = `ws_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+        const workspaceId = generateSecureId('ws');
 
         const metadata: WorkspaceMetadata = {
             workspaceId,
