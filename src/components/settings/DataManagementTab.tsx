@@ -139,28 +139,26 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                     Tools to keep the database healthy.
                 </p>
                 <div className="flex flex-col gap-2">
-                    <Button onClick={onRepairDB} variant="outline" disabled={isScanning}>
-                        {isScanning ? (
+                    <Button onClick={onRepairDB} variant="outline" disabled={isScanning} className="gap-2">
+                        {isScanning && (
                             <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                                Scanning...
+                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                                <span className="sr-only" aria-live="polite">Scanning...</span>
                             </>
-                        ) : (
-                            "Check & Repair Database"
                         )}
+                        <span aria-hidden={isScanning}>{isScanning ? "Scanning..." : "Check & Repair Database"}</span>
                     </Button>
                     {orphanScanResult && (
                         <p className="text-sm text-muted-foreground">{orphanScanResult}</p>
                     )}
-                    <Button onClick={onRegenerateMetadata} variant="outline" disabled={isRegenerating}>
-                        {isRegenerating ? (
+                    <Button onClick={onRegenerateMetadata} variant="outline" disabled={isRegenerating} className="gap-2">
+                        {isRegenerating && (
                             <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                                Regenerating...
+                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                                <span className="sr-only" aria-live="polite">Regenerating...</span>
                             </>
-                        ) : (
-                            "Regenerate All Metadata"
                         )}
+                        <span aria-hidden={isRegenerating}>{isRegenerating ? "Regenerating..." : "Regenerate All Metadata"}</span>
                     </Button>
                     {isRegenerating && (
                         <div className="w-full flex flex-col items-center space-y-1 mt-2">
@@ -177,15 +175,14 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
             {/* Danger Zone */}
             <div className="border-t pt-4 space-y-4">
                 <h3 className="text-lg font-medium text-destructive">Danger Zone</h3>
-                <Button variant="destructive" onClick={onClearAllData} disabled={isClearing}>
-                    {isClearing ? (
+                <Button variant="destructive" onClick={onClearAllData} disabled={isClearing} className="gap-2">
+                    {isClearing && (
                         <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                            Clearing...
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                            <span className="sr-only" aria-live="polite">Clearing...</span>
                         </>
-                    ) : (
-                        "Clear All Data"
                     )}
+                    <span aria-hidden={isClearing}>{isClearing ? "Clearing..." : "Clear All Data"}</span>
                 </Button>
             </div>
         </div>
