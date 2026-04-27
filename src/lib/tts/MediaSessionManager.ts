@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
 import { isPaletteBright } from '../cover-palette';
+import type { PerceptualPalette } from '../../types/db';
 
 /**
  * Metadata for the Media Session API.
@@ -23,7 +24,7 @@ export interface MediaSessionMetadata {
   /** The color palette of the current section/book. */
   coverPalette?: number[];
   /** Perceptual palette extracted via CIELAB K-Means for UI blending. */
-  perceptualPalette?: import('../../types/db').PerceptualPalette;
+  perceptualPalette?: PerceptualPalette;
 }
 
 /**
@@ -172,7 +173,7 @@ export class MediaSessionManager {
     sectionIndex?: number,
     totalSections?: number,
     palette?: number[],
-    perceptualPalette?: import('../../types/db').PerceptualPalette
+    perceptualPalette?: PerceptualPalette
   ): Promise<{ src: string; sizes?: string; type?: string } | null> {
     try {
       let progress: number | undefined = progressInput;
@@ -202,7 +203,7 @@ export class MediaSessionManager {
     src: string,
     progress?: number,
     palette?: number[],
-    perceptualPalette?: import('../../types/db').PerceptualPalette
+    perceptualPalette?: PerceptualPalette
   ): Promise<string> {
     return new Promise((resolve) => {
       const img = new Image();
