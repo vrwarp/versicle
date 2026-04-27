@@ -5,6 +5,9 @@ import { type BookMetadata } from '../../types/db';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
+import { createLogger } from '../../lib/logger';
+
+const logger = createLogger('DeleteBookDialog');
 
 interface DeleteBookDialogProps {
     isOpen: boolean;
@@ -30,7 +33,7 @@ export const DeleteBookDialog: React.FC<DeleteBookDialogProps> = ({ isOpen, onCl
             showToast(`Deleted "${book.title}"`, 'success');
             onClose();
         } catch (error) {
-            console.error(error);
+            logger.error("Failed to delete book", error);
             showToast("Failed to delete book", "error");
         } finally {
              // If we closed the dialog, this state update might happen on an unmounted component,
