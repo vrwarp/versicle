@@ -189,7 +189,7 @@ describe('MediaSessionManager', () => {
 
       // Verify that the 'progress' value (0.75) was used in the gradient stops
       expect(mockGradient.addColorStop).toHaveBeenCalledWith(0.75, 'rgba(255, 255, 255, 0.4)');
-      expect(mockGradient.addColorStop).toHaveBeenCalledWith(0.75, 'rgba(0, 0, 0, 0)');
+      expect(mockGradient.addColorStop).toHaveBeenCalledWith(0.751, 'rgba(0, 0, 0, 0)');
 
       expect(mockContext.fillRect).toHaveBeenCalled();
     });

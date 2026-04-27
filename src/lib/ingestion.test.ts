@@ -66,7 +66,7 @@ vi.mock('uuid', () => ({
 
 // Mock extractCoverPalette
 vi.mock('./cover-palette', () => ({
-  extractCoverPalette: vi.fn().mockResolvedValue([1, 2, 3, 4, 5])
+  extractCoverPalette: vi.fn().mockResolvedValue({ palette: [1, 2, 3, 4, 5] })
 }));
 
 describe('ingestion', () => {

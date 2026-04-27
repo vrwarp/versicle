@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
-import { isPaletteBright } from '../cover-palette';
+import { isPaletteBright, rgbToL, unpackColorToRGB } from '../cover-palette';
+import type { PerceptualPalette } from '../../types/db';
 
 /**
  * Metadata for the Media Session API.
@@ -22,6 +23,8 @@ export interface MediaSessionMetadata {
   progress?: number;
   /** The color palette of the current section/book. */
   coverPalette?: number[];
+  /** Perceptual palette extracted via CIELAB K-Means for UI blending. */
+  perceptualPalette?: PerceptualPalette;
 }
 
 /**
@@ -132,7 +135,8 @@ export class MediaSessionManager {
           metadata.progress,
           metadata.sectionIndex,
           metadata.totalSections,
-          metadata.coverPalette
+          metadata.coverPalette,
+          metadata.perceptualPalette
         );
         if (processedArtwork) {
           artwork = [processedArtwork];
@@ -168,7 +172,8 @@ export class MediaSessionManager {
     progressInput?: number,
     sectionIndex?: number,
     totalSections?: number,
-    palette?: number[]
+    palette?: number[],
+    perceptualPalette?: PerceptualPalette
   ): Promise<{ src: string; sizes?: string; type?: string } | null> {
     try {
       let progress: number | undefined = progressInput;
@@ -177,7 +182,7 @@ export class MediaSessionManager {
       }
 
       // Crop to square and get base64 directly from URL
-      const base64 = await this.cropAndOverlayArtwork(artwork.src, progress, palette);
+      const base64 = await this.cropAndOverlayArtwork(artwork.src, progress, palette, perceptualPalette);
 
       return {
         ...artwork,
@@ -194,7 +199,12 @@ export class MediaSessionManager {
    * Crops a given image URL to a center square and returns it as a base64 string.
    * Optionally applies a conic gradient overlay to indicate reading progress.
    */
-  private cropAndOverlayArtwork(src: string, progress?: number, palette?: number[]): Promise<string> {
+  private cropAndOverlayArtwork(
+    src: string,
+    progress?: number,
+    palette?: number[],
+    perceptualPalette?: PerceptualPalette
+  ): Promise<string> {
     return new Promise((resolve) => {
       const img = new Image();
       img.crossOrigin = 'Anonymous'; // Needed if the source is external
@@ -230,30 +240,51 @@ export class MediaSessionManager {
 
           // Apply conic gradient overlay if progress info is available
           if (progress !== undefined) {
-            // Check browser support for createConicGradient
             if (ctx.createConicGradient) {
               const cx = size / 2;
               const cy = size / 2;
-
-              // Start from top (12 o'clock), so rotate -PI/2
               const gradient = ctx.createConicGradient(-Math.PI / 2, cx, cy);
 
-              // Use adaptive color based on cover luminance
-              const isBright = isPaletteBright(palette);
-              const overlayColor = isBright ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.4)';
+              let overlayColor: string;
+              let isPerceptual = false;
+              let blendMode: GlobalCompositeOperation = 'source-over';
+
+              if (perceptualPalette) {
+                isPerceptual = true;
+                const bgRgb = unpackColorToRGB(perceptualPalette.background);
+                const stRgb = unpackColorToRGB(perceptualPalette.standout);
+
+                const bgL = rgbToL(bgRgb.r, bgRgb.g, bgRgb.b);
+                const stL = rgbToL(stRgb.r, stRgb.g, stRgb.b);
+
+                blendMode = bgL > stL ? 'multiply' : 'screen';
+                overlayColor = `rgb(${stRgb.r}, ${stRgb.g}, ${stRgb.b})`;
+              } else {
+                const isBright = isPaletteBright(palette);
+                overlayColor = isBright ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.4)';
+              }
+
               const transparent = 'rgba(0, 0, 0, 0)';
 
               gradient.addColorStop(0, overlayColor);
               gradient.addColorStop(progress, overlayColor);
-              // If fully complete, the whole circle is overlayColor.
-              // If not, transition sharply to transparent.
               if (progress < 1) {
-                gradient.addColorStop(progress, transparent);
+                gradient.addColorStop(Math.min(progress + 0.001, 1), transparent);
                 gradient.addColorStop(1, transparent);
+              }
+
+              if (isPerceptual) {
+                ctx.globalCompositeOperation = blendMode;
+                ctx.globalAlpha = 0.85;
               }
 
               ctx.fillStyle = gradient;
               ctx.fillRect(0, 0, size, size);
+
+              if (isPerceptual) {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = 1.0;
+              }
             }
           }
 
