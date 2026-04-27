@@ -266,7 +266,7 @@ export class MediaSessionManager {
               gradient.addColorStop(0, overlayColor);
               gradient.addColorStop(progress, overlayColor);
               if (progress < 1) {
-                gradient.addColorStop(isPerceptual ? Math.min(progress + 0.001, 1) : progress, transparent);
+                gradient.addColorStop(Math.min(progress + 0.001, 1), transparent);
                 gradient.addColorStop(1, transparent);
               }
 
