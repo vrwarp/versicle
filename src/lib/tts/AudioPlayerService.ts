@@ -4,7 +4,7 @@ import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-
 import { SyncEngine } from './SyncEngine';
 import { LexiconService } from './LexiconService';
 import { dbService } from '../../db/DBService';
-import type { SectionMetadata, LexiconRule } from '../../types/db';
+import type { SectionMetadata, LexiconRule, PerceptualPalette } from '../../types/db';
 import { TaskSequencer } from './TaskSequencer';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { PlaybackStateManager } from './PlaybackStateManager';
@@ -86,6 +86,7 @@ export class AudioPlayerService {
     private lastAppliedAnalysisTimestamp: number = 0;
     private lastUserPauseTimestamp: number | null = null;
     private currentBookPalette: number[] | undefined = undefined;
+    private currentBookPerceptualPalette: PerceptualPalette | undefined = undefined;
     private currentBookTitle: string = '';
     private currentBookAuthor: string = '';
     private currentBookCoverUrl: string | undefined = undefined;
@@ -240,6 +241,7 @@ export class AudioPlayerService {
             this.sessionRestored = false;
             this.lastAppliedAnalysisTimestamp = 0;
             this.currentBookPalette = undefined;
+            this.currentBookPerceptualPalette = undefined;
             this.currentBookTitle = '';
             this.currentBookAuthor = '';
             this.currentBookCoverUrl = undefined;
@@ -249,6 +251,7 @@ export class AudioPlayerService {
                 dbService.getBookMetadata(bookId).then(metadata => {
                     if (this.currentBookId === bookId) {
                         this.currentBookPalette = metadata?.coverPalette;
+                        this.currentBookPerceptualPalette = metadata?.perceptualPalette;
                         this.currentBookTitle = metadata?.title || '';
                         this.currentBookAuthor = metadata?.author || '';
                         this.currentBookCoverUrl = metadata?.coverUrl || (metadata?.coverBlob ? `/__versicle__/covers/${bookId}` : undefined);
@@ -278,6 +281,7 @@ export class AudioPlayerService {
                 album: this.currentBookTitle || '',
                 artwork: this.currentBookCoverUrl ? [{ src: this.currentBookCoverUrl }] : [],
                 coverPalette: this.currentBookPalette,
+                perceptualPalette: this.currentBookPerceptualPalette,
                 sectionIndex: this.stateManager.currentSectionIndex,
                 totalSections: this.playlist.length,
                 progress: this.calculateBookProgress()
@@ -348,6 +352,7 @@ export class AudioPlayerService {
                 album: this.currentBookTitle || '',
                 artwork: this.currentBookCoverUrl ? [{ src: this.currentBookCoverUrl }] : [],
                 coverPalette: this.currentBookPalette,
+                perceptualPalette: this.currentBookPerceptualPalette,
                 sectionIndex: this.stateManager.currentSectionIndex,
                 totalSections: this.playlist.length,
                 progress: this.calculateBookProgress()
