@@ -23,3 +23,17 @@ export async function toTraditional(text: string): Promise<string> {
   const converter = await getOpenCC();
   return converter(text);
 }
+
+export function getPinyinSync(text: string): string[] {
+  if (!pinyinModule) {
+    throw new Error('Pinyin module not loaded. Call getPinyin() first.');
+  }
+  return pinyinModule.pinyin(text, { type: 'array', toneType: 'symbol' });
+}
+
+export function toTraditionalSync(text: string): string {
+  if (!openccInstance) {
+    throw new Error('OpenCC module not loaded. Call getOpenCC() or toTraditional() first.');
+  }
+  return openccInstance(text);
+}

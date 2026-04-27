@@ -7,7 +7,12 @@ import { runCancellable, CancellationError } from '../lib/cancellable-task-runne
 import { createLogger } from '../lib/logger';
 import { usePreferencesStore } from '../store/usePreferencesStore';
 import { useBookStore } from '../store/useBookStore';
-import { toTraditional, getPinyin } from '../lib/chinese/ChineseTextProcessor';
+import {
+  toTraditional,
+  getPinyin,
+  toTraditionalSync,
+  getPinyinSync
+} from '../lib/chinese/ChineseTextProcessor';
 
 const logger = createLogger('useEpubReader');
 
@@ -592,6 +597,10 @@ export function useEpubReader(
             return;
           }
 
+          // Pre-load processors to allow synchronous calls in the loop
+          if (prefs.forceTraditionalChinese) await toTraditional('');
+          if (prefs.showPinyin) await getPinyin('');
+
           const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
           const textNodes: Text[] = [];
           let node: Text | null;
@@ -627,7 +636,7 @@ export function useEpubReader(
 
             // 2. Handle Traditional Chinese (In-place string mutation)
             if (prefs.forceTraditionalChinese) {
-              const translated = await toTraditional(originalText);
+              const translated = toTraditionalSync(originalText);
               if (textNode.nodeValue !== translated) {
                 textNode.nodeValue = translated;
               }
@@ -640,7 +649,7 @@ export function useEpubReader(
             // 3. Handle Pinyin (Ephemeral Geometry Collection)
             if (prefs.showPinyin) {
               const currentText = textNode.nodeValue || '';
-              const pinyinArray = await getPinyin(currentText);
+              const pinyinArray = getPinyinSync(currentText);
 
               for (let i = 0; i < currentText.length; i++) {
                 const char = currentText[i];
