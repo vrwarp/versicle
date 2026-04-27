@@ -1,9 +1,0 @@
-1. **Improve CheckpointDiffView Layout**: The layout of `CheckpointDiffView` needs to be improved for mobile. Currently, the "Confirm Restore", "Cancel", and "Backup Current State" buttons are all stacked side-by-side which is very cramped.
-   - Refactor the button layout in the bottom bar to be more responsive (wrap correctly on mobile, expand width). We can probably use flex-wrap or flex-col on mobile, or just make them fill the width.
-   - Additionally, we should improve the overall diff view to utilize space better. Currently, the main container has `max-h-[60vh]` which is limiting space. We should make it fill the available height if it's in a modal or taking up the whole screen, or just remove `max-h-[60vh]`. But wait, in `RecoverySettingsTab`, `CheckpointDiffView` completely replaces the content of the tab. So it should probably take up full height and have the buttons pinned to bottom.
-2. **Action Plan**:
-   - In `src/components/settings/CheckpointDiffView.tsx`:
-     - Change `<div className="flex flex-col h-full max-h-[60vh]">` to something like `<div className="flex flex-col h-full min-h-[60vh]">` or remove max-height so it expands, while keeping the overflow handling. Actually, if it's rendered inside the `SettingsDialog` (which is typically where settings are), it should take `h-full`. Let's just use `h-full`.
-     - Update the bottom action bar: `<div className="p-4 border-t bg-muted/10 flex flex-col sm:flex-row justify-between gap-3">` (so on mobile it stacks vertically or flexibly).
-     - We can also group buttons better. On mobile, `Confirm Restore` should be full width, then `Cancel`, etc.
-   - I'll test it out by writing a script or running a dev server. Wait, I should first read `src/components/settings/SettingsDialog.tsx` to understand the container context.
