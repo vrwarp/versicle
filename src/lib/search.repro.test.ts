@@ -14,7 +14,7 @@ vi.stubGlobal('URL', class {
 const mockEngine = {
     search: vi.fn().mockImplementation(async (_bookId: string, query: string) => {
         // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise(resolve => setTimeout(resolve, query === 'query1' ? 100 : 50));
         return [{ href: 'result', excerpt: `Result for ${query}` }];
     }),
     initIndex: vi.fn(),
