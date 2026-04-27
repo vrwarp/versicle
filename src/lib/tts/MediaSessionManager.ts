@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
-import { isPaletteBright, rgbToL } from '../cover-palette';
+import { isPaletteBright, rgbToL, unpackColorToRGB } from '../cover-palette';
 import type { PerceptualPalette } from '../../types/db';
 
 /**
@@ -251,11 +251,14 @@ export class MediaSessionManager {
 
               if (perceptualPalette) {
                 isPerceptual = true;
-                const bgL = rgbToL(...perceptualPalette.background);
-                const stL = rgbToL(...perceptualPalette.standout);
+                const bgRgb = unpackColorToRGB(perceptualPalette.background);
+                const stRgb = unpackColorToRGB(perceptualPalette.standout);
+
+                const bgL = rgbToL(bgRgb.r, bgRgb.g, bgRgb.b);
+                const stL = rgbToL(stRgb.r, stRgb.g, stRgb.b);
 
                 blendMode = bgL > stL ? 'multiply' : 'screen';
-                overlayColor = `rgb(${perceptualPalette.standout.join(',')})`;
+                overlayColor = `rgb(${stRgb.r}, ${stRgb.g}, ${stRgb.b})`;
               } else {
                 const isBright = isPaletteBright(palette);
                 overlayColor = isBright ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.4)';

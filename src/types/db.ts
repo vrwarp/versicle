@@ -349,8 +349,11 @@ export interface TableImage {
 // --- LEGACY TYPES (For Migration & Backward Compatibility) ---
 
 export interface PerceptualPalette {
-  standout: [number, number, number]; // RGB tuple
-  background: [number, number, number]; // RGB tuple
+  /** 16-bit packed integer (R4-G8-B4) for the standout color */
+  standout: number;
+  /** 16-bit packed integer (R4-G8-B4) for the background color */
+  background: number;
+  /** The CIELAB deltaE distance between the two colors */
   deltaE: number;
 }
 

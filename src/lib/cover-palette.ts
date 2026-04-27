@@ -398,16 +398,16 @@ export async function extractPerceptualColors(bitmap: ImageBitmap): Promise<Perc
     // Background is most frequent
     validCenters.sort((a, b) => b.count - a.count);
     const bgCluster = validCenters[0];
-    const bgRgb: [number, number, number] = [
-        Math.round(bgCluster.rgbSum[0] / bgCluster.count),
-        Math.round(bgCluster.rgbSum[1] / bgCluster.count),
-        Math.round(bgCluster.rgbSum[2] / bgCluster.count)
-    ];
+    const bgRgb = {
+        r: Math.round(bgCluster.rgbSum[0] / bgCluster.count),
+        g: Math.round(bgCluster.rgbSum[1] / bgCluster.count),
+        b: Math.round(bgCluster.rgbSum[2] / bgCluster.count)
+    };
 
     if (validCenters.length === 1) {
         return {
-            background: bgRgb,
-            standout: bgRgb,
+            background: packColor(bgRgb),
+            standout: packColor(bgRgb),
             deltaE: 0
         };
     }
@@ -427,15 +427,15 @@ export async function extractPerceptualColors(bitmap: ImageBitmap): Promise<Perc
         }
     }
 
-    const stRgb: [number, number, number] = [
-        Math.round(bestStandout.rgbSum[0] / bestStandout.count),
-        Math.round(bestStandout.rgbSum[1] / bestStandout.count),
-        Math.round(bestStandout.rgbSum[2] / bestStandout.count)
-    ];
+    const stRgb = {
+        r: Math.round(bestStandout.rgbSum[0] / bestStandout.count),
+        g: Math.round(bestStandout.rgbSum[1] / bestStandout.count),
+        b: Math.round(bestStandout.rgbSum[2] / bestStandout.count)
+    };
 
     return {
-        background: bgRgb,
-        standout: stRgb,
+        background: packColor(bgRgb),
+        standout: packColor(stRgb),
         deltaE: deltaE(bgCluster.lab, bestStandout.lab)
     };
 }

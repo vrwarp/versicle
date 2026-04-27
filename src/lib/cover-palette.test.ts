@@ -242,8 +242,12 @@ describe('Perceptual Color Utils', () => {
             const result = await extractPerceptualColors(bitmap);
 
             expect(result).toBeDefined();
-            expect(result?.background).toEqual([255, 0, 0]);
-            expect(result?.standout).toEqual([0, 0, 255]);
+
+            // Check that colors were packed properly into 16-bit format
+            // Background was [255, 0, 0] -> (15<<12) | (0<<4) | 0 = 61440 = 0xF000
+            // Standout was [0, 0, 255] -> (0<<12) | (0<<4) | 15 = 15 = 0x000F
+            expect(result?.background).toBe((15 << 12) | (0 << 4) | 0);
+            expect(result?.standout).toBe((0 << 12) | (0 << 4) | 15);
             expect(result?.deltaE).toBeGreaterThan(0);
         });
     });
