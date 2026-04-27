@@ -3,7 +3,7 @@ import type { NavigationItem } from '../types/db';
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 import { getDB } from '../db/db';
-import type { SectionMetadata, TTSContent, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry } from '../types/db';
+import type { SectionMetadata, TTSContent, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry, PerceptualPalette } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
 import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
@@ -77,7 +77,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
 
     // Re-extract cover palette if we can find a cover
     let reprocessedPalette: number[] | undefined;
-    let reprocessedPerceptualPalette: import('../types/db').PerceptualPalette | undefined;
+    let reprocessedPerceptualPalette: PerceptualPalette | undefined;
     try {
         const coverUrl = await book.coverUrl();
         if (coverUrl) {
@@ -254,7 +254,7 @@ export async function extractBookData(
     let coverBlob: Blob | undefined;
     let thumbnailBlob: Blob | undefined;
     let coverPalette: number[] | undefined;
-    let perceptualPalette: import('../types/db').PerceptualPalette | undefined;
+    let perceptualPalette: PerceptualPalette | undefined;
 
     if (coverUrl) {
         try {
@@ -465,7 +465,7 @@ export async function extractBookMetadata(file: File): Promise<{
     fileHash: string;
     coverBlob?: Blob;
     coverPalette?: number[];
-    perceptualPalette?: import('../types/db').PerceptualPalette;
+    perceptualPalette?: PerceptualPalette;
 }> {
     const isValid = await validateZipSignature(file);
     if (!isValid) {
@@ -483,7 +483,7 @@ export async function extractBookMetadata(file: File): Promise<{
     let coverBlob: Blob | undefined;
     let thumbnailBlob: Blob | undefined;
     let coverPalette: number[] | undefined;
-    let perceptualPalette: import('../types/db').PerceptualPalette | undefined;
+    let perceptualPalette: PerceptualPalette | undefined;
 
     if (coverUrl) {
         try {
