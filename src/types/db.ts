@@ -47,6 +47,8 @@ export interface StaticBookManifest {
    * Ghost Book metadata: Palette snapshot generated during ingestion.
    */
   coverPalette?: number[];
+  /** Perceptual palette extracted via CIELAB K-Means for UI blending. */
+  perceptualPalette?: PerceptualPalette;
   /** Raw dc:language from EPUB OPF metadata. Used as default for UserInventoryItem.language. */
   language?: string;
   /** The calculated base font size of the book in pixels. */
@@ -136,6 +138,8 @@ export interface UserInventoryItem {
    * Layout: [TL, TR, BL, BR, Center]
    */
   coverPalette?: number[];
+  /** Perceptual palette extracted via CIELAB K-Means for UI blending. */
+  perceptualPalette?: PerceptualPalette;
   /** ISO 639-1 language code (e.g., 'en', 'zh'). Defaults to 'en'. */
   language?: string;
 }

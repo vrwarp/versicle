@@ -465,6 +465,7 @@ export async function extractBookMetadata(file: File): Promise<{
     fileHash: string;
     coverBlob?: Blob;
     coverPalette?: number[];
+    perceptualPalette?: import('../types/db').PerceptualPalette;
 }> {
     const isValid = await validateZipSignature(file);
     if (!isValid) {
