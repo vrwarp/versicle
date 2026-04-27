@@ -15,7 +15,8 @@ vi.mock('../store/useTTSStore', () => ({
         getState: vi.fn().mockReturnValue({
             customAbbreviations: [],
             alwaysMerge: [],
-            sentenceStarters: []
+            sentenceStarters: [],
+            profiles: { 'en': { minSentenceLength: 36 } }
         })
     }
 }));
