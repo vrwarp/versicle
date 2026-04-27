@@ -7,6 +7,24 @@ import { createLogger } from './logger';
 
 const logger = createLogger('OffscreenRenderer');
 
+/**
+ * Patches an iframe's sandbox attribute to ensure allow-scripts and allow-same-origin are present.
+ * This is required for event handling in strict environments like WebKit.
+ */
+const patchIframeSandbox = (iframe: HTMLIFrameElement) => {
+  const sandbox = iframe.getAttribute('sandbox') || '';
+  const tokens = new Set(sandbox.split(/\s+/).filter(Boolean));
+
+  tokens.add('allow-scripts');
+  tokens.add('allow-same-origin');
+
+  const newValue = Array.from(tokens).join(' ');
+  // Only set if different to avoid infinite MutationObserver loops
+  if (newValue !== sandbox) {
+    iframe.setAttribute('sandbox', newValue);
+  }
+};
+
 export interface ProcessedChapter {
   href: string;
   sentences: SentenceNode[];
@@ -167,6 +185,7 @@ export async function extractContentOffscreen(
   // ePub can take File, ArrayBuffer, or URL.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const book = (ePub as any)(file);
+  let observer: MutationObserver | null = null;
 
   // SECURITY: Register a serialization hook to sanitize HTML content before it's rendered.
   // This prevents XSS attacks from malicious scripts in EPUB files during the ingestion phase.
@@ -190,14 +209,34 @@ export async function extractContentOffscreen(
       manager: 'default' // Display one chapter at a time
     });
 
-    // PATCH: Ensure iframe has allow-scripts to prevent blocking in strict environments
-    const iframe = container.querySelector('iframe');
-    if (iframe) {
-      const sandbox = iframe.getAttribute('sandbox') || '';
-      if (!sandbox.includes('allow-scripts')) {
-        iframe.setAttribute('sandbox', (sandbox + ' allow-scripts allow-same-origin').trim());
-      }
-    }
+    // PATCH: Ensure all iframes (current and future) have allow-scripts to prevent blocking in strict environments.
+    // We use a MutationObserver because epubjs might recreate the iframe when displaying new chapters.
+    observer = new MutationObserver((mutations) => {
+      mutations.forEach(mutation => {
+        if (mutation.type === 'childList') {
+          mutation.addedNodes.forEach(node => {
+            const element = node as HTMLElement;
+            if (element.tagName === 'IFRAME') {
+              patchIframeSandbox(element as HTMLIFrameElement);
+            } else if (element.querySelectorAll) {
+              element.querySelectorAll('iframe').forEach(patchIframeSandbox);
+            }
+          });
+        } else if (mutation.type === 'attributes' && mutation.target.nodeName === 'IFRAME') {
+          patchIframeSandbox(mutation.target as HTMLIFrameElement);
+        }
+      });
+    });
+
+    observer.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['sandbox']
+    });
+
+    // Initial patch for existing iframes
+    container.querySelectorAll('iframe').forEach(patchIframeSandbox);
 
     // Access spine items
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -323,6 +362,9 @@ export async function extractContentOffscreen(
 
     } finally {
     // Cleanup
+    if (observer) {
+      observer.disconnect();
+    }
     if (book) {
       await book.opened.catch(() => { });
       book.destroy();
