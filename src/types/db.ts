@@ -47,6 +47,8 @@ export interface StaticBookManifest {
    * Ghost Book metadata: Palette snapshot generated during ingestion.
    */
   coverPalette?: number[];
+  /** Perceptual palette extracted via CIELAB K-Means for UI blending. */
+  perceptualPalette?: PerceptualPalette;
   /** Raw dc:language from EPUB OPF metadata. Used as default for UserInventoryItem.language. */
   language?: string;
   /** The calculated base font size of the book in pixels. */
@@ -136,6 +138,8 @@ export interface UserInventoryItem {
    * Layout: [TL, TR, BL, BR, Center]
    */
   coverPalette?: number[];
+  /** Perceptual palette extracted via CIELAB K-Means for UI blending. */
+  perceptualPalette?: PerceptualPalette;
   /** ISO 639-1 language code (e.g., 'en', 'zh'). Defaults to 'en'. */
   language?: string;
 }
@@ -344,6 +348,15 @@ export interface TableImage {
 
 // --- LEGACY TYPES (For Migration & Backward Compatibility) ---
 
+export interface PerceptualPalette {
+  /** 16-bit packed integer (R4-G8-B4) for the standout color */
+  standout: number;
+  /** 16-bit packed integer (R4-G8-B4) for the background color */
+  background: number;
+  /** The CIELAB deltaE distance between the two colors */
+  deltaE: number;
+}
+
 /**
  * 1. Core Book Identity & Display Metadata.
  * Essential metadata for displaying the book in the library (including offloaded state).
@@ -374,6 +387,8 @@ export interface Book {
    * 5 integers representing the cover regions (TL, TR, BL, BR, Center).
    */
   coverPalette?: number[];
+  /** Perceptual palette extracted via CIELAB K-Means for UI blending. */
+  perceptualPalette?: PerceptualPalette;
   /** ISO 639-1 language code (e.g., 'en', 'zh'). */
   language?: string;
 }

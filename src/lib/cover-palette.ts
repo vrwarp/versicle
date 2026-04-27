@@ -1,4 +1,6 @@
 
+import type { PerceptualPalette } from '../types/db';
+
 // --- Weighted K-Means Clustering Utils ---
 
 interface Pixel {
@@ -96,7 +98,7 @@ function extractRegionColor(pixels: Pixel[], anchor: Point): Color {
     return c1;
 }
 
-export async function extractCoverPalette(blob: Blob): Promise<number[]> {
+export async function extractCoverPalette(blob: Blob): Promise<{ palette: number[], perceptualPalette?: PerceptualPalette }> {
     try {
         const bitmap = await createImageBitmap(blob);
         let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
@@ -113,7 +115,7 @@ export async function extractCoverPalette(blob: Blob): Promise<number[]> {
             ctx = canvas.getContext('2d');
         }
 
-        if (!ctx) return [];
+        if (!ctx) return { palette: [] };
 
         ctx.drawImage(bitmap, 0, 0, size, size);
         const imgData = ctx.getImageData(0, 0, size, size).data;
@@ -181,10 +183,17 @@ export async function extractCoverPalette(blob: Blob): Promise<number[]> {
             return packColor(c);
         });
 
-        return palette;
+        let perceptualPalette: PerceptualPalette | undefined;
+        try {
+            perceptualPalette = await extractPerceptualColors(bitmap);
+        } catch (e) {
+            console.warn('Failed to extract perceptual palette:', e);
+        }
+
+        return { palette, perceptualPalette };
     } catch (e) {
         console.warn('Failed to extract cover palette:', e);
-        return [];
+        return { palette: [] };
     }
 }
 
@@ -199,8 +208,238 @@ export function unpackColorToRGB(packed: number): { r: number, g: number, b: num
 }
 
 // Constants for sRGB to Lab conversion
-const D65_EPSILON = 0.008856;
-const D65_KAPPA = 903.3;
+const CIE_EPSILON = 0.008856;
+const CIE_KAPPA = 903.3;
+
+/**
+ * Converts an sRGB color (0-255) to the CIE XYZ color space.
+ * This is the required first step before converting to CIELAB.
+ * It linearizes the sRGB values (removes gamma) and applies the D65 illuminant matrix.
+ */
+export function rgbToXyz(r: number, g: number, b: number): [number, number, number] {
+    let [vR, vG, vB] = [r / 255, g / 255, b / 255];
+
+    vR = vR > 0.04045 ? Math.pow((vR + 0.055) / 1.055, 2.4) : vR / 12.92;
+    vG = vG > 0.04045 ? Math.pow((vG + 0.055) / 1.055, 2.4) : vG / 12.92;
+    vB = vB > 0.04045 ? Math.pow((vB + 0.055) / 1.055, 2.4) : vB / 12.92;
+
+    vR *= 100;
+    vG *= 100;
+    vB *= 100;
+
+    const x = vR * 0.4124564 + vG * 0.3575761 + vB * 0.1804375;
+    const y = vR * 0.2126729 + vG * 0.7151522 + vB * 0.0721750;
+    const z = vR * 0.0193339 + vG * 0.1191920 + vB * 0.9503041;
+
+    return [x, y, z];
+}
+
+/**
+ * Converts CIE XYZ values to the CIELAB (L*a*b*) color space.
+ * Uses the D65 standard illuminant reference values (daylight).
+ * CIELAB is perceptually uniform, meaning the Euclidean distance between two colors
+ * correlates to the human eye's perception of their difference.
+ */
+export function xyzToLab(x: number, y: number, z: number): [number, number, number] {
+    const d65X = 95.047;
+    const d65Y = 100.000;
+    const d65Z = 108.883;
+
+    let vX = x / d65X;
+    let vY = y / d65Y;
+    let vZ = z / d65Z;
+
+    vX = vX > CIE_EPSILON ? Math.pow(vX, 1 / 3) : (CIE_KAPPA * vX + 16) / 116;
+    vY = vY > CIE_EPSILON ? Math.pow(vY, 1 / 3) : (CIE_KAPPA * vY + 16) / 116;
+    vZ = vZ > CIE_EPSILON ? Math.pow(vZ, 1 / 3) : (CIE_KAPPA * vZ + 16) / 116;
+
+    const L = Math.max(0, 116 * vY - 16);
+    const a = 500 * (vX - vY);
+    const b = 200 * (vY - vZ);
+
+    return [L, a, b];
+}
+
+/**
+ * Helper function to convert sRGB directly to CIELAB.
+ */
+export function rgbToLab(r: number, g: number, b: number): [number, number, number] {
+    const [x, y, z] = rgbToXyz(r, g, b);
+    return xyzToLab(x, y, z);
+}
+
+/**
+ * Calculates the CIE76 Delta-E (Euclidean distance) between two CIELAB colors.
+ * This quantifies the perceptual difference between them. A delta-E of ~2.3
+ * is considered the "just noticeable difference" for the human eye.
+ */
+export function deltaE(labA: [number, number, number], labB: [number, number, number]): number {
+    const dL = labA[0] - labB[0];
+    const da = labA[1] - labB[1];
+    const db = labA[2] - labB[2];
+    return Math.sqrt(dL * dL + da * da + db * db);
+}
+
+/**
+ * Calculates Chroma (color purity/saturation) from a CIELAB color.
+ * It represents the distance from the neutral lightness (L*) axis.
+ */
+export function getChroma(lab: [number, number, number]): number {
+    return Math.sqrt(lab[1] * lab[1] + lab[2] * lab[2]);
+}
+
+/**
+ * Extracts a "Perceptual Palette" from an image using Lloyd's K-Means clustering
+ * operating in the perceptually uniform CIELAB color space.
+ *
+ * It determines two key colors:
+ * 1. Background: The most dominant (frequent) color cluster.
+ * 2. Standout: The color that provides the highest visual salience (contrast + saturation)
+ *    against the background color.
+ */
+export async function extractPerceptualColors(bitmap: ImageBitmap): Promise<PerceptualPalette | undefined> {
+    const size = 50;
+    let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
+
+    if (typeof OffscreenCanvas !== 'undefined') {
+        const canvas = new OffscreenCanvas(size, size);
+        ctx = canvas.getContext('2d', { willReadFrequently: true }) as OffscreenCanvasRenderingContext2D | null;
+    } else {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        ctx = canvas.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D | null;
+    }
+
+    if (!ctx) return undefined;
+
+    ctx.drawImage(bitmap, 0, 0, size, size);
+    const imgData = ctx.getImageData(0, 0, size, size).data;
+    const pixels: { rgb: [number, number, number], lab: [number, number, number] }[] = [];
+
+    for (let i = 0; i < imgData.length; i += 4) {
+        const r = imgData[i];
+        const g = imgData[i + 1];
+        const b = imgData[i + 2];
+        const a = imgData[i + 3];
+
+        if (a < 128) continue; // Skip transparent pixels
+
+        const lab = rgbToLab(r, g, b);
+        pixels.push({ rgb: [r, g, b], lab });
+    }
+
+    if (pixels.length === 0) return undefined;
+
+    // 5 Centers Deterministically Spaced
+    const k = 5;
+    const centers: { lab: [number, number, number], rgbSum: [number, number, number], labSum: [number, number, number], count: number }[] = [];
+    const step = Math.max(1, Math.floor(pixels.length / k));
+    for (let i = 0; i < k; i++) {
+        const idx = Math.min(i * step, pixels.length - 1);
+        centers.push({
+            lab: [...pixels[idx].lab],
+            rgbSum: [0, 0, 0],
+            labSum: [0, 0, 0],
+            count: 0
+        });
+    }
+
+    // Lloyd's Algorithm
+    const maxIters = 10;
+    for (let iter = 0; iter < maxIters; iter++) {
+        // Reset sums
+        for (const center of centers) {
+            center.rgbSum = [0, 0, 0];
+            center.count = 0;
+            center.labSum = [0, 0, 0];
+        }
+
+        // Assign to nearest
+        let changed = false;
+        for (const p of pixels) {
+            let minDist = Infinity;
+            let bestCenter = centers[0];
+            for (const center of centers) {
+                const dist = deltaE(p.lab, center.lab);
+                if (dist < minDist) {
+                    minDist = dist;
+                    bestCenter = center;
+                }
+            }
+            bestCenter.rgbSum[0] += p.rgb[0];
+            bestCenter.rgbSum[1] += p.rgb[1];
+            bestCenter.rgbSum[2] += p.rgb[2];
+            bestCenter.labSum[0] += p.lab[0];
+            bestCenter.labSum[1] += p.lab[1];
+            bestCenter.labSum[2] += p.lab[2];
+            bestCenter.count++;
+        }
+
+        // Update centers
+        for (const center of centers) {
+            if (center.count > 0) {
+                const newLab: [number, number, number] = [
+                    center.labSum[0] / center.count,
+                    center.labSum[1] / center.count,
+                    center.labSum[2] / center.count
+                ];
+                if (deltaE(center.lab, newLab) > 0.5) changed = true;
+                center.lab = newLab;
+            }
+        }
+        if (!changed) break;
+    }
+
+    // Filter empty clusters
+    const validCenters = centers.filter(c => c.count > 0);
+    if (validCenters.length === 0) return undefined;
+
+    // Background is most frequent
+    validCenters.sort((a, b) => b.count - a.count);
+    const bgCluster = validCenters[0];
+    const bgRgb = {
+        r: Math.round(bgCluster.rgbSum[0] / bgCluster.count),
+        g: Math.round(bgCluster.rgbSum[1] / bgCluster.count),
+        b: Math.round(bgCluster.rgbSum[2] / bgCluster.count)
+    };
+
+    if (validCenters.length === 1) {
+        return {
+            background: packColor(bgRgb),
+            standout: packColor(bgRgb),
+            deltaE: 0
+        };
+    }
+
+    // Standout using Salience Score
+    let bestStandout = validCenters[1];
+    let maxSalience = -Infinity;
+
+    for (let i = 1; i < validCenters.length; i++) {
+        const cluster = validCenters[i];
+        const dist = deltaE(bgCluster.lab, cluster.lab);
+        const chroma = getChroma(cluster.lab);
+        const salience = dist * (chroma + 15);
+        if (salience > maxSalience) {
+            maxSalience = salience;
+            bestStandout = cluster;
+        }
+    }
+
+    const stRgb = {
+        r: Math.round(bestStandout.rgbSum[0] / bestStandout.count),
+        g: Math.round(bestStandout.rgbSum[1] / bestStandout.count),
+        b: Math.round(bestStandout.rgbSum[2] / bestStandout.count)
+    };
+
+    return {
+        background: packColor(bgRgb),
+        standout: packColor(stRgb),
+        deltaE: deltaE(bgCluster.lab, bestStandout.lab)
+    };
+}
+
 
 /**
  * Calculates ONLY the perceptual lightness (L*) from an RGB triplet.
@@ -221,8 +460,8 @@ export function rgbToL(r: number, g: number, b: number): number {
 
     // 3. Calculate L* (CIE 1976 Lightness)
     // Formula: L* = 116 * f(Y) - 16
-    return Y <= D65_EPSILON
-        ? Y * D65_KAPPA
+    return Y <= CIE_EPSILON
+        ? Y * CIE_KAPPA
         : (Math.pow(Y, 1/3) * 116) - 16;
 }
 

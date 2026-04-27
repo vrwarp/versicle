@@ -3,7 +3,7 @@ import type { NavigationItem } from '../types/db';
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 import { getDB } from '../db/db';
-import type { SectionMetadata, TTSContent, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry } from '../types/db';
+import type { SectionMetadata, TTSContent, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry, PerceptualPalette } from '../types/db';
 import { getSanitizedBookMetadata } from '../db/validators';
 import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
@@ -77,15 +77,19 @@ export async function reprocessBook(bookId: string): Promise<void> {
 
     // Re-extract cover palette if we can find a cover
     let reprocessedPalette: number[] | undefined;
+    let reprocessedPerceptualPalette: PerceptualPalette | undefined;
     try {
         const coverUrl = await book.coverUrl();
         if (coverUrl) {
             const response = await fetch(coverUrl);
             const coverBlob = await response.blob();
             if (coverBlob) {
-                const palette = await extractCoverPalette(coverBlob);
-                if (palette && palette.length > 0) {
-                    reprocessedPalette = palette;
+                const result = await extractCoverPalette(coverBlob);
+                if (result.palette && result.palette.length > 0) {
+                    reprocessedPalette = result.palette;
+                }
+                if (result.perceptualPalette) {
+                    reprocessedPerceptualPalette = result.perceptualPalette;
                 }
             }
         }
@@ -157,6 +161,9 @@ export async function reprocessBook(bookId: string): Promise<void> {
 
         if (reprocessedPalette) {
             manifest.coverPalette = reprocessedPalette;
+        }
+        if (reprocessedPerceptualPalette) {
+            manifest.perceptualPalette = reprocessedPerceptualPalette;
         }
 
         await manStore.put(manifest);
@@ -247,6 +254,7 @@ export async function extractBookData(
     let coverBlob: Blob | undefined;
     let thumbnailBlob: Blob | undefined;
     let coverPalette: number[] | undefined;
+    let perceptualPalette: PerceptualPalette | undefined;
 
     if (coverUrl) {
         try {
@@ -272,7 +280,9 @@ export async function extractBookData(
 
     // Generate palette if we have any cover image
     if (thumbnailBlob || coverBlob) {
-        coverPalette = await extractCoverPalette((thumbnailBlob || coverBlob)!);
+        const result = await extractCoverPalette((thumbnailBlob || coverBlob)!);
+        coverPalette = result.palette;
+        perceptualPalette = result.perceptualPalette;
         if (coverPalette.length === 0) coverPalette = undefined;
     }
 
@@ -372,6 +382,7 @@ export async function extractBookData(
         isbn: undefined,
         coverBlob: thumbnailBlob || coverBlob,
         coverPalette,
+        perceptualPalette,
         language: rawLanguage,
         baseFontSize,
         baseLineHeight
@@ -402,6 +413,7 @@ export async function extractBookData(
         status: 'unread',
         lastInteraction: Date.now(),
         coverPalette,
+        perceptualPalette,
         language: rawLanguage
     };
 
@@ -453,6 +465,7 @@ export async function extractBookMetadata(file: File): Promise<{
     fileHash: string;
     coverBlob?: Blob;
     coverPalette?: number[];
+    perceptualPalette?: PerceptualPalette;
 }> {
     const isValid = await validateZipSignature(file);
     if (!isValid) {
@@ -470,6 +483,7 @@ export async function extractBookMetadata(file: File): Promise<{
     let coverBlob: Blob | undefined;
     let thumbnailBlob: Blob | undefined;
     let coverPalette: number[] | undefined;
+    let perceptualPalette: PerceptualPalette | undefined;
 
     if (coverUrl) {
         try {
@@ -495,7 +509,9 @@ export async function extractBookMetadata(file: File): Promise<{
 
     // Generate palette if we have any cover image
     if (thumbnailBlob || coverBlob) {
-        coverPalette = await extractCoverPalette((thumbnailBlob || coverBlob)!);
+        const result = await extractCoverPalette((thumbnailBlob || coverBlob)!);
+        coverPalette = result.palette;
+        perceptualPalette = result.perceptualPalette;
         if (coverPalette.length === 0) coverPalette = undefined;
     }
 
@@ -531,6 +547,7 @@ export async function extractBookMetadata(file: File): Promise<{
         description: candidateMetadata.description,
         fileHash,
         coverBlob: thumbnailBlob || coverBlob,
-        coverPalette
+        coverPalette,
+        perceptualPalette
     };
 }
