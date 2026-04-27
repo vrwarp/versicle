@@ -95,7 +95,7 @@ export const CheckpointDiffView: React.FC<CheckpointDiffViewProps> = ({
 
   return (
     <>
-      <div className="flex flex-col h-full max-h-[60vh]">
+      <div className="flex flex-col h-full min-h-0">
         <div className="p-4 border-b">
           <h3 className="text-lg font-semibold">Checkpoint Inspection</h3>
           <p className="text-sm text-muted-foreground">
@@ -153,16 +153,16 @@ export const CheckpointDiffView: React.FC<CheckpointDiffViewProps> = ({
           })}
         </div>
 
-        <div className="p-4 border-t bg-muted/10 flex justify-between gap-2">
-          <Button variant="outline" onClick={onBackup} disabled={isRestoring}>
+        <div className="p-4 border-t bg-muted/10 flex flex-col-reverse sm:flex-row justify-between gap-3">
+          <Button variant="outline" className="w-full sm:w-auto" onClick={onBackup} disabled={isRestoring}>
             <Download className="w-4 h-4 mr-2" />
             Backup Current State
           </Button>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={onCancel} disabled={isRestoring}>
+          <div className="flex flex-col-reverse sm:flex-row gap-2 w-full sm:w-auto">
+            <Button variant="ghost" className="w-full sm:w-auto" onClick={onCancel} disabled={isRestoring}>
                 Cancel
             </Button>
-            <Button variant="destructive" onClick={onConfirm} disabled={isRestoring}>
+            <Button variant="destructive" className="w-full sm:w-auto" onClick={onConfirm} disabled={isRestoring}>
                 {isRestoring ? 'Restoring...' : 'Confirm Restore'}
             </Button>
           </div>
