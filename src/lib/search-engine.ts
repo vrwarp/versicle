@@ -90,33 +90,30 @@ export class SearchEngine {
         const bookStore = this.books.get(bookId);
         if (!bookStore || !query.trim()) return [];
 
-        // Escape regex special characters to safely use the query in a RegExp
-        const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        // Use a global, case-insensitive regex to find all matches
-        const regex = new RegExp(escapedQuery, 'gi');
+        const lowerQuery = query.toLowerCase();
+        const queryLen = lowerQuery.length;
 
         const results: SearchResult[] = [];
         const MAX_RESULTS = 50;
 
         for (const [href, text] of bookStore.entries()) {
-            // Reset lastIndex for each new string because we are reusing the regex object
-            regex.lastIndex = 0;
+            const lowerText = text.toLowerCase();
+            let startIndex = 0;
 
-            let match;
-            while ((match = regex.exec(text)) !== null) {
-                if (match[0].length === 0) {
-                    regex.lastIndex++;
-                    continue;
-                }
+            while (true) {
+                const index = lowerText.indexOf(lowerQuery, startIndex);
+                if (index === -1) break;
 
                 results.push({
                     href: href,
-                    excerpt: this.getExcerpt(text, match.index, match[0].length)
+                    excerpt: this.getExcerpt(text, index, queryLen)
                 });
 
                 if (results.length >= MAX_RESULTS) {
                     return results;
                 }
+
+                startIndex = index + queryLen;
             }
         }
 
