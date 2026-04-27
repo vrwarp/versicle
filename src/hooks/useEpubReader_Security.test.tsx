@@ -73,9 +73,41 @@ describe('useEpubReader Security', () => {
     const iframe = viewer.querySelector('iframe')!;
 
     // We expect the sandbox to contain allow-scripts as it is required for event handling
-    const sandbox = iframe.getAttribute('sandbox');
+    const sandbox = iframe.getAttribute('sandbox')!;
     console.log('Sandbox attribute:', sandbox);
 
     expect(sandbox).toContain('allow-scripts');
+    expect(sandbox).toContain('allow-same-origin');
+
+    // Verify no duplicates
+    const tokens = sandbox.split(/\s+/).filter(Boolean);
+    const uniqueTokens = new Set(tokens);
+    expect(tokens.length).toBe(uniqueTokens.size);
+  });
+
+  it('should prevent duplicate tokens in the sandbox attribute', async () => {
+    const { getByTestId } = render(<TestComponent />);
+
+    await waitFor(() => {
+      const viewer = getByTestId('viewer');
+      const iframe = viewer.querySelector('iframe');
+      expect(iframe).not.toBeNull();
+    });
+
+    const viewer = getByTestId('viewer');
+    const iframe = viewer.querySelector('iframe')!;
+
+    // Manually trigger an attribute change with duplicates
+    iframe.setAttribute('sandbox', 'allow-scripts allow-scripts allow-same-origin');
+
+    // The observer should fix it
+    await waitFor(() => {
+      const sandbox = iframe.getAttribute('sandbox')!;
+      const tokens = sandbox.split(/\s+/).filter(Boolean);
+      const uniqueTokens = new Set(tokens);
+      expect(tokens.length).toBe(uniqueTokens.size);
+      expect(uniqueTokens.has('allow-scripts')).toBe(true);
+      expect(uniqueTokens.has('allow-same-origin')).toBe(true);
+    });
   });
 });

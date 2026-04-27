@@ -11,6 +11,24 @@ import { toTraditional, getPinyin } from '../lib/chinese/ChineseTextProcessor';
 
 const logger = createLogger('useEpubReader');
 
+/**
+ * Patches an iframe's sandbox attribute to ensure allow-scripts and allow-same-origin are present.
+ * This is required for event handling in strict environments like WebKit.
+ */
+const patchIframeSandbox = (iframe: HTMLIFrameElement) => {
+  const sandbox = iframe.getAttribute('sandbox') || '';
+  const tokens = new Set(sandbox.split(/\s+/).filter(Boolean));
+
+  tokens.add('allow-scripts');
+  tokens.add('allow-same-origin');
+
+  const newValue = Array.from(tokens).join(' ');
+  // Only set if different to avoid infinite MutationObserver loops
+  if (newValue !== sandbox) {
+    iframe.setAttribute('sandbox', newValue);
+  }
+};
+
 const STATIC_READER_STYLES = `
 `;
 
@@ -328,45 +346,38 @@ export function useEpubReader(
         }
 
         // Manually ensure allow-scripts is present to fix event handling in strict environments (like WebKit)
-        // We patch sandbox attribute manually via MutationObserver to catch dynamically created iframes.
+        // We patch sandbox attribute manually via MutationObserver to catch dynamically created iframes
+        // and react to any attribute resets by epubjs.
         const observer = new MutationObserver((mutations) => {
           mutations.forEach(mutation => {
             if (mutation.type === 'childList') {
               mutation.addedNodes.forEach(node => {
                 const element = node as HTMLElement;
                 if (element.tagName === 'IFRAME') {
-                  const iframe = element as HTMLIFrameElement;
-                  const sandbox = iframe.getAttribute('sandbox') || '';
-                  if (!sandbox.includes('allow-scripts')) {
-                    iframe.setAttribute('sandbox', (sandbox + ' allow-scripts allow-same-origin').trim());
-                  }
+                  patchIframeSandbox(element as HTMLIFrameElement);
                 } else if (element.querySelectorAll) {
                   const iframes = element.querySelectorAll('iframe');
-                  iframes.forEach(iframe => {
-                    const sandbox = iframe.getAttribute('sandbox') || '';
-                    if (!sandbox.includes('allow-scripts')) {
-                      iframe.setAttribute('sandbox', (sandbox + ' allow-scripts allow-same-origin').trim());
-                    }
-                  });
+                  iframes.forEach(patchIframeSandbox);
                 }
               });
+            } else if (mutation.type === 'attributes' && mutation.target.nodeName === 'IFRAME') {
+              patchIframeSandbox(mutation.target as HTMLIFrameElement);
             }
           });
         });
 
         if (viewerRef.current) {
-          observer.observe(viewerRef.current, { childList: true, subtree: true });
+          observer.observe(viewerRef.current, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['sandbox']
+          });
           sandboxObserverRef.current = observer;
         }
 
-        // Also patch immediately if it already exists
-        const iframe = viewerRef.current?.querySelector('iframe');
-        if (iframe) {
-          const sandbox = iframe.getAttribute('sandbox') || '';
-          if (!sandbox.includes('allow-scripts')) {
-            iframe.setAttribute('sandbox', (sandbox + ' allow-scripts allow-same-origin').trim());
-          }
-        }
+        // Also patch immediately all existing iframes
+        viewerRef.current?.querySelectorAll('iframe').forEach(patchIframeSandbox);
         setRendition(newRendition);
 
         // Disable spreads
