@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { extractCoverPalette, unpackColorToRGB, rgbToL, getOptimizedTextColor } from './cover-palette';
+import { extractCoverPalette, unpackColorToRGB, rgbToL, getOptimizedTextColor, rgbToXyz, xyzToLab, rgbToLab, deltaE, getChroma, extractPerceptualColors } from './cover-palette';
 
 describe('extractCoverPalette', () => {
     afterEach(() => {
@@ -96,6 +96,156 @@ describe('extractCoverPalette', () => {
         const result = await extractCoverPalette(blob);
 
         expect(result.palette).toEqual([]);
+    });
+});
+
+describe('Perceptual Color Utils', () => {
+    describe('rgbToXyz', () => {
+        it('should correctly convert sRGB to XYZ', () => {
+            const [x, y, z] = rgbToXyz(255, 0, 0); // Red
+            expect(x).toBeCloseTo(41.24, 1);
+            expect(y).toBeCloseTo(21.26, 1);
+            expect(z).toBeCloseTo(1.93, 1);
+        });
+
+        it('should handle black', () => {
+            const [x, y, z] = rgbToXyz(0, 0, 0);
+            expect(x).toBe(0);
+            expect(y).toBe(0);
+            expect(z).toBe(0);
+        });
+
+        it('should handle white', () => {
+            const [x, y, z] = rgbToXyz(255, 255, 255);
+            expect(x).toBeCloseTo(95.047, 1);
+            expect(y).toBeCloseTo(100.0, 1);
+            expect(z).toBeCloseTo(108.883, 1);
+        });
+    });
+
+    describe('xyzToLab', () => {
+        it('should correctly convert XYZ to CIELAB', () => {
+            const [L, a, b] = xyzToLab(41.24, 21.26, 1.93); // Approx Red XYZ
+            expect(L).toBeCloseTo(53.24, 1);
+            expect(a).toBeCloseTo(80.09, 1);
+            expect(b).toBeCloseTo(67.20, 1);
+        });
+
+        it('should handle pure black XYZ', () => {
+            const [L, a, b] = xyzToLab(0, 0, 0);
+            expect(L).toBe(0);
+            expect(a).toBe(0);
+            expect(b).toBe(0);
+        });
+
+        it('should handle pure white XYZ (D65)', () => {
+            const [L, a, b] = xyzToLab(95.047, 100.0, 108.883);
+            expect(L).toBeCloseTo(100, 1);
+            expect(a).toBeCloseTo(0, 1);
+            expect(b).toBeCloseTo(0, 1);
+        });
+    });
+
+    describe('rgbToLab', () => {
+        it('should convert RGB directly to CIELAB', () => {
+            const [L, a, b] = rgbToLab(0, 255, 0); // Green
+            expect(L).toBeCloseTo(87.73, 1);
+            expect(a).toBeCloseTo(-86.18, 1);
+            expect(b).toBeCloseTo(83.18, 1);
+        });
+    });
+
+    describe('deltaE', () => {
+        it('should calculate Euclidean distance correctly', () => {
+            const lab1: [number, number, number] = [50, 20, -10];
+            const lab2: [number, number, number] = [40, 10, 10];
+            // sqrt(10^2 + 10^2 + 20^2) = sqrt(100 + 100 + 400) = sqrt(600) ≈ 24.49
+            expect(deltaE(lab1, lab2)).toBeCloseTo(24.4948, 3);
+        });
+
+        it('should return 0 for identical colors', () => {
+            const lab: [number, number, number] = [50, 0, 0];
+            expect(deltaE(lab, lab)).toBe(0);
+        });
+    });
+
+    describe('getChroma', () => {
+        it('should calculate chroma correctly', () => {
+            const lab: [number, number, number] = [50, 30, 40];
+            // sqrt(30^2 + 40^2) = 50
+            expect(getChroma(lab)).toBe(50);
+        });
+
+        it('should be 0 for pure grayscale (a=0, b=0)', () => {
+            const lab: [number, number, number] = [50, 0, 0];
+            expect(getChroma(lab)).toBe(0);
+        });
+    });
+
+    describe('extractPerceptualColors', () => {
+        it('should return undefined if context cannot be created', async () => {
+            (global as any).OffscreenCanvas = undefined;
+            const originalCreateElement = document.createElement;
+            vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
+                if (tagName === 'canvas') {
+                    return {
+                        getContext: () => null,
+                    } as any;
+                }
+                return originalCreateElement.call(document, tagName);
+            });
+            const bitmap = {} as ImageBitmap;
+            const result = await extractPerceptualColors(bitmap);
+            expect(result).toBeUndefined();
+        });
+
+        it('should return undefined if there are no opaque pixels', async () => {
+            const mockContext = {
+                drawImage: vi.fn(),
+                // Return all transparent pixels (alpha = 0)
+                getImageData: () => ({ data: new Uint8ClampedArray(50 * 50 * 4) })
+            };
+            (global as any).OffscreenCanvas = class {
+                getContext() { return mockContext; }
+            };
+            const bitmap = {} as ImageBitmap;
+            const result = await extractPerceptualColors(bitmap);
+            expect(result).toBeUndefined();
+        });
+
+        it('should extract valid background and standout colors', async () => {
+            const mockData = new Uint8ClampedArray(50 * 50 * 4);
+            // Fill with mostly red (background) and some blue (standout)
+            for (let i = 0; i < mockData.length; i += 4) {
+                if (i < mockData.length * 0.8) {
+                    mockData[i] = 255;     // R
+                    mockData[i+1] = 0;     // G
+                    mockData[i+2] = 0;     // B
+                    mockData[i+3] = 255;   // A
+                } else {
+                    mockData[i] = 0;       // R
+                    mockData[i+1] = 0;     // G
+                    mockData[i+2] = 255;   // B
+                    mockData[i+3] = 255;   // A
+                }
+            }
+
+            const mockContext = {
+                drawImage: vi.fn(),
+                getImageData: () => ({ data: mockData })
+            };
+            (global as any).OffscreenCanvas = class {
+                getContext() { return mockContext; }
+            };
+
+            const bitmap = {} as ImageBitmap;
+            const result = await extractPerceptualColors(bitmap);
+
+            expect(result).toBeDefined();
+            expect(result?.background).toEqual([255, 0, 0]);
+            expect(result?.standout).toEqual([0, 0, 255]);
+            expect(result?.deltaE).toBeGreaterThan(0);
+        });
     });
 });
 
