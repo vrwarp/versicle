@@ -344,6 +344,12 @@ export interface TableImage {
 
 // --- LEGACY TYPES (For Migration & Backward Compatibility) ---
 
+export interface PerceptualPalette {
+  standout: [number, number, number]; // RGB tuple
+  background: [number, number, number]; // RGB tuple
+  deltaE: number;
+}
+
 /**
  * 1. Core Book Identity & Display Metadata.
  * Essential metadata for displaying the book in the library (including offloaded state).
@@ -374,6 +380,8 @@ export interface Book {
    * 5 integers representing the cover regions (TL, TR, BL, BR, Center).
    */
   coverPalette?: number[];
+  /** Perceptual palette extracted via CIELAB K-Means for UI blending. */
+  perceptualPalette?: PerceptualPalette;
   /** ISO 639-1 language code (e.g., 'en', 'zh'). */
   language?: string;
 }

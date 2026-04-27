@@ -22,6 +22,8 @@ export interface MediaSessionMetadata {
   progress?: number;
   /** The color palette of the current section/book. */
   coverPalette?: number[];
+  /** Perceptual palette extracted via CIELAB K-Means for UI blending. */
+  perceptualPalette?: import('../../types/db').PerceptualPalette;
 }
 
 /**
@@ -132,7 +134,8 @@ export class MediaSessionManager {
           metadata.progress,
           metadata.sectionIndex,
           metadata.totalSections,
-          metadata.coverPalette
+          metadata.coverPalette,
+          metadata.perceptualPalette
         );
         if (processedArtwork) {
           artwork = [processedArtwork];
@@ -168,7 +171,8 @@ export class MediaSessionManager {
     progressInput?: number,
     sectionIndex?: number,
     totalSections?: number,
-    palette?: number[]
+    palette?: number[],
+    perceptualPalette?: import('../../types/db').PerceptualPalette
   ): Promise<{ src: string; sizes?: string; type?: string } | null> {
     try {
       let progress: number | undefined = progressInput;
@@ -177,7 +181,7 @@ export class MediaSessionManager {
       }
 
       // Crop to square and get base64 directly from URL
-      const base64 = await this.cropAndOverlayArtwork(artwork.src, progress, palette);
+      const base64 = await this.cropAndOverlayArtwork(artwork.src, progress, palette, perceptualPalette);
 
       return {
         ...artwork,
@@ -194,7 +198,12 @@ export class MediaSessionManager {
    * Crops a given image URL to a center square and returns it as a base64 string.
    * Optionally applies a conic gradient overlay to indicate reading progress.
    */
-  private cropAndOverlayArtwork(src: string, progress?: number, palette?: number[]): Promise<string> {
+  private cropAndOverlayArtwork(
+    src: string,
+    progress?: number,
+    palette?: number[],
+    perceptualPalette?: import('../../types/db').PerceptualPalette
+  ): Promise<string> {
     return new Promise((resolve) => {
       const img = new Image();
       img.crossOrigin = 'Anonymous'; // Needed if the source is external
@@ -230,30 +239,78 @@ export class MediaSessionManager {
 
           // Apply conic gradient overlay if progress info is available
           if (progress !== undefined) {
-            // Check browser support for createConicGradient
             if (ctx.createConicGradient) {
-              const cx = size / 2;
-              const cy = size / 2;
+              if (perceptualPalette) {
+                // Calculate luminance manually inline since we don't import rgbToL here
+                const getL = (r: number, g: number, b: number) => {
+                  const v = [r, g, b].map(val => {
+                    val /= 255;
+                    return val <= 0.04045 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
+                  });
+                  return (0.2126 * v[0]) + (0.7152 * v[1]) + (0.0722 * v[2]);
+                };
 
-              // Start from top (12 o'clock), so rotate -PI/2
-              const gradient = ctx.createConicGradient(-Math.PI / 2, cx, cy);
+                const bgL = getL(...perceptualPalette.background);
+                const stL = getL(...perceptualPalette.standout);
 
-              // Use adaptive color based on cover luminance
-              const isBright = isPaletteBright(palette);
-              const overlayColor = isBright ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.4)';
-              const transparent = 'rgba(0, 0, 0, 0)';
+                const blendMode = bgL > stL ? 'multiply' : 'screen';
+                const fillColor = `rgb(${perceptualPalette.standout.join(',')})`;
 
-              gradient.addColorStop(0, overlayColor);
-              gradient.addColorStop(progress, overlayColor);
-              // If fully complete, the whole circle is overlayColor.
-              // If not, transition sharply to transparent.
-              if (progress < 1) {
-                gradient.addColorStop(progress, transparent);
-                gradient.addColorStop(1, transparent);
+                const offCanvas = document.createElement('canvas');
+                offCanvas.width = size;
+                offCanvas.height = size;
+                const offCtx = offCanvas.getContext('2d');
+
+                if (offCtx) {
+                  offCtx.fillStyle = fillColor;
+                  offCtx.fillRect(0, 0, size, size);
+
+                  offCtx.globalCompositeOperation = 'destination-in';
+                  const cx = size / 2;
+                  const cy = size / 2;
+                  const gradient = offCtx.createConicGradient(-Math.PI / 2, cx, cy);
+
+                  const solid = 'rgba(0, 0, 0, 1)';
+                  const transparent = 'rgba(0, 0, 0, 0)';
+
+                  gradient.addColorStop(0, solid);
+                  gradient.addColorStop(progress, solid);
+                  if (progress < 1) {
+                    gradient.addColorStop(Math.min(progress + 0.001, 1), transparent);
+                    gradient.addColorStop(1, transparent);
+                  }
+
+                  offCtx.fillStyle = gradient;
+                  offCtx.fillRect(0, 0, size, size);
+
+                  ctx.globalCompositeOperation = blendMode;
+                  ctx.globalAlpha = 0.85;
+                  ctx.drawImage(offCanvas, 0, 0);
+
+                  // Reset composite and alpha
+                  ctx.globalCompositeOperation = 'source-over';
+                  ctx.globalAlpha = 1.0;
+                }
+              } else {
+                // Fallback to legacy
+                const cx = size / 2;
+                const cy = size / 2;
+                const gradient = ctx.createConicGradient(-Math.PI / 2, cx, cy);
+
+                const isBright = isPaletteBright(palette);
+                const overlayColor = isBright ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.4)';
+                const transparent = 'rgba(0, 0, 0, 0)';
+
+                gradient.addColorStop(0, overlayColor);
+                gradient.addColorStop(progress, overlayColor);
+                if (progress < 1) {
+                  gradient.addColorStop(progress, transparent);
+                  gradient.addColorStop(1, transparent);
+                }
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, size, size);
               }
-
-              ctx.fillStyle = gradient;
-              ctx.fillRect(0, 0, size, size);
             }
           }
 
