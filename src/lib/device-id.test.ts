@@ -43,8 +43,9 @@ describe('DeviceId Service', () => {
     it('should use crypto.getRandomValues when randomUUID is not available', async () => {
         Object.defineProperty(global, 'crypto', {
             value: {
-                getRandomValues: (array: Uint32Array) => {
-                    array[0] = 123456789; // '21i3v9' in base36
+                getRandomValues: (array: Uint8Array) => {
+                    array.fill(0);
+                    array[0] = 0x15;
                     return array;
                 },
             },
@@ -54,9 +55,8 @@ describe('DeviceId Service', () => {
 
         const { getDeviceId } = await import('./device-id');
         const deviceId = getDeviceId();
-        // 123456789.toString(36) is '21i3v9'
-        // .padStart(8, '0') is '0021i3v9'
-        expect(deviceId).toBe('device-0021i3v9');
+        // 0x15 is '15' in hex. Implementation uses hex for getRandomValues fallback.
+        expect(deviceId).toBe('device-15000000');
     });
 
     it('should fallback to Math.random when crypto is not available', async () => {
