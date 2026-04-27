@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
-import { isPaletteBright } from '../cover-palette';
+import { isPaletteBright, rgbToL } from '../cover-palette';
 import type { PerceptualPalette } from '../../types/db';
 
 /**
@@ -241,76 +241,46 @@ export class MediaSessionManager {
           // Apply conic gradient overlay if progress info is available
           if (progress !== undefined) {
             if (ctx.createConicGradient) {
+              const cx = size / 2;
+              const cy = size / 2;
+              const gradient = ctx.createConicGradient(-Math.PI / 2, cx, cy);
+
+              let overlayColor: string;
+              let isPerceptual = false;
+              let blendMode: GlobalCompositeOperation = 'source-over';
+
               if (perceptualPalette) {
-                // Calculate luminance manually inline since we don't import rgbToL here
-                const getL = (r: number, g: number, b: number) => {
-                  const v = [r, g, b].map(val => {
-                    val /= 255;
-                    return val <= 0.04045 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
-                  });
-                  return (0.2126 * v[0]) + (0.7152 * v[1]) + (0.0722 * v[2]);
-                };
+                isPerceptual = true;
+                const bgL = rgbToL(...perceptualPalette.background);
+                const stL = rgbToL(...perceptualPalette.standout);
 
-                const bgL = getL(...perceptualPalette.background);
-                const stL = getL(...perceptualPalette.standout);
-
-                const blendMode = bgL > stL ? 'multiply' : 'screen';
-                const fillColor = `rgb(${perceptualPalette.standout.join(',')})`;
-
-                const offCanvas = document.createElement('canvas');
-                offCanvas.width = size;
-                offCanvas.height = size;
-                const offCtx = offCanvas.getContext('2d');
-
-                if (offCtx) {
-                  offCtx.fillStyle = fillColor;
-                  offCtx.fillRect(0, 0, size, size);
-
-                  offCtx.globalCompositeOperation = 'destination-in';
-                  const cx = size / 2;
-                  const cy = size / 2;
-                  const gradient = offCtx.createConicGradient(-Math.PI / 2, cx, cy);
-
-                  const solid = 'rgba(0, 0, 0, 1)';
-                  const transparent = 'rgba(0, 0, 0, 0)';
-
-                  gradient.addColorStop(0, solid);
-                  gradient.addColorStop(progress, solid);
-                  if (progress < 1) {
-                    gradient.addColorStop(Math.min(progress + 0.001, 1), transparent);
-                    gradient.addColorStop(1, transparent);
-                  }
-
-                  offCtx.fillStyle = gradient;
-                  offCtx.fillRect(0, 0, size, size);
-
-                  ctx.globalCompositeOperation = blendMode;
-                  ctx.globalAlpha = 0.85;
-                  ctx.drawImage(offCanvas, 0, 0);
-
-                  // Reset composite and alpha
-                  ctx.globalCompositeOperation = 'source-over';
-                  ctx.globalAlpha = 1.0;
-                }
+                blendMode = bgL > stL ? 'multiply' : 'screen';
+                overlayColor = `rgb(${perceptualPalette.standout.join(',')})`;
               } else {
-                // Fallback to legacy
-                const cx = size / 2;
-                const cy = size / 2;
-                const gradient = ctx.createConicGradient(-Math.PI / 2, cx, cy);
-
                 const isBright = isPaletteBright(palette);
-                const overlayColor = isBright ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.4)';
-                const transparent = 'rgba(0, 0, 0, 0)';
+                overlayColor = isBright ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.4)';
+              }
 
-                gradient.addColorStop(0, overlayColor);
-                gradient.addColorStop(progress, overlayColor);
-                if (progress < 1) {
-                  gradient.addColorStop(progress, transparent);
-                  gradient.addColorStop(1, transparent);
-                }
+              const transparent = 'rgba(0, 0, 0, 0)';
 
-                ctx.fillStyle = gradient;
-                ctx.fillRect(0, 0, size, size);
+              gradient.addColorStop(0, overlayColor);
+              gradient.addColorStop(progress, overlayColor);
+              if (progress < 1) {
+                gradient.addColorStop(isPerceptual ? Math.min(progress + 0.001, 1) : progress, transparent);
+                gradient.addColorStop(1, transparent);
+              }
+
+              if (isPerceptual) {
+                ctx.globalCompositeOperation = blendMode;
+                ctx.globalAlpha = 0.85;
+              }
+
+              ctx.fillStyle = gradient;
+              ctx.fillRect(0, 0, size, size);
+
+              if (isPerceptual) {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = 1.0;
               }
             }
           }
