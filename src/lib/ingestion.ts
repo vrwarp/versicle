@@ -205,6 +205,18 @@ export async function reprocessBook(bookId: string): Promise<void> {
     await Promise.all(tableBatches.map(table => tableStore.put(table)));
 
     await tx.done;
+
+    // Update Yjs store (inventory) if palette changed
+    if (reprocessedPalette || reprocessedPerceptualPalette) {
+        const { useBookStore } = await import('../store/useBookStore');
+        const updateBook = useBookStore.getState().updateBook;
+        if (updateBook) {
+            updateBook(bookId, {
+                coverPalette: reprocessedPalette,
+                perceptualPalette: reprocessedPerceptualPalette
+            });
+        }
+    }
 }
 
 export interface BookExtractionData {

@@ -850,6 +850,11 @@ export function useEpubReader(
     });
 
     themes.select(options.currentTheme);
+
+    // Set the theme font options.
+    themes.fontSize(options.fontSize);
+    themes.font(options.fontFamily);
+
     const TARGET_BASE_PX = 16; // The ideal unified size at 100% scale
     const TARGET_RATIO = 1.35; // Standard baseline leading ratio
 
@@ -862,13 +867,7 @@ export function useEpubReader(
     // Normalization factors
     const fsNormalizationFactor = TARGET_BASE_PX / bookBasePx;
     const lhNormalizationFactor = TARGET_RATIO / bookNativeRatio;
-
-    // Apply font size normalization
-    const userFSScale = options.fontSize / 100;
-    const finalFSScalePct = Math.round(fsNormalizationFactor * userFSScale * 100);
-    themes.fontSize(`${finalFSScalePct}%`);
-
-    themes.font(options.fontFamily);
+    const finalFSScalePct = Math.round(fsNormalizationFactor * 100);
 
     // Apply line height normalization
     const userLH = options.lineHeight;
@@ -904,7 +903,7 @@ export function useEpubReader(
 
       // The scaling part MUST always apply for normalization to work
       let css = `
-            html, body {
+            html {
               font-size: ${finalFSScalePct}% !important;
             }
           `;
