@@ -152,3 +152,7 @@
 ## 2026-04-26 - Dynamic ARIA Labels on Disabled Dialog Buttons
 **Learning:** Standard `disabled={true}` attributes on buttons correctly remove them from the focus order. However, for screen reader users exploring via virtual cursor, encountering a disabled "Cancel" button provides no context for *why* it is disabled.
 **Action:** When disabling buttons during async operations (e.g., `isDeleting`), apply a dynamic `aria-label` like `aria-label={isDeleting ? 'Cancel (disabled while deleting)' : 'Cancel'}` to explicitly explain the application state.
+
+## 2026-04-27 - [Async Buttons with Visible Text]
+**Learning:** Adding dynamic `aria-label`s to async buttons that also have visible changing text (like "Scanning...") creates a WCAG 2.5.3 (Label in Name) violation because the spoken accessible name no longer includes the visible text. Furthermore, it causes redundant screen reader announcements (e.g., "disabled while scanning, disabled, button").
+**Action:** For buttons with visible text, never manipulate `aria-label` during loading. Instead, wrap the visible text in `<span aria-hidden={isLoading}>...</span>` and add an invisible `<span className="sr-only" aria-live="polite">Loading...</span>` next to the loading spinner to correctly inform screen readers of the state change while maintaining the Label in Name link.

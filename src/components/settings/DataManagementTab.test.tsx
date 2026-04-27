@@ -59,7 +59,7 @@ describe('DataManagementTab', () => {
     it('shows scanning state', () => {
         render(<DataManagementTab {...defaultProps} isScanning={true} />);
 
-        expect(screen.getByText('Scanning...')).toBeInTheDocument();
+        expect(screen.getAllByText('Scanning...')[0]).toBeInTheDocument();
     });
 
     it('shows orphan scan result', () => {
@@ -78,14 +78,14 @@ describe('DataManagementTab', () => {
             />
         );
 
-        expect(screen.getByText('Regenerating...')).toBeInTheDocument();
+        expect(screen.getAllByText('Regenerating...')[0]).toBeInTheDocument();
         expect(screen.getByText('Processing book 1 of 5...')).toBeInTheDocument();
     });
 
     it('shows clearing state', () => {
         render(<DataManagementTab {...defaultProps} isClearing={true} />);
 
-        expect(screen.getByText('Clearing...')).toBeInTheDocument();
+        expect(screen.getAllByText('Clearing...')[0]).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /clearing/i })).toBeDisabled();
     });
 
