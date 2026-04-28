@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button } from '../ui/Button';
+import { Loader2 } from 'lucide-react';
 import { MigrationStateService } from '../../lib/sync/MigrationStateService';
 import { createLogger } from '../../lib/logger';
 
@@ -56,6 +57,7 @@ export const CriticalMigrationFailureView: React.FC<CriticalMigrationFailureView
                     variant="default"
                     className="w-full"
                 >
+                    {isRollingBack && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
                     {isRollingBack ? 'Rolling back...' : 'Restore Previous Data'}
                 </Button>
 
