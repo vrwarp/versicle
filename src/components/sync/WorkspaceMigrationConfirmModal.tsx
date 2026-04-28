@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button } from '../ui/Button';
+import { Loader2 } from 'lucide-react';
 import { MigrationStateService } from '../../lib/sync/MigrationStateService';
 import { CheckpointService } from '../../lib/sync/CheckpointService';
 import { getFirestoreSyncManager } from '../../lib/sync/FirestoreSyncManager';
@@ -74,6 +75,7 @@ export const WorkspaceMigrationConfirmModal: React.FC<WorkspaceMigrationConfirmM
                         variant="default"
                         className="flex-1"
                     >
+                        {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
                         {isProcessing ? 'Processing...' : 'Yes, Finalize'}
                     </Button>
                     <Button
@@ -82,6 +84,7 @@ export const WorkspaceMigrationConfirmModal: React.FC<WorkspaceMigrationConfirmM
                         variant="outline"
                         className="flex-1"
                     >
+                        {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
                         Roll Back
                     </Button>
                 </div>
