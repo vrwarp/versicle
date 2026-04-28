@@ -10,8 +10,8 @@ import { useBookStore } from '../store/useBookStore';
 import {
   toTraditional,
   getPinyin,
-  toTraditionalSync,
-  getPinyinSync
+  ensureOpenCC,
+  ensurePinyin
 } from '../lib/chinese/ChineseTextProcessor';
 
 const logger = createLogger('useEpubReader');
@@ -598,8 +598,8 @@ export function useEpubReader(
           }
 
           // Pre-load processors to allow synchronous calls in the loop
-          if (prefs.forceTraditionalChinese) await toTraditional('');
-          if (prefs.showPinyin) await getPinyin('');
+          if (prefs.forceTraditionalChinese) await ensureOpenCC();
+          if (prefs.showPinyin) await ensurePinyin();
 
           const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
           const textNodes: Text[] = [];
@@ -636,7 +636,7 @@ export function useEpubReader(
 
             // 2. Handle Traditional Chinese (In-place string mutation)
             if (prefs.forceTraditionalChinese) {
-              const translated = toTraditionalSync(originalText);
+              const translated = toTraditional(originalText);
               if (textNode.nodeValue !== translated) {
                 textNode.nodeValue = translated;
               }
@@ -649,7 +649,7 @@ export function useEpubReader(
             // 3. Handle Pinyin (Ephemeral Geometry Collection)
             if (prefs.showPinyin) {
               const currentText = textNode.nodeValue || '';
-              const pinyinArray = getPinyinSync(currentText);
+              const pinyinArray = getPinyin(currentText);
 
               for (let i = 0; i < currentText.length; i++) {
                 const char = currentText[i];
