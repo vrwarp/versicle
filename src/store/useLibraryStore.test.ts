@@ -245,9 +245,8 @@ describe('useLibraryStore', () => {
     expect(state.staticMetadata['test-id']).toBeDefined();
   });
 
-  it('should update and persist sort order', () => {
-    useLibraryStore.getState().setSortOrder('author');
-    expect(useLibraryStore.getState().sortOrder).toBe('author');
+  it('should update and persist sort order (moved to preferences)', () => {
+    // This functionality has been moved to usePreferencesStore
   });
 
   it('should use batch addBooks when importing multiple files', async () => {

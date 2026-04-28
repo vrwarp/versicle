@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import React, { ReactNode } from 'react';
 import { LibraryView } from './LibraryView';
+import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useLibraryStore, useBookStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
 import { MemoryRouter } from 'react-router-dom';
@@ -144,8 +145,8 @@ describe('LibraryView', () => {
             }
         });
 
-        useLibraryStore.setState({
-            sortOrder: 'recent'
+        usePreferencesStore.setState({
+            librarySortOrder: 'recent'
         });
 
         // Mock reading progress for sorting - using per-device structure
@@ -177,7 +178,6 @@ describe('LibraryView', () => {
                 <LibraryView />
             </MemoryRouter>
         );
-        const sortSelect = screen.getByTestId('sort-select');
 
         // Default: Recently Added (Newest first) -> 2 (300), 3 (200), 1 (100)
         let cards = screen.getAllByTestId('book-card');
@@ -186,21 +186,27 @@ describe('LibraryView', () => {
         expect(cards[2]).toHaveTextContent('B'); // 100
 
         // Sort by Title (A-Z) -> 2 (A), 1 (B), 3 (C)
-        fireEvent.change(sortSelect, { target: { value: 'title' } });
+        act(() => {
+            usePreferencesStore.setState({ librarySortOrder: 'title' });
+        });
         cards = screen.getAllByTestId('book-card');
         expect(cards[0]).toHaveTextContent('A');
         expect(cards[1]).toHaveTextContent('B');
         expect(cards[2]).toHaveTextContent('C');
 
         // Sort by Author (A-Z) -> 3 (X), 2 (Y), 1 (Z)
-        fireEvent.change(sortSelect, { target: { value: 'author' } });
+        act(() => {
+            usePreferencesStore.setState({ librarySortOrder: 'author' });
+        });
         cards = screen.getAllByTestId('book-card');
         expect(cards[0]).toHaveTextContent('C'); // Author X
         expect(cards[1]).toHaveTextContent('A'); // Author Y
         expect(cards[2]).toHaveTextContent('B'); // Author Z
 
         // Sort by Last Read (Most recent first) -> 3 (300), 1 (200), 2 (100)
-        fireEvent.change(sortSelect, { target: { value: 'last_read' } });
+        act(() => {
+            usePreferencesStore.setState({ librarySortOrder: 'last_read' });
+        });
         cards = screen.getAllByTestId('book-card');
         expect(cards[0]).toHaveTextContent('C'); // 300
         expect(cards[1]).toHaveTextContent('B'); // 200

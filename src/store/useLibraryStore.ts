@@ -11,8 +11,6 @@ import { createLogger } from '../lib/logger';
 
 const logger = createLogger('LibraryStore');
 
-export type SortOption = 'recent' | 'last_read' | 'author' | 'title';
-
 /**
  * State interface for the Library store.
  * 
@@ -43,16 +41,8 @@ interface LibraryState {
   /** Error message if an operation failed, or null. */
   error: string | null;
 
-  /** The current sort order of the library. */
-  sortOrder: SortOption;
-
   // === ACTIONS (not synced to Yjs) ===
 
-  /**
-   * Sets the sort order of the library.
-   * @param sort - The new sort order.
-   */
-  setSortOrder: (sort: SortOption) => void;
   /**
    * Hydrates static metadata (covers, etc.) from IDB for all books in inventory.
    * Should be called on app mount after Yjs syncs.
@@ -225,11 +215,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
     uploadStatus: '',
     error: null,
 
-    sortOrder: 'last_read',
-
       // Actions
-
-      setSortOrder: (sort) => set({ sortOrder: sort }),
 
       hydrateStaticMetadata: hydrateStaticMetadataFn,
 
