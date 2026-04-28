@@ -182,9 +182,38 @@ class SearchClient {
      * @param bookId - The unique identifier of the book to search.
      * @returns A Promise that resolves to an array of SearchResult objects.
      */
+    private searchRequestId = 0;
+    private pendingSearches = new Map<number, { resolve: (val: SearchResult[]) => void, reject: (err: any) => void }>();
+
+    /**
+     * Performs a search query against a specific book index via the worker.
+     *
+     * @param query - The text query to search for.
+     * @param bookId - The unique identifier of the book to search.
+     * @returns A Promise that resolves to an array of SearchResult objects.
+     */
     async search(query: string, bookId: string): Promise<SearchResult[]> {
         const engine = this.getEngine();
-        return engine.search(bookId, query);
+
+        const requestId = ++this.searchRequestId;
+
+        return new Promise<SearchResult[]>((resolve, reject) => {
+            this.pendingSearches.set(requestId, { resolve, reject });
+
+            engine.search(bookId, query).then(results => {
+                const pending = this.pendingSearches.get(requestId);
+                if (pending) {
+                    this.pendingSearches.delete(requestId);
+                    pending.resolve(results);
+                }
+            }).catch(err => {
+                const pending = this.pendingSearches.get(requestId);
+                if (pending) {
+                    this.pendingSearches.delete(requestId);
+                    pending.reject(err);
+                }
+            });
+        });
     }
 
     /**
