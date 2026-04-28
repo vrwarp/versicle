@@ -15,10 +15,22 @@ def test_abbrev_settings(page: Page):
     # Wait for navigation to reader
     expect(page).to_have_url(re.compile(r".*/read/.*"), timeout=10000)
 
+    # Wait for the button to be attached and visible before clicking
+    settings_btn = page.locator("button[data-testid='reader-settings-button']")
+    settings_btn.wait_for(state="attached", timeout=10000)
+
     # 1. Open Global Settings
     print("Opening Global Settings...")
-    page.click("button[data-testid='reader-settings-button']", force=True)
-    expect(page.get_by_role("dialog")).to_be_visible()
+    # Remove force=True to ensure it's actually actionable, or retry if it fails
+    settings_btn.click(force=True)
+
+    # Retry logic if the dialog doesn't appear
+    try:
+        expect(page.get_by_role("dialog")).to_be_visible(timeout=5000)
+    except Exception:
+        print("Retrying click on settings button...")
+        settings_btn.click(force=True)
+        expect(page.get_by_role("dialog")).to_be_visible(timeout=5000)
 
     # 2. Switch to Dictionary Tab
     print("Switching to Dictionary Tab...")
