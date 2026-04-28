@@ -175,13 +175,6 @@ class SearchClient {
         }
     }
 
-    /**
-     * Performs a search query against a specific book index via the worker.
-     *
-     * @param query - The text query to search for.
-     * @param bookId - The unique identifier of the book to search.
-     * @returns A Promise that resolves to an array of SearchResult objects.
-     */
     private searchRequestId = 0;
     private pendingSearches = new Map<number, { resolve: (val: SearchResult[]) => void, reject: (err: any) => void }>();
 
