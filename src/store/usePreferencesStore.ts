@@ -25,6 +25,7 @@ interface PreferencesState {
     readerViewMode: 'paginated' | 'scrolled';
     libraryLayout: 'grid' | 'list';
     libraryFilterMode: 'all' | 'downloaded';
+    librarySortOrder: 'recent' | 'last_read' | 'author' | 'title';
     activeContext: 'library' | 'notes';
 
     // === LANGUAGE SCOPED FONT RENDERING ===
@@ -45,6 +46,7 @@ interface PreferencesState {
     setReaderViewMode: (mode: 'paginated' | 'scrolled') => void;
     setLibraryLayout: (layout: 'grid' | 'list') => void;
     setLibraryFilterMode: (mode: 'all' | 'downloaded') => void;
+    setLibrarySortOrder: (order: 'recent' | 'last_read' | 'author' | 'title') => void;
     setActiveContext: (context: 'library' | 'notes') => void;
 
     setForceTraditionalChinese: (force: boolean) => void;
@@ -64,6 +66,7 @@ const defaultPreferences = {
     readerViewMode: 'paginated' as const,
     libraryLayout: 'grid' as const,
     libraryFilterMode: 'all' as const,
+    librarySortOrder: 'last_read' as const,
     activeContext: 'library' as const,
 
     forceTraditionalChinese: false,
@@ -98,6 +101,7 @@ export const usePreferencesStore = create<PreferencesState>()(
             setReaderViewMode: (mode) => set({ readerViewMode: mode }),
             setLibraryLayout: (layout) => set({ libraryLayout: layout }),
             setLibraryFilterMode: (mode) => set({ libraryFilterMode: mode }),
+            setLibrarySortOrder: (order) => set({ librarySortOrder: order }),
             setActiveContext: (context) => set({ activeContext: context }),
 
             setForceTraditionalChinese: (force) => set({ forceTraditionalChinese: force }),
