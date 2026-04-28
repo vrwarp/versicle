@@ -80,22 +80,12 @@ class DBService {
       const manifestStore = tx.objectStore('static_manifests');
       const resourceStore = tx.objectStore('static_resources');
 
-      // Hybrid approach: use getAll for large sets (it's faster), targeted reads for small sets
-      let allManifests: (StaticBookManifest | undefined)[];
-      let resourceKeysSet: Set<IDBValidKey>;
+      const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
+      const resourceCountPromises = Promise.all(ids.map(id => resourceStore.count(id).then(c => c > 0 ? id : undefined)));
+      const [manifests, presentIds] = await Promise.all([manifestsPromise, resourceCountPromises]);
 
-      if (ids.length > 50) {
-        const manifestsPromise = manifestStore.getAll();
-        const resourceKeysPromise = resourceStore.getAllKeys().then(keys => new Set(keys));
-        [allManifests, resourceKeysSet] = await Promise.all([manifestsPromise, resourceKeysPromise]);
-      } else {
-        const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
-        const resourceKeysPromise = Promise.all(ids.map(id => resourceStore.getKey(id)));
-
-        const [manifests, keys] = await Promise.all([manifestsPromise, resourceKeysPromise]);
-        allManifests = manifests.filter(Boolean) as StaticBookManifest[];
-        resourceKeysSet = new Set(keys.filter(Boolean) as IDBValidKey[]);
-      }
+      const allManifests = manifests.filter(Boolean) as StaticBookManifest[];
+      const resourceKeysSet = new Set(presentIds.filter(Boolean) as IDBValidKey[]);
 
       await tx.done;
 
@@ -515,12 +505,14 @@ class DBService {
         const tx = db.transaction('static_resources', 'readonly');
         const store = tx.objectStore('static_resources');
 
-        const allKeys = await store.getAllKeys();
-        const keySet = new Set(allKeys as string[]);
+        const countPromises = bookIds.map(id =>
+          store.count(id).then(count => ({ id, exists: count > 0 }))
+        );
+
+        const existenceResults = await Promise.all(countPromises);
         await tx.done;
 
-        bookIds.forEach((id) => {
-          const exists = keySet.has(id);
+        existenceResults.forEach(({ id, exists }) => {
           logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists}`);
           result.set(id, !exists);
         });
@@ -540,22 +532,6 @@ class DBService {
     }
     return new Map();
   }
-
-  /**
-   * Returns a Set of all book IDs that have binary content locally (NOT offloaded).
-   */
-  async getAvailableResourceIds(): Promise<Set<string>> {
-    try {
-      const db = await this.getDB();
-      const keys = await db.getAllKeys('static_resources');
-      return new Set(keys as string[]);
-    } catch (error) {
-      this.handleError(error);
-    }
-    return new Set();
-  }
-
-
 
   // --- Playback State ---
 
