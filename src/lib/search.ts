@@ -15,6 +15,8 @@ class SearchClient {
     private parser: DOMParser | undefined;
     private indexedBooks = new Set<string>();
     private pendingIndexes = new Map<string, { task: Promise<void>, callbacks: ((percent: number) => void)[] }>();
+    private searchIdCounter = 0;
+    private pendingSearches = new Map<number, Promise<SearchResult[]>>();
 
     /**
      * Retrieves the existing Web Worker instance or creates a new one if it doesn't exist.
@@ -177,6 +179,8 @@ class SearchClient {
 
     /**
      * Performs a search query against a specific book index via the worker.
+     * Avoids out-of-order promise resolutions by explicitly tracking requests
+     * and ignoring stale results.
      *
      * @param query - The text query to search for.
      * @param bookId - The unique identifier of the book to search.
@@ -184,7 +188,24 @@ class SearchClient {
      */
     async search(query: string, bookId: string): Promise<SearchResult[]> {
         const engine = this.getEngine();
-        return engine.search(bookId, query);
+        const currentId = ++this.searchIdCounter;
+
+        const searchPromise = engine.search(bookId, query);
+        this.pendingSearches.set(currentId, searchPromise);
+
+        try {
+            const results = await searchPromise;
+
+            // Check if there's a newer request that has been issued.
+            // If the latest ID is greater than currentId, this result is stale.
+            if (this.searchIdCounter > currentId) {
+                throw new Error('Search cancelled');
+            }
+
+            return results;
+        } finally {
+            this.pendingSearches.delete(currentId);
+        }
     }
 
     /**
@@ -197,6 +218,7 @@ class SearchClient {
             this.engine = null;
             this.indexedBooks.clear();
             this.pendingIndexes.clear();
+            this.pendingSearches.clear();
         }
     }
 }
