@@ -388,7 +388,7 @@ export class PlaybackStateManager {
             // Optimization: If queue has not changed since last persist,
             // we don't need to save the full queue to cache_session_state.
             if (this.lastPersistedQueue !== this._queue) {
-                dbService.saveTTSState(this.currentBookId, this._queue);
+                dbService.saveTTSState(this.currentBookId, this._queue, this._currentSectionIndex);
                 this.lastPersistedQueue = this._queue;
             }
         }

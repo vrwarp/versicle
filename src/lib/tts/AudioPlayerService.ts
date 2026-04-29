@@ -321,6 +321,23 @@ export class AudioPlayerService {
                     const currentIndex = progress?.currentQueueIndex || 0;
                     const sectionIndex = progress?.currentSectionIndex ?? -1;
 
+                    // VALIDATION GUARD: Check for Cache-Sync Decoupling
+                    if (state.sectionIndex !== undefined && sectionIndex !== -1 && state.sectionIndex !== sectionIndex) {
+                        logger.warn(`TTS Cache-Sync Decouple detected. Discarding stale cache. Cache Section: ${state.sectionIndex}, Sync Section: ${sectionIndex}`);
+
+                        // Clear the stale queue
+                        this.stateManager.setQueue([], 0, sectionIndex);
+
+                        if (sectionIndex >= 0 && sectionIndex < this.playlist.length) {
+                            // We need to fetch the true queue for the synced section.
+                            await this.loadSectionInternal(sectionIndex, false);
+
+                            // Restore progress inside the newly loaded queue.
+                            this.stateManager.jumpTo(currentIndex);
+                        }
+                        return;
+                    }
+
                     this.stateManager.setQueue(state.queue, currentIndex, sectionIndex);
                     // Subscription handles metadata and listeners
 
