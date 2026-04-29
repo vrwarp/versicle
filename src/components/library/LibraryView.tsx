@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useLibraryStore, type SortOption } from '../../store/useLibraryStore';
+import { useLibraryStore } from '../../store/useLibraryStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useAllBooks } from '../../store/selectors';
 import { createLogger } from '../../lib/logger';
@@ -49,8 +49,6 @@ export const LibraryView: React.FC = () => {
     addBook,
     restoreBook,
     isImporting,
-    sortOrder,
-    setSortOrder,
     hydrateStaticMetadata
   } = useLibraryStore(useShallow(state => ({
     isLoading: state.isLoading,
@@ -58,17 +56,17 @@ export const LibraryView: React.FC = () => {
     addBook: state.addBook,
     restoreBook: state.restoreBook,
     isImporting: state.isImporting,
-    sortOrder: state.sortOrder,
-    setSortOrder: state.setSortOrder,
     hydrateStaticMetadata: state.hydrateStaticMetadata
   })));
 
 
-  const { libraryLayout, setLibraryLayout, libraryFilterMode, setLibraryFilterMode, activeContext, setActiveContext } = usePreferencesStore(useShallow(state => ({
+  const { libraryLayout, setLibraryLayout, libraryFilterMode, setLibraryFilterMode, librarySortOrder, setLibrarySortOrder, activeContext, setActiveContext } = usePreferencesStore(useShallow(state => ({
     libraryLayout: state.libraryLayout,
     setLibraryLayout: state.setLibraryLayout,
     libraryFilterMode: state.libraryFilterMode,
     setLibraryFilterMode: state.setLibraryFilterMode,
+    librarySortOrder: state.librarySortOrder,
+    setLibrarySortOrder: state.setLibrarySortOrder,
     activeContext: state.activeContext,
     setActiveContext: state.setActiveContext
   })));
@@ -350,7 +348,7 @@ export const LibraryView: React.FC = () => {
 
     // 3. Sort the filtered results
     return filtered.sort((a, b) => {
-      switch (sortOrder) {
+      switch (librarySortOrder) {
         case 'recent':
           // Sort by addedAt descending (newest first)
           return (b.addedAt || 0) - (a.addedAt || 0);
@@ -369,7 +367,7 @@ export const LibraryView: React.FC = () => {
           return 0;
       }
     });
-  }, [books, debouncedSearchQuery, sortOrder, libraryFilterMode, staticMetadata]);
+  }, [books, debouncedSearchQuery, librarySortOrder, libraryFilterMode, staticMetadata]);
 
   // OPTIMIZATION: Memoize rendered VDOM items to prevent O(N) allocation on every keystroke in the search bar.
   // When `searchQuery` updates (keystroke), LibraryView re-renders immediately, but `debouncedSearchQuery`
@@ -600,8 +598,8 @@ export const LibraryView: React.FC = () => {
               <div className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
                 <span className="whitespace-nowrap hidden sm:inline" id="sort-by-label">Sort by:</span>
                 <Select
-                  value={sortOrder}
-                  onValueChange={(val) => setSortOrder(val as SortOption)}
+                  value={librarySortOrder}
+                  onValueChange={(val) => setLibrarySortOrder(val as 'recent' | 'last_read' | 'author' | 'title')}
                 >
                   <SelectTrigger
                     className="w-[130px] sm:w-[180px] text-foreground text-xs sm:text-sm h-8 sm:h-10"

@@ -3,7 +3,7 @@ let openccInstance: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let pinyinModule: any = null;
 
-export async function getOpenCC() {
+export async function ensureOpenCC() {
   if (!openccInstance) {
     // @ts-expect-error - no types for opencc-js
     const OpenCC = await import('opencc-js');
@@ -12,14 +12,23 @@ export async function getOpenCC() {
   return openccInstance;
 }
 
-export async function getPinyin(text: string): Promise<string[]> {
+export async function ensurePinyin() {
   if (!pinyinModule) {
     pinyinModule = await import('pinyin-pro');
+  }
+  return pinyinModule;
+}
+
+export function getPinyin(text: string): string[] {
+  if (!pinyinModule) {
+    throw new Error('Pinyin module not loaded. Call ensurePinyin() first.');
   }
   return pinyinModule.pinyin(text, { type: 'array', toneType: 'symbol' });
 }
 
-export async function toTraditional(text: string): Promise<string> {
-  const converter = await getOpenCC();
-  return converter(text);
+export function toTraditional(text: string): string {
+  if (!openccInstance) {
+    throw new Error('OpenCC module not loaded. Call ensureOpenCC() first.');
+  }
+  return openccInstance(text);
 }
