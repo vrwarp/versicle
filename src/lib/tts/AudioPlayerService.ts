@@ -316,6 +316,12 @@ export class AudioPlayerService {
                 if (this.currentBookId !== bookId) return;
 
                 if (state && state.queue && state.queue.length > 0) {
+                    if (state.sectionIndex !== undefined && state.sectionIndex !== progress?.currentSectionIndex) {
+                        logger.warn("TTS Cache-Sync Decouple detected. Discarding stale cache.");
+                        await dbService.clearTTSState(bookId);
+                        return;
+                    }
+
                     await this.stopInternal();
 
                     const currentIndex = progress?.currentQueueIndex || 0;
