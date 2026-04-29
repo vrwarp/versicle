@@ -85,6 +85,7 @@ describe('Sync Schema Exhaustion', () => {
         'checkpoints',      // Local recovery
         'sync_log',         // Local logging
         'app_metadata',     // Local config
+        'flight_snapshots', // Local diagnostics
     ];
 
     // Some stores are mapped to properties inside SyncManifest.

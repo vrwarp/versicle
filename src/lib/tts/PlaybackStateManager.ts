@@ -1,5 +1,6 @@
 import type { TTSQueueItem, TTSStatus } from './AudioPlayerService';
 import { dbService } from '../../db/DBService';
+import { flightRecorder } from './TTSFlightRecorder';
 
 
 export type PlaybackStateSnapshot = {
@@ -47,6 +48,7 @@ export class PlaybackStateManager {
      * Resets the playback state to its initial values.
      */
     reset() {
+        flightRecorder.record('PSM', 'reset');
         this._queue = [];
         this._currentIndex = 0;
         this._currentSectionIndex = -1;
@@ -64,6 +66,13 @@ export class PlaybackStateManager {
      * @param {number} sectionIndex The index of the current section in the book.
      */
     setQueue(items: TTSQueueItem[], startIndex: number, sectionIndex: number) {
+        flightRecorder.record('PSM', 'setQueue', {
+            len: items.length,
+            startIndex,
+            sectionIndex,
+            prevLen: this._queue.length,
+            prevIndex: this._currentIndex
+        });
         this._queue = items;
         this._currentIndex = startIndex;
         this._currentSectionIndex = sectionIndex;
@@ -105,6 +114,10 @@ export class PlaybackStateManager {
         }
 
         if (changed) {
+            flightRecorder.record('PSM', 'applySkippedMask', {
+                count: rawSkippedIndices.size,
+                sectionId
+            });
             this.calculatePrefixSums();
             this.persistQueue();
             this.notifyListeners();
@@ -172,6 +185,9 @@ export class PlaybackStateManager {
         }
 
         if (changed) {
+            flightRecorder.record('PSM', 'applyTableAdaptations', {
+                count: adaptations.length
+            });
             this._queue = newQueue;
             this.calculatePrefixSums();
             this.persistQueue();
@@ -222,6 +238,7 @@ export class PlaybackStateManager {
     next(): boolean {
         const nextIndex = this.getNextVisibleIndex(this._currentIndex);
         if (nextIndex !== -1) {
+            flightRecorder.record('PSM', 'next', { from: this._currentIndex, to: nextIndex });
             this._currentIndex = nextIndex;
             this.persistQueue();
             this.notifyListeners();
@@ -233,6 +250,7 @@ export class PlaybackStateManager {
     prev(): boolean {
         const prevIndex = this.getPrevVisibleIndex(this._currentIndex);
         if (prevIndex !== -1) {
+            flightRecorder.record('PSM', 'prev', { from: this._currentIndex, to: prevIndex });
             this._currentIndex = prevIndex;
             this.persistQueue();
             this.notifyListeners();
@@ -267,12 +285,7 @@ export class PlaybackStateManager {
 
     jumpTo(index: number): boolean {
         if (index >= 0 && index < this._queue.length) {
-            // Even if we jump to a skipped item (e.g. manually), we allow it?
-            // Or should we snap to nearest visible?
-            // For now, allow direct jumps, assuming UI handles visibility.
-            // But if auto-playing, it might be weird.
-            // Let's assume if user clicks it, they want to hear it even if skipped.
-            // BUT, for consistency, let's just update index.
+            flightRecorder.record('PSM', 'jumpTo', { from: this._currentIndex, to: index });
             this._currentIndex = index;
             this.persistQueue();
             this.notifyListeners();
@@ -305,6 +318,7 @@ export class PlaybackStateManager {
         }
 
         if (newIndex !== this._currentIndex) {
+            flightRecorder.record('PSM', 'seekToTime', { time, from: this._currentIndex, to: newIndex });
             this._currentIndex = newIndex;
             this.persistQueue();
             this.notifyListeners();
@@ -318,7 +332,9 @@ export class PlaybackStateManager {
      */
     jumpToEnd() {
         if (this._queue.length > 0) {
-            this._currentIndex = this._queue.length - 1;
+            const last = this._queue.length - 1;
+            flightRecorder.record('PSM', 'jumpToEnd', { from: this._currentIndex, to: last });
+            this._currentIndex = last;
             this.persistQueue();
             this.notifyListeners();
         }
