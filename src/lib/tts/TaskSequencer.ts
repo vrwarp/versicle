@@ -3,6 +3,8 @@
  * Ensures that tasks are executed one after another in the order they were enqueued.
  * This is crucial for maintaining consistent state in the audio player during rapid user interactions.
  */
+import { flightRecorder } from './TTSFlightRecorder';
+
 export class TaskSequencer {
     private pendingPromise: Promise<void> = Promise.resolve();
     private isDestroyed = false;
@@ -15,9 +17,21 @@ export class TaskSequencer {
      * @returns {Promise<T | void>} A promise that resolves with the task's result or void if the sequencer is destroyed or the task fails safely.
      */
     enqueue<T>(task: () => Promise<T>): Promise<T | void> {
+        flightRecorder.record('TSQ', 'enqueue');
         const resultPromise = this.pendingPromise.then(async () => {
-            if (this.isDestroyed) return;
-            return await task();
+            if (this.isDestroyed) {
+                flightRecorder.record('TSQ', 'task.abort', { reason: 'destroyed' });
+                return;
+            }
+            flightRecorder.record('TSQ', 'task.start');
+            try {
+                const res = await task();
+                flightRecorder.record('TSQ', 'task.done');
+                return res;
+            } catch (e) {
+                flightRecorder.record('TSQ', 'task.error', { error: String(e) });
+                throw e;
+            }
         });
 
         this.pendingPromise = resultPromise.then(() => { }).catch((err) => {

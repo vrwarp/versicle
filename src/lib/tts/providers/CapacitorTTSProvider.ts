@@ -2,6 +2,7 @@ import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice } from './types';
 import type { PluginListenerHandle } from '@capacitor/core';
 import { playEarconOscillators } from '../earcons';
+import { flightRecorder } from '../TTSFlightRecorder';
 
 export class CapacitorTTSProvider implements ITTSProvider {
   id = 'local';
@@ -75,11 +76,19 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
     if (isContentMatch && isNaturalFlow && this.nextUtterancePromise) {
         // --- SMART HANDOFF ---
+        const promiseToTrack = this.nextUtterancePromise;
+        const wasFinished = this.currentUtteranceFinished;
+
+        flightRecorder.record('CAP', 'play.handoff', {
+            uttId: myId,
+            textLen: text.length,
+            promiseSettled: wasFinished
+        });
+
         // Native audio is already queued/playing. We just adopt the promise.
         this.emit({ type: 'start' });
 
         // Clear preload state so we don't re-use it
-        const promiseToTrack = this.nextUtterancePromise;
         this.nextText = null;
         this.nextUtterancePromise = null;
 
@@ -117,6 +126,11 @@ export class CapacitorTTSProvider implements ITTSProvider {
       lang = voice.lang;
     }
 
+    flightRecorder.record('CAP', 'play.flush', {
+        uttId: myId,
+        textLen: text.length
+    });
+
     this.emit({ type: 'start' });
 
     const speakPromise = TextToSpeech.speak({
@@ -147,6 +161,11 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
       this.nextText = text;
 
+      flightRecorder.record('CAP', 'preload', {
+          uttId: this.activeUtteranceId + 1,
+          textLen: text.length
+      });
+
       let lang = 'en-US';
       const voice = this.voiceMap.get(options.voiceId);
       if (voice) {
@@ -166,6 +185,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
   }
 
   stop(): void {
+    flightRecorder.record('CAP', 'stop');
     this.activeUtteranceId++;
     this.lastText = null;
 
@@ -178,6 +198,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
   }
 
   pause(): void {
+    flightRecorder.record('CAP', 'pause');
     // Native pause not reliable, so we stop.
     this.activeUtteranceId++;
 
@@ -218,6 +239,11 @@ export class CapacitorTTSProvider implements ITTSProvider {
   }
 
   private emit(event: TTSEvent) {
+      flightRecorder.record('CAP', event.type, {
+          uttId: this.activeUtteranceId,
+          ...(event.type === 'error' ? { error: String(event.error) } : {}),
+          ...(event.type === 'boundary' ? { charIndex: event.charIndex } : {})
+      });
       this.eventListeners.forEach(l => l(event));
   }
 }

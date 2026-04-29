@@ -12,7 +12,8 @@ import type {
   TableImage,
   // App Types
   SyncCheckpoint,
-  SyncLogEntry
+  SyncLogEntry,
+  FlightSnapshot
 } from '../types/db';
 import { createLogger } from '../lib/logger';
 
@@ -90,16 +91,20 @@ export interface EpubLibraryDB extends DBSchema {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     value: any;
   };
+  flight_snapshots: {
+    key: string;
+    value: FlightSnapshot;
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
 
 export const initDB = () => {
   if (!dbPromise) {
-    // Bump version to 23 to trigger cleanup of deprecated stores
-    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 23, {
+    // Bump version to 24 to add flight_snapshots store
+    dbPromise = openDB<EpubLibraryDB>('EpubLibraryDB', 24, {
       async upgrade(db, oldVersion, _newVersion, transaction) {
-        logger.info(`Upgrading DB from v${oldVersion} to v23`);
+        logger.info(`Upgrading DB from v${oldVersion} to v24`);
 
         // Helper to create store if it doesn't exist
         const createStore = (name: string, options?: IDBObjectStoreParameters) => {
@@ -147,6 +152,9 @@ export const initDB = () => {
         }
         if (!db.objectStoreNames.contains('app_metadata')) {
           db.createObjectStore('app_metadata');
+        }
+        if (!db.objectStoreNames.contains('flight_snapshots')) {
+          db.createObjectStore('flight_snapshots', { keyPath: 'id' });
         }
 
         // --- Delete Deprecated Stores (migrated to Yjs) ---

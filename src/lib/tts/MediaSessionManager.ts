@@ -249,7 +249,32 @@ export class MediaSessionManager {
               let isPerceptual = false;
               let blendMode: GlobalCompositeOperation = 'source-over';
 
+              // --- Perceptual Overlay Blending Logic ---
+              // When applying the conic progress gradient, we use mathematical blend modes
+              // ('multiply' or 'screen') instead of simple alpha transparency ('source-over').
+              // This ensures the progress ring feels harmoniously integrated into the cover.
+              //
+              // In these blend modes, a color blended with itself acts as its own algorithmic 
+              // modifier. Therefore, a low Delta E (where the standout color is nearly identical 
+              // to the background color, such as on a monochromatic cover) does NOT inherently 
+              // ruin contrast in the mid-tones. For example, a mid-grey (0.5) multiply blend 
+              // yields a visible, darker shadow ring (0.5 * 0.5 = 0.25).
+              //
+              // However, this math fails at extreme luminances if the Delta E is low:
+              // - Near white (1.0): 1.0 * 1.0 = 1.0 (Invisible)
+              // - Near black (0.0): 0.0 * 0.0 = 0.0 (Invisible)
+              // 
+              // To ensure the progress ring is always visible, we must check for 
+              // extreme background luminance combined with low Delta E and fall back 
+              // to a standard alpha-blended overlay only for these edge cases.
+              let isExtremeLuminanceWithLowContrast = false;
               if (perceptualPalette) {
+                const bgRgb = unpackColorToRGB(perceptualPalette.background);
+                const bgL = rgbToL(bgRgb.r, bgRgb.g, bgRgb.b);
+                isExtremeLuminanceWithLowContrast = (bgL < 10 || bgL > 90) && perceptualPalette.deltaE < 15;
+              }
+
+              if (perceptualPalette && !isExtremeLuminanceWithLowContrast) {
                 isPerceptual = true;
                 const bgRgb = unpackColorToRGB(perceptualPalette.background);
                 const stRgb = unpackColorToRGB(perceptualPalette.standout);

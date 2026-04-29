@@ -10,6 +10,7 @@ import { AudioContentPipeline } from './AudioContentPipeline';
 import { PlaybackStateManager } from './PlaybackStateManager';
 import { TTSProviderManager } from './TTSProviderManager';
 import { PlatformIntegration } from './PlatformIntegration';
+import { flightRecorder } from './TTSFlightRecorder';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useToastStore } from '../../store/useToastStore';
 import { type SectionAnalysis, type TableAdaptation, useContentAnalysisStore } from '../../store/useContentAnalysisStore';
@@ -200,6 +201,15 @@ export class AudioPlayerService {
                 });
             });
         });
+        
+        // Flight Recorder Context
+        flightRecorder.setContextProvider(() => ({
+            bookId: this.currentBookId,
+            sectionIndex: this.stateManager.currentSectionIndex,
+            currentIndex: this.stateManager.currentIndex,
+            queueLength: this.stateManager.queue.length,
+            status: this.status
+        }));
     }
 
     static getInstance(): AudioPlayerService {
@@ -320,6 +330,12 @@ export class AudioPlayerService {
 
                     const currentIndex = progress?.currentQueueIndex || 0;
                     const sectionIndex = progress?.currentSectionIndex ?? -1;
+
+                    flightRecorder.record('APS', 'restoreQueue', {
+                        queueLen: state.queue.length,
+                        currentIndex,
+                        sectionIndex
+                    });
 
                     this.stateManager.setQueue(state.queue, currentIndex, sectionIndex);
                     // Subscription handles metadata and listeners
@@ -447,12 +463,23 @@ export class AudioPlayerService {
             if (this.currentBookId !== originalBookId) return;
 
             const index = this.playlist.findIndex(s => s.sectionId === sectionId);
+            
+            flightRecorder.record('APS', 'loadSectionBySectionId.guard', {
+                sectionId,
+                found: index !== -1,
+                currentSecIdx: this.stateManager.currentSectionIndex,
+                targetIdx: index,
+                autoPlay
+            });
+
             if (index !== -1) {
                 // Optimization: If the section is already loaded (e.g. from restore) and we are not forcing playback,
                 // keep the current state (including current index/progress).
                 if (!autoPlay && this.stateManager.currentSectionIndex === index && this.stateManager.queue.length > 0) {
+                    flightRecorder.record('APS', 'loadSectionBySectionId.guard', { reason: 'bail' });
                     return;
                 }
+                flightRecorder.record('APS', 'loadSectionBySectionId.guard', { reason: 'proceed' });
                 await this.loadSectionInternal(index, autoPlay, sectionTitle);
             }
         });
@@ -528,6 +555,7 @@ export class AudioPlayerService {
         }
         this.lastUserPauseTimestamp = null;
 
+        flightRecorder.record('APS', 'play', { status: this.status });
         return this.enqueue(() => this.playInternal());
     }
 
@@ -602,6 +630,12 @@ export class AudioPlayerService {
         }
 
         const item = this.stateManager.getCurrentItem();
+        flightRecorder.record('APS', 'playInternal', {
+            index: this.stateManager.currentIndex,
+            textPreview: item?.text,
+            cfi: item?.cfi
+        });
+
         if (!item) {
             this.setStatus('stopped');
             // notifyListeners handled by setStatus
@@ -670,6 +704,7 @@ export class AudioPlayerService {
     pause() {
         this.lastUserPauseTimestamp = Date.now();
         return this.enqueue(async () => {
+            flightRecorder.record('APS', 'pause', { index: this.stateManager.currentIndex });
             this.providerManager.pause();
             this.setStatus('paused');
             await this.savePlaybackState('paused');
@@ -683,6 +718,7 @@ export class AudioPlayerService {
     }
 
     private async stopInternal() {
+        flightRecorder.record('APS', 'stop', { status: this.status });
         await this.savePlaybackState('stopped');
         await this.platformIntegration.stop();
         this.setStatus('stopped');
@@ -691,6 +727,7 @@ export class AudioPlayerService {
 
     next() {
         return this.enqueue(async () => {
+            flightRecorder.record('APS', 'next', { hasNext: this.stateManager.hasNext() });
             if (this.stateManager.hasNext()) {
                 this.stateManager.next();
                 if (this.status === 'paused') this.setStatus('stopped');
@@ -703,6 +740,7 @@ export class AudioPlayerService {
 
     prev() {
         return this.enqueue(async () => {
+            flightRecorder.record('APS', 'prev', { hasPrev: this.stateManager.hasPrev() });
             if (this.stateManager.hasPrev()) {
                 this.stateManager.prev();
                 if (this.status === 'paused') this.setStatus('stopped');
@@ -797,7 +835,14 @@ export class AudioPlayerService {
                     }
                 }
 
-                if (this.stateManager.hasNext()) {
+                const hasNext = this.stateManager.hasNext();
+                flightRecorder.record('APS', 'playNext', {
+                    index: this.stateManager.currentIndex,
+                    hasNext,
+                    queueLen: this.stateManager.queue.length
+                });
+
+                if (hasNext) {
                     this.platformIntegration.setBackgroundAudioMode(this.platformIntegration.getBackgroundAudioMode(), true);
 
                     this.stateManager.next();
@@ -805,6 +850,7 @@ export class AudioPlayerService {
                 } else {
                     const loaded = await this.advanceToNextChapter();
                     if (!loaded) {
+                        flightRecorder.record('APS', 'playNext.completed');
                         this.setStatus('completed');
                     }
                 }
@@ -827,6 +873,7 @@ export class AudioPlayerService {
             }
         }
 
+        flightRecorder.record('APS', 'status', { from: oldStatus, to: status });
         this.status = status;
 
         if (status === 'stopped' || status === 'paused') {
@@ -958,6 +1005,13 @@ export class AudioPlayerService {
             sectionTitle || section.title
         );
 
+        flightRecorder.record('APS', 'loadSectionInternal', {
+            sectionIndex,
+            sectionId: section.sectionId,
+            queueLen: newQueue?.length || 0,
+            autoPlay
+        });
+
         if (newQueue && newQueue.length > 0) {
             if (autoPlay) {
                 this.providerManager.stop();
@@ -990,6 +1044,10 @@ export class AudioPlayerService {
         if (this.stateManager.currentSectionIndex === -1) nextSectionIndex = 0;
 
         while (nextSectionIndex < this.playlist.length) {
+            flightRecorder.record('APS', 'playNext.advance', {
+                fromSection: this.stateManager.currentSectionIndex,
+                toSection: nextSectionIndex
+            });
             const loaded = await this.loadSectionInternal(nextSectionIndex, true);
             if (loaded) return true;
             nextSectionIndex++;
