@@ -87,10 +87,15 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                 setIsSearching(false);
             }
         } catch (e) {
+            // Check if it's our internal cancellation error
+            const isCancelled = e instanceof Error && e.message === 'Search cancelled';
+
             // Re-verify after async operation
             if (currentReq === requestCounter.current) {
-                logger.error("Search failed", e);
-                showToast("Search failed", "error");
+                if (!isCancelled) {
+                    logger.error("Search failed", e);
+                    showToast("Search failed", "error");
+                }
                 setIsSearching(false);
             }
         }
