@@ -186,6 +186,7 @@ export const DiagnosticsTab: React.FC = () => {
                                                 size="icon"
                                                 onClick={() => handleShare(snap.id)}
                                                 title="Share/Export JSON"
+                                                aria-label="Share or Export JSON"
                                                 className="w-9 h-9 border-slate-200 dark:border-slate-800"
                                             >
                                                 <Share2 className="w-4 h-4" />
@@ -195,6 +196,7 @@ export const DiagnosticsTab: React.FC = () => {
                                                 size="icon"
                                                 onClick={() => handleDeleteSnapshot(snap.id)}
                                                 title="Delete"
+                                                aria-label="Delete Snapshot"
                                                 className="w-9 h-9 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
                                             >
                                                 <Trash2 className="w-4 h-4" />
