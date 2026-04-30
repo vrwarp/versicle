@@ -160,3 +160,7 @@
 ## 2026-04-27
 - **CheckpointDiffView Layout**: When embedding complex diff viewers or content-heavy components within constrained modals (like `SettingsDialog` with fixed heights like `h-[600px]`), avoid setting arbitrary `max-h-[60vh]` on the inner component, as it wastes vertical screen space and causes excessive scrolling. Instead, use flex column `h-full min-h-0` (or `flex-1 overflow-auto`) to allow the inner content to dynamically fill the remaining modal space.
 - **Responsive Footer Actions**: In settings modals or complex views, align multi-action footers responsively by using `<div className="flex flex-col-reverse sm:flex-row gap-3">`. Setting `w-full sm:w-auto` on the buttons ensures they expand fully for easy tapping on mobile, while appropriately grouping and nesting the primary/secondary actions to preserve logical reading order (e.g., Cancel then Confirm, or Backup then Cancel/Confirm).
+
+## 2026-04-30 - Added ARIA labels to Diagnostics icon buttons
+**Learning:** Found instances where icon-only buttons relied solely on `title` attributes (e.g. `Share2` and `Trash2` in `DiagnosticsTab.tsx`). While `title` provides a tooltip on hover, it's not a reliable substitute for `aria-label` for screen reader accessibility, particularly on mobile or touch interfaces.
+**Action:** Always ensure `size="icon"` buttons with Radix/Lucide icons explicitly receive an `aria-label` detailing the action, complementing the `title` attribute for comprehensive accessibility.
