@@ -326,10 +326,15 @@ export class AudioPlayerService {
                 if (this.currentBookId !== bookId) return;
 
                 if (state && state.queue && state.queue.length > 0) {
-                    await this.stopInternal();
-
                     const currentIndex = progress?.currentQueueIndex || 0;
                     const sectionIndex = progress?.currentSectionIndex ?? -1;
+
+                    if (state.sectionIndex !== undefined && state.sectionIndex !== sectionIndex) {
+                        logger.warn(`Cache-Sync Decoupling detected: Cached section ${state.sectionIndex} does not match synced section ${sectionIndex}. Discarding cached queue.`);
+                        return;
+                    }
+
+                    await this.stopInternal();
 
                     flightRecorder.record('APS', 'restoreQueue', {
                         queueLen: state.queue.length,
