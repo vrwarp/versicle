@@ -80,35 +80,22 @@ class DBService {
       const manifestStore = tx.objectStore('static_manifests');
       const resourceStore = tx.objectStore('static_resources');
 
-      // Hybrid approach: use getAll for large sets (it's faster), targeted reads for small sets
-      let allManifests: (StaticBookManifest | undefined)[];
-      let resourceKeysSet: Set<IDBValidKey>;
+      // Use targeted reads to prevent O(N) memory allocation and slow lookups for massive libraries
+      const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
+      const resourceCountsPromise = Promise.all(ids.map(id => resourceStore.count(id)));
 
-      if (ids.length > 50) {
-        const manifestsPromise = manifestStore.getAll();
-        const resourceKeysPromise = resourceStore.getAllKeys().then(keys => new Set(keys));
-        [allManifests, resourceKeysSet] = await Promise.all([manifestsPromise, resourceKeysPromise]);
-      } else {
-        const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
-        const resourceKeysPromise = Promise.all(ids.map(id => resourceStore.getKey(id)));
-
-        const [manifests, keys] = await Promise.all([manifestsPromise, resourceKeysPromise]);
-        allManifests = manifests.filter(Boolean) as StaticBookManifest[];
-        resourceKeysSet = new Set(keys.filter(Boolean) as IDBValidKey[]);
-      }
+      const [manifests, resourceCounts] = await Promise.all([manifestsPromise, resourceCountsPromise]);
 
       await tx.done;
-
-      const manifestsMap = new Map(allManifests.map(m => [m!.bookId, m]));
 
       const inventoryBooks = useBookStore.getState().books;
 
       // Map results back preserving index and handling missing records
-      return ids.map((id) => {
-          const manifest = manifestsMap.get(id);
+      return ids.map((_id, index) => {
+          const manifest = manifests[index];
           if (!manifest) return undefined;
 
-          const resourceKey = resourceKeysSet.has(manifest.bookId) ? manifest.bookId : undefined;
+          const hasResource = resourceCounts[index] > 0;
           const inventory = inventoryBooks[manifest.bookId];
 
           return {
@@ -126,7 +113,7 @@ class DBService {
             totalChars: manifest.totalChars,
             version: manifest.schemaVersion,
 
-            isOffloaded: !resourceKey,
+          isOffloaded: !hasResource,
             language: inventory?.language || manifest.language,
             coverPalette: inventory?.coverPalette || manifest.coverPalette,
             perceptualPalette: inventory?.perceptualPalette || manifest.perceptualPalette,
@@ -150,7 +137,7 @@ class DBService {
       const tx = db.transaction(['static_manifests', 'static_resources'], 'readonly');
 
       const manifest = await tx.objectStore('static_manifests').get(id);
-      const resourceKey = await tx.objectStore('static_resources').getKey(id);
+      const resourceCount = await tx.objectStore('static_resources').count(id);
 
       await tx.done;
 
@@ -176,7 +163,7 @@ class DBService {
         totalChars: manifest.totalChars,
         version: manifest.schemaVersion,
 
-        isOffloaded: !resourceKey,
+        isOffloaded: resourceCount === 0,
         language: inventory?.language || manifest.language,
         coverPalette: inventory?.coverPalette || manifest.coverPalette,
         perceptualPalette: inventory?.perceptualPalette || manifest.perceptualPalette,
@@ -515,12 +502,11 @@ class DBService {
         const tx = db.transaction('static_resources', 'readonly');
         const store = tx.objectStore('static_resources');
 
-        const allKeys = await store.getAllKeys();
-        const keySet = new Set(allKeys as string[]);
+        const counts = await Promise.all(bookIds.map(id => store.count(id)));
         await tx.done;
 
-        bookIds.forEach((id) => {
-          const exists = keySet.has(id);
+        bookIds.forEach((id, index) => {
+          const exists = counts[index] > 0;
           logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists}`);
           result.set(id, !exists);
         });
