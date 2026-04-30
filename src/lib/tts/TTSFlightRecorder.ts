@@ -99,7 +99,6 @@ class TTSFlightRecorder {
     }
 
     /** Clear the live buffer. */
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     clear() {
         this.buffer = [];
         this.head = 0;
@@ -151,6 +150,7 @@ class TTSFlightRecorder {
             const all = await db.getAll('flight_snapshots');
             return all
                 .sort((a, b) => b.createdAt - a.createdAt)
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 .map(({ eventsJSON: _unused, ...meta }: FlightSnapshot) => meta);
         } catch (e) {
             console.error('[FlightRecorder] Failed to list snapshots', e);
