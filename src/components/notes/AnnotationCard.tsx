@@ -5,6 +5,7 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { copyAnnotationAsMarkdown } from '../../lib/export-notes';
 import { useToastStore } from '../../store/useToastStore';
 import { Button } from '../ui/Button';
+import { Dialog } from '../ui/Dialog';
 
 interface AnnotationCardProps {
     annotation: UserAnnotation;
@@ -16,12 +17,16 @@ export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNa
     const showToast = useToastStore(state => state.showToast);
     const [isEditing, setIsEditing] = useState(false);
     const [editNoteText, setEditNoteText] = useState(annotation.note || '');
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     const handleDelete = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (confirm('Delete this annotation?')) {
-            remove(annotation.id);
-        }
+        setShowDeleteConfirm(true);
+    };
+
+    const confirmDelete = () => {
+        remove(annotation.id);
+        setShowDeleteConfirm(false);
     };
 
     const handleCopy = async (e: React.MouseEvent) => {
@@ -145,6 +150,19 @@ export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNa
                     <Trash2 className="w-4 h-4" />
                 </Button>
             </div>
+
+            <Dialog
+                isOpen={showDeleteConfirm}
+                onClose={() => setShowDeleteConfirm(false)}
+                title="Delete Annotation"
+                description="Are you sure you want to delete this annotation?"
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
+                        <Button variant="destructive" onClick={confirmDelete}>Delete</Button>
+                    </>
+                }
+            />
         </div>
     );
 };

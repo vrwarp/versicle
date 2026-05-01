@@ -3,6 +3,7 @@ import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { Trash2, StickyNote, PenLine } from 'lucide-react';
 import type { Annotation } from '../../types/db';
 import { Button } from '../ui/Button';
+import { Dialog } from '../ui/Dialog';
 
 interface Props {
   /** Callback to navigate to the annotation's location. */
@@ -21,10 +22,17 @@ interface Props {
 export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
   const { annotations, remove, update } = useAnnotationStore();
 
+  const [annotationToDelete, setAnnotationToDelete] = React.useState<string | null>(null);
+
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (confirm('Delete this annotation?')) {
-      remove(id);
+    setAnnotationToDelete(id);
+  };
+
+  const confirmDelete = () => {
+    if (annotationToDelete) {
+      remove(annotationToDelete);
+      setAnnotationToDelete(null);
     }
   };
 
@@ -142,6 +150,19 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
           </li>
         ))}
       </ul>
+
+      <Dialog
+          isOpen={annotationToDelete !== null}
+          onClose={() => setAnnotationToDelete(null)}
+          title="Delete Annotation"
+          description="Are you sure you want to delete this annotation?"
+          footer={
+              <>
+                  <Button variant="ghost" onClick={() => setAnnotationToDelete(null)}>Cancel</Button>
+                  <Button variant="destructive" onClick={confirmDelete}>Delete</Button>
+              </>
+          }
+      />
     </div>
   );
 };

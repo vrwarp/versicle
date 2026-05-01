@@ -4,11 +4,15 @@ import { AnnotationList } from '../AnnotationList';
 import { useAnnotationStore } from '../../../store/useAnnotationStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('lucide-react', () => ({
-  Trash2: () => <span data-testid="icon-trash" />,
-  StickyNote: () => <span data-testid="icon-note" />,
-  PenLine: () => <span data-testid="icon-edit" />,
-}));
+vi.mock('lucide-react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('lucide-react')>();
+  return {
+    ...actual,
+    Trash2: () => <span data-testid="icon-trash" />,
+    StickyNote: () => <span data-testid="icon-note" />,
+    PenLine: () => <span data-testid="icon-edit" />,
+  };
+});
 
 describe('AnnotationList', () => {
   beforeEach(() => {
@@ -57,11 +61,17 @@ describe('AnnotationList', () => {
     ];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useAnnotationStore.setState({ annotations: annotations as any, remove: deleteAnnotationMock });
-    window.confirm = vi.fn(() => true);
 
     render(<AnnotationList onNavigate={vi.fn()} />);
 
+    // Click the delete button on the item
     fireEvent.click(screen.getByTitle('Delete'));
+
+    // Now the dialog is open, click the "Delete" confirm button
+    // Actually wait for it to be visible or find it specifically
+    const deleteConfirmBtn = screen.getByRole('button', { name: 'Delete' });
+    fireEvent.click(deleteConfirmBtn);
+
     expect(deleteAnnotationMock).toHaveBeenCalledWith('1');
   });
 
