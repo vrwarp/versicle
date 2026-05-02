@@ -544,8 +544,9 @@ The central hub for TTS operations. It runs on the **Main Thread** and coordinat
 #### `src/lib/tts/AudioContentPipeline.ts`
 The Data Pipeline for TTS.
 
-*   **Goal**: Decouple "Content Loading" from "Playback Readiness".
+*   **Goal**: Decouple "Content Loading" from "Playback Readiness", and orchestrate data preparation.
 *   **Logic (Optimistic Playback)**:
+    *   **Orchestration**: It acts as the central coordinator for text processing before playback. It leverages `TextSegmenter` for sentence extraction, `LexiconService` for pronunciation overrides, and `TableAdaptationProcessor` for integrating AI-generated table descriptions.
     1.  **Immediate Return**: Returns a raw, playable queue immediately after basic extraction.
     2.  **Background Analysis**: Fires "fire-and-forget" asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze content using GenAI.
         *   **Grouping**: `groupSentencesByRoot` clusters sentences by their **Root CFI** (common ancestor) before GenAI analysis. This ensures the LLM receives logical blocks (e.g., an entire table row or aside) rather than fragmented sentences, improving classification accuracy.
@@ -648,7 +649,9 @@ Manages the virtual playback timeline.
 
 State is managed using **Zustand** with specialized strategies for different data types.
 
-*   **`useBookStore` (Synced)**: Manages **User Inventory**. Backed by Yjs Map. Holds the `__schemaVersion` atomic key and the `books` inventory state synchronized via Yjs.
+*   **`useBookStore` (Synced)**:
+    *   **Goal**: Manages the synchronized **User Inventory**.
+    *   **Logic**: Backed by Yjs Map. Holds the `__schemaVersion` atomic key and the `books` inventory state synchronized via Yjs. This store was created to decouple heavy synchronized state from transient local UI state.
 *   **`useReadingListStore` (Synced)**:
     *   **Goal**: Functions as a **"Shadow Inventory"**.
     *   **Logic**: Tracks book status (Read, Reading, Want to Read) and Rating independently of the file existence. Persists even if the book file is offloaded or deleted.
@@ -716,7 +719,7 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Logic**: Implements a **Priority Queue** (Modal > UI > Default). Components register handlers with a priority, and the store executes only the highest-priority handler.
     *   **Trade-off**: Requires strict lifecycle management. If a component fails to unregister its handler on unmount (zombie handler), it can permanently hijack the back button and trap the user.
 *   **`useLibraryStore` (Local Only)**:
-    *   **Strategy**: Manages transient and local-only state like `isImporting` flags and **Static Metadata** (covers, file hashes) which are too heavy for Yjs. The inventory `books` property has been fully migrated to `useBookStore`.
+    *   **Strategy**: Manages transient and local-only state like `isImporting` flags and **Static Metadata** (covers, file hashes) which are too heavy for Yjs. Its `books` property has been fully migrated to `useBookStore`.
     *   **The "Ghost Book" Pattern**: The UI merges Synced Inventory (Yjs) with Local Static Metadata (IDB). It merges these to support "Ghost Books" - books where the heavy local file is offloaded/deleted, but the user's progress and metadata remain in the Yjs CRDT.
     *   **Smart Ingestion**: When importing a file (`addBook`), the store uses "Smart Matching" to explicitly check if the new file's metadata (Title + Author) matches an existing "Ghost Book" in the synced inventory. If found, it links the new binary file to the existing Yjs record instead of creating a duplicate entry.
 *   **`useGoogleServicesStore` (Local Only)**:
