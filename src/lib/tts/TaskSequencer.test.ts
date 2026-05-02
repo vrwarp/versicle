@@ -49,7 +49,7 @@ describe('TaskSequencer', () => {
         const task1 = () => new Promise<void>(resolve => { results.push(1); resolve(); });
 
         sequencer.destroy();
-        await sequencer.enqueue(task1);
+        await expect(sequencer.enqueue(task1)).rejects.toThrow('TaskSequencer is destroyed');
 
         expect(results).toEqual([]);
     });
