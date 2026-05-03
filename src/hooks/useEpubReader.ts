@@ -858,15 +858,15 @@ export function useEpubReader(
     // TTS Highlight Theme
     themes.default({
       '.tts-highlight': {
-        'fill': 'yellow',
-        'background-color': isDark ? 'rgba(255, 255, 0, 0.4)' : 'rgba(255, 255, 0, 0.3)',
+        'fill': '#fde047',
+        'background-color': isDark ? 'rgba(253, 224, 71, 0.4)' : 'rgba(253, 224, 71, 0.3)',
         'fill-opacity': highlightOpacity,
         'mix-blend-mode': highlightBlendMode
       },
-      '.highlight-yellow': { 'fill': 'yellow', 'background-color': isDark ? 'rgba(255, 255, 0, 0.4)' : 'rgba(255, 255, 0, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
-      '.highlight-green': { 'fill': 'green', 'background-color': isDark ? 'rgba(0, 255, 0, 0.4)' : 'rgba(0, 255, 0, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
-      '.highlight-blue': { 'fill': 'blue', 'background-color': isDark ? 'rgba(0, 0, 255, 0.4)' : 'rgba(0, 0, 255, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
-      '.highlight-red': { 'fill': 'red', 'background-color': isDark ? 'rgba(255, 0, 0, 0.4)' : 'rgba(255, 0, 0, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode }
+      '.highlight-yellow': { 'fill': '#fde047', 'background-color': isDark ? 'rgba(253, 224, 71, 0.4)' : 'rgba(253, 224, 71, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
+      '.highlight-green': { 'fill': '#86efac', 'background-color': isDark ? 'rgba(134, 239, 172, 0.4)' : 'rgba(134, 239, 172, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
+      '.highlight-blue': { 'fill': '#93c5fd', 'background-color': isDark ? 'rgba(147, 197, 253, 0.4)' : 'rgba(147, 197, 253, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
+      '.highlight-red': { 'fill': '#fca5a5', 'background-color': isDark ? 'rgba(252, 165, 165, 0.4)' : 'rgba(252, 165, 165, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode }
     });
 
     themes.select(options.currentTheme);
