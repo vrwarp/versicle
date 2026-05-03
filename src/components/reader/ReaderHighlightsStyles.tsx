@@ -34,22 +34,22 @@ export const ReaderHighlightsStyles: React.FC<ReaderHighlightsStylesProps> = ({ 
             {/* Highlights CSS styles */}
             <style>{`
                 .highlight-red { 
-                    fill: red; 
+                    fill: #fca5a5;
                     fill-opacity: ${opacity}; 
                     mix-blend-mode: ${blendMode}; 
                 }
                 .highlight-green { 
-                    fill: green; 
+                    fill: #86efac;
                     fill-opacity: ${opacity}; 
                     mix-blend-mode: ${blendMode}; 
                 }
                 .highlight-blue { 
-                    fill: blue; 
+                    fill: #93c5fd;
                     fill-opacity: ${opacity}; 
                     mix-blend-mode: ${blendMode}; 
                 }
                 .highlight-yellow { 
-                    fill: yellow; 
+                    fill: #fde047;
                     fill-opacity: ${opacity}; 
                     mix-blend-mode: ${blendMode}; 
                 }
