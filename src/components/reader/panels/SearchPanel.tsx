@@ -87,6 +87,10 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                 setIsSearching(false);
             }
         } catch (e) {
+            if (e instanceof Error && e.message === 'Search superseded') {
+                // Ignore superseded searches
+                return;
+            }
             // Re-verify after async operation
             if (currentReq === requestCounter.current) {
                 logger.error("Search failed", e);

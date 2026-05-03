@@ -42,11 +42,11 @@ describe('SearchClient Race Condition', () => {
 
         try {
              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             const results = await Promise.race([Promise.all([p1, p2]), timeout]) as any[];
+             const results = await Promise.race([Promise.allSettled([p1, p2]), timeout]) as any[];
 
              // Verify correct mapping
-             expect(results[0][0].excerpt).toBe('Result for query1');
-             expect(results[1][0].excerpt).toBe('Result for query2');
+             expect(results[0].status).toBe('rejected'); expect(results[0].reason.message).toBe('Search superseded');
+             expect(results[1].status).toBe('fulfilled'); expect(results[1].value[0].excerpt).toBe('Result for query2');
              clearTimeout(timeoutId);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
