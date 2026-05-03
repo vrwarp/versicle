@@ -991,6 +991,10 @@ export class AudioPlayerService {
     private async loadSectionInternal(sectionIndex: number, autoPlay: boolean, sectionTitle?: string): Promise<boolean> {
         if (!this.currentBookId || sectionIndex < 0 || sectionIndex >= this.playlist.length) return false;
 
+        if (this.status === 'playing' && sectionIndex === this.stateManager.currentSectionIndex) {
+            return true;
+        }
+
         // Clear dragnet state on navigation to prevent capturing previous section context
         this.lastUserPauseTimestamp = null;
 
