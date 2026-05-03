@@ -515,12 +515,11 @@ class DBService {
         const tx = db.transaction('static_resources', 'readonly');
         const store = tx.objectStore('static_resources');
 
-        const allKeys = await store.getAllKeys();
-        const keySet = new Set(allKeys as string[]);
+        const promises = bookIds.map(id => store.count(id).then(count => ({ id, exists: count > 0 })));
+        const checks = await Promise.all(promises);
         await tx.done;
 
-        bookIds.forEach((id) => {
-          const exists = keySet.has(id);
+        checks.forEach(({ id, exists }) => {
           logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists}`);
           result.set(id, !exists);
         });
