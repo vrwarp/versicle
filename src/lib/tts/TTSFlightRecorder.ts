@@ -20,6 +20,10 @@ export type ContextProvider = () => {
     currentIndex: number;
     queueLength: number;
     status: string;
+    /** Number of items in the queue with isSkipped=true. Populated for diagnostics. */
+    skippedCount?: number;
+    /** Whether the item immediately after currentIndex is skipped. */
+    nextItemSkipped?: boolean | undefined;
 };
 
 /**
@@ -31,6 +35,13 @@ class TTSFlightRecorder {
     private head = 0;
     private full = false;
     private contextProvider: ContextProvider | null = null;
+
+    /**
+     * Optional callback invoked synchronously when an anomaly is detected,
+     * BEFORE the snapshot is taken. This allows the caller (AudioPlayerService)
+     * to emit detailed diagnostic events that get captured in the snapshot.
+     */
+    onAnomalyDetected: ((currentIndex: number, queueLen: number) => void) | null = null;
 
     /** Register a callback that provides current playback context for snapshots. */
     setContextProvider(provider: ContextProvider) {
@@ -73,6 +84,11 @@ class TTSFlightRecorder {
             if (data && typeof data.index === 'number' && typeof data.queueLen === 'number' && data.hasNext === false) {
                 const ratio = data.index / data.queueLen;
                 if (ratio < 0.8) { // Trigger if less than 80% through the chapter
+                    // Invoke the anomaly callback synchronously so its diagnostic events
+                    // are captured in the ring buffer BEFORE the snapshot freezes it.
+                    try {
+                        this.onAnomalyDetected?.(data.index as number, data.queueLen as number);
+                    } catch { /* best effort */ }
                     this.snapshot('anomaly:chapter_advance', `Auto-detected premature chapter advance at ${Math.round(ratio * 100)}%`).catch(() => {});
                 }
             }

@@ -203,13 +203,36 @@ export class AudioPlayerService {
         });
         
         // Flight Recorder Context
-        flightRecorder.setContextProvider(() => ({
-            bookId: this.currentBookId,
-            sectionIndex: this.stateManager.currentSectionIndex,
-            currentIndex: this.stateManager.currentIndex,
-            queueLength: this.stateManager.queue.length,
-            status: this.status
-        }));
+        flightRecorder.setContextProvider(() => {
+            const queue = this.stateManager.queue;
+            const idx = this.stateManager.currentIndex;
+            let skippedCount = 0;
+            for (let i = 0; i < queue.length; i++) {
+                if (queue[i]?.isSkipped) skippedCount++;
+            }
+            return {
+                bookId: this.currentBookId,
+                sectionIndex: this.stateManager.currentSectionIndex,
+                currentIndex: idx,
+                queueLength: queue.length,
+                status: this.status,
+                skippedCount,
+                nextItemSkipped: queue[idx + 1]?.isSkipped,
+            };
+        });
+
+        // Anomaly callback: emit detailed queue diagnostics before the snapshot is frozen.
+        // This captures the exact isSkipped values at the anomaly boundary.
+        flightRecorder.onAnomalyDetected = (currentIndex: number, queueLen: number) => {
+            const diag = this.stateManager.getSkipDiagnostics(currentIndex);
+            flightRecorder.record('APS', 'playNext.queueDiag', {
+                skippedCount: diag.skippedCount,
+                firstSkipped: diag.firstSkippedIndex,
+                lastSkipped: diag.lastSkippedIndex,
+                rawRemaining: queueLen - currentIndex - 1,
+                sample: JSON.stringify(diag.sample),
+            });
+        };
     }
 
     static getInstance(): AudioPlayerService {
@@ -331,10 +354,25 @@ export class AudioPlayerService {
                     const currentIndex = progress?.currentQueueIndex || 0;
                     const sectionIndex = progress?.currentSectionIndex ?? -1;
 
+                    // Detect stale isSkipped flags persisted from a prior session
+                    let skippedCount = 0;
+                    let firstSkipped = -1;
+                    let lastSkipped = -1;
+                    for (let i = 0; i < state.queue.length; i++) {
+                        if (state.queue[i]?.isSkipped) {
+                            skippedCount++;
+                            if (firstSkipped === -1) firstSkipped = i;
+                            lastSkipped = i;
+                        }
+                    }
+
                     flightRecorder.record('APS', 'restoreQueue', {
                         queueLen: state.queue.length,
                         currentIndex,
-                        sectionIndex
+                        sectionIndex,
+                        skippedCount,
+                        firstSkipped,
+                        lastSkipped,
                     });
 
                     this.stateManager.setQueue(state.queue, currentIndex, sectionIndex);

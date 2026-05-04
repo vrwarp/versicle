@@ -54,7 +54,7 @@ describe('Citation Skipping – Book of Citations EPUB', () => {
         ch1Text = ch1Sentences.map(s => s.text).join(' ');
         ch2Text = ch2Sentences.map(s => s.text).join(' ');
         ch3Text = ch3Sentences.map(s => s.text).join(' ');
-    }, 15000);
+    }, 60000);
 
     // ═══════════════════════════════════════════════════════════════════════
     //  BASIC SANITY

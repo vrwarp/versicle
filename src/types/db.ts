@@ -875,6 +875,10 @@ export interface FlightSnapshot {
     queueLength: number;
     /** The high-level player status (playing, paused, loading, etc.). */
     status: string;
+    /** Number of items in the queue with isSkipped=true. */
+    skippedCount?: number;
+    /** Whether the item immediately after currentIndex is skipped. */
+    nextItemSkipped?: boolean | undefined;
   };
   /** 
    * The number of FlightEvent objects contained in the snapshot. 
