@@ -80,35 +80,30 @@ class DBService {
       const manifestStore = tx.objectStore('static_manifests');
       const resourceStore = tx.objectStore('static_resources');
 
-      // Hybrid approach: use getAll for large sets (it's faster), targeted reads for small sets
-      let allManifests: (StaticBookManifest | undefined)[];
-      let resourceKeysSet: Set<IDBValidKey>;
+      // BOLT OPTIMIZATION: Avoid getAll() on large arrays across IDB bridge to prevent serialization OOMs
+      // and use count() instead of getKey() to avoid fetching the key value itself.
+      const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
+      const resourceCountPromise = Promise.all(ids.map(id => resourceStore.count(id)));
 
-      if (ids.length > 50) {
-        const manifestsPromise = manifestStore.getAll();
-        const resourceKeysPromise = resourceStore.getAllKeys().then(keys => new Set(keys));
-        [allManifests, resourceKeysSet] = await Promise.all([manifestsPromise, resourceKeysPromise]);
-      } else {
-        const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
-        const resourceKeysPromise = Promise.all(ids.map(id => resourceStore.getKey(id)));
-
-        const [manifests, keys] = await Promise.all([manifestsPromise, resourceKeysPromise]);
-        allManifests = manifests.filter(Boolean) as StaticBookManifest[];
-        resourceKeysSet = new Set(keys.filter(Boolean) as IDBValidKey[]);
-      }
+      const [manifests, resourceCounts] = await Promise.all([manifestsPromise, resourceCountPromise]);
 
       await tx.done;
 
-      const manifestsMap = new Map(allManifests.map(m => [m!.bookId, m]));
+      const manifestsMap = new Map<string, { manifest: StaticBookManifest, resourceCount: number }>();
+      manifests.forEach((m, i) => {
+          if (m) {
+             manifestsMap.set(m.bookId, { manifest: m, resourceCount: resourceCounts[i] });
+          }
+      });
 
       const inventoryBooks = useBookStore.getState().books;
 
       // Map results back preserving index and handling missing records
       return ids.map((id) => {
-          const manifest = manifestsMap.get(id);
-          if (!manifest) return undefined;
+          const data = manifestsMap.get(id);
+          if (!data) return undefined;
 
-          const resourceKey = resourceKeysSet.has(manifest.bookId) ? manifest.bookId : undefined;
+          const { manifest, resourceCount } = data;
           const inventory = inventoryBooks[manifest.bookId];
 
           return {
@@ -126,7 +121,7 @@ class DBService {
             totalChars: manifest.totalChars,
             version: manifest.schemaVersion,
 
-            isOffloaded: !resourceKey,
+            isOffloaded: resourceCount === 0,
             language: inventory?.language || manifest.language,
             coverPalette: inventory?.coverPalette || manifest.coverPalette,
             perceptualPalette: inventory?.perceptualPalette || manifest.perceptualPalette,
@@ -515,15 +510,15 @@ class DBService {
         const tx = db.transaction('static_resources', 'readonly');
         const store = tx.objectStore('static_resources');
 
-        const allKeys = await store.getAllKeys();
-        const keySet = new Set(allKeys as string[]);
-        await tx.done;
-
-        bookIds.forEach((id) => {
-          const exists = keySet.has(id);
-          logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists}`);
-          result.set(id, !exists);
+        // BOLT OPTIMIZATION: Avoid getAllKeys() across IDB boundary. Map to count() promises instead.
+        const promises = bookIds.map(async (id) => {
+            const count = await store.count(id);
+            const exists = count > 0;
+            logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists}`);
+            result.set(id, !exists);
         });
+        await Promise.all(promises);
+        await tx.done;
       } else {
         // Return for all resources (inverse: if in set, not offloaded)
         // Ideally we need the list of ALL books to know which are offloaded (missing from set)
