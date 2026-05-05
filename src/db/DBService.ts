@@ -75,24 +75,26 @@ class DBService {
     try {
       if (ids.length === 0) return [];
       const db = await this.getDB();
-      const tx = db.transaction(['static_manifests', 'static_resources'], 'readonly');
+      const tx = db.transaction(['static_manifests', 'static_resources', 'static_structure'], 'readonly');
 
       const manifestStore = tx.objectStore('static_manifests');
       const resourceStore = tx.objectStore('static_resources');
+      const structureStore = tx.objectStore('static_structure');
 
       // BOLT OPTIMIZATION: Avoid getAll() on large arrays across IDB bridge to prevent serialization OOMs
       // and use count() instead of getKey() to avoid fetching the key value itself.
       const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
       const resourceCountPromise = Promise.all(ids.map(id => resourceStore.count(id)));
+      const structuresPromise = Promise.all(ids.map(id => structureStore.get(id)));
 
-      const [manifests, resourceCounts] = await Promise.all([manifestsPromise, resourceCountPromise]);
+      const [manifests, resourceCounts, structures] = await Promise.all([manifestsPromise, resourceCountPromise, structuresPromise]);
 
       await tx.done;
 
-      const manifestsMap = new Map<string, { manifest: StaticBookManifest, resourceCount: number }>();
+      const manifestsMap = new Map<string, { manifest: StaticBookManifest, resourceCount: number, structure: StaticStructure | undefined }>();
       manifests.forEach((m, i) => {
           if (m) {
-             manifestsMap.set(m.bookId, { manifest: m, resourceCount: resourceCounts[i] });
+             manifestsMap.set(m.bookId, { manifest: m, resourceCount: resourceCounts[i], structure: structures[i] });
           }
       });
 
@@ -103,7 +105,7 @@ class DBService {
           const data = manifestsMap.get(id);
           if (!data) return undefined;
 
-          const { manifest, resourceCount } = data;
+          const { manifest, resourceCount, structure } = data;
           const inventory = inventoryBooks[manifest.bookId];
 
           return {
@@ -120,6 +122,7 @@ class DBService {
             fileSize: manifest.fileSize,
             totalChars: manifest.totalChars,
             version: manifest.schemaVersion,
+            syntheticToc: structure?.toc,
 
             isOffloaded: resourceCount === 0,
             language: inventory?.language || manifest.language,
@@ -142,10 +145,11 @@ class DBService {
   async getBookMetadata(id: string): Promise<BookMetadata | undefined> {
     try {
       const db = await this.getDB();
-      const tx = db.transaction(['static_manifests', 'static_resources'], 'readonly');
+      const tx = db.transaction(['static_manifests', 'static_resources', 'static_structure'], 'readonly');
 
       const manifest = await tx.objectStore('static_manifests').get(id);
       const resourceKey = await tx.objectStore('static_resources').getKey(id);
+      const structure = await tx.objectStore('static_structure').get(id);
 
       await tx.done;
 
@@ -170,6 +174,7 @@ class DBService {
         fileSize: manifest.fileSize,
         totalChars: manifest.totalChars,
         version: manifest.schemaVersion,
+        syntheticToc: structure?.toc,
 
         isOffloaded: !resourceKey,
         language: inventory?.language || manifest.language,
