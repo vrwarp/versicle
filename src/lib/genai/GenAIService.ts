@@ -216,15 +216,24 @@ class GenAIService {
 
     let instruction = "Generate concise section titles (max 6 words) for the following text segments.";
     if (context?.language && !context.language.startsWith('en')) {
-      instruction = `Generate concise section titles (max 6 words) for the following text segments.
-    Important: The titles MUST be returned in English, formatted as "English Section Title Translation (Original Language Inferred Title)".`;
+      instruction = `Extract and translate the section titles from the beginning of each text segment below. 
+
+Important constraints for the 'title' field:
+1. You MUST infer the title directly from the provided text (typically the first few lines).
+2. Format the string exactly as: "English Inferred Title (Original Language Inferred Title)"
+3. The English portion should prioritize being concise (aim for 6 words or less).
+
+Example:
+Input text: "7\n被遺忘的廢墟\n當探險隊踏入這片荒蕪的土地時，通訊設備立刻失去了信號..."
+Expected 'title' output: "7 Forgotten Ruins (7 被遺忘的廢墟)"`;
     }
 
     const prompt = `${instruction}
-    Return an array of objects with 'id' (matching the input) and 'title'.
 
-    Sections:
-    ${JSON.stringify(sections)}`;
+Return an array of objects with 'id' (matching the input) and 'title'.
+
+Sections:
+${JSON.stringify(sections)}`;
 
     const schema = {
       type: SchemaType.ARRAY,
