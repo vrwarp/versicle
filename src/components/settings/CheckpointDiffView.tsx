@@ -129,6 +129,7 @@ export const CheckpointDiffView: React.FC<CheckpointDiffViewProps> = ({
                   onClick={() => toggleStore(storeName)}
                   aria-expanded={isExpanded}
                   aria-controls={`diff-section-${storeName}`}
+                  aria-label={isExpanded ? `Collapse ${storeName} changes` : `Expand ${storeName} changes`}
                 >
                   <div className="flex items-center gap-2">
                     {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
