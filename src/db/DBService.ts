@@ -82,8 +82,9 @@ class DBService {
 
       // BOLT OPTIMIZATION: Avoid getAll() on large arrays across IDB bridge to prevent serialization OOMs
       // and use count() instead of getKey() to avoid fetching the key value itself.
-      const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
-      const resourceCountPromise = Promise.all(ids.map(id => resourceStore.count(id)));
+      const CONCURRENCY_LIMIT = 50;
+      const manifestsPromise = processWithConcurrencyLimit(ids, CONCURRENCY_LIMIT, id => manifestStore.get(id));
+      const resourceCountPromise = processWithConcurrencyLimit(ids, CONCURRENCY_LIMIT, id => resourceStore.count(id));
 
       const [manifests, resourceCounts] = await Promise.all([manifestsPromise, resourceCountPromise]);
 
@@ -511,13 +512,13 @@ class DBService {
         const store = tx.objectStore('static_resources');
 
         // BOLT OPTIMIZATION: Avoid getAllKeys() across IDB boundary. Map to count() promises instead.
-        const promises = bookIds.map(async (id) => {
+        const CONCURRENCY_LIMIT = 50;
+        await processWithConcurrencyLimit(bookIds, CONCURRENCY_LIMIT, async (id) => {
             const count = await store.count(id);
             const exists = count > 0;
             logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists}`);
             result.set(id, !exists);
         });
-        await Promise.all(promises);
         await tx.done;
       } else {
         // Return for all resources (inverse: if in set, not offloaded)
@@ -775,4 +776,25 @@ class DBService {
 }
 
 // Singleton export
+
+/**
+ * Processes an array of items with a concurrency limit.
+ * Useful for IDB bulk operations to prevent flooding the transaction queue.
+ */
+async function processWithConcurrencyLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+    const results: R[] = new Array(items.length);
+    let i = 0;
+
+    const worker = async () => {
+        while (i < items.length) {
+            const index = i++;
+            results[index] = await fn(items[index]);
+        }
+    };
+
+    const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+    await Promise.all(workers);
+    return results;
+}
+
 export const dbService = new DBService();
