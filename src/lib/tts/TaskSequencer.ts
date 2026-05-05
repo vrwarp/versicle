@@ -14,14 +14,14 @@ export class TaskSequencer {
      *
      * @template T The return type of the task.
      * @param {() => Promise<T>} task The function to execute.
-     * @returns {Promise<T | void>} A promise that resolves with the task's result or void if the sequencer is destroyed or the task fails safely.
+     * @returns {Promise<T>} A promise that resolves with the task's result.
      */
-    enqueue<T>(task: () => Promise<T>): Promise<T | void> {
+    enqueue<T>(task: () => Promise<T>): Promise<T> {
         flightRecorder.record('TSQ', 'enqueue');
         const resultPromise = this.pendingPromise.then(async () => {
             if (this.isDestroyed) {
                 flightRecorder.record('TSQ', 'task.abort', { reason: 'destroyed' });
-                return;
+                throw new Error('TaskSequencer is destroyed');
             }
             flightRecorder.record('TSQ', 'task.start');
             try {
@@ -34,10 +34,8 @@ export class TaskSequencer {
             }
         });
 
-        this.pendingPromise = resultPromise.then(() => { }).catch((err) => {
-            console.error("TaskSequencer task failed safely:", err);
-        });
-        return resultPromise as Promise<T | void>;
+        this.pendingPromise = resultPromise.then(() => { }).catch(() => { });
+        return resultPromise;
     }
 
     /**

@@ -219,7 +219,7 @@ export class AudioPlayerService {
         return AudioPlayerService.instance;
     }
 
-    private enqueue<T>(task: () => Promise<T>): Promise<T | void> {
+    private enqueue<T>(task: () => Promise<T>): Promise<T> {
         return this.taskSequencer.enqueue(task);
     }
 
