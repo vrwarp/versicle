@@ -182,7 +182,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                                     </SelectContent>
                                 </Select>
                                 {configLanguage === 'zh' && voices.filter(v => v.lang?.startsWith('zh')).length === 0 && (
-                                    <div data-testid="mandarin-voice-warning" className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md text-sm text-yellow-800 dark:text-yellow-200 mt-2">
+                                    <div data-testid="mandarin-voice-warning" className="p-3 bg-warning/10 border border-warning/30 rounded-md text-sm text-warning mt-2">
                                         ⚠️ No Mandarin voice installed. Audio playback will fail for Chinese books.
                                     </div>
                                 )}

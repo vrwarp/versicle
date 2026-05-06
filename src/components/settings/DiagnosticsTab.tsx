@@ -62,14 +62,14 @@ export const DiagnosticsTab: React.FC = () => {
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
             {/* Header / Buffer Stats */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-muted/50 p-4 rounded-xl border border-border">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+                    <div className="p-2 bg-primary/10 rounded-lg text-primary">
                         <Activity className="w-5 h-5" />
                     </div>
                     <div>
-                        <h3 className="font-semibold text-slate-900 dark:text-white">Active Flight Buffer</h3>
-                        <p className="text-sm text-slate-500">
+                        <h3 className="font-semibold text-foreground">Active Flight Buffer</h3>
+                        <p className="text-sm text-muted-foreground">
                             {stats.eventCount} / {stats.capacity} events tracked 
                             {stats.oldestWall ? ` (since ${new Date(stats.oldestWall).toLocaleTimeString()})` : ''}
                         </p>
@@ -102,7 +102,7 @@ export const DiagnosticsTab: React.FC = () => {
             {/* Saved Snapshots */}
             <div className="space-y-4">
                 <div className="flex items-center justify-between px-1">
-                    <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                    <h3 className="font-semibold text-foreground flex items-center gap-2">
                         <Download className="w-4 h-4" />
                         Saved Recordings
                         <Badge variant="secondary" className="ml-2">{snapshots.length}</Badge>
@@ -112,7 +112,7 @@ export const DiagnosticsTab: React.FC = () => {
                             variant="ghost" 
                             size="sm" 
                             onClick={handleClearAll}
-                            className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
                         >
                             Clear All
                         </Button>
@@ -120,12 +120,12 @@ export const DiagnosticsTab: React.FC = () => {
                 </div>
 
                 {snapshots.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 px-4 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-center">
-                        <div className="p-3 bg-slate-100 dark:bg-slate-900 rounded-full mb-4">
-                            <Clock className="w-8 h-8 text-slate-400" />
+                    <div className="flex flex-col items-center justify-center py-12 px-4 border-2 border-dashed border-border rounded-2xl text-center">
+                        <div className="p-3 bg-muted rounded-full mb-4">
+                            <Clock className="w-8 h-8 text-muted-foreground" />
                         </div>
-                        <h4 className="text-slate-900 dark:text-white font-medium mb-1">No recordings found</h4>
-                        <p className="text-sm text-slate-500 max-w-xs">
+                        <h4 className="text-foreground font-medium mb-1">No recordings found</h4>
+                        <p className="text-sm text-muted-foreground max-w-xs">
                             Snapshots are automatically created on anomalies or can be triggered manually.
                         </p>
                     </div>
@@ -135,7 +135,7 @@ export const DiagnosticsTab: React.FC = () => {
                             {snapshots.map((snap) => (
                                 <div 
                                     key={snap.id} 
-                                    className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-blue-300 dark:hover:border-blue-700 transition-colors shadow-sm"
+                                    className="p-4 bg-background border border-border rounded-xl hover:border-primary/50 transition-colors shadow-sm"
                                 >
                                     <div className="flex items-start justify-between gap-4">
                                         <div className="flex-1 min-w-0">
@@ -146,21 +146,21 @@ export const DiagnosticsTab: React.FC = () => {
                                                         ANOMALY
                                                     </Badge>
                                                 ) : (
-                                                    <Badge variant="outline" className="gap-1 px-1.5 py-0.5 border-blue-200 text-blue-600 dark:border-blue-900 dark:text-blue-400">
+                                                    <Badge variant="outline" className="gap-1 px-1.5 py-0.5 border-primary/20 text-primary">
                                                         <CheckCircle2 className="w-3 h-3" />
                                                         MANUAL
                                                     </Badge>
                                                 )}
-                                                <span className="text-xs text-slate-400 font-mono">
+                                                <span className="text-xs text-muted-foreground font-mono">
                                                     {snap.id.slice(0, 8)}
                                                 </span>
                                             </div>
                                             
-                                            <h4 className="font-medium text-slate-900 dark:text-white truncate">
+                                            <h4 className="font-medium text-foreground truncate">
                                                 {snap.note || 'Snapshot Recording'}
                                             </h4>
                                             
-                                            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500">
+                                            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
                                                 <div className="flex items-center gap-1.5">
                                                     <Clock className="w-3 h-3" />
                                                     {new Date(snap.createdAt).toLocaleString()}
@@ -172,7 +172,7 @@ export const DiagnosticsTab: React.FC = () => {
                                             </div>
                                             
                                             {/* Context Preview */}
-                                            <div className="mt-3 p-2 bg-slate-50 dark:bg-slate-950 rounded text-[10px] font-mono text-slate-600 dark:text-slate-400 grid grid-cols-2 gap-1">
+                                            <div className="mt-3 p-2 bg-muted/50 rounded text-[10px] font-mono text-muted-foreground grid grid-cols-2 gap-1">
                                                 <div className="truncate">BOOK: {snap.context.bookId?.slice(0, 8) || 'none'}</div>
                                                 <div>SEC: {snap.context.sectionIndex}</div>
                                                 <div>POS: {snap.context.currentIndex}</div>
@@ -187,7 +187,7 @@ export const DiagnosticsTab: React.FC = () => {
                                                 onClick={() => handleShare(snap.id)}
                                                 title="Share/Export JSON"
                                                 aria-label="Share or Export JSON"
-                                                className="w-9 h-9 border-slate-200 dark:border-slate-800"
+                                                className="w-9 h-9 border-border"
                                             >
                                                 <Share2 className="w-4 h-4" />
                                             </Button>
@@ -197,7 +197,7 @@ export const DiagnosticsTab: React.FC = () => {
                                                 onClick={() => handleDeleteSnapshot(snap.id)}
                                                 title="Delete"
                                                 aria-label="Delete Snapshot"
-                                                className="w-9 h-9 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                className="w-9 h-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </Button>
@@ -211,12 +211,12 @@ export const DiagnosticsTab: React.FC = () => {
             </div>
 
             {/* Help / Footer */}
-            <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-xl border border-blue-100 dark:border-blue-900/30">
-                <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-1 flex items-center gap-2">
+            <div className="bg-primary/5 p-4 rounded-xl border border-primary/20">
+                <h4 className="text-sm font-semibold text-primary mb-1 flex items-center gap-2">
                     <Activity className="w-4 h-4" />
                     How to use diagnostics
                 </h4>
-                <p className="text-xs text-blue-700/80 dark:text-blue-400/80 leading-relaxed">
+                <p className="text-xs text-primary/80 leading-relaxed">
                     Recording is always active with a memory-bounded ring buffer. If you experience an issue, 
                     capture a snapshot immediately. Use the share button to export the JSON recording for analysis.
                     Snapshots include state transitions, event sequences, and high-resolution timestamps.

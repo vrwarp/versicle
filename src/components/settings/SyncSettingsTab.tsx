@@ -359,9 +359,9 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                 {firebaseAuthStatus === 'signed-in' && activeWorkspaceId === null && (
                                     <div 
                                         data-testid="sync-halt-warning"
-                                        className="flex flex-col gap-2 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-md mb-4"
+                                        className="flex flex-col gap-2 p-4 bg-warning/10 border border-warning/30 rounded-md mb-4"
                                     >
-                                        <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-400">
+                                        <p className="text-sm font-semibold text-warning">
                                             Action Required: Select a Library
                                         </p>
                                         <p className="text-xs text-muted-foreground">
