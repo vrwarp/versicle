@@ -436,9 +436,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
           size="icon"
           className={cn(
             "h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation",
-            isLoading && "cursor-wait"
+            isLoading && "cursor-wait opacity-80"
           )}
           onClick={handleTogglePlay}
+          disabled={isLoading}
           aria-label={
             isLoading
               ? "Loading..."
@@ -542,10 +543,11 @@ export const CompassPill: React.FC<CompassPillProps> = ({
       <div
         className={cn(
           "flex flex-col items-center justify-center flex-1 px-2 overflow-hidden cursor-pointer active:scale-95 transition-transform group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg",
-          isLoading && "cursor-wait"
+          isLoading && "cursor-wait opacity-80 active:scale-100"
         )}
-        onClick={handleTogglePlay}
+        onClick={isLoading ? undefined : handleTogglePlay}
         onKeyDown={(e) => {
+          if (isLoading) return;
           if (e.key === 'Enter' || e.key === ' ') {
             if (e.target !== e.currentTarget) return;
             e.preventDefault();
@@ -553,7 +555,8 @@ export const CompassPill: React.FC<CompassPillProps> = ({
           }
         }}
         role="button"
-        tabIndex={0}
+        tabIndex={isLoading ? -1 : 0}
+        aria-disabled={isLoading}
         data-testid="compass-active-toggle"
         aria-label={
           isLoading
