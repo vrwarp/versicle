@@ -231,6 +231,43 @@ export class PlaybackStateManager {
         return this.getNextVisibleIndex(this._currentIndex) !== -1;
     }
 
+    /**
+     * Returns diagnostic information about the skip state of the queue.
+     * Used by the flight recorder to capture queue state during anomalies.
+     * This is NOT on the hot path — only called during anomaly detection.
+     */
+    getSkipDiagnostics(aroundIndex: number): {
+        skippedCount: number;
+        firstSkippedIndex: number;
+        lastSkippedIndex: number;
+        sample: { idx: number; isSkipped: boolean | undefined; textLen: number }[];
+    } {
+        let skippedCount = 0;
+        let firstSkippedIndex = -1;
+        let lastSkippedIndex = -1;
+
+        for (let i = 0; i < this._queue.length; i++) {
+            if (this._queue[i]?.isSkipped) {
+                skippedCount++;
+                if (firstSkippedIndex === -1) firstSkippedIndex = i;
+                lastSkippedIndex = i;
+            }
+        }
+
+        // Sample 5 items around the given index (the boundary)
+        const sample: { idx: number; isSkipped: boolean | undefined; textLen: number }[] = [];
+        for (let i = Math.max(0, aroundIndex - 1); i < Math.min(this._queue.length, aroundIndex + 5); i++) {
+            const item = this._queue[i];
+            sample.push({
+                idx: i,
+                isSkipped: item?.isSkipped,
+                textLen: item?.text?.length ?? -1,
+            });
+        }
+
+        return { skippedCount, firstSkippedIndex, lastSkippedIndex, sample };
+    }
+
     hasPrev(): boolean {
         return this.getPrevVisibleIndex(this._currentIndex) !== -1;
     }

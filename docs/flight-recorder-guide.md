@@ -94,6 +94,21 @@ CAP  play.handoff     → "Smart Handoff: Android was already playing this one"
 
 **🚨 If `hasNext` is `false`, the engine will advance to the next chapter.** This is the event to look for when diagnosing premature chapter advances.
 
+#### `APS:playNext.queueDiag` — Queue state diagnostic (anomaly only)
+
+```json
+{ "src": "APS", "ev": "playNext.queueDiag", "d": { "skippedCount": 237, "firstSkipped": 106, "lastSkipped": 342, "rawRemaining": 237, "sample": "[{\"idx\":104,...}]" } }
+```
+
+Emitted automatically **only when a premature chapter advance anomaly is detected** (`hasNext: false` while less than 80% through the chapter). It fires synchronously before the snapshot is taken, so the data is always captured.
+
+- `skippedCount`: Total number of items in the queue with `isSkipped: true`.
+- `firstSkipped` / `lastSkipped`: Index range of skipped items. If `firstSkipped` immediately follows the anomaly index, this confirms skip flags caused the issue.
+- `rawRemaining`: How many items exist past the current index (regardless of skip state).
+- `sample`: JSON array of 5-6 items around the anomaly boundary, showing each item's `idx`, `isSkipped`, and `textLen`.
+
+**🔑 This event definitively answers "why did hasNext return false?"** If `skippedCount > 0`, the issue is skip flags. If `skippedCount === 0`, look for a different cause (queue truncation, sparse array, etc.).
+
 #### `APS:playNext.advance` — Chapter advance triggered
 
 ```json
@@ -158,10 +173,12 @@ Valid statuses: `stopped`, `loading`, `playing`, `paused`, `completed`.
 #### `APS:restoreQueue` — Queue restored from cache on app launch
 
 ```json
-{ "src": "APS", "ev": "restoreQueue", "d": { "queueLen": 200, "currentIndex": 100, "sectionIndex": 5 } }
+{ "src": "APS", "ev": "restoreQueue", "d": { "queueLen": 200, "currentIndex": 100, "sectionIndex": 5, "skippedCount": 0, "firstSkipped": -1, "lastSkipped": -1 } }
 ```
 
 The engine loaded a saved queue from the database. Check if `sectionIndex` is `-1` — that means the section tracking was lost, which can cause guard clauses to fail.
+
+**🚨 If `skippedCount > 0` here, the restored queue has stale `isSkipped` flags baked in from a previous session.** This is the leading hypothesis for the premature chapter advance bug. Items marked as skipped will remain invisible to `hasNext()` even if the content filter is no longer enabled.
 
 #### `APS:loadSectionById.guard` — Guard clause decision
 
@@ -199,12 +216,17 @@ The `useTTS` React hook detected a section change in the visual reader and consi
 
 1. Find the `playNext.advance` event (search for `"ev":"playNext.advance"`).
 2. Look at the event immediately before it — it should be a `playNext` with `hasNext: false`.
-3. Check the `index` and `queueLen` values:
+3. **Check for `playNext.queueDiag`** — if the anomaly was auto-detected (ratio < 80%), this event appears right before the snapshot event and contains the definitive answer:
+   - If `skippedCount > 0`: Skip flags caused the issue. Check `firstSkipped` and `lastSkipped` to see the range.
+   - If `skippedCount === 0`: The issue is NOT skip flags — look for queue truncation or other causes.
+   - The `sample` field shows the exact `isSkipped` and `textLen` values for items around the boundary.
+4. **Check for stale `restoreQueue`** — search backwards for `"ev":"restoreQueue"`. If `skippedCount > 0`, the queue was restored from the database with stale skip flags from a prior session where the content filter was active.
+5. Check the `index` and `queueLen` values in the `playNext` event:
    - If `index` is near `queueLen` (e.g., 198/200) → the queue was genuinely exhausted. The issue might be with the queue being too short (content filter removed items).
    - If `index` is far from `queueLen` (e.g., 42/200) → something caused `hasNext` to return false despite items remaining. This likely means all remaining items are marked as skipped.
    - If `queueLen` is unexpectedly small → the queue was replaced. Look backwards for a `PSM:setQueue` event.
 
-4. If you find a `PSM:setQueue` between the last `playInternal` and the `playNext.advance`, the queue was swapped mid-playback. Check:
+6. If you find a `PSM:setQueue` between the last `playInternal` and the `playNext.advance`, the queue was swapped mid-playback. Check:
    - Was `startIndex` reset to 0?
    - What was `prevIndex`?
    - Look further back to see what triggered the `setQueue` — was it a `loadSectionById.guard` with `reason: "proceed"`?
@@ -298,7 +320,10 @@ cat snapshot.json | jq '
 '
 
 # Show the "story" — just the high-level events, no noise
-cat snapshot.json | jq '[.[] | select(.ev | test("playInternal|playNext|setQueue|status|advance|restoreQueue|loadSection|guard|snapshot"))]'
+cat snapshot.json | jq '[.[] | select(.ev | test("playInternal|playNext|setQueue|status|advance|restoreQueue|loadSection|guard|snapshot|queueDiag"))]'
+
+# Extract queue diagnostics from anomaly snapshots
+cat snapshot.json | jq '[.[] | select(.ev == "playNext.queueDiag" or .ev == "restoreQueue")]'
 ```
 
 ---
