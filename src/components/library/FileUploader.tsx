@@ -76,20 +76,31 @@ export const FileUploader: React.FC = () => {
     if (files.length === 1) {
       await processSingleFile(files[0]);
     } else {
-      // Validate all files before passing to batch import
+      // Validate files in chunks to balance performance and memory usage
       const validFiles: File[] = [];
-      for (const file of files) {
-        const lowerName = file.name.toLowerCase();
-        if (lowerName.endsWith('.epub') || lowerName.endsWith('.zip')) {
+      const CONCURRENCY_LIMIT = 10;
+
+      for (let i = 0; i < files.length; i += CONCURRENCY_LIMIT) {
+        const chunk = files.slice(i, i + CONCURRENCY_LIMIT);
+        const chunkResults = await Promise.all(chunk.map(async (file) => {
+          const lowerName = file.name.toLowerCase();
+          const isSupported = lowerName.endsWith('.epub') || lowerName.endsWith('.zip');
+
+          if (!isSupported) {
+            showToast(`Skipping unsupported file: ${file.name}`, 'error');
+            return null;
+          }
+
           const isValid = await validateZipSignature(file);
           if (isValid) {
-            validFiles.push(file);
+            return file;
           } else {
             showToast(`Skipping invalid file: ${file.name}`, 'error');
+            return null;
           }
-        } else {
-          showToast(`Skipping unsupported file: ${file.name}`, 'error');
-        }
+        }));
+
+        validFiles.push(...chunkResults.filter((f): f is File => f !== null));
       }
 
       if (validFiles.length > 0) {
