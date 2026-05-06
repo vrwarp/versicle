@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import type { ContentType } from '../../types/content-analysis';
 import { createLogger } from '../logger';
+import { generateSecureId } from '../crypto';
 
 const logger = createLogger('GenAIService');
 
@@ -51,7 +52,7 @@ class GenAIService {
   private log(type: 'request' | 'response' | 'error', method: string, payload: any, context?: { bookTitle?: string, sectionTitle?: string, correlationId?: string }) {
     if (this.logCallback) {
       this.logCallback({
-        id: crypto.randomUUID(),
+        id: generateSecureId(),
         timestamp: Date.now(),
         type,
         method,
@@ -117,7 +118,7 @@ class GenAIService {
   }
 
   public async generateContent(prompt: string, context?: { bookTitle?: string, sectionTitle?: string }): Promise<string> {
-    const correlationId = crypto.randomUUID();
+    const correlationId = generateSecureId();
     const fullContext = { ...context, correlationId };
 
     return this.executeWithRetry(async (genAI, modelId) => {
@@ -147,7 +148,7 @@ class GenAIService {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   public async generateStructured<T>(prompt: string | any, schema: any, generationConfigOverride?: any, context?: { bookTitle?: string, sectionTitle?: string, correlationId?: string }): Promise<T> {
-    const correlationId = context?.correlationId || crypto.randomUUID();
+    const correlationId = context?.correlationId || generateSecureId();
     const fullContext = { ...context, correlationId };
 
     // Check for E2E Test Mocks
