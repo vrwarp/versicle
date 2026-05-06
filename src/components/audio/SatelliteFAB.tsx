@@ -16,6 +16,7 @@ export const SatelliteFAB: React.FC = () => {
     const isLoading = status === 'loading';
 
     const handleToggle = () => {
+        if (isLoading) return;
         if (isPlaying) {
             pause();
         } else {
@@ -29,9 +30,10 @@ export const SatelliteFAB: React.FC = () => {
             className={cn(
                 "flex items-center justify-center w-14 h-14 rounded-full shadow-xl bg-primary text-primary-foreground transition-transform active:scale-95 z-50",
                 "hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                isLoading && "cursor-wait"
+                isLoading && "cursor-wait opacity-80"
             )}
             onClick={handleToggle}
+            aria-disabled={isLoading}
             aria-label={isLoading ? "Loading..." : (isPlaying ? "Pause" : "Play")}
         >
             {isLoading ? (
