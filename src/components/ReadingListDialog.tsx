@@ -300,6 +300,7 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
                                                 <button
                                                     className="flex items-center gap-1 hover:text-foreground/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
                                                     onClick={() => handleSort(column.id as keyof ReadingListEntry)}
+                                                    aria-label={`Sort by ${column.label}`}
                                                 >
                                                     {column.label}
                                                     {sortField === column.id ? (

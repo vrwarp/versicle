@@ -80,6 +80,7 @@ export const DriveFolderPicker: React.FC<DriveFolderPickerProps> = ({ onSelect, 
                                             "hover:underline transition-colors shrink-0 text-sm rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                                             isLast ? "font-semibold text-foreground pointer-events-none" : "text-muted-foreground hover:text-foreground"
                                         )}
+                                        aria-label={isLast ? `Current folder ${crumb.name}` : `Navigate to ${crumb.name}`}
                                     >
                                         {crumb.name}
                                     </button>
@@ -124,6 +125,7 @@ export const DriveFolderPicker: React.FC<DriveFolderPickerProps> = ({ onSelect, 
                                 key={folder.id}
                                 onClick={() => openFolder(folder.id, folder.name)}
                                 className="w-full flex items-center p-2 rounded-lg hover:bg-accent transition-colors text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/20"
+                                aria-label={`Open folder ${folder.name}`}
                             >
                                 {/* Folder Icon */}
                                 <div className="mr-3 shrink-0">
