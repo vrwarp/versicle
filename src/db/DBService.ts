@@ -516,13 +516,18 @@ class DBService {
         const store = tx.objectStore('static_resources');
 
         // BOLT OPTIMIZATION: Avoid getAllKeys() across IDB boundary. Map to count() promises instead.
-        const promises = bookIds.map(async (id) => {
-            const count = await store.count(id);
-            const exists = count > 0;
-            logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists}`);
-            result.set(id, !exists);
-        });
-        await Promise.all(promises);
+        // Chunk the promises to avoid choking the microtask queue and IDB transaction queue for massive libraries.
+        const BATCH_SIZE = 50;
+        for (let i = 0; i < bookIds.length; i += BATCH_SIZE) {
+            const batch = bookIds.slice(i, i + BATCH_SIZE);
+            const promises = batch.map(async (id) => {
+                const count = await store.count(id);
+                const exists = count > 0;
+                logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists}`);
+                result.set(id, !exists);
+            });
+            await Promise.all(promises);
+        }
         await tx.done;
       } else {
         // Return for all resources (inverse: if in set, not offloaded)
