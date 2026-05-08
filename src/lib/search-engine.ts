@@ -96,7 +96,13 @@ export class SearchEngine {
         const results: SearchResult[] = [];
         const MAX_RESULTS = 50;
 
+        // Fast-path RegExp check to avoid allocating lowercased text when there is no match
+        const regex = new RegExp(this.escapeRegExp(query), 'i');
+
         for (const [href, text] of bookStore.entries()) {
+            // BOLT OPTIMIZATION: Early exit before massive string allocation
+            if (!regex.test(text)) continue;
+
             const lowerText = text.toLowerCase();
             let startIndex = 0;
 
@@ -118,6 +124,13 @@ export class SearchEngine {
         }
 
         return results;
+    }
+
+    /**
+     * Escapes special characters in a string so it can be safely used in a RegExp.
+     */
+    private escapeRegExp(string: string): string {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
     }
 
     /**
