@@ -15,6 +15,7 @@ class SearchClient {
     private parser: DOMParser | undefined;
     private indexedBooks = new Set<string>();
     private pendingIndexes = new Map<string, { task: Promise<void>, callbacks: ((percent: number) => void)[] }>();
+    private searchCounters = new Map<string, number>();
 
     /**
      * Retrieves the existing Web Worker instance or creates a new one if it doesn't exist.
@@ -191,8 +192,17 @@ class SearchClient {
      * @returns A Promise that resolves to an array of SearchResult objects.
      */
     async search(query: string, bookId: string): Promise<SearchResult[]> {
+        const reqId = (this.searchCounters.get(bookId) || 0) + 1;
+        this.searchCounters.set(bookId, reqId);
+
         const engine = this.getEngine();
-        return engine.search(bookId, query);
+        const results = await engine.search(bookId, query);
+
+        if (this.searchCounters.get(bookId) !== reqId) {
+            throw new Error('Search superseded');
+        }
+
+        return results;
     }
 
     /**
