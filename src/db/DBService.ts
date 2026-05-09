@@ -83,11 +83,23 @@ class DBService {
 
       // BOLT OPTIMIZATION: Avoid getAll() on large arrays across IDB bridge to prevent serialization OOMs
       // and use count() instead of getKey() to avoid fetching the key value itself.
-      const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
-      const resourceCountPromise = Promise.all(ids.map(id => resourceStore.count(id)));
-      const structuresPromise = Promise.all(ids.map(id => structureStore.get(id)));
+      // Additionally, batch IDB gets to prevent microtask queue flooding on large libraries.
+      const BATCH_SIZE = 50;
+      const manifests: (StaticBookManifest | undefined)[] = [];
+      const resourceCounts: number[] = [];
+      const structures: (StaticStructure | undefined)[] = [];
 
-      const [manifests, resourceCounts, structures] = await Promise.all([manifestsPromise, resourceCountPromise, structuresPromise]);
+      for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+        const batchIds = ids.slice(i, i + BATCH_SIZE);
+
+        const mBatch = await Promise.all(batchIds.map(id => manifestStore.get(id)));
+        const rBatch = await Promise.all(batchIds.map(id => resourceStore.count(id)));
+        const sBatch = await Promise.all(batchIds.map(id => structureStore.get(id)));
+
+        manifests.push(...mBatch);
+        resourceCounts.push(...rBatch);
+        structures.push(...sBatch);
+      }
 
       await tx.done;
 

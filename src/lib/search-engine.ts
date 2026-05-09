@@ -96,7 +96,16 @@ export class SearchEngine {
         const results: SearchResult[] = [];
         const MAX_RESULTS = 50;
 
+        // Escape special characters for regex
+        const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const fastPathRegex = new RegExp(escapedQuery, 'i');
+
         for (const [href, text] of bookStore.entries()) {
+            // Fast-path check: avoid allocating lowerText if no match exists
+            if (!fastPathRegex.test(text)) {
+                continue;
+            }
+
             const lowerText = text.toLowerCase();
             let startIndex = 0;
 
