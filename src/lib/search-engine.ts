@@ -96,7 +96,16 @@ export class SearchEngine {
         const results: SearchResult[] = [];
         const MAX_RESULTS = 50;
 
+        // Fast-path RegExp to avoid massive string allocations (toLowerCase) when scanning
+        const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const searchRegex = new RegExp(escapeRegExp(query), 'i');
+
         for (const [href, text] of bookStore.entries()) {
+            // Early exit: avoid allocating a lowercased copy of the entire text block if there is no match
+            if (!searchRegex.test(text)) {
+                continue;
+            }
+
             const lowerText = text.toLowerCase();
             let startIndex = 0;
 
