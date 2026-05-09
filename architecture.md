@@ -118,7 +118,6 @@ graph TD
     subgraph Storage [IndexedDB]
         DBService[DBService]
         StaticStores[Static & Resources]
-        UserStores[User Data & Progress]
         CacheStores[Cache & Tables]
         AppStores[Checkpoints & Logs]
         YDB[versicle-yjs]
@@ -199,7 +198,6 @@ graph TD
     TTSCache --> DBService
 
     DBService --> StaticStores
-    DBService --> UserStores
     DBService --> CacheStores
     DBService --> AppStores
 ```
