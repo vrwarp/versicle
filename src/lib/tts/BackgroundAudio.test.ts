@@ -44,7 +44,7 @@ describe('BackgroundAudio', () => {
 
       it('should play noise when mode is noise', () => {
           backgroundAudio.play('noise');
-          expect(mockAudio.src).toContain('white-noise');
+          expect(mockAudio.src).toContain('sub_bass');
           expect(mockAudio.play).toHaveBeenCalled();
       });
 
@@ -60,7 +60,7 @@ describe('BackgroundAudio', () => {
           expect(mockAudio.src).toContain('silence');
 
           backgroundAudio.play('noise');
-          expect(mockAudio.src).toContain('white-noise');
+          expect(mockAudio.src).toContain('sub_bass');
       });
 
       it('should not restart if mode is same and already playing', () => {
@@ -117,7 +117,7 @@ describe('BackgroundAudio', () => {
       it('should set volume for white noise', () => {
           backgroundAudio.setVolume(0.5);
           backgroundAudio.play('noise');
-          expect(mockAudio.volume).toBe(0.5);
+          expect(mockAudio.volume).toBe(0.125);
       });
 
       it('should ignore volume for silence', () => {
@@ -129,7 +129,7 @@ describe('BackgroundAudio', () => {
       it('should update volume if already playing noise', () => {
             backgroundAudio.play('noise');
             backgroundAudio.setVolume(0.2);
-            expect(mockAudio.volume).toBe(0.2);
+            expect(mockAudio.volume).toBeCloseTo(0.008);
       });
   });
 });

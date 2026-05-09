@@ -1,5 +1,5 @@
 import silenceUrl from '../../assets/silence.ogg';
-import whiteNoiseUrl from '../../assets/white-noise.ogg';
+import whiteNoiseUrl from '../../assets/15m_8k_sub_bass_vbr_off.webm';
 
 export type BackgroundAudioMode = 'silence' | 'noise' | 'off';
 
@@ -7,7 +7,11 @@ export class BackgroundAudio {
     private audio: HTMLAudioElement;
     private stopTimeout: ReturnType<typeof setTimeout> | null = null;
     private currentMode: BackgroundAudioMode = 'off';
-    private whiteNoiseVolume: number = 0.1;
+    private linearVolume: number = 0.1;
+
+    private getPerceptualVolume(linearVal: number): number {
+        return Math.pow(linearVal, 3);
+    }
 
     constructor() {
         this.audio = new Audio();
@@ -15,9 +19,9 @@ export class BackgroundAudio {
     }
 
     setVolume(volume: number) {
-        this.whiteNoiseVolume = Math.max(0, Math.min(1, volume));
+        this.linearVolume = Math.max(0, Math.min(1, volume));
         if (this.currentMode === 'noise') {
-            this.audio.volume = this.whiteNoiseVolume;
+            this.audio.volume = this.getPerceptualVolume(this.linearVolume);
         }
     }
 
@@ -30,7 +34,7 @@ export class BackgroundAudio {
         }
 
         const targetSrc = mode === 'noise' ? whiteNoiseUrl : silenceUrl;
-        const targetVolume = mode === 'noise' ? this.whiteNoiseVolume : 1.0;
+        const targetVolume = mode === 'noise' ? this.getPerceptualVolume(this.linearVolume) : 1.0;
 
         // If switching source, or if just starting
         // Note: checking getAttribute('src') is unreliable as .src setter doesn't always update the content attribute
