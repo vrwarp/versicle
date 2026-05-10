@@ -35,8 +35,10 @@ describe('TaskSequencer', () => {
 
         try {
             await p1;
+
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (_e) {
+            // expected
             // caller can catch the error
         }
         await p2;
@@ -49,7 +51,8 @@ describe('TaskSequencer', () => {
         const task1 = () => new Promise<void>(resolve => { results.push(1); resolve(); });
 
         sequencer.destroy();
-        await sequencer.enqueue(task1);
+
+        await expect(sequencer.enqueue(task1)).rejects.toThrow('TaskSequencer is destroyed');
 
         expect(results).toEqual([]);
     });
