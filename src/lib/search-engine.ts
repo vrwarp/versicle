@@ -93,10 +93,15 @@ export class SearchEngine {
         const lowerQuery = query.toLowerCase();
         const queryLen = lowerQuery.length;
 
+        // RegExp check without global flag, just test if it exists
+        const fastRegex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
         const results: SearchResult[] = [];
         const MAX_RESULTS = 50;
 
         for (const [href, text] of bookStore.entries()) {
+            if (!fastRegex.test(text)) continue;
+
             const lowerText = text.toLowerCase();
             let startIndex = 0;
 
