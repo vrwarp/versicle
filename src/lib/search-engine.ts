@@ -93,10 +93,16 @@ export class SearchEngine {
         const lowerQuery = query.toLowerCase();
         const queryLen = lowerQuery.length;
 
+        // BOLT OPTIMIZATION: Fast-path regex scan to avoid massive string allocation
+        const escapedQuery = lowerQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const fastRegex = new RegExp(escapedQuery, 'i');
+
         const results: SearchResult[] = [];
         const MAX_RESULTS = 50;
 
         for (const [href, text] of bookStore.entries()) {
+            if (!fastRegex.test(text)) continue;
+
             const lowerText = text.toLowerCase();
             let startIndex = 0;
 
