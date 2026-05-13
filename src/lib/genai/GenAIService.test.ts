@@ -9,6 +9,10 @@ const mocks = vi.hoisted(() => {
   };
 });
 
+vi.mock('../crypto', () => ({
+  generateSecureId: vi.fn(() => 'mock-secure-id')
+}));
+
 // Mock the module
 vi.mock('@google/generative-ai', () => {
   return {
@@ -31,11 +35,25 @@ vi.mock('@google/generative-ai', () => {
   };
 });
 
+import { generateSecureId } from '../crypto';
+
 describe('GenAIService Rotation Logic', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  it('should use generateSecureId for generating IDs', async () => {
+    genAIService.configure('fake-key', 'ignored-model', false);
+
+    mocks.generateContent.mockResolvedValue({
+      response: Promise.resolve({ text: () => 'result' })
+    });
+
+    await genAIService.generateContent('prompt');
+    expect(generateSecureId).toHaveBeenCalled();
+  });
+
 
   afterEach(() => {
     vi.restoreAllMocks();

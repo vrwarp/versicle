@@ -3,6 +3,7 @@ import yjs from 'zustand-middleware-yjs';
 import { yDoc, getYjsOptions } from './yjs-provider';
 import type { UserAnnotation } from '../types/db';
 import { createLogger } from '../lib/logger';
+import { generateSecureId } from '../lib/crypto';
 
 const logger = createLogger('AnnotationStore');
 
@@ -98,7 +99,7 @@ export const createAnnotationStore = () => create<AnnotationState>()(
 
       // Actions
       add: (partialAnnotation) => {
-        const id = crypto.randomUUID();
+        const id = generateSecureId();
         const newAnnotation: UserAnnotation = {
           ...partialAnnotation,
           id,
