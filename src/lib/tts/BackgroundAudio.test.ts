@@ -1,15 +1,28 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { BackgroundAudio } from './BackgroundAudio';
+
+type MockAudio = {
+    play: Mock;
+    pause: Mock;
+    currentTime: number;
+    loop: boolean;
+    paused: boolean;
+    volume: number;
+    src: string;
+    getAttribute: Mock;
+    load: Mock;
+    error: null;
+};
 
 describe('BackgroundAudio', () => {
   let backgroundAudio: BackgroundAudio;
-  let mockAudio1: any;
-  let mockAudio2: any;
+  let mockAudio1: MockAudio;
+  let mockAudio2: MockAudio;
 
   beforeEach(() => {
     vi.useFakeTimers();
     // Mock Audio
-    const createMockAudio = () => ({
+    const createMockAudio = (): MockAudio => ({
         play: vi.fn().mockResolvedValue(undefined),
         pause: vi.fn(),
         currentTime: 0,
@@ -17,7 +30,7 @@ describe('BackgroundAudio', () => {
         paused: true,
         volume: 1,
         src: '',
-        getAttribute: vi.fn(function(this: any, attr) {
+        getAttribute: vi.fn(function(this: { src: string }, attr: string) {
              if (attr === 'src') return this.src;
              return null;
         }),
@@ -28,11 +41,10 @@ describe('BackgroundAudio', () => {
     mockAudio2 = createMockAudio();
     
     let callCount = 0;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     global.Audio = vi.fn(function() { 
         callCount++;
         return callCount === 1 ? mockAudio1 : mockAudio2;
-    }) as any;
+    }) as unknown as typeof Audio;
 
     backgroundAudio = new BackgroundAudio();
   });
