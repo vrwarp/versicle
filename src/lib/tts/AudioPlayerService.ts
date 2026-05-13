@@ -375,7 +375,13 @@ export class AudioPlayerService {
                         lastSkipped,
                     });
 
-                    this.stateManager.setQueue(state.queue, currentIndex, sectionIndex);
+                    // Clear stale isSkipped flags — the content analysis pipeline
+                    // will re-apply them asynchronously from current GenAI settings.
+                    const cleanedQueue = skippedCount > 0
+                        ? state.queue.map(item => item.isSkipped ? { ...item, isSkipped: false } : item)
+                        : state.queue;
+
+                    this.stateManager.setQueue(cleanedQueue, currentIndex, sectionIndex);
                     // Subscription handles metadata and listeners
 
                     // Trigger background content analysis (GenAI) for the restored section
