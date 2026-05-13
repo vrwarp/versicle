@@ -6,8 +6,8 @@ vi.mock('../db/db', () => ({
   getDB: vi.fn(),
 }));
 
-vi.mock('uuid', () => ({
-  v4: () => 'test-uuid',
+vi.mock('../lib/crypto', () => ({
+  generateSecureId: vi.fn(() => 'test-uuid'),
 }));
 
 describe('useAnnotationStore', () => {
