@@ -90,30 +90,56 @@ export class SearchEngine {
         const bookStore = this.books.get(bookId);
         if (!bookStore || !query.trim()) return [];
 
+        // BOLT OPTIMIZATION: Avoid allocating megabytes of string memory using `.toLowerCase()`
+        // on the entire document texts. Instead, compute char codes once for the query and
+        // perform ASCII case-insensitivity math during the linear scan.
         const lowerQuery = query.toLowerCase();
         const queryLen = lowerQuery.length;
+        const queryCodes = new Uint16Array(queryLen);
+        for (let i = 0; i < queryLen; i++) {
+            queryCodes[i] = lowerQuery.charCodeAt(i);
+        }
 
         const results: SearchResult[] = [];
         const MAX_RESULTS = 50;
 
         for (const [href, text] of bookStore.entries()) {
-            const lowerText = text.toLowerCase();
+            const textLen = text.length;
             let startIndex = 0;
 
-            while (true) {
-                const index = lowerText.indexOf(lowerQuery, startIndex);
-                if (index === -1) break;
+            while (startIndex <= textLen - queryLen) {
+                let match = true;
+                for (let j = 0; j < queryLen; j++) {
+                    let code = text.charCodeAt(startIndex + j);
 
-                results.push({
-                    href: href,
-                    excerpt: this.getExcerpt(text, index, queryLen)
-                });
+                    // Case-insensitive ASCII fold (A-Z to a-z)
+                    if (code >= 65 && code <= 90) {
+                        code += 32;
+                    } else if (code >= 192) {
+                        // Fallback for non-ASCII characters
+                        code = String.fromCharCode(code).toLowerCase().charCodeAt(0);
+                    }
 
-                if (results.length >= MAX_RESULTS) {
-                    return results;
+                    if (code !== queryCodes[j]) {
+                        match = false;
+                        break;
+                    }
                 }
 
-                startIndex = index + queryLen;
+                if (match) {
+                    results.push({
+                        href: href,
+                        excerpt: this.getExcerpt(text, startIndex, queryLen)
+                    });
+
+                    if (results.length >= MAX_RESULTS) {
+                        return results;
+                    }
+
+                    startIndex += queryLen;
+                } else {
+                    startIndex++;
+                }
             }
         }
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { SearchEngine } from './search-engine';
 
 describe('SearchEngine Performance', () => {
@@ -8,13 +8,16 @@ describe('SearchEngine Performance', () => {
     beforeEach(() => {
         engine = new SearchEngine();
         engine.initIndex(BOOK_ID);
+        vi.restoreAllMocks();
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     it('should measure search performance on a large dataset with NO MATCHES', () => {
-        // Generate a large dummy book with repetitive content to simulate a real scenario
-        // We use NO MATCHES because returning early hides the O(N) regex performance. We want to scan the whole thing.
         const numSections = 1000;
-        const sectionLength = 10000; // 10k chars per section -> 10M total chars
+        const sectionLength = 10000;
 
         const sections = [];
         for (let i = 0; i < numSections; i++) {
@@ -33,7 +36,8 @@ describe('SearchEngine Performance', () => {
 
         const query = 'APPLE';
 
-        // Measure Current RegExp approach implicitly by calling the actual engine
+        const toLowerCaseSpy = vi.spyOn(String.prototype, 'toLowerCase');
+
         const startCurrent = performance.now();
         const results = engine.search(BOOK_ID, query);
         const endCurrent = performance.now();
@@ -43,5 +47,9 @@ describe('SearchEngine Performance', () => {
 
         expect(results).toBeDefined();
         expect(results.length).toBe(0);
+
+        // Assert that we did not use toLowerCase on the massive text blocks
+        // It's allowed for the query string itself though, so let's check call count
+        expect(toLowerCaseSpy).toHaveBeenCalledTimes(1);
     });
 });
