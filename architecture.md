@@ -120,7 +120,7 @@ graph TD
         StaticStores[Static & Resources]
         UserStores[User Data & Progress]
         CacheStores[Cache & Tables]
-        AppStores[Checkpoints & Logs]
+        AppStores[Checkpoints, Logs & Flight Snapshots]
         YDB[versicle-yjs]
     end
 
@@ -213,7 +213,7 @@ The data layer is built on **IndexedDB** using the `idb` library. It is accessed
 #### `src/db/DBService.ts`
 The main database abstraction layer. It handles error wrapping (converting DOM errors to typed application errors like `StorageFullError`), transaction management, and debouncing for frequent writes.
 
-**Key Stores (Schema v23):**
+**Key Stores (Schema v24):**
 *   **Domain 1: Static (Immutable/Heavy)** - *Managed by DBService*
     *   `static_manifests`: Lightweight metadata (Title, Author, Cover Thumbnail) for listing books.
     *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
@@ -231,6 +231,11 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `cache_render_metrics`: Layout calculation results.
     *   `cache_session_state`: Playback queue persistence.
     *   `cache_tts_preparation`: Staging area for TTS text extraction.
+*   **Domain 4: App (Sync Infrastructure & Diagnostics)**
+    *   `checkpoints`: Snapshot backups of the Yjs document state.
+    *   `sync_log`: Audit trail for sync events.
+    *   `app_metadata`: Ephemeral app-wide configuration data.
+    *   `flight_snapshots`: "Black box" data recorders (Zustand state snapshots) captured for post-mortem debugging of intermittent issues.
 
 **Key Functions:**
 *   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations) and `user_reading_list` entry.
@@ -427,6 +432,12 @@ Versicle employs a dual-strategy for data safety, distinguishing between "Hard R
 *   **Notes Export (`src/lib/export-notes.ts`)**:
     *   **Goal**: Enable users to easily extract annotations from books for external use.
     *   **Logic**: Generates raw Markdown string payloads combining highlight text and user notes. Facilitates both direct Blob download via `URL.createObjectURL` and Clipboard API copy functionality.
+
+#### Diagnostics & Recovery (`src/types/db.ts`)
+*   **Flight Data Recorders (`flight_snapshots`)**:
+    *   **Goal**: Enable post-mortem debugging of intermittent issues (like premature chapter advances) by capturing "Black Box" snapshots of application state.
+    *   **Logic**: Captures a deep copy of the active Yjs document and Zustand store states (via manual trigger in the Diagnostics UI or automatic anomaly detection). Stored persistently in IDB (`flight_snapshots`) to survive app restarts.
+    *   **Trade-off**: Snapshots can be large and are retained locally, requiring manual cleanup via the Maintenance UI to prevent unbounded storage growth over time.
 
 #### Cloud Library (`src/lib/drive/`)
 Integrates with Google Drive to provide a cloud-based library.
