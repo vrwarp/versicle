@@ -80,7 +80,8 @@ export class SearchEngine {
     }
 
     /**
-     * Searches a specific book for a query string using linear RegExp scan.
+     * Searches a specific book for a query string using a highly optimized,
+     * zero-allocation case-insensitive substring scan using charCodeAt.
      *
      * @param bookId - The unique identifier of the book to search.
      * @param query - The text query to search for.
@@ -88,32 +89,58 @@ export class SearchEngine {
      */
     search(bookId: string, query: string): SearchResult[] {
         const bookStore = this.books.get(bookId);
-        if (!bookStore || !query.trim()) return [];
+        const trimmedQuery = query.trim();
+        if (!bookStore || !trimmedQuery) return [];
 
-        const lowerQuery = query.toLowerCase();
-        const queryLen = lowerQuery.length;
+        const queryLen = trimmedQuery.length;
+        if (queryLen === 0) return [];
 
+        // Precompute lowercased query char codes to avoid doing it per character of the text
+        const qCodes = new Uint16Array(queryLen);
+        for (let i = 0; i < queryLen; i++) {
+            let c = trimmedQuery.charCodeAt(i);
+            if (c >= 65 && c <= 90) c += 32; // Convert A-Z to a-z
+            qCodes[i] = c;
+        }
+
+        const firstChar = qCodes[0];
         const results: SearchResult[] = [];
         const MAX_RESULTS = 50;
 
         for (const [href, text] of bookStore.entries()) {
-            const lowerText = text.toLowerCase();
-            let startIndex = 0;
+            const tLen = text.length;
 
-            while (true) {
-                const index = lowerText.indexOf(lowerQuery, startIndex);
-                if (index === -1) break;
+            for (let i = 0; i <= tLen - queryLen; i++) {
+                // Check first character fast path
+                let tc = text.charCodeAt(i);
+                if (tc >= 65 && tc <= 90) tc += 32;
+                if (tc !== firstChar) continue;
 
-                results.push({
-                    href: href,
-                    excerpt: this.getExcerpt(text, index, queryLen)
-                });
-
-                if (results.length >= MAX_RESULTS) {
-                    return results;
+                // First character matched, check the rest
+                let match = true;
+                for (let j = 1; j < queryLen; j++) {
+                    let tc2 = text.charCodeAt(i + j);
+                    if (tc2 >= 65 && tc2 <= 90) tc2 += 32;
+                    if (tc2 !== qCodes[j]) {
+                        match = false;
+                        break;
+                    }
                 }
 
-                startIndex = index + queryLen;
+                if (match) {
+                    results.push({
+                        href: href,
+                        excerpt: this.getExcerpt(text, i, queryLen)
+                    });
+
+                    if (results.length >= MAX_RESULTS) {
+                        return results;
+                    }
+
+                    // Skip the rest of the matched query to prevent overlapping matches,
+                    // -1 because the outer loop will do i++
+                    i += queryLen - 1;
+                }
             }
         }
 
