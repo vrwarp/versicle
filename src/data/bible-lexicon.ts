@@ -1,6 +1,138 @@
 import type { LexiconRule } from '../types/db';
 
-export const BIBLE_ABBREVIATIONS = [
+export const BIBLE_ABBREVIATIONS: (string | { abbr: string, language?: string })[] = [
+    { abbr: "创", language: 'zh' },
+    { abbr: "出", language: 'zh' },
+    { abbr: "利", language: 'zh' },
+    { abbr: "民", language: 'zh' },
+    { abbr: "申", language: 'zh' },
+    { abbr: "书", language: 'zh' },
+    { abbr: "士", language: 'zh' },
+    { abbr: "得", language: 'zh' },
+    { abbr: "撒上", language: 'zh' },
+    { abbr: "撒下", language: 'zh' },
+    { abbr: "王上", language: 'zh' },
+    { abbr: "王下", language: 'zh' },
+    { abbr: "代上", language: 'zh' },
+    { abbr: "代下", language: 'zh' },
+    { abbr: "拉", language: 'zh' },
+    { abbr: "尼", language: 'zh' },
+    { abbr: "斯", language: 'zh' },
+    { abbr: "伯", language: 'zh' },
+    { abbr: "诗", language: 'zh' },
+    { abbr: "箴", language: 'zh' },
+    { abbr: "传", language: 'zh' },
+    { abbr: "歌", language: 'zh' },
+    { abbr: "赛", language: 'zh' },
+    { abbr: "耶", language: 'zh' },
+    { abbr: "哀", language: 'zh' },
+    { abbr: "结", language: 'zh' },
+    { abbr: "但", language: 'zh' },
+    { abbr: "何", language: 'zh' },
+    { abbr: "珥", language: 'zh' },
+    { abbr: "摩", language: 'zh' },
+    { abbr: "俄", language: 'zh' },
+    { abbr: "拿", language: 'zh' },
+    { abbr: "弥", language: 'zh' },
+    { abbr: "鸿", language: 'zh' },
+    { abbr: "哈", language: 'zh' },
+    { abbr: "番", language: 'zh' },
+    { abbr: "该", language: 'zh' },
+    { abbr: "亚", language: 'zh' },
+    { abbr: "玛", language: 'zh' },
+    { abbr: "太", language: 'zh' },
+    { abbr: "可", language: 'zh' },
+    { abbr: "路", language: 'zh' },
+    { abbr: "约", language: 'zh' },
+    { abbr: "徒", language: 'zh' },
+    { abbr: "罗", language: 'zh' },
+    { abbr: "林前", language: 'zh' },
+    { abbr: "林后", language: 'zh' },
+    { abbr: "加", language: 'zh' },
+    { abbr: "弗", language: 'zh' },
+    { abbr: "腓", language: 'zh' },
+    { abbr: "西", language: 'zh' },
+    { abbr: "帖前", language: 'zh' },
+    { abbr: "帖后", language: 'zh' },
+    { abbr: "提前", language: 'zh' },
+    { abbr: "提后", language: 'zh' },
+    { abbr: "多", language: 'zh' },
+    { abbr: "门", language: 'zh' },
+    { abbr: "来", language: 'zh' },
+    { abbr: "雅", language: 'zh' },
+    { abbr: "彼前", language: 'zh' },
+    { abbr: "彼后", language: 'zh' },
+    { abbr: "约一", language: 'zh' },
+    { abbr: "约二", language: 'zh' },
+    { abbr: "约三", language: 'zh' },
+    { abbr: "犹", language: 'zh' },
+    { abbr: "启", language: 'zh' },
+    { abbr: "創", language: 'zh' },
+    { abbr: "出", language: 'zh' },
+    { abbr: "利", language: 'zh' },
+    { abbr: "民", language: 'zh' },
+    { abbr: "申", language: 'zh' },
+    { abbr: "書", language: 'zh' },
+    { abbr: "士", language: 'zh' },
+    { abbr: "得", language: 'zh' },
+    { abbr: "撒上", language: 'zh' },
+    { abbr: "撒下", language: 'zh' },
+    { abbr: "王上", language: 'zh' },
+    { abbr: "王下", language: 'zh' },
+    { abbr: "代上", language: 'zh' },
+    { abbr: "代下", language: 'zh' },
+    { abbr: "拉", language: 'zh' },
+    { abbr: "尼", language: 'zh' },
+    { abbr: "斯", language: 'zh' },
+    { abbr: "伯", language: 'zh' },
+    { abbr: "詩", language: 'zh' },
+    { abbr: "箴", language: 'zh' },
+    { abbr: "傳", language: 'zh' },
+    { abbr: "歌", language: 'zh' },
+    { abbr: "賽", language: 'zh' },
+    { abbr: "耶", language: 'zh' },
+    { abbr: "哀", language: 'zh' },
+    { abbr: "結", language: 'zh' },
+    { abbr: "但", language: 'zh' },
+    { abbr: "何", language: 'zh' },
+    { abbr: "珥", language: 'zh' },
+    { abbr: "摩", language: 'zh' },
+    { abbr: "俄", language: 'zh' },
+    { abbr: "拿", language: 'zh' },
+    { abbr: "彌", language: 'zh' },
+    { abbr: "鴻", language: 'zh' },
+    { abbr: "哈", language: 'zh' },
+    { abbr: "番", language: 'zh' },
+    { abbr: "該", language: 'zh' },
+    { abbr: "亞", language: 'zh' },
+    { abbr: "瑪", language: 'zh' },
+    { abbr: "太", language: 'zh' },
+    { abbr: "可", language: 'zh' },
+    { abbr: "路", language: 'zh' },
+    { abbr: "約", language: 'zh' },
+    { abbr: "徒", language: 'zh' },
+    { abbr: "羅", language: 'zh' },
+    { abbr: "林前", language: 'zh' },
+    { abbr: "林後", language: 'zh' },
+    { abbr: "加", language: 'zh' },
+    { abbr: "弗", language: 'zh' },
+    { abbr: "腓", language: 'zh' },
+    { abbr: "西", language: 'zh' },
+    { abbr: "帖前", language: 'zh' },
+    { abbr: "帖後", language: 'zh' },
+    { abbr: "提前", language: 'zh' },
+    { abbr: "提後", language: 'zh' },
+    { abbr: "多", language: 'zh' },
+    { abbr: "門", language: 'zh' },
+    { abbr: "來", language: 'zh' },
+    { abbr: "雅", language: 'zh' },
+    { abbr: "彼前", language: 'zh' },
+    { abbr: "彼後", language: 'zh' },
+    { abbr: "約一", language: 'zh' },
+    { abbr: "約二", language: 'zh' },
+    { abbr: "約三", language: 'zh' },
+    { abbr: "猶", language: 'zh' },
+    { abbr: "啟", language: 'zh' },
     "Gen.", "Ge.", "Gn.",
     "Ex.", "Exod.", "Exo.",
     "Lev.", "Le.", "Lv.",
@@ -68,6 +200,931 @@ export const BIBLE_ABBREVIATIONS = [
     "Jude", "Jd.",
     "Rev.", "Rv.", "Revelation",
     "v.", "vs.", "vv.", "ch.", "chap."
+,
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(创)(?=\\s?\\d+)",
+        replacement: "创世记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(出)(?=\\s?\\d+)",
+        replacement: "出埃及记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(利)(?=\\s?\\d+)",
+        replacement: "利未记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(民)(?=\\s?\\d+)",
+        replacement: "民数记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(申)(?=\\s?\\d+)",
+        replacement: "申命记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(书)(?=\\s?\\d+)",
+        replacement: "约书亚记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(士)(?=\\s?\\d+)",
+        replacement: "士师记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(得)(?=\\s?\\d+)",
+        replacement: "路得记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(撒上)(?=\\s?\\d+)",
+        replacement: "撒母耳记上",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(撒下)(?=\\s?\\d+)",
+        replacement: "撒母耳记下",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(王上)(?=\\s?\\d+)",
+        replacement: "列王纪上",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(王下)(?=\\s?\\d+)",
+        replacement: "列王纪下",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(代上)(?=\\s?\\d+)",
+        replacement: "历代志上",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(代下)(?=\\s?\\d+)",
+        replacement: "历代志下",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(拉)(?=\\s?\\d+)",
+        replacement: "以斯拉记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(尼)(?=\\s?\\d+)",
+        replacement: "尼希米记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(斯)(?=\\s?\\d+)",
+        replacement: "以斯帖记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(伯)(?=\\s?\\d+)",
+        replacement: "约伯记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(诗)(?=\\s?\\d+)",
+        replacement: "诗篇",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(箴)(?=\\s?\\d+)",
+        replacement: "箴言",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(传)(?=\\s?\\d+)",
+        replacement: "传道书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(歌)(?=\\s?\\d+)",
+        replacement: "雅歌",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(赛)(?=\\s?\\d+)",
+        replacement: "以赛亚书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(耶)(?=\\s?\\d+)",
+        replacement: "耶利米书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(哀)(?=\\s?\\d+)",
+        replacement: "耶利米哀歌",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(结)(?=\\s?\\d+)",
+        replacement: "以西结书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(但)(?=\\s?\\d+)",
+        replacement: "但以理书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(何)(?=\\s?\\d+)",
+        replacement: "何西阿书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(珥)(?=\\s?\\d+)",
+        replacement: "约珥书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(摩)(?=\\s?\\d+)",
+        replacement: "阿摩司书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(俄)(?=\\s?\\d+)",
+        replacement: "俄巴底亚书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(拿)(?=\\s?\\d+)",
+        replacement: "约拿书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(弥)(?=\\s?\\d+)",
+        replacement: "弥迦书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(鸿)(?=\\s?\\d+)",
+        replacement: "那鸿书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(哈)(?=\\s?\\d+)",
+        replacement: "哈巴谷书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(番)(?=\\s?\\d+)",
+        replacement: "西番雅书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(该)(?=\\s?\\d+)",
+        replacement: "哈该书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(亚)(?=\\s?\\d+)",
+        replacement: "撒迦利亚书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(玛)(?=\\s?\\d+)",
+        replacement: "玛拉基书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(太)(?=\\s?\\d+)",
+        replacement: "马太福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(可)(?=\\s?\\d+)",
+        replacement: "马可福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(路)(?=\\s?\\d+)",
+        replacement: "路加福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(约)(?=\\s?\\d+)",
+        replacement: "约翰福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(徒)(?=\\s?\\d+)",
+        replacement: "使徒行传",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(罗)(?=\\s?\\d+)",
+        replacement: "罗马书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(林前)(?=\\s?\\d+)",
+        replacement: "哥林多前书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(林后)(?=\\s?\\d+)",
+        replacement: "哥林多后书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(加)(?=\\s?\\d+)",
+        replacement: "加拉太书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(弗)(?=\\s?\\d+)",
+        replacement: "以弗所书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(腓)(?=\\s?\\d+)",
+        replacement: "腓立比书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(西)(?=\\s?\\d+)",
+        replacement: "歌罗西书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(帖前)(?=\\s?\\d+)",
+        replacement: "帖撒罗尼迦前书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(帖后)(?=\\s?\\d+)",
+        replacement: "帖撒罗尼迦后书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(提前)(?=\\s?\\d+)",
+        replacement: "提摩太前书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(提后)(?=\\s?\\d+)",
+        replacement: "提摩太后书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(多)(?=\\s?\\d+)",
+        replacement: "提多书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(门)(?=\\s?\\d+)",
+        replacement: "腓利门书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(来)(?=\\s?\\d+)",
+        replacement: "希伯来书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(雅)(?=\\s?\\d+)",
+        replacement: "雅各书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(彼前)(?=\\s?\\d+)",
+        replacement: "彼得前书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(彼后)(?=\\s?\\d+)",
+        replacement: "彼得后书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(约一)(?=\\s?\\d+)",
+        replacement: "约翰一书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(约二)(?=\\s?\\d+)",
+        replacement: "约翰二书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(约三)(?=\\s?\\d+)",
+        replacement: "约翰三书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(犹)(?=\\s?\\d+)",
+        replacement: "犹大书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(启)(?=\\s?\\d+)",
+        replacement: "启示录",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(創)(?=\\s?\\d+)",
+        replacement: "創世記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(出)(?=\\s?\\d+)",
+        replacement: "出埃及記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(利)(?=\\s?\\d+)",
+        replacement: "利未記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(民)(?=\\s?\\d+)",
+        replacement: "民數記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(申)(?=\\s?\\d+)",
+        replacement: "申命記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(書)(?=\\s?\\d+)",
+        replacement: "約書亞記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(士)(?=\\s?\\d+)",
+        replacement: "士師記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(得)(?=\\s?\\d+)",
+        replacement: "路得記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(撒上)(?=\\s?\\d+)",
+        replacement: "撒母耳記上",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(撒下)(?=\\s?\\d+)",
+        replacement: "撒母耳記下",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(王上)(?=\\s?\\d+)",
+        replacement: "列王紀上",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(王下)(?=\\s?\\d+)",
+        replacement: "列王紀下",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(代上)(?=\\s?\\d+)",
+        replacement: "歷代志上",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(代下)(?=\\s?\\d+)",
+        replacement: "歷代志下",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(拉)(?=\\s?\\d+)",
+        replacement: "以斯拉記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(尼)(?=\\s?\\d+)",
+        replacement: "尼希米記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(斯)(?=\\s?\\d+)",
+        replacement: "以斯帖記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(伯)(?=\\s?\\d+)",
+        replacement: "約伯記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(詩)(?=\\s?\\d+)",
+        replacement: "詩篇",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(箴)(?=\\s?\\d+)",
+        replacement: "箴言",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(傳)(?=\\s?\\d+)",
+        replacement: "傳道書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(歌)(?=\\s?\\d+)",
+        replacement: "雅歌",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(賽)(?=\\s?\\d+)",
+        replacement: "以賽亞書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(耶)(?=\\s?\\d+)",
+        replacement: "耶利米書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(哀)(?=\\s?\\d+)",
+        replacement: "耶利米哀歌",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(結)(?=\\s?\\d+)",
+        replacement: "以西結書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(但)(?=\\s?\\d+)",
+        replacement: "但以理書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(何)(?=\\s?\\d+)",
+        replacement: "何西阿書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(珥)(?=\\s?\\d+)",
+        replacement: "約珥書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(摩)(?=\\s?\\d+)",
+        replacement: "阿摩司書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(俄)(?=\\s?\\d+)",
+        replacement: "俄巴底亞書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(拿)(?=\\s?\\d+)",
+        replacement: "約拿書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(彌)(?=\\s?\\d+)",
+        replacement: "彌迦書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(鴻)(?=\\s?\\d+)",
+        replacement: "那鴻書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(哈)(?=\\s?\\d+)",
+        replacement: "哈巴谷書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(番)(?=\\s?\\d+)",
+        replacement: "西番雅書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(該)(?=\\s?\\d+)",
+        replacement: "哈該書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(亞)(?=\\s?\\d+)",
+        replacement: "撒迦利亞書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(瑪)(?=\\s?\\d+)",
+        replacement: "瑪拉基書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(太)(?=\\s?\\d+)",
+        replacement: "馬太福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(可)(?=\\s?\\d+)",
+        replacement: "馬可福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(路)(?=\\s?\\d+)",
+        replacement: "路加福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(約)(?=\\s?\\d+)",
+        replacement: "約翰福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(徒)(?=\\s?\\d+)",
+        replacement: "使徒行傳",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(羅)(?=\\s?\\d+)",
+        replacement: "羅馬書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(林前)(?=\\s?\\d+)",
+        replacement: "哥林多前書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(林後)(?=\\s?\\d+)",
+        replacement: "哥林多後書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(加)(?=\\s?\\d+)",
+        replacement: "加拉太書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(弗)(?=\\s?\\d+)",
+        replacement: "以弗所書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(腓)(?=\\s?\\d+)",
+        replacement: "腓立比書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(西)(?=\\s?\\d+)",
+        replacement: "歌羅西書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(帖前)(?=\\s?\\d+)",
+        replacement: "帖撒羅尼迦前書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(帖後)(?=\\s?\\d+)",
+        replacement: "帖撒羅尼迦後書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(提前)(?=\\s?\\d+)",
+        replacement: "提摩太前書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(提後)(?=\\s?\\d+)",
+        replacement: "提摩太後書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(多)(?=\\s?\\d+)",
+        replacement: "提多書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(門)(?=\\s?\\d+)",
+        replacement: "腓利門書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(來)(?=\\s?\\d+)",
+        replacement: "希伯來書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(雅)(?=\\s?\\d+)",
+        replacement: "雅各書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(彼前)(?=\\s?\\d+)",
+        replacement: "彼得前書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(彼後)(?=\\s?\\d+)",
+        replacement: "彼得後書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(約一)(?=\\s?\\d+)",
+        replacement: "約翰一書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(約二)(?=\\s?\\d+)",
+        replacement: "約翰二書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(約三)(?=\\s?\\d+)",
+        replacement: "約翰三書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(猶)(?=\\s?\\d+)",
+        replacement: "猶大書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(啟)(?=\\s?\\d+)",
+        replacement: "啟示錄",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    }
 ];
 
 // Based on lexicon-bible.csv
@@ -1042,6 +2099,931 @@ export const BIBLE_LEXICON_RULES: Omit<LexiconRule, 'id' | 'created'>[] = [
     {
         original: "\\b(ch|chap)\\.?(?=\\s?\\d+)",
         replacement: "章",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    }
+,
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(创)(?=\\s?\\d+)",
+        replacement: "创世记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(出)(?=\\s?\\d+)",
+        replacement: "出埃及记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(利)(?=\\s?\\d+)",
+        replacement: "利未记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(民)(?=\\s?\\d+)",
+        replacement: "民数记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(申)(?=\\s?\\d+)",
+        replacement: "申命记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(书)(?=\\s?\\d+)",
+        replacement: "约书亚记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(士)(?=\\s?\\d+)",
+        replacement: "士师记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(得)(?=\\s?\\d+)",
+        replacement: "路得记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(撒上)(?=\\s?\\d+)",
+        replacement: "撒母耳记上",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(撒下)(?=\\s?\\d+)",
+        replacement: "撒母耳记下",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(王上)(?=\\s?\\d+)",
+        replacement: "列王纪上",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(王下)(?=\\s?\\d+)",
+        replacement: "列王纪下",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(代上)(?=\\s?\\d+)",
+        replacement: "历代志上",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(代下)(?=\\s?\\d+)",
+        replacement: "历代志下",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(拉)(?=\\s?\\d+)",
+        replacement: "以斯拉记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(尼)(?=\\s?\\d+)",
+        replacement: "尼希米记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(斯)(?=\\s?\\d+)",
+        replacement: "以斯帖记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(伯)(?=\\s?\\d+)",
+        replacement: "约伯记",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(诗)(?=\\s?\\d+)",
+        replacement: "诗篇",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(箴)(?=\\s?\\d+)",
+        replacement: "箴言",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(传)(?=\\s?\\d+)",
+        replacement: "传道书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(歌)(?=\\s?\\d+)",
+        replacement: "雅歌",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(赛)(?=\\s?\\d+)",
+        replacement: "以赛亚书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(耶)(?=\\s?\\d+)",
+        replacement: "耶利米书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(哀)(?=\\s?\\d+)",
+        replacement: "耶利米哀歌",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(结)(?=\\s?\\d+)",
+        replacement: "以西结书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(但)(?=\\s?\\d+)",
+        replacement: "但以理书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(何)(?=\\s?\\d+)",
+        replacement: "何西阿书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(珥)(?=\\s?\\d+)",
+        replacement: "约珥书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(摩)(?=\\s?\\d+)",
+        replacement: "阿摩司书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(俄)(?=\\s?\\d+)",
+        replacement: "俄巴底亚书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(拿)(?=\\s?\\d+)",
+        replacement: "约拿书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(弥)(?=\\s?\\d+)",
+        replacement: "弥迦书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(鸿)(?=\\s?\\d+)",
+        replacement: "那鸿书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(哈)(?=\\s?\\d+)",
+        replacement: "哈巴谷书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(番)(?=\\s?\\d+)",
+        replacement: "西番雅书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(该)(?=\\s?\\d+)",
+        replacement: "哈该书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(亚)(?=\\s?\\d+)",
+        replacement: "撒迦利亚书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(玛)(?=\\s?\\d+)",
+        replacement: "玛拉基书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(太)(?=\\s?\\d+)",
+        replacement: "马太福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(可)(?=\\s?\\d+)",
+        replacement: "马可福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(路)(?=\\s?\\d+)",
+        replacement: "路加福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(约)(?=\\s?\\d+)",
+        replacement: "约翰福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(徒)(?=\\s?\\d+)",
+        replacement: "使徒行传",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(罗)(?=\\s?\\d+)",
+        replacement: "罗马书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(林前)(?=\\s?\\d+)",
+        replacement: "哥林多前书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(林后)(?=\\s?\\d+)",
+        replacement: "哥林多后书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(加)(?=\\s?\\d+)",
+        replacement: "加拉太书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(弗)(?=\\s?\\d+)",
+        replacement: "以弗所书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(腓)(?=\\s?\\d+)",
+        replacement: "腓立比书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(西)(?=\\s?\\d+)",
+        replacement: "歌罗西书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(帖前)(?=\\s?\\d+)",
+        replacement: "帖撒罗尼迦前书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(帖后)(?=\\s?\\d+)",
+        replacement: "帖撒罗尼迦后书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(提前)(?=\\s?\\d+)",
+        replacement: "提摩太前书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(提后)(?=\\s?\\d+)",
+        replacement: "提摩太后书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(多)(?=\\s?\\d+)",
+        replacement: "提多书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(门)(?=\\s?\\d+)",
+        replacement: "腓利门书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(来)(?=\\s?\\d+)",
+        replacement: "希伯来书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(雅)(?=\\s?\\d+)",
+        replacement: "雅各书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(彼前)(?=\\s?\\d+)",
+        replacement: "彼得前书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(彼后)(?=\\s?\\d+)",
+        replacement: "彼得后书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(约一)(?=\\s?\\d+)",
+        replacement: "约翰一书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(约二)(?=\\s?\\d+)",
+        replacement: "约翰二书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(约三)(?=\\s?\\d+)",
+        replacement: "约翰三书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(犹)(?=\\s?\\d+)",
+        replacement: "犹大书",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(启)(?=\\s?\\d+)",
+        replacement: "启示录",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(創)(?=\\s?\\d+)",
+        replacement: "創世記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(出)(?=\\s?\\d+)",
+        replacement: "出埃及記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(利)(?=\\s?\\d+)",
+        replacement: "利未記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(民)(?=\\s?\\d+)",
+        replacement: "民數記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(申)(?=\\s?\\d+)",
+        replacement: "申命記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(書)(?=\\s?\\d+)",
+        replacement: "約書亞記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(士)(?=\\s?\\d+)",
+        replacement: "士師記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(得)(?=\\s?\\d+)",
+        replacement: "路得記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(撒上)(?=\\s?\\d+)",
+        replacement: "撒母耳記上",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(撒下)(?=\\s?\\d+)",
+        replacement: "撒母耳記下",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(王上)(?=\\s?\\d+)",
+        replacement: "列王紀上",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(王下)(?=\\s?\\d+)",
+        replacement: "列王紀下",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(代上)(?=\\s?\\d+)",
+        replacement: "歷代志上",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(代下)(?=\\s?\\d+)",
+        replacement: "歷代志下",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(拉)(?=\\s?\\d+)",
+        replacement: "以斯拉記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(尼)(?=\\s?\\d+)",
+        replacement: "尼希米記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(斯)(?=\\s?\\d+)",
+        replacement: "以斯帖記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(伯)(?=\\s?\\d+)",
+        replacement: "約伯記",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(詩)(?=\\s?\\d+)",
+        replacement: "詩篇",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(箴)(?=\\s?\\d+)",
+        replacement: "箴言",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(傳)(?=\\s?\\d+)",
+        replacement: "傳道書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(歌)(?=\\s?\\d+)",
+        replacement: "雅歌",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(賽)(?=\\s?\\d+)",
+        replacement: "以賽亞書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(耶)(?=\\s?\\d+)",
+        replacement: "耶利米書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(哀)(?=\\s?\\d+)",
+        replacement: "耶利米哀歌",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(結)(?=\\s?\\d+)",
+        replacement: "以西結書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(但)(?=\\s?\\d+)",
+        replacement: "但以理書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(何)(?=\\s?\\d+)",
+        replacement: "何西阿書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(珥)(?=\\s?\\d+)",
+        replacement: "約珥書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(摩)(?=\\s?\\d+)",
+        replacement: "阿摩司書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(俄)(?=\\s?\\d+)",
+        replacement: "俄巴底亞書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(拿)(?=\\s?\\d+)",
+        replacement: "約拿書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(彌)(?=\\s?\\d+)",
+        replacement: "彌迦書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(鴻)(?=\\s?\\d+)",
+        replacement: "那鴻書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(哈)(?=\\s?\\d+)",
+        replacement: "哈巴谷書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(番)(?=\\s?\\d+)",
+        replacement: "西番雅書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(該)(?=\\s?\\d+)",
+        replacement: "哈該書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(亞)(?=\\s?\\d+)",
+        replacement: "撒迦利亞書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(瑪)(?=\\s?\\d+)",
+        replacement: "瑪拉基書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(太)(?=\\s?\\d+)",
+        replacement: "馬太福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(可)(?=\\s?\\d+)",
+        replacement: "馬可福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(路)(?=\\s?\\d+)",
+        replacement: "路加福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(約)(?=\\s?\\d+)",
+        replacement: "約翰福音",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(徒)(?=\\s?\\d+)",
+        replacement: "使徒行傳",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(羅)(?=\\s?\\d+)",
+        replacement: "羅馬書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(林前)(?=\\s?\\d+)",
+        replacement: "哥林多前書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(林後)(?=\\s?\\d+)",
+        replacement: "哥林多後書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(加)(?=\\s?\\d+)",
+        replacement: "加拉太書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(弗)(?=\\s?\\d+)",
+        replacement: "以弗所書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(腓)(?=\\s?\\d+)",
+        replacement: "腓立比書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(西)(?=\\s?\\d+)",
+        replacement: "歌羅西書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(帖前)(?=\\s?\\d+)",
+        replacement: "帖撒羅尼迦前書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(帖後)(?=\\s?\\d+)",
+        replacement: "帖撒羅尼迦後書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(提前)(?=\\s?\\d+)",
+        replacement: "提摩太前書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(提後)(?=\\s?\\d+)",
+        replacement: "提摩太後書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(多)(?=\\s?\\d+)",
+        replacement: "提多書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(門)(?=\\s?\\d+)",
+        replacement: "腓利門書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(來)(?=\\s?\\d+)",
+        replacement: "希伯來書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(雅)(?=\\s?\\d+)",
+        replacement: "雅各書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(彼前)(?=\\s?\\d+)",
+        replacement: "彼得前書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(彼後)(?=\\s?\\d+)",
+        replacement: "彼得後書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(約一)(?=\\s?\\d+)",
+        replacement: "約翰一書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(約二)(?=\\s?\\d+)",
+        replacement: "約翰二書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(約三)(?=\\s?\\d+)",
+        replacement: "約翰三書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(猶)(?=\\s?\\d+)",
+        replacement: "猶大書",
+        isRegex: true, matchType: 'regex',
+        applyBeforeGlobal: false,
+        language: 'zh'
+    },
+    {
+        original: "(?<![\\u4e00-\\u9fa5])(啟)(?=\\s?\\d+)",
+        replacement: "啟示錄",
         isRegex: true, matchType: 'regex',
         applyBeforeGlobal: false,
         language: 'zh'
