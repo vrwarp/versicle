@@ -21,7 +21,7 @@ export class AudioContentPipeline {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private analysisPromises = new Map<string, Promise<any>>();
 
-    private lastAbbrInputs: { custom: string[], bible: boolean, language?: string } | null = null;
+    private lastAbbrInputs: { custom: string[], bible: boolean } | null = null;
     private lastAbbrResult: string[] | null = null;
 
     public tableProcessor = new TableAdaptationProcessor();
@@ -137,7 +137,7 @@ export class AudioContentPipeline {
                 const biblePref = await LexiconService.getInstance().getBibleLexiconPreference(bookId);
                 const shouldIncludeBible = biblePref === 'on' || (biblePref === 'default' && settings.isBibleLexiconEnabled);
 
-                const abbreviations = this.getMergedAbbreviations(settings.customAbbreviations, shouldIncludeBible, bookMetadata?.language);
+                const abbreviations = this.getMergedAbbreviations(settings.customAbbreviations, shouldIncludeBible);
 
                 const finalSentences = TextSegmenter.refineSegments(
                     workingSentences,
@@ -261,22 +261,21 @@ export class AudioContentPipeline {
      * Prevents creating a new array reference on every call, allowing TextSegmenter
      * to skip rebuilding its internal Set cache.
      */
-    private getMergedAbbreviations(customAbbreviations: string[], shouldIncludeBible: boolean, language?: string): string[] {
+    private getMergedAbbreviations(customAbbreviations: string[], shouldIncludeBible: boolean): string[] {
         if (
             this.lastAbbrInputs &&
             this.lastAbbrInputs.custom === customAbbreviations &&
-            this.lastAbbrInputs.bible === shouldIncludeBible &&
-            this.lastAbbrInputs.language === language
+            this.lastAbbrInputs.bible === shouldIncludeBible
         ) {
             return this.lastAbbrResult!;
         }
 
         let merged = customAbbreviations;
         if (shouldIncludeBible) {
-            merged = [...customAbbreviations, ...BIBLE_ABBREVIATIONS.filter(a => typeof a === 'string' ? true : (!a.language || !language || language.toLowerCase().startsWith(a.language.toLowerCase()))).map(a => typeof a === 'string' ? a : a.abbr).filter(Boolean) as string[]];
+            merged = [...customAbbreviations, ...BIBLE_ABBREVIATIONS];
         }
 
-        this.lastAbbrInputs = { custom: customAbbreviations, bible: shouldIncludeBible, language };
+        this.lastAbbrInputs = { custom: customAbbreviations, bible: shouldIncludeBible };
         this.lastAbbrResult = merged;
         return merged;
     }
