@@ -52,6 +52,7 @@ const DiffNodeView: React.FC<{ node: DiffNode; level?: number }> = ({ node, leve
           role="button"
           tabIndex={0}
           aria-expanded={isExpanded}
+          aria-label={isExpanded ? `Collapse ${node.key}` : `Expand ${node.key}`}
           onKeyDown={(e) => {
             if (e.target !== e.currentTarget) return;
             if (e.key === 'Enter' || e.key === ' ') {

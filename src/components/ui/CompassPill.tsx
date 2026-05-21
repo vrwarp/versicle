@@ -441,6 +441,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
           )}
           onClick={handleTogglePlay}
           aria-disabled={isLoading}
+          aria-pressed={isPlaying}
           aria-label={
             isLoading
               ? "Loading..."
@@ -558,6 +559,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         tabIndex={0}
         data-testid="compass-active-toggle"
         aria-disabled={isLoading}
+        aria-pressed={isPlaying}
         aria-label={
           isLoading
             ? "Loading..."
