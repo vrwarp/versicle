@@ -392,8 +392,14 @@ export class AudioContentPipeline {
             // Preprocess table roots for efficient querying (optimized)
             const preprocessedTableRoots = this.tableProcessor.preprocessTableRoots(sectionTableImages);
 
+            // Ensure each sentence tracks its raw index
+            const sentencesWithIndices = targetSentences.map((s, idx) => ({
+                ...s,
+                sourceIndices: s.sourceIndices || [idx]
+            }));
+
             // Group sentences by Root Node
-            const groups = this.groupSentencesByRoot(targetSentences, preprocessedTableRoots);
+            const groups = this.groupSentencesByRoot(sentencesWithIndices, preprocessedTableRoots);
             const referenceStartCfi = await this.getOrDetectContentTypes(bookId, sectionId, groups);
 
             if (referenceStartCfi && skipTypes.includes('reference')) {
