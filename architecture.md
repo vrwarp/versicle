@@ -62,6 +62,7 @@ graph TD
         UIStore[useUIStore]
         SyncStore[useSyncStore]
         DeviceStore[useDeviceStore]
+        GoogleStore[useGoogleServicesStore]
     end
 
     subgraph DataLayer [Data & Sync]
@@ -161,6 +162,8 @@ graph TD
     GlobalSettings --> DriveScanner
     DriveScanner --> GoogleAuth
     GlobalSettings --> GoogleAuth
+    GlobalSettings --> GoogleStore
+    GoogleStore --> GoogleAuth
 
     LibStore --> DBService
     LibStore --> Ingestion
@@ -679,6 +682,9 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Logic**:
         *   **Yjs Keying**: Uses `preferences/${deviceId}` as the key in the Yjs document.
         *   **Why**: This ensures that changing the theme on your phone doesn't accidentally change the theme on your tablet, while still backing up the settings to the cloud.
+*   **`useSyncStore` (`src/lib/sync/hooks/useSyncStore.ts`)**:
+    *   **Goal**: Track connection and auth status for Firebase/Firestore sync.
+    *   **Logic**: Decouples the UI components from the underlying `FirestoreSyncManager` provider instance.
 *   **`useReadingStateStore` (Per-Device Sync)**:
     *   **Strategy**: Uses a nested map structure (`bookId -> deviceId -> Progress`) in Yjs.
     *   **Why**: To prevent overwriting reading positions when switching between devices (e.g., preventing a phone at 10% from overwriting a tablet at 80% during a sync race).
@@ -757,7 +763,7 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **Database Resilience**: `DBService` wraps `QuotaExceededError` into a unified `StorageFullError` for consistent UI handling.
 *   **Safe Mode**: If critical database initialization fails, the app boots into `SafeModeView`, providing a "Factory Reset" (`deleteDB`) option to unblock the user.
 *   **Workspace Migration Locks**: Safely halts background synchronization operations via `MigrationStateService` when transitioning between cloud workspaces to prevent split-brain states or data corruption. Recovery UI (`CriticalMigrationFailureView`) catches unhandled exceptions to rollback state safely.
-*   **Schema Quarantine (`ObsoleteLockView`)**: When the application detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION = 4`), it renders `ObsoleteLockView` to lock the UI permanently.
+*   **Schema Quarantine (`ObsoleteLockView`)**: When the application detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION = 5`), it renders `ObsoleteLockView` to lock the UI permanently.
     *   **Why**: Prevents a down-level client from inadvertently overwriting or corrupting newer data structures introduced by an updated app version.
     *   **Trade-off**: The user is completely locked out of the app until they update to the latest version.
 *   **Service Worker**: The app verifies `waitForServiceWorkerController` on launch to ensure image serving infrastructure is active, failing fast if the SW is broken.
