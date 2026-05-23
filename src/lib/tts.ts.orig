@@ -163,7 +163,7 @@ export const extractSentencesFromNode = (
                 //   /^[\*†‡]+$/    — symbol markers:           "*", "†", "‡", "**"
                 const isCitationText = /^\[?\d+\]?$/.test(text) || /^\(\d+\)$/.test(text) || /^[*†‡]+$/.test(text);
 
-                if (isCitationText && sanitizationEnabled) {
+                if (isCitationText) {
                     if (tagName === 'SUP') {
                         return; // Always skip superscript citations
                     } else if (tagName === 'A') {
