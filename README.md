@@ -96,8 +96,9 @@
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata. Re-download or re-import later to restore instantly.
 *   **Maintenance**: Built-in tools to scan for and prune orphaned data.
 *   **Checkpoint Forensics**: Inspect the exact data difference between your live state and any backup checkpoint.
+*   **Flight Data Recorders**: Captures "Black Box" snapshots of application state (Zustand) during unexpected errors or manually via the Diagnostics UI for post-mortem debugging.
 *   **Safe Mode**: A fallback UI that activates on critical database initialization failures, allowing users to export debug info or perform a factory reset to recover usability.
-*   **Schema Quarantine (`ObsoleteLockView`)**: A safety mechanism that locks the app and severs cloud connections if a remote database with a newer schema version (currently V4) is detected, preventing outdated clients from corrupting upgraded data structures.
+*   **Schema Quarantine (`ObsoleteLockView`)**: A safety mechanism that locks the app and severs cloud connections if a remote database with a newer schema version (currently V5) is detected, preventing outdated clients from corrupting upgraded data structures.
 
 ## Setup & Development
 

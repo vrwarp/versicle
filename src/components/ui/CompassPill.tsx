@@ -441,6 +441,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
           )}
           onClick={handleTogglePlay}
           aria-disabled={isLoading}
+          aria-pressed={isPlaying}
           aria-label={
             isLoading
               ? "Loading..."
@@ -558,6 +559,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         tabIndex={0}
         data-testid="compass-active-toggle"
         aria-disabled={isLoading}
+        aria-pressed={isPlaying}
         aria-label={
           isLoading
             ? "Loading..."
@@ -566,11 +568,11 @@ export const CompassPill: React.FC<CompassPillProps> = ({
       >
         <div className="text-sm font-bold tracking-wide uppercase truncate w-full text-center flex items-center justify-center gap-1.5">
           {isLoading ? (
-            <Loader2 size={10} className="animate-spin opacity-70" data-testid="active-loader-icon" aria-hidden="true" />
+            <Loader2 size={16} className="animate-spin opacity-70" data-testid="active-loader-icon" aria-hidden="true" />
           ) : isPlaying ? (
-            <Pause size={10} className="fill-current opacity-70" data-testid="active-pause-icon" />
+            <Pause size={16} className="fill-current opacity-70" data-testid="active-pause-icon" />
           ) : (
-            <Play size={10} className="fill-current opacity-70 ml-0.5" data-testid="active-play-icon" />
+            <Play size={16} className="fill-current opacity-70 ml-0.5" data-testid="active-play-icon" />
           )}
           <span className="truncate">{sectionTitle}</span>
         </div>

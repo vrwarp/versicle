@@ -34,6 +34,7 @@ export const SatelliteFAB: React.FC = () => {
             )}
             onClick={handleToggle}
             aria-disabled={isLoading}
+            aria-pressed={isPlaying}
             aria-label={isLoading ? "Loading..." : (isPlaying ? "Pause" : "Play")}
         >
             {isLoading ? (

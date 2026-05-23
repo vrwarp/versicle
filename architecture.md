@@ -62,6 +62,7 @@ graph TD
         UIStore[useUIStore]
         SyncStore[useSyncStore]
         DeviceStore[useDeviceStore]
+        GoogleStore[useGoogleServicesStore]
     end
 
     subgraph DataLayer [Data & Sync]
@@ -120,7 +121,7 @@ graph TD
         StaticStores[Static & Resources]
         UserStores[User Data & Progress]
         CacheStores[Cache & Tables]
-        AppStores[Checkpoints & Logs]
+        AppStores[Checkpoints, Logs & Flight Snapshots]
         YDB[versicle-yjs]
     end
 
@@ -161,6 +162,8 @@ graph TD
     GlobalSettings --> DriveScanner
     DriveScanner --> GoogleAuth
     GlobalSettings --> GoogleAuth
+    GlobalSettings --> GoogleStore
+    GoogleStore --> GoogleAuth
 
     LibStore --> DBService
     LibStore --> Ingestion
@@ -213,7 +216,7 @@ The data layer is built on **IndexedDB** using the `idb` library. It is accessed
 #### `src/db/DBService.ts`
 The main database abstraction layer. It handles error wrapping (converting DOM errors to typed application errors like `StorageFullError`), transaction management, and debouncing for frequent writes.
 
-**Key Stores (Schema v23):**
+**Key Stores (Schema v24):**
 *   **Domain 1: Static (Immutable/Heavy)** - *Managed by DBService*
     *   `static_manifests`: Lightweight metadata (Title, Author, Cover Thumbnail) for listing books.
     *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
@@ -231,6 +234,11 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `cache_render_metrics`: Layout calculation results.
     *   `cache_session_state`: Playback queue persistence.
     *   `cache_tts_preparation`: Staging area for TTS text extraction.
+*   **Domain 4: App (Sync Infrastructure & Diagnostics)**
+    *   `checkpoints`: Snapshot backups of the Yjs document state.
+    *   `sync_log`: Audit trail for sync events.
+    *   `app_metadata`: Ephemeral app-wide configuration data.
+    *   `flight_snapshots`: "Black box" data recorders (Zustand state snapshots) captured for post-mortem debugging of intermittent issues.
 
 **Key Functions:**
 *   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations) and `user_reading_list` entry.
@@ -427,6 +435,12 @@ Versicle employs a dual-strategy for data safety, distinguishing between "Hard R
 *   **Notes Export (`src/lib/export-notes.ts`)**:
     *   **Goal**: Enable users to easily extract annotations from books for external use.
     *   **Logic**: Generates raw Markdown string payloads combining highlight text and user notes. Facilitates both direct Blob download via `URL.createObjectURL` and Clipboard API copy functionality.
+
+#### Diagnostics & Recovery (`src/types/db.ts`)
+*   **Flight Data Recorders (`flight_snapshots`)**:
+    *   **Goal**: Enable post-mortem debugging of intermittent issues (like premature chapter advances) by capturing "Black Box" snapshots of application state.
+    *   **Logic**: Captures a deep copy of the active Yjs document and Zustand store states (via manual trigger in the Diagnostics UI or automatic anomaly detection). Stored persistently in IDB (`flight_snapshots`) to survive app restarts.
+    *   **Trade-off**: Snapshots can be large and are retained locally, requiring manual cleanup via the Maintenance UI to prevent unbounded storage growth over time.
 
 #### Cloud Library (`src/lib/drive/`)
 Integrates with Google Drive to provide a cloud-based library.
@@ -668,6 +682,9 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Logic**:
         *   **Yjs Keying**: Uses `preferences/${deviceId}` as the key in the Yjs document.
         *   **Why**: This ensures that changing the theme on your phone doesn't accidentally change the theme on your tablet, while still backing up the settings to the cloud.
+*   **`useSyncStore` (`src/lib/sync/hooks/useSyncStore.ts`)**:
+    *   **Goal**: Track connection and auth status for Firebase/Firestore sync.
+    *   **Logic**: Decouples the UI components from the underlying `FirestoreSyncManager` provider instance.
 *   **`useReadingStateStore` (Per-Device Sync)**:
     *   **Strategy**: Uses a nested map structure (`bookId -> deviceId -> Progress`) in Yjs.
     *   **Why**: To prevent overwriting reading positions when switching between devices (e.g., preventing a phone at 10% from overwriting a tablet at 80% during a sync race).
@@ -746,7 +763,7 @@ State is managed using **Zustand** with specialized strategies for different dat
 *   **Database Resilience**: `DBService` wraps `QuotaExceededError` into a unified `StorageFullError` for consistent UI handling.
 *   **Safe Mode**: If critical database initialization fails, the app boots into `SafeModeView`, providing a "Factory Reset" (`deleteDB`) option to unblock the user.
 *   **Workspace Migration Locks**: Safely halts background synchronization operations via `MigrationStateService` when transitioning between cloud workspaces to prevent split-brain states or data corruption. Recovery UI (`CriticalMigrationFailureView`) catches unhandled exceptions to rollback state safely.
-*   **Schema Quarantine (`ObsoleteLockView`)**: When the application detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION = 4`), it renders `ObsoleteLockView` to lock the UI permanently.
+*   **Schema Quarantine (`ObsoleteLockView`)**: When the application detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION = 5`), it renders `ObsoleteLockView` to lock the UI permanently.
     *   **Why**: Prevents a down-level client from inadvertently overwriting or corrupting newer data structures introduced by an updated app version.
     *   **Trade-off**: The user is completely locked out of the app until they update to the latest version.
 *   **Service Worker**: The app verifies `waitForServiceWorkerController` on launch to ensure image serving infrastructure is active, failing fast if the SW is broken.

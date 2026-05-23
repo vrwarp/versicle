@@ -649,6 +649,8 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
 
     offloadBook: async (id: string) => {
       logger.debug('offloadBook called. ID:', id);
+      const wasAlreadyOffloaded = get().offloadedBookIds.has(id);
+
       // Optimistic update
       set((state) => {
         const set = state.offloadedBookIds || new Set();
@@ -664,10 +666,15 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
       } catch (err) {
         logger.error('Failed to offload book:', err);
         // Revert optimistic update
-        set((state) => ({
-          error: 'Failed to offload book.',
-          offloadedBookIds: new Set([...state.offloadedBookIds].filter(bid => bid !== id))
-        }));
+        set((state) => {
+          if (wasAlreadyOffloaded) {
+            return { error: 'Failed to offload book.' };
+          }
+          return {
+            error: 'Failed to offload book.',
+            offloadedBookIds: new Set([...state.offloadedBookIds].filter(bid => bid !== id))
+          };
+        });
       }
     },
 
