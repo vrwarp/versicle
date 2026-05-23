@@ -872,7 +872,7 @@ export function useEpubReader(
     themes.select(options.currentTheme);
 
     // Set the theme font options.
-    themes.fontSize(options.fontSize);
+    themes.fontSize(`${options.fontSize}%`);
     themes.font(options.fontFamily);
 
     const TARGET_BASE_PX = 16; // The ideal unified size at 100% scale
@@ -887,7 +887,7 @@ export function useEpubReader(
     // Normalization factors
     const fsNormalizationFactor = TARGET_BASE_PX / bookBasePx;
     const lhNormalizationFactor = TARGET_RATIO / bookNativeRatio;
-    const finalFSScalePct = Math.round(fsNormalizationFactor * 100);
+    const finalFSScalePct = Math.round(options.fontSize * fsNormalizationFactor);
 
     // Apply line height normalization
     const userLH = options.lineHeight;
