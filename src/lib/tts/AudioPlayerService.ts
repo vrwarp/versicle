@@ -84,6 +84,7 @@ export class AudioPlayerService {
     private sessionRestored: boolean = false;
     private prerollEnabled: boolean = false;
     private isPreviewing: boolean = false;
+    private lastAppliedAnalysisSectionId: string | null = null;
     private lastAppliedAnalysisTimestamp: number = 0;
     private lastUserPauseTimestamp: number | null = null;
     private currentBookPalette: number[] | undefined = undefined;
@@ -201,6 +202,26 @@ export class AudioPlayerService {
                 });
             });
         });
+
+        // Subscribe to GenAI settings changes for hot-swapping behavior and late-hydration support
+        if (typeof useGenAIStore.subscribe === 'function') {
+            useGenAIStore.subscribe(() => {
+                const bookId = this.currentBookId;
+                if (!bookId) return;
+
+                const sectionIndex = this.stateManager.currentSectionIndex;
+                if (sectionIndex === -1) return;
+
+                const section = this.playlist[sectionIndex];
+                if (!section) return;
+
+                // Reset timestamp to force re-application or clearing of mask
+                this.lastAppliedAnalysisSectionId = null;
+                this.lastAppliedAnalysisTimestamp = 0;
+
+                this.applyCachedAnalysis(bookId, section.sectionId);
+            });
+        }
         
         // Flight Recorder Context
         flightRecorder.setContextProvider(() => {
@@ -272,6 +293,7 @@ export class AudioPlayerService {
 
             this.currentBookId = bookId;
             this.sessionRestored = false;
+            this.lastAppliedAnalysisSectionId = null;
             this.lastAppliedAnalysisTimestamp = 0;
             this.currentBookPalette = undefined;
             this.currentBookPerceptualPalette = undefined;
@@ -393,7 +415,17 @@ export class AudioPlayerService {
                         this.contentPipeline.triggerAnalysis(
                             bookId,
                             section.sectionId,
-                            undefined // will fetch from DB
+                            undefined, // will fetch from DB
+                            (mask) => {
+                                if (this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
+                                    this.stateManager.applySkippedMask(mask, section.sectionId);
+                                }
+                            },
+                            (adaptations) => {
+                                if (this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
+                                    this.stateManager.applyTableAdaptations(adaptations);
+                                }
+                            }
                         );
                     }
                 }
@@ -966,10 +998,11 @@ export class AudioPlayerService {
         const analysis = state.sections[key];
 
         if (analysis && analysis.status === 'success') {
-            // Skip if we've already processed this exact analysis update
-            if (analysis.generatedAt <= this.lastAppliedAnalysisTimestamp) return;
+            // Skip if we've already processed this exact analysis update for this specific section
+            if (this.lastAppliedAnalysisSectionId === section.sectionId && analysis.generatedAt <= this.lastAppliedAnalysisTimestamp) return;
 
             // Update timestamp synchronously to prevent concurrent duplicate enqueueing
+            this.lastAppliedAnalysisSectionId = section.sectionId;
             this.lastAppliedAnalysisTimestamp = analysis.generatedAt;
 
             this.enqueue(async () => {
@@ -980,15 +1013,17 @@ export class AudioPlayerService {
 
                 const genAISettings = useGenAIStore.getState();
 
-                // 1. Apply Skip Mask if needed
+                // 1. Apply or clear Skip Mask
                 if (genAISettings.isEnabled && genAISettings.isContentAnalysisEnabled && genAISettings.contentFilterSkipTypes.length > 0) {
                     const mask = await this.contentPipeline.detectContentSkipMask(bookId, section.sectionId, genAISettings.contentFilterSkipTypes);
                     if (mask.size > 0 && this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
                         this.stateManager.applySkippedMask(mask, section.sectionId);
                     }
+                } else {
+                    this.stateManager.applySkippedMask(new Set(), section.sectionId);
                 }
 
-                // 2. Apply Table Adaptations if needed
+                // 2. Apply or clear Table Adaptations
                 if (genAISettings.isEnabled && genAISettings.isTableAdaptationEnabled && analysis.tableAdaptations) {
                     const ttsContent = await dbService.getTTSContent(bookId, section.sectionId);
                     if (ttsContent && this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
@@ -998,6 +1033,8 @@ export class AudioPlayerService {
                         );
                         this.stateManager.applyTableAdaptations(adaptations);
                     }
+                } else {
+                    this.stateManager.applyTableAdaptations([]);
                 }
             });
         }
@@ -1037,16 +1074,29 @@ export class AudioPlayerService {
 
         // Clear dragnet state on navigation to prevent capturing previous section context
         this.lastUserPauseTimestamp = null;
+        this.lastAppliedAnalysisSectionId = null;
+        this.lastAppliedAnalysisTimestamp = 0;
 
         const section = this.playlist[sectionIndex];
 
+        const bookId = this.currentBookId;
         const newQueue = await this.contentPipeline.loadSection(
             this.currentBookId,
             section,
             sectionIndex,
             this.prerollEnabled,
             this.speed,
-            sectionTitle || section.title
+            sectionTitle || section.title,
+            (mask) => {
+                if (this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
+                    this.stateManager.applySkippedMask(mask, section.sectionId);
+                }
+            },
+            (adaptations) => {
+                if (this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
+                    this.stateManager.applyTableAdaptations(adaptations);
+                }
+            }
         );
 
         flightRecorder.record('APS', 'loadSectionInternal', {
