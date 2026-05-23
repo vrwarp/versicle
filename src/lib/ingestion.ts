@@ -10,6 +10,7 @@ import { extractContentOffscreen } from './offscreen-renderer';
 import { CURRENT_BOOK_VERSION } from './constants';
 import { extractCoverPalette } from './cover-palette';
 import { createLogger } from './logger';
+import { normalizeLanguageCode } from './language-utils';
 
 const logger = createLogger('Ingestion');
 
@@ -67,9 +68,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
     await book.ready;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const metadata = await (book.loaded as any).metadata;
-    let rawLanguage: string = metadata.language || metadata.lang || 'en';
-    rawLanguage = rawLanguage.trim().toLowerCase().split('-')[0]; // 'zh-CN' -> 'zh'
-    if (!/^[a-z]{2,3}$/.test(rawLanguage)) rawLanguage = 'en';
+    const rawLanguage = normalizeLanguageCode(metadata.language || metadata.lang);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const navigation = await (book.loaded as any).navigation;
@@ -259,9 +258,7 @@ export async function extractBookData(
     const coverUrl = await book.coverUrl();
 
     // Extract language (ISO 639-1), normalize, default to 'en'
-    let rawLanguage: string = metadata.language || metadata.lang || 'en';
-    rawLanguage = rawLanguage.trim().toLowerCase().split('-')[0]; // 'zh-CN' -> 'zh'
-    if (!/^[a-z]{2,3}$/.test(rawLanguage)) rawLanguage = 'en';
+    const rawLanguage = normalizeLanguageCode(metadata.language || metadata.lang);
 
     let coverBlob: Blob | undefined;
     let thumbnailBlob: Blob | undefined;

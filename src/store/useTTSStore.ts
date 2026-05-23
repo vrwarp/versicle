@@ -12,6 +12,7 @@ import { CapacitorTTSProvider } from '../lib/tts/providers/CapacitorTTSProvider'
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/TextSegmenter';
 import { Capacitor } from '@capacitor/core';
 import { LexiconService } from '../lib/tts/LexiconService';
+import { normalizeLanguageCode } from '../lib/language-utils';
 
 export interface TTSProfile {
     voiceId: string | null;
@@ -173,7 +174,8 @@ export const useTTSStore = create<TTSState>()(
                     en: { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0, minSentenceLength: 36 },
                 },
 
-                setActiveLanguage: (lang) => {
+                setActiveLanguage: (rawLang) => {
+                    const lang = normalizeLanguageCode(rawLang);
                     const state = get();
                     // When we change the language context, we also update the active properties
                     // and fetch the voice objects for the underlying service
