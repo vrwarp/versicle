@@ -96,6 +96,12 @@ async function main() {
     if (match) {
       const trad = match[1];
       const simp = match[2];
+
+      // Filter: Must contain at least 1 Chinese character
+      if (!/[\u4e00-\u9fff]/.test(simp) && !/[\u4e00-\u9fff]/.test(trad)) {
+        continue;
+      }
+
       const pinyin = match[3];
       const definitions = match[4].replace(/\/$/, '').split('/').join('; ');
 
