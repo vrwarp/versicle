@@ -149,7 +149,7 @@ export const extractSentencesFromNode = (
             const tagName = el.tagName.toUpperCase();
 
             // Skip ignored tags
-            if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'IMG', 'VIDEO', 'AUDIO', 'IFRAME', 'OBJECT'].includes(tagName)) {
+            if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'IMG', 'VIDEO', 'AUDIO', 'IFRAME', 'OBJECT', 'TITLE', 'META', 'LINK', 'BASE', 'HEAD'].includes(tagName)) {
                 return;
             }
 
