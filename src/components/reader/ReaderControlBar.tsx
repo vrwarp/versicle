@@ -81,7 +81,7 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
     const compassState = useReaderUIStore(state => state.compassState || {});
 
     // Logic:
-    let variant: 'annotation' | 'active' | 'summary' | 'compact' | 'sync-alert' | 'audio-triage' | null = null;
+    let variant: 'annotation' | 'active' | 'summary' | 'compact' | 'sync-alert' | 'audio-triage' | 'vocab-triage' | null = null;
 
     if (compassState.variant) {
         variant = compassState.variant;

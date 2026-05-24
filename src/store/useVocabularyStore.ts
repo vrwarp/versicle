@@ -24,7 +24,8 @@ export const useVocabularyStore = create<VocabularyState>()(
 
       toggleKnownCharacter: (char) => set((state) => {
         if (state.knownCharacters[char]) {
-          const { [char]: _, ...remaining } = state.knownCharacters;
+          const remaining = { ...state.knownCharacters };
+          delete remaining[char];
           return { knownCharacters: remaining };
         } else {
           return {
@@ -44,7 +45,8 @@ export const useVocabularyStore = create<VocabularyState>()(
       })),
 
       markAsUnknown: (char) => set((state) => {
-        const { [char]: _, ...remaining } = state.knownCharacters;
+        const remaining = { ...state.knownCharacters };
+        delete remaining[char];
         return { knownCharacters: remaining };
       }),
 

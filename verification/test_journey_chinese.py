@@ -147,3 +147,138 @@ def test_journey_chinese_book(page: Page):
 
     utils.capture_screenshot(page, "chinese_journey_03_tts_settings")
     print("Chinese Book Journey Passed!")
+
+
+def test_journey_smart_pinyin(page: Page):
+    print("Starting Adaptive Smart Pinyin Journey...")
+    utils.reset_app(page)
+
+    # 1. Upload Chinese book
+    print("Uploading test_chinese.epub...")
+    import base64
+    with open("verification/test_chinese.epub", "rb") as f:
+        file_bytes = f.read()
+    file_base64 = base64.b64encode(file_bytes).decode('utf-8')
+
+    page.evaluate("""(base64Data) => {
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const file = new File([byteArray], 'test_chinese.epub', { type: 'application/epub+zip' });
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        const dropEvent = new DragEvent('drop', { dataTransfer: dataTransfer, bubbles: true });
+        document.querySelector('[data-testid="library-view"]').dispatchEvent(dropEvent);
+    }""", file_base64)
+
+    # Wait for book card to appear
+    book_card = page.locator("[data-testid^='book-card-']", has_text="Test Chinese Book").first
+    expect(book_card).to_be_visible(timeout=15000)
+
+    # 2. Open Book
+    print("Opening book...")
+    book_card.click()
+    expect(page.get_by_test_id("reader-view")).to_be_visible(timeout=10000)
+    page.wait_for_timeout(2000)
+
+    # Ensure text is rendered in iframe
+    frame = page.locator('[data-testid="reader-iframe-container"] iframe').content_frame
+    frame.locator("body").wait_for(timeout=5000)
+    expect(frame.locator("body")).to_contain_text("测试用的中文书", timeout=10000)
+
+    # 3. Open Visual Settings, ensure language is Chinese, and turn on Pinyin
+    print("Enabling Pinyin overlay...")
+    page.get_by_test_id("reader-visual-settings-button").click()
+
+    # Ensure book language is set to 'zh' if not detected
+    lang_select = page.get_by_test_id("book-language-select")
+    expect(lang_select).to_be_visible(timeout=5000)
+    if "en" in lang_select.inner_text():
+        lang_select.click()
+        page.get_by_role("option", name="Chinese (zh)").click()
+        page.wait_for_timeout(1000)
+
+    pinyin_switch = page.get_by_test_id("show-pinyin-switch")
+    expect(pinyin_switch).to_be_visible()
+    
+    # Ensure Pinyin switch is toggled active
+    if pinyin_switch.get_attribute("data-state") != "checked":
+        pinyin_switch.click()
+    
+    # Close popover by clicking outside
+    page.mouse.click(10, 10)
+    page.wait_for_timeout(1000)
+
+    # 4. Trigger text selection of Chinese characters inside the iframe
+    print("Selecting Chinese text...")
+    frame.locator("body").evaluate("""
+        () => {
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+            let node = walker.nextNode();
+            while(node) {
+                if (node.textContent.includes("测试用的中文书")) {
+                    const range = document.createRange();
+                    const startIdx = node.textContent.indexOf("测试");
+                    range.setStart(node, startIdx);
+                    range.setEnd(node, startIdx + 7); // Select "测试用的中文书"
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    
+                    // Dispatch mouseup to trigger selection popover
+                    document.dispatchEvent(new MouseEvent('mouseup', {
+                        view: window,
+                        bubbles: true,
+                        cancelable: true,
+                        clientX: 100,
+                        clientY: 100
+                    }));
+                    break;
+                }
+                node = walker.nextNode();
+            }
+        }
+    """)
+
+    # 5. Expect Selection Toolbar to appear with "Mark as Known" button
+    print("Verifying Selection Toolbar...")
+    expect(page.get_by_test_id("compass-pill-annotation")).to_be_visible(timeout=5000)
+    
+    vocab_btn = page.get_by_test_id("popover-vocab-button")
+    expect(vocab_btn).to_be_visible()
+    utils.capture_screenshot(page, "smart_pinyin_01_toolbar")
+
+    # 6. Open Precision Triage interface
+    print("Opening Precision Vocab Triage...")
+    vocab_btn.click()
+    
+    # Expect Vocab Triage card to render
+    expect(page.get_by_test_id("compass-pill-vocab-triage")).to_be_visible(timeout=5000)
+    utils.capture_screenshot(page, "smart_pinyin_02_triage")
+
+    # 7. Click a character tile (e.g. "中") to toggle proficiency
+    print("Toggling known character '中'...")
+    tile_btn = page.locator("button:has-text('中')").first
+    expect(tile_btn).to_be_visible()
+    
+    # Toggle it
+    tile_btn.click()
+    page.wait_for_timeout(500)
+    utils.capture_screenshot(page, "smart_pinyin_03_toggled")
+
+    # 8. Complete triage
+    print("Completing triage...")
+    done_btn = page.get_by_role("button", name="Done")
+    expect(done_btn).to_be_visible()
+    done_btn.click()
+    page.wait_for_timeout(1000)
+
+    # Triage and popover should close cleanly
+    expect(page.get_by_test_id("compass-pill-vocab-triage")).not_to_be_visible(timeout=5000)
+    expect(page.get_by_test_id("compass-pill-annotation")).not_to_be_visible(timeout=5000)
+    
+    print("Adaptive Smart Pinyin Journey Passed!")
+

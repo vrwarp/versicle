@@ -140,6 +140,36 @@ export const VisualSettings = () => {
               </div>
             </div>
           )}
+          
+          <div className="border-t border-border/40 pt-2 mt-2 text-[10px] text-muted-foreground leading-normal">
+            Dictionary data provided by{' '}
+            <a 
+              href="https://cc-cedict.org/" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="underline hover:text-foreground transition-colors"
+            >
+              CC-CEDICT
+            </a>{' '}
+            via{' '}
+            <a 
+              href="https://www.mdbg.net/chinese/dictionary?page=cc-cedict" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="underline hover:text-foreground transition-colors"
+            >
+              MDBG
+            </a>{' '}
+            under{' '}
+            <a 
+              href="https://creativecommons.org/licenses/by-sa/4.0/" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="underline hover:text-foreground transition-colors"
+            >
+              CC BY-SA 4.0
+            </a>.
+          </div>
         </div>
       )}
 
