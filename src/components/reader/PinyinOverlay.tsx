@@ -1,5 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
+import { usePreferencesStore } from '../../store/usePreferencesStore';
 
 /**
  * Pinyin position entry.
@@ -31,7 +32,24 @@ export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({
   pinyinSize,
   containerNode 
 }) => {
+  const currentTheme = usePreferencesStore(state => state.currentTheme) || 'light';
+  const customTheme = usePreferencesStore(state => state.customTheme) || { bg: '#ffffff' };
+
   if (positions.length === 0 || !containerNode) return null;
+
+  // Compute shadow color to ensure crisp contrast on all reading backgrounds
+  // - Light theme uses pure white shadow (body bg is #ffffff)
+  // - Sepia theme uses warm sepia shadow (body bg is #f4ecd8)
+  // - Dark theme uses deep dark gray shadow (body bg is #1a1a1a) to avoid the wonky halo glow
+  let shadowColor = '#ffffff';
+  const themeStr = currentTheme as string;
+  if (themeStr === 'dark') {
+    shadowColor = '#1a1a1a';
+  } else if (themeStr === 'sepia') {
+    shadowColor = '#f4ecd8';
+  } else if (themeStr === 'custom') {
+    shadowColor = customTheme.bg || '#ffffff';
+  }
 
   const overlayContent = (
     <div 
@@ -48,7 +66,7 @@ export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({
             transform: 'translate(-50%, -100%)',
             fontSize: `${0.7 * (pinyinSize / 100)}rem`,
             lineHeight: 1,
-            textShadow: '0 0 2px white, 0 0 4px white', // Ensure readability over any background
+            textShadow: `0 0 2px ${shadowColor}, 0 0 4px ${shadowColor}`, // Ensure readability over any background
             display: 'block',
             textAlign: 'center',
             minWidth: '1em'
@@ -62,3 +80,4 @@ export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({
 
   return createPortal(overlayContent, containerNode);
 };
+
