@@ -18,6 +18,7 @@ import { useGenAIStore } from '../../store/useGenAIStore';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { mergeCfiSlow } from '../cfi-utils';
 import { createLogger } from '../logger';
+import { normalizeLanguageCode } from '../language-utils';
 
 const logger = createLogger('AudioPlayerService');
 
@@ -180,14 +181,15 @@ export class AudioPlayerService {
                     return;
                 }
 
-                const currentLang = state.books[bookId]?.language;
+                const rawLang = state.books[bookId]?.language || 'en';
+                const currentLang = normalizeLanguageCode(rawLang);
                 
                 // Trigger sync if language changed for the CURRENT book, 
                 // using activeLanguage to prevent unwarranted restarts.
                 import('../../store/useTTSStore').then(({ useTTSStore }) => {
                     const lastLang = useTTSStore.getState().activeLanguage;
 
-                    if (currentLang && currentLang !== lastLang) {
+                    if (currentLang !== lastLang) {
                         logger.info(`Syncing TTS language to book: ${currentLang} (Book: ${bookId})`);
                         useTTSStore.getState().setActiveLanguage(currentLang);
                         
@@ -276,8 +278,9 @@ export class AudioPlayerService {
                     import('../../store/useTTSStore')
                 ]).then(([{ useBookStore }, { useTTSStore }]) => {
                     if (this.currentBookId !== bookId) return; // Prevent race conditions if bookId changed again rapidly
-                    const currentLang = useBookStore.getState().books[bookId]?.language;
-                    if (currentLang && currentLang !== useTTSStore.getState().activeLanguage) {
+                    const rawLang = useBookStore.getState().books[bookId]?.language || 'en';
+                    const currentLang = normalizeLanguageCode(rawLang);
+                    if (currentLang !== useTTSStore.getState().activeLanguage) {
                         useTTSStore.getState().setActiveLanguage(currentLang);
                         this.activeLexiconRules = null; // Force lexicon reload for the new language
                     }
