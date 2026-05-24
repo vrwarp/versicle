@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { createLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import type { BookMetadata } from '../types/db';
+import { CURRENT_BOOK_VERSION } from '../lib/constants';
 
 // Mock DBService
 const mockDBService = {
@@ -243,6 +244,50 @@ describe('useLibraryStore', () => {
     expect(mockDBService.getBookMetadata).toHaveBeenCalledWith('test-id');
     const state = useLibraryStore.getState();
     expect(state.staticMetadata['test-id']).toBeDefined();
+  });
+
+  it('should force hydrate static metadata from DB even if already in state when requested', async () => {
+    // Setup book in Yjs state first
+    useBookStore.setState({
+      books: {
+        'test-id': {
+          bookId: 'test-id',
+          title: 'Test',
+          author: 'Author',
+          addedAt: 1000,
+          status: 'unread',
+          tags: [],
+          lastInteraction: 1000
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any
+      }
+    });
+
+    // Populate staticMetadata with an outdated version
+    useLibraryStore.setState({
+      staticMetadata: {
+        'test-id': {
+          ...mockBook,
+          version: 1
+        }
+      }
+    });
+
+    const updatedBook = {
+      ...mockBook,
+      version: CURRENT_BOOK_VERSION
+    };
+
+    // Mock DBService to return the updated static metadata
+    vi.mocked(mockDBService.getBookMetadata).mockResolvedValue(updatedBook);
+
+    // Call standard hydrateStaticMetadata() -> should NOT overwrite because already in state
+    await useLibraryStore.getState().hydrateStaticMetadata();
+    expect(useLibraryStore.getState().staticMetadata['test-id']?.version).toBe(1);
+
+    // Call hydrateStaticMetadata with forceBookIds -> should overwrite
+    await useLibraryStore.getState().hydrateStaticMetadata(['test-id']);
+    expect(useLibraryStore.getState().staticMetadata['test-id']?.version).toBe(CURRENT_BOOK_VERSION);
   });
 
   it('should update and persist sort order (moved to preferences)', () => {

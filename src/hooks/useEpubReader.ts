@@ -285,6 +285,14 @@ export function useEpubReader(
     optionsRef.current = options;
   }, [options]);
 
+  // Sync metadata from options if it changes reactively
+  useEffect(() => {
+    if (options.metadata) {
+      setMetadata(options.metadata);
+    }
+  }, [options.metadata]);
+
+
   // Load Book
   useEffect(() => {
     if (!bookId || !viewerRef.current) return;
