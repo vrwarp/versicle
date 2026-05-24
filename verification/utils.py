@@ -44,6 +44,11 @@ def reset_app(page: Page):
                 await window.__DISCONNECT_YJS__();
             }
 
+            // Disconnect main DB connection to release IndexedDB locks
+            if (typeof window.__CLOSE_DB__ === 'function') {
+                await window.__CLOSE_DB__();
+            }
+
             // Unregister Service Workers
             if ('serviceWorker' in navigator) {
                 const registrations = await navigator.serviceWorker.getRegistrations();

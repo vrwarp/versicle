@@ -67,6 +67,11 @@ def clear_data_and_reload(page: Page, base_url: str):
                 await window.__DISCONNECT_YJS__();
             }
 
+            // Disconnect main DB connection to release IndexedDB locks
+            if (typeof window.__CLOSE_DB__ === 'function') {
+                await window.__CLOSE_DB__();
+            }
+
             const dbs = await window.indexedDB.databases();
             for (const db of dbs) {
                 await new Promise(resolve => {

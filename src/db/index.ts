@@ -1,2 +1,2 @@
-export { initDB, getDB } from './db';
+export { initDB, getDB, closeDB } from './db';
 export type { EpubLibraryDB } from './db';

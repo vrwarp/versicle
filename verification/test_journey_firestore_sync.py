@@ -56,6 +56,11 @@ def test_firestore_book_sync_and_restore(browser: Browser, browser_context_args)
                 await window.__DISCONNECT_YJS__();
             }
 
+            // Disconnect main DB connection to release IndexedDB locks
+            if (typeof window.__CLOSE_DB__ === 'function') {
+                await window.__CLOSE_DB__();
+            }
+
             // Clear all IndexedDB databases
             const dbs = await window.indexedDB.databases();
             for (const db of dbs) {
@@ -356,6 +361,11 @@ def test_firestore_sync_offload_status_hydration(browser: Browser, browser_conte
             // Disconnect Yjs to release IDB locks
             if (typeof window.__DISCONNECT_YJS__ === 'function') {
                 await window.__DISCONNECT_YJS__();
+            }
+
+            // Disconnect main DB connection to release IndexedDB locks
+            if (typeof window.__CLOSE_DB__ === 'function') {
+                await window.__CLOSE_DB__();
             }
 
             const dbs = await window.indexedDB.databases();

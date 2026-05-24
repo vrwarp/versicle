@@ -6,23 +6,24 @@ def test_reading_history_journey(page: Page):
     # 1. Load the app (using the demo book since library might be empty)
     page.goto("/")
 
-    # Handle empty library case by loading demo book if prompted
-    try:
-        page.wait_for_selector("text=Your library is empty", timeout=2000)
-        page.click("text=Load Demo Book")
-    except:
-        pass # Library not empty or demo book already loaded
-
-    # Wait for book cover to appear to ensure we are in library or book is loaded
-    # If in library, click the first book
-    try:
-        page.wait_for_selector("[data-testid^='book-card-']", timeout=5000)
-        page.click("[data-testid^='book-card-']:first-child")
-    except:
-        pass # Might be already in reader if persistent state
+    # Wait for either reader view, book cards, or empty library message
+    # This accommodates any prior state or slow loading under parallel load
+    for _ in range(100):  # 20 seconds total wait
+        if page.is_visible("[data-testid='reader-view']"):
+            break
+        if page.is_visible("text=Your library is empty"):
+            page.click("text=Load Demo Book")
+            # Wait for book card to appear after loading demo book
+            page.wait_for_selector("[data-testid^='book-card-']", timeout=10000)
+            page.click("[data-testid^='book-card-']:first-child")
+            break
+        if page.is_visible("[data-testid^='book-card-']"):
+            page.click("[data-testid^='book-card-']:first-child")
+            break
+        page.wait_for_timeout(200)
 
     # Wait for reader to load
-    page.wait_for_selector("[data-testid='reader-view']", timeout=10000)
+    page.wait_for_selector("[data-testid='reader-view']", timeout=15000)
 
     # DWELL TIME CHECK: We must stay on the initial page for > 2 seconds for history to track it
     # upon the next navigation.

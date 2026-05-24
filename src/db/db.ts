@@ -97,7 +97,7 @@ export interface EpubLibraryDB extends DBSchema {
   };
 }
 
-let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>>;
+let dbPromise: Promise<IDBPDatabase<EpubLibraryDB>> | null = null;
 
 export const initDB = () => {
   if (!dbPromise) {
@@ -189,3 +189,17 @@ export const getDB = () => {
   }
   return dbPromise;
 };
+
+export const closeDB = async () => {
+  if (dbPromise) {
+    const db = await dbPromise;
+    db.close();
+    dbPromise = null;
+    logger.info('Database connection closed.');
+  }
+};
+
+if (typeof window !== 'undefined') {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__CLOSE_DB__ = closeDB;
+}
