@@ -83,6 +83,17 @@ describe('WebSpeechProvider', () => {
        expect(mockSynth.addEventListener).toHaveBeenCalledWith('voiceschanged', expect.any(Function));
        expect(mockSynth.removeEventListener).toHaveBeenCalledWith('voiceschanged', expect.any(Function));
     });
+
+    it('should resolve and log a warning if voice loading times out', async () => {
+       vi.spyOn(console, 'warn').mockImplementation(() => {});
+       vi.useFakeTimers();
+       mockSynth.getVoices.mockReturnValue([]);
+       const initPromise = provider.init();
+       vi.advanceTimersByTime(1500); // Trigger the timeout
+       await initPromise;
+       expect(console.warn).toHaveBeenCalledWith('WebSpeechProvider: Voice loading timed out or no voices available.');
+       vi.useRealTimers();
+    });
   });
 
   describe('getVoices', () => {

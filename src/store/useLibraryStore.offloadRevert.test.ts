@@ -1,9 +1,13 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { createLibraryStore, useBookStore } from './useLibraryStore';
 
 describe('LibraryStore offload error reverting predictability', () => {
   beforeEach(() => {
     useBookStore.setState({ books: {} });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('should not remove offloaded state if offload fails but book was already offloaded', async () => {
@@ -12,6 +16,10 @@ describe('LibraryStore offload error reverting predictability', () => {
         throw new Error("DB Error");
       }),
     };
+
+    // Suppress console.error in this test specifically since it tests an error branch
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const useLibraryStore = createLibraryStore(mockDb as any);
     useLibraryStore.setState({ offloadedBookIds: new Set(['book1']) });
