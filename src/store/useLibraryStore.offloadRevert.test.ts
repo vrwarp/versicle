@@ -7,6 +7,7 @@ describe('LibraryStore offload error reverting predictability', () => {
   });
 
   it('should not remove offloaded state if offload fails but book was already offloaded', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const mockDb = {
       offloadBook: vi.fn(async () => {
         throw new Error("DB Error");
@@ -21,5 +22,6 @@ describe('LibraryStore offload error reverting predictability', () => {
     const state = useLibraryStore.getState();
     // It should remain offloaded even if the redundant call fails
     expect(state.offloadedBookIds.has('book1')).toBe(true);
+    errorSpy.mockRestore();
   });
 });
