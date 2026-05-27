@@ -1,0 +1,188 @@
+import { test, expect } from "./utils";
+import { resetApp, ensureLibraryWithBook } from "./utils";
+import * as fs from "fs";
+import * as path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+test("smart toc success", async ({ page }) => {
+  console.log("Starting Smart TOC Success Journey...");
+  // 1. Reset and Load
+  await resetApp(page);
+  await ensureLibraryWithBook(page);
+
+  // 2. Inject Mock Data for GenAI
+  // We use real IDs from Alice in Wonderland (np-4 is Chapter 1)
+  const mockResponse = [
+    { id: "np-4", title: "AI Generated: The Rabbit Hole" },
+    { id: "np-5", title: "AI Generated: Pool of Tears" },
+  ];
+
+  await page.evaluate((mockData) => {
+    localStorage.setItem(
+      "genai-storage",
+      JSON.stringify({
+        state: { isEnabled: true, apiKey: "mock-key", model: "gemini-flash-lite-latest" },
+        version: 0,
+      })
+    );
+    localStorage.setItem("mockGenAIResponse", JSON.stringify(mockData));
+  }, mockResponse);
+
+  // Reload to pick up store changes
+  await page.reload();
+
+  // Wait for library to load
+  await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 10000 });
+
+  // 3. Open Reader
+  // Ensure book is present (reload might have cleared state or DB latency)
+  try {
+    await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 10000 });
+  } catch (e) {
+    console.log("Book card missing after reload in Success Scenario, ensuring library again...");
+    await ensureLibraryWithBook(page);
+    await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 30000 });
+  }
+
+  await page.locator('[data-testid^="book-card-"]').first().click();
+  await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 20000 });
+
+  // 4. Open TOC
+  await page.getByTestId("reader-toc-button").click();
+  await expect(page.getByTestId("reader-toc-sidebar")).toBeVisible();
+
+  // 5. Enable Generated Titles
+  // Before enabling, check original title exists
+  await expect(page.getByText("CHAPTER I. Down the Rabbit-Hole")).toBeVisible();
+
+  await page.getByLabel("Generated Titles").click();
+
+  // 6. Click Enhance
+  const enhanceBtn = page.getByRole("button", { name: "Enhance Titles with AI" });
+  await expect(enhanceBtn).toBeVisible();
+  await enhanceBtn.click();
+
+  // 7. Wait for Success Toast
+  await expect(page.getByText("Table of Contents enhanced successfully!")).toBeVisible({ timeout: 10000 });
+
+  // 8. Verify Titles Updated
+  // Check that the new titles are visible
+  await expect(page.getByText("AI Generated: The Rabbit Hole")).toBeVisible();
+  await expect(page.getByText("AI Generated: Pool of Tears")).toBeVisible();
+
+  // Verify original title is GONE (or at least replaced in the list view)
+  await expect(page.getByText("CHAPTER I. Down the Rabbit-Hole")).not.toBeVisible();
+
+  const screenshotsDir = path.resolve(__dirname, "screenshots");
+  if (!fs.existsSync(screenshotsDir)) {
+    fs.mkdirSync(screenshotsDir, { recursive: true });
+  }
+  const suffix = page.viewportSize()?.width && page.viewportSize()!.width < 600 ? "mobile" : "desktop";
+  await page.screenshot({ path: path.join(screenshotsDir, `smart_toc_success_${suffix}.png`) });
+});
+
+test("smart toc failure", async ({ page }) => {
+  console.log("Starting Smart TOC Failure Journey...");
+
+  // Setup
+  await resetApp(page);
+  await ensureLibraryWithBook(page);
+
+  // 1. Missing Key Scenario
+  console.log("--- Scenario 1: Missing Key ---");
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "genai-storage",
+      JSON.stringify({
+        state: { isEnabled: true, apiKey: "", model: "gemini-flash-lite-latest" },
+        version: 0,
+      })
+    );
+    localStorage.removeItem("mockGenAIResponse");
+    localStorage.removeItem("mockGenAIError");
+  });
+  await page.reload();
+
+  // Ensure book is present (reload might have cleared state or DB latency)
+  try {
+    await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 10000 });
+  } catch (e) {
+    console.log("Book card missing after reload, ensuring library again...");
+    await ensureLibraryWithBook(page);
+    await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 30000 });
+  }
+
+  await page.locator('[data-testid^="book-card-"]').first().click();
+  await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 20000 });
+
+  await page.getByTestId("reader-toc-button").click();
+  await expect(page.getByTestId("reader-toc-sidebar")).toBeVisible();
+  await page.getByLabel("Generated Titles").click();
+
+  await page.getByRole("button", { name: "Enhance Titles with AI" }).click();
+
+  const screenshotsDir = path.resolve(__dirname, "screenshots");
+  if (!fs.existsSync(screenshotsDir)) {
+    fs.mkdirSync(screenshotsDir, { recursive: true });
+  }
+  const suffix = page.viewportSize()?.width && page.viewportSize()!.width < 600 ? "mobile" : "desktop";
+
+  // Expect error toast
+  try {
+    await expect(page.getByText("AI features are disabled or not configured")).toBeVisible({ timeout: 10000 });
+  } catch (e) {
+    console.log("Taking failure screenshot for Scenario 1...");
+    await page.screenshot({ path: path.join(screenshotsDir, `smart_toc_failure_sc1_${suffix}.png`) });
+    throw e;
+  }
+
+  // 2. Service Failure Scenario
+  console.log("--- Scenario 2: Service Failure ---");
+  // Reset history state to ensure sidebar is closed after reload
+  await page.evaluate("history.replaceState(null, '')");
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "genai-storage",
+      JSON.stringify({
+        state: { isEnabled: true, apiKey: "mock-key", model: "gemini-flash-lite-latest" },
+        version: 0,
+      })
+    );
+    localStorage.setItem("mockGenAIError", "true");
+  });
+  await page.reload();
+
+  // Ensure in reader
+  try {
+    await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 5000 });
+  } catch (e) {
+    await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 30000 });
+    await page.locator('[data-testid^="book-card-"]').first().click();
+    await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 20000 });
+  }
+
+  await page.getByTestId("reader-toc-button").click();
+  await expect(page.getByTestId("reader-toc-sidebar")).toBeVisible();
+  await page.getByLabel("Generated Titles").click();
+
+  await page.getByRole("button", { name: "Enhance Titles with AI" }).click();
+
+  // Check for success toast (false positive)
+  if (await page.getByText("Table of Contents enhanced successfully!").isVisible()) {
+    console.log("FAILURE: Got success toast instead of error! Chapters likely empty.");
+  }
+
+  // Expect failure toast
+  try {
+    await expect(page.getByText("Failed to enhance TOC")).toBeVisible({ timeout: 5000 });
+  } catch (e) {
+    console.log("Taking failure screenshot...");
+    await page.screenshot({ path: path.join(screenshotsDir, `smart_toc_failure_debug_${suffix}.png`) });
+    throw e;
+  }
+
+  await page.screenshot({ path: path.join(screenshotsDir, `smart_toc_failure_${suffix}.png`) });
+});
