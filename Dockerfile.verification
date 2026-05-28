@@ -3,6 +3,7 @@ FROM mcr.microsoft.com/playwright:v1.49.0-jammy
 # 1. Setup Environment
 WORKDIR /app
 ENV PATH="/app/node_modules/.bin:${PATH}"
+ENV BASE_URL=http://localhost:5173
 
 # 2. Install Node Dependencies (Layer Caching)
 COPY package.json package-lock.json ./
