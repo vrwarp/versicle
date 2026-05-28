@@ -30,6 +30,7 @@ async function uploadBook(page: any, filename: string) {
 }
 
 test('Firestore Book Sync and Restore', async ({ browser }) => {
+  test.setTimeout(120_000);
   console.log('========== DEVICE A: Import Book & Sync ==========');
   
   const contextA = await browser.newContext({

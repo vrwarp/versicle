@@ -11,19 +11,38 @@ const __dirname = path.dirname(__filename);
 const ttsPolyfillPath = path.resolve(__dirname, 'tts-polyfill.js');
 const ttsPolyfillContent = fs.readFileSync(ttsPolyfillPath, 'utf8');
 
-export const test = base.extend({
+export const test = base.extend<Record<string, never>, { _suppressLogs: void }>({
+  // Worker-scoped: runs once per worker process (not per test).
+  // Patches console.log/info/debug to noop so spec-file log calls are
+  // silent by default. Set DEBUG_PAGE_LOGS=1 to restore them.
+  _suppressLogs: [
+    async ({}, use) => {
+      if (!process.env.DEBUG_PAGE_LOGS) {
+        const noop = () => {};
+        console.log = noop;
+        console.info = noop;
+        console.debug = noop;
+        // warn/error kept so failures stay visible
+      }
+      await use();
+    },
+    { scope: 'worker', auto: true },
+  ],
+
   page: async ({ page }, use) => {
     page.setDefaultTimeout(10000);
     page.setDefaultNavigationTimeout(10000);
 
-    page.on('console', (msg) => console.log(`PAGE LOG: ${msg.text()}`));
-    page.on('pageerror', (err) => console.error(`PAGE ERROR: ${err}`));
+    if (process.env.DEBUG_PAGE_LOGS) {
+      page.on('console', (msg) => console.log(`PAGE LOG: ${msg.text()}`));
+      page.on('pageerror', (err) => console.error(`PAGE ERROR: ${err}`));
+    }
 
     await page.addInitScript({ content: ttsPolyfillContent });
     await page.addInitScript({ content: 'window.__VERSICLE_SANITIZATION_DISABLED__ = true;' });
 
     await use(page);
-  }
+  },
 });
 
 export { expect };

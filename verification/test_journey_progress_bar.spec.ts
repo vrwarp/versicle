@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./utils";
 import { resetApp, captureScreenshot } from "./utils";
 
 test("verify progress bar", async ({ page }) => {
@@ -39,7 +39,7 @@ test("verify progress bar", async ({ page }) => {
     await backBtn.click();
   } else {
     // Fallback: navigate via URL
-    await page.goto("http://localhost:5173/");
+    await page.goto("/");
   }
 
   // 4. Check for progress bar

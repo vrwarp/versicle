@@ -1,8 +1,8 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./utils";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { Frame } from "@playwright/test";
+import type { Frame } from "@playwright/test";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
