@@ -70,6 +70,16 @@ describe('WebSpeechProvider', () => {
       expect(mockSynth.getVoices).toHaveBeenCalled();
     });
 
+    it('should resolve on timeout if voices never load', async () => {
+      vi.useFakeTimers();
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const initPromise = provider.init();
+      vi.runAllTimers();
+      await initPromise;
+      expect(console.warn).toHaveBeenCalledWith('WebSpeechProvider: Voice loading timed out or no voices available.');
+      vi.useRealTimers();
+    });
+
     it('should wait for onvoiceschanged if voices are not loaded', async () => {
        mockSynth.getVoices.mockReturnValueOnce([]).mockReturnValueOnce([{ name: 'Voice 1' }]);
 
