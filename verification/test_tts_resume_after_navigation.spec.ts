@@ -1,0 +1,174 @@
+import { test, expect } from "./utils";
+import { captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter } from "./utils";
+
+test("tts resume after leaving book", async ({ page, baseURL }) => {
+  console.log("Starting Resume After Navigation Test...");
+  const finalBaseURL = baseURL || "http://localhost:5173";
+  await resetApp(page);
+  await ensureLibraryWithBook(page);
+
+  // Open Book
+  console.log("Opening book...");
+  await page.locator("[data-testid^='book-card-']").first().click();
+  await expect(page.getByTestId("reader-back-button")).toBeVisible();
+
+  // Navigate to a chapter
+  console.log("Navigating to chapter...");
+  await navigateToChapter(page);
+
+  // Open TTS Panel
+  console.log("Opening TTS panel...");
+  await page.getByTestId("reader-audio-button").click();
+  await expect(page.getByTestId("tts-panel")).toBeVisible();
+
+  // Wait for queue
+  await expect(page.getByTestId("tts-queue-item-0")).toBeVisible({ timeout: 10000 });
+
+  // Start playback and advance position
+  console.log("Starting playback and advancing...");
+  await page.getByTestId("tts-play-pause-button").click();
+
+  // Skip forward 3 times (to item 3)
+  await page.getByTestId("tts-forward-button").click();
+  await page.waitForTimeout(300);
+  await page.getByTestId("tts-forward-button").click();
+  await page.waitForTimeout(300);
+  await page.getByTestId("tts-forward-button").click();
+  await page.waitForTimeout(500);
+
+  // Verify we're at item 3
+  await expect(page.getByTestId("tts-queue-item-3")).toHaveAttribute("data-current", "true", { timeout: 5000 });
+  console.log("At queue item 3");
+
+  // Get the text of item 3 for later comparison
+  const item3Text = await page.getByTestId("tts-queue-item-3").innerText();
+  console.log(`Item 3 text: ${item3Text.substring(0, 50)}...`);
+
+  // Pause playback
+  await page.getByTestId("tts-play-pause-button").click();
+  await page.waitForTimeout(500);
+
+  // Close TTS panel
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
+
+  // Navigate back to library
+  console.log("Going back to library...");
+  await page.getByTestId("reader-back-button").click();
+  await expect(page).toHaveURL(new RegExp(finalBaseURL.replace(/\/$/, "") + "/?$"), { timeout: 10000 });
+
+  // Wait a moment for state to persist
+  await page.waitForTimeout(1000);
+
+  // Re-open the book
+  console.log("Re-opening book...");
+  await page.locator("[data-testid^='book-card-']").first().click();
+  await expect(page.getByTestId("reader-back-button")).toBeVisible();
+
+  // Open TTS Panel
+  console.log("Checking resumed TTS state...");
+  await page.getByTestId("reader-audio-button").click();
+  await expect(page.getByTestId("tts-panel")).toBeVisible({ timeout: 5000 });
+
+  // Wait for queue to restore
+  await page.waitForTimeout(2000);
+
+  // Check that we're at or near item 3 (resume position)
+  const queueItems = page.locator("[data-testid^='tts-queue-item-']");
+  await expect(queueItems.first()).toBeVisible({ timeout: 10000 });
+
+  // Find the current item
+  for (let i = 0; i < 10; i++) {
+    try {
+      const item = page.getByTestId(`tts-queue-item-${i}`);
+      if (await item.isVisible() && (await item.getAttribute("data-current")) === "true") {
+        console.log(`Current item at index: ${i}`);
+        const currentText = await item.innerText();
+        console.log(`Current item text: ${currentText.substring(0, 50)}...`);
+
+        // Should be at index 2 or greater (we advanced to 3 before)
+        expect(i).toBeGreaterThanOrEqual(2);
+        await captureScreenshot(page, "resume_after_nav_success");
+        console.log("Resume After Navigation Test Passed!");
+        return;
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+
+  // If we didn't find a current item, fail
+  await captureScreenshot(page, "resume_after_nav_fail");
+  throw new Error("Could not find current queue item after resume");
+});
+
+test("tts position persists across reload", async ({ page }) => {
+  console.log("Starting Position Persistence Across Reload Test...");
+  await resetApp(page);
+  await ensureLibraryWithBook(page);
+
+  // Open Book
+  await page.locator("[data-testid^='book-card-']").first().click();
+  await expect(page.getByTestId("reader-back-button")).toBeVisible();
+
+  // Navigate to chapter
+  await navigateToChapter(page);
+
+  // Open TTS Panel
+  await page.getByTestId("reader-audio-button").click();
+  await expect(page.getByTestId("tts-panel")).toBeVisible();
+
+  // Wait for queue
+  await expect(page.getByTestId("tts-queue-item-0")).toBeVisible({ timeout: 10000 });
+
+  // Skip to item 5
+  console.log("Advancing to item 5...");
+  for (let i = 0; i < 5; i++) {
+    await page.getByTestId("tts-forward-button").click();
+    await page.waitForTimeout(200);
+  }
+
+  await page.waitForTimeout(1000);
+
+  // Verify at item 5
+  await expect(page.getByTestId("tts-queue-item-5")).toHaveAttribute("data-current", "true", { timeout: 5000 });
+  const item5Text = await page.getByTestId("tts-queue-item-5").innerText();
+  console.log(`Item 5 text before reload: ${item5Text.substring(0, 50)}...`);
+
+  // Reload page
+  console.log("Reloading page...");
+  await page.reload();
+  await expect(page.getByTestId("reader-back-button")).toBeVisible({ timeout: 10000 });
+
+  // Open TTS Panel
+  await page.getByTestId("reader-audio-button").click();
+  await expect(page.getByTestId("tts-panel")).toBeVisible({ timeout: 5000 });
+
+  // Wait for queue restoration
+  await page.waitForTimeout(2000);
+
+  // Check that item 5 is still current
+  try {
+    await expect(page.getByTestId("tts-queue-item-5")).toHaveAttribute("data-current", "true", { timeout: 5000 });
+    const restoredText = await page.getByTestId("tts-queue-item-5").innerText();
+    console.log(`Item 5 text after reload: ${restoredText.substring(0, 50)}...`);
+    expect(item5Text).toBe(restoredText);
+    console.log("Position Persistence Across Reload Test Passed!");
+  } catch (e) {
+    // Check what the current position actually is
+    for (let i = 0; i < 10; i++) {
+      try {
+        if ((await page.getByTestId(`tts-queue-item-${i}`).getAttribute("data-current")) === "true") {
+          console.log(`Actually at index ${i} after reload`);
+          break;
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+    await captureScreenshot(page, "position_persistence_check");
+    throw e;
+  }
+
+  await captureScreenshot(page, "position_persistence_success");
+});

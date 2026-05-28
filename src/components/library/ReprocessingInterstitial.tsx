@@ -28,7 +28,7 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
             try {
                 await reprocessBook(bookId);
                 // Refresh store to get updated metadata (especially schemaVersion)
-                await useLibraryStore.getState().hydrateStaticMetadata();
+                await useLibraryStore.getState().hydrateStaticMetadata([bookId]);
                 onComplete();
             } catch (e) {
                 console.error("Reprocessing failed", e);

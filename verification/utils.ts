@@ -1,0 +1,198 @@
+import { test as base, expect } from '@playwright/test';
+import type { Page, Frame } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Read tts-polyfill.js content
+const ttsPolyfillPath = path.resolve(__dirname, 'tts-polyfill.js');
+const ttsPolyfillContent = fs.readFileSync(ttsPolyfillPath, 'utf8');
+
+export const test = base.extend<Record<string, never>, { _suppressLogs: void }>({
+  // Worker-scoped: runs once per worker process (not per test).
+  // Patches console.log/info/debug to noop so spec-file log calls are
+  // silent by default. Set DEBUG_PAGE_LOGS=1 to restore them.
+  _suppressLogs: [
+    async ({}, use) => {
+      if (!process.env.DEBUG_PAGE_LOGS) {
+        const noop = () => {};
+        console.log = noop;
+        console.info = noop;
+        console.debug = noop;
+        // warn/error kept so failures stay visible
+      }
+      await use();
+    },
+    { scope: 'worker', auto: true },
+  ],
+
+  page: async ({ page }, use) => {
+    page.setDefaultTimeout(10000);
+    page.setDefaultNavigationTimeout(10000);
+
+    if (process.env.DEBUG_PAGE_LOGS) {
+      page.on('console', (msg) => console.log(`PAGE LOG: ${msg.text()}`));
+      page.on('pageerror', (err) => console.error(`PAGE ERROR: ${err}`));
+    }
+
+    await page.addInitScript({ content: ttsPolyfillContent });
+    await page.addInitScript({ content: 'window.__VERSICLE_SANITIZATION_DISABLED__ = true;' });
+
+    await use(page);
+  },
+});
+
+export { expect };
+
+export async function navigateToChapter(page: Page, chapterId: string = 'toc-item-6') {
+  console.log(`Navigating to chapter: ${chapterId}...`);
+  await page.getByTestId('reader-toc-button').click();
+  await page.getByTestId(chapterId).click();
+
+  await expect(page.getByTestId('reader-toc-sidebar')).not.toBeVisible();
+
+  await page.locator('body').click({ position: { x: 100, y: 100 } });
+
+  await expect(page.getByTestId('compass-pill-active')).toBeVisible();
+  await page.waitForTimeout(1000);
+}
+
+export async function resetApp(page: Page) {
+  await page.goto('/', { timeout: 10000 });
+  await page.reload();
+
+  await page.evaluate(async () => {
+    // Disconnect Yjs to release IDB locks
+    if (typeof (window as any).__DISCONNECT_YJS__ === 'function') {
+      await (window as any).__DISCONNECT_YJS__();
+    }
+
+    // Disconnect main DB connection to release IndexedDB locks
+    if (typeof (window as any).__CLOSE_DB__ === 'function') {
+      await (window as any).__CLOSE_DB__();
+    }
+
+    // Unregister Service Workers
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const registration of registrations) {
+        await registration.unregister();
+      }
+    }
+
+    // Clear DBs
+    const dbs = await window.indexedDB.databases();
+    for (const db of dbs) {
+      if (db.name) {
+        await new Promise<void>((resolve, reject) => {
+          const req = window.indexedDB.deleteDatabase(db.name!);
+          req.onsuccess = () => resolve();
+          req.onerror = reject;
+          req.onblocked = () => {
+            console.warn(`DB ${db.name} deletion blocked`);
+            resolve();
+          };
+        });
+      }
+    }
+    localStorage.clear();
+  });
+
+  await page.reload();
+
+  try {
+    try {
+      await page.waitForSelector('text=Updating Library', { state: 'detached', timeout: 10000 });
+    } catch {
+      // Ignore
+    }
+
+    await page.waitForSelector(
+      "[data-testid^='book-card-'], button:has-text('Load Demo Book'), :text('Your library is empty')",
+      { timeout: 45000 }
+    );
+  } catch (err) {
+    console.warn(`Warning: App load state check failed: ${err}`);
+    await captureScreenshot(page, 'reset_app_timeout_debug');
+  }
+}
+
+export async function ensureLibraryWithBook(page: Page) {
+  try {
+    await page.waitForSelector(
+      "[data-testid^='book-card-'], button:has-text('Load Demo Book'), :text('Your library is empty')",
+      { timeout: 45000 }
+    );
+  } catch (err) {
+    console.warn(`Warning: Neither book card nor load button found within 45s: ${err}`);
+    await captureScreenshot(page, 'ensure_library_timeout_debug');
+  }
+
+  if ((await page.getByText("Alice's Adventures in Wonderland").count()) > 0) {
+    return;
+  }
+
+  let loadBtn = page.getByRole('button', { name: 'Load Demo Book' });
+  if ((await loadBtn.count()) === 0) {
+    loadBtn = page.locator('button').filter({ hasText: 'Load Demo Book' });
+  }
+
+  if ((await loadBtn.count()) > 0 && (await loadBtn.first().isVisible())) {
+    await loadBtn.first().click();
+    try {
+      await page.waitForSelector("[data-testid^='book-card-']", { timeout: 30000 });
+    } catch {
+      if (await loadBtn.first().isVisible()) {
+        await loadBtn.first().click();
+        await page.waitForSelector("[data-testid^='book-card-']", { timeout: 30000 });
+      }
+    }
+  }
+}
+
+export async function captureScreenshot(page: Page, name: string, hideTtsStatus: boolean = false) {
+  const screenshotsDir = path.resolve(__dirname, 'screenshots');
+  if (!fs.existsSync(screenshotsDir)) {
+    fs.mkdirSync(screenshotsDir, { recursive: true });
+  }
+
+  if (hideTtsStatus) {
+    await page.evaluate(() => {
+      const el = document.getElementById('tts-debug');
+      if (el) {
+        el.style.visibility = 'hidden';
+      }
+    });
+    try {
+      await page.locator('#tts-debug').waitFor({ state: 'hidden', timeout: 1000 });
+    } catch {
+      // Ignore
+    }
+  }
+
+  const viewport = page.viewportSize();
+  const width = viewport ? viewport.width : 1280;
+  const suffix = width < 600 ? 'mobile' : 'desktop';
+  await page.screenshot({ path: path.join(screenshotsDir, `${name}_${suffix}.png`), timeout: 10000 });
+
+  if (hideTtsStatus) {
+    await page.evaluate(() => {
+      const el = document.getElementById('tts-debug');
+      if (el) {
+        el.style.visibility = 'visible';
+      }
+    });
+  }
+}
+
+export function getReaderFrame(page: Page): Frame | null {
+  for (const frame of page.frames()) {
+    if (frame !== page.mainFrame() && (frame.name().includes('epubjs') || frame.url().includes('blob:'))) {
+      return frame;
+    }
+  }
+  return null;
+}

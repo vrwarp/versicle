@@ -23,9 +23,8 @@ done
 
 # 3. Run Verification Tests
 echo "🧪 Running verification suite..."
-# We pass all arguments ($@) to the python script, which passes them to pytest.
-# This allows running `docker run ... --update-snapshots`
-python verification/run_all.py "$@"
+# We pass all arguments ($@) to the playwright test runner.
+npx playwright test "$@"
 EXIT_CODE=$?
 
 # 4. Cleanup and Exit

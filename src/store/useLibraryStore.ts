@@ -47,7 +47,7 @@ interface LibraryState {
    * Hydrates static metadata (covers, etc.) from IDB for all books in inventory.
    * Should be called on app mount after Yjs syncs.
    */
-  hydrateStaticMetadata: () => Promise<void>;
+  hydrateStaticMetadata: (forceBookIds?: string[]) => Promise<void>;
   /**
    * Imports a new EPUB file into the library.
    * @param file - The EPUB file to import.
@@ -104,7 +104,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
   (set, get) => {
 
     // Extracted hydrate function to avoid get() and stale closures
-    const hydrateStaticMetadataFn = async () => {
+    const hydrateStaticMetadataFn = async (forceBookIds?: string[]) => {
       // Access books from the SYNCED store (Yjs)
       const books = useBookStore.getState().books;
       const bookIds = Object.keys(books);
@@ -133,12 +133,13 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         set((state) => {
           const currentBooks = useBookStore.getState().books;
           const nextStaticMetadata = { ...state.staticMetadata };
+          const forceSet = new Set(forceBookIds || []);
 
           manifests.forEach(manifest => {
             if (manifest && manifest.id) {
               // Only add if it still exists in the synced inventory (not concurrently removed)
-              // and wasn't already loaded/updated in state.
-              if (currentBooks[manifest.id] && !(manifest.id in nextStaticMetadata)) {
+              // and wasn't already loaded/updated in state, unless forced.
+              if (currentBooks[manifest.id] && (!(manifest.id in nextStaticMetadata) || forceSet.has(manifest.id))) {
                 nextStaticMetadata[manifest.id] = manifest;
               }
             }

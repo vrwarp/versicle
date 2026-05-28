@@ -12,6 +12,7 @@ import { CapacitorTTSProvider } from '../lib/tts/providers/CapacitorTTSProvider'
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/TextSegmenter';
 import { Capacitor } from '@capacitor/core';
 import { LexiconService } from '../lib/tts/LexiconService';
+import { normalizeLanguageCode } from '../lib/language-utils';
 
 export interface TTSProfile {
     voiceId: string | null;
@@ -173,7 +174,8 @@ export const useTTSStore = create<TTSState>()(
                     en: { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0, minSentenceLength: 36 },
                 },
 
-                setActiveLanguage: (lang) => {
+                setActiveLanguage: (rawLang) => {
+                    const lang = normalizeLanguageCode(rawLang);
                     const state = get();
                     // When we change the language context, we also update the active properties
                     // and fetch the voice objects for the underlying service
@@ -402,15 +404,34 @@ export const useTTSStore = create<TTSState>()(
 
                     // If current voice is not in new list, pick default
                     const currentVoice = get().voice;
-                    const voiceExists = currentVoice && voices.find(v => v.id === currentVoice.id);
+                    const activeLang = get().activeLanguage;
+                    const profileVoiceId = get().profiles[activeLang]?.voiceId;
 
-                    if (!voiceExists && voices.length > 0) {
-                        const defaultVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
-                        player.setVoice(defaultVoice.id);
-                        set({ voice: defaultVoice });
-                    } else if (currentVoice) {
+                    let targetVoice = null;
+
+                    // 1. If we have a current voice and it still exists in the new list, AND it matches the active language, keep it
+                    if (currentVoice && voices.find(v => v.id === currentVoice.id) && currentVoice.lang.startsWith(activeLang)) {
+                        targetVoice = currentVoice;
+                    }
+                    // 2. Try the profile's saved voiceId for the active language
+                    else if (profileVoiceId) {
+                        targetVoice = voices.find(v => v.id === profileVoiceId) || null;
+                    }
+
+                    // 3. Fallback to any voice matching the active language
+                    if (!targetVoice && voices.length > 0) {
+                        targetVoice = voices.find(v => v.lang.startsWith(activeLang)) || null;
+                    }
+
+                    // 4. Ultimate fallback to English, then the first available voice
+                    if (!targetVoice && voices.length > 0) {
+                        targetVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+                    }
+
+                    if (targetVoice) {
                         // Re-set voice to ensure player knows about it
-                        player.setVoice(currentVoice.id);
+                        player.setVoice(targetVoice.id);
+                        set({ voice: targetVoice });
                     }
                 },
                 downloadVoice: async (voiceId) => {

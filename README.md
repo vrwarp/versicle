@@ -181,3 +181,10 @@ We use Docker to run end-to-end tests in a consistent environment using Playwrig
 ## Contributing
 
 Please see `architecture.md` for a deep dive into the system design.
+
+## Licenses & Attributions
+
+### CC-CEDICT Chinese-English Dictionary
+Versicle integrates a compiled and optimized key-value version of the **[CC-CEDICT](https://cc-cedict.org/)** Chinese-to-English dictionary database compiled and hosted by **[MDBG](https://www.mdbg.net/chinese/dictionary?page=cc-cedict)**. 
+
+The CC-CEDICT database is licensed under the **[Creative Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/)**. In accordance with the ShareAlike terms, our custom-compiled offline JSON database (`public/dict/cedict.json`) and polyphone-merged adaptations are distributed under the same license terms.

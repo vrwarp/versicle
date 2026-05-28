@@ -1,43 +1,23 @@
-FROM python:3.11-slim-bookworm
+FROM mcr.microsoft.com/playwright:v1.49.0-jammy
 
 # 1. Setup Environment
 WORKDIR /app
 ENV PATH="/app/node_modules/.bin:${PATH}"
+ENV BASE_URL=http://localhost:5173
 
-# 2. Install Dependencies
-# - curl, gnupg: for Node.js install
-# - build-essential: for node-gyp if needed
-# - lsb-release: required for Playwright to detect OS correctly
-RUN apt-get update && \
-    apt-get install -y curl gnupg build-essential lsb-release && \
-    rm -rf /var/lib/apt/lists/*
-
-# 3. Install Node.js 20
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    node --version && \
-    npm --version
-
-# 4. Install Node Dependencies (Layer Caching)
+# 2. Install Node Dependencies (Layer Caching)
 COPY package.json package-lock.json ./
 COPY scripts ./scripts
 RUN npm ci --legacy-peer-deps
 
-# 5. Install Python Dependencies
-RUN pip install --no-cache-dir pytest pytest-playwright pytest-xdist playwright==1.49.0
-
-# 6. Install Browsers
-# This installs browsers AND their system dependencies
-RUN playwright install --with-deps
-
-# 7. Copy Source Code
+# 3. Copy Source Code
 COPY . .
 
-# 8. Build the App (with HTTPS disabled for verification)
+# 4. Build the App (with HTTPS disabled for verification)
 ENV VITE_HTTPS=false
 RUN npm run build
 
-# 9. Set Entrypoint
+# 5. Set Entrypoint
 COPY verification/docker_entrypoint.sh /app/verification/docker_entrypoint.sh
 RUN chmod +x /app/verification/docker_entrypoint.sh
 

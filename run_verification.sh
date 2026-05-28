@@ -44,6 +44,10 @@ if [[ "$1" == "--help" ]]; then
   echo "  - Disable parallel execution (useful for debugging):"
   echo "      ./run_verification.sh -n 0"
   echo ""
+  echo "  - Enable verbose page/console logs (sets DEBUG_PAGE_LOGS=1 in container):"
+  echo "      ./run_verification.sh --logs"
+  echo "      ./run_verification.sh --logs verification/test_journey_library.spec.ts"
+  echo ""
   echo "Artifacts:"
   echo "  - Screenshots and test artifacts are saved to 'verification/screenshots'."
   echo "  - This directory is mounted from the host, so artifacts persist after the run."
@@ -54,6 +58,17 @@ if [[ "$1" == "--help" ]]; then
   echo "  - Tests run against a production-like build (Vite preview), not the dev server."
   exit 0
 fi
+
+# Parse flags before passing remainder to playwright
+DEBUG_ENV=""
+PASSTHROUGH_ARGS=()
+for arg in "$@"; do
+  if [[ "$arg" == "--logs" ]]; then
+    DEBUG_ENV="-e DEBUG_PAGE_LOGS=1"
+  else
+    PASSTHROUGH_ARGS+=("$arg")
+  fi
+done
 
 # Build the test image
 docker build -t versicle-verify -f Dockerfile.verification .
@@ -66,7 +81,9 @@ echo "🏃 Running verification tests..."
 # We mount the screenshots directory to persist artifacts
 docker run --rm \
   -v "$(pwd)/verification/screenshots:/app/verification/screenshots" \
-  versicle-verify "$@"
+  -e BASE_URL=http://localhost:5173 \
+  $DEBUG_ENV \
+  versicle-verify "${PASSTHROUGH_ARGS[@]}"
 
 # Capture the exit code from docker run
 EXIT_CODE=$?
