@@ -1,6 +1,5 @@
 import { test, expect } from "./utils";
 import { resetApp, getReaderFrame, captureScreenshot } from "./utils";
-import { Frame } from "@playwright/test";
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function waitForReaderFrame(page: any): Promise<Frame> {

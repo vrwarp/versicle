@@ -1,5 +1,5 @@
 import { test as base, expect } from '@playwright/test';
-import type { Page, Frame } from '@playwright/test';
+import type { Page, FrameLocator } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -16,7 +16,8 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
   // Patches console.log/info/debug to noop so spec-file log calls are
   // silent by default. Set DEBUG_PAGE_LOGS=1 to restore them.
   _suppressLogs: [
-    async (_args, use) => {
+      // eslint-disable-next-line no-empty-pattern
+    async ({}, use) => {
       if (!process.env.DEBUG_PAGE_LOGS) {
         const noop = () => {};
         console.log = noop;
@@ -193,7 +194,7 @@ export async function captureScreenshot(page: Page, name: string, hideTtsStatus:
   }
 }
 
-export function getReaderFrame(page: Page): Frame | null {
+export function getReaderFrame(page: Page): FrameLocator | null {
   for (const frame of page.frames()) {
     if (frame !== page.mainFrame() && (frame.name().includes('epubjs') || frame.url().includes('blob:'))) {
       return frame;
