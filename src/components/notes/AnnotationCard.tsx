@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { UserAnnotation } from '../../types/db';
-import { StickyNote, PenLine, Trash2, Copy } from 'lucide-react';
+import { StickyNote, PenLine, Trash2, Copy, Check } from 'lucide-react';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
 import { copyAnnotationAsMarkdown } from '../../lib/export-notes';
 import { useToastStore } from '../../store/useToastStore';
@@ -16,6 +16,7 @@ export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNa
     const showToast = useToastStore(state => state.showToast);
     const [isEditing, setIsEditing] = useState(false);
     const [editNoteText, setEditNoteText] = useState(annotation.note || '');
+    const [isCopied, setIsCopied] = useState(false);
 
     const handleDelete = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -28,6 +29,8 @@ export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNa
         e.stopPropagation();
         try {
             await copyAnnotationAsMarkdown(annotation);
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
             showToast('Copied to clipboard', 'success');
         } catch {
             showToast('Failed to copy', 'error');
@@ -119,10 +122,10 @@ export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNa
                     size="icon"
                     onClick={handleCopy}
                     className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    title="Copy as Markdown"
-                    aria-label="Copy as Markdown"
+                    title={isCopied ? "Copied" : "Copy as Markdown"}
+                    aria-label={isCopied ? "Copied" : "Copy as Markdown"}
                 >
-                    <Copy className="w-4 h-4" />
+                    {isCopied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                 </Button>
                 <Button
                     variant="ghost"
