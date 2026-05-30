@@ -92,7 +92,7 @@ test("tts resume after leaving book", async ({ page, baseURL }) => {
         console.log("Resume After Navigation Test Passed!");
         return;
       }
-    } catch (e) {
+    } catch {
       continue;
     }
   }
@@ -162,7 +162,7 @@ test("tts position persists across reload", async ({ page }) => {
           console.log(`Actually at index ${i} after reload`);
           break;
         }
-      } catch (err) {
+      } catch {
         continue;
       }
     }

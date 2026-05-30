@@ -2,6 +2,7 @@ import { test, expect } from "./utils";
 import { resetApp, ensureLibraryWithBook, captureScreenshot, navigateToChapter, getReaderFrame } from "./utils";
 import { Frame } from "@playwright/test";
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function waitForReaderFrame(page: any): Promise<Frame> {
   for (let i = 0; i < 20; i++) {
     const frame = getReaderFrame(page);

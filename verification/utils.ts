@@ -16,7 +16,7 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
   // Patches console.log/info/debug to noop so spec-file log calls are
   // silent by default. Set DEBUG_PAGE_LOGS=1 to restore them.
   _suppressLogs: [
-    async ({}, use) => {
+    async (_args, use) => {
       if (!process.env.DEBUG_PAGE_LOGS) {
         const noop = () => {};
         console.log = noop;
@@ -41,6 +41,7 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
     await page.addInitScript({ content: ttsPolyfillContent });
     await page.addInitScript({ content: 'window.__VERSICLE_SANITIZATION_DISABLED__ = true;' });
 
+  // eslint-disable-next-line react-hooks/rules-of-hooks
     await use(page);
   },
 });
@@ -66,12 +67,16 @@ export async function resetApp(page: Page) {
 
   await page.evaluate(async () => {
     // Disconnect Yjs to release IDB locks
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (typeof (window as any).__DISCONNECT_YJS__ === 'function') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (window as any).__DISCONNECT_YJS__();
     }
 
     // Disconnect main DB connection to release IndexedDB locks
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (typeof (window as any).__CLOSE_DB__ === 'function') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (window as any).__CLOSE_DB__();
     }
 

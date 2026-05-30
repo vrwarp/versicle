@@ -1,5 +1,5 @@
 import { test, expect } from './utils';
-import * as utils from './utils';
+
 
 test('Generative AI Settings Tab Test', async ({ page }) => {
   // 1. Open App

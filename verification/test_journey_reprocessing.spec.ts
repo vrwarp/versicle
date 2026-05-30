@@ -17,6 +17,7 @@ test("verify reprocessing interstitial", async ({ page }) => {
     bookId = await page.evaluate((title) => {
       return new Promise<string | null>((resolve) => {
         const req = indexedDB.open("EpubLibraryDB", 24);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
         req.onsuccess = (e: any) => {
           const db = e.target.result;
           console.log("IndexedDB EpubLibraryDB opened successfully. Object stores:", Array.from(db.objectStoreNames));
@@ -26,9 +27,12 @@ test("verify reprocessing interstitial", async ({ page }) => {
           }
           const tx = db.transaction("static_manifests", "readonly");
           const store = tx.objectStore("static_manifests");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
           store.getAll().onsuccess = (ev: any) => {
             const manifests = ev.target.result;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
             console.log("All manifests in DB:", manifests.map((m: any) => m.title));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const manifest = manifests.find((m: any) => m.title.includes(title));
             resolve(manifest ? manifest.bookId : null);
           };
@@ -55,10 +59,12 @@ test("verify reprocessing interstitial", async ({ page }) => {
   await page.evaluate((id) => {
     return new Promise<boolean>((resolve) => {
       const req = indexedDB.open("EpubLibraryDB", 24);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       req.onsuccess = (e: any) => {
         const db = e.target.result;
         const tx = db.transaction("static_manifests", "readwrite");
         const store = tx.objectStore("static_manifests");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
         store.get(id).onsuccess = (ev: any) => {
           const manifest = ev.target.result;
           manifest.schemaVersion = 0;
@@ -98,10 +104,12 @@ test("verify reprocessing interstitial", async ({ page }) => {
   const newVersion = await page.evaluate((id) => {
     return new Promise<number>((resolve) => {
       const req = indexedDB.open("EpubLibraryDB", 24);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       req.onsuccess = (e: any) => {
         const db = e.target.result;
         const tx = db.transaction("static_manifests", "readonly");
         const store = tx.objectStore("static_manifests");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
         store.get(id).onsuccess = (ev: any) => resolve(ev.target.result.schemaVersion);
       };
     });

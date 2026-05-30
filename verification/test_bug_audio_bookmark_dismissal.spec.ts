@@ -13,6 +13,7 @@ test('Audio Bookmark Dismissal Test', async ({ page }) => {
   // 2. Programmatically trigger triage mode (to save time)
   console.log('Triggering audio-triage mode...');
   await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).useReaderUIStore.getState().setCompassState({
       variant: 'audio-triage',
       targetAnnotation: {
@@ -43,6 +44,7 @@ test('Audio Bookmark Dismissal Test', async ({ page }) => {
   // 5. Try clicking inside the iframe (if possible)
   // We'll trigger triage mode again
   await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).useReaderUIStore.getState().setCompassState({
       variant: 'audio-triage',
       targetAnnotation: {
@@ -63,6 +65,7 @@ test('Audio Bookmark Dismissal Test', async ({ page }) => {
   // 6. Test X button dismissal
   console.log('Testing X button dismissal...');
   await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).useReaderUIStore.getState().setCompassState({
       variant: 'audio-triage',
       targetAnnotation: {

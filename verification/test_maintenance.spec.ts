@@ -18,6 +18,7 @@ test("orphan repair", async ({ page }) => {
     return new Promise<void>((resolve) => {
       // Use version 24 (current)
       const req = window.indexedDB.open("EpubLibraryDB", 24);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       req.onsuccess = (e: any) => {
         const db = e.target.result;
         // Target active stores for maintenance
@@ -89,6 +90,7 @@ test("orphan repair", async ({ page }) => {
     return new Promise<boolean>((resolve) => {
       // Use version 24
       const req = window.indexedDB.open("EpubLibraryDB", 24);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       req.onsuccess = (e: any) => {
         const db = e.target.result;
         const tx = db.transaction(["static_resources", "cache_render_metrics"], "readonly");

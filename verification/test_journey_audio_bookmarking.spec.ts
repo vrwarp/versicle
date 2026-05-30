@@ -20,6 +20,7 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   // SECURE SYNC: Wait for the TTS engine to actually load the new chapter's text
   console.log('Waiting for TTS queue synchronization...');
   await page.waitForFunction(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const queue = (window as any).useTTSStore.getState().queue;
     return queue.length > 0;
   }, { timeout: 15000 });
@@ -44,6 +45,7 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   // Wait for the async capture to complete in store
   console.log('Waiting for bookmark to appear in store...');
   await page.waitForFunction(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return Object.values((window as any).useAnnotationStore.getState().annotations).some((a: any) => a.type === 'audio-bookmark');
   }, { timeout: 10000 });
 
@@ -54,9 +56,12 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
 
   // Programmatically trigger triage mode via the store.
   await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const store = (window as any).useAnnotationStore.getState();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bookmark = Object.values(store.annotations).find((a: any) => a.type === 'audio-bookmark');
     if (bookmark) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (window as any).useReaderUIStore.getState().setCompassState({
         variant: 'audio-triage',
         targetAnnotation: bookmark
@@ -76,7 +81,9 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
 
   // Verify elevation in store
   const isHighlight = await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const store = (window as any).useAnnotationStore.getState();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return Object.values(store.annotations).some((a: any) => a.type === 'highlight');
   });
   expect(isHighlight).toBeTruthy();
@@ -85,6 +92,7 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   console.log('Testing Global Inbox...');
 
   // First ensure TTS is playing so we can pause/play to create a second bookmark
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isPlaying = await page.evaluate(() => (window as any).useTTSStore.getState().isPlaying);
   if (!isPlaying) {
     await page.getByTestId('compass-pill-active').getByLabel('Play').click();
@@ -102,7 +110,9 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
 
   // Wait for the second bookmark to appear
   await page.waitForFunction(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return Object.values((window as any).useAnnotationStore.getState().annotations)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((a: any) => a.type === 'audio-bookmark').length > 0;
   }, { timeout: 10000 });
 
@@ -125,7 +135,9 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
 
   // After discarding all bookmarks, the inbox should disappear
   const remaining = await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return Object.values((window as any).useAnnotationStore.getState().annotations)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((a: any) => a.type === 'audio-bookmark').length;
   });
   if (remaining === 0) {

@@ -41,7 +41,7 @@ test("smart toc success", async ({ page }) => {
   // Ensure book is present (reload might have cleared state or DB latency)
   try {
     await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 10000 });
-  } catch (e) {
+  } catch {
     console.log("Book card missing after reload in Success Scenario, ensuring library again...");
     await ensureLibraryWithBook(page);
     await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 30000 });
@@ -109,7 +109,7 @@ test("smart toc failure", async ({ page }) => {
   // Ensure book is present (reload might have cleared state or DB latency)
   try {
     await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 10000 });
-  } catch (e) {
+  } catch {
     console.log("Book card missing after reload, ensuring library again...");
     await ensureLibraryWithBook(page);
     await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 30000 });
@@ -158,7 +158,7 @@ test("smart toc failure", async ({ page }) => {
   // Ensure in reader
   try {
     await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 5000 });
-  } catch (e) {
+  } catch {
     await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 30000 });
     await page.locator('[data-testid^="book-card-"]').first().click();
     await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 20000 });

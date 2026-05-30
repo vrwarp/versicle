@@ -1,5 +1,5 @@
 import { test, expect } from './utils';
-import * as utils from './utils';
+
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function uploadBook(page: any, filename: string) {
   console.log(`Uploading ${filename}...`);
   const filePath = path.resolve(__dirname, filename);
@@ -53,10 +54,14 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   // Clear data
   await pageA.goto('/');
   await pageA.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (typeof (window as any).__DISCONNECT_YJS__ === 'function') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (window as any).__DISCONNECT_YJS__();
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (typeof (window as any).__CLOSE_DB__ === 'function') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (window as any).__CLOSE_DB__();
     }
     const dbs = await window.indexedDB.databases();
@@ -228,10 +233,14 @@ test('Offload Status Hydration', async ({ browser }) => {
 
   await pageA.goto('/');
   await pageA.evaluate(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (typeof (window as any).__DISCONNECT_YJS__ === 'function') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (window as any).__DISCONNECT_YJS__();
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (typeof (window as any).__CLOSE_DB__ === 'function') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (window as any).__CLOSE_DB__();
     }
     const dbs = await window.indexedDB.databases();

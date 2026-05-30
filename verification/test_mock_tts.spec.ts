@@ -1,5 +1,6 @@
 import { test, expect } from "./utils";
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function setupMockTts(page: any) {
   await page.goto("/");
   // Wait for initial load

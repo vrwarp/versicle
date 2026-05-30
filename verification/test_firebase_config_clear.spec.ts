@@ -1,5 +1,5 @@
 import { test, expect } from './utils';
-import * as utils from './utils';
+
 
 test('verify firebase config clear', async ({ page }) => {
   // Navigate to app

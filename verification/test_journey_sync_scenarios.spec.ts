@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename);
 const ttsPolyfillPath = path.resolve(__dirname, 'tts-polyfill.js');
 const ttsPolyfillContent = fs.readFileSync(ttsPolyfillPath, 'utf8');
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function injectMockFirestore(page: any, testUid: string) {
   const injectionCode = `
     window.__VERSICLE_MOCK_FIRESTORE__ = true;
@@ -23,6 +24,7 @@ function injectMockFirestore(page: any, testUid: string) {
   page.addInitScript({ content: ttsPolyfillContent });
 }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractWorkspaceId(snapshot: any, testUid: string): string | null {
   if (!snapshot) return null;
   try {
@@ -32,22 +34,27 @@ function extractWorkspaceId(snapshot: any, testUid: string): string | null {
         return key.split("/").pop() || null;
       }
     }
-  } catch (e) {
+  } catch {
     // Ignore
   }
   return null;
 }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function clearDataAndReload(page: any, baseURL: string) {
   await page.goto(baseURL || "/");
   await page.evaluate(async () => {
     // Disconnect Yjs to release IDB locks
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (typeof (window as any).__DISCONNECT_YJS__ === 'function') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (window as any).__DISCONNECT_YJS__();
     }
 
     // Disconnect main DB connection to release IndexedDB locks
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (typeof (window as any).__CLOSE_DB__ === 'function') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (window as any).__CLOSE_DB__();
     }
 
@@ -68,6 +75,7 @@ async function clearDataAndReload(page: any, baseURL: string) {
   await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 10000 });
 }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function pollForPersistence(page: any, expectedKeyPattern: string, retries = 20, delay = 500): Promise<string | null> {
   for (let i = 0; i < retries; i++) {
     const snapshotStr = await page.evaluate("localStorage.getItem('versicle_mock_firestore_snapshot')");
@@ -79,6 +87,7 @@ async function pollForPersistence(page: any, expectedKeyPattern: string, retries
   return null;
 }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getReaderFrame(page: any): Frame | null {
   for (const frame of page.frames()) {
     if (frame !== page.mainFrame() && (frame.name().includes('epubjs') || frame.url().includes('blob:'))) {
@@ -88,6 +97,7 @@ function getReaderFrame(page: any): Frame | null {
   return null;
 }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function waitForReaderFrame(page: any): Promise<Frame> {
   for (let i = 0; i < 20; i++) {
     const frame = getReaderFrame(page);
@@ -123,7 +133,7 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   if (!bookIdAttr) {
     throw new Error("Book card is missing data-testid");
   }
-  const bookId = bookIdAttr.replace("book-card-", "");
+  // const _bookId = bookIdAttr.replace("book-card-", "");
 
   // Open Reader
   await bookCard.click();
@@ -304,14 +314,14 @@ test("note marker affordance", async ({ browser, baseURL }) => {
   let frame = await waitForReaderFrame(page);
 
   // Navigate until we find text content (skip cover/images)
-  let foundText = false;
+  // let foundText = false;
   for (let i = 0; i < 5; i++) {
     try {
       if ((await frame.locator("p").count()) > 0) {
         foundText = true;
         break;
       }
-    } catch (e) {
+    } catch {
       console.log("Frame error/detachment, re-resolving...");
     }
     console.log("No text found, turning page...");

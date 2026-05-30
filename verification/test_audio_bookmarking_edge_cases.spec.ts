@@ -11,6 +11,7 @@ test('Timeout Protection', async ({ page }) => {
   await utils.navigateToChapter(page, 'toc-item-6');
 
   // Wait for TTS queue sync
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await page.waitForFunction(() => (window as any).useTTSStore.getState().queue.length > 0, { timeout: 15000 });
 
   // Start Playback
@@ -32,6 +33,7 @@ test('Timeout Protection', async ({ page }) => {
 
   // Verify NO bookmark in store
   const bookmarkExists = await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return Object.values((window as any).useAnnotationStore.getState().annotations).some((a: any) => a.type === 'audio-bookmark');
   });
   expect(bookmarkExists).toBeFalsy();
@@ -49,6 +51,7 @@ test('Navigation Guard', async ({ page }) => {
   await utils.navigateToChapter(page, 'toc-item-3');
 
   // Wait for queue to load for this chapter
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await page.waitForFunction(() => (window as any).useTTSStore.getState().queue.length > 0, { timeout: 15000 });
 
   // Start Playback
@@ -66,6 +69,7 @@ test('Navigation Guard', async ({ page }) => {
 
   // Wait for TTS queue to reload for the new chapter
   await page.waitForFunction(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const queue = (window as any).useTTSStore.getState().queue;
     return queue.length > 0;
   }, { timeout: 15000 });
@@ -80,6 +84,7 @@ test('Navigation Guard', async ({ page }) => {
   // Verify NO bookmark in store
   console.log('Verifying no stale bookmark was created...');
   const bookmarkExists = await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return Object.values((window as any).useAnnotationStore.getState().annotations).some((a: any) => a.type === 'audio-bookmark');
   });
   expect(bookmarkExists).toBeFalsy();
@@ -97,6 +102,7 @@ test('Inline HUD Discard', async ({ page }) => {
   await utils.navigateToChapter(page, 'toc-item-6');
 
   // Wait for TTS queue sync
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await page.waitForFunction(() => (window as any).useTTSStore.getState().queue.length > 0, { timeout: 15000 });
 
   // Trigger bookmark via gesture
@@ -113,15 +119,19 @@ test('Inline HUD Discard', async ({ page }) => {
   // Wait for bookmark to appear in store
   console.log('Waiting for bookmark to appear in store...');
   await page.waitForFunction(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return Object.values((window as any).useAnnotationStore.getState().annotations).some((a: any) => a.type === 'audio-bookmark');
   }, { timeout: 10000 });
 
   // Programmatically trigger triage mode via the store
   console.log('Opening Triage HUD programmatically...');
   await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const store = (window as any).useAnnotationStore.getState();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bookmark = Object.values(store.annotations).find((a: any) => a.type === 'audio-bookmark');
     if (bookmark) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (window as any).useReaderUIStore.getState().setCompassState({
         variant: 'audio-triage',
         targetAnnotation: bookmark
@@ -144,6 +154,7 @@ test('Inline HUD Discard', async ({ page }) => {
   await expect(page.getByTestId('compass-pill-triage')).not.toBeVisible();
 
   const bookmarkExists = await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return Object.values((window as any).useAnnotationStore.getState().annotations).some((a: any) => a.type === 'audio-bookmark');
   });
   expect(bookmarkExists).toBeFalsy();
@@ -161,6 +172,7 @@ test('Section Start Boundary', async ({ page }) => {
   await utils.navigateToChapter(page, 'toc-item-6');
 
   // Wait for TTS queue sync but do NOT play yet
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await page.waitForFunction(() => (window as any).useTTSStore.getState().queue.length > 0, { timeout: 15000 });
 
   // At index 0: Play briefly -> Pause -> Play
@@ -172,11 +184,13 @@ test('Section Start Boundary', async ({ page }) => {
 
   // Wait for bookmark to appear in store
   await page.waitForFunction(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return Object.values((window as any).useAnnotationStore.getState().annotations).some((a: any) => a.type === 'audio-bookmark');
   }, { timeout: 10000 });
 
   // Verify bookmark has text content
   const bookmark = await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return Object.values((window as any).useAnnotationStore.getState().annotations).find((a: any) => a.type === 'audio-bookmark') as any;
   });
   expect(bookmark).toBeTruthy();
