@@ -122,7 +122,9 @@ export class LexiconService {
             const shouldApplyBible = bibleLexiconEnabled === 'on' || (bibleLexiconEnabled === 'default' && this.globalBibleLexiconEnabled);
 
             if (shouldApplyBible) {
-                const bibleRules: LexiconRule[] = BIBLE_LEXICON_RULES.map((r, i) => ({
+                const bibleRules: LexiconRule[] = BIBLE_LEXICON_RULES
+                    .filter(r => !r.language || !language || language.toLowerCase().startsWith(r.language.toLowerCase()))
+                    .map((r, i) => ({
                     id: `bible-${i}`,
                     original: r.original,
                     replacement: r.replacement,
@@ -151,7 +153,9 @@ export class LexiconService {
             const shouldApplyBible = this.globalBibleLexiconEnabled;
 
             if (shouldApplyBible) {
-                const bibleRules: LexiconRule[] = BIBLE_LEXICON_RULES.map((r, i) => ({
+                const bibleRules: LexiconRule[] = BIBLE_LEXICON_RULES
+                    .filter(r => !r.language || !language || language.toLowerCase().startsWith(r.language.toLowerCase()))
+                    .map((r, i) => ({
                     id: `bible-${i}`,
                     original: r.original,
                     replacement: r.replacement,
