@@ -233,6 +233,7 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                             <input
                                                 id="max-logs"
                                                 type="number"
+                                                aria-label="Max GenAI debug logs"
                                                 min={1}
                                                 max={1000}
                                                 className="flex h-8 w-20 rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
