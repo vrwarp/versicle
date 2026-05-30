@@ -379,6 +379,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                         <div className="flex flex-col gap-2 w-full">
                                             <input
                                                 data-testid="lexicon-input-original"
+                                                aria-label="Original text"
                                                 className="border p-1 rounded flex-1 min-w-0 text-sm bg-background border-input text-foreground"
                                                 value={editingRule.original}
                                                 onChange={e => setEditingRule({ ...editingRule, original: e.target.value })}
@@ -388,6 +389,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                 <CornerDownRight size={16} className="text-muted-foreground shrink-0" />
                                                 <input
                                                     data-testid="lexicon-input-replacement"
+                                                    aria-label="Replacement text"
                                                     className="border p-1 rounded flex-1 min-w-0 text-sm bg-background border-input text-foreground"
                                                     value={editingRule.replacement}
                                                     onChange={e => setEditingRule({ ...editingRule, replacement: e.target.value })}
@@ -426,6 +428,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                     <label className="flex items-center gap-2 text-xs text-muted-foreground" title="Apply this rule before global rules">
                                                         <input
                                                             data-testid="lexicon-priority-checkbox"
+                                                            aria-label="Apply this rule before global rules"
                                                             type="checkbox"
                                                             checked={editingRule.applyBeforeGlobal || false}
                                                             onChange={e => setEditingRule({ ...editingRule, applyBeforeGlobal: e.target.checked })}
@@ -502,6 +505,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                         <div className="flex flex-col gap-2">
                             <input
                                 data-testid="lexicon-input-original"
+                                aria-label="Original text"
                                 className="border p-1 rounded flex-1 min-w-0 text-sm bg-background border-input text-foreground"
                                 value={editingRule?.original || ''}
                                 onChange={e => setEditingRule({ ...editingRule, original: e.target.value })}
@@ -512,6 +516,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                 <CornerDownRight size={16} className="text-muted-foreground shrink-0" />
                                 <input
                                     data-testid="lexicon-input-replacement"
+                                    aria-label="Replacement text"
                                     className="border p-1 rounded flex-1 min-w-0 text-sm bg-background border-input text-foreground"
                                     value={editingRule?.replacement || ''}
                                     onChange={e => setEditingRule({ ...editingRule, replacement: e.target.value })}
@@ -552,6 +557,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                     <label className="flex items-center gap-2 text-xs text-muted-foreground" title="Apply this rule before global rules">
                                         <input
                                             data-testid="lexicon-priority-checkbox"
+                                            aria-label="Apply this rule before global rules"
                                             type="checkbox"
                                             checked={editingRule?.applyBeforeGlobal || false}
                                             onChange={e => setEditingRule({ ...editingRule, applyBeforeGlobal: e.target.checked })}
@@ -579,6 +585,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                     <div className="flex flex-col gap-2">
                         <input
                             data-testid="lexicon-test-input"
+                            aria-label="Test sentence"
                             className="w-full border p-2 rounded text-sm bg-background border-input text-foreground"
                             placeholder="Type a sentence containing your words..."
                             value={testInput}

@@ -146,6 +146,7 @@ const StringListManager: React.FC<StringListManagerProps> = ({
                         <input
                             type="text"
                             value={newItem}
+                            aria-label={`New ${title.toLowerCase()}`}
                             onChange={(e) => {
                                 setNewItem(e.target.value);
                                 setError(null);
