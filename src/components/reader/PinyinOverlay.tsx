@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
+import { useVocabularyStore } from '../../store/useVocabularyStore';
 
 /**
  * Pinyin position entry.
@@ -34,6 +35,7 @@ export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({
 }) => {
   const currentTheme = usePreferencesStore(state => state.currentTheme) || 'light';
   const customTheme = usePreferencesStore(state => state.customTheme) || { bg: '#ffffff' };
+  const knownCharacters = useVocabularyStore(state => state.knownCharacters);
 
   if (positions.length === 0 || !containerNode) return null;
 
@@ -56,7 +58,7 @@ export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({
       className="absolute inset-0 pointer-events-none z-[10] overflow-visible"
       aria-hidden="true"
     >
-      {positions.map((pos, idx) => (
+      {positions.filter(pos => !knownCharacters[pos.char]).map((pos, idx) => (
         <span
           key={`${pos.char}-${idx}`}
           className="absolute text-muted-foreground whitespace-nowrap transition-opacity duration-200"
