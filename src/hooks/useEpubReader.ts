@@ -7,7 +7,6 @@ import { runCancellable, CancellationError } from '../lib/cancellable-task-runne
 import { createLogger } from '../lib/logger';
 import { usePreferencesStore } from '../store/usePreferencesStore';
 import { useBookStore } from '../store/useBookStore';
-import { useVocabularyStore } from '../store/useVocabularyStore';
 import {
   toTraditional,
   getPinyin,
@@ -276,7 +275,6 @@ export function useEpubReader(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const processChineseContentRef = useRef<(contents: any) => Promise<void>>(async () => { });
   const { forceTraditionalChinese, showPinyin, pinyinSize } = usePreferencesStore();
-  const { knownCharacters } = useVocabularyStore();
   const sandboxObserverRef = useRef<MutationObserver | null>(null);
 
   // Use a ref for options to access latest values in event listeners without re-binding
@@ -671,11 +669,9 @@ export function useEpubReader(
             if (prefs.showPinyin) {
               const currentText = textNode.nodeValue || '';
               const pinyinArray = getPinyin(currentText);
-              const vocab = useVocabularyStore.getState();
 
               for (let i = 0; i < currentText.length; i++) {
                 const char = currentText[i];
-                if (vocab.knownCharacters[char]) continue; // Smart Pinyin Filtering: Skip known characters!
                 if (/[\u4e00-\u9fff]/.test(char) && pinyinArray[i]) {
                   try {
                     const range = doc.createRange();
@@ -846,7 +842,7 @@ export function useEpubReader(
     (renditionRef.current as any).getContents().forEach((contents: any) => {
       processChineseContentRef.current(contents);
     });
-  }, [isReady, forceTraditionalChinese, showPinyin, pinyinSize, knownCharacters]);
+  }, [isReady, forceTraditionalChinese, showPinyin, pinyinSize]);
 
   useEffect(() => {
     if (!renditionRef.current || !isReady) return;
