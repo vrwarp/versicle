@@ -1,8 +1,9 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from "./utils";
 import { resetApp, ensureLibraryWithBook, captureScreenshot, navigateToChapter, getReaderFrame } from "./utils";
-import { Frame } from "@playwright/test";
+import type { Frame } from "@playwright/test";
 
-async function waitForReaderFrame(page: any): Promise<Frame> {
+async function waitForReaderFrame(page: Page): Promise<Frame> {
   for (let i = 0; i < 20; i++) {
     const frame = getReaderFrame(page);
     if (frame) {

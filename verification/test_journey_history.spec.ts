@@ -1,5 +1,4 @@
 import { test, expect } from './utils';
-import * as utils from './utils';
 
 test('Reading History Journey Test', async ({ page }) => {
   // 1. Load the app (using the demo book since library might be empty)

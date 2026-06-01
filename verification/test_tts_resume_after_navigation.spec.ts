@@ -92,7 +92,7 @@ test("tts resume after leaving book", async ({ page, baseURL }) => {
         console.log("Resume After Navigation Test Passed!");
         return;
       }
-    } catch (e) {
+    } catch {
       continue;
     }
   }
@@ -154,7 +154,7 @@ test("tts position persists across reload", async ({ page }) => {
     console.log(`Item 5 text after reload: ${restoredText.substring(0, 50)}...`);
     expect(item5Text).toBe(restoredText);
     console.log("Position Persistence Across Reload Test Passed!");
-  } catch (e) {
+  } catch {
     // Check what the current position actually is
     for (let i = 0; i < 10; i++) {
       try {
@@ -162,7 +162,7 @@ test("tts position persists across reload", async ({ page }) => {
           console.log(`Actually at index ${i} after reload`);
           break;
         }
-      } catch (err) {
+      } catch {
         continue;
       }
     }

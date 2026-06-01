@@ -65,7 +65,7 @@ test("tts cross chapter transition", async ({ page }) => {
         await captureScreenshot(page, "cross_chapter_same");
       }
     }
-  } catch (e) {
+  } catch {
     console.log("Exception checking queue state", e);
     await captureScreenshot(page, "cross_chapter_exception");
   }
