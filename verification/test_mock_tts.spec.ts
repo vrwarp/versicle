@@ -1,6 +1,7 @@
+import { Page } from '@playwright/test';
 import { test, expect } from "./utils";
 
-async function setupMockTts(page: any) {
+async function setupMockTts(page: Page) {
   await page.goto("/");
   // Wait for initial load
   await page.waitForTimeout(1000);
@@ -8,7 +9,7 @@ async function setupMockTts(page: any) {
   // Wait for voices to load (signifies polyfill is active)
   try {
     await page.waitForFunction("window.speechSynthesis.getVoices().length > 0", { timeout: 5000 });
-  } catch (e) {
+  } catch {
     console.log("Timeout waiting for voices, polyfill might not be injected.");
     const isMock = await page.evaluate("window.speechSynthesis.constructor.name === 'MockSpeechSynthesis'");
     console.log(`Is Mock Synthesis: ${isMock}`);

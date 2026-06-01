@@ -65,7 +65,7 @@ test('Journey Notes Test', async ({ page }) => {
         return true;
       }
       return false;
-    } catch (e) {
+    } catch {
       return false;
     }
   };

@@ -68,7 +68,7 @@ test('Journey Long Reading Test', async ({ page }) => {
         }
       }
       return false;
-    } catch (e) {
+    } catch {
       return false;
     }
   });
@@ -154,7 +154,7 @@ test('Journey Long Reading Test', async ({ page }) => {
   await page.waitForTimeout(3000);
 
   // 2. Verify Highlight is present
-  const countAfter = await page.evaluate(() => (window as any).__reader_added_annotations_count);
+  const countAfter = await page.evaluate(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__reader_added_annotations_count);
   console.log(`Annotations count after reload: ${countAfter}`);
 
   if (countAfter > 0) {

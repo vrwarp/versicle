@@ -20,7 +20,7 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   // SECURE SYNC: Wait for the TTS engine to actually load the new chapter's text
   console.log('Waiting for TTS queue synchronization...');
   await page.waitForFunction(() => {
-    const queue = (window as any).useTTSStore.getState().queue;
+    const queue = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().queue;
     return queue.length > 0;
   }, { timeout: 15000 });
 
@@ -44,7 +44,7 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   // Wait for the async capture to complete in store
   console.log('Waiting for bookmark to appear in store...');
   await page.waitForFunction(() => {
-    return Object.values((window as any).useAnnotationStore.getState().annotations).some((a: any) => a.type === 'audio-bookmark');
+    return Object.values((window as any  ).useAnnotationStore.getState().annotations).some((a: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => a.type === 'audio-bookmark');
   }, { timeout: 10000 });
 
   await utils.captureScreenshot(page, 'bookmark_1_captured');
@@ -54,10 +54,10 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
 
   // Programmatically trigger triage mode via the store.
   await page.evaluate(() => {
-    const store = (window as any).useAnnotationStore.getState();
-    const bookmark = Object.values(store.annotations).find((a: any) => a.type === 'audio-bookmark');
+    const store = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useAnnotationStore.getState();
+    const bookmark = Object.values(store.annotations).find((a: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => a.type === 'audio-bookmark');
     if (bookmark) {
-      (window as any).useReaderUIStore.getState().setCompassState({
+      (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useReaderUIStore.getState().setCompassState({
         variant: 'audio-triage',
         targetAnnotation: bookmark
       });
@@ -76,8 +76,8 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
 
   // Verify elevation in store
   const isHighlight = await page.evaluate(() => {
-    const store = (window as any).useAnnotationStore.getState();
-    return Object.values(store.annotations).some((a: any) => a.type === 'highlight');
+    const store = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useAnnotationStore.getState();
+    return Object.values(store.annotations).some((a: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => a.type === 'highlight');
   });
   expect(isHighlight).toBeTruthy();
 
@@ -85,7 +85,7 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   console.log('Testing Global Inbox...');
 
   // First ensure TTS is playing so we can pause/play to create a second bookmark
-  const isPlaying = await page.evaluate(() => (window as any).useTTSStore.getState().isPlaying);
+  const isPlaying = await page.evaluate(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().isPlaying);
   if (!isPlaying) {
     await page.getByTestId('compass-pill-active').getByLabel('Play').click();
     await expect(page.getByTestId('compass-pill-active').getByLabel('Pause')).toBeVisible({ timeout: 5000 });
@@ -102,8 +102,8 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
 
   // Wait for the second bookmark to appear
   await page.waitForFunction(() => {
-    return Object.values((window as any).useAnnotationStore.getState().annotations)
-      .filter((a: any) => a.type === 'audio-bookmark').length > 0;
+    return Object.values((window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useAnnotationStore.getState().annotations)
+      .filter((a: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => a.type === 'audio-bookmark').length > 0;
   }, { timeout: 10000 });
 
   // Go back to library
@@ -125,8 +125,8 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
 
   // After discarding all bookmarks, the inbox should disappear
   const remaining = await page.evaluate(() => {
-    return Object.values((window as any).useAnnotationStore.getState().annotations)
-      .filter((a: any) => a.type === 'audio-bookmark').length;
+    return Object.values((window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useAnnotationStore.getState().annotations)
+      .filter((a: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => a.type === 'audio-bookmark').length;
   });
   if (remaining === 0) {
     await expect(page.getByText('Audio Bookmarks Inbox')).not.toBeVisible();

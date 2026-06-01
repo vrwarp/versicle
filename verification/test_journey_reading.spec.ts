@@ -56,7 +56,7 @@ test("reading journey", async ({ page }) => {
 
     try {
       await expect(body).not.toHaveText(initialText, { timeout: 2000 });
-    } catch (e) {
+    } catch {
       console.log(`Primary action ${action} failed to update text within 2s. Attempting fallback click...`);
       const viewport = page.viewportSize();
       if (viewport) {
@@ -68,7 +68,7 @@ test("reading journey", async ({ page }) => {
       }
       try {
         await expect(body).not.toHaveText(initialText, { timeout: 5000 });
-      } catch (err) {
+      } catch {
         console.warn(`WARNING: Navigation failed even after fallback. Text remains: ${initialText}`);
       }
     }

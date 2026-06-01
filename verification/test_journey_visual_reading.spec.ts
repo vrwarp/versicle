@@ -1,8 +1,9 @@
+import { Page } from '@playwright/test';
 import { test, expect } from "./utils";
 import { resetApp, getReaderFrame, captureScreenshot } from "./utils";
 import { Frame } from "@playwright/test";
 
-async function waitForReaderFrame(page: any): Promise<Frame> {
+async function waitForReaderFrame(page: Page): Promise<Frame> {
   for (let i = 0; i < 20; i++) {
     const frame = getReaderFrame(page);
     if (frame) {
@@ -36,7 +37,7 @@ test("journey visual reading", async ({ page }) => {
   try {
     // Use loose match for Chapter I
     await page.getByText("Chapter I", { exact: false }).first().click();
-  } catch (e) {
+  } catch {
     console.log("Failed to click 'Chapter I' by text. Trying toc-item-2...");
     await page.getByTestId("toc-item-2").click();
   }
@@ -50,7 +51,7 @@ test("journey visual reading", async ({ page }) => {
   // Wait for content
   try {
     await frame.locator("p").first().waitFor({ timeout: 5000 });
-  } catch (e) {
+  } catch {
     // Ignore
   }
 

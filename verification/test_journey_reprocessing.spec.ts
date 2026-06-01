@@ -17,7 +17,7 @@ test("verify reprocessing interstitial", async ({ page }) => {
     bookId = await page.evaluate((title) => {
       return new Promise<string | null>((resolve) => {
         const req = indexedDB.open("EpubLibraryDB", 24);
-        req.onsuccess = (e: any) => {
+        req.onsuccess = (e: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
           const db = e.target.result;
           console.log("IndexedDB EpubLibraryDB opened successfully. Object stores:", Array.from(db.objectStoreNames));
           if (!db.objectStoreNames.contains("static_manifests")) {
@@ -26,10 +26,10 @@ test("verify reprocessing interstitial", async ({ page }) => {
           }
           const tx = db.transaction("static_manifests", "readonly");
           const store = tx.objectStore("static_manifests");
-          store.getAll().onsuccess = (ev: any) => {
+          store.getAll().onsuccess = (ev: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
             const manifests = ev.target.result;
-            console.log("All manifests in DB:", manifests.map((m: any) => m.title));
-            const manifest = manifests.find((m: any) => m.title.includes(title));
+            console.log("All manifests in DB:", manifests.map((m: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => m.title));
+            const manifest = manifests.find((m: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => m.title.includes(title));
             resolve(manifest ? manifest.bookId : null);
           };
         };
@@ -55,11 +55,11 @@ test("verify reprocessing interstitial", async ({ page }) => {
   await page.evaluate((id) => {
     return new Promise<boolean>((resolve) => {
       const req = indexedDB.open("EpubLibraryDB", 24);
-      req.onsuccess = (e: any) => {
+      req.onsuccess = (e: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
         const db = e.target.result;
         const tx = db.transaction("static_manifests", "readwrite");
         const store = tx.objectStore("static_manifests");
-        store.get(id).onsuccess = (ev: any) => {
+        store.get(id).onsuccess = (ev: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
           const manifest = ev.target.result;
           manifest.schemaVersion = 0;
           store.put(manifest).onsuccess = () => resolve(true);
@@ -86,7 +86,7 @@ test("verify reprocessing interstitial", async ({ page }) => {
 
     // Take screenshot while it's processing
     await captureScreenshot(page, "reprocessing_interstitial");
-  } catch (e) {
+  } catch {
     console.log("Interstitial missed or failed to appear (might be too fast):", e);
     await captureScreenshot(page, "reprocessing_missed");
   }
@@ -98,11 +98,11 @@ test("verify reprocessing interstitial", async ({ page }) => {
   const newVersion = await page.evaluate((id) => {
     return new Promise<number>((resolve) => {
       const req = indexedDB.open("EpubLibraryDB", 24);
-      req.onsuccess = (e: any) => {
+      req.onsuccess = (e: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
         const db = e.target.result;
         const tx = db.transaction("static_manifests", "readonly");
         const store = tx.objectStore("static_manifests");
-        store.get(id).onsuccess = (ev: any) => resolve(ev.target.result.schemaVersion);
+        store.get(id).onsuccess = (ev: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => resolve(ev.target.result.schemaVersion);
       };
     });
   }, bookId);

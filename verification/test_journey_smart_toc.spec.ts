@@ -41,7 +41,7 @@ test("smart toc success", async ({ page }) => {
   // Ensure book is present (reload might have cleared state or DB latency)
   try {
     await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 10000 });
-  } catch (e) {
+  } catch {
     console.log("Book card missing after reload in Success Scenario, ensuring library again...");
     await ensureLibraryWithBook(page);
     await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 30000 });
@@ -109,7 +109,7 @@ test("smart toc failure", async ({ page }) => {
   // Ensure book is present (reload might have cleared state or DB latency)
   try {
     await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 10000 });
-  } catch (e) {
+  } catch {
     console.log("Book card missing after reload, ensuring library again...");
     await ensureLibraryWithBook(page);
     await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 30000 });
@@ -133,7 +133,7 @@ test("smart toc failure", async ({ page }) => {
   // Expect error toast
   try {
     await expect(page.getByText("AI features are disabled or not configured")).toBeVisible({ timeout: 10000 });
-  } catch (e) {
+  } catch {
     console.log("Taking failure screenshot for Scenario 1...");
     await page.screenshot({ path: path.join(screenshotsDir, `smart_toc_failure_sc1_${suffix}.png`) });
     throw e;
@@ -158,7 +158,7 @@ test("smart toc failure", async ({ page }) => {
   // Ensure in reader
   try {
     await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 5000 });
-  } catch (e) {
+  } catch {
     await page.locator('[data-testid^="book-card-"]').first().waitFor({ timeout: 30000 });
     await page.locator('[data-testid^="book-card-"]').first().click();
     await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 20000 });
@@ -178,7 +178,7 @@ test("smart toc failure", async ({ page }) => {
   // Expect failure toast
   try {
     await expect(page.getByText("Failed to enhance TOC")).toBeVisible({ timeout: 5000 });
-  } catch (e) {
+  } catch {
     console.log("Taking failure screenshot...");
     await page.screenshot({ path: path.join(screenshotsDir, `smart_toc_failure_debug_${suffix}.png`) });
     throw e;

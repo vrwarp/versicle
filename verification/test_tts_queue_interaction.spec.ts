@@ -154,7 +154,7 @@ test("tts queue highlight follows playback", async ({ page }) => {
       console.log("Still on item 0, checking item 1...");
       await expect(page.getByTestId("tts-queue-item-1")).toBeVisible();
     }
-  } catch (e) {
+  } catch {
     // Ignore
   }
 

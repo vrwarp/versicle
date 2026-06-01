@@ -16,7 +16,7 @@ vi.mock('../store/useTTSStore', () => ({
             customAbbreviations: [],
             alwaysMerge: [],
             sentenceStarters: [],
-            profiles: { 'en': { minSentenceLength: 36 } }
+            profiles: { 'en': { minSentenceLength: 36 } }, activeLanguage: 'en', setActiveLanguage: vi.fn()
         })
     }
 }));
