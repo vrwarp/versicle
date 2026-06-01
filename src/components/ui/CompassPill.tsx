@@ -126,7 +126,7 @@ const VocabTile: React.FC<{
         )}
         style={{ touchAction: 'manipulation' }}
       >
-        <span className="text-[10px] text-muted-foreground/80 leading-none h-3 select-none">
+        <span className="text-[10px] text-muted-foreground/80 leading-none h-3 select-none font-pinyin">
           {pinyin.split(' / ')[0]}
         </span>
         <span className="text-lg font-semibold leading-none mt-1 select-none">
@@ -698,7 +698,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
         </p>
 
         {/* Body: Tactile Character Tiles */}
-        <div className="flex flex-wrap items-center gap-2 mb-4 justify-center">
+        <div className="flex flex-wrap items-center gap-2 mb-4 justify-center max-h-[300px] overflow-y-auto p-1 custom-scrollbar">
           {Array.from(popover.text || '').map((char, index) => {
             const isChinese = /[\u4e00-\u9fff]/.test(char);
             

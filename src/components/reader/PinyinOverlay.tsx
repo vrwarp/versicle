@@ -61,7 +61,7 @@ export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({
       {positions.filter(pos => !knownCharacters[pos.char]).map((pos, idx) => (
         <span
           key={`${pos.char}-${idx}`}
-          className="absolute text-muted-foreground whitespace-nowrap transition-opacity duration-200"
+          className="absolute text-muted-foreground whitespace-nowrap transition-opacity duration-200 font-pinyin"
           style={{
             top: pos.top - 2, // Position just above the character
             left: pos.left,
