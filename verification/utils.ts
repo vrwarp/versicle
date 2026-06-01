@@ -17,7 +17,7 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
   // Patches console.log/info/debug to noop so spec-file log calls are
   // silent by default. Set DEBUG_PAGE_LOGS=1 to restore them.
   _suppressLogs: [
-    async (_args, use) => {
+    async ({}, use) /* eslint-disable-line no-empty-pattern */ => {
       if (!process.env.DEBUG_PAGE_LOGS) {
         const noop = () => {};
         console.log = noop;

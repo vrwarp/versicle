@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { test, expect } from './utils';
 import * as utils from './utils';
 import * as fs from 'fs';
