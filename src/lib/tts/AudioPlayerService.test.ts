@@ -58,7 +58,8 @@ vi.mock('../../db/DBService', () => ({
         getBookMetadata: vi.fn().mockResolvedValue({
             title: 'Test Book',
             author: 'Test Author',
-            coverUrl: 'http://example.com/cover.jpg'
+            coverUrl: 'http://example.com/cover.jpg',
+            useSyntheticToc: true
         }),
         getBookStructure: vi.fn().mockResolvedValue({ toc: [] }),
         updatePlaybackState: vi.fn().mockResolvedValue(undefined),

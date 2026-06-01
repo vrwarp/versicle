@@ -12,6 +12,9 @@ import { useShallow } from 'zustand/react/shallow';
 import { LexiconManager } from './LexiconManager';
 
 import { useRemoteProgress } from '../../hooks/useRemoteProgress';
+import { findTocItem, resolveSyntheticPreference } from '../../lib/reader/titleResolver';
+
+
 
 export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition }) => {
     // Correctly using the store-based toast
@@ -36,9 +39,11 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
     const hasQueueItems = useTTSStore(state => state.queue.length > 0);
     const isPlaying = useTTSStore(state => state.isPlaying);
 
-    const { immersiveMode, currentSectionTitle, currentBookId, jumpToLocation, resetCompassState } = useReaderUIStore(useShallow(state => ({
+    const { immersiveMode, toc, currentSectionTitle, currentSectionId, currentBookId, jumpToLocation, resetCompassState } = useReaderUIStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
+        toc: state.toc,
         currentSectionTitle: state.currentSectionTitle,
+        currentSectionId: state.currentSectionId,
         currentBookId: state.currentBookId,
         jumpToLocation: state.jumpToLocation,
         resetCompassState: state.resetCompassState
@@ -206,15 +211,14 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
         // Get progress from reading state (local device)
         progress = (lastReadBookProgress?.percentage || 0) * 100;
     } else if ((variant === 'active' || variant === 'compact') && isReaderActive && currentBook) {
-        // If queue is empty, CompassPill falls back to its own logic, but we can override it here.
-        // If queue has items, CompassPill uses queue item title.
-        // We can pass `title` as Book Title and `subtitle` as Section Title to be explicit.
-        if (!hasQueueItems) {
-            title = currentBook.title;
-            subtitle = currentSectionTitle || undefined;
-            // Get progress from reading state (local device)
-            progress = (currentBookProgress?.percentage || 0) * 100;
-        }
+        title = currentBook.title;
+        const useSynthetic = resolveSyntheticPreference(currentBook);
+        const currentToc = (useSynthetic && currentBook.syntheticToc) ? currentBook.syntheticToc : toc;
+        
+        const resolvedItem = currentSectionId ? findTocItem(currentToc, currentSectionId) : null;
+        subtitle = resolvedItem?.label || currentSectionTitle || undefined;
+        // Get progress from reading state (local device)
+        progress = (currentBookProgress?.percentage || 0) * 100;
     }
 
     return (

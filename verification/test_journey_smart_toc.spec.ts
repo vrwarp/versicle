@@ -58,7 +58,28 @@ test("smart toc success", async ({ page }) => {
   // Before enabling, check original title exists
   await expect(page.getByText("CHAPTER I. Down the Rabbit-Hole")).toBeVisible();
 
-  await page.getByLabel("Generated Titles").click();
+  await page.locator("#synthetic-toc-mode").click();
+
+  // Debug: capture UI state right after the switch click
+  const dbgSuffix = page.viewportSize()?.width && page.viewportSize()!.width < 600 ? "mobile" : "desktop";
+  await page.screenshot({ path: path.join(__dirname, `screenshots/debug_switch_click_success_${dbgSuffix}.png`) });
+
+  // Log DOM state for diagnosis
+  const domState = await page.evaluate(() => {
+    const sw = document.getElementById("synthetic-toc-mode");
+    const allBtns = Array.from(document.querySelectorAll("button")).map((b) => ({
+      text: (b.textContent ?? "").trim().substring(0, 60),
+      ariaLabel: b.getAttribute("aria-label"),
+      role: b.getAttribute("role"),
+      disabled: b.disabled,
+    }));
+    return {
+      switchAriaChecked: sw?.getAttribute("aria-checked"),
+      switchDataState: sw?.getAttribute("data-state"),
+      allButtons: allBtns.slice(0, 30),
+    };
+  });
+  console.log("DOM_STATE_AFTER_SWITCH:", JSON.stringify(domState, null, 2));
 
   // 6. Click Enhance
   const enhanceBtn = page.getByRole("button", { name: "Enhance Titles with AI" });
@@ -120,7 +141,10 @@ test("smart toc failure", async ({ page }) => {
 
   await page.getByTestId("reader-toc-button").click();
   await expect(page.getByTestId("reader-toc-sidebar")).toBeVisible();
-  await page.getByLabel("Generated Titles").click();
+  await page.locator("#synthetic-toc-mode").click();
+  // Debug: capture state after switch click in failure scenario
+  const failDbgSuffix = page.viewportSize()?.width && page.viewportSize()!.width < 600 ? "mobile" : "desktop";
+  await page.screenshot({ path: path.join(__dirname, `screenshots/debug_switch_click_fail_${failDbgSuffix}.png`) });
 
   await page.getByRole("button", { name: "Enhance Titles with AI" }).click();
 
@@ -166,7 +190,7 @@ test("smart toc failure", async ({ page }) => {
 
   await page.getByTestId("reader-toc-button").click();
   await expect(page.getByTestId("reader-toc-sidebar")).toBeVisible();
-  await page.getByLabel("Generated Titles").click();
+  await page.locator("#synthetic-toc-mode").click();
 
   await page.getByRole("button", { name: "Enhance Titles with AI" }).click();
 
