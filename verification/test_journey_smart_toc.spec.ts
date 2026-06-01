@@ -190,7 +190,12 @@ test("smart toc failure", async ({ page }) => {
 
   await page.getByTestId("reader-toc-button").click();
   await expect(page.getByTestId("reader-toc-sidebar")).toBeVisible();
-  await page.locator("#synthetic-toc-mode").click();
+  // The switch may already be ON (useSyntheticToc persisted from scenario 1). Click only if OFF.
+  const sc2Switch = page.locator("#synthetic-toc-mode");
+  if ((await sc2Switch.getAttribute("data-state")) !== "checked") {
+    await sc2Switch.click();
+  }
+  await expect(page.getByRole("button", { name: "Enhance Titles with AI" })).toBeVisible({ timeout: 5000 });
 
   await page.getByRole("button", { name: "Enhance Titles with AI" }).click();
 

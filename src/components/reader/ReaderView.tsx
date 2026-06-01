@@ -872,12 +872,10 @@ export const ReaderView: React.FC = () => {
             // fires an observer which re-triggers this effect — without this guard,
             // that causes a reset race that clears the toggle.
             if (!userHasExplicitlySetSyntheticToc.current) {
-                if (bookMetadata.useSyntheticToc !== undefined) {
-                    setUseSyntheticToc(bookMetadata.useSyntheticToc);
-                } else {
-                    const hasSyntheticToc = bookMetadata.syntheticToc && bookMetadata.syntheticToc.length > 0;
-                    setUseSyntheticToc(!!hasSyntheticToc);
-                }
+                // bookMetadata.syntheticToc is always set from static_structure.toc (the original
+                // epub TOC), so we can't use its presence to infer whether AI titles exist.
+                // Only trust the explicit useSyntheticToc flag saved in the Yjs store.
+                setUseSyntheticToc(bookMetadata.useSyntheticToc === true);
             }
         }
     }, [bookMetadata]);
