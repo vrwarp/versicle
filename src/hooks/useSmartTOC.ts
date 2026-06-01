@@ -5,6 +5,7 @@ import { genAIService } from '../lib/genai/GenAIService';
 import { dbService } from '../db/DBService';
 import { useGenAIStore } from '../store/useGenAIStore';
 import { useToastStore } from '../store/useToastStore';
+import { useLibraryStore } from '../store/useLibraryStore';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('useSmartTOC');
@@ -65,6 +66,18 @@ export function useSmartTOC(
 
       // Persist enhanced TOC to static_structure in IDB
       await dbService.updateBookStructure(bookId, newToc);
+
+      // Reactively update local static metadata cache in useLibraryStore
+      useLibraryStore.setState((state) => {
+        const nextStaticMetadata = { ...state.staticMetadata };
+        if (nextStaticMetadata[bookId]) {
+          nextStaticMetadata[bookId] = {
+            ...nextStaticMetadata[bookId],
+            syntheticToc: newToc
+          };
+        }
+        return { staticMetadata: nextStaticMetadata };
+      });
 
       setSyntheticToc(newToc);
       showToast('Table of Contents enhanced successfully!', 'success');

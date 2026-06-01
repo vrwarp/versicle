@@ -359,8 +359,8 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   };
 
   const currentItem = queue[currentIndex];
-  // Title priority: Queue Item Title -> Reader Store Title -> "Section X"
-  const sectionTitle = currentItem?.title || readerSectionTitle || `Section ${currentIndex + 1}`;
+  // Title priority: Subtitle Prop (real-time toggle) -> Queue Item Title -> Reader Store Title -> "Section X"
+  const sectionTitle = subtitle || currentItem?.title || readerSectionTitle || `Section ${currentIndex + 1}`;
 
   const displayTitle = title || book?.title || "Current Book";
   const displaySubtitle = subtitle || sectionTitle;

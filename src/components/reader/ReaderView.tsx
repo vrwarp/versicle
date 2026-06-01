@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import type { NavigationItem } from 'epubjs';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useBookStore } from '../../store/useBookStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useBook } from '../../store/selectors';
 import { useShallow } from 'zustand/react/shallow';
@@ -11,6 +12,7 @@ import { useUIStore } from '../../store/useUIStore';
 import { useTTS } from '../../hooks/useTTS';
 import { useEpubReader, type EpubReaderOptions } from '../../hooks/useEpubReader';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
+import { findTocItem } from '../../lib/reader/titleResolver';
 import { AnnotationList } from './AnnotationList';
 import { LexiconManager } from './LexiconManager';
 import { VisualSettings } from './VisualSettings';
@@ -383,7 +385,6 @@ export const ReaderView: React.FC = () => {
         isReady: isRenditionReady,
         areLocationsReady,
         isLoading: hookLoading,
-        metadata,
         error: hookError
     } = useEpubReader(bookId, viewerRef as React.RefObject<HTMLElement>, readerOptions);
 
@@ -420,16 +421,16 @@ export const ReaderView: React.FC = () => {
     const containerNode = (rendition as any)?.manager?.container || null;
 
     useEffect(() => {
-        metadataRef.current = metadata;
+        metadataRef.current = bookMetadata;
 
         // Check version and redirect if outdated
-        if (metadata) {
-            const effectiveVersion = metadata.version ?? 0;
+        if (bookMetadata) {
+            const effectiveVersion = bookMetadata.version ?? 0;
             if (effectiveVersion < CURRENT_BOOK_VERSION && bookId) {
                 navigate('/', { state: { reprocessBookId: bookId } });
             }
         }
-    }, [metadata, bookId, navigate]);
+    }, [bookMetadata, bookId, navigate]);
 
     const bookRef = useRef(book);
     useEffect(() => {
@@ -813,41 +814,28 @@ export const ReaderView: React.FC = () => {
 
     const [useSyntheticToc, setUseSyntheticToc] = useState(false);
     const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);
+    // Tracks whether the user has explicitly toggled the switch in this session.
+    // Prevents the bookMetadata effect from overriding their choice when Yjs
+    // fires an observer after updateBook (which would cause a reset race).
+    const userHasExplicitlySetSyntheticToc = useRef(false);
 
     // Determine active TOC item based on currentSectionId (href)
     const activeTocId = useMemo(() => {
         if (!currentSectionId) return null;
-        let bestMatchId: string | null = null;
-
         const currentToc = useSyntheticToc ? syntheticToc : toc;
-
-        const traverse = (items: NavigationItem[]): boolean => {
-            for (const item of items) {
-                const itemPath = item.href.split('#')[0];
-                const sectionPath = currentSectionId.split('#')[0];
-
-                if (itemPath === sectionPath) {
-                    // Found a file match.
-                    // If we have not found a match yet, take this one (likely the parent/chapter start)
-                    if (!bestMatchId) {
-                        bestMatchId = item.id;
-                    }
-                    // If we find an exact match (including hash if any), that's definitely the one
-                    if (item.href === currentSectionId) {
-                        bestMatchId = item.id;
-                        return true;
-                    }
-                }
-                if (item.subitems && item.subitems.length > 0) {
-                    if (traverse(item.subitems)) return true;
-                }
-            }
-            return false;
-        };
-
-        traverse(currentToc);
-        return bestMatchId;
+        const resolvedItem = findTocItem(currentToc, currentSectionId);
+        return resolvedItem ? resolvedItem.id : null;
     }, [toc, syntheticToc, useSyntheticToc, currentSectionId]);
+
+    // Keep currentSectionTitle in sync with the active TOC item when preference changes
+    useEffect(() => {
+        if (!currentSectionId) return;
+        const currentToc = useSyntheticToc ? syntheticToc : toc;
+        const resolvedItem = findTocItem(currentToc, currentSectionId);
+        if (resolvedItem && resolvedItem.label !== currentSectionTitle) {
+            setCurrentSection(resolvedItem.label, currentSectionId);
+        }
+    }, [toc, syntheticToc, useSyntheticToc, currentSectionId, currentSectionTitle, setCurrentSection]);
 
     // Smart TOC Hook
     const { enhanceTOC, isEnhancing, progress: tocProgress } = useSmartTOC(
@@ -865,14 +853,34 @@ export const ReaderView: React.FC = () => {
     // Search State
     const [syncPanelOpen, setSyncPanelOpen] = useState(false);
 
+    // Reset the explicit-set guard whenever the user navigates to a different book
+    useEffect(() => {
+        userHasExplicitlySetSyntheticToc.current = false;
+    }, [bookId]);
+
     // Load synthetic TOC from metadata
     useEffect(() => {
-        if (metadata?.syntheticToc) {
-            setSyntheticToc(metadata.syntheticToc);
-        } else {
-            setSyntheticToc([]);
+        if (bookMetadata) {
+            if (bookMetadata.syntheticToc) {
+                setSyntheticToc(bookMetadata.syntheticToc);
+            } else {
+                setSyntheticToc([]);
+            }
+
+            // Only initialize useSyntheticToc from metadata if the user hasn't
+            // explicitly toggled it. When updateBook is called, the Yjs-backed store
+            // fires an observer which re-triggers this effect — without this guard,
+            // that causes a reset race that clears the toggle.
+            if (!userHasExplicitlySetSyntheticToc.current) {
+                if (bookMetadata.useSyntheticToc !== undefined) {
+                    setUseSyntheticToc(bookMetadata.useSyntheticToc);
+                } else {
+                    const hasSyntheticToc = bookMetadata.syntheticToc && bookMetadata.syntheticToc.length > 0;
+                    setUseSyntheticToc(!!hasSyntheticToc);
+                }
+            }
         }
-    }, [metadata]);
+    }, [bookMetadata]);
 
 
     const handlePrev = useCallback(() => {
@@ -1191,7 +1199,7 @@ export const ReaderView: React.FC = () => {
                         </Button>
                     </div>
                     <h1 className="text-sm font-medium truncate max-w-xs text-foreground hidden md:block">
-                        {metadata?.title || currentSectionTitle || 'Reading'}
+                        {currentSectionTitle || bookMetadata?.title || 'Reading'}
                     </h1>
                     <div className="flex items-center gap-1 md:gap-2">
                         <Sheet open={activeSidebar === 'audio-panel'} onOpenChange={(open) => setSidebar(open ? 'audio-panel' : 'none')}>
@@ -1265,7 +1273,13 @@ export const ReaderView: React.FC = () => {
                         toc={toc}
                         syntheticToc={syntheticToc}
                         useSyntheticToc={useSyntheticToc}
-                        onUseSyntheticTocChange={setUseSyntheticToc}
+                        onUseSyntheticTocChange={(val) => {
+                            userHasExplicitlySetSyntheticToc.current = true;
+                            setUseSyntheticToc(val);
+                            if (bookId) {
+                                useBookStore.getState().updateBook(bookId, { useSyntheticToc: val });
+                            }
+                        }}
                         activeTocId={activeTocId ?? undefined}
                         deviceMarkers={deviceMarkers}
                         onNavigate={(href) => {
