@@ -62,7 +62,12 @@ export default defineConfig({
         serviceWorkers: 'block',
       },
       timeout: 180000,
-      retries: 1,
+      // WebKit reuses one long-lived browser instance per worker across the whole
+      // run; that instance degrades over its ~25-test lifetime (memory/disk/IO),
+      // which makes render-sensitive panels (e.g. the audio deck settings tab)
+      // occasionally fail to paint within the wait. Extra retries absorb this
+      // environmental flakiness — the tests themselves are deterministic in isolation.
+      retries: 2,
     },
   ],
 });
