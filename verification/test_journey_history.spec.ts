@@ -47,9 +47,11 @@ test('Reading History Journey Test', async ({ page }) => {
 
   // 5. Check History again
   await page.click("[data-testid='reader-toc-button']");
-  if (!(await page.isVisible("[data-testid='reader-toc-sidebar']"))) {
-    await page.click("[data-testid='reader-toc-button']");
-  }
+  // Wait for sidebar to become visible before clicking tab-history (avoids race conditions in WebKit)
+  await page.waitForSelector("[data-testid='reader-toc-sidebar']", { state: 'visible', timeout: 5000 }).catch(() => {
+    // If sidebar not visible, toggle button again
+    return page.click("[data-testid='reader-toc-button']");
+  });
 
   await page.click("[data-testid='tab-history']");
 

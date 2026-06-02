@@ -27,17 +27,25 @@ test("tts resume after leaving book", async ({ page, baseURL }) => {
   // Start playback and advance position
   console.log("Starting playback and advancing...");
   await page.getByTestId("tts-play-pause-button").click();
+  await page.waitForTimeout(300);
 
-  // Skip forward 3 times (to item 3)
-  await page.getByTestId("tts-forward-button").click();
-  await page.waitForTimeout(300);
-  await page.getByTestId("tts-forward-button").click();
-  await page.waitForTimeout(300);
-  await page.getByTestId("tts-forward-button").click();
+  // Pause first to stop auto-advance while we skip
+  await page.getByTestId("tts-play-pause-button").click();
   await page.waitForTimeout(500);
 
-  // Verify we're at item 3
-  await expect(page.getByTestId("tts-queue-item-3")).toHaveAttribute("data-current", "true", { timeout: 5000 });
+  // Skip forward with explicit wait for each item to become current
+  await page.getByTestId("tts-forward-button").click();
+  await expect(page.getByTestId("tts-queue-item-1")).toHaveAttribute("data-current", "true", { timeout: 10000 });
+
+  await page.getByTestId("tts-forward-button").click();
+  await expect(page.getByTestId("tts-queue-item-2")).toHaveAttribute("data-current", "true", { timeout: 10000 });
+
+  await page.getByTestId("tts-forward-button").click();
+  await expect(page.getByTestId("tts-queue-item-3")).toHaveAttribute("data-current", "true", { timeout: 10000 });
+  console.log("At queue item 3");
+
+  // Resume playback
+  await page.getByTestId("tts-play-pause-button").click();
   console.log("At queue item 3");
 
   // Get the text of item 3 for later comparison
@@ -121,17 +129,16 @@ test("tts position persists across reload", async ({ page }) => {
   // Wait for queue
   await expect(page.getByTestId("tts-queue-item-0")).toBeVisible({ timeout: 10000 });
 
-  // Skip to item 5
+  // Skip to item 5 without starting TTS (forward button works in stopped state too)
   console.log("Advancing to item 5...");
-  for (let i = 0; i < 5; i++) {
+  // Skip with explicit item verification
+  for (let i = 1; i <= 5; i++) {
     await page.getByTestId("tts-forward-button").click();
-    await page.waitForTimeout(200);
+    await expect(page.getByTestId(`tts-queue-item-${i}`)).toHaveAttribute("data-current", "true", { timeout: 10000 });
   }
 
-  await page.waitForTimeout(1000);
-
   // Verify at item 5
-  await expect(page.getByTestId("tts-queue-item-5")).toHaveAttribute("data-current", "true", { timeout: 5000 });
+  await expect(page.getByTestId("tts-queue-item-5")).toHaveAttribute("data-current", "true", { timeout: 10000 });
   const item5Text = await page.getByTestId("tts-queue-item-5").innerText();
   console.log(`Item 5 text before reload: ${item5Text.substring(0, 50)}...`);
 

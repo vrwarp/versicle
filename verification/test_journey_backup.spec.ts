@@ -16,13 +16,13 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   await page.setInputFiles("data-testid=hidden-file-input", path.resolve(__dirname, "alice.epub"));
 
   const bookCard = page.locator("[data-testid^='book-card-']").first();
-  await expect(bookCard).toBeVisible({ timeout: 5000 });
+  await expect(bookCard).toBeVisible({ timeout: 20000 });
 
   // Click to open reader
   await bookCard.click();
 
   // Wait for reader to load
-  await expect(page.getByTestId("reader-iframe-container")).toBeVisible({ timeout: 5000 });
+  await expect(page.getByTestId("reader-iframe-container")).toBeVisible({ timeout: 15000 });
 
   // 2. Add Annotation via Lexicon rule
   await page.waitForTimeout(1000);
@@ -92,13 +92,13 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   await page.setInputFiles("data-testid=backup-file-input", backupPath);
 
   // Wait for reload
-  await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 5000 });
+  await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 15000 });
 
   // 6. Verify Restore
-  await expect(bookCard).toBeVisible({ timeout: 5000 });
+  await expect(bookCard).toBeVisible({ timeout: 15000 });
 
   // Since it was a light backup, the book should be "Offloaded" (cloud icon)
-  await expect(page.locator(".bg-black\\/20")).toBeVisible({ timeout: 5000 });
+  await expect(page.locator(".bg-black\\/20")).toBeVisible({ timeout: 10000 });
 
   await utils.captureScreenshot(page, "backup_restore_complete");
 
@@ -117,7 +117,7 @@ test('Journey Full Backup & Restore (ZIP)', async ({ page }) => {
   await page.setInputFiles("data-testid=hidden-file-input", path.resolve(__dirname, "alice.epub"));
 
   const bookCard = page.locator("[data-testid^='book-card-']").first();
-  await expect(bookCard).toBeVisible({ timeout: 5000 });
+  await expect(bookCard).toBeVisible({ timeout: 20000 });
 
   // 2. Export Full Backup
   await page.waitForTimeout(500);
@@ -165,13 +165,13 @@ test('Journey Full Backup & Restore (ZIP)', async ({ page }) => {
   await page.setInputFiles("data-testid=backup-file-input", backupPath);
 
   // Wait for reload
-  await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 5000 });
+  await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 15000 });
 
   // 5. Verify Restore
-  await expect(bookCard).toBeVisible({ timeout: 5000 });
+  await expect(bookCard).toBeVisible({ timeout: 20000 });
 
   // Should NOT be offloaded (no cloud icon overlay)
-  await expect(page.locator(".bg-black\\/20")).not.toBeVisible({ timeout: 5000 });
+  await expect(page.locator(".bg-black\\/20")).not.toBeVisible({ timeout: 10000 });
 
   await utils.captureScreenshot(page, "full_backup_restore_complete");
 

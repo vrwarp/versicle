@@ -108,12 +108,14 @@ class DBService {
           const { manifest, resourceCount, structure } = data;
           const inventory = inventoryBooks[manifest.bookId];
 
+          // coverBlob may be ArrayBuffer at runtime (stored as ArrayBuffer for WebKit IDB compatibility)
+          const rawCoverBlob = manifest.coverBlob as unknown as Blob | ArrayBuffer | undefined;
           return {
             id: manifest.bookId,
             title: inventory?.customTitle || inventory?.title || manifest.title,
             author: inventory?.customAuthor || inventory?.author || manifest.author,
             description: manifest.description,
-            coverBlob: manifest.coverBlob,
+            coverBlob: rawCoverBlob instanceof ArrayBuffer ? new Blob([rawCoverBlob]) : rawCoverBlob,
             addedAt: inventory?.addedAt || Date.now(),
 
             bookId: manifest.bookId,
@@ -160,12 +162,14 @@ class DBService {
       // Get inventory from Yjs store (primary source)
       const inventory = useBookStore.getState().books[id];
 
+      // coverBlob may be ArrayBuffer at runtime (stored as ArrayBuffer for WebKit IDB compatibility)
+      const rawCoverBlob2 = manifest.coverBlob as unknown as Blob | ArrayBuffer | undefined;
       return {
         id: manifest.bookId,
         title: inventory?.customTitle || inventory?.title || manifest.title,
         author: inventory?.customAuthor || inventory?.author || manifest.author,
         description: manifest.description,
-        coverBlob: manifest.coverBlob,
+        coverBlob: rawCoverBlob2 instanceof ArrayBuffer ? new Blob([rawCoverBlob2]) : rawCoverBlob2,
         addedAt: inventory?.addedAt || Date.now(),
 
         bookId: manifest.bookId,
@@ -322,6 +326,32 @@ class DBService {
    */
   async ingestBook(data: BookExtractionData, mode: 'add' | 'overwrite' = 'add'): Promise<void> {
     try {
+      // Pre-convert Blobs to ArrayBuffers before the transaction.
+      // WebKit's IDB structured clone does not support Blob objects; ArrayBuffer is required.
+      const coverBlob = data.manifest.coverBlob;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const manifestToStore: any = {
+        ...data.manifest,
+        coverBlob: coverBlob instanceof Blob ? await coverBlob.arrayBuffer() : coverBlob,
+      };
+
+      const epubBlob = data.resource.epubBlob;
+      const resourceToStore = {
+        ...data.resource,
+        epubBlob: epubBlob instanceof Blob ? await epubBlob.arrayBuffer() : epubBlob,
+      };
+
+      const tablesToStore = await Promise.all(
+        data.tableBatches.map(async (table) => {
+          const imageBlob = table.imageBlob;
+          return {
+            ...table,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            imageBlob: imageBlob instanceof Blob ? await imageBlob.arrayBuffer() : imageBlob as any,
+          };
+        })
+      );
+
       const db = await this.getDB();
       const tx = db.transaction([
         'static_manifests', 'static_resources', 'static_structure',
@@ -333,12 +363,12 @@ class DBService {
       const structureStore = tx.objectStore('static_structure');
 
       if (mode === 'overwrite') {
-        await manifestStore.put(data.manifest);
-        await resourceStore.put(data.resource);
+        await manifestStore.put(manifestToStore);
+        await resourceStore.put(resourceToStore);
         await structureStore.put(data.structure);
       } else {
-        await manifestStore.add(data.manifest);
-        await resourceStore.add(data.resource);
+        await manifestStore.add(manifestToStore);
+        await resourceStore.add(resourceToStore);
         await structureStore.add(data.structure);
       }
 
@@ -357,7 +387,7 @@ class DBService {
       await Promise.all(ttsPromises);
 
       const tableStore = tx.objectStore('cache_table_images');
-      const tablePromises = data.tableBatches.map(table => {
+      const tablePromises = tablesToStore.map(table => {
         return mode === 'overwrite' ? tableStore.put(table) : tableStore.add(table);
       });
       await Promise.all(tablePromises);
@@ -488,11 +518,12 @@ class DBService {
         throw new Error('File verification failed: Fingerprint mismatch.');
       }
 
-      // Store File
+      // Store File as ArrayBuffer (WebKit IDB does not support Blob structured clone)
+      const epubArrayBuffer = await file.arrayBuffer();
       const tx = db.transaction(['static_resources'], 'readwrite');
       const store = tx.objectStore('static_resources');
-      const resource = await store.get(id) || { bookId: id, epubBlob: file };
-      resource.epubBlob = file;
+      const resource = await store.get(id) || { bookId: id, epubBlob: epubArrayBuffer };
+      resource.epubBlob = epubArrayBuffer;
       await store.put(resource);
       await tx.done;
 
@@ -734,7 +765,15 @@ class DBService {
   async getTableImages(bookId: string): Promise<TableImage[]> {
     try {
       const db = await this.getDB();
-      return await db.getAllFromIndex('cache_table_images', 'by_bookId', bookId);
+      const rows = await db.getAllFromIndex('cache_table_images', 'by_bookId', bookId);
+      return rows.map(row => {
+        // imageBlob may be ArrayBuffer at runtime (stored as ArrayBuffer for WebKit IDB compatibility)
+        const rawImageBlob = row.imageBlob as unknown as Blob | ArrayBuffer;
+        return {
+          ...row,
+          imageBlob: rawImageBlob instanceof ArrayBuffer ? new Blob([rawImageBlob]) : rawImageBlob,
+        };
+      });
     } catch (error) {
       this.handleError(error);
     }

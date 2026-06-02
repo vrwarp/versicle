@@ -49,8 +49,13 @@ export { expect };
 
 export async function navigateToChapter(page: Page, chapterId: string = 'toc-item-6') {
   console.log(`Navigating to chapter: ${chapterId}...`);
-  await page.getByTestId('reader-toc-button').click();
-  await page.getByTestId(chapterId).click();
+  await page.getByTestId('reader-toc-button').click({ noWaitAfter: true });
+  // Wait for sidebar and items to be ready before clicking (WebKit animations can be slower)
+  await page.waitForSelector('[data-testid="reader-toc-sidebar"]', { state: 'visible', timeout: 8000 }).catch(() => {});
+  await page.waitForSelector('[data-testid^="toc-item-"]', { state: 'visible', timeout: 8000 }).catch(() => {});
+  // Scroll target chapter into view before clicking (needed when TOC item is off-screen)
+  await page.getByTestId(chapterId).scrollIntoViewIfNeeded().catch(() => {});
+  await page.getByTestId(chapterId).click({ force: true });
 
   await expect(page.getByTestId('reader-toc-sidebar')).not.toBeVisible();
 
@@ -75,11 +80,14 @@ export async function resetApp(page: Page) {
       await (window as any).__CLOSE_DB__();
     }
 
-    // Unregister Service Workers
+    // Unregister Service Workers (with timeout — WebKit's unregister() can hang indefinitely)
     if ('serviceWorker' in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
       for (const registration of registrations) {
-        await registration.unregister();
+        await Promise.race([
+          registration.unregister(),
+          new Promise<void>(resolve => setTimeout(resolve, 2000)),
+        ]);
       }
     }
 

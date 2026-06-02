@@ -89,7 +89,7 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
     await pageA.waitForTimeout(1000);
   }
 
-  await expect(pageA.locator("[data-testid^='book-card-']")).toHaveCount(booksToUpload.length, { timeout: 30000 });
+  await expect(pageA.locator("[data-testid^='book-card-']")).toHaveCount(booksToUpload.length, { timeout: 80000 });
   await pageA.waitForTimeout(1000);
   const bookTitlesA = await pageA.locator("[data-testid='book-title']").allTextContents();
   console.log(`[A] Book titles: ${bookTitlesA}`);
@@ -155,20 +155,25 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   await pageB.waitForTimeout(1000);
   await pageB.getByRole('button', { name: 'Sync & Cloud' }).click();
 
-  await expect(pageB.getByTestId('sync-halt-warning')).toBeVisible({ timeout: 10000 });
+  await expect(pageB.getByTestId('sync-halt-warning')).toBeVisible({ timeout: 20000 });
   await pageB.getByRole('button', { name: 'Switch' }).click();
 
   await expect(pageB.getByText('Finalize Workspace Switch?')).toBeVisible({ timeout: 15000 });
   await pageB.getByRole('button', { name: 'Yes, Finalize' }).click();
 
   await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 30000 });
+  await pageB.waitForTimeout(2000); // Wait for page to fully stabilize after potential internal navigation
 
   const injected = await pageB.evaluate(() => localStorage.getItem('versicle_mock_firestore_snapshot'));
   expect(injected).toBeTruthy();
 
-  for (let i = 0; i < 20; i++) {
-    const bookCards = await pageB.locator("[data-testid^='book-card-']").count();
-    if (bookCards > 0) break;
+  for (let i = 0; i < 30; i++) {
+    try {
+      const bookCards = await pageB.locator("[data-testid^='book-card-']").count();
+      if (bookCards > 0) break;
+    } catch {
+      // Context might be temporarily unstable during navigation
+    }
     await pageB.waitForTimeout(500);
   }
 
@@ -296,7 +301,7 @@ test('Offload Status Hydration', async ({ browser }) => {
   await pageB.waitForTimeout(1000);
   await pageB.getByRole('button', { name: 'Sync & Cloud' }).click();
 
-  await expect(pageB.getByTestId('sync-halt-warning')).toBeVisible({ timeout: 10000 });
+  await expect(pageB.getByTestId('sync-halt-warning')).toBeVisible({ timeout: 20000 });
   await pageB.getByRole('button', { name: 'Switch' }).click();
 
   await expect(pageB.getByText('Finalize Workspace Switch?')).toBeVisible({ timeout: 15000 });

@@ -53,5 +53,16 @@ export default defineConfig({
         hasTouch: true,
       },
     },
+    {
+      name: 'webkit',
+      use: {
+        ...devices['Desktop Safari'],
+        viewport: { width: 1280, height: 720 },
+        launchOptions: {},
+        serviceWorkers: 'block',
+      },
+      timeout: 180000,
+      retries: 1,
+    },
   ],
 });

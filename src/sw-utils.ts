@@ -4,7 +4,7 @@ export const DB_NAME = 'EpubLibraryDB';
 export const STATIC_MANIFESTS_STORE = 'static_manifests';
 export const BOOKS_STORE = 'books'; // Legacy
 
-export async function getCoverFromDB(bookId: string): Promise<Blob | undefined> {
+export async function getCoverFromDB(bookId: string): Promise<Blob | ArrayBuffer | undefined> {
   const db = await openDB(DB_NAME); // Opens with whatever version is current
 
   try {
@@ -28,13 +28,13 @@ export async function getCoverFromDB(bookId: string): Promise<Blob | undefined> 
 
 export async function createCoverResponse(bookId: string): Promise<Response> {
   try {
-    const coverBlob = await getCoverFromDB(bookId);
+    const coverData = await getCoverFromDB(bookId);
 
-    if (coverBlob && (coverBlob instanceof Blob || (coverBlob as { size: number }).size > 0)) {
-       // Check for blob-like object since instanceof might be flaky in tests
-      return new Response(coverBlob, {
+    if (coverData) {
+      const blob = coverData instanceof Blob ? coverData : new Blob([coverData as ArrayBuffer]);
+      return new Response(blob, {
         headers: {
-          'Content-Type': coverBlob.type || 'image/jpeg',
+          'Content-Type': blob.type || 'image/jpeg',
           'Cache-Control': 'public, max-age=31536000', // Long cache
         },
       });

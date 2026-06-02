@@ -59,6 +59,7 @@ test('Navigation Guard', async ({ page }) => {
   // Pause — this sets lastUserPauseTimestamp
   await page.getByTestId('compass-pill-active').getByLabel('Pause').click();
   await expect(page.getByTestId('compass-pill-active').getByLabel('Play')).toBeVisible({ timeout: 5000 });
+  await page.waitForTimeout(1000); // Allow WebKit to settle TTS state before TOC navigation
 
   // Navigate to a DIFFERENT chapter — this should clear lastUserPauseTimestamp
   console.log('Navigating to Chapter 5 during pause...');

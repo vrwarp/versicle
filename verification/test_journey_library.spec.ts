@@ -22,7 +22,7 @@ test('Library Journey Test', async ({ page }) => {
   // Verify book appears
   const bookCard = page.locator("[data-testid^='book-card-']").first();
   await expect(bookCard).toBeVisible({ timeout: 15000 });
-  await expect(page.getByText("Alice's Adventures in Wonderland")).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText("Alice's Adventures in Wonderland").first()).toBeVisible({ timeout: 15000 });
 
   await utils.captureScreenshot(page, 'library_2_demo_loaded');
 

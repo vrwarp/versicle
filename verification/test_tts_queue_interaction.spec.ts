@@ -95,22 +95,20 @@ test("tts skip rewind button", async ({ page }) => {
   console.log("Starting playback...");
   await page.getByTestId("tts-play-pause-button").click();
 
-  // Skip forward twice (to item 2)
-  console.log("Skipping forward twice...");
+  // Skip forward with explicit waits for each item transition
+  console.log("Skipping forward...");
   await page.getByTestId("tts-forward-button").click();
-  await page.waitForTimeout(500);
-  await page.getByTestId("tts-forward-button").click();
-  await page.waitForTimeout(500);
+  await expect(page.getByTestId("tts-queue-item-1")).toHaveAttribute("data-current", "true", { timeout: 10000 });
 
-  // Verify we're at item 2
-  await expect(page.getByTestId("tts-queue-item-2")).toHaveAttribute("data-current", "true", { timeout: 5000 });
+  await page.getByTestId("tts-forward-button").click();
+  await expect(page.getByTestId("tts-queue-item-2")).toHaveAttribute("data-current", "true", { timeout: 10000 });
 
   // Click Rewind button
   console.log("Clicking rewind button...");
   await page.getByTestId("tts-rewind-button").click();
 
   // Verify item 1 is now current
-  await expect(page.getByTestId("tts-queue-item-1")).toHaveAttribute("data-current", "true", { timeout: 5000 });
+  await expect(page.getByTestId("tts-queue-item-1")).toHaveAttribute("data-current", "true", { timeout: 10000 });
 
   await captureScreenshot(page, "skip_rewind_success");
   console.log("Skip Rewind Test Passed!");

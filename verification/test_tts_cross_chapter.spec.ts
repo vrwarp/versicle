@@ -100,11 +100,13 @@ test("tts chapter navigation during playback", async ({ page }) => {
   const chapter3FirstItem = await page.getByTestId("tts-queue-item-0").innerText();
   console.log(`Chapter III first item: ${chapter3FirstItem.substring(0, 50)}...`);
 
-  // Skip forward a few times
+  // Skip forward a few times with explicit waits
   await page.getByTestId("tts-play-pause-button").click();
   await page.waitForTimeout(1000);
   await page.getByTestId("tts-forward-button").click();
+  await page.waitForTimeout(800);
   await page.getByTestId("tts-forward-button").click();
+  await page.waitForTimeout(800);
 
   // Pause playback before navigating
   await page.getByTestId("tts-play-pause-button").click();
@@ -116,7 +118,9 @@ test("tts chapter navigation during playback", async ({ page }) => {
 
   // Navigate to Chapter V via TOC
   console.log("Navigating to Chapter V...");
-  await page.getByTestId("reader-toc-button").click();
+  // Wait for any pending epub.js navigation before clicking TOC
+  await page.waitForTimeout(1000);
+  await page.getByTestId("reader-toc-button").click({ noWaitAfter: true });
   await expect(page.getByTestId("reader-toc-sidebar")).toBeVisible();
   await page.getByRole("button", { name: "Chapter V." }).first().click();
   await page.waitForTimeout(3000);
