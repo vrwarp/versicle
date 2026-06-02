@@ -100,10 +100,7 @@ async function waitForReaderFrame(page: any): Promise<Frame> {
   throw new Error("Timeout waiting for reader iframe");
 }
 
-test("seamless handoff", async ({ browser, browserName, baseURL }) => {
-  // The sync-halt-warning detection relies on cross-context Firestore snapshot sync
-  // which does not work reliably in WebKit with blocked service workers.
-  test.skip(browserName === 'webkit', 'Cross-context mock Firestore sync unreliable in WebKit');
+test("seamless handoff", async ({ browser, baseURL }) => {
   const testUid = `mock-user-${Math.random().toString(36).substring(2, 10)}`;
   const finalBaseURL = baseURL || "http://localhost:5173";
 
@@ -151,11 +148,23 @@ test("seamless handoff", async ({ browser, browserName, baseURL }) => {
       { timeout: 30000 }
     ).catch(() => {});
 
-    const turns = attempt > 0 ? 10 : 5;
-    console.log(`[A] Turning ${turns} pages...`);
+    // Generate progress reliably via a TOC jump. rendition.next() page turns are
+    // a no-op on WebKit when rendition.manager is briefly undefined; a TOC jump to
+    // a mid-book chapter relocates deterministically and persists non-zero progress.
+    console.log("[A] Jumping to a mid-book chapter via TOC...");
+    await pageA.getByTestId("reader-toc-button").click({ noWaitAfter: true });
+    await pageA.waitForSelector('[data-testid="reader-toc-sidebar"]', { state: "visible", timeout: 8000 }).catch(() => {});
+    await pageA.waitForSelector('[data-testid^="toc-item-"]', { state: "visible", timeout: 8000 }).catch(() => {});
+    await pageA.getByTestId("toc-item-6").scrollIntoViewIfNeeded().catch(() => {});
+    await pageA.getByTestId("toc-item-6").click({ force: true });
+    await expect(pageA.getByTestId("reader-toc-sidebar")).not.toBeVisible();
+    await pageA.waitForTimeout(2000);
+
+    // A few extra page turns for additional progress (best-effort)
+    const turns = attempt > 0 ? 6 : 3;
     for (let t = 0; t < turns; t++) {
-      await pageA.evaluate("window.rendition && window.rendition.manager && window.rendition.next()");
-      await pageA.waitForTimeout(500);
+      await pageA.keyboard.press("ArrowRight");
+      await pageA.waitForTimeout(400);
     }
 
     // Go back to library
@@ -286,9 +295,7 @@ test("seamless handoff", async ({ browser, browserName, baseURL }) => {
   await contextB.close();
 });
 
-test("note marker affordance", async ({ browser, browserName, baseURL }) => {
-  // epub.js iframe <p> elements consistently fail to render within timeout in WebKit.
-  test.skip(browserName === 'webkit', 'epub.js iframe content rendering is too slow in WebKit for this test');
+test("note marker affordance", async ({ browser, baseURL }) => {
   const testUid = `mock-user-${Math.random().toString(36).substring(2, 10)}`;
   const finalBaseURL = baseURL || "http://localhost:5173";
   const context = await browser.newContext();
@@ -308,32 +315,25 @@ test("note marker affordance", async ({ browser, browserName, baseURL }) => {
   const readerContainer = page.getByTestId("reader-iframe-container");
   await expect(readerContainer).toBeVisible({ timeout: 10000 });
 
-  // Wait for rendition and manager (WebKit may need more time for manager initialization)
+  // Wait for rendition to be ready
   await page.waitForFunction("window.rendition && window.rendition.location");
-  await page.waitForFunction("window.rendition && window.rendition.manager").catch(() => {});
-  await page.waitForTimeout(2000); // Extra wait for WebKit iframe content loading
+  await page.waitForTimeout(1000);
 
-  // Wait for iframe content using helper
+  // Jump straight to a content chapter via the TOC. Turning pages with
+  // rendition.next() is unreliable on WebKit (leaves the reader on front-matter
+  // with no <p>), whereas a TOC jump lands directly on rendered prose.
+  await page.getByTestId("reader-toc-button").click({ noWaitAfter: true });
+  await page.waitForSelector('[data-testid="reader-toc-sidebar"]', { state: "visible", timeout: 8000 }).catch(() => {});
+  await page.waitForSelector('[data-testid^="toc-item-"]', { state: "visible", timeout: 8000 }).catch(() => {});
+  await page.getByTestId("toc-item-6").scrollIntoViewIfNeeded().catch(() => {});
+  await page.getByTestId("toc-item-6").click({ force: true });
+  await expect(page.getByTestId("reader-toc-sidebar")).not.toBeVisible();
+  await page.waitForTimeout(1500);
+
+  // Resolve the rendered content frame and confirm prose is present
   let frame = await waitForReaderFrame(page);
-
-  // Navigate until we find text content (skip cover/images)
-  let foundText = false;
-  for (let i = 0; i < 10; i++) {
-    try {
-      if ((await frame.locator("p").count()) > 0) {
-        foundText = true;
-        break;
-      }
-    } catch (e) {
-      console.log("Frame error/detachment, re-resolving...");
-    }
-    console.log("No text found, turning page...");
-    await page.evaluate("window.rendition && window.rendition.manager && window.rendition.next()");
-    await page.waitForTimeout(2000);
-    frame = await waitForReaderFrame(page);
-  }
-
   await expect(frame.locator("p").first()).toBeVisible({ timeout: 20000 });
+  frame = await waitForReaderFrame(page);
 
   const pLocator = frame.locator("p").first();
   await page.waitForTimeout(1000); // Wait for layout stability

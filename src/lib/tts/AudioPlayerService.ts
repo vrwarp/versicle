@@ -786,7 +786,12 @@ export class AudioPlayerService {
             flightRecorder.record('APS', 'pause', { index: this.stateManager.currentIndex });
             this.providerManager.pause();
             this.setStatus('paused');
-            await this.savePlaybackState('paused');
+            // Persist best-effort, OUTSIDE the sequencer. The session-state IndexedDB
+            // write can hang indefinitely on WebKit (its transaction never settles);
+            // awaiting it here would wedge the TaskSequencer so every subsequent
+            // play/pause/skip task queues behind it forever (isPlaying never flips,
+            // skip never advances). Detach it so playback control stays responsive.
+            void this.savePlaybackState('paused').catch(() => {});
         });
     }
 
@@ -798,7 +803,9 @@ export class AudioPlayerService {
 
     private async stopInternal() {
         flightRecorder.record('APS', 'stop', { status: this.status });
-        await this.savePlaybackState('stopped');
+        // Detach the persistence write (see pause()): on WebKit the session-state
+        // IndexedDB transaction can hang and would otherwise wedge the sequencer.
+        void this.savePlaybackState('stopped').catch(() => {});
         await this.platformIntegration.stop();
         this.setStatus('stopped');
         this.providerManager.stop();
@@ -1112,7 +1119,9 @@ export class AudioPlayerService {
         if (newQueue && newQueue.length > 0) {
             if (autoPlay) {
                 this.providerManager.stop();
-                await this.savePlaybackState('stopped');
+                // Detached persistence (see pause()): never let the session-state
+                // IndexedDB write wedge cross-section navigation on WebKit.
+                void this.savePlaybackState('stopped').catch(() => {});
                 this.setStatus('loading');
             } else {
                 await this.stopInternal();

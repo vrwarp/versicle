@@ -78,8 +78,12 @@ mkdir -p verification/screenshots
 
 # Run the verification container and capture exit code
 echo "🏃 Running verification tests..."
-# We mount the screenshots directory to persist artifacts
+# We mount the screenshots directory to persist artifacts.
+# --ipc=host: Playwright's recommended setting for browsers in Docker. The default
+#   64MB /dev/shm starves the browser's shared memory and causes renderer "Page
+#   crashed" failures (notably in WebKit on long, memory-heavy journeys).
 docker run --rm \
+  --ipc=host \
   -v "$(pwd)/verification/screenshots:/app/verification/screenshots" \
   -e BASE_URL=http://localhost:5173 \
   $DEBUG_ENV \
