@@ -8,7 +8,7 @@ test('Journey Audio Bookmarking Test', async ({ page, browserName }) => {
   // single-chain TaskSequencer, so the Part-3 pause occasionally never flips isPlaying.
   // Fully fixing this needs broader resilience to hung IDB ops in the TTS task chain
   // (a sequencer watchdog without the concurrency regression we saw); tracked separately.
-  test.skip(browserName === 'webkit', 'WebKit: residual TTS sequencer flakiness (other IDB-hang points) even serially');
+  test.skip(browserName === 'webkit' && !process.env.TTS_IDB_PROBE, 'WebKit: residual TTS sequencer flakiness (other IDB-hang points) even serially');
   // Drive playback off the TTS store state rather than UI-render timing, which
   // lags the store on WebKit. waitForFunction(fn, arg, options) — the timeout is
   // the THIRD positional arg, so pass `undefined` for arg or it is ignored.

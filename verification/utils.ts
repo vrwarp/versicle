@@ -11,6 +11,11 @@ const __dirname = path.dirname(__filename);
 const ttsPolyfillPath = path.resolve(__dirname, 'tts-polyfill.js');
 const ttsPolyfillContent = fs.readFileSync(ttsPolyfillPath, 'utf8');
 
+// Optional IndexedDB / event-loop probe (TTS_IDB_PROBE=1). Injected before the app so
+// it can wrap IndexedDB and measure hung transactions + event-loop stalls.
+const idbProbePath = path.resolve(__dirname, '_idb_probe.js');
+const idbProbeContent = fs.existsSync(idbProbePath) ? fs.readFileSync(idbProbePath, 'utf8') : '';
+
 export const test = base.extend<Record<string, never>, { _suppressLogs: void }>({
   // Worker-scoped: runs once per worker process (not per test).
   // Patches console.log/info/debug to noop so spec-file log calls are
@@ -64,7 +69,7 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
     if (freshBrowser) await freshBrowser.close();
   },
 
-  page: async ({ page }, use) => {
+  page: async ({ page }, use, testInfo) => {
     page.setDefaultTimeout(10000);
     page.setDefaultNavigationTimeout(10000);
 
@@ -73,10 +78,29 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
       page.on('pageerror', (err) => console.error(`PAGE ERROR: ${err}`));
     }
 
+    if (process.env.TTS_IDB_PROBE && idbProbeContent) {
+      await page.addInitScript({ content: idbProbeContent });
+    }
     await page.addInitScript({ content: ttsPolyfillContent });
     await page.addInitScript({ content: 'window.__VERSICLE_SANITIZATION_DISABLED__ = true;' });
 
     await use(page);
+
+    // Dump the probe (and TTS flight-recorder tail) after the test body. For a timed-out
+    // test this captures the wedge state: any IDB txn still outstanding here is a hang.
+    if (process.env.TTS_IDB_PROBE) {
+      try {
+        const summary = await page.evaluate(() => (window as any).__idbProbe?.summary?.() ?? null);
+        const fr = await page.evaluate(() => {
+          const f = (window as any).__ttsFlightRecorder;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return f?.export ? f.export().slice(-16).map((e: any) => `${e.src}.${e.ev}`) : [];
+        });
+        console.error(`\n[IDBPROBE] "${testInfo.title}" status=${testInfo.status}\n  probe=${JSON.stringify(summary)}\n  fr=${JSON.stringify(fr)}`);
+      } catch (e) {
+        console.error(`[IDBPROBE] dump failed for "${testInfo.title}": ${e}`);
+      }
+    }
   },
 });
 

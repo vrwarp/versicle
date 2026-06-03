@@ -45,7 +45,7 @@ test('Navigation Guard', async ({ page, browserName }) => {
   // past the chapter navigation, but still flakes on WebKit on the Dragnet-capture
   // assertion — the same residual TTS-sequencer/IDB-hang timing issue as the
   // audio-bookmarking journey. Skipped until that is fixed.
-  test.skip(browserName === 'webkit', 'WebKit: residual TTS Dragnet/timing flakiness (sidebar bug now fixed)');
+  test.skip(browserName === 'webkit' && !process.env.TTS_IDB_PROBE, 'WebKit: residual TTS Dragnet/timing flakiness (sidebar bug now fixed)');
   // Verify that navigating to a new chapter during a pause prevents capturing stale context.
   console.log('Testing Navigation Guard...');
   await utils.resetApp(page);

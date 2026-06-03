@@ -67,6 +67,10 @@ USER_SET_WORKERS=false
 for arg in "$@"; do
   if [[ "$arg" == "--logs" ]]; then
     DEBUG_ENV="-e DEBUG_PAGE_LOGS=1"
+  elif [[ "$arg" == "--probe" ]]; then
+    # Enable the IndexedDB / event-loop probe (verification/_idb_probe.js) and dump
+    # its summary per test. Used to diagnose WebKit TTS hangs.
+    DEBUG_ENV="$DEBUG_ENV -e TTS_IDB_PROBE=1"
   else
     PASSTHROUGH_ARGS+=("$arg")
     [[ "$arg" == *webkit* ]] && TARGETS_WEBKIT=true

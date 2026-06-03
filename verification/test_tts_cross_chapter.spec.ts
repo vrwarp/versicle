@@ -81,7 +81,7 @@ test("tts chapter navigation during playback", async ({ page, browserName }) => 
   // gets past the TOC navigation, but still flakes on WebKit on the subsequent TTS queue
   // assertion (tts-queue-item data-current) — the same residual TTS-sequencer/IDB-hang
   // timing issue that affects the audio-bookmarking journey. Skipped until that is fixed.
-  test.skip(browserName === 'webkit', 'WebKit: residual TTS queue/timing flakiness after chapter nav (sidebar bug now fixed)');
+  test.skip(browserName === 'webkit' && !process.env.TTS_IDB_PROBE, 'WebKit: residual TTS queue/timing flakiness after chapter nav (sidebar bug now fixed)');
   console.log("Starting Chapter Navigation During Playback Test...");
   await resetApp(page);
   await ensureLibraryWithBook(page);
