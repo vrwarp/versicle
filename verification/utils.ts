@@ -127,7 +127,7 @@ export async function ensureLibraryWithBook(page: Page) {
       "[data-testid^='book-card-'], button:has-text('Load Demo Book'), :text('Your library is empty')",
       { timeout: 45000 }
     );
-  } catch {
+  } catch (err) {
     console.warn(`Warning: Neither book card nor load button found within 45s: ${err}`);
     await captureScreenshot(page, 'ensure_library_timeout_debug');
   }
