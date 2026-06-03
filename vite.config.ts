@@ -12,6 +12,28 @@ export default defineConfig(({ mode }) => {
     base: env.VITE_BASE || '/',
     build: {
       sourcemap: true,
+      chunkSizeWarningLimit: 3000,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('epubjs') || id.includes('jszip')) {
+                return 'epub';
+              }
+              if (id.includes('firebase')) {
+                return 'firebase';
+              }
+              if (id.includes('yjs') || id.includes('y-indexeddb') || id.includes('y-protocols') || id.includes('y-cinder')) {
+                return 'yjs';
+              }
+              if (id.includes('lucide-react') || id.includes('@radix-ui') || id.includes('react') || id.includes('react-dom')) {
+                return 'react-vendor';
+              }
+              return 'vendor';
+            }
+          }
+        }
+      }
     },
     preview: {
       headers: {
