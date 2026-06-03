@@ -45,14 +45,19 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
     const context = await (freshBrowser ?? browser).newContext(contextOptions);
 
     // Mirror the config's trace: 'on-first-retry' for these manually-created contexts.
-    const tracing = testInfo.retry > 0;
-    if (tracing) {
-      await context.tracing.start({ screenshots: true, snapshots: true, sources: true }).catch(() => {});
+    // Mirror the config's trace: 'on-first-retry'. Only stop if start actually
+    // succeeded, otherwise Playwright throws "Must start tracing before stopping".
+    let traceStarted = false;
+    if (testInfo.retry > 0) {
+      try {
+        await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
+        traceStarted = true;
+      } catch { /* tracing unavailable; continue without it */ }
     }
 
     await use(context);
 
-    if (tracing) {
+    if (traceStarted) {
       await context.tracing.stop({ path: testInfo.outputPath('trace.zip') }).catch(() => {});
     }
     await context.close();

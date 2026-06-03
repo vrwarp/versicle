@@ -76,12 +76,12 @@ test("tts cross chapter transition", async ({ page }) => {
 });
 
 test("tts chapter navigation during playback", async ({ page, browserName }) => {
-  // Skipped on WebKit: during TTS playback the reader-toc-button is not actionable
-  // (the click times out) and the TOC sidebar — a same-route React Router navigation —
-  // does not re-render. This reproduces even serially with a fresh browser, so it is a
-  // genuine product issue (reader sidebar driven by router state), not runner contention.
-  // Fixing it needs the sidebar moved off React Router state; tracked separately.
-  test.skip(browserName === 'webkit', 'WebKit: TOC sidebar/button unresponsive during TTS playback (router-state sidebar; needs refactor)');
+  // The TOC-sidebar render bug that previously blocked this test is now FIXED (reader
+  // sidebar state moved off React Router into a store — see useSidebarState). The test
+  // gets past the TOC navigation, but still flakes on WebKit on the subsequent TTS queue
+  // assertion (tts-queue-item data-current) — the same residual TTS-sequencer/IDB-hang
+  // timing issue that affects the audio-bookmarking journey. Skipped until that is fixed.
+  test.skip(browserName === 'webkit', 'WebKit: residual TTS queue/timing flakiness after chapter nav (sidebar bug now fixed)');
   console.log("Starting Chapter Navigation During Playback Test...");
   await resetApp(page);
   await ensureLibraryWithBook(page);

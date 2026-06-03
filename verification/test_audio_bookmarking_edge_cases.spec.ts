@@ -40,11 +40,12 @@ test('Timeout Protection', async ({ page }) => {
 });
 
 test('Navigation Guard', async ({ page, browserName }) => {
-  // Skipped on WebKit: flaky even serially. It navigates chapters via the TOC after a
-  // TTS pause, hitting the same router-state TOC-sidebar bug as test_tts_cross_chapter —
-  // navigate() updates history but ReaderView doesn't reliably re-render, so the TOC
-  // items intermittently never appear. Needs the sidebar moved off React Router state.
-  test.skip(browserName === 'webkit', 'WebKit: TOC sidebar (router state) does not reliably re-render after a TTS pause; needs sidebar refactor');
+  // The TOC-sidebar render bug that previously blocked this test is now FIXED (reader
+  // sidebar moved off React Router into a store — see useSidebarState). The test gets
+  // past the chapter navigation, but still flakes on WebKit on the Dragnet-capture
+  // assertion — the same residual TTS-sequencer/IDB-hang timing issue as the
+  // audio-bookmarking journey. Skipped until that is fixed.
+  test.skip(browserName === 'webkit', 'WebKit: residual TTS Dragnet/timing flakiness (sidebar bug now fixed)');
   // Verify that navigating to a new chapter during a pause prevents capturing stale context.
   console.log('Testing Navigation Guard...');
   await utils.resetApp(page);
