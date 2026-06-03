@@ -45,7 +45,7 @@
 *   **Drag & Drop**: Drag files anywhere to import.
 *   **Smart Offloading**: Delete the heavy book file to save space but keep your reading stats, highlights, and metadata.
 *   **Ghost Books**: Library items with missing files (offloaded) are preserved as "Ghost Books" using synced metadata. Importing a file with matching metadata will automatically link it to the existing record instead of creating duplicates.
-*   **Chinese Language Support**: Native support for Chinese readers, featuring on-the-fly conversion to Traditional Chinese and dynamic Pinyin pronunciation overlays that render cleanly without breaking text selection or text-to-speech.
+*   **Chinese Language Support**: Native support for Chinese readers, featuring on-the-fly conversion to Traditional Chinese and dynamic Pinyin pronunciation overlays that render cleanly without breaking text selection or text-to-speech. Features **Smart Pinyin Filtering** allowing users to mark characters as "known" to progressively hide Pinyin as they learn.
 *   **High-Performance Rendering**: Uses a two-stage memoization strategy to ensure the library view remains silky smooth (60fps) even with thousands of books.
 *   **Zero-Latency Parsing**: Uses a specialized zero-allocation text scanner (`TextScanningTrie`) to process text instantly without garbage collection pauses.
 *   **Instant Resume**: Remembers the last open book and restores your place immediately on launch, bypassing heavy sync checks.

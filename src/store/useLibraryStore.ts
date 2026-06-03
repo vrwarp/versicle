@@ -146,8 +146,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           });
 
           return {
-            staticMetadata: nextStaticMetadata,
-            isHydrating: false
+            staticMetadata: nextStaticMetadata
           };
         });
 
@@ -199,6 +198,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
         }
       } catch (err) {
         logger.error('Failed to hydrate static metadata:', err);
+      } finally {
         set({ isHydrating: false });
       }
     };

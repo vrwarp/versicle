@@ -55,7 +55,9 @@ graph TD
         ReaderStore[useReaderStore]
         TTSStore[useTTSStore]
         LibStore[useLibraryStore]
+        BookStore[useBookStore]
         AnnotStore[useAnnotationStore]
+        VocabularyStore[useVocabularyStore]
         GenAIStore[useGenAIStore]
         ContentAnalysisStore[useContentAnalysisStore]
         BackNav[useBackNavigationStore]
@@ -414,6 +416,7 @@ Implements full-text search off the main thread.
 *   **Logic**:
     *   **In-Place Mutation (`opencc-js`)**: Uses a `TreeWalker` to scan all text nodes within the rendered EPUB DOM. If Traditional Chinese is enabled, it mutates the `nodeValue` of the text nodes in place, avoiding structural changes that would break `epub.js` CFI mapping.
     *   **Ephemeral Geometry Collection (`pinyinPositions`)**: For Pinyin (`pinyin-pro`), it creates a `Range` for each individual Chinese character to calculate its exact bounding rectangle (`getBoundingClientRect()`).
+    *   **Smart Pinyin Filtering**: Integrates with `useVocabularyStore` during the geometry collection phase to selectively skip calculations and rendering for characters the user has marked as "known".
     *   **Overlay Rendering (`PinyinOverlay.tsx`)**: Uses `React.createPortal` to render the Pinyin text into a transparent overlay layer *inside* the `epub.js` scroll container. This ensures the Pinyin scrolls in lockstep with the native text at 60fps without altering the underlying DOM structure, preserving text selection and TTS compatibility.
 *   **Trade-offs**: Calculating `getBoundingClientRect` for every character forces synchronous layout reflows, which can penalize chapter loading performance on slower devices.
 
@@ -716,6 +719,10 @@ State is managed using **Zustand** with specialized strategies for different dat
         *   **Persistence**: Stored in `localStorage` via `persist` middleware.
         *   **Usage Tracking**: Tracks token usage and estimated cost for the current session.
         *   **Logging**: Maintains a rolling buffer of the last 100 debug logs (`GenAILogEntry`) for troubleshooting. Each log is linked by a generated `correlationId` and contextualized with `bookId` and `sectionId` to trace full request/response lifecycles.
+*   **`useVocabularyStore` (Synced)**:
+    *   **Goal**: Track known Chinese characters to filter out unnecessary Pinyin annotations.
+    *   **Logic**: Uses a Yjs map to sync a dictionary of `knownCharacters`. Integrates with `useEpubReader.ts` during the ephemeral geometry collection phase to selectively skip characters based on the synced known state ("Smart Pinyin Filtering").
+    *   **Trade-offs**: A large dictionary of known characters will marginally increase the Yjs document size and memory usage.
 *   **`useLexiconStore` (Synced)**:
     *   **Goal**: Synchronize pronunciation rules across devices.
     *   **Logic**:

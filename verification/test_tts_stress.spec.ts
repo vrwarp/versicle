@@ -191,7 +191,7 @@ test("tts concurrent skip operations", async ({ page }) => {
         expect(i).toBeLessThanOrEqual(4);
         break;
       }
-    } catch (e) {
+    } catch {
       continue;
     }
   }

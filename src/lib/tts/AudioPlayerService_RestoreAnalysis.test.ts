@@ -80,7 +80,10 @@ vi.mock('../../store/useTTSStore', () => ({
             customAbbreviations: [],
             alwaysMerge: false,
             sentenceStarters: [],
-            minSentenceLength: 10
+            minSentenceLength: 10,
+            activeLanguage: 'en',
+            setActiveLanguage: vi.fn(),
+            voices: []
         }))
     }
 }));

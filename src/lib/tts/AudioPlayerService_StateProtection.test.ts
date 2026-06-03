@@ -13,9 +13,7 @@ vi.mock('./AudioContentPipeline', () => ({
 vi.mock('../../store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,
     useTTSStore: {
-        getState: vi.fn(() => ({
-            // Add any necessary state here
-        })),
+        getState: vi.fn(() => ({ activeLanguage: 'en', setActiveLanguage: vi.fn(), voices: [], profiles: { 'en': { minSentenceLength: 36 } }, customAbbreviations: [], alwaysMerge: false, sentenceStarters: [], isBibleLexiconEnabled: false })),
         subscribe: vi.fn(),
     }
 }));
