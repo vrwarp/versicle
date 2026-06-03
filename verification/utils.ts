@@ -115,7 +115,7 @@ export async function resetApp(page: Page) {
       "[data-testid^='book-card-'], button:has-text('Load Demo Book'), :text('Your library is empty')",
       { timeout: 45000 }
     );
-  } catch {
+  } catch (err) {
     console.warn(`Warning: App load state check failed: ${err}`);
     await captureScreenshot(page, 'reset_app_timeout_debug');
   }
