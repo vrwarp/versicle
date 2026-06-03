@@ -1,17 +1,7 @@
 import { test, expect } from './utils';
 import * as utils from './utils';
 
-test('Journey Audio Bookmarking Test', async ({ page, browserName }) => {
-  // Skipped on WebKit. The underlying TTS-resume bug IS fixed (savePlaybackState no
-  // longer blocks the TaskSequencer — see AudioPlayerService), and this journey now
-  // passes on WebKit when run in isolation. It remains flaky only in the *full* parallel
-  // WebKit suite: each Playwright worker reuses one long-lived WebKit instance across
-  // ~25 tests, and that instance degrades (memory growth, accumulated IndexedDB/SQLite
-  // on disk, CPU/IO pressure from sibling workers). Under that degradation the timing-
-  // sensitive pause→play Dragnet in Part 3 intermittently exceeds its waits. This is an
-  // environmental/runner issue, not a product bug; re-enabling needs runner changes
-  // (e.g. fewer webkit workers + recycling the browser between tests), tracked separately.
-  test.skip(browserName === 'webkit', 'WebKit: flaky only under full-suite long-run instance degradation (resume bug itself is fixed; passes in isolation)');
+test('Journey Audio Bookmarking Test', async ({ page }) => {
   // Drive playback off the TTS store state rather than UI-render timing, which
   // lags the store on WebKit. waitForFunction(fn, arg, options) — the timeout is
   // the THIRD positional arg, so pass `undefined` for arg or it is ignored.

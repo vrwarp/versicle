@@ -29,6 +29,36 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
     { scope: 'worker', auto: true },
   ],
 
+  // Fresh browser instance PER TEST on WebKit.
+  // Playwright reuses one browser per worker across the whole run; on WebKit that
+  // long-lived instance degrades over its ~25-test lifetime (memory growth,
+  // accumulated IndexedDB/SQLite on disk, IO pressure), which makes render- and
+  // timing-sensitive journeys (TTS resume, audio deck, TOC sidebar) flaky late in
+  // the run. Launching a fresh WebKit browser for every test eliminates that
+  // cross-test degradation so each test starts from a clean instance. Other
+  // browsers keep the default shared-per-worker browser (they don't degrade this
+  // way and a fresh launch per test would only slow them down).
+  // Note: this only affects tests that use the default `context`/`page`; multi-
+  // context tests that drive `browser` directly are unchanged.
+  context: async ({ browser, playwright, browserName, contextOptions }, use, testInfo) => {
+    const freshBrowser = browserName === 'webkit' ? await playwright.webkit.launch() : undefined;
+    const context = await (freshBrowser ?? browser).newContext(contextOptions);
+
+    // Mirror the config's trace: 'on-first-retry' for these manually-created contexts.
+    const tracing = testInfo.retry > 0;
+    if (tracing) {
+      await context.tracing.start({ screenshots: true, snapshots: true, sources: true }).catch(() => {});
+    }
+
+    await use(context);
+
+    if (tracing) {
+      await context.tracing.stop({ path: testInfo.outputPath('trace.zip') }).catch(() => {});
+    }
+    await context.close();
+    if (freshBrowser) await freshBrowser.close();
+  },
+
   page: async ({ page }, use) => {
     page.setDefaultTimeout(10000);
     page.setDefaultNavigationTimeout(10000);

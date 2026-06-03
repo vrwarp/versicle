@@ -1,13 +1,7 @@
 import { test, expect } from "./utils";
 import { captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter } from "./utils";
 
-test("tts resume after leaving book", async ({ page, baseURL, browserName }) => {
-  // Skipped on WebKit. The underlying resume bug IS fixed (savePlaybackState no longer
-  // blocks the TaskSequencer) and this passes on WebKit in isolation, but it hard-fails
-  // intermittently in the full parallel suite where the long-lived per-worker WebKit
-  // instance degrades over its ~25-test lifetime (memory/disk/IO pressure), pushing the
-  // resume timing past its waits. Environmental/runner issue, tracked separately.
-  test.skip(browserName === 'webkit', 'WebKit: flaky only under full-suite long-run instance degradation (resume bug itself is fixed; passes in isolation)');
+test("tts resume after leaving book", async ({ page, baseURL }) => {
   console.log("Starting Resume After Navigation Test...");
   const finalBaseURL = baseURL || "http://localhost:5173";
   await resetApp(page);
@@ -116,12 +110,7 @@ test("tts resume after leaving book", async ({ page, baseURL, browserName }) => 
   throw new Error("Could not find current queue item after resume");
 });
 
-test("tts position persists across reload", async ({ page, browserName }) => {
-  // Skipped on WebKit: the queue's `data-current` marker (driven by repeated forward
-  // skips) lags the store under WebKit's heavy IndexedDB contention — React does not
-  // re-render the queue item in time. Distinct from the (now fixed) TTS-resume sequencer
-  // wedge; tracked for a follow-up.
-  test.skip(browserName === 'webkit', 'WebKit: queue data-current marker lags the store under IDB contention');
+test("tts position persists across reload", async ({ page }) => {
   console.log("Starting Position Persistence Across Reload Test...");
   await resetApp(page);
   await ensureLibraryWithBook(page);

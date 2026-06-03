@@ -2,9 +2,13 @@ import { test, expect } from "./utils";
 import { ensureLibraryWithBook, captureScreenshot, resetApp } from "./utils";
 
 test("verify reprocessing interstitial", async ({ page, browserName }) => {
-  // In WebKit, epub.js book re-import (reprocessing) consistently exceeds any
-  // reasonable per-test timeout — the operation takes 80-100+ seconds.
-  test.skip(browserName === 'webkit', 'Book reprocessing takes >80s in WebKit, exceeding test timeout');
+  // Skipped on WebKit: epub.js book re-import is pathologically slow here — the reader
+  // does not return even after 150s (it exceeds any reasonable per-test timeout), even
+  // when run serially with a fresh browser. This is a genuine WebKit perf/hang issue in
+  // epub.js re-import, not a runner contention problem; tracked for a separate fix.
+  test.skip(browserName === 'webkit', 'WebKit: epub.js reprocessing does not complete within 150s (genuine perf/hang, not contention)');
+  // give the whole test extra headroom beyond the project default
+  test.setTimeout(240000);
   // 1. Reset app using utility
   await resetApp(page);
 
@@ -95,7 +99,7 @@ test("verify reprocessing interstitial", async ({ page, browserName }) => {
   }
 
   // Wait for it to finish and reader to load (reprocessing can be slow in WebKit)
-  await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 80000 });
+  await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 150000 });
 
   // 5. Verify metadata update
   const newVersion = await page.evaluate((id) => {

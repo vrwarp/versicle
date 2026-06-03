@@ -39,13 +39,7 @@ test('Timeout Protection', async ({ page }) => {
   console.log('Timeout protection verified.');
 });
 
-test('Navigation Guard', async ({ page, browserName }) => {
-  // Skipped on WebKit: after a TTS pause, opening the TOC sidebar (a same-route
-  // React Router navigation) updates history but does not re-render ReaderView under
-  // WebKit's heavy IndexedDB contention, so the TOC items never appear. This is a
-  // React-Router-re-render-during-TTS issue distinct from the (now fixed) TTS-resume
-  // sequencer wedge; tracked for a follow-up (move sidebar state out of router state).
-  test.skip(browserName === 'webkit', 'WebKit: TOC sidebar does not re-render after a TTS pause (router re-render under IDB contention)');
+test('Navigation Guard', async ({ page }) => {
   // Verify that navigating to a new chapter during a pause prevents capturing stale context.
   console.log('Testing Navigation Guard...');
   await utils.resetApp(page);

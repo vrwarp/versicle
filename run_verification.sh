@@ -62,13 +62,26 @@ fi
 # Parse flags before passing remainder to playwright
 DEBUG_ENV=""
 PASSTHROUGH_ARGS=()
+TARGETS_WEBKIT=false
+USER_SET_WORKERS=false
 for arg in "$@"; do
   if [[ "$arg" == "--logs" ]]; then
     DEBUG_ENV="-e DEBUG_PAGE_LOGS=1"
   else
     PASSTHROUGH_ARGS+=("$arg")
+    [[ "$arg" == *webkit* ]] && TARGETS_WEBKIT=true
+    [[ "$arg" == --workers* ]] && USER_SET_WORKERS=true
   fi
 done
+
+# WebKit is run serially (one worker). Unlike Chromium, parallel WebKit instances
+# in this container contend heavily for CPU/IO, which makes the timing-sensitive TTS
+# journeys flaky. Serial execution trades runtime for reliability. Only applied when
+# the run explicitly targets the webkit project and the caller didn't set --workers.
+if [[ "$TARGETS_WEBKIT" == true && "$USER_SET_WORKERS" == false ]]; then
+  echo "🧵 WebKit target detected — running serially (--workers=1) for reliability."
+  PASSTHROUGH_ARGS+=("--workers=1")
+fi
 
 # Build the test image
 docker build -t versicle-verify -f Dockerfile.verification .
