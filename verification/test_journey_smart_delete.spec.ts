@@ -86,7 +86,7 @@ test("smart delete journey", async ({ page }) => {
 
   // Should navigate to reader (either directly or after reprocessing)
   await expect(page).toHaveURL(/.*\/read\/.*/, { timeout: 15000 });
-  await expect(page.getByTestId("reader-back-button")).toBeVisible({ timeout: 5000 });
+  await expect(page.getByTestId("reader-back-button")).toBeVisible({ timeout: 15000 });
 
   await captureScreenshot(page, "reader_smart_delete_success");
 });

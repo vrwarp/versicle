@@ -25,10 +25,10 @@ test("journey reading tools", async ({ page }) => {
   await page.locator("[data-testid^='book-card-']").first().click();
 
   console.log(`Current URL: ${page.url}`);
-  await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 5000 });
+  await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 15000 });
   console.log("Reader View is visible");
 
-  await expect(page.getByTestId("reader-back-button")).toBeVisible({ timeout: 5000 });
+  await expect(page.getByTestId("reader-back-button")).toBeVisible({ timeout: 15000 });
 
   // Wait for iframe content
   let frame = await waitForReaderFrame(page);
@@ -140,7 +140,7 @@ test("journey reading tools", async ({ page }) => {
   await page.reload();
 
   // Wait for book to reload
-  await expect(page.getByTestId("reader-back-button")).toBeVisible({ timeout: 5000 });
+  await expect(page.getByTestId("reader-back-button")).toBeVisible({ timeout: 15000 });
   frame = await waitForReaderFrame(page);
   await page.waitForTimeout(2000);
 

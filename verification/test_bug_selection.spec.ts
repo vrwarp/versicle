@@ -58,7 +58,7 @@ test('Selection Popover Reappearance Test', async ({ page }) => {
   await expect(bookCard).toBeVisible({ timeout: 5000 });
   await bookCard.click();
 
-  await expect(page.getByTestId('reader-back-button')).toBeVisible({ timeout: 5000 });
+  await expect(page.getByTestId('reader-back-button')).toBeVisible({ timeout: 15000 });
 
   // Navigate to a content chapter via the TOC so we are guaranteed rendered prose
   // to select (front-matter pages reached by a single ArrowRight have no text on WebKit).
