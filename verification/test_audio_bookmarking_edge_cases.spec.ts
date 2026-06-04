@@ -39,13 +39,11 @@ test('Timeout Protection', async ({ page }) => {
   console.log('Timeout protection verified.');
 });
 
-test('Navigation Guard', async ({ page, browserName }) => {
-  // The TOC-sidebar render bug that previously blocked this test is now FIXED (reader
-  // sidebar moved off React Router into a store — see useSidebarState). The test gets
-  // past the chapter navigation, but still flakes on WebKit on the Dragnet-capture
-  // assertion — the same residual TTS-sequencer/IDB-hang timing issue as the
-  // audio-bookmarking journey. Skipped until that is fixed.
-  test.skip(browserName === 'webkit' && !process.env.TTS_IDB_PROBE, 'WebKit: residual TTS Dragnet/timing flakiness (sidebar bug now fixed)');
+test('Navigation Guard', async ({ page }) => {
+  // Previously WebKit-skipped. Now passes after clearing the Dragnet pause-timestamp on
+  // the TOC navigation INTENT (see ReaderView onNavigate → AudioPlayerService.clearPauseGesture):
+  // WebKit's slow rendition.display() relocation meant the section-change clear raced the
+  // user's next play, capturing a stale audio-bookmark.
   // Verify that navigating to a new chapter during a pause prevents capturing stale context.
   console.log('Testing Navigation Guard...');
   await utils.resetApp(page);

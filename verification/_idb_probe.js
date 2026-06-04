@@ -33,7 +33,7 @@
   probe.summary = function () {
     const outstanding = probe.txns
       .filter((t) => !t.settled)
-      .map((t) => ({ stores: t.stores, mode: t.mode, ageMs: now() - t.start }));
+      .map((t) => ({ stores: t.stores, mode: t.mode, ageMs: now() - t.start, at: t.stack }));
     const settled = probe.txns.filter((t) => t.settled);
     const durs = settled.map((t) => t.dur).sort((a, b) => a - b);
     const slow = settled
@@ -102,6 +102,16 @@
       const origTxn = IDBDatabase.prototype.transaction;
       IDBDatabase.prototype.transaction = function (stores, mode) {
         const tx = origTxn.apply(this, arguments);
+        // Capture a trimmed stack so an outstanding (hung) txn can be attributed to the
+        // exact call site that opened it. Drop the top 2 frames (this wrapper + Error).
+        let stack = '';
+        try {
+          stack = (new Error().stack || '')
+            .split('\n')
+            .slice(2, 8)
+            .map((s) => s.trim())
+            .join(' <- ');
+        } catch (e) { /* ignore */ }
         const rec = {
           id: txId++,
           stores: Array.isArray(stores) ? stores.join(',') : String(stores),
@@ -109,6 +119,7 @@
           start: now(),
           end: null,
           settled: false,
+          stack,
         };
         probe.txns.push(rec);
         const settle = (how) => {

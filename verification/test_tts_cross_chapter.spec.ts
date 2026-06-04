@@ -75,13 +75,10 @@ test("tts cross chapter transition", async ({ page }) => {
   console.log("Cross-Chapter Transition Test Completed!");
 });
 
-test("tts chapter navigation during playback", async ({ page, browserName }) => {
-  // The TOC-sidebar render bug that previously blocked this test is now FIXED (reader
-  // sidebar state moved off React Router into a store — see useSidebarState). The test
-  // gets past the TOC navigation, but still flakes on WebKit on the subsequent TTS queue
-  // assertion (tts-queue-item data-current) — the same residual TTS-sequencer/IDB-hang
-  // timing issue that affects the audio-bookmarking journey. Skipped until that is fixed.
-  test.skip(browserName === 'webkit' && !process.env.TTS_IDB_PROBE, 'WebKit: residual TTS queue/timing flakiness after chapter nav (sidebar bug now fixed)');
+test("tts chapter navigation during playback", async ({ page }) => {
+  // Previously WebKit-skipped (TOC sidebar render bug + TTS queue/IDB-hang timing). Now
+  // passes after the IndexedDB hang fixes (Yjs persistence throttle + hang-safe
+  // cache_session_state writes) and the main-thread mock TTS stabilised WebKit playback.
   console.log("Starting Chapter Navigation During Playback Test...");
   await resetApp(page);
   await ensureLibraryWithBook(page);

@@ -81,33 +81,37 @@ test("tts resume after leaving book", async ({ page, baseURL }) => {
   // Wait for queue to restore
   await page.waitForTimeout(2000);
 
-  // Check that we're at or near item 3 (resume position)
+  // Check that we resumed at or near item 3.
+  //
+  // Verify via the TTS store (useTTSStore), which is the source of truth for the resume
+  // position. The queue DOM is just a view of it: on WebKit the audio Sheet's open
+  // animation can momentarily leave the queue items `visibility:hidden`, which is a
+  // rendering transient unrelated to resume correctness. Gating on DOM *visibility* here
+  // made the test flaky; gating on the store (and on the items being *attached*) is
+  // deterministic.
   const queueItems = page.locator("[data-testid^='tts-queue-item-']");
-  await expect(queueItems.first()).toBeVisible({ timeout: 10000 });
+  await expect(queueItems.first()).toBeAttached({ timeout: 10000 });
 
-  // Find the current item
-  for (let i = 0; i < 10; i++) {
-    try {
-      const item = page.getByTestId(`tts-queue-item-${i}`);
-      if (await item.isVisible() && (await item.getAttribute("data-current")) === "true") {
-        console.log(`Current item at index: ${i}`);
-        const currentText = await item.innerText();
-        console.log(`Current item text: ${currentText.substring(0, 50)}...`);
+  await page.waitForFunction(
+    () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s = (window as any).useTTSStore?.getState?.();
+      return !!s && Array.isArray(s.queue) && s.queue.length > 0 && typeof s.currentIndex === 'number';
+    },
+    undefined,
+    { timeout: 10000 }
+  );
 
-        // Should be at index 2 or greater (we advanced to 3 before)
-        expect(i).toBeGreaterThanOrEqual(2);
-        await captureScreenshot(page, "resume_after_nav_success");
-        console.log("Resume After Navigation Test Passed!");
-        return;
-      }
-    } catch (e) {
-      continue;
-    }
-  }
+  const resumeIndex = await page.evaluate(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    () => (window as any).useTTSStore.getState().currentIndex as number
+  );
+  console.log(`Resumed at queue index: ${resumeIndex}`);
 
-  // If we didn't find a current item, fail
-  await captureScreenshot(page, "resume_after_nav_fail");
-  throw new Error("Could not find current queue item after resume");
+  // Should be at index 2 or greater (we advanced to item 3 before leaving).
+  expect(resumeIndex).toBeGreaterThanOrEqual(2);
+  await captureScreenshot(page, "resume_after_nav_success");
+  console.log("Resume After Navigation Test Passed!");
 });
 
 test("tts position persists across reload", async ({ page }) => {
