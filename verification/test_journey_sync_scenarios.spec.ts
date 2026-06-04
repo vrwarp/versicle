@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from "./utils";
 import * as fs from "fs";
 import * as path from "path";
@@ -11,7 +12,7 @@ const __dirname = path.dirname(__filename);
 const ttsPolyfillPath = path.resolve(__dirname, 'tts-polyfill.js');
 const ttsPolyfillContent = fs.readFileSync(ttsPolyfillPath, 'utf8');
 
-function injectMockFirestore(page: any, testUid: string) {
+function injectMockFirestore(page: Page, testUid: string) {
   const injectionCode = `
     window.__VERSICLE_MOCK_FIRESTORE__ = true;
     window.__VERSICLE_MOCK_USER_ID__ = '${testUid}';
@@ -23,7 +24,7 @@ function injectMockFirestore(page: any, testUid: string) {
   page.addInitScript({ content: ttsPolyfillContent });
 }
 
-function extractWorkspaceId(snapshot: any, testUid: string): string | null {
+function extractWorkspaceId(snapshot: unknown, testUid: string): string | null {
   if (!snapshot) return null;
   try {
     const snapshotDict = typeof snapshot === "string" ? JSON.parse(snapshot) : snapshot;
@@ -32,23 +33,23 @@ function extractWorkspaceId(snapshot: any, testUid: string): string | null {
         return key.split("/").pop() || null;
       }
     }
-  } catch (e) {
+  } catch {
     // Ignore
   }
   return null;
 }
 
-async function clearDataAndReload(page: any, baseURL: string) {
+async function clearDataAndReload(page: Page, baseURL: string) {
   await page.goto(baseURL || "/");
   await page.evaluate(async () => {
     // Disconnect Yjs to release IDB locks
-    if (typeof (window as any).__DISCONNECT_YJS__ === 'function') {
-      await (window as any).__DISCONNECT_YJS__();
+    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__ === 'function') {
+      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__();
     }
 
     // Disconnect main DB connection to release IndexedDB locks
-    if (typeof (window as any).__CLOSE_DB__ === 'function') {
-      await (window as any).__CLOSE_DB__();
+    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__ === 'function') {
+      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__();
     }
 
     const dbs = await window.indexedDB.databases();
@@ -68,7 +69,7 @@ async function clearDataAndReload(page: any, baseURL: string) {
   await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 10000 });
 }
 
-async function pollForPersistence(page: any, expectedKeyPattern: string, retries = 20, delay = 500): Promise<string | null> {
+async function pollForPersistence(page: Page, expectedKeyPattern: string, retries = 20, delay = 500): Promise<string | null> {
   for (let i = 0; i < retries; i++) {
     const snapshotStr = await page.evaluate("localStorage.getItem('versicle_mock_firestore_snapshot')");
     if (snapshotStr && snapshotStr.includes(expectedKeyPattern)) {
@@ -79,7 +80,7 @@ async function pollForPersistence(page: any, expectedKeyPattern: string, retries
   return null;
 }
 
-function getReaderFrame(page: any): Frame | null {
+function getReaderFrame(page: Page): Frame | null {
   for (const frame of page.frames()) {
     if (frame !== page.mainFrame() && (frame.name().includes('epubjs') || frame.url().includes('blob:'))) {
       return frame;
@@ -88,7 +89,7 @@ function getReaderFrame(page: any): Frame | null {
   return null;
 }
 
-async function waitForReaderFrame(page: any): Promise<Frame> {
+async function waitForReaderFrame(page: Page): Promise<Frame> {
   for (let i = 0; i < 20; i++) {
     const frame = getReaderFrame(page);
     if (frame) {
@@ -123,8 +124,6 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   if (!bookIdAttr) {
     throw new Error("Book card is missing data-testid");
   }
-  const bookId = bookIdAttr.replace("book-card-", "");
-
   // Open Reader
   await bookCard.click();
   await expect(pageA.getByTestId("reader-iframe-container")).toBeVisible({ timeout: 10000 });

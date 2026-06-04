@@ -8,7 +8,7 @@ test("journey workspace switch", async ({ page }) => {
   // Bypass the intro dialog if it appears
   try {
     await page.getByRole("button", { name: "Continue" }).click({ timeout: 2000 });
-  } catch (e) {
+  } catch {
     // Ignore
   }
 

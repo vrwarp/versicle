@@ -1,4 +1,4 @@
-import { test, expect } from "./utils";
+import { test } from "./utils";
 import { captureScreenshot } from "./utils";
 
 test("verify audio bookmark inbox", async ({ page, baseURL }) => {
@@ -11,7 +11,7 @@ test("verify audio bookmark inbox", async ({ page, baseURL }) => {
 
   try {
     await page.waitForSelector('[data-testid="library-view"]', { timeout: 5000 });
-  } catch (e) {
+  } catch {
     console.log("IndexedDB hung as expected. Taking best-effort fallback screenshot.");
   }
 

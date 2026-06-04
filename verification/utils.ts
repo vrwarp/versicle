@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 import { test as base, expect } from '@playwright/test';
 import type { Page, Frame } from '@playwright/test';
 import * as fs from 'fs';
@@ -21,7 +22,7 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
   // Patches console.log/info/debug to noop so spec-file log calls are
   // silent by default. Set DEBUG_PAGE_LOGS=1 to restore them.
   _suppressLogs: [
-    async ({}, use) => {
+    async ({}, use) /* eslint-disable-line no-empty-pattern */ => {
       if (!process.env.DEBUG_PAGE_LOGS) {
         const noop = () => {};
         console.log = noop;
@@ -104,13 +105,13 @@ export async function resetApp(page: Page) {
 
   await page.evaluate(async () => {
     // Disconnect Yjs to release IDB locks
-    if (typeof (window as any).__DISCONNECT_YJS__ === 'function') {
-      await (window as any).__DISCONNECT_YJS__();
+    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__ === 'function') {
+      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__();
     }
 
     // Disconnect main DB connection to release IndexedDB locks
-    if (typeof (window as any).__CLOSE_DB__ === 'function') {
-      await (window as any).__CLOSE_DB__();
+    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__ === 'function') {
+      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__();
     }
 
     // Unregister Service Workers (with timeout — WebKit's unregister() can hang indefinitely)
@@ -155,7 +156,7 @@ export async function resetApp(page: Page) {
       "[data-testid^='book-card-'], button:has-text('Load Demo Book'), :text('Your library is empty')",
       { timeout: 45000 }
     );
-  } catch (err) {
+  } catch {
     console.warn(`Warning: App load state check failed: ${err}`);
     await captureScreenshot(page, 'reset_app_timeout_debug');
   }
@@ -167,7 +168,7 @@ export async function ensureLibraryWithBook(page: Page) {
       "[data-testid^='book-card-'], button:has-text('Load Demo Book'), :text('Your library is empty')",
       { timeout: 45000 }
     );
-  } catch (err) {
+  } catch {
     console.warn(`Warning: Neither book card nor load button found within 45s: ${err}`);
     await captureScreenshot(page, 'ensure_library_timeout_debug');
   }

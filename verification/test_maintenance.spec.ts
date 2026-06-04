@@ -18,7 +18,7 @@ test("orphan repair", async ({ page }) => {
     return new Promise<void>((resolve) => {
       // Use version 24 (current)
       const req = window.indexedDB.open("EpubLibraryDB", 24);
-      req.onsuccess = (e: any) => {
+      req.onsuccess = (e: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
         const db = e.target.result;
         // Target active stores for maintenance
         const tx = db.transaction(["static_resources", "cache_render_metrics"], "readwrite");
@@ -72,7 +72,7 @@ test("orphan repair", async ({ page }) => {
 
     await successMsg.scrollIntoViewIfNeeded();
     await expect(successMsg).toBeVisible();
-  } catch (e) {
+  } catch {
     // Capture screenshot on failure
     const screenshotsDir = path.resolve(__dirname, "screenshots");
     if (!fs.existsSync(screenshotsDir)) {
@@ -89,7 +89,7 @@ test("orphan repair", async ({ page }) => {
     return new Promise<boolean>((resolve) => {
       // Use version 24
       const req = window.indexedDB.open("EpubLibraryDB", 24);
-      req.onsuccess = (e: any) => {
+      req.onsuccess = (e: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
         const db = e.target.result;
         const tx = db.transaction(["static_resources", "cache_render_metrics"], "readonly");
 

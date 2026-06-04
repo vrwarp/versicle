@@ -1,5 +1,4 @@
-import { test, expect } from './utils';
-import * as utils from './utils';
+import { test } from './utils';
 
 test('verify event history', async ({ page }) => {
   console.log('Navigating to app...');

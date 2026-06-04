@@ -93,7 +93,7 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
 
   try {
     await expect(page.getByText(`Workspace "${wsName}" deleted.`)).toBeVisible({ timeout: 5000 });
-  } catch (e) {
+  } catch {
     console.log("Toast may have disappeared, proceeding to check if workspace is gone.");
   }
 
@@ -132,12 +132,12 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
 
   // Set localStorage values on the correct origin securely (appending, not overwriting!)
   await pageStale.evaluate(({ deletedWsId, uid }) => {
-    let snapshot: Record<string, any> = {};
+    let snapshot: Record<string, unknown> = {};
     const existing = localStorage.getItem('versicle_mock_firestore_snapshot');
     if (existing) {
       try {
         snapshot = JSON.parse(existing);
-      } catch (e) {}
+      } catch { /* empty */ }
     }
     snapshot[`users/${uid}/versicle/${deletedWsId}`] = { isDeleted: true, deletedAt: Date.now() };
     localStorage.setItem('versicle_mock_firestore_snapshot', JSON.stringify(snapshot));

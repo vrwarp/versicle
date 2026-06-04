@@ -1,5 +1,5 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from './utils';
-import * as utils from './utils';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function uploadBook(page: any, filename: string) {
+async function uploadBook(page: Page, filename: string) {
   console.log(`Uploading ${filename}...`);
   const filePath = path.resolve(__dirname, filename);
   const fileBuffer = fs.readFileSync(filePath);
@@ -53,11 +53,11 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   // Clear data
   await pageA.goto('/');
   await pageA.evaluate(async () => {
-    if (typeof (window as any).__DISCONNECT_YJS__ === 'function') {
-      await (window as any).__DISCONNECT_YJS__();
+    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__ === 'function') {
+      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__();
     }
-    if (typeof (window as any).__CLOSE_DB__ === 'function') {
-      await (window as any).__CLOSE_DB__();
+    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__ === 'function') {
+      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__();
     }
     const dbs = await window.indexedDB.databases();
     for (const db of dbs) {
@@ -233,11 +233,11 @@ test('Offload Status Hydration', async ({ browser }) => {
 
   await pageA.goto('/');
   await pageA.evaluate(async () => {
-    if (typeof (window as any).__DISCONNECT_YJS__ === 'function') {
-      await (window as any).__DISCONNECT_YJS__();
+    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__ === 'function') {
+      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__();
     }
-    if (typeof (window as any).__CLOSE_DB__ === 'function') {
-      await (window as any).__CLOSE_DB__();
+    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__ === 'function') {
+      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__();
     }
     const dbs = await window.indexedDB.databases();
     for (const db of dbs) {

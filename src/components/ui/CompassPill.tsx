@@ -10,6 +10,7 @@ import { useSectionDuration } from '../../hooks/useSectionDuration';
 import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check, BookOpen, ArrowUpCircle, Smartphone, Trash2, GraduationCap } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
+import { Popover, PopoverContent, PopoverTrigger } from './Popover';
 
 export type ActionType =
   | 'vocab'      // Payload: null
@@ -87,71 +88,73 @@ const VocabTile: React.FC<{
   const compound = dict ? getCompoundWord(fullSelection, charIndex, dict) : null;
 
   return (
-    <div
-      ref={tileRef}
-      className="relative flex flex-col items-center"
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
-    >
-      {/* Tooltip Popup */}
-      {showTooltip && (pinyin || definition) && (
-        <div 
-          className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 z-50 w-48 bg-popover text-popover-foreground border border-border text-xs rounded-lg p-2.5 shadow-xl pointer-events-auto leading-relaxed"
-          style={{ textShadow: 'none' }}
+    <Popover open={showTooltip && (!!pinyin || !!definition)} onOpenChange={setShowTooltip}>
+      <PopoverTrigger asChild>
+        <div
+          ref={tileRef}
+          className="relative flex flex-col items-center"
+          onMouseEnter={() => setShowTooltip(true)}
+          onMouseLeave={() => setShowTooltip(false)}
         >
-          <div className="font-semibold border-b border-border/40 pb-1 mb-1.5 flex items-center justify-between">
-            <span className="text-sm">{char}</span>
-            <span className="text-muted-foreground font-normal">[{pinyin}]</span>
-          </div>
-          <p className="text-muted-foreground break-words mb-1.5">{definition || 'No standalone definition'}</p>
-          {compound && (
-            <div className="border-t border-border/40 pt-1.5 mt-1.5 text-[10px]">
-              <span className="font-semibold text-primary">In selection: </span>
-              <span className="font-semibold">{compound.word}</span> <span className="text-muted-foreground">[{compound.pinyin}]</span>
-              <p className="text-muted-foreground mt-0.5 break-words">{compound.definition}</p>
-            </div>
-          )}
-          <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-popover" />
+          {/* Main Tile */}
+          <button
+            onClick={onToggle}
+            className={cn(
+              "relative flex flex-col items-center justify-center w-12 h-14 rounded-xl border transition-all duration-200 select-none",
+              isKnown
+                ? "bg-primary/10 border-primary text-primary font-medium shadow-sm hover:bg-primary/15"
+                : "bg-card border-border text-foreground hover:bg-accent hover:border-accent-foreground/30"
+            )}
+            style={{ touchAction: 'manipulation' }}
+          >
+            <span className="text-[10px] text-muted-foreground/80 leading-none h-3 select-none font-pinyin">
+              {pinyin.split(' / ')[0]}
+            </span>
+            <span className="text-lg font-semibold leading-none mt-1 select-none">
+              {char}
+            </span>
+
+            {/* Small [i] icon for touch trigger */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowTooltip(!showTooltip);
+              }}
+              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center text-[9px] text-muted-foreground hover:bg-accent hover:text-foreground shadow-sm transition-colors"
+              title="Show meaning"
+            >
+              i
+            </button>
+
+            {isKnown && (
+              <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-primary flex items-center justify-center text-primary-foreground shadow-sm">
+                <Check size={8} strokeWidth={3} />
+              </div>
+            )}
+          </button>
         </div>
-      )}
-
-      {/* Main Tile */}
-      <button
-        onClick={onToggle}
-        className={cn(
-          "relative flex flex-col items-center justify-center w-12 h-14 rounded-xl border transition-all duration-200 select-none",
-          isKnown
-            ? "bg-primary/10 border-primary text-primary font-medium shadow-sm hover:bg-primary/15"
-            : "bg-card border-border text-foreground hover:bg-accent hover:border-accent-foreground/30"
-        )}
-        style={{ touchAction: 'manipulation' }}
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="center"
+        sideOffset={8}
+        className="w-48 bg-popover text-popover-foreground border border-border text-xs rounded-lg p-2.5 shadow-xl pointer-events-auto leading-relaxed z-[100]"
+        style={{ textShadow: 'none' }}
       >
-        <span className="text-[10px] text-muted-foreground/80 leading-none h-3 select-none font-pinyin">
-          {pinyin.split(' / ')[0]}
-        </span>
-        <span className="text-lg font-semibold leading-none mt-1 select-none">
-          {char}
-        </span>
-
-        {/* Small [i] icon for touch trigger */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowTooltip(!showTooltip);
-          }}
-          className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center text-[9px] text-muted-foreground hover:bg-accent hover:text-foreground shadow-sm transition-colors"
-          title="Show meaning"
-        >
-          i
-        </button>
-
-        {isKnown && (
-          <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-primary flex items-center justify-center text-primary-foreground shadow-sm">
-            <Check size={8} strokeWidth={3} />
+        <div className="font-semibold border-b border-border/40 pb-1 mb-1.5 flex items-center justify-between">
+          <span className="text-sm">{char}</span>
+          <span className="text-muted-foreground font-normal">[{pinyin}]</span>
+        </div>
+        <p className="text-muted-foreground break-words mb-1.5">{definition || 'No standalone definition'}</p>
+        {compound && (
+          <div className="border-t border-border/40 pt-1.5 mt-1.5 text-[10px]">
+            <span className="font-semibold text-primary">In selection: </span>
+            <span className="font-semibold">{compound.word}</span> <span className="text-muted-foreground">[{compound.pinyin}]</span>
+            <p className="text-muted-foreground mt-0.5 break-words">{compound.definition}</p>
           </div>
         )}
-      </button>
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 };
 

@@ -11,9 +11,9 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   // lags the store on WebKit. waitForFunction(fn, arg, options) — the timeout is
   // the THIRD positional arg, so pass `undefined` for arg or it is ignored.
   const waitPlaying = () =>
-    page.waitForFunction(() => (window as any).useTTSStore.getState().isPlaying === true, undefined, { timeout: 30000 });
+    page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().isPlaying === true, undefined, { timeout: 30000 });
   const waitPaused = () =>
-    page.waitForFunction(() => (window as any).useTTSStore.getState().isPlaying === false, undefined, { timeout: 15000 });
+    page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().isPlaying === false, undefined, { timeout: 15000 });
 
   console.log('Starting Audio Bookmarking Journey...');
   await utils.resetApp(page);
@@ -33,7 +33,7 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   // SECURE SYNC: Wait for the TTS engine to actually load the new chapter's text
   console.log('Waiting for TTS queue synchronization...');
   await page.waitForFunction(() => {
-    const queue = (window as any).useTTSStore.getState().queue;
+    const queue = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().queue;
     return queue.length > 0;
   }, undefined, { timeout: 15000 });
   await page.waitForTimeout(500); // Allow state to fully settle
@@ -60,7 +60,7 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   // Wait for the async capture to complete in store
   console.log('Waiting for bookmark to appear in store...');
   await page.waitForFunction(() => {
-    return Object.values((window as any).useAnnotationStore.getState().annotations).some((a: any) => a.type === 'audio-bookmark');
+    return Object.values((window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useAnnotationStore.getState().annotations).some((a: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => a.type === 'audio-bookmark');
   }, undefined, { timeout: 10000 });
 
   await utils.captureScreenshot(page, 'bookmark_1_captured');
@@ -70,10 +70,10 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
 
   // Programmatically trigger triage mode via the store.
   await page.evaluate(() => {
-    const store = (window as any).useAnnotationStore.getState();
-    const bookmark = Object.values(store.annotations).find((a: any) => a.type === 'audio-bookmark');
+    const store = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useAnnotationStore.getState();
+    const bookmark = Object.values(store.annotations).find((a: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => a.type === 'audio-bookmark');
     if (bookmark) {
-      (window as any).useReaderUIStore.getState().setCompassState({
+      (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useReaderUIStore.getState().setCompassState({
         variant: 'audio-triage',
         targetAnnotation: bookmark
       });
@@ -92,8 +92,8 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
 
   // Verify elevation in store
   const isHighlight = await page.evaluate(() => {
-    const store = (window as any).useAnnotationStore.getState();
-    return Object.values(store.annotations).some((a: any) => a.type === 'highlight');
+    const store = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useAnnotationStore.getState();
+    return Object.values(store.annotations).some((a: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => a.type === 'highlight');
   });
   expect(isHighlight).toBeTruthy();
 
@@ -105,24 +105,24 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   // actions instead of the compass-pill buttons. Under the heavy IndexedDB contention
   // of the full parallel WebKit run, the compass-pill button can lag the store state
   // (React re-render delay), making a UI click flaky — the store actions exercise the
-  // same Dragnet capture path deterministically.
+  // same Dragnet capture path deterministically (the pause/play below already do this).
   await page.evaluate(() => {
-    const tts = (window as any).useTTSStore.getState();
+    const tts = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState();
     if (!tts.isPlaying) tts.play();
   });
   await waitPlaying();
 
   // Pause then Play within the Dragnet window (≤5s) to capture the second bookmark.
-  await page.evaluate(() => (window as any).useTTSStore.getState().pause());
+  await page.evaluate(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().pause());
   await waitPaused();
   await page.waitForTimeout(300);
-  await page.evaluate(() => (window as any).useTTSStore.getState().play());
+  await page.evaluate(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().play());
   await waitPlaying();
 
   // Wait for the second bookmark to appear
   await page.waitForFunction(() => {
-    return Object.values((window as any).useAnnotationStore.getState().annotations)
-      .filter((a: any) => a.type === 'audio-bookmark').length > 0;
+    return Object.values((window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useAnnotationStore.getState().annotations)
+      .filter((a: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => a.type === 'audio-bookmark').length > 0;
   }, undefined, { timeout: 10000 });
 
   // Go back to library. TTS is actively playing here, which lets the reader→library
@@ -146,8 +146,8 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
 
   // After discarding all bookmarks, the inbox should disappear
   const remaining = await page.evaluate(() => {
-    return Object.values((window as any).useAnnotationStore.getState().annotations)
-      .filter((a: any) => a.type === 'audio-bookmark').length;
+    return Object.values((window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useAnnotationStore.getState().annotations)
+      .filter((a: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => a.type === 'audio-bookmark').length;
   });
   if (remaining === 0) {
     await expect(page.getByText('Audio Bookmarks Inbox')).not.toBeVisible();
