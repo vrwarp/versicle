@@ -93,7 +93,7 @@ test("verify reprocessing interstitial", async ({ page, browserName }) => {
 
     // Take screenshot while it's processing
     await captureScreenshot(page, "reprocessing_interstitial");
-  } catch {
+  } catch (e) {
     console.log("Interstitial missed or failed to appear (might be too fast):", e);
     await captureScreenshot(page, "reprocessing_missed");
   }

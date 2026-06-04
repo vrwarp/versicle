@@ -157,7 +157,7 @@ test("smart toc failure", async ({ page }) => {
   // Expect error toast
   try {
     await expect(page.getByText("AI features are disabled or not configured")).toBeVisible({ timeout: 10000 });
-  } catch {
+  } catch (e) {
     console.log("Taking failure screenshot for Scenario 1...");
     await page.screenshot({ path: path.join(screenshotsDir, `smart_toc_failure_sc1_${suffix}.png`) });
     throw e;
@@ -207,7 +207,7 @@ test("smart toc failure", async ({ page }) => {
   // Expect failure toast
   try {
     await expect(page.getByText("Failed to enhance TOC")).toBeVisible({ timeout: 5000 });
-  } catch {
+  } catch (e) {
     console.log("Taking failure screenshot...");
     await page.screenshot({ path: path.join(screenshotsDir, `smart_toc_failure_debug_${suffix}.png`) });
     throw e;

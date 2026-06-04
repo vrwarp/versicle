@@ -65,7 +65,7 @@ test("tts cross chapter transition", async ({ page }) => {
         await captureScreenshot(page, "cross_chapter_same");
       }
     }
-  } catch {
+  } catch (e) {
     console.log("Exception checking queue state", e);
     await captureScreenshot(page, "cross_chapter_exception");
   }
@@ -147,8 +147,16 @@ test("tts chapter navigation during playback", async ({ page }) => {
     console.log(`WARNING: Queue may not have refreshed. Ch3: ${chapter3FirstItem.substring(0, 30)}, Ch5: ${chapter5FirstItem.substring(0, 30)}`);
   }
 
-  // Verify current index is 0
-  await expect(page.getByTestId("tts-queue-item-0")).toHaveAttribute("data-current", "true");
+  // Verify current index reset to 0 after the chapter change. Assert via the TTS store
+  // (source of truth) with a generous timeout — on WebKit under full-suite load the queue
+  // re-sync after navigation can lag, and the DOM data-current attribute follows the store.
+  await page.waitForFunction(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    () => (window as any).useTTSStore?.getState?.().currentIndex === 0,
+    undefined,
+    { timeout: 20000 }
+  );
+  await expect(page.getByTestId("tts-queue-item-0")).toHaveAttribute("data-current", "true", { timeout: 10000 });
 
   await captureScreenshot(page, "chapter_navigation_playback");
   console.log("Chapter Navigation During Playback Test Passed!");

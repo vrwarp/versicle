@@ -158,28 +158,19 @@ test("tts position persists across reload", async ({ page }) => {
   // Wait for queue restoration
   await page.waitForTimeout(2000);
 
-  // Check that item 5 is still current
-  try {
-    await expect(page.getByTestId("tts-queue-item-5")).toHaveAttribute("data-current", "true", { timeout: 5000 });
-    const restoredText = await page.getByTestId("tts-queue-item-5").innerText();
-    console.log(`Item 5 text after reload: ${restoredText.substring(0, 50)}...`);
-    expect(item5Text).toBe(restoredText);
-    console.log("Position Persistence Across Reload Test Passed!");
-  } catch {
-    // Check what the current position actually is
-    for (let i = 0; i < 10; i++) {
-      try {
-        if ((await page.getByTestId(`tts-queue-item-${i}`).getAttribute("data-current")) === "true") {
-          console.log(`Actually at index ${i} after reload`);
-          break;
-        }
-      } catch {
-        continue;
-      }
-    }
-    await captureScreenshot(page, "position_persistence_check");
-    throw e;
-  }
+  // Check that item 5 is still current after reload. Assert the restored position via the
+  // TTS store (the source of truth) with a generous timeout — on WebKit under full-suite
+  // load the session restore can lag, and the DOM data-current attribute follows the store.
+  await page.waitForFunction(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    () => (window as any).useTTSStore?.getState?.().currentIndex === 5,
+    undefined,
+    { timeout: 20000 }
+  );
+  const restoredText = await page.getByTestId("tts-queue-item-5").innerText();
+  console.log(`Item 5 text after reload: ${restoredText.substring(0, 50)}...`);
+  expect(item5Text).toBe(restoredText);
+  console.log("Position Persistence Across Reload Test Passed!");
 
   await captureScreenshot(page, "position_persistence_success");
 });

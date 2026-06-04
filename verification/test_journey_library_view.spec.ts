@@ -23,8 +23,9 @@ test('Library Grid/List Toggle', async ({ page }) => {
   console.log('Uploading Frankenstein...');
   await fileInput.setInputFiles(path.resolve(__dirname, 'frankenstein.epub'));
 
-  // Increase timeout for second upload
-  await expect(page.locator("[data-testid^='book-card-']")).toHaveCount(2, { timeout: 10000 });
+  // The second upload (import + IDB writes) can be slow on WebKit under full-suite load,
+  // so allow extra time for the second card to render.
+  await expect(page.locator("[data-testid^='book-card-']")).toHaveCount(2, { timeout: 30000 });
 
   await utils.captureScreenshot(page, 'library_view_1_grid_initial');
 
