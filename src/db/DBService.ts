@@ -590,55 +590,106 @@ class DBService {
 
   // --- Playback State ---
 
-  async updatePlaybackState(bookId: string, _lastPlayedCfi?: string, lastPauseTime?: number | null): Promise<void> {
+  // ── cache_session_state persistence (WebKit-hang-safe) ─────────────────────
+  // WebKit's IndexedDB hangs on two patterns we hit during TTS, each leaving a lone
+  // cache_session_state readwrite transaction outstanding for 5–15s (proven with
+  // verification/_idb_probe.js) — which wedges the connection and, through it, the
+  // single-chain TTS task sequencer (play/pause never settle):
+  //   1. concurrent readwrite transactions on the same store, and
+  //   2. a readwrite transaction with an intra-transaction await — read-modify-write
+  //      (`await store.get()` then `await store.put()`). The transaction can go inactive
+  //      across the await and never fire 'complete'.
+  // Mitigation: keep an in-memory mirror of each book's record, serialise every write
+  // through one chain (no concurrency), and write with a single synchronous put() and no
+  // await before it (no intra-transaction read).
+  private sessionWriteChain: Promise<void> = Promise.resolve();
+  private sessionCache = new Map<string, CacheSessionState>();
+
+  private enqueueSessionWrite(work: () => Promise<void>): Promise<void> {
+    const next = this.sessionWriteChain.then(work, work);
+    // Keep the chain alive even if an individual write rejects.
+    this.sessionWriteChain = next.then(() => {}, () => {});
+    return next;
+  }
+
+  /** Resolve a book's session record, seeding the in-memory mirror from disk once. */
+  private async loadSession(bookId: string): Promise<CacheSessionState> {
+    const cached = this.sessionCache.get(bookId);
+    if (cached) return cached;
+    let session: CacheSessionState | undefined;
     try {
       const db = await this.getDB();
-      // Only cache_session_state is updated now
-      const tx = db.transaction(['cache_session_state'], 'readwrite');
-
-      if (lastPauseTime !== undefined) {
-        const sessionStore = tx.objectStore('cache_session_state');
-        const session = await sessionStore.get(bookId) || { bookId, playbackQueue: [], updatedAt: Date.now() };
-        session.lastPauseTime = lastPauseTime === null ? undefined : lastPauseTime;
-        await sessionStore.put(session);
-      }
-
-      await tx.done;
+      session = await db.get('cache_session_state', bookId);
     } catch (error) {
       this.handleError(error);
     }
+    // A concurrent caller may have populated the mirror while we awaited the read.
+    const current = this.sessionCache.get(bookId);
+    if (current) return current;
+    const resolved = session || { bookId, playbackQueue: [], updatedAt: Date.now() };
+    this.sessionCache.set(bookId, resolved);
+    return resolved;
+  }
+
+  /** Serialised, hang-safe write of a book's mirrored record (single synchronous put). */
+  private writeSession(bookId: string): Promise<void> {
+    return this.enqueueSessionWrite(async () => {
+      const session = this.sessionCache.get(bookId);
+      if (!session) return;
+      // Snapshot now so a later in-memory mutation can't change the object mid-commit.
+      const snapshot = { ...session };
+      try {
+        const db = await this.getDB();
+        const tx = db.transaction('cache_session_state', 'readwrite');
+        // Single synchronous put, no await before it — the WebKit-hang-safe shape.
+        tx.objectStore('cache_session_state').put(snapshot);
+        await tx.done;
+      } catch (error) {
+        this.handleError(error);
+      }
+    });
+  }
+
+  async updatePlaybackState(bookId: string, _lastPlayedCfi?: string, lastPauseTime?: number | null): Promise<void> {
+    // CFI is no longer persisted here; only lastPauseTime is written.
+    if (lastPauseTime === undefined) return;
+    const session = await this.loadSession(bookId);
+    session.lastPauseTime = lastPauseTime === null ? undefined : lastPauseTime;
+    session.updatedAt = Date.now();
+    this.scheduleSessionWrite(bookId);
   }
 
   // --- TTS State Operations ---
 
-  private saveTTSStateTimeout: NodeJS.Timeout | null = null;
-  private pendingTTSState: { [bookId: string]: CacheSessionState } = {};
-
   saveTTSState(bookId: string, queue: TTSQueueItem[]): void {
-    this.pendingTTSState[bookId] = {
-      bookId,
-      playbackQueue: queue,
-      updatedAt: Date.now()
-    };
+    // Update the in-memory mirror (preserving lastPauseTime), then debounce the disk write.
+    const session = this.sessionCache.get(bookId) || { bookId, playbackQueue: [], updatedAt: Date.now() };
+    session.playbackQueue = queue;
+    session.updatedAt = Date.now();
+    this.sessionCache.set(bookId, session);
+    this.scheduleSessionWrite(bookId);
+  }
 
-    if (this.saveTTSStateTimeout) return;
+  // Debounced, coalesced disk persistence for cache_session_state. The in-memory mirror is
+  // the source of truth during a session, so disk writes (which only matter for
+  // cross-session resume) can be batched. Coalescing also minimises how often a
+  // cache_session_state readwrite txn is in flight: WebKit can still intermittently hang
+  // even a single clean put(), and a hung txn wedges the whole connection (and the TTS
+  // sequencer behind it) — so fewer writes means fewer chances to wedge during the
+  // play/pause window. (The window is shorter than the 1s the queue write already used, so
+  // cross-session resume is no more delayed than before.)
+  private sessionDirty = new Set<string>();
+  private sessionFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
-    this.saveTTSStateTimeout = setTimeout(async () => {
-      this.saveTTSStateTimeout = null;
-      const pending = { ...this.pendingTTSState };
-      this.pendingTTSState = {};
-
-      try {
-        const db = await this.getDB();
-        const tx = db.transaction('cache_session_state', 'readwrite');
-        const store = tx.objectStore('cache_session_state');
-
-        await Promise.all(Object.values(pending).map(state => store.put(state)));
-        await tx.done;
-      } catch (error) {
-        logger.error('Failed to save TTS state', error);
-      }
-    }, 1000);
+  private scheduleSessionWrite(bookId: string): void {
+    this.sessionDirty.add(bookId);
+    if (this.sessionFlushTimer) return;
+    this.sessionFlushTimer = setTimeout(() => {
+      this.sessionFlushTimer = null;
+      const books = [...this.sessionDirty];
+      this.sessionDirty.clear();
+      for (const id of books) void this.writeSession(id);
+    }, 500);
   }
 
   async getTTSState(bookId: string): Promise<TTSState | undefined> {
@@ -647,6 +698,8 @@ class DBService {
       const session = await db.get('cache_session_state', bookId);
 
       if (session) {
+        // Seed the in-memory mirror so later writes never need an intra-transaction read.
+        this.sessionCache.set(bookId, session);
         return {
           bookId,
           queue: session.playbackQueue,
@@ -786,9 +839,13 @@ class DBService {
   // --- Cleanup ---
 
   cleanup(): void {
-    if (this.saveTTSStateTimeout) {
-      clearTimeout(this.saveTTSStateTimeout);
-      this.saveTTSStateTimeout = null;
+    if (this.sessionFlushTimer) {
+      clearTimeout(this.sessionFlushTimer);
+      this.sessionFlushTimer = null;
+      // Flush any pending session writes synchronously-ish before teardown.
+      const books = [...this.sessionDirty];
+      this.sessionDirty.clear();
+      for (const id of books) void this.writeSession(id);
     }
   }
 
