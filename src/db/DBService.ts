@@ -839,14 +839,14 @@ class DBService {
   // --- Cleanup ---
 
   cleanup(): void {
+    // Cancel any pending (debounced) session write. cleanup() runs at teardown; the
+    // in-memory mirror still holds the latest state, and writing during teardown can race
+    // a closing DB connection — so drop the pending write rather than flush it.
     if (this.sessionFlushTimer) {
       clearTimeout(this.sessionFlushTimer);
       this.sessionFlushTimer = null;
-      // Flush any pending session writes synchronously-ish before teardown.
-      const books = [...this.sessionDirty];
-      this.sessionDirty.clear();
-      for (const id of books) void this.writeSession(id);
     }
+    this.sessionDirty.clear();
   }
 
   // --- TTS Content Operations (For Migration/Caching) ---

@@ -14,6 +14,7 @@ const { mockPlayerInstance, mockLoadVoices } = vi.hoisted(() => {
             stop: vi.fn(),
             generatePreroll: vi.fn().mockReturnValue("Chapter 1. Estimated reading time: 1 minute."),
             loadSectionBySectionId: vi.fn(),
+            clearPauseGesture: vi.fn(),
         },
         mockLoadVoices: vi.fn()
     };

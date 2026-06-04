@@ -54,7 +54,7 @@ describe('waitForServiceWorkerController', () => {
         await expect(promise).resolves.toBeUndefined();
     });
 
-    it('throws error after max attempts', async () => {
+    it('resolves gracefully after max attempts (does not hang or throw)', async () => {
         Object.defineProperty(window.navigator, 'serviceWorker', {
             value: {
                 ready: Promise.resolve(),
@@ -64,19 +64,15 @@ describe('waitForServiceWorkerController', () => {
             writable: true,
         });
 
-        // Capture the promise and attach a catch handler IMMEDIATELY
-        // to prevent "unhandled rejection" during timer advancement.
         const promise = waitForServiceWorkerController(window.navigator);
-        const resultPromise = promise.catch(e => e);
 
-        // Expontential backoff: ~1275ms
-        // Advance enough time to exhaust retries
+        // Exponential backoff over 8 attempts (~1275ms). Advance enough to exhaust them.
         await vi.advanceTimersByTimeAsync(2000);
 
-        // Now check the result
-        const result = await resultPromise;
-        expect(result).toBeInstanceOf(Error);
-        expect(result.message).toMatch(/Controller still not ready after 8 attempts/);
+        // The function gives up gracefully (resolves) rather than throwing, so callers
+        // can proceed even when the SW never takes control (e.g. WebKit / Playwright with
+        // serviceWorkers:'block'). See waitForServiceWorkerController.
+        await expect(promise).resolves.toBeUndefined();
     });
 
     it('does nothing if serviceWorker is not supported', async () => {
