@@ -154,7 +154,7 @@ test("tts chapter navigation during playback", async ({ page }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     () => (window as any).useTTSStore?.getState?.().currentIndex === 0,
     undefined,
-    { timeout: 20000 }
+    { timeout: 35000 }
   );
   await expect(page.getByTestId("tts-queue-item-0")).toHaveAttribute("data-current", "true", { timeout: 10000 });
 

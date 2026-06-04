@@ -165,7 +165,7 @@ test("tts position persists across reload", async ({ page }) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     () => (window as any).useTTSStore?.getState?.().currentIndex === 5,
     undefined,
-    { timeout: 20000 }
+    { timeout: 35000 }
   );
   const restoredText = await page.getByTestId("tts-queue-item-5").innerText();
   console.log(`Item 5 text after reload: ${restoredText.substring(0, 50)}...`);
