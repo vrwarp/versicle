@@ -64,6 +64,7 @@ export const ReaderView: React.FC = () => {
     const navigate = useNavigate();
     const { activeSidebar, setSidebar } = useSidebarState();
     const viewerRef = useRef<HTMLDivElement>(null);
+
     const previousLocation = useRef<{ start: string; end: string; timestamp: number } | null>(null);
     const scrollWrapperRef = useRef<HTMLDivElement>(null);
 
@@ -1146,7 +1147,12 @@ export const ReaderView: React.FC = () => {
                                 if (activeSidebar !== 'none') {
                                     setSidebar('none');
                                 } else {
-                                    navigate('/');
+                                    // flushSync: React Router 7 wraps navigations in startTransition by
+                                    // default; on WebKit that transition can be starved when nothing else
+                                    // re-renders (e.g. TTS idle), so the URL updates but the route never
+                                    // re-renders and the reader→library transition wedges. Force a
+                                    // synchronous navigation so it always completes.
+                                    navigate('/', { flushSync: true });
                                 }
                             }}
                             className="rounded-full text-muted-foreground"
@@ -1281,6 +1287,13 @@ export const ReaderView: React.FC = () => {
                         activeTocId={activeTocId ?? undefined}
                         deviceMarkers={deviceMarkers}
                         onNavigate={(href) => {
+                            // Invalidate any pending pause→play "Dragnet" capture on the navigation
+                            // INTENT (the TOC click), synchronously. The reader's relocation →
+                            // currentSectionId update is slow/unreliable on WebKit, so clearing only
+                            // on the section change (see useTTS) races the user's next play and lets a
+                            // stale audio-bookmark slip through. A deliberate TOC navigation is never a
+                            // resume gesture, so drop the pause timestamp immediately.
+                            AudioPlayerService.getInstance().clearPauseGesture();
                             rendition?.display(href);
                             setSidebar('none');
                         }}

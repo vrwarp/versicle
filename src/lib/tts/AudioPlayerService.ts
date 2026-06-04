@@ -795,6 +795,22 @@ export class AudioPlayerService {
         });
     }
 
+    /**
+     * Invalidate any pending pause→play "Dragnet" capture. Called synchronously when the
+     * reader navigates to a different section (see useTTS). A chapter change between a
+     * pause and a play is a deliberate navigation, not a resume gesture, so it must not
+     * capture a stale audio-bookmark. This runs OUTSIDE the task sequencer so it always
+     * precedes a subsequent play() — unlike the clear inside loadSectionInternal, which is
+     * enqueued and can be skipped by the loadSectionBySectionId guard (or never reached
+     * when the queue-sync early-returns while playing).
+     */
+    public clearPauseGesture(): void {
+        if (this.lastUserPauseTimestamp !== null) {
+            flightRecorder.record('APS', 'clearPauseGesture', {});
+            this.lastUserPauseTimestamp = null;
+        }
+    }
+
     stop() {
         return this.enqueue(async () => {
             await this.stopInternal();
