@@ -1,6 +1,7 @@
 import type * as Y from 'yjs';
 import type { IndexeddbPersistence } from 'y-indexeddb';
 import { createLogger } from '../lib/logger';
+import { runExclusiveIdbWrite } from '../lib/idb-write-lock';
 
 const logger = createLogger('YjsIdbThrottle');
 
@@ -78,8 +79,11 @@ export function installThrottledYjsPersistence(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ((persistence as any).db as IDBDatabase | null) ?? null;
 
+    // Serialised through the shared IDB write lock so this `updates` readwrite transaction
+    // never overlaps a DBService cache_session_state write — concurrent readwrite txns hang
+    // WebKit (see src/lib/idb-write-lock.ts).
     const writeBatch = (db: IDBDatabase, batch: Uint8Array[]): Promise<void> =>
-        new Promise((resolve, reject) => {
+        runExclusiveIdbWrite(() => new Promise<void>((resolve, reject) => {
             let txn: IDBTransaction;
             try {
                 txn = db.transaction([UPDATES_STORE], 'readwrite');
@@ -93,7 +97,7 @@ export function installThrottledYjsPersistence(
             const store = txn.objectStore(UPDATES_STORE);
             // `updates` is an autoIncrement store — add() with no key (== idb.addAutoKey).
             for (const u of batch) store.add(u);
-        });
+        }));
 
     const runFlush = async (): Promise<void> => {
         timer = null;

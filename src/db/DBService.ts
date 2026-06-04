@@ -25,6 +25,7 @@ import { createLogger } from '../lib/logger';
 
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
+import { runExclusiveIdbWrite } from '../lib/idb-write-lock';
 
 const logger = createLogger('DBService');
 
@@ -640,10 +641,15 @@ class DBService {
       const snapshot = { ...session };
       try {
         const db = await this.getDB();
-        const tx = db.transaction('cache_session_state', 'readwrite');
-        // Single synchronous put, no await before it — the WebKit-hang-safe shape.
-        tx.objectStore('cache_session_state').put(snapshot);
-        await tx.done;
+        // Serialised through the shared IDB write lock so this cache_session_state readwrite
+        // transaction never overlaps a Yjs `updates` write — concurrent readwrite txns hang
+        // WebKit (see src/lib/idb-write-lock.ts).
+        await runExclusiveIdbWrite(async () => {
+          const tx = db.transaction('cache_session_state', 'readwrite');
+          // Single synchronous put, no await before it — the WebKit-hang-safe shape.
+          tx.objectStore('cache_session_state').put(snapshot);
+          await tx.done;
+        });
       } catch (error) {
         this.handleError(error);
       }
