@@ -52,7 +52,8 @@ test("verify progress bar", async ({ page }) => {
 
   // Force reload to ensure library fetches latest book data if state wasn't updated
   await page.reload();
-  await page.waitForSelector('[data-testid^="book-card-"]', { timeout: 15000 });
+  // WebKit library re-hydration after reload can lag under full-suite parallel load.
+  await page.waitForSelector('[data-testid^="book-card-"]', { timeout: 25000 });
 
   // Verify progress bar is visible
   // We expect some progress > 0

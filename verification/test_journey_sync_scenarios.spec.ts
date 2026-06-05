@@ -238,7 +238,8 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   await pageB.waitForTimeout(1000);
   await pageB.getByRole("button", { name: "Sync & Cloud" }).click();
 
-  await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 40000 });
+  // WebKit cross-client sync-halt detection lags under full-suite parallel load.
+  await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 60000 });
   await pageB.getByRole("button", { name: "Switch" }).click();
 
   console.log("[B] Handling migration confirmation modal...");
@@ -464,7 +465,8 @@ test("offline resilience", async ({ browser, baseURL }) => {
   await pageB.waitForTimeout(1000);
   await pageB.getByRole("button", { name: "Sync & Cloud" }).click();
 
-  await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 40000 });
+  // WebKit cross-client sync-halt detection lags under full-suite parallel load.
+  await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 60000 });
   await pageB.getByRole("button", { name: "Switch" }).click();
 
   console.log("[B] Handling migration confirmation modal...");

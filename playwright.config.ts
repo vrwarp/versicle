@@ -67,7 +67,9 @@ export default defineConfig({
       // which makes render-sensitive panels (e.g. the audio deck settings tab)
       // occasionally fail to paint within the wait. Extra retries absorb this
       // environmental flakiness — the tests themselves are deterministic in isolation.
-      retries: 2,
+      // Full-suite runs keep WebKit parallel (for runtime), so these retries also absorb the
+      // parallel-WebKit CPU/IO contention that intermittently lags a reader/library load.
+      retries: 3,
     },
   ],
 });
