@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import * as Y from 'yjs';
-import { IndexeddbPersistence } from 'y-indexeddb';
+import { IndexeddbPersistence } from 'y-idb';
 import { Button } from '../ui/Button';
 import { createLogger } from '../../lib/logger';
 import { Download, RefreshCw, AlertCircle } from 'lucide-react';

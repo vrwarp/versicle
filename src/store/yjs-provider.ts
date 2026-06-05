@@ -1,7 +1,7 @@
 import * as Y from 'yjs';
-import { IndexeddbPersistence } from 'y-indexeddb';
+import { IndexeddbPersistence } from 'y-idb';
 import { isStorageSupported } from '../lib/sync/support';
-import { installThrottledYjsPersistence, type ThrottleController } from './yjs-idb-throttle';
+import { runExclusiveIdbWrite } from '../lib/idb-write-lock';
 import { createLogger } from '../lib/logger';
 import type { YjsOptions } from 'zustand-middleware-yjs';
 import type { UserProgress } from '../types/db';
@@ -23,19 +23,14 @@ if (typeof window !== 'undefined') {
 }
 
 let persistence: IndexeddbPersistence | null = null;
-let throttleController: ThrottleController | null = null;
 
 // Initialize persistence only if supported
 if (isStorageSupported()) {
     try {
-        persistence = new IndexeddbPersistence('versicle-yjs', yDoc);
-
-        // Replace y-indexeddb's per-update fire-and-forget IDB writer with a
-        // coalescing, single-in-flight writer. Stock y-indexeddb opens a fresh
-        // readwrite transaction on the `updates` store for every Y.Doc update with
-        // no concurrency limit; under TTS's rapid update cadence that backlog hangs
-        // IndexedDB on WebKit and wedges the TTS task sequencer. See yjs-idb-throttle.ts.
-        throttleController = installThrottledYjsPersistence(persistence, yDoc, { flushMs: 200 });
+        persistence = new IndexeddbPersistence('versicle-yjs', yDoc, {
+            writeDebounceMs: 200,
+            transactionRunner: runExclusiveIdbWrite,
+        });
 
         persistence.on('synced', () => {
             logger.info('Content loaded from IndexedDB (versicle-yjs)');
@@ -237,12 +232,6 @@ export const waitForYjsSync = (timeoutMs = 5000): Promise<void> => {
 export const disconnectYjs = async () => {
     if (persistence) {
         logger.info('Disconnecting persistence...');
-        // Tear down the throttled writer first so any buffered updates are flushed
-        // and its handlers are detached before the underlying DB connection closes.
-        if (throttleController) {
-            await throttleController.teardown();
-            throttleController = null;
-        }
         await persistence.destroy();
         persistence = null;
         logger.info('Persistence disconnected.');

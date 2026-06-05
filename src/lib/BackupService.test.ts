@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 // Mock y-indexeddb to avoid side effects in yjs-provider
-vi.mock('y-indexeddb', () => ({
+vi.mock('y-idb', () => ({
   IndexeddbPersistence: class {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     constructor(_name: string, doc: any) {
