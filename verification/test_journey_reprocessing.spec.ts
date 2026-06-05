@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { ensureLibraryWithBook, captureScreenshot, resetApp } from "./utils";
+import { ensureLibraryWithBook, captureScreenshot, resetApp, waitForPersistedWrites } from "./utils";
 
 test("verify reprocessing interstitial", async ({ page, browserName }) => {
   // Skipped on WebKit: epub.js book re-import is pathologically slow here — the reader
@@ -76,6 +76,11 @@ test("verify reprocessing interstitial", async ({ page, browserName }) => {
   }, bookId);
 
   console.log("Downgraded book version to 0.");
+
+  // Let the debounced Yjs library write reach disk before the hard reload, otherwise the book
+  // is gone from the library after reload (the on-screen card renders from the in-memory store,
+  // which does not prove the entry has been persisted to y-idb yet).
+  await waitForPersistedWrites(page);
 
   // Reload to ensure Reader checks the new (old) version
   await page.reload();

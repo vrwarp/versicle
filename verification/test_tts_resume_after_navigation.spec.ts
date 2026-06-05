@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter } from "./utils";
+import { captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter, waitForPersistedWrites } from "./utils";
 
 test("tts resume after leaving book", async ({ page, baseURL }) => {
   console.log("Starting Resume After Navigation Test...");
@@ -145,6 +145,11 @@ test("tts position persists across reload", async ({ page }) => {
   await expect(page.getByTestId("tts-queue-item-5")).toHaveAttribute("data-current", "true", { timeout: 10000 });
   const item5Text = await page.getByTestId("tts-queue-item-5").innerText();
   console.log(`Item 5 text before reload: ${item5Text.substring(0, 50)}...`);
+
+  // Let the debounced position writes (Yjs currentQueueIndex + DBService playback queue) reach
+  // disk before the hard reload; otherwise the reload tears the page down with the writes still
+  // buffered and the restored position is lost.
+  await waitForPersistedWrites(page);
 
   // Reload page
   console.log("Reloading page...");

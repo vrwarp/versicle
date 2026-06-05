@@ -55,6 +55,9 @@ test('Library Grid/List Toggle', async ({ page }) => {
 
   // 5. Persistence Check
   console.log('Reloading to check persistence...');
+  // Let the debounced library + view-preference writes reach disk before the hard reload,
+  // otherwise the reload tears the page down with them still buffered.
+  await utils.waitForPersistedWrites(page);
   await page.reload();
   await expect(bookListItem).toBeVisible({ timeout: 5000 });
   await expect(toggleBtn).toHaveAttribute('aria-label', 'Switch to grid view');

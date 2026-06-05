@@ -65,8 +65,10 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
     // test this captures the wedge state: any IDB txn still outstanding here is a hang.
     if (process.env.TTS_IDB_PROBE) {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const summary = await page.evaluate(() => (window as any).__idbProbe?.summary?.() ?? null);
         const fr = await page.evaluate(() => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const f = (window as any).__ttsFlightRecorder;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           return f?.export ? f.export().slice(-40).map((e: any) => `${e.src}.${e.ev}`) : [];
@@ -160,6 +162,25 @@ export async function resetApp(page: Page) {
     console.warn(`Warning: App load state check failed: ${err}`);
     await captureScreenshot(page, 'reset_app_timeout_debug');
   }
+}
+
+/**
+ * Wait for the app's debounced IndexedDB writes to reach disk before a hard `page.reload()`.
+ *
+ * Persistence is intentionally debounced and coalesced through a single in-flight transaction
+ * to avoid the WebKit IndexedDB hangs that motivated the y-idb migration:
+ *   - Yjs state (e.g. reading progress / TTS `currentQueueIndex`) → y-idb, writeDebounceMs=200
+ *   - DBService `cache_session_state` (e.g. the TTS playback queue) → 500ms debounce
+ * Both flush asynchronously and cannot be guaranteed to commit during page teardown, so a
+ * `page.reload()` issued immediately after a write tears the page down with the bytes still
+ * buffered — and the state is gone after reload. Tests that assert "X survives a reload" must
+ * let those windows drain first (the in-SPA navigation tests already wait ~1s "to persist").
+ *
+ * The wait comfortably exceeds the longest debounce (500ms) plus write time; once the test
+ * goes idle here no new writes are issued, so the timers fire and the queued writes complete.
+ */
+export async function waitForPersistedWrites(page: Page) {
+  await page.waitForTimeout(1500);
 }
 
 export async function ensureLibraryWithBook(page: Page) {

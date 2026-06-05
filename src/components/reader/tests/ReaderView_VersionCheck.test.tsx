@@ -12,7 +12,7 @@ const { mockUseBook } = vi.hoisted(() => ({
 }));
 
 vi.mock('../../../store/selectors', () => ({
-    useBook: (id: any) => mockUseBook(id),
+    useBook: (id: string | null) => mockUseBook(id),
     useLastReadBook: vi.fn(),
     useAllBooks: vi.fn()
 }));

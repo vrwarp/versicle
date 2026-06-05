@@ -60,7 +60,7 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   // Wait for the async capture to complete in store
   console.log('Waiting for bookmark to appear in store...');
   await page.waitForFunction(() => {
-    return Object.values((window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useAnnotationStore.getState().annotations).some((a: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => a.type === 'audio-bookmark');
+    return Object.values((window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useAnnotationStore.getState().annotations).some((a: any) => a.type === 'audio-bookmark');
   }, undefined, { timeout: 10000 });
 
   await utils.captureScreenshot(page, 'bookmark_1_captured');

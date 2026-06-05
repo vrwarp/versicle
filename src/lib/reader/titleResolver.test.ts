@@ -111,7 +111,7 @@ describe('titleResolver', () => {
     });
 
     it('falls back to true if useSyntheticToc is undefined and syntheticToc contains items', () => {
-      const book: any = {
+      const book: Partial<UserInventoryItem> = {
         useSyntheticToc: undefined,
         syntheticToc: [{ id: '1', label: 'AI Title', href: 'ch1.html' }]
       };
@@ -119,13 +119,13 @@ describe('titleResolver', () => {
     });
 
     it('falls back to false if useSyntheticToc is undefined and syntheticToc is empty or missing', () => {
-      const bookEmpty: any = {
+      const bookEmpty: Partial<UserInventoryItem> = {
         useSyntheticToc: undefined,
         syntheticToc: []
       };
       expect(resolveSyntheticPreference(bookEmpty)).toBe(false);
 
-      const bookMissing: any = {
+      const bookMissing: Partial<UserInventoryItem> = {
         useSyntheticToc: undefined
       };
       expect(resolveSyntheticPreference(bookMissing)).toBe(false);
