@@ -498,7 +498,7 @@ export const LibraryView: React.FC = () => {
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
             <Select value={activeContext || 'library'} onValueChange={(val) => setActiveContext(val as 'library' | 'notes')}>
-              <SelectTrigger className="w-auto text-3xl font-bold border-0 shadow-none p-0 h-auto focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none" aria-label="Select view context">
+              <SelectTrigger className="w-auto text-2xl sm:text-3xl font-bold border-0 shadow-none p-0 h-auto focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none flex-shrink-0" aria-label="Select view context">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -525,8 +525,9 @@ export const LibraryView: React.FC = () => {
                 <Button
                   onClick={() => setIsImportSourceOpen(true)}
                   disabled={isImporting}
-                  className="gap-2 shadow-sm"
+                  className="gap-2 shadow-sm max-sm:px-3"
                   data-testid="header-add-button"
+                  size={isImporting ? "icon" : "default"}
                 >
                   {isImporting ? (
                     <>
@@ -538,9 +539,6 @@ export const LibraryView: React.FC = () => {
                   )}
                   <span aria-hidden={isImporting} className="font-medium hidden sm:inline">
                     {isImporting ? "Importing..." : "Import Book"}
-                  </span>
-                  <span aria-hidden={isImporting} className="font-medium sm:hidden">
-                    {isImporting ? "Importing..." : "Import"}
                   </span>
                 </Button>
               </>
