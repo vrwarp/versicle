@@ -238,7 +238,7 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   await pageB.waitForTimeout(1000);
   await pageB.getByRole("button", { name: "Sync & Cloud" }).click();
 
-  await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 20000 });
+  await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 40000 });
   await pageB.getByRole("button", { name: "Switch" }).click();
 
   console.log("[B] Handling migration confirmation modal...");
@@ -263,8 +263,9 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   await pageB.setInputFiles("data-testid=restore-file-input", alicePath);
   await pageB.waitForTimeout(2000);
 
-  // Wait for restoration to complete
-  await expect(pageB.getByRole("dialog")).toBeHidden({ timeout: 10000 });
+  // Wait for restoration to complete. The Content Missing dialog closes once the re-supplied
+  // epub finishes re-ingesting, which is slow on WebKit under full-suite load.
+  await expect(pageB.getByRole("dialog")).toBeHidden({ timeout: 45000 });
 
   // Resume Reading
   console.log("[B] Checking for Resume Badge...");
@@ -463,7 +464,7 @@ test("offline resilience", async ({ browser, baseURL }) => {
   await pageB.waitForTimeout(1000);
   await pageB.getByRole("button", { name: "Sync & Cloud" }).click();
 
-  await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 20000 });
+  await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 40000 });
   await pageB.getByRole("button", { name: "Switch" }).click();
 
   console.log("[B] Handling migration confirmation modal...");

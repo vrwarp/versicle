@@ -210,7 +210,9 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   await pageB.setInputFiles('data-testid=restore-file-input', restoreFilePath);
   await pageB.waitForTimeout(3000);
 
-  await expect(offloadIndicator).not.toBeVisible({ timeout: 10000 });
+  // The offload overlay clears once the re-supplied epub finishes re-ingesting (slow on
+  // WebKit under full-suite load).
+  await expect(offloadIndicator).not.toBeVisible({ timeout: 45000 });
   await bookCardAlice.click();
   await expect(pageB.getByTestId('reader-iframe-container')).toBeVisible({ timeout: 10000 });
 

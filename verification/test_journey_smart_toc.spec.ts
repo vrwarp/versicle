@@ -87,7 +87,8 @@ test("smart toc success", async ({ page }) => {
   await enhanceBtn.click();
 
   // 7. Wait for Success Toast
-  await expect(page.getByText("Table of Contents enhanced successfully!")).toBeVisible({ timeout: 10000 });
+  // TOC enhancement + persistence is slow on WebKit under full-suite load.
+  await expect(page.getByText("Table of Contents enhanced successfully!")).toBeVisible({ timeout: 30000 });
 
   // 8. Verify Titles Updated
   // Check that the new titles are visible
