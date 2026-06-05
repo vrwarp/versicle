@@ -78,6 +78,7 @@ vi.mock('./store/useLibraryStore', () => ({
   useLibraryStore: (selector: any) => selector({
     books: {},
     hydrateStaticMetadata: vi.fn(),
+    hasHydrated: false,
   }),
 }));
 
