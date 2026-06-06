@@ -1,12 +1,11 @@
 import { test, expect } from "./utils";
 import { ensureLibraryWithBook, captureScreenshot, resetApp, waitForPersistedWrites } from "./utils";
 
-test("verify reprocessing interstitial", async ({ page, browserName }) => {
-  // Skipped on WebKit: epub.js book re-import is pathologically slow here — the reader
-  // does not return even after 150s (it exceeds any reasonable per-test timeout), even
-  // when run serially with a fresh browser. This is a genuine WebKit perf/hang issue in
-  // epub.js re-import, not a runner contention problem; tracked for a separate fix.
-  test.skip(browserName === 'webkit', 'WebKit: epub.js reprocessing does not complete within 150s (genuine perf/hang, not contention)');
+test("verify reprocessing interstitial", async ({ page }) => {
+  // Re-enabled on WebKit. The earlier "pathologically slow / never returns" symptom was not
+  // slowness — reprocessBook stored table images as Blobs, which WebKit's IndexedDB cannot
+  // structured-clone (DataCloneError: "BlobURLs are not yet supported"), so the upgrade threw
+  // and the reader never loaded. Table images are now converted to ArrayBuffer before the put.
   // give the whole test extra headroom beyond the project default
   test.setTimeout(240000);
   // 1. Reset app using utility

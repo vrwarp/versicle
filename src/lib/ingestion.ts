@@ -146,31 +146,40 @@ export async function reprocessBook(bookId: string): Promise<void> {
         }
     });
 
-    const tx = db.transaction(['static_manifests', 'static_structure', 'cache_tts_preparation', 'cache_table_images'], 'readwrite');
+    // ── Persist the reprocessed book (WebKit-IndexedDB-safe) ─────────────────────────────
+    // Two WebKit/IndexedDB hazards are handled here:
+    //  1) WebKit's structured clone cannot store Blob objects (DataCloneError: "BlobURLs are
+    //     not yet supported"). snapdom returns table images as Blobs, so convert them to
+    //     ArrayBuffer before the put — same as DBService's ingest path; getTableImages()
+    //     rehydrates the Blob on read. This is the bug that made WebKit reprocessing "hang":
+    //     the table put threw synchronously, the upgrade failed, and the reader never loaded.
+    //  2) A readwrite transaction that goes inactive across an `await` can wedge on WebKit, so
+    //     every read is hoisted out first and the transaction below issues only synchronous
+    //     put/delete, awaited once at tx.done.
+    const tableRows = await Promise.all(tableBatches.map(async (table) => ({
+        ...table,
+        imageBlob: (table.imageBlob instanceof Blob ? await table.imageBlob.arrayBuffer() : table.imageBlob) as unknown as Blob,
+    })));
 
-    // Update Metadata
-    const manStore = tx.objectStore('static_manifests');
-    const manifest = await manStore.get(bookId);
+    const manifest = await db.get('static_manifests', bookId);
+    const oldPrepKeys = await db.getAllKeysFromIndex('cache_tts_preparation', 'by_bookId', bookId);
+    const oldTableKeys = await db.getAllKeysFromIndex('cache_table_images', 'by_bookId', bookId);
+
     if (manifest) {
         manifest.totalChars = totalChars;
         // manifest.syntheticToc? v18 puts this in static_structure.
         manifest.schemaVersion = CURRENT_BOOK_VERSION;
         manifest.baseFontSize = baseFontSize;
         manifest.baseLineHeight = baseLineHeight;
-
-        if (reprocessedPalette) {
-            manifest.coverPalette = reprocessedPalette;
-        }
-        if (reprocessedPerceptualPalette) {
-            manifest.perceptualPalette = reprocessedPerceptualPalette;
-        }
-
-        await manStore.put(manifest);
+        if (reprocessedPalette) manifest.coverPalette = reprocessedPalette;
+        if (reprocessedPerceptualPalette) manifest.perceptualPalette = reprocessedPerceptualPalette;
     }
 
-    // Update Structure
-    const structStore = tx.objectStore('static_structure');
-    await structStore.put({
+    const tx = db.transaction(['static_manifests', 'static_structure', 'cache_tts_preparation', 'cache_table_images'], 'readwrite');
+
+    if (manifest) tx.objectStore('static_manifests').put(manifest);
+
+    tx.objectStore('static_structure').put({
         bookId,
         toc: realToc.length > 0 ? realToc : syntheticToc,
         spineItems: sections.map(s => ({
@@ -180,28 +189,22 @@ export async function reprocessBook(bookId: string): Promise<void> {
         }))
     });
 
-    // Update TTS Preparation (Cache)
-    // Clean up old entries first
+    // TTS preparation cache: drop old section rows, write the new ones.
     const prepStore = tx.objectStore('cache_tts_preparation');
-    // Requires index 'by_bookId' which we added
-    const prepIndex = prepStore.index('by_bookId');
-    const keys = await prepIndex.getAllKeys(bookId);
-    await Promise.all(keys.map(key => prepStore.delete(key)));
+    for (const key of oldPrepKeys) prepStore.delete(key);
+    for (const batch of ttsContentBatches) {
+        prepStore.put({
+            id: batch.id,
+            bookId: batch.bookId,
+            sectionId: batch.sectionId,
+            sentences: batch.sentences
+        });
+    }
 
-    await Promise.all(ttsContentBatches.map(batch => prepStore.put({
-        id: batch.id,
-        bookId: batch.bookId,
-        sectionId: batch.sectionId,
-        sentences: batch.sentences
-    })));
-
-    // Update Table Images (Cache)
+    // Table-image cache: drop old rows, write the new ones (imageBlob now an ArrayBuffer).
     const tableStore = tx.objectStore('cache_table_images');
-    const tableIndex = tableStore.index('by_bookId');
-    const tableKeys = await tableIndex.getAllKeys(bookId);
-    await Promise.all(tableKeys.map(key => tableStore.delete(key)));
-
-    await Promise.all(tableBatches.map(table => tableStore.put(table)));
+    for (const key of oldTableKeys) tableStore.delete(key);
+    for (const table of tableRows) tableStore.put(table);
 
     await tx.done;
 
