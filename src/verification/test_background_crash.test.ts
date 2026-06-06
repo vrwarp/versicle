@@ -46,6 +46,7 @@ vi.mock('../db/DBService', () => ({
     getTTSContent: vi.fn(),
     getContentAnalysis: vi.fn(),
     getBookMetadata: vi.fn(),
+    getBookStructure: vi.fn(),
     getTTSState: vi.fn(),
     saveTTSState: vi.fn(),
     updatePlaybackState: vi.fn(),
