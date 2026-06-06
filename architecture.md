@@ -236,6 +236,7 @@ The main database abstraction layer. It handles error wrapping (converting DOM e
     *   `cache_render_metrics`: Layout calculation results.
     *   `cache_session_state`: Playback queue persistence.
     *   `cache_tts_preparation`: Staging area for TTS text extraction.
+    *   `flight_snapshots`: "Black box" data recorders (Zustand state snapshots) captured for post-mortem debugging of intermittent issues.
 *   **Domain 4: App (Sync Infrastructure & Diagnostics)**
     *   `checkpoints`: Snapshot backups of the Yjs document state.
     *   `sync_log`: Audit trail for sync events.
@@ -666,6 +667,10 @@ Manages the virtual playback timeline.
 
 State is managed using **Zustand** with specialized strategies for different data types.
 
+*   **`useLibraryStore` (Transient/Local)**:
+    *   **Goal**: Manages transient local UI state, such as hydrating static metadata (`staticMetadata`) and tracking offloaded books.
+    *   **Logic**: During sequential asynchronous hydration steps (e.g., `hydrateStaticMetadata`), it explicitly defers clearing the loading state until the end of the entire operation.
+    *   **Trade-off/Hardening**: Always uses a `finally` block to guarantee `isHydrating: false` is set regardless of errors. This architectural constraint prevents UI flickering and infinite loading spinners on failure.
 *   **`useBookStore` (Synced)**:
     *   **Goal**: Manages the synchronized **User Inventory**.
     *   **Logic**: Backed by Yjs Map. Holds the `__schemaVersion` atomic key and the `books` inventory state synchronized via Yjs. This store was created to decouple heavy synchronized state from transient local UI state.
