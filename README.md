@@ -188,3 +188,10 @@ Please see `architecture.md` for a deep dive into the system design.
 Versicle integrates a compiled and optimized key-value version of the **[CC-CEDICT](https://cc-cedict.org/)** Chinese-to-English dictionary database compiled and hosted by **[MDBG](https://www.mdbg.net/chinese/dictionary?page=cc-cedict)**. 
 
 The CC-CEDICT database is licensed under the **[Creative Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/)**. In accordance with the ShareAlike terms, our custom-compiled offline JSON database (`public/dict/cedict.json`) and polyphone-merged adaptations are distributed under the same license terms.
+
+### PT Sans Narrow (Modified for Pinyin Support)
+Versicle bundles a modified version of the **[PT Sans Narrow](https://fonts.google.com/specimen/PT+Sans+Narrow)** font family (Regular & Bold), originally created by **[ParaType](https://www.paratype.com/)** (Alexandra Korolkova, Olga Umpeleva, and Vladimir Yefimov) under the **[SIL Open Font License 1.1](https://openfontlicense.org/)**.
+
+**Modifications**:
+- Lacking native support for Hanyu Pinyin characters with tone marks, we programmatically injected the missing 3rd-tone (caron/hacek) composite glyphs (**`ǎ`**, **`ǐ`**, **`ǒ`**, **`ǔ`**, **`ǚ`**) into the local TrueType font binaries (`public/fonts/PT_Sans-Narrow-Web-*.ttf`) using Python `fonttools` to perfectly align and center the caron accent (`caron`) over their respective base vowel glyphs (`a`, `dotlessi`, `o`, `u`, `udieresis`).
+

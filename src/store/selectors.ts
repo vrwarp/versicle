@@ -148,6 +148,7 @@ export const useAllBooks = () => {
                 fileHash: staticMetadataObj[book.bookId]?.fileHash,
                 fileSize: staticMetadataObj[book.bookId]?.fileSize,
                 totalChars: staticMetadataObj[book.bookId]?.totalChars,
+                syntheticToc: staticMetadataObj[book.bookId]?.syntheticToc,
 
                 // Derive offloaded status from local set
                 isOffloaded: offloadedBookIdsSet.has(book.bookId),
@@ -348,6 +349,8 @@ export const useBook = (id: string | null) => {
             version: staticMeta?.version || undefined,
             baseFontSize: staticMeta?.baseFontSize,
             baseLineHeight: staticMeta?.baseLineHeight,
+            syntheticToc: staticMeta?.syntheticToc,
+            useSyntheticToc: book.useSyntheticToc,
 
             isOffloaded,
 

@@ -44,6 +44,7 @@ vi.mock('./store/useLibraryStore', () => {
       hydrateStaticMetadata: hydrate,
       books: {},
       isHydrating: false,
+      hasHydrated: false,
       isLoading: false,
       error: null
     });
@@ -52,6 +53,7 @@ vi.mock('./store/useLibraryStore', () => {
     hydrateStaticMetadata: hydrate,
     books: { 'b1': { id: 'b1' } },
     isHydrating: false,
+    hasHydrated: false,
     isLoading: false,
     error: null
   });

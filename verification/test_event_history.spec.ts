@@ -6,7 +6,7 @@ test('verify event history', async ({ page }) => {
 
   // Handle empty library / Load Demo
   try {
-    await page.waitForSelector('text=Your library is empty', { timeout: 3000 });
+    await page.waitForSelector('text=Your library is empty', { timeout: 10000 });
     console.log('Library empty. Loading demo book...');
     await page.click('text=Load Demo Book');
   } catch {
@@ -15,7 +15,7 @@ test('verify event history', async ({ page }) => {
 
   // Open book
   console.log('Opening book...');
-  await page.waitForSelector("[data-testid^='book-card-']", { timeout: 10000 });
+  await page.waitForSelector("[data-testid^='book-card-']", { timeout: 20000 });
   await page.click("[data-testid^='book-card-']:first-child");
 
   // Wait for reader

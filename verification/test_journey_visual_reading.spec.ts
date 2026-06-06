@@ -21,8 +21,8 @@ test("journey visual reading", async ({ page }) => {
 
   // 1. Load Book
   await page.click("text=Load Demo Book");
-  await expect(page.locator("text=Alice's Adventures in Wonderland")).toBeVisible({ timeout: 15000 });
-  await page.click("text=Alice's Adventures in Wonderland");
+  await expect(page.locator("text=Alice's Adventures in Wonderland").first()).toBeVisible({ timeout: 15000 });
+  await page.locator("text=Alice's Adventures in Wonderland").first().click();
   await expect(page.locator("div[data-testid='reader-iframe-container']")).toBeVisible({ timeout: 5000 });
 
   // Wait for content

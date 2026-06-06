@@ -6,6 +6,17 @@ import { ReaderView } from '../ReaderView';
 import { useEpubReader } from '../../../hooks/useEpubReader';
 import { CURRENT_BOOK_VERSION } from '../../../lib/constants';
 
+// Hoisted mocks for selectors
+const { mockUseBook } = vi.hoisted(() => ({
+    mockUseBook: vi.fn()
+}));
+
+vi.mock('../../../store/selectors', () => ({
+    useBook: (id: string | null) => mockUseBook(id),
+    useLastReadBook: vi.fn(),
+    useAllBooks: vi.fn()
+}));
+
 // Mocks
 vi.mock('react-router-dom', async () => {
     const actual = await vi.importActual('react-router-dom');
@@ -168,9 +179,16 @@ describe('ReaderView Version Check', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         (useNavigate as unknown as ReturnType<typeof vi.fn>).mockReturnValue(mockNavigate);
+        mockUseBook.mockReturnValue(null);
     });
 
     it('redirects to library if book version is outdated', async () => {
+        mockUseBook.mockReturnValue({
+            bookId: 'book-123',
+            title: 'Outdated Book',
+            version: CURRENT_BOOK_VERSION - 1
+        });
+
         // Mock outdated book metadata
         (useEpubReader as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
             book: {},
@@ -207,6 +225,12 @@ describe('ReaderView Version Check', () => {
     });
 
     it('does not redirect if book version is current', async () => {
+        mockUseBook.mockReturnValue({
+            bookId: 'book-123',
+            title: 'Current Book',
+            version: CURRENT_BOOK_VERSION
+        });
+
         // Mock current book metadata
         (useEpubReader as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
             book: {},
@@ -242,6 +266,12 @@ describe('ReaderView Version Check', () => {
     });
 
     it('defaults to version 0 and redirects if version is missing', async () => {
+        mockUseBook.mockReturnValue({
+            bookId: 'book-123',
+            title: 'Legacy Book'
+            // version is undefined
+        });
+
         // Mock missing version
         (useEpubReader as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
             book: {},

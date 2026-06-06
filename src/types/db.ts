@@ -142,6 +142,8 @@ export interface UserInventoryItem {
   perceptualPalette?: PerceptualPalette;
   /** ISO 639-1 language code (e.g., 'en', 'zh'). Defaults to 'en'. */
   language?: string;
+  /** Whether to use synthetic (AI enhanced) Table of Contents. */
+  useSyntheticToc?: boolean;
 }
 
 /**
@@ -446,6 +448,8 @@ export interface BookState {
   aiAnalysisStatus?: 'none' | 'partial' | 'complete';
   /** ISO 639-1 language code (e.g., 'en', 'zh'). */
   language?: string;
+  /** Whether to use synthetic (AI enhanced) Table of Contents. */
+  useSyntheticToc?: boolean;
 }
 
 /**

@@ -14,7 +14,7 @@ test("search and sort mobile", async ({ page }) => {
   const loadBtn = page.getByText("Load Demo Book");
   if (await loadBtn.isVisible()) {
     await loadBtn.click();
-    await expect(page.getByText("Alice's Adventures in Wonderland")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Alice's Adventures in Wonderland").first()).toBeVisible({ timeout: 10000 });
   }
 
   // 2. Search Functionality
@@ -25,13 +25,13 @@ test("search and sort mobile", async ({ page }) => {
   // 2a. Search by Title (Positive)
   console.log("  - Searching by Title: 'Alice'");
   await searchInput.fill("Alice");
-  await expect(page.getByText("Alice's Adventures in Wonderland")).toBeVisible();
+  await expect(page.getByText("Alice's Adventures in Wonderland").first()).toBeVisible();
   await captureScreenshot(page, "search_result_found");
 
   // 2b. Search by Author (Positive)
   console.log("  - Searching by Author: 'Lewis Carroll'");
   await searchInput.fill("Lewis Carroll");
-  await expect(page.getByText("Alice's Adventures in Wonderland")).toBeVisible();
+  await expect(page.getByText("Alice's Adventures in Wonderland").first()).toBeVisible();
 
   // 2b-bis. Test Input Clear Button (New Feature)
   console.log("  - Testing Input Clear Button");
@@ -41,7 +41,7 @@ test("search and sort mobile", async ({ page }) => {
   await expect(searchInput).toHaveValue("");
   await expect(inputClearBtn).not.toBeVisible();
   // Verify results reset
-  await expect(page.getByText("Alice's Adventures in Wonderland")).toBeVisible();
+  await expect(page.getByText("Alice's Adventures in Wonderland").first()).toBeVisible();
 
   // 2c. Search (Negative)
   console.log("  - Searching for non-existent book: 'Space Odysey'");
@@ -52,7 +52,7 @@ test("search and sort mobile", async ({ page }) => {
   // 2d. Clear Search
   console.log("  - Clearing Search");
   await page.getByLabel("Clear search").click();
-  await expect(page.getByText("Alice's Adventures in Wonderland")).toBeVisible();
+  await expect(page.getByText("Alice's Adventures in Wonderland").first()).toBeVisible();
   await expect(searchInput).toHaveValue("");
 
   // 3. Sorting Functionality

@@ -364,4 +364,36 @@ describe('useLibraryStore', () => {
       expect(state.offloadedBookIds.has('book1')).toBe(false);
     });
   });
+
+  it('should not change reference of staticMetadata and offloadedBookIds if nothing changes', async () => {
+    // Setup book in Yjs state first
+    useBookStore.setState({
+      books: {
+        'test-id': {
+          bookId: 'test-id',
+          title: 'Test',
+          author: 'Author',
+          addedAt: 1000,
+          status: 'unread',
+          tags: [],
+          lastInteraction: 1000
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any
+      }
+    });
+
+    // Mock DBService to return empty metadata/offloaded
+    vi.mocked(mockDBService.getBookMetadata).mockResolvedValue(undefined);
+    vi.mocked(mockDBService.getOffloadedStatus).mockResolvedValue(new Map());
+
+    const initialMetadataRef = useLibraryStore.getState().staticMetadata;
+    const initialOffloadedRef = useLibraryStore.getState().offloadedBookIds;
+
+    await useLibraryStore.getState().hydrateStaticMetadata();
+
+    const state = useLibraryStore.getState();
+    expect(state.staticMetadata).toBe(initialMetadataRef);
+    expect(state.offloadedBookIds).toBe(initialOffloadedRef);
+  });
 });
+

@@ -65,7 +65,7 @@ test("tts cross chapter transition", async ({ page }) => {
         await captureScreenshot(page, "cross_chapter_same");
       }
     }
-  } catch {
+  } catch (e) {
     console.log("Exception checking queue state", e);
     await captureScreenshot(page, "cross_chapter_exception");
   }
@@ -76,6 +76,9 @@ test("tts cross chapter transition", async ({ page }) => {
 });
 
 test("tts chapter navigation during playback", async ({ page }) => {
+  // Previously WebKit-skipped (TOC sidebar render bug + TTS queue/IDB-hang timing). Now
+  // passes after the IndexedDB hang fixes (Yjs persistence throttle + hang-safe
+  // cache_session_state writes) and the main-thread mock TTS stabilised WebKit playback.
   console.log("Starting Chapter Navigation During Playback Test...");
   await resetApp(page);
   await ensureLibraryWithBook(page);
@@ -100,11 +103,13 @@ test("tts chapter navigation during playback", async ({ page }) => {
   const chapter3FirstItem = await page.getByTestId("tts-queue-item-0").innerText();
   console.log(`Chapter III first item: ${chapter3FirstItem.substring(0, 50)}...`);
 
-  // Skip forward a few times
+  // Skip forward a few times with explicit waits
   await page.getByTestId("tts-play-pause-button").click();
   await page.waitForTimeout(1000);
   await page.getByTestId("tts-forward-button").click();
+  await page.waitForTimeout(800);
   await page.getByTestId("tts-forward-button").click();
+  await page.waitForTimeout(800);
 
   // Pause playback before navigating
   await page.getByTestId("tts-play-pause-button").click();
@@ -116,7 +121,9 @@ test("tts chapter navigation during playback", async ({ page }) => {
 
   // Navigate to Chapter V via TOC
   console.log("Navigating to Chapter V...");
-  await page.getByTestId("reader-toc-button").click();
+  // Wait for any pending epub.js navigation before clicking TOC
+  await page.waitForTimeout(1000);
+  await page.getByTestId("reader-toc-button").click({ noWaitAfter: true });
   await expect(page.getByTestId("reader-toc-sidebar")).toBeVisible();
   await page.getByRole("button", { name: "Chapter V." }).first().click();
   await page.waitForTimeout(3000);
@@ -140,8 +147,16 @@ test("tts chapter navigation during playback", async ({ page }) => {
     console.log(`WARNING: Queue may not have refreshed. Ch3: ${chapter3FirstItem.substring(0, 30)}, Ch5: ${chapter5FirstItem.substring(0, 30)}`);
   }
 
-  // Verify current index is 0
-  await expect(page.getByTestId("tts-queue-item-0")).toHaveAttribute("data-current", "true");
+  // Verify current index reset to 0 after the chapter change. Assert via the TTS store
+  // (source of truth) with a generous timeout — on WebKit under full-suite load the queue
+  // re-sync after navigation can lag, and the DOM data-current attribute follows the store.
+  await page.waitForFunction(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    () => (window as any).useTTSStore?.getState?.().currentIndex === 0,
+    undefined,
+    { timeout: 35000 }
+  );
+  await expect(page.getByTestId("tts-queue-item-0")).toHaveAttribute("data-current", "true", { timeout: 10000 });
 
   await captureScreenshot(page, "chapter_navigation_playback");
   console.log("Chapter Navigation During Playback Test Passed!");

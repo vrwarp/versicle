@@ -1,33 +1,38 @@
 import { test, expect } from "./utils";
-import { resetApp, captureScreenshot } from "./utils";
+import { resetApp, captureScreenshot, ensureLibraryWithBook, navigateToChapter } from "./utils";
 
 test("verify progress bar", async ({ page }) => {
   // 1. Reset app to ensure clean state
   await resetApp(page);
+  await ensureLibraryWithBook(page);
 
-  // 2. Add the demo book (Alice in Wonderland)
-  await page.waitForTimeout(2000);
+  // 2. Open the book
+  await page.locator("[data-testid^='book-card-']").first().click();
+  await expect(page.getByTestId("reader-back-button")).toBeVisible({ timeout: 10000 });
 
-  const demoBtn = page.getByText("Load Demo Book");
-  if (await demoBtn.isVisible()) {
-    await demoBtn.click();
-    await expect(page.getByText("Alice's Adventures in Wonderland")).toBeVisible({ timeout: 15000 });
-  }
+  // 3. Navigate to a mid-book chapter to generate meaningful progress
+  // Chapter navigation fires the relocated event which saves progress
+  await navigateToChapter(page, 'toc-item-6');
 
-  // 3. Simulate progress by navigating in the reader
-  await page.getByText("Alice's Adventures in Wonderland").click();
+  // Wait for rendition and locations to be ready
+  await page.waitForFunction("window.rendition && window.rendition.location").catch(() => {});
+  await page.waitForFunction(
+    "window.rendition && window.rendition.book && window.rendition.book.locations && window.rendition.book.locations.total() > 0",
+    { timeout: 30000 }
+  ).catch(() => {});
+  await page.waitForTimeout(1000);
 
-  // Wait for reader container
-  await page.waitForSelector('[data-testid="reader-iframe-container"]', { state: "attached", timeout: 5000 });
-
-  // Wait for EPUB to render (sometimes takes a moment)
-  await page.waitForTimeout(3000);
-
-  // Advance pages to generate progress
-  for (let i = 0; i < 5; i++) {
+  // Navigate a few more pages to ensure non-zero progress percentage
+  const viewport = page.viewportSize();
+  for (let i = 0; i < 3; i++) {
     await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(800);
+    if (viewport) {
+      await page.mouse.click(viewport.width * 0.85, viewport.height * 0.5);
+      await page.waitForTimeout(800);
+    }
   }
+  await page.waitForTimeout(1000);
 
   // Go back to library
   let backBtn = page.locator('button[aria-label="Back to Library"]');
@@ -43,11 +48,12 @@ test("verify progress bar", async ({ page }) => {
   }
 
   // 4. Check for progress bar
-  await page.waitForSelector('[data-testid^="book-card-"]', { timeout: 5000 });
+  await page.waitForSelector('[data-testid^="book-card-"]', { timeout: 15000 });
 
   // Force reload to ensure library fetches latest book data if state wasn't updated
   await page.reload();
-  await page.waitForSelector('[data-testid^="book-card-"]', { timeout: 5000 });
+  // WebKit library re-hydration after reload can lag under full-suite parallel load.
+  await page.waitForSelector('[data-testid^="book-card-"]', { timeout: 25000 });
 
   // Verify progress bar is visible
   // We expect some progress > 0

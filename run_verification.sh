@@ -62,13 +62,39 @@ fi
 # Parse flags before passing remainder to playwright
 DEBUG_ENV=""
 PASSTHROUGH_ARGS=()
+TARGETS_WEBKIT=false
+USER_SET_WORKERS=false
+HAS_PROJECT=false
 for arg in "$@"; do
   if [[ "$arg" == "--logs" ]]; then
-    DEBUG_ENV="-e DEBUG_PAGE_LOGS=1"
+    DEBUG_ENV="$DEBUG_ENV -e DEBUG_PAGE_LOGS=1"
+  elif [[ "$arg" == "--probe" ]]; then
+    # Enable the IndexedDB / event-loop probe (verification/_idb_probe.js) and dump
+    # its summary per test. Used to diagnose WebKit TTS hangs.
+    DEBUG_ENV="$DEBUG_ENV -e TTS_IDB_PROBE=1"
   else
     PASSTHROUGH_ARGS+=("$arg")
+    [[ "$arg" == *webkit* ]] && TARGETS_WEBKIT=true
+    [[ "$arg" == --workers* ]] && USER_SET_WORKERS=true
+    if [[ "$arg" == --project* ]] || [[ "$arg" == -p ]]; then
+      HAS_PROJECT=true
+    fi
   fi
 done
+
+if [[ "$HAS_PROJECT" == false ]]; then
+  echo "No project specified — defaulting to desktop and mobile projects."
+  PASSTHROUGH_ARGS+=("--project=desktop" "--project=mobile")
+fi
+
+# WebKit is run serially (one worker). Unlike Chromium, parallel WebKit instances
+# in this container contend heavily for CPU/IO, which makes the timing-sensitive TTS
+# journeys flaky. Serial execution trades runtime for reliability. Only applied when
+# the run explicitly targets the webkit project and the caller didn't set --workers.
+if [[ "$TARGETS_WEBKIT" == true && "$USER_SET_WORKERS" == false ]]; then
+  echo "🧵 WebKit target detected — running serially (--workers=1) for reliability."
+  PASSTHROUGH_ARGS+=("--workers=1")
+fi
 
 # Build the test image
 docker build -t versicle-verify -f Dockerfile.verification .
@@ -78,8 +104,12 @@ mkdir -p verification/screenshots
 
 # Run the verification container and capture exit code
 echo "🏃 Running verification tests..."
-# We mount the screenshots directory to persist artifacts
+# We mount the screenshots directory to persist artifacts.
+# --ipc=host: Playwright's recommended setting for browsers in Docker. The default
+#   64MB /dev/shm starves the browser's shared memory and causes renderer "Page
+#   crashed" failures (notably in WebKit on long, memory-heavy journeys).
 docker run --rm \
+  --ipc=host \
   -v "$(pwd)/verification/screenshots:/app/verification/screenshots" \
   -e BASE_URL=http://localhost:5173 \
   $DEBUG_ENV \

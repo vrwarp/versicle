@@ -26,6 +26,8 @@ interface LibraryState {
   offloadedBookIds: Set<string>;
   /** Flag indicating if static metadata is currently being hydrated. */
   isHydrating: boolean;
+  /** Flag indicating if hydration has completed at least once since boot. */
+  hasHydrated: boolean;
   /** Flag indicating if the library is currently loading. */
   isLoading: boolean;
   /** Flag indicating if a book is currently being imported. */
@@ -111,7 +113,12 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
       logger.debug(`Hydrate called. Books in store: ${bookIds.length}`);
 
       if (bookIds.length === 0) {
+        set({ hasHydrated: true });
         return; // No books to hydrate
+      }
+
+      if (get().isHydrating && !forceBookIds) {
+        return;
       }
 
       set({ isHydrating: true });
@@ -132,19 +139,26 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
 
         set((state) => {
           const currentBooks = useBookStore.getState().books;
-          const nextStaticMetadata = { ...state.staticMetadata };
           const forceSet = new Set(forceBookIds || []);
+          let changed = false;
 
+          const nextStaticMetadata = { ...state.staticMetadata };
           manifests.forEach(manifest => {
             if (manifest && manifest.id) {
               // Only add if it still exists in the synced inventory (not concurrently removed)
               // and wasn't already loaded/updated in state, unless forced.
               if (currentBooks[manifest.id] && (!(manifest.id in nextStaticMetadata) || forceSet.has(manifest.id))) {
-                nextStaticMetadata[manifest.id] = manifest;
+                if (nextStaticMetadata[manifest.id] !== manifest) {
+                  nextStaticMetadata[manifest.id] = manifest;
+                  changed = true;
+                }
               }
             }
           });
 
+          if (!changed) {
+            return {};
+          }
           return {
             staticMetadata: nextStaticMetadata
           };
@@ -171,6 +185,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
           set((state) => {
             const currentBooks = useBookStore.getState().books;
             const nextOffloadedBookIds = new Set(state.offloadedBookIds);
+            let changed = false;
 
             // Only add IDs from the DB read if they weren't explicitly removed
             // from the state concurrently while the DB read was pending.
@@ -186,9 +201,15 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
                 continue;
               }
 
-              nextOffloadedBookIds.add(id);
+              if (!nextOffloadedBookIds.has(id)) {
+                nextOffloadedBookIds.add(id);
+                changed = true;
+              }
             }
 
+            if (!changed) {
+              return {};
+            }
             return {
               offloadedBookIds: nextOffloadedBookIds
             };
@@ -199,7 +220,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
       } catch (err) {
         logger.error('Failed to hydrate static metadata:', err);
       } finally {
-        set({ isHydrating: false });
+        set({ isHydrating: false, hasHydrated: true });
       }
     };
 
@@ -208,6 +229,7 @@ export const createLibraryStore = (injectedDB: IDBService = dbService as any) =>
       staticMetadata: {},
       offloadedBookIds: new Set<string>(),
     isHydrating: false,
+    hasHydrated: false,
     isLoading: false,
     isImporting: false,
     importProgress: 0,

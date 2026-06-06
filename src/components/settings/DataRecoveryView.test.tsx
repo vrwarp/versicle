@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 import '@testing-library/jest-dom';
 import { DataRecoveryView } from './DataRecoveryView';
 
-vi.mock('y-indexeddb', () => {
+vi.mock('y-idb', () => {
     return {
         IndexeddbPersistence: class {
             constructor() { }

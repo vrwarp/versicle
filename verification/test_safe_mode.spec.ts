@@ -22,7 +22,7 @@ test("safe mode trigger", async ({ page, baseURL }) => {
   try {
     await expect(page.getByRole("heading", { name: "Safe Mode" })).toBeVisible({ timeout: 5000 });
     console.log("Safe Mode screen visible.");
-  } catch {
+  } catch (e) {
     await captureScreenshot(page, "safe_mode_failure");
     throw e;
   }

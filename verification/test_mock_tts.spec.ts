@@ -9,7 +9,7 @@ async function setupMockTts(page: Page) {
   // Wait for voices to load (signifies polyfill is active)
   try {
     await page.waitForFunction("window.speechSynthesis.getVoices().length > 0", { timeout: 5000 });
-  } catch {
+  } catch (e) {
     console.log("Timeout waiting for voices, polyfill might not be injected.");
     const isMock = await page.evaluate("window.speechSynthesis.constructor.name === 'MockSpeechSynthesis'");
     console.log(`Is Mock Synthesis: ${isMock}`);

@@ -12,6 +12,11 @@ const __dirname = path.dirname(__filename);
 const ttsPolyfillPath = path.resolve(__dirname, 'tts-polyfill.js');
 const ttsPolyfillContent = fs.readFileSync(ttsPolyfillPath, 'utf8');
 
+// Optional IndexedDB / event-loop probe (TTS_IDB_PROBE=1). Injected before the app so
+// it can wrap IndexedDB and measure hung transactions + event-loop stalls.
+const idbProbePath = path.resolve(__dirname, '_idb_probe.js');
+const idbProbeContent = fs.existsSync(idbProbePath) ? fs.readFileSync(idbProbePath, 'utf8') : '';
+
 export const test = base.extend<Record<string, never>, { _suppressLogs: void }>({
   // Worker-scoped: runs once per worker process (not per test).
   // Patches console.log/info/debug to noop so spec-file log calls are
@@ -30,7 +35,16 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
     { scope: 'worker', auto: true },
   ],
 
-  page: async ({ page }, use) => {
+  // NOTE: We deliberately use Playwright's default shared-browser-per-worker model.
+  // An earlier "fresh WebKit browser per test" override was added to dodge long-run
+  // instance degradation — but that degradation was caused by the IndexedDB hangs
+  // (Yjs persistence + cache_session_state), which are now fixed at the source. The
+  // per-test browser launch added its own cost: ~one WebKit process launch/teardown
+  // per test across the serial run, whose memory churn occasionally crashed the
+  // renderer ("Target crashed"). The shared per-worker browser avoids that churn.
+  // Trace-on-first-retry is handled by playwright.config.ts (use.trace).
+
+  page: async ({ page }, use, testInfo) => {
     page.setDefaultTimeout(10000);
     page.setDefaultNavigationTimeout(10000);
 
@@ -39,10 +53,31 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
       page.on('pageerror', (err) => console.error(`PAGE ERROR: ${err}`));
     }
 
+    if (process.env.TTS_IDB_PROBE && idbProbeContent) {
+      await page.addInitScript({ content: idbProbeContent });
+    }
     await page.addInitScript({ content: ttsPolyfillContent });
     await page.addInitScript({ content: 'window.__VERSICLE_SANITIZATION_DISABLED__ = true;' });
 
     await use(page);
+
+    // Dump the probe (and TTS flight-recorder tail) after the test body. For a timed-out
+    // test this captures the wedge state: any IDB txn still outstanding here is a hang.
+    if (process.env.TTS_IDB_PROBE) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const summary = await page.evaluate(() => (window as any).__idbProbe?.summary?.() ?? null);
+        const fr = await page.evaluate(() => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const f = (window as any).__ttsFlightRecorder;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return f?.export ? f.export().slice(-40).map((e: any) => `${e.src}.${e.ev}`) : [];
+        });
+        console.error(`\n[IDBPROBE] "${testInfo.title}" status=${testInfo.status}\n  probe=${JSON.stringify(summary)}\n  fr=${JSON.stringify(fr)}`);
+      } catch (e) {
+        console.error(`[IDBPROBE] dump failed for "${testInfo.title}": ${e}`);
+      }
+    }
   },
 });
 
@@ -50,8 +85,13 @@ export { expect };
 
 export async function navigateToChapter(page: Page, chapterId: string = 'toc-item-6') {
   console.log(`Navigating to chapter: ${chapterId}...`);
-  await page.getByTestId('reader-toc-button').click();
-  await page.getByTestId(chapterId).click();
+  await page.getByTestId('reader-toc-button').click({ noWaitAfter: true });
+  // Wait for sidebar and items to be ready before clicking (WebKit animations can be slower)
+  await page.waitForSelector('[data-testid="reader-toc-sidebar"]', { state: 'visible', timeout: 8000 }).catch(() => {});
+  await page.waitForSelector('[data-testid^="toc-item-"]', { state: 'visible', timeout: 8000 }).catch(() => {});
+  // Scroll target chapter into view before clicking (needed when TOC item is off-screen)
+  await page.getByTestId(chapterId).scrollIntoViewIfNeeded().catch(() => {});
+  await page.getByTestId(chapterId).click({ force: true });
 
   await expect(page.getByTestId('reader-toc-sidebar')).not.toBeVisible();
 
@@ -76,11 +116,14 @@ export async function resetApp(page: Page) {
       await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__();
     }
 
-    // Unregister Service Workers
+    // Unregister Service Workers (with timeout — WebKit's unregister() can hang indefinitely)
     if ('serviceWorker' in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
       for (const registration of registrations) {
-        await registration.unregister();
+        await Promise.race([
+          registration.unregister(),
+          new Promise<void>(resolve => setTimeout(resolve, 2000)),
+        ]);
       }
     }
 
@@ -115,10 +158,29 @@ export async function resetApp(page: Page) {
       "[data-testid^='book-card-'], button:has-text('Load Demo Book'), :text('Your library is empty')",
       { timeout: 45000 }
     );
-  } catch {
+  } catch (err) {
     console.warn(`Warning: App load state check failed: ${err}`);
     await captureScreenshot(page, 'reset_app_timeout_debug');
   }
+}
+
+/**
+ * Wait for the app's debounced IndexedDB writes to reach disk before a hard `page.reload()`.
+ *
+ * Persistence is intentionally debounced and coalesced through a single in-flight transaction
+ * to avoid the WebKit IndexedDB hangs that motivated the y-idb migration:
+ *   - Yjs state (e.g. reading progress / TTS `currentQueueIndex`) → y-idb, writeDebounceMs=200
+ *   - DBService `cache_session_state` (e.g. the TTS playback queue) → 500ms debounce
+ * Both flush asynchronously and cannot be guaranteed to commit during page teardown, so a
+ * `page.reload()` issued immediately after a write tears the page down with the bytes still
+ * buffered — and the state is gone after reload. Tests that assert "X survives a reload" must
+ * let those windows drain first (the in-SPA navigation tests already wait ~1s "to persist").
+ *
+ * The wait comfortably exceeds the longest debounce (500ms) plus write time; once the test
+ * goes idle here no new writes are issued, so the timers fire and the queued writes complete.
+ */
+export async function waitForPersistedWrites(page: Page) {
+  await page.waitForTimeout(1500);
 }
 
 export async function ensureLibraryWithBook(page: Page) {
@@ -127,7 +189,7 @@ export async function ensureLibraryWithBook(page: Page) {
       "[data-testid^='book-card-'], button:has-text('Load Demo Book'), :text('Your library is empty')",
       { timeout: 45000 }
     );
-  } catch {
+  } catch (err) {
     console.warn(`Warning: Neither book card nor load button found within 45s: ${err}`);
     await captureScreenshot(page, 'ensure_library_timeout_debug');
   }

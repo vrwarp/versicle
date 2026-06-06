@@ -118,12 +118,11 @@ export const LibraryView: React.FC = () => {
   // Phase 2: Hydrate static metadata after Yjs sync completes
   // Wait for books to be populated by Yjs before hydrating static metadata
   const bookCount = books.length; // useAllBooks returns array
-  const { staticMetadata, offloadedBookIds } = useLibraryStore(useShallow(state => ({
+  const { staticMetadata, offloadedBookIds, hasHydrated } = useLibraryStore(useShallow(state => ({
     staticMetadata: state.staticMetadata,
-    offloadedBookIds: state.offloadedBookIds
+    offloadedBookIds: state.offloadedBookIds,
+    hasHydrated: state.hasHydrated
   })));
-  const hydratedCount = Object.keys(staticMetadata).length;
-  const offloadedCount = offloadedBookIds.size;
 
   // Track previous book count to detect when new books sync
   const prevBookCountRef = useRef(0);
@@ -133,14 +132,14 @@ export const LibraryView: React.FC = () => {
     // 1. Books exist AND book count increased (new books added)
     // 2. OR books exist but nothing has been hydrated yet (initial load on fresh device)
     const bookCountIncreased = bookCount > prevBookCountRef.current;
-    const needsInitialHydration = bookCount > 0 && hydratedCount === 0 && offloadedCount === 0;
+    const needsInitialHydration = bookCount > 0 && !hasHydrated;
 
     if (bookCountIncreased || needsInitialHydration) {
       hydrateStaticMetadata();
     }
 
     prevBookCountRef.current = bookCount;
-  }, [bookCount, hydratedCount, offloadedCount, hydrateStaticMetadata]);
+  }, [bookCount, hasHydrated, hydrateStaticMetadata]);
 
   // Phase 2: fetchBooks removed - data auto-syncs via Yjs middleware
 
@@ -498,7 +497,7 @@ export const LibraryView: React.FC = () => {
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
             <Select value={activeContext || 'library'} onValueChange={(val) => setActiveContext(val as 'library' | 'notes')}>
-              <SelectTrigger className="w-auto text-3xl font-bold border-0 shadow-none p-0 h-auto focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none" aria-label="Select view context">
+              <SelectTrigger className="w-auto text-2xl sm:text-3xl font-bold border-0 shadow-none p-0 h-auto focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none flex-shrink-0" aria-label="Select view context">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -525,8 +524,9 @@ export const LibraryView: React.FC = () => {
                 <Button
                   onClick={() => setIsImportSourceOpen(true)}
                   disabled={isImporting}
-                  className="gap-2 shadow-sm"
+                  className="gap-2 shadow-sm max-sm:px-3"
                   data-testid="header-add-button"
+                  size={isImporting ? "icon" : "default"}
                 >
                   {isImporting ? (
                     <>
@@ -538,9 +538,6 @@ export const LibraryView: React.FC = () => {
                   )}
                   <span aria-hidden={isImporting} className="font-medium hidden sm:inline">
                     {isImporting ? "Importing..." : "Import Book"}
-                  </span>
-                  <span aria-hidden={isImporting} className="font-medium sm:hidden">
-                    {isImporting ? "Importing..." : "Import"}
                   </span>
                 </Button>
               </>

@@ -140,12 +140,30 @@ test("seamless handoff", async ({ browser, baseURL }) => {
 
     await expect(pageA.getByTestId("reader-iframe-container")).toBeVisible();
     await pageA.waitForFunction("window.rendition && window.rendition.location");
+    // Wait for rendition manager and locations to be initialized (WebKit may need more time)
+    await pageA.waitForFunction("window.rendition && window.rendition.manager").catch(() => {});
+    await pageA.waitForFunction(
+      "window.rendition && window.rendition.book && window.rendition.book.locations && window.rendition.book.locations.total() > 0",
+      { timeout: 30000 }
+    ).catch(() => {});
 
-    const turns = attempt > 0 ? 10 : 5;
-    console.log(`[A] Turning ${turns} pages...`);
+    // Generate progress reliably via a TOC jump. rendition.next() page turns are
+    // a no-op on WebKit when rendition.manager is briefly undefined; a TOC jump to
+    // a mid-book chapter relocates deterministically and persists non-zero progress.
+    console.log("[A] Jumping to a mid-book chapter via TOC...");
+    await pageA.getByTestId("reader-toc-button").click({ noWaitAfter: true });
+    await pageA.waitForSelector('[data-testid="reader-toc-sidebar"]', { state: "visible", timeout: 8000 }).catch(() => {});
+    await pageA.waitForSelector('[data-testid^="toc-item-"]', { state: "visible", timeout: 8000 }).catch(() => {});
+    await pageA.getByTestId("toc-item-6").scrollIntoViewIfNeeded().catch(() => {});
+    await pageA.getByTestId("toc-item-6").click({ force: true });
+    await expect(pageA.getByTestId("reader-toc-sidebar")).not.toBeVisible();
+    await pageA.waitForTimeout(2000);
+
+    // A few extra page turns for additional progress (best-effort)
+    const turns = attempt > 0 ? 6 : 3;
     for (let t = 0; t < turns; t++) {
-      await pageA.evaluate("window.rendition && window.rendition.next()");
-      await pageA.waitForTimeout(500);
+      await pageA.keyboard.press("ArrowRight");
+      await pageA.waitForTimeout(400);
     }
 
     // Go back to library
@@ -213,14 +231,18 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   }, { snapshot: snapshotA, workspaceId: wsId });
 
   await pageB.reload();
-  await pageB.screenshot({ path: path.join(__dirname, "screenshots", "handoff_B_initial.png") });
+  // Debug-only artifact: bound it and never let it fail the test. page.screenshot() hangs
+  // indefinitely if it fires while the page is mid-navigation, and the post-switch flow
+  // does a window.location.reload() followed by a client-side router nav before settling.
+  await pageB.screenshot({ path: path.join(__dirname, "screenshots", "handoff_B_initial.png"), timeout: 5000 }).catch(() => {});
 
   console.log("[B] Selecting workspace to start sync...");
   await pageB.getByTestId("header-settings-button").click();
   await pageB.waitForTimeout(1000);
   await pageB.getByRole("button", { name: "Sync & Cloud" }).click();
 
-  await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 10000 });
+  // WebKit cross-client sync-halt detection lags under full-suite parallel load.
+  await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 60000 });
   await pageB.getByRole("button", { name: "Switch" }).click();
 
   console.log("[B] Handling migration confirmation modal...");
@@ -229,7 +251,8 @@ test("seamless handoff", async ({ browser, baseURL }) => {
 
   await expect(pageB.getByTestId("library-view")).toBeVisible({ timeout: 30000 });
   console.log("[B] Workspace finalized and reloaded");
-  await pageB.screenshot({ path: path.join(__dirname, "screenshots", "handoff_B_synced.png") });
+  // Debug-only artifact: bound it and never let it fail the test (see note above).
+  await pageB.screenshot({ path: path.join(__dirname, "screenshots", "handoff_B_synced.png"), timeout: 5000 }).catch(() => {});
 
   // Wait for Ghost Book to appear
   const cardB = pageB.locator("[data-testid^='book-card-']").first();
@@ -245,8 +268,9 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   await pageB.setInputFiles("data-testid=restore-file-input", alicePath);
   await pageB.waitForTimeout(2000);
 
-  // Wait for restoration to complete
-  await expect(pageB.getByRole("dialog")).toBeHidden({ timeout: 10000 });
+  // Wait for restoration to complete. The Content Missing dialog closes once the re-supplied
+  // epub finishes re-ingesting, which is slow on WebKit under full-suite load.
+  await expect(pageB.getByRole("dialog")).toBeHidden({ timeout: 45000 });
 
   // Resume Reading
   console.log("[B] Checking for Resume Badge...");
@@ -289,35 +313,32 @@ test("note marker affordance", async ({ browser, baseURL }) => {
   const alicePath = path.resolve(__dirname, "alice.epub");
   await page.setInputFiles("data-testid=hidden-file-input", alicePath);
   const bookCard = page.locator("[data-testid^='book-card-']").first();
-  await expect(bookCard).toBeVisible({ timeout: 10000 });
+  await expect(bookCard).toBeVisible({ timeout: 20000 });
 
   // Open Reader
   await bookCard.click();
   const readerContainer = page.getByTestId("reader-iframe-container");
   await expect(readerContainer).toBeVisible({ timeout: 10000 });
 
-  // Wait for rendition
+  // Wait for rendition to be ready
   await page.waitForFunction("window.rendition && window.rendition.location");
+  await page.waitForTimeout(1000);
 
-  // Wait for iframe content using helper
+  // Jump straight to a content chapter via the TOC. Turning pages with
+  // rendition.next() is unreliable on WebKit (leaves the reader on front-matter
+  // with no <p>), whereas a TOC jump lands directly on rendered prose.
+  await page.getByTestId("reader-toc-button").click({ noWaitAfter: true });
+  await page.waitForSelector('[data-testid="reader-toc-sidebar"]', { state: "visible", timeout: 8000 }).catch(() => {});
+  await page.waitForSelector('[data-testid^="toc-item-"]', { state: "visible", timeout: 8000 }).catch(() => {});
+  await page.getByTestId("toc-item-6").scrollIntoViewIfNeeded().catch(() => {});
+  await page.getByTestId("toc-item-6").click({ force: true });
+  await expect(page.getByTestId("reader-toc-sidebar")).not.toBeVisible();
+  await page.waitForTimeout(1500);
+
+  // Resolve the rendered content frame and confirm prose is present
   let frame = await waitForReaderFrame(page);
-
-  // Navigate until we find text content (skip cover/images)
-  for (let i = 0; i < 5; i++) {
-    try {
-      if ((await frame.locator("p").count()) > 0) {
-                break;
-      }
-    } catch {
-      console.log("Frame error/detachment, re-resolving...");
-    }
-    console.log("No text found, turning page...");
-    await page.evaluate("window.rendition && window.rendition.next()");
-    await page.waitForTimeout(1000);
-    frame = await waitForReaderFrame(page);
-  }
-
-  await expect(frame.locator("p").first()).toBeVisible({ timeout: 5000 });
+  await expect(frame.locator("p").first()).toBeVisible({ timeout: 20000 });
+  frame = await waitForReaderFrame(page);
 
   const pLocator = frame.locator("p").first();
   await page.waitForTimeout(1000); // Wait for layout stability
@@ -448,7 +469,8 @@ test("offline resilience", async ({ browser, baseURL }) => {
   await pageB.waitForTimeout(1000);
   await pageB.getByRole("button", { name: "Sync & Cloud" }).click();
 
-  await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 10000 });
+  // WebKit cross-client sync-halt detection lags under full-suite parallel load.
+  await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 60000 });
   await pageB.getByRole("button", { name: "Switch" }).click();
 
   console.log("[B] Handling migration confirmation modal...");

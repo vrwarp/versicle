@@ -40,6 +40,10 @@ test('Timeout Protection', async ({ page }) => {
 });
 
 test('Navigation Guard', async ({ page }) => {
+  // Previously WebKit-skipped. Now passes after clearing the Dragnet pause-timestamp on
+  // the TOC navigation INTENT (see ReaderView onNavigate → AudioPlayerService.clearPauseGesture):
+  // WebKit's slow rendition.display() relocation meant the section-change clear raced the
+  // user's next play, capturing a stale audio-bookmark.
   // Verify that navigating to a new chapter during a pause prevents capturing stale context.
   console.log('Testing Navigation Guard...');
   await utils.resetApp(page);
@@ -59,6 +63,7 @@ test('Navigation Guard', async ({ page }) => {
   // Pause — this sets lastUserPauseTimestamp
   await page.getByTestId('compass-pill-active').getByLabel('Pause').click();
   await expect(page.getByTestId('compass-pill-active').getByLabel('Play')).toBeVisible({ timeout: 5000 });
+  await page.waitForTimeout(1000); // Allow WebKit to settle TTS state before TOC navigation
 
   // Navigate to a DIFFERENT chapter — this should clear lastUserPauseTimestamp
   console.log('Navigating to Chapter 5 during pause...');

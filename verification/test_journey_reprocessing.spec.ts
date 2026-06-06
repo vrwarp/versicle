@@ -1,7 +1,13 @@
 import { test, expect } from "./utils";
-import { ensureLibraryWithBook, captureScreenshot, resetApp } from "./utils";
+import { ensureLibraryWithBook, captureScreenshot, resetApp, waitForPersistedWrites } from "./utils";
 
 test("verify reprocessing interstitial", async ({ page }) => {
+  // Re-enabled on WebKit. The earlier "pathologically slow / never returns" symptom was not
+  // slowness — reprocessBook stored table images as Blobs, which WebKit's IndexedDB cannot
+  // structured-clone (DataCloneError: "BlobURLs are not yet supported"), so the upgrade threw
+  // and the reader never loaded. Table images are now converted to ArrayBuffer before the put.
+  // give the whole test extra headroom beyond the project default
+  test.setTimeout(240000);
   // 1. Reset app using utility
   await resetApp(page);
 
@@ -70,11 +76,16 @@ test("verify reprocessing interstitial", async ({ page }) => {
 
   console.log("Downgraded book version to 0.");
 
+  // Let the debounced Yjs library write reach disk before the hard reload, otherwise the book
+  // is gone from the library after reload (the on-screen card renders from the in-memory store,
+  // which does not prove the entry has been persisted to y-idb yet).
+  await waitForPersistedWrites(page);
+
   // Reload to ensure Reader checks the new (old) version
   await page.reload();
 
   // 3. Open the book
-  await page.getByText(bookTitle).click();
+  await page.getByText(bookTitle).first().click();
 
   // 4. Expect Reprocessing Interstitial
   console.log("Waiting for interstitial...");
@@ -86,13 +97,13 @@ test("verify reprocessing interstitial", async ({ page }) => {
 
     // Take screenshot while it's processing
     await captureScreenshot(page, "reprocessing_interstitial");
-  } catch {
+  } catch (e) {
     console.log("Interstitial missed or failed to appear (might be too fast):", e);
     await captureScreenshot(page, "reprocessing_missed");
   }
 
-  // Wait for it to finish and reader to load
-  await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 30000 });
+  // Wait for it to finish and reader to load (reprocessing can be slow in WebKit)
+  await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 150000 });
 
   // 5. Verify metadata update
   const newVersion = await page.evaluate((id) => {

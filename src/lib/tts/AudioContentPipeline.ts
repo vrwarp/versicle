@@ -5,13 +5,14 @@ import { useTTSStore, getDefaultMinSentenceLength } from '../../store/useTTSStor
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { genAIService } from '../genai/GenAIService';
 import { getParentCfi, generateCfiRange, parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
-import type { SectionMetadata, NavigationItem } from '../../types/db';
+import type { SectionMetadata } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
 import type { SentenceNode } from '../tts';
 import { BIBLE_ABBREVIATIONS } from '../../data/bible-lexicon';
 import { LexiconService } from './LexiconService';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
+import { findTocItem, resolveSyntheticPreference } from '../reader/titleResolver';
 
 /**
  * Manages the transformation of raw book content into a playable TTS queue.
@@ -54,45 +55,26 @@ export class AudioContentPipeline {
             // Determine Title
             let title: string | undefined = undefined;
 
-            // Priority 1: AI-extracted title
-            const analysis = await dbService.getContentAnalysis(bookId, section.sectionId);
-            if (analysis && analysis.structure && analysis.structure.title) {
-                title = analysis.structure.title;
+            const bookMetadata = await dbService.getBookMetadata(bookId);
+            const useSynthetic = resolveSyntheticPreference(bookMetadata);
+
+            if (useSynthetic) {
+                // Priority 1: AI-extracted title
+                const analysis = await dbService.getContentAnalysis(bookId, section.sectionId);
+                if (analysis && analysis.structure && analysis.structure.title) {
+                    title = analysis.structure.title;
+                }
             }
 
             // Priority 2: Label from the Stored TOC
             if (!title) {
                 const structure = await dbService.getBookStructure(bookId);
 
-                // Pre-calculate target path once to avoid repeated split operations
-                const targetPath = section.sectionId.split('#')[0];
+                const tocSource = (useSynthetic && bookMetadata?.syntheticToc)
+                    ? bookMetadata.syntheticToc
+                    : structure?.toc;
 
-                // Recursive helper to find TOC entry by href
-                const findTocEntry = (items: NavigationItem[]): NavigationItem | undefined => {
-                    for (const item of items) {
-                        // Exact match (fastest)
-                        if (item.href === section.sectionId) return item;
-
-                        // Loose match: Check if item.href matches the file path of the spine item.
-                        // Instead of splitting every item.href, check if it starts with the target path
-                        // and is followed by '#' or end of string.
-                        if (item.href.startsWith(targetPath)) {
-                            const charAfter = item.href.charCodeAt(targetPath.length);
-                            // 35 is '#'
-                            if (Number.isNaN(charAfter) || charAfter === 35) {
-                                return item;
-                            }
-                        }
-
-                        if (item.subitems && item.subitems.length > 0) {
-                            const found = findTocEntry(item.subitems);
-                            if (found) return found;
-                        }
-                    }
-                    return undefined;
-                };
-
-                const tocEntry = structure?.toc ? findTocEntry(structure.toc) : undefined;
+                const tocEntry = tocSource ? findTocItem(tocSource, section.sectionId) : null;
 
                 if (tocEntry) {
                     title = tocEntry.label;
@@ -109,8 +91,6 @@ export class AudioContentPipeline {
 
             // Sync the Reader UI Store to ensure CompassPill stays accurate during auto-advance
             useReaderUIStore.getState().setCurrentSection(title, section.sectionId);
-
-            const bookMetadata = await dbService.getBookMetadata(bookId);
 
             const newQueue: TTSQueueItem[] = [];
 

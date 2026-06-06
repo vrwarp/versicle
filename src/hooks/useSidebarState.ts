@@ -1,44 +1,57 @@
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
+import { create } from 'zustand';
+import { useNavigationGuard } from './useNavigationGuard';
+import { BackButtonPriority } from '../store/useBackNavigationStore';
 
 export type SidebarType = 'none' | 'toc' | 'annotations' | 'search' | 'audio-panel' | 'visual-settings';
 
+interface SidebarUIState {
+  active: SidebarType;
+  setActive: (sidebar: SidebarType) => void;
+}
+
+/**
+ * Which reader side panel (TOC / search / annotations / audio deck / visual settings)
+ * is currently open.
+ *
+ * This is a plain store rather than React Router `location.state`. The previous design
+ * encoded the open panel in the router history (open = push, close = `navigate(-1)`),
+ * which on WebKit could update history *without* re-rendering ReaderView while TTS was
+ * active — the TOC sidebar would then never paint (see the skipped
+ * test_tts_cross_chapter / Navigation Guard journeys). A Zustand `set` reliably
+ * re-renders subscribers via useSyncExternalStore, decoupled from the router.
+ *
+ * The "Back button closes the open panel" UX that the router approach gave for free is
+ * preserved explicitly via a navigation guard in {@link useSidebarState}.
+ */
+const useSidebarStore = create<SidebarUIState>((set) => ({
+  active: 'none',
+  setActive: (active) => set({ active }),
+}));
+
 export function useSidebarState() {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const activeSidebar = useSidebarStore((s) => s.active);
+  const setActive = useSidebarStore((s) => s.setActive);
 
-  // Derive active sidebar from location state
-  const activeSidebar: SidebarType = (location.state as { sidebar?: SidebarType })?.sidebar || 'none';
+  const setSidebar = useCallback((sidebar: SidebarType) => {
+    setActive(sidebar);
+  }, [setActive]);
 
-  // Clear sidebar state on mount (handle reload)
-  const isMounted = useRef(false);
+  // Close any open panel when the reader (re)mounts. Matches the previous behavior
+  // where a reload/navigation cleared open panels, and prevents a stale panel from
+  // lingering in the module-level store across reader sessions.
   useEffect(() => {
-    if (!isMounted.current) {
-      isMounted.current = true;
-      if (activeSidebar !== 'none') {
-        // Reset to none on initial load by replacing the current state
-        // This ensures that refreshing the page closes any open panels
-        navigate('.', { state: { ...location.state, sidebar: undefined }, replace: true });
-      }
-    }
-  }, [activeSidebar, navigate, location.state]);
+    setActive('none');
+  }, [setActive]);
 
-  const setSidebar = (sidebar: SidebarType) => {
-    if (sidebar === activeSidebar) return;
-
-    if (sidebar === 'none') {
-      // Closing: Go back in history
-      navigate(-1);
-    } else {
-      if (activeSidebar === 'none') {
-        // Opening: Push new state
-        navigate('.', { state: { ...location.state, sidebar }, replace: false });
-      } else {
-        // Switching: Replace current sidebar state
-        navigate('.', { state: { ...location.state, sidebar }, replace: true });
-      }
-    }
-  };
+  // Preserve "Back closes the open panel": while a panel is open, intercept the browser
+  // and hardware Back button (via BackNavigationManager) and close the panel instead of
+  // leaving the reader. When nothing is open the guard is disabled, so Back navigates
+  // normally (back to the library).
+  const closeOnBack = useCallback(() => {
+    setActive('none');
+  }, [setActive]);
+  useNavigationGuard(closeOnBack, BackButtonPriority.UI_ELEMENT, activeSidebar !== 'none');
 
   return { activeSidebar, setSidebar };
 }

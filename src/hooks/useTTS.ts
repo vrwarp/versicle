@@ -22,6 +22,16 @@ export const useTTS = () => {
     loadVoices();
   }, [loadVoices]);
 
+  // Invalidate the pause→play "Dragnet" capture whenever the reader navigates to a
+  // different section. A chapter change between a pause and a play is a deliberate
+  // navigation, not a resume gesture, so it must not capture a stale audio-bookmark.
+  // This is separate from the queue-sync effect below (which early-returns while playing
+  // and whose clear lives inside an enqueued loadSectionInternal that the guard can skip),
+  // so the Dragnet is invalidated synchronously the moment the section changes.
+  useEffect(() => {
+    player.clearPauseGesture();
+  }, [player, currentSectionId]);
+
   // Main Effect: Sync Audio Service with Visual Location (when idle)
   useEffect(() => {
     let ignore = false;

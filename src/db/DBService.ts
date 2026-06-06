@@ -25,6 +25,7 @@ import { createLogger } from '../lib/logger';
 
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
+import { runExclusiveIdbWrite } from '../lib/idb-write-lock';
 
 const logger = createLogger('DBService');
 
@@ -108,12 +109,14 @@ class DBService {
           const { manifest, resourceCount, structure } = data;
           const inventory = inventoryBooks[manifest.bookId];
 
+          // coverBlob may be ArrayBuffer at runtime (stored as ArrayBuffer for WebKit IDB compatibility)
+          const rawCoverBlob = manifest.coverBlob as unknown as Blob | ArrayBuffer | undefined;
           return {
             id: manifest.bookId,
             title: inventory?.customTitle || inventory?.title || manifest.title,
             author: inventory?.customAuthor || inventory?.author || manifest.author,
             description: manifest.description,
-            coverBlob: manifest.coverBlob,
+            coverBlob: rawCoverBlob instanceof ArrayBuffer ? new Blob([rawCoverBlob]) : rawCoverBlob,
             addedAt: inventory?.addedAt || Date.now(),
 
             bookId: manifest.bookId,
@@ -160,12 +163,14 @@ class DBService {
       // Get inventory from Yjs store (primary source)
       const inventory = useBookStore.getState().books[id];
 
+      // coverBlob may be ArrayBuffer at runtime (stored as ArrayBuffer for WebKit IDB compatibility)
+      const rawCoverBlob2 = manifest.coverBlob as unknown as Blob | ArrayBuffer | undefined;
       return {
         id: manifest.bookId,
         title: inventory?.customTitle || inventory?.title || manifest.title,
         author: inventory?.customAuthor || inventory?.author || manifest.author,
         description: manifest.description,
-        coverBlob: manifest.coverBlob,
+        coverBlob: rawCoverBlob2 instanceof ArrayBuffer ? new Blob([rawCoverBlob2]) : rawCoverBlob2,
         addedAt: inventory?.addedAt || Date.now(),
 
         bookId: manifest.bookId,
@@ -322,6 +327,32 @@ class DBService {
    */
   async ingestBook(data: BookExtractionData, mode: 'add' | 'overwrite' = 'add'): Promise<void> {
     try {
+      // Pre-convert Blobs to ArrayBuffers before the transaction.
+      // WebKit's IDB structured clone does not support Blob objects; ArrayBuffer is required.
+      const coverBlob = data.manifest.coverBlob;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const manifestToStore: any = {
+        ...data.manifest,
+        coverBlob: coverBlob instanceof Blob ? await coverBlob.arrayBuffer() : coverBlob,
+      };
+
+      const epubBlob = data.resource.epubBlob;
+      const resourceToStore = {
+        ...data.resource,
+        epubBlob: epubBlob instanceof Blob ? await epubBlob.arrayBuffer() : epubBlob,
+      };
+
+      const tablesToStore = await Promise.all(
+        data.tableBatches.map(async (table) => {
+          const imageBlob = table.imageBlob;
+          return {
+            ...table,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            imageBlob: imageBlob instanceof Blob ? await imageBlob.arrayBuffer() : imageBlob as any,
+          };
+        })
+      );
+
       const db = await this.getDB();
       const tx = db.transaction([
         'static_manifests', 'static_resources', 'static_structure',
@@ -333,12 +364,12 @@ class DBService {
       const structureStore = tx.objectStore('static_structure');
 
       if (mode === 'overwrite') {
-        await manifestStore.put(data.manifest);
-        await resourceStore.put(data.resource);
+        await manifestStore.put(manifestToStore);
+        await resourceStore.put(resourceToStore);
         await structureStore.put(data.structure);
       } else {
-        await manifestStore.add(data.manifest);
-        await resourceStore.add(data.resource);
+        await manifestStore.add(manifestToStore);
+        await resourceStore.add(resourceToStore);
         await structureStore.add(data.structure);
       }
 
@@ -357,7 +388,7 @@ class DBService {
       await Promise.all(ttsPromises);
 
       const tableStore = tx.objectStore('cache_table_images');
-      const tablePromises = data.tableBatches.map(table => {
+      const tablePromises = tablesToStore.map(table => {
         return mode === 'overwrite' ? tableStore.put(table) : tableStore.add(table);
       });
       await Promise.all(tablePromises);
@@ -488,11 +519,12 @@ class DBService {
         throw new Error('File verification failed: Fingerprint mismatch.');
       }
 
-      // Store File
+      // Store File as ArrayBuffer (WebKit IDB does not support Blob structured clone)
+      const epubArrayBuffer = await file.arrayBuffer();
       const tx = db.transaction(['static_resources'], 'readwrite');
       const store = tx.objectStore('static_resources');
-      const resource = await store.get(id) || { bookId: id, epubBlob: file };
-      resource.epubBlob = file;
+      const resource = await store.get(id) || { bookId: id, epubBlob: epubArrayBuffer };
+      resource.epubBlob = epubArrayBuffer;
       await store.put(resource);
       await tx.done;
 
@@ -559,55 +591,111 @@ class DBService {
 
   // --- Playback State ---
 
-  async updatePlaybackState(bookId: string, _lastPlayedCfi?: string, lastPauseTime?: number | null): Promise<void> {
+  // ── cache_session_state persistence (WebKit-hang-safe) ─────────────────────
+  // WebKit's IndexedDB hangs on two patterns we hit during TTS, each leaving a lone
+  // cache_session_state readwrite transaction outstanding for 5–15s (proven with
+  // verification/_idb_probe.js) — which wedges the connection and, through it, the
+  // single-chain TTS task sequencer (play/pause never settle):
+  //   1. concurrent readwrite transactions on the same store, and
+  //   2. a readwrite transaction with an intra-transaction await — read-modify-write
+  //      (`await store.get()` then `await store.put()`). The transaction can go inactive
+  //      across the await and never fire 'complete'.
+  // Mitigation: keep an in-memory mirror of each book's record, serialise every write
+  // through one chain (no concurrency), and write with a single synchronous put() and no
+  // await before it (no intra-transaction read).
+  private sessionWriteChain: Promise<void> = Promise.resolve();
+  private sessionCache = new Map<string, CacheSessionState>();
+
+  private enqueueSessionWrite(work: () => Promise<void>): Promise<void> {
+    const next = this.sessionWriteChain.then(work, work);
+    // Keep the chain alive even if an individual write rejects.
+    this.sessionWriteChain = next.then(() => {}, () => {});
+    return next;
+  }
+
+  /** Resolve a book's session record, seeding the in-memory mirror from disk once. */
+  private async loadSession(bookId: string): Promise<CacheSessionState> {
+    const cached = this.sessionCache.get(bookId);
+    if (cached) return cached;
+    let session: CacheSessionState | undefined;
     try {
       const db = await this.getDB();
-      // Only cache_session_state is updated now
-      const tx = db.transaction(['cache_session_state'], 'readwrite');
-
-      if (lastPauseTime !== undefined) {
-        const sessionStore = tx.objectStore('cache_session_state');
-        const session = await sessionStore.get(bookId) || { bookId, playbackQueue: [], updatedAt: Date.now() };
-        session.lastPauseTime = lastPauseTime === null ? undefined : lastPauseTime;
-        await sessionStore.put(session);
-      }
-
-      await tx.done;
+      session = await db.get('cache_session_state', bookId);
     } catch (error) {
       this.handleError(error);
     }
+    // A concurrent caller may have populated the mirror while we awaited the read.
+    const current = this.sessionCache.get(bookId);
+    if (current) return current;
+    const resolved = session || { bookId, playbackQueue: [], updatedAt: Date.now() };
+    this.sessionCache.set(bookId, resolved);
+    return resolved;
+  }
+
+  /** Serialised, hang-safe write of a book's mirrored record (single synchronous put). */
+  private writeSession(bookId: string): Promise<void> {
+    return this.enqueueSessionWrite(async () => {
+      const session = this.sessionCache.get(bookId);
+      if (!session) return;
+      // Snapshot now so a later in-memory mutation can't change the object mid-commit.
+      const snapshot = { ...session };
+      try {
+        const db = await this.getDB();
+        // Serialised through the shared IDB write lock so this cache_session_state readwrite
+        // transaction never overlaps a Yjs `updates` write — concurrent readwrite txns hang
+        // WebKit (see src/lib/idb-write-lock.ts).
+        await runExclusiveIdbWrite(async () => {
+          const tx = db.transaction('cache_session_state', 'readwrite');
+          // Single synchronous put, no await before it — the WebKit-hang-safe shape.
+          tx.objectStore('cache_session_state').put(snapshot);
+          await tx.done;
+        });
+      } catch (error) {
+        this.handleError(error);
+      }
+    });
+  }
+
+  async updatePlaybackState(bookId: string, _lastPlayedCfi?: string, lastPauseTime?: number | null): Promise<void> {
+    // CFI is no longer persisted here; only lastPauseTime is written.
+    if (lastPauseTime === undefined) return;
+    const session = await this.loadSession(bookId);
+    session.lastPauseTime = lastPauseTime === null ? undefined : lastPauseTime;
+    session.updatedAt = Date.now();
+    this.scheduleSessionWrite(bookId);
   }
 
   // --- TTS State Operations ---
 
-  private saveTTSStateTimeout: NodeJS.Timeout | null = null;
-  private pendingTTSState: { [bookId: string]: CacheSessionState } = {};
-
   saveTTSState(bookId: string, queue: TTSQueueItem[]): void {
-    this.pendingTTSState[bookId] = {
-      bookId,
-      playbackQueue: queue,
-      updatedAt: Date.now()
-    };
+    // Update the in-memory mirror (preserving lastPauseTime), then debounce the disk write.
+    const session = this.sessionCache.get(bookId) || { bookId, playbackQueue: [], updatedAt: Date.now() };
+    session.playbackQueue = queue;
+    session.updatedAt = Date.now();
+    this.sessionCache.set(bookId, session);
+    this.scheduleSessionWrite(bookId);
+  }
 
-    if (this.saveTTSStateTimeout) return;
+  // Debounced, coalesced disk persistence for cache_session_state. The in-memory mirror is
+  // the source of truth during a session, so disk writes (which only matter for
+  // cross-session resume) can be batched. Coalescing also minimises how often a
+  // cache_session_state readwrite txn is in flight: WebKit can still intermittently hang
+  // even a single clean put(), and a hung txn wedges the whole connection (and the TTS
+  // sequencer behind it) — so fewer writes means fewer chances to wedge during the
+  // play/pause window. (The window is shorter than the 1s the queue write already used, so
+  // cross-session resume is no more delayed than before.)
+  private sessionDirty = new Set<string>();
+  private sessionFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
-    this.saveTTSStateTimeout = setTimeout(async () => {
-      this.saveTTSStateTimeout = null;
-      const pending = { ...this.pendingTTSState };
-      this.pendingTTSState = {};
-
-      try {
-        const db = await this.getDB();
-        const tx = db.transaction('cache_session_state', 'readwrite');
-        const store = tx.objectStore('cache_session_state');
-
-        await Promise.all(Object.values(pending).map(state => store.put(state)));
-        await tx.done;
-      } catch (error) {
-        logger.error('Failed to save TTS state', error);
-      }
-    }, 1000);
+  private scheduleSessionWrite(bookId: string): void {
+    this.sessionDirty.add(bookId);
+    if (this.sessionFlushTimer) return;
+    this.sessionFlushTimer = setTimeout(() => {
+      this.sessionFlushTimer = null;
+      const books = [...this.sessionDirty];
+      this.sessionDirty.clear();
+      for (const id of books) void this.writeSession(id);
+    }, 500);
   }
 
   async getTTSState(bookId: string): Promise<TTSState | undefined> {
@@ -616,6 +704,8 @@ class DBService {
       const session = await db.get('cache_session_state', bookId);
 
       if (session) {
+        // Seed the in-memory mirror so later writes never need an intra-transaction read.
+        this.sessionCache.set(bookId, session);
         return {
           bookId,
           queue: session.playbackQueue,
@@ -734,7 +824,15 @@ class DBService {
   async getTableImages(bookId: string): Promise<TableImage[]> {
     try {
       const db = await this.getDB();
-      return await db.getAllFromIndex('cache_table_images', 'by_bookId', bookId);
+      const rows = await db.getAllFromIndex('cache_table_images', 'by_bookId', bookId);
+      return rows.map(row => {
+        // imageBlob may be ArrayBuffer at runtime (stored as ArrayBuffer for WebKit IDB compatibility)
+        const rawImageBlob = row.imageBlob as unknown as Blob | ArrayBuffer;
+        return {
+          ...row,
+          imageBlob: rawImageBlob instanceof ArrayBuffer ? new Blob([rawImageBlob]) : rawImageBlob,
+        };
+      });
     } catch (error) {
       this.handleError(error);
     }
@@ -747,10 +845,14 @@ class DBService {
   // --- Cleanup ---
 
   cleanup(): void {
-    if (this.saveTTSStateTimeout) {
-      clearTimeout(this.saveTTSStateTimeout);
-      this.saveTTSStateTimeout = null;
+    // Cancel any pending (debounced) session write. cleanup() runs at teardown; the
+    // in-memory mirror still holds the latest state, and writing during teardown can race
+    // a closing DB connection — so drop the pending write rather than flush it.
+    if (this.sessionFlushTimer) {
+      clearTimeout(this.sessionFlushTimer);
+      this.sessionFlushTimer = null;
     }
+    this.sessionDirty.clear();
   }
 
   // --- TTS Content Operations (For Migration/Caching) ---

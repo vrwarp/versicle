@@ -1,10 +1,25 @@
 // verification/tts-polyfill.js
+//
+// Mock implementation of the Web Speech API for e2e tests.
+//
+// The speech "engine" (word-by-word timing that drives start/boundary/end events)
+// runs ON THE MAIN THREAD via setTimeout. It used to live in a Web Worker
+// (public/mock-tts-worker.js), but WebKit's worker<->main postMessage delivery is
+// unreliable in the headless test container: messages (e.g. the 'start' event, or a
+// 'PAUSE') intermittently get dropped or stalled. Because the app's WebSpeechProvider
+// resolves play() on the utterance 'start' event and serialises play/pause through a
+// single task chain, a dropped 'start' wedges the whole TTS sequencer — which is exactly
+// why the audio-bookmarking journey was WebKit-flaky. Running the engine inline removes
+// the worker message channel entirely, so the events fire deterministically.
 
 (function () {
     if (window.__mockTTSLoaded) return;
     window.__mockTTSLoaded = true;
 
-    console.log('%c 🗣️ [MockTTS] Injecting Polyfill (Web Worker)', 'background: #222; color: #bada55');
+    console.log('%c 🗣️ [MockTTS] Injecting Polyfill (main thread)', 'background: #222; color: #bada55');
+
+    const WPM = 150;
+    const BASE_MS_PER_WORD = (60 / WPM) * 1000; // 400ms/word at rate 1
 
     // Create debug element
     function ensureDebugElement() {
@@ -24,31 +39,13 @@
             debugEl.setAttribute('data-testid', 'tts-debug');
             document.body.appendChild(debugEl);
         }
+        return debugEl;
     }
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', ensureDebugElement);
     } else {
         ensureDebugElement();
-    }
-
-    // Initialize Web Worker
-    let worker = null;
-    try {
-        worker = new Worker('/mock-tts-worker.js');
-        console.log('🗣️ [MockTTS] Worker Initialized');
-
-        worker.onmessage = (event) => {
-            const synth = window.speechSynthesis;
-            if (synth && synth._handleMessage) {
-                synth._handleMessage(event.data);
-            }
-        };
-        worker.onerror = (e) => {
-            console.error('🗣️ [MockTTS] Worker Error', e);
-        };
-    } catch (e) {
-        console.error('🗣️ [MockTTS] Failed to create Worker', e);
     }
 
     class MockSpeechSynthesisUtterance extends EventTarget {
@@ -85,7 +82,12 @@
                 { name: 'Mock Voice 1', lang: 'en-US', default: true, localService: true, voiceURI: 'mock-1' },
                 { name: 'Mock Voice 2', lang: 'en-GB', default: false, localService: true, voiceURI: 'mock-2' }
             ];
-            this._utteranceMap = new Map();
+
+            // Main-thread speech engine state (was the Web Worker).
+            this._state = 'IDLE'; // IDLE | SPEAKING | PAUSED
+            this._queue = [];     // pending utterances
+            this._current = null; // { utterance, words: [{word, index}], wordIndex }
+            this._timer = null;
         }
 
         getVoices() {
@@ -93,45 +95,35 @@
         }
 
         speak(utterance) {
-            console.log('🗣️ [MockTTS] speak called:', utterance.text.substring(0, 50));
+            console.log('🗣️ [MockTTS] speak called:', (utterance.text || '').substring(0, 50));
             this.speaking = true;
-            this._utteranceMap.set(utterance._id, utterance);
 
             // Update debug element with rate for test verification
-            ensureDebugElement();
-            const debugEl = document.getElementById('tts-debug');
+            const debugEl = ensureDebugElement();
             if (debugEl) {
                 debugEl.setAttribute('data-rate', String(utterance.rate));
             }
 
-            const msg = {
-                type: 'SPEAK',
-                payload: {
-                    text: utterance.text,
-                    rate: utterance.rate,
-                    id: utterance._id
-                }
-            };
-
-            if (worker) {
-                console.log('🗣️ [MockTTS] sending SPEAK to Worker');
-                worker.postMessage(msg);
-            } else {
-                console.error('🗣️ [MockTTS] No Worker available');
+            this._queue.push(utterance);
+            if (this._state === 'IDLE') {
+                this._processNext();
             }
         }
 
         cancel() {
             console.log('🗣️ [MockTTS] cancel called');
+            if (this._timer) {
+                clearTimeout(this._timer);
+                this._timer = null;
+            }
+            this._queue = [];
+            this._current = null;
+            this._state = 'IDLE';
             this.speaking = false;
             this.paused = false;
             this.pending = false;
-            const msg = { type: 'CANCEL' };
-            if (worker) {
-                worker.postMessage(msg);
-            }
-            this._utteranceMap.clear();
-            const debugEl = document.getElementById('tts-debug');
+
+            const debugEl = ensureDebugElement();
             if (debugEl) {
                 debugEl.textContent = '[[CANCELED]]';
                 debugEl.setAttribute('data-status', 'canceled');
@@ -141,11 +133,14 @@
         pause() {
             console.log('🗣️ [MockTTS] pause called');
             this.paused = true;
-            const msg = { type: 'PAUSE' };
-            if (worker) {
-                worker.postMessage(msg);
+            if (this._state === 'SPEAKING') {
+                this._state = 'PAUSED';
+                if (this._timer) {
+                    clearTimeout(this._timer);
+                    this._timer = null;
+                }
             }
-            const debugEl = document.getElementById('tts-debug');
+            const debugEl = ensureDebugElement();
             if (debugEl) {
                 debugEl.textContent = '[[PAUSED]]';
                 debugEl.setAttribute('data-status', 'paused');
@@ -156,66 +151,105 @@
             console.log('🗣️ [MockTTS] resume called');
             if (this.paused) {
                 this.paused = false;
-                const msg = { type: 'RESUME' };
-                if (worker) {
-                    worker.postMessage(msg);
-                }
-                const debugEl = document.getElementById('tts-debug');
+                const debugEl = ensureDebugElement();
                 if (debugEl) {
                     debugEl.textContent = '[[RESUMED]]';
                     debugEl.setAttribute('data-status', 'resumed');
                 }
+                if (this._state === 'PAUSED') {
+                    this._state = 'SPEAKING';
+                    this._scheduleNextWord();
+                }
             }
         }
 
-        _handleMessage(data) {
-            console.log('🗣️ [MockTTS] _handleMessage received:', data.type, data);
-
-            if (data.type === 'LOG') {
-                console.log(`🗣️ [MockTTS-Worker] ${data.payload}`);
+        _processNext() {
+            if (this._queue.length === 0) {
+                this._state = 'IDLE';
                 return;
             }
 
-            const { type, id, charIndex, name, text } = data;
-            const utterance = this._utteranceMap.get(id);
-            if (!utterance) return;
+            this._state = 'SPEAKING';
+            const utterance = this._queue.shift();
+            const text = utterance.text || '';
+            const tokens = text.match(/\S+/g) || [];
 
-            ensureDebugElement();
-            const eventInit = { bubbles: false, cancelable: false, utterance };
+            const words = [];
+            let searchIndex = 0;
+            for (const token of tokens) {
+                const index = text.indexOf(token, searchIndex);
+                words.push({ word: token, index });
+                searchIndex = index + token.length;
+            }
 
-            // Update Debug DOM
-            const debugEl = document.getElementById('tts-debug');
+            this._current = { utterance, words, wordIndex: 0 };
+
+            this._dispatch(utterance, 'start', { charIndex: 0 });
+            this._scheduleNextWord();
+        }
+
+        _scheduleNextWord() {
+            const cur = this._current;
+            if (!cur) return;
+
+            if (cur.wordIndex >= cur.words.length) {
+                const utterance = cur.utterance;
+                this._current = null;
+                this._dispatch(utterance, 'end', { charIndex: (utterance.text || '').length });
+                this._processNext();
+                return;
+            }
+
+            const wordObj = cur.words[cur.wordIndex];
+            const rate = cur.utterance.rate || 1;
+            const delay = BASE_MS_PER_WORD / rate;
+
+            this._timer = setTimeout(() => {
+                this._timer = null;
+                // Guard against cancel()/pause() that cleared current mid-timeout.
+                if (this._state !== 'SPEAKING' || this._current !== cur) return;
+
+                this._dispatch(cur.utterance, 'boundary', {
+                    charIndex: wordObj.index,
+                    charLength: wordObj.word.length,
+                    name: 'word',
+                    text: wordObj.word
+                });
+
+                cur.wordIndex++;
+                this._scheduleNextWord();
+            }, delay);
+        }
+
+        _dispatch(utterance, type, data) {
+            const debugEl = ensureDebugElement();
             if (debugEl) {
                 debugEl.setAttribute('data-last-event', type);
-                if (type === 'boundary') {
-                    debugEl.textContent = text || '';
-                    debugEl.setAttribute('data-char-index', charIndex);
-                    debugEl.setAttribute('data-status', 'speaking');
-                }
                 if (type === 'start') {
                     debugEl.setAttribute('data-status', 'start');
-                }
-                if (type === 'end') {
+                } else if (type === 'boundary') {
+                    debugEl.textContent = data.text || '';
+                    debugEl.setAttribute('data-char-index', String(data.charIndex));
+                    debugEl.setAttribute('data-status', 'speaking');
+                } else if (type === 'end') {
                     debugEl.textContent = '[[END]]';
                     debugEl.setAttribute('data-status', 'end');
-                    this._utteranceMap.delete(id);
                 }
             }
 
-            // Dispatch events
             let event;
             if (type === 'boundary') {
-                event = new SpeechSynthesisEvent('boundary', { ...eventInit, charIndex, name, charLength: data.charLength });
+                event = new SpeechSynthesisEvent('boundary', { utterance, charIndex: data.charIndex, name: data.name, charLength: data.charLength });
                 if (utterance.onboundary) utterance.onboundary(event);
             } else if (type === 'start') {
-                event = new SpeechSynthesisEvent('start', { ...eventInit, charIndex: 0 });
+                event = new SpeechSynthesisEvent('start', { utterance, charIndex: 0 });
                 if (utterance.onstart) utterance.onstart(event);
             } else if (type === 'end') {
-                event = new SpeechSynthesisEvent('end', { ...eventInit, charIndex: utterance.text.length });
+                event = new SpeechSynthesisEvent('end', { utterance, charIndex: data.charIndex });
                 if (utterance.onend) utterance.onend(event);
             }
 
-            utterance.dispatchEvent(event);
+            if (event) utterance.dispatchEvent(event);
         }
     }
 

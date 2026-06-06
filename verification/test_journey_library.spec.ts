@@ -22,7 +22,7 @@ test('Library Journey Test', async ({ page }) => {
   // Verify book appears
   const bookCard = page.locator("[data-testid^='book-card-']").first();
   await expect(bookCard).toBeVisible({ timeout: 15000 });
-  await expect(page.getByText("Alice's Adventures in Wonderland")).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText("Alice's Adventures in Wonderland").first()).toBeVisible({ timeout: 15000 });
 
   await utils.captureScreenshot(page, 'library_2_demo_loaded');
 
@@ -49,6 +49,10 @@ test('Library Journey Test', async ({ page }) => {
 
   // 5. Persistence Check
   console.log('Reloading to check persistence...');
+  // Let the debounced library write reach disk before the hard reload, otherwise the
+  // reload tears the page down with the bytes still buffered (mirrors 8d3b2726, which
+  // applied the same flush to the sibling library_view / reprocessing / tts-resume tests).
+  await utils.waitForPersistedWrites(page);
   await page.reload();
   await expect(page.locator("[data-testid^='book-card-']").first()).toBeVisible({ timeout: 15000 });
 

@@ -7,6 +7,7 @@ import { runCancellable, CancellationError } from '../lib/cancellable-task-runne
 import { createLogger } from '../lib/logger';
 import { usePreferencesStore } from '../store/usePreferencesStore';
 import { useBookStore } from '../store/useBookStore';
+import { findTocItem } from '../lib/reader/titleResolver';
 import {
   toTraditional,
   getPinyin,
@@ -166,22 +167,7 @@ const safeInjectStyles = (doc: Document, css: string, styleId: string) => {
  * while ToC items may point to specific anchors (e.g., "chapter1.html#section1").
  * Matching by file path allows us to associate a generic file with its parent ToC entry (e.g., the Chapter title).
  */
-const findTitleInToc = (toc: NavigationItem[], href: string): string | null => {
-  for (const item of toc) {
-    if (item.href === href) return item.label;
 
-    // Check if item.href matches the file path of the spine item
-    const itemPath = item.href.split('#')[0];
-    const spinePath = href.split('#')[0];
-    if (itemPath === spinePath) return item.label;
-
-    if (item.subitems && item.subitems.length > 0) {
-      const found = findTitleInToc(item.subitems, href);
-      if (found) return found;
-    }
-  }
-  return null;
-};
 
 /**
  * Configuration options for the EpubReader hook.
@@ -454,9 +440,13 @@ export function useEpubReader(
 
             // Improve title resolution
             if (item) {
-              const betterTitle = findTitleInToc(tocItems, item.href);
-              if (betterTitle) {
-                title = betterTitle;
+              const useSynthetic = optionsRef.current.metadata?.useSyntheticToc;
+              const tocSource = (useSynthetic && optionsRef.current.metadata?.syntheticToc)
+                ? optionsRef.current.metadata.syntheticToc
+                : tocItems;
+              const betterItem = findTocItem(tocSource, item.href);
+              if (betterItem) {
+                title = betterItem.label;
               }
             }
 
@@ -499,9 +489,13 @@ export function useEpubReader(
 
           // Improve title resolution
           if (item) {
-            const betterTitle = findTitleInToc(tocItems, item.href);
-            if (betterTitle) {
-              title = betterTitle;
+            const useSynthetic = optionsRef.current.metadata?.useSyntheticToc;
+            const tocSource = (useSynthetic && optionsRef.current.metadata?.syntheticToc)
+              ? optionsRef.current.metadata.syntheticToc
+              : tocItems;
+            const betterItem = findTocItem(tocSource, item.href);
+            if (betterItem) {
+              title = betterItem.label;
             }
           }
 

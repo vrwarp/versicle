@@ -39,7 +39,7 @@ test('ARIA Labels Verification', async ({ page }) => {
   await page.getByLabel('Open Audio Deck').click();
 
   // Switch to settings tab in Audio Panel
-  await page.getByRole('button', { name: 'Settings' }).click({ force: true });
+  await page.getByRole('button', { name: 'Settings', exact: true }).click({ force: true });
 
   // Playback speed slider
   await expect(page.getByRole('slider', { name: 'Speed' })).toBeVisible();

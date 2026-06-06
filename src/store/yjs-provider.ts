@@ -1,6 +1,7 @@
 import * as Y from 'yjs';
-import { IndexeddbPersistence } from 'y-indexeddb';
+import { IndexeddbPersistence } from 'y-idb';
 import { isStorageSupported } from '../lib/sync/support';
+import { runExclusiveIdbWrite } from '../lib/idb-write-lock';
 import { createLogger } from '../lib/logger';
 import type { YjsOptions } from 'zustand-middleware-yjs';
 import type { UserProgress } from '../types/db';
@@ -26,7 +27,10 @@ let persistence: IndexeddbPersistence | null = null;
 // Initialize persistence only if supported
 if (isStorageSupported()) {
     try {
-        persistence = new IndexeddbPersistence('versicle-yjs', yDoc);
+        persistence = new IndexeddbPersistence('versicle-yjs', yDoc, {
+            writeDebounceMs: 200,
+            transactionRunner: runExclusiveIdbWrite,
+        });
 
         persistence.on('synced', () => {
             logger.info('Content loaded from IndexedDB (versicle-yjs)');

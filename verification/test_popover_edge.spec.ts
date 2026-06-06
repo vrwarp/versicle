@@ -15,7 +15,7 @@ test("popover edge collision", async ({ page }) => {
   await expect(bookCard).toBeVisible({ timeout: 5000 });
   await bookCard.click();
 
-  await expect(page.getByTestId("reader-back-button")).toBeVisible({ timeout: 5000 });
+  await expect(page.getByTestId("reader-back-button")).toBeVisible({ timeout: 15000 });
 
   // Wait for iframe content
   await page.waitForTimeout(2000);

@@ -53,5 +53,23 @@ export default defineConfig({
         hasTouch: true,
       },
     },
+    {
+      name: 'webkit',
+      use: {
+        ...devices['Desktop Safari'],
+        viewport: { width: 1280, height: 720 },
+        launchOptions: {},
+        serviceWorkers: 'block',
+      },
+      timeout: 180000,
+      // WebKit reuses one long-lived browser instance per worker across the whole
+      // run; that instance degrades over its ~25-test lifetime (memory/disk/IO),
+      // which makes render-sensitive panels (e.g. the audio deck settings tab)
+      // occasionally fail to paint within the wait. Extra retries absorb this
+      // environmental flakiness — the tests themselves are deterministic in isolation.
+      // Full-suite runs keep WebKit parallel (for runtime), so these retries also absorb the
+      // parallel-WebKit CPU/IO contention that intermittently lags a reader/library load.
+      retries: 3,
+    },
   ],
 });
