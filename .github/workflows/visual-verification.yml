@@ -6,8 +6,17 @@ on:
   pull_request:
 
 jobs:
-  verify-screenshots:
+  verify:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - project: desktop
+            workers: ""
+          - project: mobile
+            workers: ""
+          - project: webkit
+            workers: "--workers=1"
     
     steps:
       - uses: actions/checkout@v4
@@ -20,13 +29,15 @@ jobs:
       - name: Run Verification Suite
         run: |
           mkdir -p verification/screenshots
-          docker run --rm -v ${{ github.workspace }}/verification/screenshots:/app/verification/screenshots versicle-verify
+          docker run --rm \
+            -v ${{ github.workspace }}/verification/screenshots:/app/verification/screenshots \
+            versicle-verify --project=${{ matrix.project }} ${{ matrix.workers }}
 
       # 3. Upload Screenshots as Artifacts
       - name: Upload Screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: verification-screenshots
+          name: verification-screenshots-${{ matrix.project }}
           path: verification/screenshots/
           retention-days: 14

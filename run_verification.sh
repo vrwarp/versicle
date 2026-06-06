@@ -64,6 +64,7 @@ DEBUG_ENV=""
 PASSTHROUGH_ARGS=()
 TARGETS_WEBKIT=false
 USER_SET_WORKERS=false
+HAS_PROJECT=false
 for arg in "$@"; do
   if [[ "$arg" == "--logs" ]]; then
     DEBUG_ENV="$DEBUG_ENV -e DEBUG_PAGE_LOGS=1"
@@ -75,8 +76,16 @@ for arg in "$@"; do
     PASSTHROUGH_ARGS+=("$arg")
     [[ "$arg" == *webkit* ]] && TARGETS_WEBKIT=true
     [[ "$arg" == --workers* ]] && USER_SET_WORKERS=true
+    if [[ "$arg" == --project* ]] || [[ "$arg" == -p ]]; then
+      HAS_PROJECT=true
+    fi
   fi
 done
+
+if [[ "$HAS_PROJECT" == false ]]; then
+  echo "No project specified — defaulting to desktop and mobile projects."
+  PASSTHROUGH_ARGS+=("--project=desktop" "--project=mobile")
+fi
 
 # WebKit is run serially (one worker). Unlike Chromium, parallel WebKit instances
 # in this container contend heavily for CPU/IO, which makes the timing-sensitive TTS
