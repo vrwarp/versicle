@@ -49,6 +49,10 @@ test('Library Journey Test', async ({ page }) => {
 
   // 5. Persistence Check
   console.log('Reloading to check persistence...');
+  // Let the debounced library write reach disk before the hard reload, otherwise the
+  // reload tears the page down with the bytes still buffered (mirrors 8d3b2726, which
+  // applied the same flush to the sibling library_view / reprocessing / tts-resume tests).
+  await utils.waitForPersistedWrites(page);
   await page.reload();
   await expect(page.locator("[data-testid^='book-card-']").first()).toBeVisible({ timeout: 15000 });
 

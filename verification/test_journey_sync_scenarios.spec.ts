@@ -231,7 +231,10 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   }, { snapshot: snapshotA, workspaceId: wsId });
 
   await pageB.reload();
-  await pageB.screenshot({ path: path.join(__dirname, "screenshots", "handoff_B_initial.png") });
+  // Debug-only artifact: bound it and never let it fail the test. page.screenshot() hangs
+  // indefinitely if it fires while the page is mid-navigation, and the post-switch flow
+  // does a window.location.reload() followed by a client-side router nav before settling.
+  await pageB.screenshot({ path: path.join(__dirname, "screenshots", "handoff_B_initial.png"), timeout: 5000 }).catch(() => {});
 
   console.log("[B] Selecting workspace to start sync...");
   await pageB.getByTestId("header-settings-button").click();
@@ -248,7 +251,8 @@ test("seamless handoff", async ({ browser, baseURL }) => {
 
   await expect(pageB.getByTestId("library-view")).toBeVisible({ timeout: 30000 });
   console.log("[B] Workspace finalized and reloaded");
-  await pageB.screenshot({ path: path.join(__dirname, "screenshots", "handoff_B_synced.png") });
+  // Debug-only artifact: bound it and never let it fail the test (see note above).
+  await pageB.screenshot({ path: path.join(__dirname, "screenshots", "handoff_B_synced.png"), timeout: 5000 }).catch(() => {});
 
   // Wait for Ghost Book to appear
   const cardB = pageB.locator("[data-testid^='book-card-']").first();
