@@ -113,6 +113,9 @@
     "@jofr/capacitor-media-session": {
       "@capacitor/core": "^7.0.0"
     },
-    "brace-expansion@1": "^1.1.13"
+    "brace-expansion@1": "^1.1.13",
+    "epubjs": {
+      "@xmldom/xmldom": "^0.8.13"
+    }
   }
 }
