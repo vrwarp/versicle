@@ -44,7 +44,8 @@ vi.mock('../../../store/useReadingStateStore', () => ({
       subscribe: (listener: unknown) => mockUseReadingStateStore.subscribe?.(listener),
     }
   ),
-  useCurrentDeviceProgress: (bookId: any) => mockUseCurrentDeviceProgress(bookId)
+  useCurrentDeviceProgress: (bookId: any) => mockUseCurrentDeviceProgress(bookId),
+  useBookProgress: (bookId: any) => mockUseCurrentDeviceProgress(bookId)
 }));
 
 // Mock selectors
