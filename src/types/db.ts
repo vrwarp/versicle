@@ -319,6 +319,25 @@ export interface CacheSessionState {
  * Extracted/sanitized sentences for TTS.
  * Store: 'cache_tts_preparation' (Key: `${bookId}-${sectionId}`)
  */
+
+/** A citation marker detected during chapter extraction (superscript numbers, symbol footnotes, etc.). */
+export interface CitationMarker {
+  /** CFI of the marker element (node reference, not range). */
+  cfi: string;
+  /** Text content of the marker, e.g. "1", "[3]", "†". */
+  markerText: string;
+  /** True if the element is or computes as a superscript/subscript. */
+  super: boolean;
+  /** True if markerText is numeric (vs. symbol). */
+  numeric: boolean;
+  /** True if the marker appears immediately after word text with no space (diagnostic). */
+  glued: boolean;
+  /** Ratio of element font-size to parent font-size when checked via computed style. */
+  fontSizeRatio?: number;
+  /** href of the nearest <a> inside or equal to the element, if present. */
+  targetHref?: string;
+}
+
 export interface CacheTtsPreparation {
   /** Composite key. */
   id: string;
@@ -329,6 +348,8 @@ export interface CacheTtsPreparation {
     text: string;
     cfi: string;
   }[];
+  /** Citation markers detected during extraction (superscripts, symbol footnotes). */
+  citationMarkers?: CitationMarker[];
 }
 
 /**

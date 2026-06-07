@@ -44,7 +44,7 @@ describe('Citation Skipping – Book of Citations EPUB', () => {
                 doc.body,
                 () => 'cfi',
                 { sanitizationEnabled: true },
-            );
+            ).sentences;
         };
 
         ch1Sentences = await loadChapter('text/chapter1.html');

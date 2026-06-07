@@ -3,6 +3,9 @@ import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { TextSegmenter } from './TextSegmenter';
 import { useTTSStore, getDefaultMinSentenceLength } from '../../store/useTTSStore';
 import { useGenAIStore } from '../../store/useGenAIStore';
+import { generateSecureId } from '../crypto';
+import { EpubCFI } from 'epubjs';
+import type { CitationMarker } from '../../types/db';
 import { genAIService } from '../genai/GenAIService';
 import { getParentCfi, generateCfiRange, parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
 import type { SectionMetadata } from '../../types/db';
@@ -317,7 +320,7 @@ export class AudioContentPipeline {
                     const groups = this.groupSentencesByRoot(ttsContent.sentences, preprocessedTableRoots);
 
                     // Detect (will use deduplicated promise if already running)
-                    analysisTasks.push(this.getOrDetectContentTypes(bookId, nextSection.sectionId, groups));
+                    analysisTasks.push(this.getOrDetectContentTypes(bookId, nextSection.sectionId, groups, ttsContent.citationMarkers));
                 }
 
                 // 3. Table Adaptation Analysis
@@ -356,9 +359,11 @@ export class AudioContentPipeline {
 
         try {
             let targetSentences = sentences;
+            let citationMarkers: CitationMarker[] | undefined;
             if (!targetSentences) {
                 const ttsContent = await dbService.getTTSContent(bookId, sectionId);
                 targetSentences = ttsContent?.sentences || [];
+                citationMarkers = ttsContent?.citationMarkers;
             }
 
             if (targetSentences.length === 0) return indicesToSkip;
@@ -374,7 +379,7 @@ export class AudioContentPipeline {
 
             // Group sentences by Root Node
             const groups = this.groupSentencesByRoot(targetSentences, preprocessedTableRoots);
-            const referenceStartCfi = await this.getOrDetectContentTypes(bookId, sectionId, groups);
+            const referenceStartCfi = await this.getOrDetectContentTypes(bookId, sectionId, groups, citationMarkers);
 
             if (referenceStartCfi && skipTypes.includes('reference')) {
                 let isReferenceSection = false;
@@ -401,9 +406,11 @@ export class AudioContentPipeline {
 
 
     /**
-     * Retrieves cached reference start CFI from DB or triggers GenAI detection if missing.
+     * Retrieves cached reference start CFI from DB or triggers detection if missing.
+     * Strategy is read from the GenAI store. Gemini also shadow-runs the deterministic
+     * detector for telemetry, enabling offline threshold tuning.
      */
-    async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[]): Promise<string | undefined | null> {
+    async getOrDetectContentTypes(bookId: string, sectionId: string, groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[], citationMarkers?: CitationMarker[]): Promise<string | undefined | null> {
         // Deduplicate concurrent requests for the same section
         const key = `${bookId}:${sectionId}`;
         if (this.analysisPromises.has(key)) {
@@ -443,8 +450,17 @@ export class AudioContentPipeline {
                 }
             }
 
-            // 2. If not found, detect with GenAI
+            // 2. If not found, detect
             const aiStore = useGenAIStore.getState();
+            const strategy = aiStore.referenceDetectionStrategy;
+
+            // Deterministic-only path
+            if (strategy === 'deterministic') {
+                const detCfi = this.runDeterministicDetector(groups);
+                await dbService.saveReferenceStartCfi(bookId, sectionId, detCfi ?? undefined);
+                return detCfi ?? undefined;
+            }
+
             const canUseGenAI = aiStore.isEnabled && (genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse')));
 
             if (!canUseGenAI) {
@@ -456,13 +472,18 @@ export class AudioContentPipeline {
                 dbService.markAnalysisLoading(bookId, sectionId);
 
                 const idToCfiMap = new Map<string, string>();
+                const markers = citationMarkers || [];
+                const markerGroupIndex = this.attributeMarkersToGroups(groups, markers);
 
                 const nodesToDetect = groups.map((g, index) => {
                     const id = index.toString();
                     idToCfiMap.set(id, g.rootCfi);
+                    const groupMarkers = markers.filter((_, mi) => markerGroupIndex[mi] === index);
                     return {
                         id,
-                        sampleText: g.fullText.substring(0, 200)
+                        sampleText: g.fullText.substring(0, 200),
+                        citationMarkerCount: groupMarkers.length,
+                        hasSuperscriptMarkers: groupMarkers.some(m => m.super),
                     };
                 });
 
@@ -497,6 +518,10 @@ export class AudioContentPipeline {
                     const referenceResult = results.find(res => res.type === 'reference');
                     const referenceStartCfi = referenceResult ? idToCfiMap.get(referenceResult.id) : undefined;
 
+                    // Shadow run: deterministic detector for telemetry (result not used for playback)
+                    const detShadowCfi = this.runDeterministicDetector(groups);
+                    this.emitReferenceDetectionTelemetry({ bookId, sectionId, groups, markers, markerGroupIndex, geminiCfi: referenceStartCfi, detShadowCfi });
+
                     // Persist detection results (this sets status to 'success')
                     await dbService.saveReferenceStartCfi(bookId, sectionId, referenceStartCfi);
                     return referenceStartCfi;
@@ -517,6 +542,179 @@ export class AudioContentPipeline {
         } finally {
             this.analysisPromises.delete(key);
         }
+    }
+
+    /**
+     * Deterministic reference-section detector.
+     * Finds the longest tail run of consecutive groups that match enumerator patterns
+     * (e.g., "[1] Author", "1. Author", "1 Smith") starting at or past 60% of chapter length.
+     * Returns the rootCfi of the first group in that run, or null if none found.
+     */
+    private runDeterministicDetector(groups: { rootCfi: string; fullText: string }[]): string | null {
+        const ENUMERATOR = /^\s*(?:\[(\d+)\]|(\d+)[.)]\s|(\d+)\s+[A-Z])/;
+        let bestRunStart = -1;
+        let bestRunLen = 0;
+        let runStart = -1;
+        let runLen = 0;
+
+        for (let i = 0; i < groups.length; i++) {
+            if (ENUMERATOR.test(groups[i].fullText)) {
+                if (runLen === 0) runStart = i;
+                runLen++;
+                if (runLen > bestRunLen) {
+                    bestRunLen = runLen;
+                    bestRunStart = runStart;
+                }
+            } else {
+                runLen = 0;
+            }
+        }
+
+        if (bestRunLen >= 2 && bestRunStart >= groups.length * 0.6) {
+            return groups[bestRunStart].rootCfi;
+        }
+        return null;
+    }
+
+    /**
+     * Attributes each citation marker to the group whose [firstSegmentCfi, lastSegmentCfi]
+     * range contains it, using proper CFI comparison. Returns a per-marker array of group
+     * indices (-1 when no group contains the marker or comparison fails).
+     */
+    private attributeMarkersToGroups(
+        groups: { segments: { cfi: string }[] }[],
+        markers: CitationMarker[]
+    ): number[] {
+        if (markers.length === 0) return [];
+        const comparer = new EpubCFI();
+        // Pre-parse group bounds once
+        const bounds = groups.map(g => {
+            const first = g.segments[0]?.cfi;
+            const last = g.segments[g.segments.length - 1]?.cfi;
+            try {
+                return first && last ? { start: new EpubCFI(first), end: new EpubCFI(last) } : null;
+            } catch {
+                return null;
+            }
+        });
+
+        return markers.map(mk => {
+            let parsed: EpubCFI;
+            try {
+                parsed = new EpubCFI(mk.cfi);
+            } catch {
+                return -1;
+            }
+            for (let i = 0; i < bounds.length; i++) {
+                const b = bounds[i];
+                if (!b) continue;
+                try {
+                    // @ts-expect-error epubjs compare accepts EpubCFI objects despite strict string types
+                    if (comparer.compare(parsed, b.start) >= 0 && comparer.compare(parsed, b.end) <= 0) {
+                        return i;
+                    }
+                } catch {
+                    // ignore this group
+                }
+            }
+            return -1;
+        });
+    }
+
+    /** Normalizes a numeric marker/enumerator to its bare digits (e.g. "[3]" → "3"), else null. */
+    private normalizeEnumerator(text: string): string | null {
+        const m = /(\d+)/.exec(text);
+        return m ? m[1] : null;
+    }
+
+    private emitReferenceDetectionTelemetry(params: {
+        bookId: string;
+        sectionId: string;
+        groups: { rootCfi: string; segments: { text: string; cfi: string }[]; fullText: string }[];
+        markers: CitationMarker[];
+        markerGroupIndex: number[];
+        geminiCfi: string | undefined;
+        detShadowCfi: string | null;
+    }): void {
+        const { bookId, sectionId, groups, markers, markerGroupIndex, geminiCfi, detShadowCfi } = params;
+        const ENUMERATOR = /^\s*(?:\[(\d+)\]|(\d+)[.)]\s|(\d+)\s+[A-Z])/;
+        const n = groups.length;
+
+        // Per-group marker counts derived from the shared attribution
+        const groupMarkerCounts = new Array(n).fill(0);
+        for (const gi of markerGroupIndex) {
+            if (gi >= 0 && gi < n) groupMarkerCounts[gi]++;
+        }
+
+        // Per-group features
+        const perGroup = groups.map((g, i) => {
+            const m = ENUMERATOR.exec(g.fullText);
+            const enumeratorValue = m ? (m[1] ?? m[2] ?? m[3] ?? null) : null;
+            const enumeratorType = m
+                ? (m[1] ? 'bracketed' : m[2] ? 'dotted' : 'spaced')
+                : null;
+            return {
+                groupIndex: i,
+                fractionFromEnd: n > 1 ? (n - 1 - i) / (n - 1) : 0,
+                enumeratorType,
+                enumeratorValue,
+                markerCount: groupMarkerCounts[i],
+            };
+        });
+
+        // Body = first 60% of groups; tail = last 40%.
+        // bodyMarkerSet holds normalized numeric markers found in the body; tailEnumeratorSet
+        // holds enumerators starting tail groups. High overlap → tail enumerates body citations.
+        const bodyThreshold = Math.floor(n * 0.6);
+        const bodyMarkerSet = new Set<string>();
+        markers.forEach((mk, mi) => {
+            const gi = markerGroupIndex[mi];
+            if (gi !== -1 && gi < bodyThreshold && mk.numeric) {
+                const norm = this.normalizeEnumerator(mk.markerText);
+                if (norm) bodyMarkerSet.add(norm);
+            }
+        });
+
+        const tailGroups = groups.slice(bodyThreshold);
+        const tailEnumeratorSet = new Set<string>();
+        let longestTailEnumeratorRun = 0;
+        let curRun = 0;
+        for (const g of tailGroups) {
+            const m = ENUMERATOR.exec(g.fullText);
+            if (m) {
+                const val = m[1] ?? m[2] ?? m[3];
+                if (val) tailEnumeratorSet.add(val);
+                curRun++;
+                if (curRun > longestTailEnumeratorRun) longestTailEnumeratorRun = curRun;
+            } else {
+                curRun = 0;
+            }
+        }
+
+        const overlap = [...bodyMarkerSet].filter(v => tailEnumeratorSet.has(v)).length;
+        const setOverlapFraction = tailEnumeratorSet.size > 0
+            ? overlap / tailEnumeratorSet.size
+            : 0;
+
+        useGenAIStore.getState().addLog({
+            id: generateSecureId(),
+            timestamp: Date.now(),
+            type: 'response',
+            method: 'detectReferenceStart',
+            payload: {
+                bookId,
+                sectionId,
+                groupCount: n,
+                markerCount: markers.length,
+                geminiCfi,
+                detShadowCfi,
+                setOverlapFraction,
+                longestTailEnumeratorRun,
+                bodyMarkerSet: [...bodyMarkerSet],
+                tailEnumeratorSet: [...tailEnumeratorSet],
+                perGroup,
+            },
+        });
     }
 
     /**

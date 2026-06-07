@@ -7,7 +7,7 @@ describe('extractSentencesFromNode inline element fragmentation', () => {
     it('should NOT fragment sentences with inline elements', () => {
         const div = document.createElement('div');
         div.innerHTML = '<p>This is a <b>test</b>.</p>';
-        const result = extractSentencesFromNode(div, mockCfiGenerator);
+        const { sentences: result } = extractSentencesFromNode(div, mockCfiGenerator);
 
         expect(result).toHaveLength(1);
         expect(result[0].text).toBe('This is a test.');
@@ -16,7 +16,7 @@ describe('extractSentencesFromNode inline element fragmentation', () => {
     it('should NOT fragment sentences split by links', () => {
          const div = document.createElement('div');
          div.innerHTML = '<p>Click <a href="#">here</a> for more.</p>';
-         const result = extractSentencesFromNode(div, mockCfiGenerator);
+         const { sentences: result } = extractSentencesFromNode(div, mockCfiGenerator);
 
         expect(result).toHaveLength(1);
         expect(result[0].text).toBe('Click here for more.');
@@ -25,7 +25,7 @@ describe('extractSentencesFromNode inline element fragmentation', () => {
     it('should handle multiple sentences in a block', () => {
         const div = document.createElement('div');
         div.innerHTML = '<p>Sentence one. <b>Sentence</b> two.</p>';
-        const result = extractSentencesFromNode(div, mockCfiGenerator);
+        const { sentences: result } = extractSentencesFromNode(div, mockCfiGenerator);
 
         expect(result).toHaveLength(2);
         expect(result[0].text).toBe('Sentence one.');
@@ -35,7 +35,7 @@ describe('extractSentencesFromNode inline element fragmentation', () => {
     it('should handle nested blocks correctly', () => {
          const div = document.createElement('div');
          div.innerHTML = '<div>Outer text. <p>Inner paragraph.</p> Post text.</div>';
-         const result = extractSentencesFromNode(div, mockCfiGenerator);
+         const { sentences: result } = extractSentencesFromNode(div, mockCfiGenerator);
 
         const texts = result.map(s => s.text);
         expect(texts).toContain('Outer text.');

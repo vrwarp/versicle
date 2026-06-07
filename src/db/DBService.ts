@@ -376,15 +376,9 @@ class DBService {
       // User data (overrides, progress, inventory) is now handled by Yjs stores exclusively.
 
       const ttsStore = tx.objectStore('cache_tts_preparation');
-      const ttsPromises = data.ttsContentBatches.map(batch => {
-        const item = {
-          id: batch.id,
-          bookId: batch.bookId,
-          sectionId: batch.sectionId,
-          sentences: batch.sentences
-        };
-        return mode === 'overwrite' ? ttsStore.put(item) : ttsStore.add(item);
-      });
+      const ttsPromises = data.ttsContentBatches.map(batch =>
+        mode === 'overwrite' ? ttsStore.put(batch) : ttsStore.add(batch)
+      );
       await Promise.all(ttsPromises);
 
       const tableStore = tx.objectStore('cache_table_images');

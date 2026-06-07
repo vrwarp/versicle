@@ -106,7 +106,9 @@ vi.mock('../../store/useGenAIStore', () => ({
             isContentAnalysisEnabled: true,
             isEnabled: true, // Default to true for tests
             contentFilterSkipTypes: ['reference'],
-            apiKey: 'test-key'
+            apiKey: 'test-key',
+            referenceDetectionStrategy: 'gemini',
+            addLog: vi.fn(),
         })
     }
 }));
