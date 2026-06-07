@@ -59,9 +59,18 @@ export default defineConfig({
         ...devices['Desktop Safari'],
         viewport: { width: 1280, height: 720 },
         launchOptions: {},
-        serviceWorkers: 'block',
+        // Allow service workers (Playwright default). Blocking them made
+        // navigator.serviceWorker.ready never resolve, so the app's
+        // waitForServiceWorkerController() fell through to its 3s timeout on EVERY
+        // page load (it gates the whole UI behind swInitialized). That added ~2s of
+        // dead time per load on WebKit alone — the real reason WebKit looked slow.
+        // With SWs allowed the SW registers + controls in ~10ms (parity with Chromium).
+        serviceWorkers: 'allow',
       },
-      timeout: 180000,
+      // Slowest WebKit test under full parallel load is ~58s (the multi-device
+      // seamless-handoff journey); 120s leaves ~2x headroom. This used to be 180s
+      // to absorb the now-removed per-load 3s service-worker timeout (see above).
+      timeout: 120000,
       // WebKit reuses one long-lived browser instance per worker across the whole
       // run; that instance degrades over its ~25-test lifetime (memory/disk/IO),
       // which makes render-sensitive panels (e.g. the audio deck settings tab)

@@ -11,6 +11,12 @@ const ttsPolyfillPath = path.resolve(__dirname, 'tts-polyfill.js');
 const ttsPolyfillContent = fs.readFileSync(ttsPolyfillPath, 'utf8');
 
 test("workspace deletion tombstone", async ({ browser, baseURL }) => {
+  // Two-phase journey (create+delete a workspace, then a fresh stale-client detects the
+  // tombstone). It runs in ~8s nominally but spans two browser contexts, multiple reloads
+  // and a cross-context sync event, so the default 30s budget is too tight under parallel
+  // load. test.slow() triples it (90s desktop/mobile, 360s webkit) — comfortably above the
+  // internal waits below.
+  test.slow();
   const finalBaseURL = baseURL || "http://localhost:5173";
   const testUid = `mock-user-${Math.random().toString(36).substring(2, 10)}`;
 
@@ -167,7 +173,7 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
   // persistent state change is the authoritative signal; the toast is best-effort.
   await pageStale
     .getByText("Sync disconnected: Remote workspace was deleted.", { exact: false })
-    .waitFor({ state: "visible", timeout: 50000 })
+    .waitFor({ state: "visible", timeout: 15000 })
     .then(() => console.log("Stale client showed the disconnect toast"))
     .catch(() => console.log("Disconnect toast not observed; verifying persistent effect instead"));
 
@@ -178,7 +184,7 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
         pageStale.evaluate(
           () => JSON.parse(localStorage.getItem("sync-storage") || "{}").state?.activeWorkspaceId ?? null
         ),
-      { timeout: 50000 }
+      { timeout: 25000 }
     )
     .not.toBe(wsId);
   console.log("Stale client correctly cleared the deleted workspace ID");

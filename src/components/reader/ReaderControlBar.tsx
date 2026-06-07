@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTTSStore } from '../../store/useTTSStore';
-import { useCurrentDeviceProgress } from '../../store/useReadingStateStore';
+import { useCurrentDeviceProgress, useBookProgress } from '../../store/useReadingStateStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { useBook, useLastReadBook } from '../../store/selectors';
 import { useAnnotationStore } from '../../store/useAnnotationStore';
@@ -69,7 +69,10 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
     // Select the current book if active
     // OPTIMIZATION: Use specialized selector
     const currentBook = useBook(currentBookId);
-    const currentBookProgress = useCurrentDeviceProgress(currentBookId);
+    // useBookProgress applies the same fallback logic as getProgress() (most-recent
+    // across devices, with isValidProgress guard), so the scrubber always reflects
+    // the best available progress rather than just the current-device entry.
+    const currentBookProgress = useBookProgress(currentBookId);
 
     // Determine State Priority
     // 0. Sync Alert (High Priority)
@@ -214,11 +217,14 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
         title = currentBook.title;
         const useSynthetic = resolveSyntheticPreference(currentBook);
         const currentToc = (useSynthetic && currentBook.syntheticToc) ? currentBook.syntheticToc : toc;
-        
+
         const resolvedItem = currentSectionId ? findTocItem(currentToc, currentSectionId) : null;
         subtitle = resolvedItem?.label || currentSectionTitle || undefined;
-        // Get progress from reading state (local device)
-        progress = (currentBookProgress?.percentage || 0) * 100;
+        // Only override progress when TTS is not active; when TTS has queue items,
+        // CompassPill uses its own TTS-based chapter progress from useSectionDuration.
+        if (!hasQueueItems) {
+            progress = (currentBookProgress?.percentage || 0) * 100;
+        }
     }
 
     return (

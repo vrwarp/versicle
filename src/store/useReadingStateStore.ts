@@ -439,16 +439,38 @@ export const useReadingStateStore = create<ReadingState>()(
 
 /**
  * Hook to get progress for a specific book.
- * Returns the entry with the MOST RECENT timestamp across all devices.
- * @param bookId - The book ID, or null.
- * @returns The progress object with max percentage, or null if not found.
+ * Applies the same priority logic as getProgress() — local device first (if valid),
+ * then most-recent across all devices, then local as final fallback — but does so
+ * entirely from the `state` selector argument so Zustand can track dependencies
+ * reactively. (Calling state.getProgress() internally uses the store's `get()`
+ * closure, which means the selector result doesn't change from Zustand's perspective
+ * even when the underlying progress data changes.)
  */
 export const useBookProgress = (bookId: string | null) => {
+    const deviceId = getDeviceId();
     return useReadingStateStore(state => {
         if (!bookId) return null;
+        const bookProgress = state.progress?.[bookId];
+        if (!bookProgress) return null;
 
-        // Use the selector logic which now includes local priority
-        return state.getProgress(bookId);
+        // 1. Prefer current device if valid (> 0.5%)
+        const local = bookProgress[deviceId];
+        if (local && local.percentage > 0.005) return local;
+
+        // 2. Fall back to most recent valid entry across all devices
+        let mostRecent: UserProgress | null = null;
+        for (const id in bookProgress) {
+            const p = bookProgress[id];
+            if (p && p.percentage > 0.005) {
+                if (!mostRecent || p.lastRead > mostRecent.lastRead) {
+                    mostRecent = p;
+                }
+            }
+        }
+        if (mostRecent) return mostRecent;
+
+        // 3. Final fallback: local entry even if below threshold
+        return local || null;
     });
 };
 
