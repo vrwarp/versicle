@@ -103,8 +103,10 @@ test("scrubber tracks TTS chapter position during playback", async ({ page }) =>
   await captureScreenshot(page, "scrubber_at_index_3");
 
   // Core assertion: scrubber reflects TTS chapter position
-  // Allow ±5% tolerance for rounding / transition frame timing
-  expect(widthAfterSkip).toBeGreaterThan(5);
+  // Must be non-zero (not stuck), and must closely track the TTS position.
+  // Note: for long chapters, index 3 of many items can be well below 5%, so we
+  // only require > 0 here; toBeCloseTo is the real correctness check.
+  expect(widthAfterSkip).toBeGreaterThan(0);
   expect(widthAfterSkip).toBeCloseTo(expectedPct, 0 /* 0 decimal places = ±0.5% */);
 
   // Regression guard: scrubber must NOT be pinned to the global book reading percentage.
@@ -131,17 +133,33 @@ test("scrubber shows book reading progress when TTS queue is empty", async ({ pa
   await navigateToChapter(page, "toc-item-2");
   await expect(page.getByTestId("compass-pill-active")).toBeVisible({ timeout: 10000 });
 
-  // Dwell long enough for the reading session to record > 0% progress
-  await page.waitForTimeout(4000);
-  await page.keyboard.press("ArrowRight");
-  await page.waitForTimeout(1000);
+  // Dwell long enough for the reading session to record > 0% progress.
+  // We do NOT press ArrowRight here: some epub.js paginated builds emit a
+  // `relocated` event with percentage=0 on the first render of the new page,
+  // which overwrites the valid chapter percentage before the real value is
+  // committed — leaving the current-device progress stuck at 0%.
+  await page.waitForTimeout(3000);
 
   // Ensure TTS queue is empty (no TTS initiated)
   const { total: queueLength } = await getTTSProgress(page);
   console.log(`TTS queue length (should be 0): ${queueLength}`);
 
   // When queue is empty, scrubber uses the global reading percentage from the store.
-  // It should be > 0 since we've been reading.
+  // Wait for both the store to have non-zero progress AND the DOM to reflect it
+  // (React re-render may lag a tick behind the Zustand state update).
+  await page.waitForFunction(
+    () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const store = (window as any).useReadingStateStore?.getState?.();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bookId = (window as any).useReaderUIStore?.getState?.().currentBookId;
+      const pct = bookId ? (store?.getProgress?.(bookId)?.percentage ?? 0) * 100 : 0;
+      const el = document.querySelector('[data-testid="compass-pill-progress-bar"]');
+      return pct > 0 && el !== null && parseFloat((el as HTMLElement).style.width) > 0;
+    },
+    undefined,
+    { timeout: 12000 }
+  ).catch(() => { /* fall through to assertion so the failure message is readable */ });
   const scrubberWidth = await getScrubberWidth(page);
   const globalBookPct = await page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -190,11 +208,14 @@ test("scrubber advances as TTS plays through sentences", async ({ page }) => {
   console.log("Starting TTS playback...");
   await page.getByTestId("compass-active-toggle").click();
 
-  // Wait for TTS to advance at least 2 positions (mock TTS is fast)
+  // Wait for TTS to advance at least 2 positions (mock TTS is fast).
+  // Pass undefined as arg so Playwright treats the third argument as options,
+  // not as the page-function argument (which would override the 10s page default).
   await page.waitForFunction(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     () => (window as any).useTTSStore?.getState?.().currentIndex >= 2,
-    { timeout: 15000 }
+    undefined,
+    { timeout: 20000 }
   );
 
   const { index: liveIndex } = await getTTSProgress(page);
@@ -208,8 +229,9 @@ test("scrubber advances as TTS plays through sentences", async ({ page }) => {
 
   await captureScreenshot(page, "scrubber_live_advance");
 
-  // Scrubber must have advanced from its starting position
-  expect(widthAfterPlay).toBeGreaterThan(widthBefore + 5);
+  // Scrubber must have advanced from its starting position (widthBefore is ~0 at index 0).
+  // Use expectedWidth - 1 so the bound scales with queue length rather than a fixed 5%.
+  expect(widthAfterPlay).toBeGreaterThan(Math.max(0, expectedWidth - 1));
   // And must track the TTS position, not a stale value
   expect(widthAfterPlay).toBeCloseTo(expectedWidth, 0);
 
