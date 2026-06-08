@@ -456,7 +456,8 @@ export class AudioContentPipeline {
 
             // Deterministic-only path
             if (strategy === 'deterministic') {
-                const detCfi = this.runDeterministicDetector(groups);
+                const detIndex = this.runDeterministicDetector(groups);
+                const detCfi = detIndex >= 0 ? groups[detIndex]?.rootCfi : null;
                 await dbService.saveReferenceStartCfi(bookId, sectionId, detCfi ?? undefined);
                 return detCfi ?? undefined;
             }
@@ -475,13 +476,17 @@ export class AudioContentPipeline {
                 const markers = citationMarkers || [];
                 const markerGroupIndex = this.attributeMarkersToGroups(groups, markers);
 
+                // Compute hint signals for the prompt
+                const enumeratorCandidateIndex = this.runDeterministicDetector(groups);
+                const markerDropoffIndex = this.computeMarkerDropoffIndex(groups, markers, markerGroupIndex);
+
                 const nodesToDetect = groups.map((g, index) => {
                     const id = index.toString();
                     idToCfiMap.set(id, g.rootCfi);
                     const groupMarkers = markers.filter((_, mi) => markerGroupIndex[mi] === index);
                     return {
                         id,
-                        sampleText: g.fullText.substring(0, 200),
+                        sampleText: g.fullText,
                         citationMarkerCount: groupMarkers.length,
                         hasSuperscriptMarkers: groupMarkers.some(m => m.super),
                     };
@@ -511,16 +516,19 @@ export class AudioContentPipeline {
                     if (structure && structure.toc) findSectionTitle(structure.toc);
                     const sectionTitle = sectionMap.get(sectionId) || 'Unknown Section';
 
-                    // Note: Using default model (gemini-1.5-flash) from GenAIService
-                    const results = await genAIService.detectContentTypes(nodesToDetect, { bookTitle, sectionTitle });
+                    const { classifications: results, justification, agreedWithHeuristic } = await genAIService.detectContentTypes(
+                        nodesToDetect,
+                        { enumeratorCandidate: enumeratorCandidateIndex, markerDropoffIndex },
+                        { bookTitle, sectionTitle }
+                    );
 
                     // Find the first result marked as reference
                     const referenceResult = results.find(res => res.type === 'reference');
                     const referenceStartCfi = referenceResult ? idToCfiMap.get(referenceResult.id) : undefined;
 
-                    // Shadow run: deterministic detector for telemetry (result not used for playback)
-                    const detShadowCfi = this.runDeterministicDetector(groups);
-                    this.emitReferenceDetectionTelemetry({ bookId, sectionId, groups, markers, markerGroupIndex, geminiCfi: referenceStartCfi, detShadowCfi });
+                    // Deterministic shadow result mapped back to rootCfi for telemetry
+                    const detShadowCfi = enumeratorCandidateIndex >= 0 ? groups[enumeratorCandidateIndex]?.rootCfi ?? null : null;
+                    this.emitReferenceDetectionTelemetry({ bookId, sectionId, groups, markers, markerGroupIndex, geminiCfi: referenceStartCfi, detShadowCfi, enumeratorCandidateIndex, markerDropoffIndex, agreedWithHeuristic, justification });
 
                     // Persist detection results (this sets status to 'success')
                     await dbService.saveReferenceStartCfi(bookId, sectionId, referenceStartCfi);
@@ -548,9 +556,9 @@ export class AudioContentPipeline {
      * Deterministic reference-section detector.
      * Finds the longest tail run of consecutive groups that match enumerator patterns
      * (e.g., "[1] Author", "1. Author", "1 Smith") starting at or past 60% of chapter length.
-     * Returns the rootCfi of the first group in that run, or null if none found.
+     * Returns the group index of the first group in that run, or -1 if none found.
      */
-    private runDeterministicDetector(groups: { rootCfi: string; fullText: string }[]): string | null {
+    private runDeterministicDetector(groups: { fullText: string }[]): number {
         const ENUMERATOR = /^\s*(?:\[(\d+)\]|(\d+)[.)]\s|(\d+)\s+[A-Z])/;
         let bestRunStart = -1;
         let bestRunLen = 0;
@@ -571,9 +579,38 @@ export class AudioContentPipeline {
         }
 
         if (bestRunLen >= 2 && bestRunStart >= groups.length * 0.6) {
-            return groups[bestRunStart].rootCfi;
+            return bestRunStart;
         }
-        return null;
+        return -1;
+    }
+
+    /**
+     * Finds the highest group index where superscript citation markers are still dense.
+     * Signals the last body group before an endnote block (markers drop off past this index).
+     * Returns -1 if total superscript markers < 3 or no dense window found.
+     */
+    private computeMarkerDropoffIndex(
+        groups: { segments: { cfi: string }[] }[],
+        markers: CitationMarker[],
+        markerGroupIndex: number[]
+    ): number {
+        const totalSuper = markers.filter(m => m.super).length;
+        if (totalSuper < 3) return -1;
+
+        const n = groups.length;
+        const groupSuperCounts = new Array(n).fill(0);
+        markers.forEach((mk, mi) => {
+            const gi = markerGroupIndex[mi];
+            if (gi >= 0 && gi < n && mk.super) groupSuperCounts[gi]++;
+        });
+
+        for (let i = n - 1; i >= 0; i--) {
+            if (groupSuperCounts[i] === 0) continue;
+            let windowCount = 0;
+            for (let j = Math.max(0, i - 4); j <= i; j++) windowCount += groupSuperCounts[j];
+            if (windowCount >= 2) return i;
+        }
+        return -1;
     }
 
     /**
@@ -635,8 +672,12 @@ export class AudioContentPipeline {
         markerGroupIndex: number[];
         geminiCfi: string | undefined;
         detShadowCfi: string | null;
+        enumeratorCandidateIndex: number;
+        markerDropoffIndex: number;
+        agreedWithHeuristic: boolean;
+        justification: string;
     }): void {
-        const { bookId, sectionId, groups, markers, markerGroupIndex, geminiCfi, detShadowCfi } = params;
+        const { bookId, sectionId, groups, markers, markerGroupIndex, geminiCfi, detShadowCfi, enumeratorCandidateIndex, markerDropoffIndex, agreedWithHeuristic, justification } = params;
         const ENUMERATOR = /^\s*(?:\[(\d+)\]|(\d+)[.)]\s|(\d+)\s+[A-Z])/;
         const n = groups.length;
 
@@ -708,6 +749,10 @@ export class AudioContentPipeline {
                 markerCount: markers.length,
                 geminiCfi,
                 detShadowCfi,
+                enumeratorCandidateIndex,
+                markerDropoffIndex,
+                agreedWithHeuristic,
+                justification,
                 setOverlapFraction,
                 longestTailEnumeratorRun,
                 bodyMarkerSet: [...bodyMarkerSet],

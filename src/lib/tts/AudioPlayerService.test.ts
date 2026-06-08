@@ -117,9 +117,11 @@ vi.mock('../genai/GenAIService', () => ({
     genAIService: {
         isConfigured: vi.fn().mockReturnValue(true),
         configure: vi.fn(),
-        detectContentTypes: vi.fn().mockResolvedValue([
-            { id: '0', type: 'text' }
-        ])
+        detectContentTypes: vi.fn().mockResolvedValue({
+            classifications: [{ id: '0', type: 'text' }],
+            justification: '',
+            agreedWithHeuristic: false,
+        })
     }
 }));
 
@@ -438,12 +440,16 @@ describe('AudioPlayerService', () => {
 
             // Mock GenAI response
             // IDs correspond to indices: '0', '1', '2'
-            // @ts-expect-error Mock implementation
-            vi.mocked(genAIService.detectContentTypes).mockResolvedValue([
-                { id: '0', type: 'main' },
-                { id: '1', type: 'main' },
-                { id: '2', type: 'reference' } // Skip this one
-            ]);
+            vi.mocked(genAIService.detectContentTypes).mockResolvedValue({
+                classifications: [
+                    { id: '0', type: 'main' },
+                    { id: '1', type: 'main' },
+                    { id: '2', type: 'reference' },
+                ],
+                justification: '',
+                agreedWithHeuristic: false,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            } as any);
 
             // Check the mask generation
             const mask = await contentPipeline.detectContentSkipMask('book1', 'sec1', ['reference'], sentences);
