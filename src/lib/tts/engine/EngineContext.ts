@@ -1,0 +1,157 @@
+/**
+ * EngineContext — the single boundary between the TTS engine core and the host
+ * environment (React/Zustand stores, native platform bridges).
+ *
+ * The engine core (AudioPlayerService, AudioContentPipeline, TableAdaptationProcessor)
+ * must reach the outside world ONLY through this interface. It deliberately does NOT
+ * abstract `dbService` (IndexedDB) or `genAIService` (fetch) — both are available in a
+ * Web Worker, so the core may import them directly. What is abstracted here is exactly
+ * the set of dependencies that are NOT worker-safe: the main-thread Zustand stores and
+ * the Capacitor native bridge.
+ *
+ * Two implementations exist:
+ *  - `createZustandEngineContext()` — the production wiring. Forwards every call to the
+ *    real stores / Capacitor, so behavior is identical to the pre-refactor code and
+ *    existing module-level store mocks in tests keep working unchanged.
+ *  - `FakeEngineContext` — a deterministic in-memory implementation for unit tests.
+ *
+ * When the engine later moves into a worker (Phase 5), a third implementation backed by
+ * a message port replaces the Zustand one; the engine code does not change because it
+ * only ever sees this interface.
+ *
+ * All argument/return types are derived from the existing store signatures via `typeof`
+ * type queries on type-only imports. These imports are erased at runtime and create no
+ * runtime dependency, so the core stays worker-portable.
+ */
+import type { useTTSStore } from '../../../store/useTTSStore';
+import type { useGenAIStore } from '../../../store/useGenAIStore';
+import type { useReadingStateStore } from '../../../store/useReadingStateStore';
+import type { SectionAnalysis, TableAdaptation } from '../../../store/useContentAnalysisStore';
+import type { useAnnotationStore } from '../../../store/useAnnotationStore';
+import type { useToastStore } from '../../../store/useToastStore';
+
+// Re-exported so the engine core and helpers (e.g. FakeEngineContext) get all
+// engine-boundary types from this one module without re-reaching into the stores.
+export type { SectionAnalysis, TableAdaptation };
+
+// --- Snapshot / argument types reused verbatim from the existing store signatures ---
+
+/** Full TTS settings snapshot (voice, speed, language, segmentation, lexicon flags). */
+export type TTSSettingsSnapshot = ReturnType<typeof useTTSStore.getState>;
+
+/** Full GenAI settings snapshot (enabled flags, skip types, api key, logging). */
+export type GenAISettingsSnapshot = ReturnType<typeof useGenAIStore.getState>;
+
+type ReadingStateSnapshot = ReturnType<typeof useReadingStateStore.getState>;
+/** Persisted reading progress for a book (queue index, section index, …). */
+export type Progress = ReturnType<ReadingStateSnapshot['getProgress']>;
+/** The reading-event classification accepted by `addCompletedRange` (e.g. 'tts'). */
+export type ReadingEventType = Parameters<ReadingStateSnapshot['addCompletedRange']>[2];
+
+/** The annotation payload accepted by the annotation store's `add`. */
+export type AnnotationInput = Parameters<ReturnType<typeof useAnnotationStore.getState>['add']>[0];
+
+/** A single GenAI activity-log entry. */
+export type GenAILogEntry = Parameters<GenAISettingsSnapshot['addLog']>[0];
+
+/** Toast severity levels. */
+export type ToastType = Parameters<ReturnType<typeof useToastStore.getState>['showToast']>[1];
+
+// --- Ports (grouped by concern) ---
+
+/** TTS user settings + the active language (read/write). */
+export interface TTSConfigPort {
+    /** The language currently driving voice/segmentation selection. */
+    getActiveLanguage(): string;
+    /** Update the active language (e.g. when the book's language changes). */
+    setActiveLanguage(lang: string): void;
+    /** A snapshot of the full TTS settings used by the content pipeline. */
+    getSettings(): TTSSettingsSnapshot;
+    /** Locale-aware default for minimum sentence length during segmentation. */
+    getDefaultMinSentenceLength(lang: string): number;
+}
+
+/** GenAI settings + activity log + change notifications. */
+export interface GenAIPort {
+    getSettings(): GenAISettingsSnapshot;
+    addLog(entry: GenAILogEntry): void;
+    /** Subscribe to settings changes; returns an unsubscribe function. */
+    subscribe(listener: () => void): () => void;
+}
+
+/** Per-book reading progress and completed-range history. */
+export interface ReadingStatePort {
+    getProgress(bookId: string): Progress;
+    updateTTSProgress(bookId: string, queueIndex: number, sectionIndex: number): void;
+    addCompletedRange(bookId: string, cfiRange: string, type?: ReadingEventType): void;
+    updatePlaybackPosition(bookId: string, lastPlayedCfi: string): void;
+}
+
+/** A snapshot of all cached section analyses, keyed by `${bookId}/${sectionId}`. */
+export type ContentAnalysisSnapshot = { sections: Record<string, SectionAnalysis> };
+
+/** Cached GenAI content analysis (skip masks, table adaptations) + change stream. */
+export interface ContentAnalysisPort {
+    getAnalysis(bookId: string, sectionId: string): SectionAnalysis | undefined;
+    /**
+     * The current snapshot of all analyses. The engine reads from snapshots (pushed via
+     * `subscribe` or pulled here) rather than per-key queries, which keeps the data flow
+     * serializable and worker-friendly.
+     */
+    getSnapshot(): ContentAnalysisSnapshot;
+    /** Subscribe to analysis updates; the listener receives the new snapshot. Returns an unsubscribe function. */
+    subscribe(listener: (state: ContentAnalysisSnapshot) => void): () => void;
+}
+
+/** Book inventory metadata the engine needs (currently just language) + change stream. */
+export interface BookInfoPort {
+    getBookLanguage(bookId: string): string;
+    /** Subscribe to book inventory changes; returns an unsubscribe function. */
+    subscribe(listener: () => void): () => void;
+}
+
+/** Sink for audio-bookmark annotations (the pause→play "Dragnet" capture). */
+export interface AnnotationPort {
+    add(annotation: AnnotationInput): void;
+}
+
+/** User-facing transient notifications. */
+export interface NotificationPort {
+    showToast(message: string, type?: ToastType): void;
+}
+
+/** Reader UI coordination (highlighting the active section as it plays). */
+export interface ReaderUIPort {
+    setCurrentSection(title: string, sectionId: string): void;
+}
+
+/**
+ * Native platform detection and capability requests. NOTE: this is distinct from the
+ * audio-output `PlatformPort` introduced in Phase 3 — this port is only about *which*
+ * platform we're on and one-shot native capability prompts.
+ */
+export interface PlatformInfoPort {
+    /** 'web' | 'ios' | 'android'. */
+    getPlatform(): string;
+    isNativePlatform(): boolean;
+    /** Whether the OS is currently battery-optimizing this app (Android). */
+    isBatteryOptimizationEnabled(): Promise<boolean>;
+    /** Open the OS battery-optimization settings screen (Android). */
+    openBatteryOptimizationSettings(): Promise<void>;
+}
+
+/**
+ * The aggregate context handed to the engine core. One object, injected at the
+ * composition root, carrying every non-worker-safe capability the core needs.
+ */
+export interface EngineContext {
+    config: TTSConfigPort;
+    genAI: GenAIPort;
+    readingState: ReadingStatePort;
+    contentAnalysis: ContentAnalysisPort;
+    book: BookInfoPort;
+    annotations: AnnotationPort;
+    notifications: NotificationPort;
+    readerUI: ReaderUIPort;
+    platform: PlatformInfoPort;
+}

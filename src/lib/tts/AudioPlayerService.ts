@@ -1,6 +1,4 @@
 import type { ITTSProvider, TTSVoice } from './providers/types';
-import { Capacitor } from '@capacitor/core';
-import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-optimization';
 import { SyncEngine } from './SyncEngine';
 import { LexiconService } from './LexiconService';
 import { dbService } from '../../db/DBService';
@@ -9,13 +7,11 @@ import { TaskSequencer } from './TaskSequencer';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { PlaybackStateManager } from './PlaybackStateManager';
 import { TTSProviderManager } from './TTSProviderManager';
+import type { PlaybackBackend, PlaybackBackendFactory, TTSProviderEvents } from './engine/PlaybackBackend';
 import { PlatformIntegration } from './PlatformIntegration';
 import { flightRecorder } from './TTSFlightRecorder';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
-import { useToastStore } from '../../store/useToastStore';
-import { type SectionAnalysis, type TableAdaptation, useContentAnalysisStore } from '../../store/useContentAnalysisStore';
-import { useGenAIStore } from '../../store/useGenAIStore';
-import { useAnnotationStore } from '../../store/useAnnotationStore';
+import type { SectionAnalysis, TableAdaptation, EngineContext } from './engine/EngineContext';
+import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { mergeCfiSlow } from '../cfi-utils';
 import { createLogger } from '../logger';
 import { normalizeLanguageCode } from '../language-utils';
@@ -65,11 +61,13 @@ export class AudioPlayerService {
     // TaskSequencer ensures async operations are executed serially to prevent race conditions.
     private taskSequencer = new TaskSequencer();
     // AudioContentPipeline handles loading content, GenAI filtering, and text refinement.
-    private contentPipeline = new AudioContentPipeline();
+    // Assigned in the constructor so it shares the service's injected EngineContext.
+    private contentPipeline: AudioContentPipeline;
     // PlaybackStateManager manages the queue, current index, and position calculations.
     private stateManager = new PlaybackStateManager();
 
-    private providerManager: TTSProviderManager;
+    private readonly ctx: EngineContext;
+    private providerManager: PlaybackBackend;
     private platformIntegration: PlatformIntegration;
     private syncEngine: SyncEngine | null = null;
     private lexiconService: LexiconService;
@@ -94,12 +92,17 @@ export class AudioPlayerService {
     private currentBookAuthor: string = '';
     private currentBookCoverUrl: string | undefined = undefined;
 
-    private constructor() {
+    private constructor(
+        ctx: EngineContext = createZustandEngineContext(),
+        backendFactory: PlaybackBackendFactory = (events) => new TTSProviderManager(events),
+    ) {
+        this.ctx = ctx;
+        this.contentPipeline = new AudioContentPipeline(this.ctx);
         this.syncEngine = new SyncEngine();
         this.lexiconService = LexiconService.getInstance();
 
         // Subscribe to content analysis changes (Reactive Injection)
-        useContentAnalysisStore.subscribe((state) => {
+        this.ctx.contentAnalysis.subscribe((state) => {
             this.handleContentAnalysisUpdate(state);
         });
 
@@ -113,7 +116,7 @@ export class AudioPlayerService {
             onSeekTo: (time) => this.seekTo(time),
         });
 
-        this.providerManager = new TTSProviderManager({
+        const providerEvents: TTSProviderEvents = {
             onStart: () => {
                 this.setStatus('playing');
             },
@@ -151,7 +154,8 @@ export class AudioPlayerService {
             onDownloadProgress: (voiceId, percent, status) => {
                 this.notifyDownloadProgress(voiceId, percent, status);
             }
-        });
+        };
+        this.providerManager = backendFactory(providerEvents);
 
         this.syncEngine.setOnHighlight(() => {
             // No action currently
@@ -161,7 +165,7 @@ export class AudioPlayerService {
         this.stateManager.subscribe((snapshot) => {
             // Update Yjs Progress
             if (this.currentBookId && snapshot.currentSectionIndex !== -1) {
-                useReadingStateStore.getState().updateTTSProgress(
+                this.ctx.readingState.updateTTSProgress(
                     this.currentBookId,
                     snapshot.currentIndex,
                     snapshot.currentSectionIndex
@@ -171,59 +175,52 @@ export class AudioPlayerService {
             this.notifyListeners(snapshot.currentItem?.cfi || null);
         });
 
-        // Subscribe to book store changes for proactive language synchronization
-        // This ensures that if a user (or Yjs sync) updates the book's language, 
+        // Subscribe to book store changes for proactive language synchronization.
+        // This ensures that if a user (or Yjs sync) updates the book's language,
         // the TTS system reactively switches its profile and voice.
-        import('../../store/useBookStore').then(({ useBookStore }) => {
-            useBookStore.subscribe((state) => {
-                const bookId = this.currentBookId;
-                if (!bookId) {
-                    return;
+        this.ctx.book.subscribe(() => {
+            const bookId = this.currentBookId;
+            if (!bookId) {
+                return;
+            }
+
+            const currentLang = normalizeLanguageCode(this.ctx.book.getBookLanguage(bookId));
+
+            // Trigger sync if language changed for the CURRENT book,
+            // using activeLanguage to prevent unwarranted restarts.
+            const lastLang = this.ctx.config.getActiveLanguage();
+
+            if (currentLang !== lastLang) {
+                logger.info(`Syncing TTS language to book: ${currentLang} (Book: ${bookId})`);
+                this.ctx.config.setActiveLanguage(currentLang);
+
+                // Force lexicon reload for the new language
+                this.activeLexiconRules = null;
+
+                // If playing, restart to apply the new voice/language immediately
+                if (this.status === 'playing' || this.status === 'loading') {
+                    this.playInternal(true);
                 }
-
-                const rawLang = state.books[bookId]?.language || 'en';
-                const currentLang = normalizeLanguageCode(rawLang);
-                
-                // Trigger sync if language changed for the CURRENT book, 
-                // using activeLanguage to prevent unwarranted restarts.
-                import('../../store/useTTSStore').then(({ useTTSStore }) => {
-                    const lastLang = useTTSStore.getState().activeLanguage;
-
-                    if (currentLang !== lastLang) {
-                        logger.info(`Syncing TTS language to book: ${currentLang} (Book: ${bookId})`);
-                        useTTSStore.getState().setActiveLanguage(currentLang);
-                        
-                        // Force lexicon reload for the new language
-                        this.activeLexiconRules = null;
-
-                        // If playing, restart to apply the new voice/language immediately
-                        if (this.status === 'playing' || this.status === 'loading') {
-                             this.playInternal(true);
-                        }
-                    }
-                });
-            });
+            }
         });
 
         // Subscribe to GenAI settings changes for hot-swapping behavior and late-hydration support
-        if (typeof useGenAIStore.subscribe === 'function') {
-            useGenAIStore.subscribe(() => {
-                const bookId = this.currentBookId;
-                if (!bookId) return;
+        this.ctx.genAI.subscribe(() => {
+            const bookId = this.currentBookId;
+            if (!bookId) return;
 
-                const sectionIndex = this.stateManager.currentSectionIndex;
-                if (sectionIndex === -1) return;
+            const sectionIndex = this.stateManager.currentSectionIndex;
+            if (sectionIndex === -1) return;
 
-                const section = this.playlist[sectionIndex];
-                if (!section) return;
+            const section = this.playlist[sectionIndex];
+            if (!section) return;
 
-                // Reset timestamp to force re-application or clearing of mask
-                this.lastAppliedAnalysisSectionId = null;
-                this.lastAppliedAnalysisTimestamp = 0;
+            // Reset timestamp to force re-application or clearing of mask
+            this.lastAppliedAnalysisSectionId = null;
+            this.lastAppliedAnalysisTimestamp = 0;
 
-                this.applyCachedAnalysis(bookId, section.sectionId);
-            });
-        }
+            this.applyCachedAnalysis(bookId, section.sectionId);
+        });
         
         // Flight Recorder Context
         flightRecorder.setContextProvider(() => {
@@ -265,6 +262,18 @@ export class AudioPlayerService {
         return AudioPlayerService.instance;
     }
 
+    /**
+     * Construct an isolated, non-singleton instance with an explicitly injected context and
+     * (optionally) playback backend. Intended for tests and for hosts that own the engine
+     * lifecycle (e.g. a worker shell, which injects a message-channel-backed backend) rather
+     * than relying on the global singleton. See {@link EngineContext} and {@link PlaybackBackend}.
+     */
+    static createWithContext(ctx: EngineContext, backendFactory?: PlaybackBackendFactory): AudioPlayerService {
+        return backendFactory
+            ? new AudioPlayerService(ctx, backendFactory)
+            : new AudioPlayerService(ctx);
+    }
+
     private enqueue<T>(task: () => Promise<T>): Promise<T | void> {
         return this.taskSequencer.enqueue(task);
     }
@@ -273,18 +282,11 @@ export class AudioPlayerService {
         if (this.currentBookId !== bookId) {
             if (bookId) {
                 // Proactively sync language to ensure proper voices are loaded before playback starts
-                Promise.all([
-                    import('../../store/useBookStore'),
-                    import('../../store/useTTSStore')
-                ]).then(([{ useBookStore }, { useTTSStore }]) => {
-                    if (this.currentBookId !== bookId) return; // Prevent race conditions if bookId changed again rapidly
-                    const rawLang = useBookStore.getState().books[bookId]?.language || 'en';
-                    const currentLang = normalizeLanguageCode(rawLang);
-                    if (currentLang !== useTTSStore.getState().activeLanguage) {
-                        useTTSStore.getState().setActiveLanguage(currentLang);
-                        this.activeLexiconRules = null; // Force lexicon reload for the new language
-                    }
-                }).catch(e => logger.error("Failed to sync language on setBookId", e));
+                const currentLang = normalizeLanguageCode(this.ctx.book.getBookLanguage(bookId));
+                if (currentLang !== this.ctx.config.getActiveLanguage()) {
+                    this.ctx.config.setActiveLanguage(currentLang);
+                    this.activeLexiconRules = null; // Force lexicon reload for the new language
+                }
             }
             // Immediately stop playback and reset state to prevent leakage of old book state
             if (this.status !== 'stopped') {
@@ -369,7 +371,7 @@ export class AudioPlayerService {
         this.enqueue(async () => {
             try {
                 const state = await dbService.getTTSState(bookId);
-                const progress = useReadingStateStore.getState().getProgress(bookId);
+                const progress = this.ctx.readingState.getProgress(bookId);
 
                 if (this.currentBookId !== bookId) return;
 
@@ -674,7 +676,7 @@ export class AudioPlayerService {
         this.providerManager.playEarcon('bookmark_captured');
 
         // 4. Dispatch to Yjs Store
-        useAnnotationStore.getState().add({
+        this.ctx.annotations.add({
             bookId: this.currentBookId,
             cfiRange: mergedCfi,
             type: 'audio-bookmark',
@@ -725,7 +727,7 @@ export class AudioPlayerService {
             const engaged = await this.engageBackgroundMode(item);
             if (this.currentBookId !== initialBookId) return;
 
-            if (!engaged && Capacitor.getPlatform() === 'android') {
+            if (!engaged && this.ctx.platform.getPlatform() === 'android') {
                 this.setStatus('stopped');
                 this.notifyError("Cannot play in background");
                 return;
@@ -740,9 +742,7 @@ export class AudioPlayerService {
             const voiceId = this.voiceId || '';
 
             if (!this.activeLexiconRules) {
-                const { useBookStore } = await import('../../store/useBookStore');
-                const bookInventory = initialBookId ? useBookStore.getState().books[initialBookId] : undefined;
-                const bookLang = bookInventory?.language || 'en';
+                const bookLang = initialBookId ? this.ctx.book.getBookLanguage(initialBookId) : 'en';
                 this.activeLexiconRules = await this.lexiconService.getRules(initialBookId || undefined, bookLang);
                 if (this.currentBookId !== initialBookId) return;
             }
@@ -930,7 +930,7 @@ export class AudioPlayerService {
                     const item = this.stateManager.getCurrentItem();
                     if (item && item.cfi && !item.isPreroll) {
                         try {
-                            useReadingStateStore.getState().addCompletedRange(this.currentBookId, item.cfi, 'tts');
+                            this.ctx.readingState.addCompletedRange(this.currentBookId, item.cfi, 'tts');
                         } catch (e) {
                             logger.error("Failed to update history", e);
                         }
@@ -967,7 +967,7 @@ export class AudioPlayerService {
                 const item = this.stateManager.getCurrentItem();
                 if (item && item.cfi && !item.isPreroll) {
                     try {
-                        useReadingStateStore.getState().addCompletedRange(this.currentBookId, item.cfi, 'tts');
+                        this.ctx.readingState.addCompletedRange(this.currentBookId, item.cfi, 'tts');
                     } catch (e) {
                         logger.error("Failed to update history", e);
                     }
@@ -1037,7 +1037,7 @@ export class AudioPlayerService {
                 const activeSection = this.playlist[this.stateManager.currentSectionIndex];
                 if (!activeSection || activeSection.sectionId !== section.sectionId) return;
 
-                const genAISettings = useGenAIStore.getState();
+                const genAISettings = this.ctx.genAI.getSettings();
 
                 // 1. Apply or clear Skip Mask
                 if (genAISettings.isEnabled && genAISettings.isContentAnalysisEnabled && genAISettings.contentFilterSkipTypes.length > 0) {
@@ -1067,9 +1067,9 @@ export class AudioPlayerService {
     }
 
     private applyCachedAnalysis(bookId: string, sectionId: string) {
-        const analysis = useContentAnalysisStore.getState().getAnalysis(bookId, sectionId);
+        const analysis = this.ctx.contentAnalysis.getAnalysis(bookId, sectionId);
         if (analysis && analysis.status === 'success') {
-            this.handleContentAnalysisUpdate(useContentAnalysisStore.getState());
+            this.handleContentAnalysisUpdate(this.ctx.contentAnalysis.getSnapshot());
         }
     }
 
@@ -1082,15 +1082,15 @@ export class AudioPlayerService {
     }
 
     public async checkBatteryOptimization() {
-        if (Capacitor.getPlatform() === 'android') {
-            const isEnabled = await BatteryOptimization.isBatteryOptimizationEnabled();
-            if (isEnabled.enabled) {
+        if (this.ctx.platform.getPlatform() === 'android') {
+            const isEnabled = await this.ctx.platform.isBatteryOptimizationEnabled();
+            if (isEnabled) {
                 // Prompt user to disable battery optimization for reliable background playback
-                useToastStore.getState().showToast(
+                this.ctx.notifications.showToast(
                     'For reliable background playback, please disable battery optimization for this app.',
                     'info'
                 );
-                await BatteryOptimization.openBatteryOptimizationSettings();
+                await this.ctx.platform.openBatteryOptimizationSettings();
             }
         }
     }
@@ -1204,7 +1204,7 @@ export class AudioPlayerService {
         const lastPlayedCfi = (currentItem && currentItem.cfi) ? currentItem.cfi : undefined;
 
         if (lastPlayedCfi) {
-            useReadingStateStore.getState().updatePlaybackPosition(this.currentBookId, lastPlayedCfi);
+            this.ctx.readingState.updatePlaybackPosition(this.currentBookId, lastPlayedCfi);
         }
 
         // Call stateManager to save legacy cache/db

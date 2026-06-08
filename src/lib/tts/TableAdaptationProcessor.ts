@@ -1,12 +1,22 @@
 import { dbService } from '../../db/DBService';
-import { useGenAIStore } from '../../store/useGenAIStore';
 import { genAIService } from '../genai/GenAIService';
 import { EpubCFI } from 'epubjs';
 import { parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
 import type { SentenceNode } from '../tts';
+import type { EngineContext } from './engine/EngineContext';
+import { createZustandEngineContext } from './engine/createZustandEngineContext';
 
 export class TableAdaptationProcessor {
     private tableAnalysisPromises = new Map<string, Promise<void>>();
+    private readonly ctx: EngineContext;
+
+    /**
+     * @param ctx The engine context. Defaults to the production Zustand-backed context so
+     *   existing tests that construct the processor directly keep working unchanged.
+     */
+    constructor(ctx: EngineContext = createZustandEngineContext()) {
+        this.ctx = ctx;
+    }
     /**
      * Retrieves cached table adaptations from DB or triggers GenAI detection if missing.
      * Replaces `AudioContentPipeline.processTableAdaptations`.
@@ -23,7 +33,7 @@ export class TableAdaptationProcessor {
         }
 
         const promise = (async () => {
-            const genAISettings = useGenAIStore.getState();
+            const genAISettings = this.ctx.genAI.getSettings();
 
             try {
                 // Ensure we have sentences

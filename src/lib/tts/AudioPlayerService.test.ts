@@ -91,6 +91,8 @@ vi.mock('../../store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,
     useTTSStore: {
         getState: vi.fn().mockReturnValue({
+            activeLanguage: 'en',
+            setActiveLanguage: vi.fn(),
             customAbbreviations: [],
             alwaysMerge: [],
             sentenceStarters: [],

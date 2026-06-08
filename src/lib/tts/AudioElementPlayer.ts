@@ -1,12 +1,15 @@
 
 import { playEarconOscillators } from './earcons';
+import type { AudioSink } from './engine/AudioSink';
 
 /**
  * Wrapper around the HTML5 Audio element to handle playback of Blobs and URLs.
  * Provides a consistent interface for controlling playback, volume, and rate,
  * and abstracts away the URL.createObjectURL/revokeObjectURL lifecycle.
+ *
+ * This is the production main-thread implementation of {@link AudioSink}.
  */
-export class AudioElementPlayer {
+export class AudioElementPlayer implements AudioSink {
   private audio: HTMLAudioElement;
   private onTimeUpdateCallback: ((time: number) => void) | null = null;
   private onEndedCallback: (() => void) | null = null;

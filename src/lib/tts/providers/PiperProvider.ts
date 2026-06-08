@@ -1,5 +1,6 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
 import type { TTSOptions, TTSVoice, SpeechSegment } from './types';
+import type { AudioSink } from '../engine/AudioSink';
 import { piperGenerate, isModelPersisted, deleteCachedModel, fetchWithBackoff, cacheModel, stitchWavs } from './piper-utils';
 import { TextSegmenter } from '../TextSegmenter';
 
@@ -70,8 +71,8 @@ export class PiperProvider extends BaseCloudProvider {
   private voiceMap: Map<string, { modelPath: string; configPath: string; speakerId?: number }> = new Map();
   private segmenter: TextSegmenter;
 
-  constructor(locale?: string) {
-    super();
+  constructor(locale?: string, audioSink?: AudioSink) {
+    super(audioSink);
     this.segmenter = new TextSegmenter(locale);
   }
 

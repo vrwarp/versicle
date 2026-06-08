@@ -3,6 +3,7 @@ import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { Capacitor } from '@capacitor/core';
 import type { AlignmentData } from './SyncEngine';
+import type { PlaybackBackend } from './engine/PlaybackBackend';
 
 /**
  * Interface defining the events emitted by the TTSProviderManager.
@@ -47,7 +48,7 @@ export interface TTSProviderEvents {
  * Handles initialization, platform detection (Native vs Web), error recovery (Cloud -> Local fallback),
  * and event normalization across different providers.
  */
-export class TTSProviderManager {
+export class TTSProviderManager implements PlaybackBackend {
     private provider: ITTSProvider;
     private events: TTSProviderEvents;
 

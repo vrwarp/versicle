@@ -1,18 +1,23 @@
 import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice, SpeechSegment } from './types';
 import { AudioElementPlayer } from '../AudioElementPlayer';
+import type { AudioSink } from '../engine/AudioSink';
 import { TTSCache } from '../TTSCache';
 import { CostEstimator } from '../CostEstimator';
 
 export abstract class BaseCloudProvider implements ITTSProvider {
   abstract id: string;
   protected voices: TTSVoice[] = [];
-  protected audioPlayer: AudioElementPlayer;
+  protected audioPlayer: AudioSink;
   protected cache: TTSCache;
   protected eventListeners: ((event: TTSEvent) => void)[] = [];
   protected requestRegistry: Map<string, Promise<SpeechSegment>> = new Map();
 
-  constructor() {
-    this.audioPlayer = new AudioElementPlayer();
+  /**
+   * @param audioSink The audio-output device. Defaults to the real {@link AudioElementPlayer};
+   *   tests inject a `FakeAudioSink` to drive playback deterministically without jsdom.
+   */
+  constructor(audioSink: AudioSink = new AudioElementPlayer()) {
+    this.audioPlayer = audioSink;
     this.cache = new TTSCache();
     this.setupAudioPlayer();
   }

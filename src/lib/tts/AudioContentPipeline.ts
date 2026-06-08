@@ -1,8 +1,7 @@
 import { dbService } from '../../db/DBService';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { TextSegmenter } from './TextSegmenter';
-import { useTTSStore, getDefaultMinSentenceLength } from '../../store/useTTSStore';
-import { useGenAIStore } from '../../store/useGenAIStore';
+import type { EngineContext } from './engine/EngineContext';
+import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { generateSecureId } from '../crypto';
 import { EpubCFI } from 'epubjs';
 import type { CitationMarker } from '../../types/db';
@@ -28,7 +27,18 @@ export class AudioContentPipeline {
     private lastAbbrInputs: { custom: string[], bible: boolean } | null = null;
     private lastAbbrResult: string[] | null = null;
 
-    public tableProcessor = new TableAdaptationProcessor();
+    private readonly ctx: EngineContext;
+    public tableProcessor: TableAdaptationProcessor;
+
+    /**
+     * @param ctx The engine context. Defaults to the production Zustand-backed context so
+     *   that existing tests which construct the pipeline directly keep working (their
+     *   module-level store mocks are still intercepted by the default context).
+     */
+    constructor(ctx: EngineContext = createZustandEngineContext()) {
+        this.ctx = ctx;
+        this.tableProcessor = new TableAdaptationProcessor(ctx);
+    }
 
     /**
      * Loads a section, processes its text, and returns a playable queue.
@@ -93,7 +103,7 @@ export class AudioContentPipeline {
             title = title || `Section ${sectionIndex + 1}`;
 
             // Sync the Reader UI Store to ensure CompassPill stays accurate during auto-advance
-            useReaderUIStore.getState().setCurrentSection(title, section.sectionId);
+            this.ctx.readerUI.setCurrentSection(title, section.sectionId);
 
             const newQueue: TTSQueueItem[] = [];
 
@@ -114,7 +124,7 @@ export class AudioContentPipeline {
                 const workingSentences = ttsContent.sentences;
 
                 // Dynamic Refinement: Merge segments based on current settings
-                const settings = useTTSStore.getState();
+                const settings = this.ctx.config.getSettings();
 
                 // Inject Bible abbreviations if enabled
                 const biblePref = await LexiconService.getInstance().getBibleLexiconPreference(bookId);
@@ -127,7 +137,7 @@ export class AudioContentPipeline {
                     abbreviations,
                     settings.alwaysMerge,
                     settings.sentenceStarters,
-                    settings.profiles[bookMetadata?.language || 'en']?.minSentenceLength ?? getDefaultMinSentenceLength(bookMetadata?.language || 'en'),
+                    settings.profiles[bookMetadata?.language || 'en']?.minSentenceLength ?? this.ctx.config.getDefaultMinSentenceLength(bookMetadata?.language || 'en'),
                     bookMetadata?.language || 'en'
                 );
 
@@ -198,7 +208,7 @@ export class AudioContentPipeline {
         onMaskFound?: (mask: Set<number>) => void,
         onAdaptationsFound?: (adaptations: { indices: number[], text: string }[]) => void
     ): Promise<void> {
-        const genAISettings = useGenAIStore.getState();
+        const genAISettings = this.ctx.genAI.getSettings();
         const skipTypes = genAISettings.contentFilterSkipTypes;
         const isContentAnalysisEnabled = genAISettings.isContentAnalysisEnabled && genAISettings.isEnabled;
 
@@ -286,7 +296,7 @@ export class AudioContentPipeline {
      * @param {SectionMetadata[]} playlist The full playlist of sections.
      */
     async triggerNextChapterAnalysis(bookId: string, currentSectionIndex: number, playlist: SectionMetadata[]) {
-        const genAISettings = useGenAIStore.getState();
+        const genAISettings = this.ctx.genAI.getSettings();
         if (!genAISettings.isEnabled || !genAISettings.isContentAnalysisEnabled) {
             return;
         }
@@ -451,7 +461,7 @@ export class AudioContentPipeline {
             }
 
             // 2. If not found, detect
-            const aiStore = useGenAIStore.getState();
+            const aiStore = this.ctx.genAI.getSettings();
             const strategy = aiStore.referenceDetectionStrategy;
 
             // Deterministic-only path
@@ -774,7 +784,7 @@ export class AudioContentPipeline {
             ? overlap / tailEnumeratorSet.size
             : 0;
 
-        useGenAIStore.getState().addLog({
+        this.ctx.genAI.addLog({
             id: generateSecureId(),
             timestamp: Date.now(),
             type: 'response',
