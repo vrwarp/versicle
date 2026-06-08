@@ -687,7 +687,9 @@ export class AudioContentPipeline {
             if (gi >= 0 && gi < n) groupMarkerCounts[gi]++;
         }
 
-        // Per-group features
+        // Per-group features. startCfi/endCfi are the exact segment bounds used by
+        // attributeMarkersToGroups — pairing them with markerDetail below makes orphaned
+        // markers (groupIndex -1) diagnosable: compare a marker's cfi against the bounds.
         const perGroup = groups.map((g, i) => {
             const m = ENUMERATOR.exec(g.fullText);
             const enumeratorValue = m ? (m[1] ?? m[2] ?? m[3] ?? null) : null;
@@ -700,8 +702,23 @@ export class AudioContentPipeline {
                 enumeratorType,
                 enumeratorValue,
                 markerCount: groupMarkerCounts[i],
+                segmentCount: g.segments.length,
+                startCfi: g.segments[0]?.cfi,
+                endCfi: g.segments[g.segments.length - 1]?.cfi,
             };
         });
+
+        // Per-marker dump: full marker metadata plus the group it attributed to (-1 = orphaned).
+        // Lets offline analysis reconstruct exactly why a marker landed inside or outside a group.
+        const markerDetail = markers.map((mk, mi) => ({
+            cfi: mk.cfi,
+            markerText: mk.markerText,
+            super: mk.super,
+            numeric: mk.numeric,
+            glued: mk.glued,
+            targetHref: mk.targetHref,
+            groupIndex: markerGroupIndex[mi] ?? -1,
+        }));
 
         // Body = first 60% of groups; tail = last 40%.
         // bodyMarkerSet holds normalized numeric markers found in the body; tailEnumeratorSet
@@ -747,6 +764,7 @@ export class AudioContentPipeline {
                 sectionId,
                 groupCount: n,
                 markerCount: markers.length,
+                orphanMarkerCount: markerGroupIndex.filter(gi => gi === -1).length,
                 geminiCfi,
                 detShadowCfi,
                 enumeratorCandidateIndex,
@@ -757,6 +775,7 @@ export class AudioContentPipeline {
                 longestTailEnumeratorRun,
                 bodyMarkerSet: [...bodyMarkerSet],
                 tailEnumeratorSet: [...tailEnumeratorSet],
+                markerDetail,
                 perGroup,
             },
         });
