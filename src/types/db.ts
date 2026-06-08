@@ -332,6 +332,9 @@ export interface CitationMarker {
   numeric: boolean;
   /** True if the marker appears immediately after word text with no space (diagnostic). */
   glued: boolean;
+  /** True if the marker is the first non-whitespace content of its block (e.g. a footnote/
+   *  endnote entry that opens with its reference anchor), vs an in-text citation. */
+  leading: boolean;
   /** Ratio of element font-size to parent font-size when checked via computed style. */
   fontSizeRatio?: number;
   /** href of the nearest <a> inside or equal to the element, if present. */

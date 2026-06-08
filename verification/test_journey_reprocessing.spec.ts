@@ -119,5 +119,5 @@ test("verify reprocessing interstitial", async ({ page }) => {
   }, bookId);
 
   console.log(`Book version after processing: ${newVersion}`);
-  expect(newVersion).toBe(10);
+  expect(newVersion).toBe(11);
 });

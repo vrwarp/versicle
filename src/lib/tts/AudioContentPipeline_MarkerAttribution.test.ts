@@ -19,6 +19,7 @@ const marker = (cfi: string): CitationMarker => ({
     super: true,
     numeric: true,
     glued: false,
+    leading: false,
 });
 
 const attribute = (pipeline: AudioContentPipeline, groups: Group[], markers: CitationMarker[]): number[] =>

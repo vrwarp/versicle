@@ -46,6 +46,27 @@ interface CitationDetection {
 const NO_CITATION: CitationDetection = { isCitation: false, marker: null };
 
 /**
+ * True when `el` is the first non-whitespace content of its nearest block-level ancestor —
+ * i.e., the block "leads with" this marker. Typical of a footnote/endnote entry that opens
+ * with its reference anchor, as opposed to an in-text citation that follows running prose.
+ */
+function isLeadingInBlock(el: Element): boolean {
+    let node: Node = el;
+    while (node.parentElement) {
+        const parent = node.parentElement;
+        // Any non-whitespace sibling before us at this level means we don't lead the block.
+        let sib = node.previousSibling;
+        while (sib) {
+            if ((sib.textContent || '').trim() !== '') return false;
+            sib = sib.previousSibling;
+        }
+        if (BLOCK_TAGS.has(parent.tagName.toUpperCase())) return true;
+        node = parent;
+    }
+    return true;
+}
+
+/**
  * Classifies an inline element as a citation marker and captures its metadata.
  * Handles <sup>, <sub>, <a> with note-link semantics, and CSS-superscript <span>.
  */
@@ -127,6 +148,7 @@ function detectCitationMarkerElement(el: Element, cfiGenerator: (range: Range) =
             super: tagName === 'SUP' || tagName === 'SUB' || isSuper,
             numeric: isNumeric,
             glued: !!glued,
+            leading: isLeadingInBlock(el),
             fontSizeRatio,
             targetHref,
         },

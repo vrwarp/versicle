@@ -267,11 +267,11 @@ ${JSON.stringify(sections)}`;
   /**
    * Detects content types for a batch of root nodes.
    * Applies asymmetric detail (front 60% ~8-word truncation, tail 40% ~120-char truncation),
-   * sparse JSON (omit zero/false marker fields), and optional deterministic hint signals.
+   * sparse JSON (omit false flags), and an optional deterministic enumerator hint.
    */
   public async detectContentTypes(
-    nodes: { id: string, sampleText: string, citationMarkerCount?: number, hasSuperscriptMarkers?: boolean }[],
-    hints: { enumeratorCandidate: number, markerDropoffIndex: number },
+    nodes: { id: string, sampleText: string, leadsWithMarker?: boolean }[],
+    hints: { enumeratorCandidate: number },
     context?: { bookTitle?: string, sectionTitle?: string }
   ): Promise<{ classifications: { id: string, type: ContentType }[], justification: string, agreedWithHeuristic: boolean }> {
     if (nodes.length === 0) return { classifications: [], justification: '', agreedWithHeuristic: false };
@@ -285,8 +285,9 @@ ${JSON.stringify(sections)}`;
       const sampleText = isTail ? truncateChars(raw, 120) : truncateWords(raw, 8);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const entry: Record<string, any> = { id: parseInt(node.id, 10), sampleText };
-      if (node.citationMarkerCount && node.citationMarkerCount > 0) entry.citationMarkerCount = node.citationMarkerCount;
-      if (node.hasSuperscriptMarkers) entry.hasSuperscriptMarkers = true;
+      // A group flagged leadsWithMarker begins with a citation anchor — typical of a footnote
+      // or endnote entry that opens with its reference number/symbol.
+      if (node.leadsWithMarker) entry.leadsWithMarker = true;
       return entry;
     });
 
@@ -294,15 +295,17 @@ ${JSON.stringify(sections)}`;
     if (hints.enumeratorCandidate >= 0) {
       hintLines.push(`- HINT A (enumerated bibliography): Group ${hints.enumeratorCandidate} starts a consecutive run of numbered entries (e.g. "[1] Author…"). This pattern suggests a bibliography-style reference section starting there.`);
     }
-    if (hints.markerDropoffIndex >= 0) {
-      hintLines.push(`- HINT B (endnote block): Group ${hints.markerDropoffIndex} is the last group with dense superscript citation markers in the body text. Groups beyond this index are likely an endnote block (short prose entries, no enumerators).`);
-    }
     const hintSection = hintLines.length > 0
       ? `\n### Hints from deterministic analysis (candidates, not ground truth):\n${hintLines.join('\n')}\nIn your justification, explicitly state whether you agree or disagree with each hint and why.\n`
       : '';
 
     const prompt = `You will be provided an array of text groups from an EPUB book section, ordered as they appear in the book.
 Your task is to identify where the end-of-chapter "references" section begins. References include footnotes, bibliographies, citations, or endnotes.
+
+A group may carry "leadsWithMarker": true, meaning that group BEGINS with a citation anchor/marker
+(e.g. a footnote or endnote entry that opens with its reference number or symbol). A run of such
+groups at the end of the section is a strong indicator of an endnote/footnote block — even when the
+entries have no visible enumerator in the sample text.
 
 ### Task:
 Find the index of the first group that clearly marks the beginning of the references section.

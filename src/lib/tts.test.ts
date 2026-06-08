@@ -130,3 +130,58 @@ describe('extractSentencesFromNode', () => {
     expect(result[0].text).toBe('Click here for more.');
   });
 });
+
+describe('citation marker leading flag', () => {
+  // Any non-empty CFI string marks the citation as captured (so the marker object is built).
+  const cfiGen = (range: Range) => `cfi(${range.startOffset})`;
+
+  const markersFrom = (html: string) => {
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    div.innerHTML = html;
+    const { citationMarkers } = extractSentencesFromNode(div, cfiGen);
+    document.body.removeChild(div);
+    return citationMarkers;
+  };
+
+  it('flags a footnote entry that opens with its reference anchor as leading', () => {
+    // <span> isn't a computed superscript in jsdom, so the inner <a href="#..."> is the marker.
+    const markers = markersFrom(
+      '<div class="footnote"><p><span class="ref"><a href="#fnref_1">1</a></span> Note body text here.</p></div>'
+    );
+    expect(markers).toHaveLength(1);
+    expect(markers[0].leading).toBe(true);
+  });
+
+  it('does not flag an in-text citation that follows prose', () => {
+    const markers = markersFrom(
+      '<p>Some running prose here.<sup><a href="#fn_1">1</a></sup> And it continues.</p>'
+    );
+    expect(markers).toHaveLength(1);
+    expect(markers[0].leading).toBe(false);
+  });
+
+  it('does not flag a trailing citation at the end of a paragraph', () => {
+    const markers = markersFrom(
+      '<p>A sentence that ends with a note.<sup><a href="#fn_2">2</a></sup></p>'
+    );
+    expect(markers).toHaveLength(1);
+    expect(markers[0].leading).toBe(false);
+  });
+
+  it('treats leading whitespace before the marker as still leading', () => {
+    const markers = markersFrom(
+      '<div class="endnote"><p>\n   <sup><a href="#en_1">1</a></sup> Endnote prose.</p></div>'
+    );
+    expect(markers).toHaveLength(1);
+    expect(markers[0].leading).toBe(true);
+  });
+
+  it('does not flag a marker preceded by a non-whitespace inline element', () => {
+    const markers = markersFrom(
+      '<p><span class="label">Note</span><sup><a href="#fn_3">3</a></sup> body.</p>'
+    );
+    expect(markers).toHaveLength(1);
+    expect(markers[0].leading).toBe(false);
+  });
+});

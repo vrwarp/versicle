@@ -487,8 +487,9 @@ export class AudioContentPipeline {
                     return {
                         id,
                         sampleText: g.fullText,
-                        citationMarkerCount: groupMarkers.length,
-                        hasSuperscriptMarkers: groupMarkers.some(m => m.super),
+                        // A note/endnote entry opens with its reference anchor. This position-aware
+                        // flag is a far stronger signal than a position-independent marker count.
+                        leadsWithMarker: groupMarkers.some(m => m.leading),
                     };
                 });
 
@@ -518,7 +519,7 @@ export class AudioContentPipeline {
 
                     const { classifications: results, justification, agreedWithHeuristic } = await genAIService.detectContentTypes(
                         nodesToDetect,
-                        { enumeratorCandidate: enumeratorCandidateIndex, markerDropoffIndex },
+                        { enumeratorCandidate: enumeratorCandidateIndex },
                         { bookTitle, sectionTitle }
                     );
 
@@ -693,11 +694,17 @@ export class AudioContentPipeline {
         const ENUMERATOR = /^\s*(?:\[(\d+)\]|(\d+)[.)]\s|(\d+)\s+[A-Z])/;
         const n = groups.length;
 
-        // Per-group marker counts derived from the shared attribution
+        // Per-group marker counts (and whether any leading marker attributes there) from the
+        // shared attribution. leadsWithMarker is the position-aware signal now fed to the model.
         const groupMarkerCounts = new Array(n).fill(0);
-        for (const gi of markerGroupIndex) {
-            if (gi >= 0 && gi < n) groupMarkerCounts[gi]++;
-        }
+        const groupLeadsWithMarker = new Array(n).fill(false);
+        markers.forEach((mk, mi) => {
+            const gi = markerGroupIndex[mi];
+            if (gi >= 0 && gi < n) {
+                groupMarkerCounts[gi]++;
+                if (mk.leading) groupLeadsWithMarker[gi] = true;
+            }
+        });
 
         // Per-group features. startCfi/endCfi are the exact segment bounds used by
         // attributeMarkersToGroups — pairing them with markerDetail below makes orphaned
@@ -714,6 +721,7 @@ export class AudioContentPipeline {
                 enumeratorType,
                 enumeratorValue,
                 markerCount: groupMarkerCounts[i],
+                leadsWithMarker: groupLeadsWithMarker[i],
                 segmentCount: g.segments.length,
                 startCfi: g.segments[0]?.cfi,
                 endCfi: g.segments[g.segments.length - 1]?.cfi,
