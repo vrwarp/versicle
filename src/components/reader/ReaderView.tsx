@@ -24,7 +24,7 @@ import { dbService } from '../../db/DBService';
 import { searchClient } from '../../lib/search';
 import { SyncStatusPanel } from './SyncStatusPanel';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';
-import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
+import { getAudioPlayer } from '../../lib/tts/engine/mainThreadAudioPlayer';
 import { ReaderTTSController } from './ReaderTTSController';
 import { generateCfiRange, snapCfiToSentence } from '../../lib/cfi-utils';
 import { TOCPanel, SearchPanel } from './panels';
@@ -482,7 +482,7 @@ export const ReaderView: React.FC = () => {
     // Set Book ID and Audio Service context
     useEffect(() => {
         if (bookId) {
-            AudioPlayerService.getInstance().setBookId(bookId);
+            getAudioPlayer().setBookId(bookId);
             setCurrentBookId(bookId);
         }
     }, [bookId, setCurrentBookId]);
@@ -900,9 +900,9 @@ export const ReaderView: React.FC = () => {
 
             if (isTTSActive) {
                 if (e.detail.direction === 'next') {
-                    AudioPlayerService.getInstance().skipToNextSection();
+                    getAudioPlayer().skipToNextSection();
                 } else {
-                    AudioPlayerService.getInstance().skipToPreviousSection();
+                    getAudioPlayer().skipToPreviousSection();
                 }
             } else {
                 if (e.detail.direction === 'next') handleNext();
@@ -975,7 +975,7 @@ export const ReaderView: React.FC = () => {
 
 
     const handlePlayFromSelection = useCallback((cfiRange: string) => {
-        const queue = AudioPlayerService.getInstance().getQueue();
+        const queue = getAudioPlayer().getQueue();
         if (!queue || queue.length === 0 || !rendition) return;
 
         try {
@@ -1007,7 +1007,7 @@ export const ReaderView: React.FC = () => {
             }
 
             if (bestIndex !== -1) {
-                AudioPlayerService.getInstance().jumpTo(bestIndex);
+                getAudioPlayer().jumpTo(bestIndex);
             }
         } catch (e) {
             logger.error("Error matching CFI for playback", e);
@@ -1293,7 +1293,7 @@ export const ReaderView: React.FC = () => {
                             // on the section change (see useTTS) races the user's next play and lets a
                             // stale audio-bookmark slip through. A deliberate TOC navigation is never a
                             // resume gesture, so drop the pause timestamp immediately.
-                            AudioPlayerService.getInstance().clearPauseGesture();
+                            getAudioPlayer().clearPauseGesture();
                             rendition?.display(href);
                             setSidebar('none');
                         }}

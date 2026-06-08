@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
+import { getAudioPlayer, resetAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 import { useContentAnalysisStore } from '../../store/useContentAnalysisStore';
 import type { SectionAnalysis } from '../../store/useContentAnalysisStore';
 
@@ -133,9 +134,8 @@ describe('AudioPlayerService - Reactive Store Subscription (Vulnerability 2)', (
         vi.clearAllMocks();
         storeSubscribeCallback = null;
 
-        // @ts-expect-error Resetting singleton
-        AudioPlayerService.instance = undefined;
-        service = AudioPlayerService.getInstance();
+        resetAudioPlayerForTests();
+        service = getAudioPlayer();
 
         // expect subscribe was called in the constructor
         expect(useContentAnalysisStore.subscribe).toHaveBeenCalled();

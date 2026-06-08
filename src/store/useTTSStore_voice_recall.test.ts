@@ -1,17 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useTTSStore } from './useTTSStore';
 
-// Mock AudioPlayerService
-vi.mock('../lib/tts/AudioPlayerService', () => {
+// Mock the engine composition root (production now talks to getAudioPlayer()).
+vi.mock('../lib/tts/engine/mainThreadAudioPlayer', () => {
     return {
-        AudioPlayerService: {
-            getInstance: vi.fn(() => ({
-                setSpeed: vi.fn(),
-                setVoice: vi.fn(),
-                setLanguage: vi.fn(),
-                subscribe: vi.fn(),
-            }))
-        }
+        getAudioPlayer: vi.fn(() => ({
+            setSpeed: vi.fn(),
+            setVoice: vi.fn(),
+            setLanguage: vi.fn(),
+            subscribe: vi.fn(),
+        })),
+        resetAudioPlayerForTests: vi.fn(),
     };
 });
 

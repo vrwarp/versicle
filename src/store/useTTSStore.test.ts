@@ -1,29 +1,28 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useTTSStore } from './useTTSStore';
 
-// Mock AudioPlayerService
-vi.mock('../lib/tts/AudioPlayerService', () => {
+// Mock the engine composition root (production now talks to getAudioPlayer()).
+vi.mock('../lib/tts/engine/mainThreadAudioPlayer', () => {
     return {
-        AudioPlayerService: {
-            getInstance: vi.fn(() => ({
-                play: vi.fn(),
-                pause: vi.fn(),
-                stop: vi.fn(),
-                setSpeed: vi.fn(),
-                setVoice: vi.fn(),
-                setLanguage: vi.fn(),
-                init: vi.fn(),
-                getVoices: vi.fn(() => []),
-                setProvider: vi.fn(),
-                subscribe: vi.fn(() => {
-                    // Simulate playing state when play is called if needed
-                    // But for unit test we might want to manually trigger syncState
-                }),
-                setBackgroundAudioMode: vi.fn(),
-                setBackgroundVolume: vi.fn(),
-                setPrerollEnabled: vi.fn(),
-            }))
-        }
+        getAudioPlayer: vi.fn(() => ({
+            play: vi.fn(),
+            pause: vi.fn(),
+            stop: vi.fn(),
+            setSpeed: vi.fn(),
+            setVoice: vi.fn(),
+            setLanguage: vi.fn(),
+            init: vi.fn(),
+            getVoices: vi.fn(() => []),
+            setProvider: vi.fn(),
+            subscribe: vi.fn(() => {
+                // Simulate playing state when play is called if needed
+                // But for unit test we might want to manually trigger syncState
+            }),
+            setBackgroundAudioMode: vi.fn(),
+            setBackgroundVolume: vi.fn(),
+            setPrerollEnabled: vi.fn(),
+        })),
+        resetAudioPlayerForTests: vi.fn(),
     };
 });
 

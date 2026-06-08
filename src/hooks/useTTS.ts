@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useTTSStore } from '../store/useTTSStore';
 import { useReaderUIStore } from '../store/useReaderUIStore';
-import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
+import { getAudioPlayer } from '../lib/tts/engine/mainThreadAudioPlayer';
 
 /**
  * Custom hook to manage Text-to-Speech (TTS) functionality.
@@ -15,7 +15,7 @@ export const useTTS = () => {
   const currentBookId = useReaderUIStore(state => state.currentBookId);
   const currentSectionId = useReaderUIStore(state => state.currentSectionId);
 
-  const player = AudioPlayerService.getInstance();
+  const player = getAudioPlayer();
 
   // Load voices on mount
   useEffect(() => {

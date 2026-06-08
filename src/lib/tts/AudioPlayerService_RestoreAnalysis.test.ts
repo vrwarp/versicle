@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
+import { getAudioPlayer, resetAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 import { dbService } from '../../db/DBService';
 
 // --- Mocks Setup ---
@@ -121,10 +122,9 @@ describe('AudioPlayerService - Restore Analysis', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        // @ts-expect-error Resetting singleton
-        AudioPlayerService.instance = undefined;
+        resetAudioPlayerForTests();
         try {
-            service = AudioPlayerService.getInstance();
+            service = getAudioPlayer();
         } catch (e) {
             console.error("Constructor Error:", e);
             throw e;

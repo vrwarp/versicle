@@ -86,13 +86,14 @@ vi.mock('../lib/tts/providers/CapacitorTTSProvider', () => {
 
 // Now import the service
 import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
+import { getAudioPlayer } from '../lib/tts/engine/mainThreadAudioPlayer';
 
 describe('AudioPlayerService Background Crash Prevention', () => {
   let service: AudioPlayerService;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = AudioPlayerService.getInstance();
+    service = getAudioPlayer();
   });
 
   it('should NOT stop playback state during autoPlay transition', async () => {

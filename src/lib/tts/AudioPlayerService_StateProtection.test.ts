@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
+import { getAudioPlayer, resetAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 
 // Mock AudioContentPipeline to avoid circular deps
 vi.mock('./AudioContentPipeline', () => ({
@@ -59,9 +60,8 @@ describe('AudioPlayerService - State Protection', () => {
 
     beforeEach(() => {
         // Reset singleton
-        // @ts-expect-error Resetting singleton for test
-        AudioPlayerService.instance = undefined;
-        service = AudioPlayerService.getInstance();
+        resetAudioPlayerForTests();
+        service = getAudioPlayer();
         updateTTSProgressSpy.mockClear();
     });
 

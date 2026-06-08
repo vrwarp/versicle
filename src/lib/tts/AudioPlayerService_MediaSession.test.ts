@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
+import { getAudioPlayer, resetAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 import type { TTSEvent, ITTSProvider } from './providers/types';
 
 // Mock WebSpeechProvider
@@ -156,9 +157,8 @@ describe('AudioPlayerService MediaSession Integration', () => {
         (window as any).Audio = MockAudio;
 
         // Reset AudioPlayerService singleton
-        // @ts-expect-error Resetting singleton for testing
-        AudioPlayerService.instance = undefined;
-        service = AudioPlayerService.getInstance();
+        resetAudioPlayerForTests();
+        service = getAudioPlayer();
     });
 
     afterEach(() => {

@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { LexiconService } from '../../lib/tts/LexiconService';
 import { useLexiconStore } from '../../store/useLexiconStore';
-import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
+import { getAudioPlayer } from '../../lib/tts/engine/mainThreadAudioPlayer';
 import type { LexiconRule } from '../../types/db';
 import { Plus, Trash2, Save, X, Download, Upload, ArrowUp, ArrowDown, Play, RefreshCw, CornerDownRight } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -201,7 +201,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
         }
 
         if (textToPlay) {
-            AudioPlayerService.getInstance().preview(textToPlay);
+            getAudioPlayer().preview(textToPlay);
         }
     };
 

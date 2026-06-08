@@ -133,16 +133,15 @@ vi.mock('../../../store/useToastStore', () => ({
         showToast: vi.fn()
     })
 }));
-vi.mock('../../../lib/tts/AudioPlayerService', () => ({
-    AudioPlayerService: {
-        getInstance: () => ({
-            setBookId: vi.fn(),
-            getQueue: vi.fn(),
-            jumpTo: vi.fn(),
-            skipToNextSection: vi.fn(),
-            skipToPreviousSection: vi.fn()
-        })
-    }
+vi.mock('../../../lib/tts/engine/mainThreadAudioPlayer', () => ({
+    getAudioPlayer: () => ({
+        setBookId: vi.fn(),
+        getQueue: vi.fn(),
+        jumpTo: vi.fn(),
+        skipToNextSection: vi.fn(),
+        skipToPreviousSection: vi.fn()
+    }),
+    resetAudioPlayerForTests: vi.fn(),
 }));
 vi.mock('../../../hooks/useTTS', () => ({
     useTTS: vi.fn()

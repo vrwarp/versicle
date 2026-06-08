@@ -6,12 +6,10 @@ import type { SectionMetadata, LexiconRule, PerceptualPalette } from '../../type
 import { TaskSequencer } from './TaskSequencer';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { PlaybackStateManager } from './PlaybackStateManager';
-import { TTSProviderManager } from './TTSProviderManager';
 import type { PlaybackBackend, PlaybackBackendFactory, TTSProviderEvents } from './engine/PlaybackBackend';
 import { PlatformIntegration } from './PlatformIntegration';
 import { flightRecorder } from './TTSFlightRecorder';
 import type { SectionAnalysis, TableAdaptation, EngineContext } from './engine/EngineContext';
-import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { mergeCfiSlow } from '../cfi-utils';
 import { createLogger } from '../logger';
 import { normalizeLanguageCode } from '../language-utils';
@@ -55,8 +53,6 @@ type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentInd
  * media session integration, and state persistence.
  */
 export class AudioPlayerService {
-    private static instance: AudioPlayerService;
-
     // Components
     // TaskSequencer ensures async operations are executed serially to prevent race conditions.
     private taskSequencer = new TaskSequencer();
@@ -92,10 +88,7 @@ export class AudioPlayerService {
     private currentBookAuthor: string = '';
     private currentBookCoverUrl: string | undefined = undefined;
 
-    private constructor(
-        ctx: EngineContext = createZustandEngineContext(),
-        backendFactory: PlaybackBackendFactory = (events) => new TTSProviderManager(events),
-    ) {
+    private constructor(ctx: EngineContext, backendFactory: PlaybackBackendFactory) {
         this.ctx = ctx;
         this.contentPipeline = new AudioContentPipeline(this.ctx);
         this.syncEngine = new SyncEngine();
@@ -255,23 +248,16 @@ export class AudioPlayerService {
         };
     }
 
-    static getInstance(): AudioPlayerService {
-        if (!AudioPlayerService.instance) {
-            AudioPlayerService.instance = new AudioPlayerService();
-        }
-        return AudioPlayerService.instance;
-    }
-
     /**
-     * Construct an isolated, non-singleton instance with an explicitly injected context and
-     * (optionally) playback backend. Intended for tests and for hosts that own the engine
-     * lifecycle (e.g. a worker shell, which injects a message-channel-backed backend) rather
-     * than relying on the global singleton. See {@link EngineContext} and {@link PlaybackBackend}.
+     * Construct an AudioPlayerService with an explicitly injected context and playback
+     * backend. This is the ONLY construction path: the main thread uses it via
+     * {@link getAudioPlayer} (Zustand context + TTSProviderManager), tests use it with fakes,
+     * and a worker shell uses it with a message-channel-backed context + proxy backend.
+     * Keeping both dependencies injected (no defaults) is what keeps this module free of
+     * worker-unsafe imports. See {@link EngineContext} and {@link PlaybackBackend}.
      */
-    static createWithContext(ctx: EngineContext, backendFactory?: PlaybackBackendFactory): AudioPlayerService {
-        return backendFactory
-            ? new AudioPlayerService(ctx, backendFactory)
-            : new AudioPlayerService(ctx);
+    static createWithContext(ctx: EngineContext, backendFactory: PlaybackBackendFactory): AudioPlayerService {
+        return new AudioPlayerService(ctx, backendFactory);
     }
 
     private enqueue<T>(task: () => Promise<T>): Promise<T | void> {

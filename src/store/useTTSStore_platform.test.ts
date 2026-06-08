@@ -72,18 +72,17 @@ const { mockSetProvider, mockInit, mockGetVoices, mockSubscribe, mockSetVoice, m
     }
 });
 
-vi.mock('../lib/tts/AudioPlayerService', () => {
+vi.mock('../lib/tts/engine/mainThreadAudioPlayer', () => {
     return {
-        AudioPlayerService: {
-            getInstance: vi.fn(() => ({
-                setProvider: mockSetProvider,
-                init: mockInit,
-                getVoices: mockGetVoices,
-                subscribe: mockSubscribe,
-                setVoice: mockSetVoice,
-                setLocalProviderConfig: mockSetLocalProviderConfig,
-            }))
-        }
+        getAudioPlayer: vi.fn(() => ({
+            setProvider: mockSetProvider,
+            init: mockInit,
+            getVoices: mockGetVoices,
+            subscribe: mockSubscribe,
+            setVoice: mockSetVoice,
+            setLocalProviderConfig: mockSetLocalProviderConfig,
+        })),
+        resetAudioPlayerForTests: vi.fn(),
     };
 });
 

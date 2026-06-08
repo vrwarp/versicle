@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
+import { getAudioPlayer } from './engine/mainThreadAudioPlayer';
 import { dbService } from '../../db/DBService';
 
 vi.mock('../../db/DBService', () => ({
@@ -76,7 +77,7 @@ describe('AudioPlayerService Predictability', () => {
         vi.clearAllMocks();
         // Since it's a singleton, we might need a fresh instance for tests
         // But for now, we'll try to just grab it
-        service = AudioPlayerService.getInstance();
+        service = getAudioPlayer();
         service.setBookId(null);
     });
 
@@ -134,7 +135,7 @@ describe('AudioPlayerService loadSection Race Condition Fix', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        service = AudioPlayerService.getInstance();
+        service = getAudioPlayer();
         service.setBookId(null);
     });
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
+import { getAudioPlayer, resetAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 
 // --- Mocks ---
 
@@ -77,9 +78,8 @@ describe('AudioPlayerService - Resume Speed Bug', () => {
         // Reset singleton logic if possible, or just re-get.
         // Since it's a singleton, we need to be careful.
         // The existing test resets it via @ts-expect-error.
-        // @ts-expect-error Resetting singleton
-        AudioPlayerService.instance = undefined;
-        service = AudioPlayerService.getInstance();
+        resetAudioPlayerForTests();
+        service = getAudioPlayer();
 
         // Clear spies
         resumeSpy.mockClear();

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { TTSVoice } from '../lib/tts/providers/types';
-import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
+import { getAudioPlayer } from '../lib/tts/engine/mainThreadAudioPlayer';
 import type { TTSStatus, TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import { GoogleTTSProvider } from '../lib/tts/providers/GoogleTTSProvider';
 import { OpenAIProvider } from '../lib/tts/providers/OpenAIProvider';
@@ -218,7 +218,7 @@ export const useTTSStore = create<TTSState>()(
                     }));
 
                     // Update the single active audio player properties
-                    const player = AudioPlayerService.getInstance();
+                    const player = getAudioPlayer();
                     player.setSpeed(profile.rate);
                     player.setLanguage(lang);
                     if (selectedVoice) {
@@ -235,7 +235,7 @@ export const useTTSStore = create<TTSState>()(
                 minSentenceLength: 36,
 
                 initialize: () => {
-                    const player = AudioPlayerService.getInstance();
+                    const player = getAudioPlayer();
                     // Subscribe to player updates
                     player.subscribe((status, activeCfi, currentIndex, queue, error, downloadInfo) => {
                         set(() => ({
@@ -259,20 +259,20 @@ export const useTTSStore = create<TTSState>()(
                 },
 
                 play: () => {
-                    AudioPlayerService.getInstance().play();
+                    getAudioPlayer().play();
                 },
                 pause: () => {
-                    AudioPlayerService.getInstance().pause();
+                    getAudioPlayer().pause();
                 },
                 stop: () => {
-                    AudioPlayerService.getInstance().stop();
+                    getAudioPlayer().stop();
                 },
                 setRate: (rate, lang?: string) => {
                     const targetLang = lang || get().activeLanguage;
                     const isActive = targetLang === get().activeLanguage;
                     
                     if (isActive) {
-                        AudioPlayerService.getInstance().setSpeed(rate);
+                        getAudioPlayer().setSpeed(rate);
                     }
 
                     set((state) => ({
@@ -300,7 +300,7 @@ export const useTTSStore = create<TTSState>()(
                     const isActive = targetLang === get().activeLanguage;
 
                     if (isActive && voice) {
-                        AudioPlayerService.getInstance().setVoice(voice.id);
+                        getAudioPlayer().setVoice(voice.id);
                     }
 
                     set((state) => ({
@@ -355,7 +355,7 @@ export const useTTSStore = create<TTSState>()(
                     set({ enableCostWarning: enable });
                 },
                 setPrerollEnabled: (enable) => {
-                    AudioPlayerService.getInstance().setPrerollEnabled(enable);
+                    getAudioPlayer().setPrerollEnabled(enable);
                     set({ prerollEnabled: enable });
                 },
                 setSanitizationEnabled: (enable) => {
@@ -367,14 +367,14 @@ export const useTTSStore = create<TTSState>()(
                 },
                 setBackgroundAudioMode: (mode) => {
                     set({ backgroundAudioMode: mode });
-                    AudioPlayerService.getInstance().setBackgroundAudioMode(mode);
+                    getAudioPlayer().setBackgroundAudioMode(mode);
                 },
                 setWhiteNoiseVolume: (volume) => {
                     set({ whiteNoiseVolume: volume });
-                    AudioPlayerService.getInstance().setBackgroundVolume(volume);
+                    getAudioPlayer().setBackgroundVolume(volume);
                 },
                 loadVoices: async () => {
-                    const player = AudioPlayerService.getInstance();
+                    const player = getAudioPlayer();
                     // Ensure provider is set on player (in case of fresh load)
                     const { providerId, apiKeys } = get();
                     // We might need to check if player already has correct provider type
@@ -435,7 +435,7 @@ export const useTTSStore = create<TTSState>()(
                     }
                 },
                 downloadVoice: async (voiceId) => {
-                    const player = AudioPlayerService.getInstance();
+                    const player = getAudioPlayer();
                     try {
                         set({ isDownloading: true, downloadingVoiceId: voiceId, downloadStatus: 'Starting...' });
                         await player.downloadVoice(voiceId);
@@ -445,18 +445,18 @@ export const useTTSStore = create<TTSState>()(
                     }
                 },
                 deleteVoice: async (voiceId) => {
-                    const player = AudioPlayerService.getInstance();
+                    const player = getAudioPlayer();
                     await player.deleteVoice(voiceId);
                     set({ isDownloading: false, downloadProgress: 0, downloadStatus: 'Not Downloaded', downloadingVoiceId: null });
                 },
                 checkVoiceDownloaded: async (voiceId) => {
-                    return await AudioPlayerService.getInstance().isVoiceDownloaded(voiceId);
+                    return await getAudioPlayer().isVoiceDownloaded(voiceId);
                 },
                 jumpTo: (index) => {
-                    AudioPlayerService.getInstance().jumpTo(index);
+                    getAudioPlayer().jumpTo(index);
                 },
                 seek: (seconds) => {
-                    AudioPlayerService.getInstance().seek(seconds);
+                    getAudioPlayer().seek(seconds);
                 },
                 clearError: () => {
                     set({ lastError: null });
@@ -529,7 +529,7 @@ export const useTTSStore = create<TTSState>()(
                         state.activeLanguage = 'en';
                     }
 
-                    const player = AudioPlayerService.getInstance();
+                    const player = getAudioPlayer();
                     player.setBackgroundAudioMode(state.backgroundAudioMode);
                     player.setBackgroundVolume(state.whiteNoiseVolume);
                     player.setPrerollEnabled(state.prerollEnabled);
