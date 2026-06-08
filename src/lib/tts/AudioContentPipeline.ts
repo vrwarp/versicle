@@ -624,12 +624,24 @@ export class AudioContentPipeline {
     ): number[] {
         if (markers.length === 0) return [];
         const comparer = new EpubCFI();
-        // Pre-parse group bounds once
+        // Pre-parse group bounds once.
+        //
+        // The upper bound MUST be the END of the last segment, not the last segment's range CFI
+        // itself. epubjs `compare` against a range CFI uses that range's START offset, so
+        // `new EpubCFI(lastSegmentRange)` collapses the upper bound down to where the last
+        // segment *begins*. For a single-segment group (first === last) that makes the
+        // [start, end] window a single point, orphaning any marker that isn't exactly at the
+        // segment start — e.g. a footnote-head back-reference that sits in a <span> before the
+        // spoken text. Convert both ends to explicit point CFIs (first-segment start,
+        // last-segment end) via parseCfiRange so the window spans the group's full extent.
         const bounds = groups.map(g => {
             const first = g.segments[0]?.cfi;
             const last = g.segments[g.segments.length - 1]?.cfi;
+            if (!first || !last) return null;
             try {
-                return first && last ? { start: new EpubCFI(first), end: new EpubCFI(last) } : null;
+                const startPoint = parseCfiRange(first)?.fullStart || first;
+                const endPoint = parseCfiRange(last)?.fullEnd || last;
+                return { start: new EpubCFI(startPoint), end: new EpubCFI(endPoint) };
             } catch {
                 return null;
             }
