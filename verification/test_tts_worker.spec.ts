@@ -47,3 +47,35 @@ test('TTS engine runs in a real Web Worker (queue round-trip across the boundary
     expect(result.queueLength).toBe(1);
     expect(result.status).not.toBeNull();
 });
+
+/**
+ * Verifies the app-adoption path: with worker mode enabled, the engine the app talks to
+ * (`getAudioPlayer()`) is the worker-backed handle, and a store-facing call routes through the
+ * worker to the main-thread backend and back.
+ */
+test('worker mode: getAudioPlayer() routes the app through the Worker', async ({ page }) => {
+    // Enable worker mode before the app boots.
+    await page.addInitScript(() => {
+        try { localStorage.setItem('tts:worker', '1'); } catch { /* ignore */ }
+    });
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle').catch(() => { /* SPA keeps connections open */ });
+    await page.waitForFunction(() => typeof window.__ttsWorkerHandleTest === 'function', null, { timeout: 30000 });
+
+    await page.evaluate(() => {
+        (window as unknown as { __h?: unknown }).__h = undefined;
+        window.__ttsWorkerHandleTest!()
+            .then((r) => { (window as unknown as { __h: unknown }).__h = r; })
+            .catch((e) => { (window as unknown as { __h: unknown }).__h = { error: String(e) }; });
+    });
+    await page.waitForFunction(() => (window as unknown as { __h?: unknown }).__h !== undefined, null, { timeout: 30000 });
+    const r = await page.evaluate(() => (window as unknown as { __h: { enabled?: boolean; engineName?: string; voicesIsArray?: boolean; queueLength?: number; error?: string } }).__h);
+
+    if (r.error) throw new Error(`Worker-mode handle test failed: ${r.error}`);
+
+    expect(r.enabled).toBe(true);
+    expect(r.engineName).toBe('WorkerEngineHandle');
+    expect(r.voicesIsArray).toBe(true);
+    expect(r.queueLength).toBe(0);
+});

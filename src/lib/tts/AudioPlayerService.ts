@@ -45,7 +45,22 @@ export interface DownloadInfo {
     status: string;
 }
 
-type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: ReadonlyArray<TTSQueueItem>, error: string | null, downloadInfo?: DownloadInfo) => void;
+export type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: ReadonlyArray<TTSQueueItem>, error: string | null, downloadInfo?: DownloadInfo) => void;
+
+/**
+ * The public engine surface the app (useTTSStore / useTTS / ReaderView) talks to. Both the
+ * in-process {@link AudioPlayerService} and the worker-backed handle satisfy it, so the app can
+ * be pointed at either via {@link getAudioPlayer} without changing call sites.
+ */
+export type TtsEngine = Pick<AudioPlayerService,
+    | 'play' | 'pause' | 'stop' | 'preview'
+    | 'setSpeed' | 'setVoice' | 'setLanguage' | 'setProvider' | 'init' | 'getVoices'
+    | 'downloadVoice' | 'deleteVoice' | 'isVoiceDownloaded'
+    | 'subscribe' | 'getQueue' | 'setBookId' | 'clearPauseGesture'
+    | 'loadSection' | 'loadSectionBySectionId' | 'jumpTo' | 'seek'
+    | 'skipToNextSection' | 'skipToPreviousSection'
+    | 'setBackgroundAudioMode' | 'setBackgroundVolume' | 'setPrerollEnabled'
+>;
 
 /**
  * Singleton service that manages Text-to-Speech playback.

@@ -18,6 +18,8 @@ declare global {
     useReaderUIStore: typeof useReaderUIStore;
     /** Verification hook: boots the TTS engine in a real Web Worker and round-trips through it. */
     __ttsWorkerSmokeTest?: () => Promise<{ ok: boolean; queueLength: number; status: string | null }>;
+    /** Verification hook: exercises the app-facing engine when worker mode is enabled. */
+    __ttsWorkerHandleTest?: () => Promise<{ enabled: boolean; engineName: string; voicesIsArray: boolean; queueLength: number }>;
   }
 }
 
@@ -52,6 +54,21 @@ if (typeof window !== 'undefined') {
     } finally {
       client.dispose();
     }
+  };
+
+  // Verification-only: when worker mode is enabled (localStorage['tts:worker']='1'), prove the
+  // app-facing engine (getAudioPlayer) is the worker-backed handle and that a store-facing call
+  // (getVoices) routes through the worker to the main-thread backend and back.
+  window.__ttsWorkerHandleTest = async () => {
+    const { getAudioPlayer, isWorkerEngineEnabled } = await import('./lib/tts/engine/mainThreadAudioPlayer');
+    const engine = getAudioPlayer();
+    const voices = await engine.getVoices();
+    return {
+      enabled: isWorkerEngineEnabled(),
+      engineName: engine.constructor.name,
+      voicesIsArray: Array.isArray(voices),
+      queueLength: engine.getQueue().length,
+    };
   };
 }
 

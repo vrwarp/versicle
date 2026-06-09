@@ -50,19 +50,23 @@ composition root `mainThreadAudioPlayer.ts` and the worker bridge.
   *import-safety* (it surfaced and fixed: `DOMPurify.addHook` at module-init in `sanitizer.ts`,
   and `getState()` action functions in pushed snapshots).
 
-## Remaining step: route the whole app through the worker
+## App adoption (wired, flag-gated)
 
-`createWorkerEngineClient()` is *async* (the Worker boots + state replicates), whereas
-`getAudioPlayer()` is the synchronous in-process engine that `useTTSStore` uses today. To make
-the app run on the worker:
+The app can run entirely on the worker, gated by a flag (off by default). `getAudioPlayer()`
+returns the in-process engine normally, or a `WorkerEngineHandle` when worker mode is enabled —
+both satisfy the `TtsEngine` interface, so no `useTTSStore` / `ReaderView` call site changes.
 
-1. Boot the client once at startup (e.g. in `useTTSStore.initialize()`), `await` it, and hold
-   the returned client.
-2. Route the store's player calls through `client.engine.*` (fire-and-forget calls — play,
-   pause, setSpeed, … — work unchanged) and use `client.subscribe(...)` (auto-proxies the
-   listener) and `client.setBook(...)` (pre-replicates per-book language + progress).
-3. `setProvider(ITTSProvider)` can't cross the boundary — switch to `backendSetProviderById`
-   (the host owns provider construction).
+- **Enable:** `localStorage['tts:worker'] = '1'` (runtime) or `VITE_TTS_WORKER=true` (build).
+- **`WorkerEngineHandle`** bridges the sync↔async gap: `createWorkerEngineClient()` boots
+  asynchronously, so the handle queues fire-and-forget calls on the boot promise and keeps an
+  internal subscription so `getQueue()` (sync) and listener fan-out behave like the in-process
+  engine. `setProvider(ITTSProvider)` → `client.setProviderById(id)` (live objects can't cross
+  the boundary). `TTSVoice.originalVoice` (a live `SpeechSynthesisVoice`) is stripped at the
+  boundary.
+- **Verified:** `verification/test_tts_worker.spec.ts` › *"worker mode: getAudioPlayer() routes
+  the app through the Worker"* enables the flag, asserts `getAudioPlayer()` is the
+  `WorkerEngineHandle`, and round-trips `getVoices()` worker→host→worker→main.
 
-Until then, production stays on the synchronous `getAudioPlayer()` path (unchanged), and the
-worker path is exercised by the two verification tests above.
+Default production remains the synchronous in-process path. Flipping the default to worker mode
+is now a one-line flag flip after on-device QA of real playback (lock-screen controls, background
+audio, provider switching) which can't be exercised headlessly.
