@@ -19,7 +19,7 @@ import type {
     TTSStatus,
     DownloadInfo,
 } from '../AudioPlayerService';
-import type { ITTSProvider } from '../providers/types';
+import type { ITTSProvider, TTSVoice } from '../providers/types';
 import { createLogger } from '../../logger';
 import { createWorkerEngineClient, type WorkerEngineClient } from './createWorkerEngineClient';
 
@@ -38,7 +38,18 @@ export class WorkerEngineHandle implements TtsEngine {
     private cachedError: string | null = null;
     private cachedDownload: DownloadInfo | undefined;
 
+    // No Web Worker in this environment (jsdom unit tests, SSR). The handle becomes a benign
+    // no-op stub: getQueue() returns [], subscribe() fires the cached 'stopped' snapshot, and
+    // commands/queries short-circuit. Production webviews always have Worker, so this never
+    // applies there — but it keeps the handle the single engine type without a fallback branch.
+    private readonly disabled = typeof Worker === 'undefined';
+
     constructor() {
+        if (this.disabled) {
+            // Never resolves; run()/call() short-circuit on `disabled`, so it's never awaited.
+            this.ready = new Promise<WorkerEngineClient>(() => {});
+            return;
+        }
         this.ready = createWorkerEngineClient();
         this.ready
             .then(async (client) => {
@@ -57,11 +68,13 @@ export class WorkerEngineHandle implements TtsEngine {
 
     /** Fire-and-forget: run once the worker is ready (errors logged, not surfaced). */
     private run(fn: (client: WorkerEngineClient) => unknown): void {
+        if (this.disabled) return;
         this.ready.then(fn).catch((e) => logger.error('worker engine call failed', e));
     }
 
-    /** Await the worker, then call and return its result. */
-    private async call<T>(fn: (client: WorkerEngineClient) => Promise<T>): Promise<T> {
+    /** Await the worker, then call and return its result (or `fallback` if there's no Worker). */
+    private async call<T>(fn: (client: WorkerEngineClient) => Promise<T>, fallback: T): Promise<T> {
+        if (this.disabled) return fallback;
         return fn(await this.ready);
     }
 
@@ -88,15 +101,15 @@ export class WorkerEngineHandle implements TtsEngine {
     }
     jumpTo(index: number): Promise<void> { this.run((c) => c.engine.jumpTo(index)); return Promise.resolve(); }
     seek(offset: number): Promise<void> { this.run((c) => c.engine.seek(offset)); return Promise.resolve(); }
-    async skipToNextSection(): Promise<boolean> { return this.call((c) => c.engine.skipToNextSection()); }
-    async skipToPreviousSection(): Promise<boolean> { return this.call((c) => c.engine.skipToPreviousSection()); }
+    async skipToNextSection(): Promise<boolean> { return this.call((c) => c.engine.skipToNextSection(), false); }
+    async skipToPreviousSection(): Promise<boolean> { return this.call((c) => c.engine.skipToPreviousSection(), false); }
 
     // --- Voices / init (request/response) ---
-    async init(): Promise<void> { await this.call((c) => c.engine.init()); }
-    getVoices() { return this.call((c) => c.engine.getVoices()); }
-    async downloadVoice(voiceId: string): Promise<void> { await this.call((c) => c.engine.downloadVoice(voiceId)); }
-    async deleteVoice(voiceId: string): Promise<void> { await this.call((c) => c.engine.deleteVoice(voiceId)); }
-    isVoiceDownloaded(voiceId: string): Promise<boolean> { return this.call((c) => c.engine.isVoiceDownloaded(voiceId)); }
+    async init(): Promise<void> { await this.call((c) => c.engine.init(), undefined); }
+    getVoices(): Promise<TTSVoice[]> { return this.call((c) => c.engine.getVoices(), []); }
+    async downloadVoice(voiceId: string): Promise<void> { await this.call((c) => c.engine.downloadVoice(voiceId), undefined); }
+    async deleteVoice(voiceId: string): Promise<void> { await this.call((c) => c.engine.deleteVoice(voiceId), undefined); }
+    isVoiceDownloaded(voiceId: string): Promise<boolean> { return this.call((c) => c.engine.isVoiceDownloaded(voiceId), false); }
 
     // --- Synchronous reads served from the cached snapshot ---
     getQueue(): ReadonlyArray<TTSQueueItem> { return this.cachedQueue; }

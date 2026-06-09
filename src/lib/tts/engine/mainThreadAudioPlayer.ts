@@ -21,16 +21,14 @@ import { WorkerEngineHandle } from './WorkerEngineHandle';
 let instance: TtsEngine | null = null;
 
 /**
- * The single production TTS engine. Runs in a Web Worker via {@link WorkerEngineHandle} on any
- * real platform (browser / Capacitor webview always provide `Worker`); falls back to the
- * in-process engine only where `Worker` doesn't exist (jsdom unit tests, SSR). There is one
- * audio-output device, so one instance is correct.
+ * The single production TTS engine: a {@link WorkerEngineHandle} that runs the engine in a Web
+ * Worker. This is the ONLY production path — there is no runtime engine-selection branch. The
+ * handle itself degrades to a no-op where `Worker` is unavailable (jsdom/SSR), so this stays a
+ * single code path everywhere. There is one audio-output device, so one instance is correct.
  */
 export function getAudioPlayer(): TtsEngine {
     if (!instance) {
-        instance = typeof Worker !== 'undefined'
-            ? new WorkerEngineHandle()
-            : getInProcessAudioPlayer();
+        instance = new WorkerEngineHandle();
     }
     return instance;
 }
