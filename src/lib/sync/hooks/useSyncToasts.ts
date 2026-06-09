@@ -7,32 +7,38 @@ import { useBookStore } from '../../../store/useLibraryStore';
 /**
  * Hook to show toast notifications when sync events occur from other devices.
  */
+import type { UserProgress } from '../../../types/db';
+
 export function useSyncToasts() {
     const showToast = useToastStore(state => state.showToast);
     const currentDeviceId = getDeviceId();
-    const lastProgressRef = useRef<string>('');
+    const lastProgressRef = useRef<Record<string, Record<string, UserProgress>> | null>(null);
     const lastToastTimeRef = useRef<Record<string, number>>({});
 
     useEffect(() => {
         const unsubscribe = useReadingStateStore.subscribe((state) => {
             const progress = state.progress;
-            // Simple serialization to detect changes cheaply
-            const currentStr = JSON.stringify(progress);
 
-            if (lastProgressRef.current && lastProgressRef.current !== currentStr) {
-                // Determine what changed
-                const oldProgress = JSON.parse(lastProgressRef.current || '{}');
+            // Reference stability check
+            if (lastProgressRef.current && lastProgressRef.current !== progress) {
+                const oldProgress = lastProgressRef.current;
 
                 for (const bookId in progress) {
                     const bookProgress = progress[bookId];
-                    const oldBookProgress = oldProgress[bookId] || {};
+                    const oldBookProgress = oldProgress[bookId];
+
+                    // If this book hasn't changed at all, skip
+                    if (bookProgress === oldBookProgress) continue;
 
                     for (const deviceId in bookProgress) {
                         // Ignore local updates
                         if (deviceId === currentDeviceId) continue;
 
                         const newDeviceState = bookProgress[deviceId];
-                        const oldDeviceState = oldBookProgress[deviceId];
+                        const oldDeviceState = oldBookProgress?.[deviceId];
+
+                        // If this device's progress hasn't changed, skip
+                        if (newDeviceState === oldDeviceState) continue;
 
                         // Check if this device updated significant progress
                         if (!oldDeviceState || (newDeviceState.lastRead > (oldDeviceState.lastRead || 0))) {
@@ -65,7 +71,7 @@ export function useSyncToasts() {
                 }
             }
 
-            lastProgressRef.current = currentStr;
+            lastProgressRef.current = progress;
         });
 
         return () => unsubscribe();
