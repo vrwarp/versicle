@@ -7,30 +7,35 @@ import DOMPurify from 'dompurify';
  * @param html - The raw HTML string.
  * @returns The sanitized HTML string.
  */
-// Configure DOMPurify hooks once
-DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-  // Fix Reverse Tabnabbing Vulnerability
-  // Ensure all links with target="_blank" have rel="noopener noreferrer"
-  if ('getAttribute' in node) {
-    const target = node.getAttribute('target');
-    if (target && target.toLowerCase() === '_blank') {
-      const currentRel = node.getAttribute('rel') || '';
-      const rels = new Set(currentRel.toLowerCase().split(/\s+/).filter(Boolean));
-      rels.add('noopener');
-      rels.add('noreferrer');
-      node.setAttribute('rel', Array.from(rels).join(' '));
+// Configure DOMPurify hooks once. DOMPurify only binds its API (addHook/sanitize) when a DOM
+// is present; in a Web Worker there is no `window`, so it's a no-op shell. Guard the init so
+// this module can be imported in a worker (e.g. transitively via DBService → validators) — TTS
+// orchestration never sanitizes HTML off the main thread.
+if (typeof DOMPurify.addHook === 'function') {
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    // Fix Reverse Tabnabbing Vulnerability
+    // Ensure all links with target="_blank" have rel="noopener noreferrer"
+    if ('getAttribute' in node) {
+      const target = node.getAttribute('target');
+      if (target && target.toLowerCase() === '_blank') {
+        const currentRel = node.getAttribute('rel') || '';
+        const rels = new Set(currentRel.toLowerCase().split(/\s+/).filter(Boolean));
+        rels.add('noopener');
+        rels.add('noreferrer');
+        node.setAttribute('rel', Array.from(rels).join(' '));
+      }
     }
-  }
 
-  // Security Hardening: Prevent External CSS Injection
-  // Disallow <link> tags that point to external domains
-  if (node.tagName === 'LINK') {
-    const href = node.getAttribute('href');
-    if (href && (href.startsWith('http:') || href.startsWith('https:') || href.startsWith('//'))) {
-      node.remove();
+    // Security Hardening: Prevent External CSS Injection
+    // Disallow <link> tags that point to external domains
+    if (node.tagName === 'LINK') {
+      const href = node.getAttribute('href');
+      if (href && (href.startsWith('http:') || href.startsWith('https:') || href.startsWith('//'))) {
+        node.remove();
+      }
     }
-  }
-});
+  });
+}
 
 export function sanitizeContent(html: string): string {
   return DOMPurify.sanitize(html, {

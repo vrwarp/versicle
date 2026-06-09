@@ -13,6 +13,12 @@ export default defineConfig(({ mode }) => {
     build: {
       sourcemap: true,
     },
+    // ES-module workers so the TTS engine worker (a large, code-split module graph) can be
+    // bundled — the default 'iife' format rejects code-splitting. Workers are loaded with
+    // { type: 'module' }, so this matches.
+    worker: {
+      format: 'es',
+    },
     preview: {
       headers: {
         'X-Frame-Options': 'SAMEORIGIN',

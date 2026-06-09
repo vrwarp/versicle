@@ -1,76 +1,68 @@
-# Porting the TTS engine into a Web Worker
+# TTS engine in a Web Worker
 
-This document is the completion guide for moving the engine core into a Worker. The hard,
-de-risked parts are done and tested; what remains is wiring + a browser smoke test.
+The TTS orchestration engine **runs in a real Web Worker** today, verified end-to-end in a
+browser. This documents how it's wired and the one remaining step to make the *whole app* use
+it (vs. the smoke-tested path).
 
-## What's already in place (tested, green)
+## Architecture
 
-The engine core reaches the host through three interfaces and nothing else:
+The engine core reaches the outside world only through injected ports, so the orchestration
+("brain") can run in a Worker while everything browser-bound stays on the main thread:
 
-| Port | Abstracts | Production impl | Test impl | Worker impl |
-|------|-----------|-----------------|-----------|-------------|
-| `EngineContext` | main-thread Zustand stores + Capacitor detection | `createZustandEngineContext()` | `FakeEngineContext` | **`WorkerEngineContext`** (replicated state) |
-| `PlaybackBackend` | audio synthesis + playback (providers, `AudioSink`) | `TTSProviderManager` | `FakePlaybackBackend` | a Comlink proxy to a main-thread `TTSProviderManager` |
-| `AudioSink` | the audio device (`HTMLAudioElement`, Web Audio) | `AudioElementPlayer` | `FakeAudioSink` | stays main-thread, behind `PlaybackBackend` |
+| Port | Abstracts | Main-thread impl | Worker impl |
+|------|-----------|------------------|-------------|
+| `EngineContext` | Zustand stores + Capacitor detection | `createZustandEngineContext` | `WorkerEngineContext` (replicated state) |
+| `PlaybackBackend` | synthesis + playback (providers, `AudioSink`) | `TTSProviderManager` | Comlink proxy → main thread |
+| `MediaPlatform` | media session + background audio | `PlatformIntegration` | Comlink proxy → main thread |
 
-`AudioPlayerService.createWithContext(ctx, backendFactory)` constructs the engine with both
-injected — this is the entry point a worker uses.
+`AudioPlayerService.ts` has **no worker-unsafe value imports** — the main-thread deps
+(`createZustandEngineContext`, `TTSProviderManager`, `PlatformIntegration`) live only in the
+composition root `mainThreadAudioPlayer.ts` and the worker bridge.
 
-De-risked facts:
-- **`EpubCFI` is worker-safe** — it imports, constructs, parses, and compares with no DOM
-  (verified empirically). The content pipeline's CFI usage works in a Worker.
-- **The synchronous-getter problem is solved.** `EngineContext` has sync getters
-  (`getSettings`, `getActiveLanguage`, `getProgress`, …) that cannot be satisfied by an
-  on-demand async postMessage. `WorkerEngineContext` solves this with **state replication**:
-  the main thread pushes `EngineStateUpdate` snapshots in; the worker serves the sync getters
-  from cache; writes flow out as `EngineHostCommand`s. This is fully unit-tested in
-  `WorkerEngineContext.test.ts`.
-
-## The one remaining code change in the engine
-
-`AudioPlayerService`'s constructor has two **default** arguments that are only meant for the
-main thread but are statically imported, so they load even in a worker bundle:
-
-```ts
-private constructor(
-  ctx = createZustandEngineContext(),                       // ⟵ pulls in the Zustand stores
-  backendFactory = (events) => new TTSProviderManager(events) // ⟵ pulls in Capacitor
-) { … }
+```
+ main thread                                            worker (tts.worker.ts)
+ ───────────                                            ──────────────────────
+ createWorkerEngineClient                               Comlink.expose(WorkerTtsEngine)
+   • real TTSProviderManager + PlatformIntegration        • AudioPlayerService (the brain)
+   • store.subscribe → applyStateUpdate ───────────────▶  • WorkerEngineContext (cache)
+   • backend events ── dispatchBackendEvent ───────────▶  • proxy PlaybackBackend / MediaPlatform
+   • applyHostCommand ◀── post (writes) ◀──────────────   • engine API (play/pause/setQueue/…)
+   • engine.play()/subscribe(proxy) ──────────────────▶
 ```
 
-`createZustandEngineContext` transitively imports `useTTSStore` (zustand `persist` +
-`localStorage`, which doesn't exist in a Worker) and `TTSProviderManager` imports
-`@capacitor/core`. A worker always injects its own `ctx`/`backendFactory`, so these defaults
-are never *invoked* there — but they're still *imported* at module load.
+## Files
 
-**To make `AudioPlayerService.ts` cleanly importable in a worker, move the main-thread
-defaults out of the module.** Recommended: relocate the production composition root
-(`getInstance()` + its `createZustandEngineContext()` / `new TTSProviderManager()` wiring)
-into a new `engine/mainThreadEngine.ts`, make the `AudioPlayerService` constructor's `ctx`
-and `backendFactory` **required**, and update the ~37 `AudioPlayerService.getInstance()` call
-sites (mostly in `useTTSStore.ts`, plus the singleton-reset pattern in ~8 test files) to use
-the new root. This is mechanical but touches tests, which is why it was deferred until the
-worker is actually being wired (it has no benefit before then).
+- `WorkerTtsEngine.ts` — worker-side host: runs `AudioPlayerService` with the proxy backend +
+  platform + `WorkerEngineContext`; exposes the engine API. Defines the `EngineHost` contract.
+- `src/workers/tts.worker.ts` — the Worker entry (`Comlink.expose(new WorkerTtsEngine())`).
+- `createWorkerEngineClient.ts` — main-thread bridge: creates the Worker, hosts the real
+  backend + platform, replicates store state in, applies write commands out, returns a client.
+- `WorkerEngineContext.ts` — replicated-state `EngineContext` (solves sync-getter-over-async).
 
-## Remaining wiring (needs a browser to verify)
+## Verification
 
-1. **`src/workers/tts.worker.ts`** — mirror `src/workers/search.worker.ts`:
-   ```ts
-   import * as Comlink from 'comlink';
-   import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
-   import { WorkerEngineContext } from '../lib/tts/engine/WorkerEngineContext';
-   // build ctx with post() → Comlink callback; build a proxy PlaybackBackendFactory whose
-   // methods call Comlink-exposed host functions; expose the engine's public API.
-   ```
-2. **Main-thread host/bridge** — owns the real `TTSProviderManager`, subscribes to the
-   stores and pushes `EngineStateUpdate`s into the worker, applies inbound
-   `EngineHostCommand`s to the real stores, and forwards `TTSProviderEvents` into the worker.
-   `useTTSStore` then talks to the Comlink-wrapped engine instead of the in-process singleton.
-3. **`setProvider` wrinkle** — `PlaybackBackend.setProvider(ITTSProvider)` can't pass a live
-   object across the boundary. Expose a `setProviderById(id)` on the host instead (the host
-   already owns provider construction).
-4. **Smoke test in the browser** — load a book, play, pause, skip, lock-screen controls,
-   audio-bookmark; confirm parity with the main-thread engine.
+- **`WorkerTtsEngine.test.ts`** (vitest) drives the engine over a `MessageChannel` Comlink
+  boundary — the exact bridge code, minus OS-thread isolation. Round-trip: engine call →
+  backend proxy → provider event → status callback.
+- **`verification/test_tts_worker.spec.ts`** (Playwright) boots the engine in a **real** Worker
+  in Chromium via `window.__ttsWorkerSmokeTest` (in `src/main.tsx`) and asserts a
+  `setQueue → getQueue` round-trip + status propagation. This is what exercises real worker
+  *import-safety* (it surfaced and fixed: `DOMPurify.addHook` at module-init in `sanitizer.ts`,
+  and `getState()` action functions in pushed snapshots).
 
-Until step 1–2 land, production keeps using the in-process `getInstance()` path, which is
-unchanged.
+## Remaining step: route the whole app through the worker
+
+`createWorkerEngineClient()` is *async* (the Worker boots + state replicates), whereas
+`getAudioPlayer()` is the synchronous in-process engine that `useTTSStore` uses today. To make
+the app run on the worker:
+
+1. Boot the client once at startup (e.g. in `useTTSStore.initialize()`), `await` it, and hold
+   the returned client.
+2. Route the store's player calls through `client.engine.*` (fire-and-forget calls — play,
+   pause, setSpeed, … — work unchanged) and use `client.subscribe(...)` (auto-proxies the
+   listener) and `client.setBook(...)` (pre-replicates per-book language + progress).
+3. `setProvider(ITTSProvider)` can't cross the boundary — switch to `backendSetProviderById`
+   (the host owns provider construction).
+
+Until then, production stays on the synchronous `getAudioPlayer()` path (unchanged), and the
+worker path is exercised by the two verification tests above.
