@@ -50,11 +50,22 @@ import { AudioPlayerService } from '../AudioPlayerService';
 import { FakeEngineContext } from './FakeEngineContext';
 import { FakePlaybackBackend } from './FakePlaybackBackend';
 
+/** A no-op media platform (the engine's media-session/background-audio dependency). */
+const platformFactory = () => ({
+    setBackgroundAudioMode: vi.fn(),
+    getBackgroundAudioMode: vi.fn(() => 'off' as const),
+    setBackgroundVolume: vi.fn(),
+    updatePlaybackState: vi.fn(),
+    updateMetadata: vi.fn(),
+    setPositionState: vi.fn(),
+    stop: vi.fn().mockResolvedValue(undefined),
+});
+
 describe('AudioPlayerService driven entirely by injected fakes', () => {
     it('routes play() to the injected backend and broadcasts provider status to subscribers', async () => {
         const ctx = new FakeEngineContext();
         const backendRef = FakePlaybackBackend.factory();
-        const svc = AudioPlayerService.createWithContext(ctx, backendRef.factory);
+        const svc = AudioPlayerService.createWithContext(ctx, backendRef.factory, platformFactory);
 
         const statuses: string[] = [];
         svc.subscribe((status) => statuses.push(status));
@@ -77,7 +88,7 @@ describe('AudioPlayerService driven entirely by injected fakes', () => {
     it('forwards language + voice changes to the injected backend', async () => {
         const ctx = new FakeEngineContext();
         const backendRef = FakePlaybackBackend.factory();
-        const svc = AudioPlayerService.createWithContext(ctx, backendRef.factory);
+        const svc = AudioPlayerService.createWithContext(ctx, backendRef.factory, platformFactory);
 
         svc.setLanguage('zh-CN');
         expect(backendRef.get()!.locale).toBe('zh-CN');
@@ -86,7 +97,7 @@ describe('AudioPlayerService driven entirely by injected fakes', () => {
     it('captures an audio-bookmark annotation into the injected context (Dragnet)', async () => {
         const ctx = new FakeEngineContext();
         const backendRef = FakePlaybackBackend.factory();
-        const svc = AudioPlayerService.createWithContext(ctx, backendRef.factory);
+        const svc = AudioPlayerService.createWithContext(ctx, backendRef.factory, platformFactory);
 
         // A book id is required for the Dragnet capture to dispatch an annotation.
         // setBookId reads only through the injected context + (stubbed) dbService.

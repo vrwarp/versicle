@@ -1,7 +1,6 @@
 import { dbService } from '../../db/DBService';
 import { TextSegmenter } from './TextSegmenter';
 import type { EngineContext } from './engine/EngineContext';
-import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { generateSecureId } from '../crypto';
 import { EpubCFI } from 'epubjs';
 import type { CitationMarker } from '../../types/db';
@@ -31,11 +30,12 @@ export class AudioContentPipeline {
     public tableProcessor: TableAdaptationProcessor;
 
     /**
-     * @param ctx The engine context. Defaults to the production Zustand-backed context so
-     *   that existing tests which construct the pipeline directly keep working (their
-     *   module-level store mocks are still intercepted by the default context).
+     * @param ctx The engine context. Required (no default) so this module never statically
+     *   imports the Zustand-backed context — that keeps the engine graph worker-importable.
+     *   The main thread passes `createZustandEngineContext()`; a worker passes a
+     *   message-channel-backed context; tests pass a fake.
      */
-    constructor(ctx: EngineContext = createZustandEngineContext()) {
+    constructor(ctx: EngineContext) {
         this.ctx = ctx;
         this.tableProcessor = new TableAdaptationProcessor(ctx);
     }

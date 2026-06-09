@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { SentenceNode } from '../tts';
 import { SeededRandom } from '../../test/fuzz-utils';
@@ -15,7 +16,7 @@ describe('TableAdaptationProcessor Fuzz Test', () => {
     });
 
     it('mapSentencesToAdaptations should accurately match synthetic structural hierarchies', () => {
-        const processor = new TableAdaptationProcessor();
+        const processor = new TableAdaptationProcessor(createZustandEngineContext());
         const prng = new SeededRandom(DEFAULT_FUZZ_SEED);
 
         for (let iter = 0; iter < 100; iter++) {

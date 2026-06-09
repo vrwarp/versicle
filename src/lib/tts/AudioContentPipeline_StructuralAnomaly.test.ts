@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { extractSentencesFromNode } from '../tts';
 import { EpubCFI } from 'epubjs';
@@ -9,7 +10,7 @@ const createMockCfiGenerator = () => (range: Range): string => {
 };
 
 describe('AudioContentPipeline - Structural Anomaly Grouping (TDD Regression)', () => {
-    const pipeline = new AudioContentPipeline();
+    const pipeline = new AudioContentPipeline(createZustandEngineContext());
 
     it('should correctly segment body paragraphs into separate groups even when anomalous metadata tags are present in the body', () => {
         // Construct the anomalous HTML DOM where metadata tags are placed inside the body

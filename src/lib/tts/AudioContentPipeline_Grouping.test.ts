@@ -1,5 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
+import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
 
 // Helper to access private method
@@ -11,7 +12,7 @@ function groupSentences(pipeline: AudioContentPipeline, sentences: any[]): any[]
 
 describe('AudioContentPipeline Grouping Logic', () => {
     it('should inconsistently split groups depending on order (P1, Div, P2 vs Div, P1, P2)', () => {
-        const pipeline = new AudioContentPipeline();
+        const pipeline = new AudioContentPipeline(createZustandEngineContext());
 
         // Data setup using correct CFIs with spine separator (!)
         // Spine: /6/14

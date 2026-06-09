@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { dbService } from '../../db/DBService';
 import { useGenAIStore } from '../../store/useGenAIStore';
@@ -59,7 +60,7 @@ describe('AudioContentPipeline - triggerAnalysis', () => {
     let pipeline: AudioContentPipeline;
 
     beforeEach(() => {
-        pipeline = new AudioContentPipeline();
+        pipeline = new AudioContentPipeline(createZustandEngineContext());
         vi.clearAllMocks();
     });
 

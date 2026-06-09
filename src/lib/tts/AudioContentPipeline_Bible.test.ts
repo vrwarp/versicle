@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { dbService } from '../../db/DBService';
 import { useTTSStore } from '../../store/useTTSStore';
@@ -69,7 +70,7 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        pipeline = new AudioContentPipeline();
+        pipeline = new AudioContentPipeline(createZustandEngineContext());
 
         // Default Mocks
         vi.mocked(dbService.getTTSContent).mockResolvedValue({ sentences: [{ text: 'Test.', cfi: 'cfi' }] } as unknown as { sentences: { text: string, cfi: string }[] });

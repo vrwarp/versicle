@@ -14,6 +14,7 @@
 import { AudioPlayerService } from '../AudioPlayerService';
 import { createZustandEngineContext } from './createZustandEngineContext';
 import { TTSProviderManager } from '../TTSProviderManager';
+import { PlatformIntegration } from '../PlatformIntegration';
 
 let instance: AudioPlayerService | null = null;
 
@@ -26,6 +27,7 @@ export function getAudioPlayer(): AudioPlayerService {
         instance = AudioPlayerService.createWithContext(
             createZustandEngineContext(),
             (events) => new TTSProviderManager(events),
+            (events) => new PlatformIntegration(events),
         );
     }
     return instance;

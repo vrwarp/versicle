@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { dbService } from '../../db/DBService';
 import { useGenAIStore } from '../../store/useGenAIStore';
@@ -12,7 +13,7 @@ describe('TableAdaptationProcessor', () => {
     let processor: TableAdaptationProcessor;
 
     beforeEach(() => {
-        processor = new TableAdaptationProcessor();
+        processor = new TableAdaptationProcessor(createZustandEngineContext());
         vi.clearAllMocks();
     });
 

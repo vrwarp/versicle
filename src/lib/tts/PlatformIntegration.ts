@@ -33,11 +33,30 @@ export interface PlatformEvents {
 }
 
 /**
+ * The slice of platform integration the engine core depends on (media-session metadata,
+ * lock-screen playback state, and the background-audio keep-alive loop). Abstracted so the
+ * worker-resident engine can inject a stub or a main-thread proxy: all of these reach
+ * `navigator.mediaSession` / `HTMLAudioElement`, which don't exist in a Worker.
+ */
+export interface MediaPlatform {
+    setBackgroundAudioMode(mode: BackgroundAudioMode, isPlaying: boolean): void;
+    getBackgroundAudioMode(): BackgroundAudioMode;
+    setBackgroundVolume(volume: number): void;
+    updatePlaybackState(status: TTSStatus): void;
+    updateMetadata(metadata: MediaSessionMetadata): void;
+    setPositionState(state: { duration: number; playbackRate: number; position: number }): void;
+    stop(): Promise<void>;
+}
+
+/** Builds a {@link MediaPlatform} wired to the given OS-control callbacks. */
+export type MediaPlatformFactory = (events: PlatformEvents) => MediaPlatform;
+
+/**
  * Handles interactions with platform-specific audio features.
  * Manages the Media Session API (metadata, lock screen controls) and
  * Background Audio persistence (silent audio loop).
  */
-export class PlatformIntegration {
+export class PlatformIntegration implements MediaPlatform {
     private backgroundAudio: BackgroundAudio;
     private backgroundAudioMode: BackgroundAudioMode = 'silence';
     private mediaSessionManager: MediaSessionManager;

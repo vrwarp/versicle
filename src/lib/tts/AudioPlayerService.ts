@@ -7,7 +7,7 @@ import { TaskSequencer } from './TaskSequencer';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { PlaybackStateManager } from './PlaybackStateManager';
 import type { PlaybackBackend, PlaybackBackendFactory, TTSProviderEvents } from './engine/PlaybackBackend';
-import { PlatformIntegration } from './PlatformIntegration';
+import type { MediaPlatform, MediaPlatformFactory } from './PlatformIntegration';
 import { flightRecorder } from './TTSFlightRecorder';
 import type { SectionAnalysis, TableAdaptation, EngineContext } from './engine/EngineContext';
 import { mergeCfiSlow } from '../cfi-utils';
@@ -64,7 +64,7 @@ export class AudioPlayerService {
 
     private readonly ctx: EngineContext;
     private providerManager: PlaybackBackend;
-    private platformIntegration: PlatformIntegration;
+    private platformIntegration: MediaPlatform;
     private syncEngine: SyncEngine | null = null;
     private lexiconService: LexiconService;
 
@@ -88,7 +88,11 @@ export class AudioPlayerService {
     private currentBookAuthor: string = '';
     private currentBookCoverUrl: string | undefined = undefined;
 
-    private constructor(ctx: EngineContext, backendFactory: PlaybackBackendFactory) {
+    private constructor(
+        ctx: EngineContext,
+        backendFactory: PlaybackBackendFactory,
+        platformFactory: MediaPlatformFactory,
+    ) {
         this.ctx = ctx;
         this.contentPipeline = new AudioContentPipeline(this.ctx);
         this.syncEngine = new SyncEngine();
@@ -99,7 +103,7 @@ export class AudioPlayerService {
             this.handleContentAnalysisUpdate(state);
         });
 
-        this.platformIntegration = new PlatformIntegration({
+        this.platformIntegration = platformFactory({
             onPlay: () => this.play(),
             onPause: () => this.pause(),
             onStop: () => this.stop(),
@@ -256,8 +260,12 @@ export class AudioPlayerService {
      * Keeping both dependencies injected (no defaults) is what keeps this module free of
      * worker-unsafe imports. See {@link EngineContext} and {@link PlaybackBackend}.
      */
-    static createWithContext(ctx: EngineContext, backendFactory: PlaybackBackendFactory): AudioPlayerService {
-        return new AudioPlayerService(ctx, backendFactory);
+    static createWithContext(
+        ctx: EngineContext,
+        backendFactory: PlaybackBackendFactory,
+        platformFactory: MediaPlatformFactory,
+    ): AudioPlayerService {
+        return new AudioPlayerService(ctx, backendFactory, platformFactory);
     }
 
     private enqueue<T>(task: () => Promise<T>): Promise<T | void> {

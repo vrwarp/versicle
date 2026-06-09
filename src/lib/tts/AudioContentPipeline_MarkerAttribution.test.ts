@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { extractSentencesFromNode } from '../tts';
 import { EpubCFI } from 'epubjs';
@@ -27,7 +28,7 @@ const attribute = (pipeline: AudioContentPipeline, groups: Group[], markers: Cit
     (pipeline as any).attributeMarkersToGroups(groups, markers);
 
 describe('AudioContentPipeline.attributeMarkersToGroups', () => {
-    const pipeline = new AudioContentPipeline();
+    const pipeline = new AudioContentPipeline(createZustandEngineContext());
 
     // ---------------------------------------------------------------------------------------
     // Real CFIs captured from the "All That Jesus Commanded — Command #7" telemetry.
@@ -142,7 +143,7 @@ describe('AudioContentPipeline.attributeMarkersToGroups', () => {
 });
 
 describe('AudioContentPipeline marker attribution — DOM round-trip (wiring smoke test)', () => {
-    const pipeline = new AudioContentPipeline();
+    const pipeline = new AudioContentPipeline(createZustandEngineContext());
 
     const cfiGen = (range: Range): string => new EpubCFI(range, '/6/14!').toString();
 

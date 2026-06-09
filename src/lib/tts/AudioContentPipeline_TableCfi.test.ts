@@ -1,10 +1,11 @@
 
 import { describe, it, expect } from 'vitest';
+import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { SentenceNode } from '../tts';
 
 describe('AudioContentPipeline Table CFI Logic', () => {
-    const processor = new TableAdaptationProcessor();
+    const processor = new TableAdaptationProcessor(createZustandEngineContext());
 
     it('should correctly exclude siblings when using Range CFI with parent container', () => {
         // Table CFI is a range within parent /6/14!/4

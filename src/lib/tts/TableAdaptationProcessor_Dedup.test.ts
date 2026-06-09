@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { dbService } from '../../db/DBService';
 
@@ -35,7 +36,7 @@ describe('TableAdaptationProcessor - Deduplication (Vulnerability 3)', () => {
     let processor: TableAdaptationProcessor;
 
     beforeEach(() => {
-        processor = new TableAdaptationProcessor();
+        processor = new TableAdaptationProcessor(createZustandEngineContext());
         vi.clearAllMocks();
     });
 
