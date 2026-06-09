@@ -67,12 +67,12 @@ export class AudioContentPipeline {
             // Determine Title
             let title: string | undefined = undefined;
 
-            const bookMetadata = await dbService.getBookMetadata(bookId);
+            const bookMetadata = await this.ctx.book.getMetadata(bookId);
             const useSynthetic = resolveSyntheticPreference(bookMetadata);
 
             if (useSynthetic) {
                 // Priority 1: AI-extracted title
-                const analysis = await dbService.getContentAnalysis(bookId, section.sectionId);
+                const analysis = await this.ctx.contentAnalysis.getContentAnalysis(bookId, section.sectionId);
                 if (analysis && analysis.structure && analysis.structure.title) {
                     title = analysis.structure.title;
                 }
@@ -428,7 +428,7 @@ export class AudioContentPipeline {
 
         const promise = (async () => {
             // 1. Check existing classification in DB
-            const contentAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
+            const contentAnalysis = await this.ctx.contentAnalysis.getContentAnalysis(bookId, sectionId);
 
             // If we have stored reference start CFI, return it
             if (contentAnalysis?.referenceStartCfi !== undefined) {
@@ -467,7 +467,7 @@ export class AudioContentPipeline {
             if (strategy === 'deterministic') {
                 const detIndex = this.runDeterministicDetector(groups);
                 const detCfi = detIndex >= 0 ? groups[detIndex]?.rootCfi : null;
-                await dbService.saveReferenceStartCfi(bookId, sectionId, detCfi ?? undefined);
+                await this.ctx.contentAnalysis.saveReferenceStartCfi(bookId, sectionId, detCfi ?? undefined);
                 return detCfi ?? undefined;
             }
 
@@ -479,7 +479,7 @@ export class AudioContentPipeline {
 
             try {
                 // Mark as loading to prevent concurrent attempts from other sources
-                dbService.markAnalysisLoading(bookId, sectionId);
+                this.ctx.contentAnalysis.markAnalysisLoading(bookId, sectionId);
 
                 const idToCfiMap = new Map<string, string>();
                 const markers = citationMarkers || [];
@@ -508,7 +508,7 @@ export class AudioContentPipeline {
                 }
 
                 if (genAIService.isConfigured()) {
-                    const bookMetadata = await dbService.getBookMetadata(bookId);
+                    const bookMetadata = await this.ctx.book.getMetadata(bookId);
                     const bookTitle = bookMetadata?.title || 'Unknown Book';
                     const structure = await dbService.getBookStructure(bookId);
                     const sectionMap = new Map<string, string>();
@@ -541,14 +541,14 @@ export class AudioContentPipeline {
                     this.emitReferenceDetectionTelemetry({ bookId, sectionId, groups, markers, markerGroupIndex, geminiCfi: referenceStartCfi, detShadowCfi, enumeratorCandidateIndex, markerDropoffIndex, agreedWithHeuristic, justification });
 
                     // Persist detection results (this sets status to 'success')
-                    await dbService.saveReferenceStartCfi(bookId, sectionId, referenceStartCfi);
+                    await this.ctx.contentAnalysis.saveReferenceStartCfi(bookId, sectionId, referenceStartCfi);
                     return referenceStartCfi;
                 }
             } catch (e: unknown) {
                 console.warn("Content detection failed", e);
                 // Mark as error with timestamp
                 const message = e instanceof Error ? e.message : String(e);
-                dbService.markAnalysisError(bookId, sectionId, message || 'Unknown error');
+                this.ctx.contentAnalysis.markAnalysisError(bookId, sectionId, message || 'Unknown error');
             }
 
             return null;

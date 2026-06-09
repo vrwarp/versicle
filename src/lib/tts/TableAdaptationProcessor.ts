@@ -40,7 +40,7 @@ export class TableAdaptationProcessor {
                 const targetSentences = sentences;
 
             // 1. Check DB for existing adaptations
-            const analysis = await dbService.getContentAnalysis(bookId, sectionId);
+            const analysis = await this.ctx.contentAnalysis.getContentAnalysis(bookId, sectionId);
             const existingAdaptations = new Map<string, string>(
                 analysis?.tableAdaptations?.map(a => {
                     const range = parseCfiRange(a.rootCfi);
@@ -89,7 +89,7 @@ export class TableAdaptationProcessor {
                     imageBlob: img.imageBlob
                 }));
 
-                const bookMetadata = await dbService.getBookMetadata(bookId);
+                const bookMetadata = await this.ctx.book.getMetadata(bookId);
                 const bookTitle = bookMetadata?.title || 'Unknown Book';
                 const structure = await dbService.getBookStructure(bookId);
                 const sectionMap = new Map<string, string>();
@@ -110,13 +110,13 @@ export class TableAdaptationProcessor {
                 const results = await genAIService.generateTableAdaptations(nodes, 512, { bookTitle, sectionTitle });
 
                 // 5. Update DB
-                await dbService.saveTableAdaptations(bookId, sectionId, results.map(r => ({
+                await this.ctx.contentAnalysis.saveTableAdaptations(bookId, sectionId, results.map(r => ({
                     rootCfi: r.cfi,
                     text: r.adaptation
                 })));
 
                 // 6. Notify listeners with updated full set
-                const updatedAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
+                const updatedAnalysis = await this.ctx.contentAnalysis.getContentAnalysis(bookId, sectionId);
                 const finalAdaptations = new Map<string, string>(
                     updatedAnalysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
                 );

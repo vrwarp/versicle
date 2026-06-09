@@ -37,6 +37,8 @@ import type {
     ContentAnalysisSnapshot,
     SectionAnalysis,
     LexiconRule,
+    ContentAnalysis,
+    BookMetadata,
 } from './EngineContext';
 
 /** Main-thread → worker state replication messages. */
@@ -57,7 +59,11 @@ export type EngineHostCommand =
     | { kind: 'addAnnotation'; annotation: AnnotationInput }
     | { kind: 'showToast'; message: string; type?: ToastType }
     | { kind: 'addGenAILog'; entry: GenAILogEntry }
-    | { kind: 'setCurrentSection'; title: string; sectionId: string };
+    | { kind: 'setCurrentSection'; title: string; sectionId: string }
+    | { kind: 'saveReferenceStartCfi'; bookId: string; sectionId: string; cfi: string | undefined }
+    | { kind: 'markAnalysisLoading'; bookId: string; sectionId: string }
+    | { kind: 'markAnalysisError'; bookId: string; sectionId: string; error: string }
+    | { kind: 'saveTableAdaptations'; bookId: string; sectionId: string; adaptations: { rootCfi: string; text: string }[] };
 
 export interface WorkerEngineContextOptions {
     /** Outbound channel: deliver a write/side-effect command to the main-thread host. */
@@ -70,6 +76,9 @@ export interface WorkerEngineContextOptions {
     /** Lexicon rule fetching, proxied to the main thread (which owns the yjs-backed store). */
     getRules?: (bookId: string | undefined, language: string) => Promise<LexiconRule[]>;
     getBibleLexiconPreference?: (bookId: string) => Promise<'on' | 'off' | 'default'>;
+    /** Async reads proxied to the main thread (content-analysis + book metadata live in yjs stores). */
+    getContentAnalysis?: (bookId: string, sectionId: string) => Promise<ContentAnalysis | undefined>;
+    getBookMetadata?: (bookId: string) => Promise<BookMetadata | undefined>;
     /** Locale-aware default; pure, computed locally. Override only for tests. */
     defaultMinSentenceLength?: (lang: string) => number;
 }
@@ -81,6 +90,8 @@ export class WorkerEngineContext implements EngineContext {
     private readonly batteryOpen: () => Promise<void>;
     private readonly fetchRules: (bookId: string | undefined, language: string) => Promise<LexiconRule[]>;
     private readonly fetchBiblePref: (bookId: string) => Promise<'on' | 'off' | 'default'>;
+    private readonly fetchContentAnalysis: (bookId: string, sectionId: string) => Promise<ContentAnalysis | undefined>;
+    private readonly fetchBookMetadata: (bookId: string) => Promise<BookMetadata | undefined>;
     private readonly minSentenceLength: (lang: string) => number;
 
     // Replicated state (populated by applyUpdate).
@@ -102,6 +113,8 @@ export class WorkerEngineContext implements EngineContext {
         this.batteryOpen = opts.openBatteryOptimizationSettings ?? (async () => {});
         this.fetchRules = opts.getRules ?? (async () => []);
         this.fetchBiblePref = opts.getBibleLexiconPreference ?? (async () => 'default');
+        this.fetchContentAnalysis = opts.getContentAnalysis ?? (async () => undefined);
+        this.fetchBookMetadata = opts.getBookMetadata ?? (async () => undefined);
         this.minSentenceLength = opts.defaultMinSentenceLength ?? ((lang) => (lang.startsWith('zh') ? 6 : 36));
     }
 
@@ -177,10 +190,20 @@ export class WorkerEngineContext implements EngineContext {
             this.analysisListeners.add(listener);
             return () => this.analysisListeners.delete(listener);
         },
+        getContentAnalysis: (bookId: string, sectionId: string) => this.fetchContentAnalysis(bookId, sectionId),
+        saveReferenceStartCfi: (bookId: string, sectionId: string, cfi: string | undefined) =>
+            this.post({ kind: 'saveReferenceStartCfi', bookId, sectionId, cfi }),
+        markAnalysisLoading: (bookId: string, sectionId: string) =>
+            this.post({ kind: 'markAnalysisLoading', bookId, sectionId }),
+        markAnalysisError: (bookId: string, sectionId: string, error: string) =>
+            this.post({ kind: 'markAnalysisError', bookId, sectionId, error }),
+        saveTableAdaptations: (bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]) =>
+            this.post({ kind: 'saveTableAdaptations', bookId, sectionId, adaptations }),
     };
 
     book = {
         getBookLanguage: (bookId: string) => this.bookLanguages[bookId] || 'en',
+        getMetadata: (bookId: string) => this.fetchBookMetadata(bookId),
         subscribe: (listener: () => void) => {
             this.bookListeners.add(listener);
             return () => this.bookListeners.delete(listener);

@@ -315,7 +315,7 @@ export class AudioPlayerService {
             this.stateManager.setBookId(bookId);
 
             if (bookId) {
-                dbService.getBookMetadata(bookId).then(metadata => {
+                this.ctx.book.getMetadata(bookId).then(metadata => {
                     if (this.currentBookId === bookId) {
                         this.currentBookPalette = metadata?.coverPalette;
                         this.currentBookPerceptualPalette = metadata?.perceptualPalette;
@@ -702,7 +702,7 @@ export class AudioPlayerService {
         if (this.status === 'stopped' && initialBookId && !this.sessionRestored) {
             this.sessionRestored = true;
             try {
-                const book = await dbService.getBookMetadata(initialBookId);
+                const book = await this.ctx.book.getMetadata(initialBookId);
                 if (this.currentBookId !== initialBookId) return;
 
                 if (book) {

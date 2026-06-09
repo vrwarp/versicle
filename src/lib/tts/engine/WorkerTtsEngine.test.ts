@@ -70,6 +70,8 @@ describe('WorkerTtsEngine over a MessageChannel (live worker bridge)', () => {
             platformStop: async () => {},
             lexiconGetRules: async () => [],
             lexiconGetBiblePreference: async () => 'default',
+            getContentAnalysis: async () => undefined,
+            getBookMetadata: async () => undefined,
             applyHostCommand: (cmd) => hostCommands.push(cmd),
         };
 

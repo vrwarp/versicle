@@ -19,6 +19,8 @@ import type {
     ToastType,
     SectionAnalysis,
     LexiconRule,
+    ContentAnalysis,
+    BookMetadata,
 } from './EngineContext';
 
 type AnalysisListener = (state: { sections: Record<string, SectionAnalysis> }) => void;
@@ -84,6 +86,11 @@ export class FakeEngineContext implements EngineContext {
         },
     };
 
+    /** keyed by `${bookId}/${sectionId}` → persisted ContentAnalysis (the getContentAnalysis result). */
+    contentAnalyses: Record<string, ContentAnalysis> = {};
+    readonly savedReferenceCfis: Array<{ bookId: string; sectionId: string; cfi: string | undefined }> = [];
+    readonly savedTableAdaptations: Array<{ bookId: string; sectionId: string; adaptations: { rootCfi: string; text: string }[] }> = [];
+
     contentAnalysis = {
         getAnalysis: (bookId: string, sectionId: string) => this.analyses[`${bookId}/${sectionId}`],
         getSnapshot: () => ({ sections: this.analyses }),
@@ -91,10 +98,22 @@ export class FakeEngineContext implements EngineContext {
             this.analysisListeners.add(listener);
             return () => this.analysisListeners.delete(listener);
         },
+        getContentAnalysis: async (bookId: string, sectionId: string) => this.contentAnalyses[`${bookId}/${sectionId}`],
+        saveReferenceStartCfi: (bookId: string, sectionId: string, cfi: string | undefined) => {
+            this.savedReferenceCfis.push({ bookId, sectionId, cfi });
+        },
+        markAnalysisLoading: () => {},
+        markAnalysisError: () => {},
+        saveTableAdaptations: (bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]) => {
+            this.savedTableAdaptations.push({ bookId, sectionId, adaptations });
+        },
     };
 
+    /** keyed by bookId → full BookMetadata (the getMetadata result). */
+    bookMetadata: Record<string, BookMetadata> = {};
     book = {
         getBookLanguage: (bookId: string) => this.bookLanguages[bookId] || 'en',
+        getMetadata: async (bookId: string) => this.bookMetadata[bookId],
         subscribe: (listener: () => void) => {
             this.bookListeners.add(listener);
             return () => this.bookListeners.delete(listener);

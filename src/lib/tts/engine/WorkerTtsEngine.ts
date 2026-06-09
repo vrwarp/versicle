@@ -18,7 +18,7 @@ import type { PlaybackBackend, TTSProviderEvents } from './PlaybackBackend';
 import type { MediaPlatform } from '../PlatformIntegration';
 import type { TTSVoice } from '../providers/types';
 import type { AlignmentData } from '../SyncEngine';
-import type { LexiconRule } from './EngineContext';
+import type { LexiconRule, ContentAnalysis, BookMetadata } from './EngineContext';
 import type { MediaSessionMetadata } from '../MediaSessionManager';
 import type { BackgroundAudioMode } from '../BackgroundAudio';
 
@@ -65,6 +65,11 @@ export interface EngineHost {
     lexiconGetRules(bookId: string | undefined, language: string): Promise<LexiconRule[]>;
     lexiconGetBiblePreference(bookId: string): Promise<'on' | 'off' | 'default'>;
 
+    // Content-analysis + book-metadata reads (the main thread owns these yjs-backed stores;
+    // writes flow through applyHostCommand).
+    getContentAnalysis(bookId: string, sectionId: string): Promise<ContentAnalysis | undefined>;
+    getBookMetadata(bookId: string): Promise<BookMetadata | undefined>;
+
     // Worker → main-thread store writes (the WorkerEngineContext.post channel).
     applyHostCommand(command: EngineHostCommand): void;
 }
@@ -93,6 +98,8 @@ export class WorkerTtsEngine {
             platformName,
             getRules: (bookId, language) => host.lexiconGetRules(bookId, language),
             getBibleLexiconPreference: (bookId) => host.lexiconGetBiblePreference(bookId),
+            getContentAnalysis: (bookId, sectionId) => host.getContentAnalysis(bookId, sectionId),
+            getBookMetadata: (bookId) => host.getBookMetadata(bookId),
         });
 
         const backendFactory = (events: TTSProviderEvents): PlaybackBackend => {

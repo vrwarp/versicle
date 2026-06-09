@@ -22,6 +22,7 @@ import { useToastStore } from '../../../store/useToastStore';
 import { useBookStore } from '../../../store/useBookStore';
 import { useReaderUIStore } from '../../../store/useReaderUIStore';
 import { LexiconService } from '../LexiconService';
+import { dbService } from '../../../db/DBService';
 import type { EngineContext } from './EngineContext';
 
 /**
@@ -60,10 +61,18 @@ export function createZustandEngineContext(): EngineContext {
                 useContentAnalysisStore.getState().getAnalysis(bookId, sectionId),
             getSnapshot: () => useContentAnalysisStore.getState(),
             subscribe: (listener) => useContentAnalysisStore.subscribe(listener),
+            getContentAnalysis: async (bookId, sectionId) => dbService.getContentAnalysis(bookId, sectionId),
+            saveReferenceStartCfi: (bookId, sectionId, cfi) =>
+                dbService.saveReferenceStartCfi(bookId, sectionId, cfi),
+            markAnalysisLoading: (bookId, sectionId) => dbService.markAnalysisLoading(bookId, sectionId),
+            markAnalysisError: (bookId, sectionId, error) => dbService.markAnalysisError(bookId, sectionId, error),
+            saveTableAdaptations: (bookId, sectionId, adaptations) =>
+                dbService.saveTableAdaptations(bookId, sectionId, adaptations),
         },
 
         book: {
             getBookLanguage: (bookId) => useBookStore.getState().books[bookId]?.language || 'en',
+            getMetadata: (bookId) => dbService.getBookMetadata(bookId),
             subscribe: (listener) => useBookStore.subscribe(listener),
         },
 

@@ -29,11 +29,11 @@ import type { useReadingStateStore } from '../../../store/useReadingStateStore';
 import type { SectionAnalysis, TableAdaptation } from '../../../store/useContentAnalysisStore';
 import type { useAnnotationStore } from '../../../store/useAnnotationStore';
 import type { useToastStore } from '../../../store/useToastStore';
-import type { LexiconRule } from '../../../types/db';
+import type { LexiconRule, ContentAnalysis, BookMetadata } from '../../../types/db';
 
 // Re-exported so the engine core and helpers (e.g. FakeEngineContext) get all
 // engine-boundary types from this one module without re-reaching into the stores.
-export type { SectionAnalysis, TableAdaptation, LexiconRule };
+export type { SectionAnalysis, TableAdaptation, LexiconRule, ContentAnalysis, BookMetadata };
 
 // --- Snapshot / argument types reused verbatim from the existing store signatures ---
 
@@ -102,11 +102,22 @@ export interface ContentAnalysisPort {
     getSnapshot(): ContentAnalysisSnapshot;
     /** Subscribe to analysis updates; the listener receives the new snapshot. Returns an unsubscribe function. */
     subscribe(listener: (state: ContentAnalysisSnapshot) => void): () => void;
+
+    // --- Per-section read/writes (persisted analysis). Async so they work across the worker
+    // boundary; the main thread backs these with the content-analysis store via DBService. ---
+    /** The fully-resolved persisted analysis for a section (title, refStartCfi, adaptations, status). */
+    getContentAnalysis(bookId: string, sectionId: string): Promise<ContentAnalysis | undefined>;
+    saveReferenceStartCfi(bookId: string, sectionId: string, referenceStartCfi: string | undefined): void;
+    markAnalysisLoading(bookId: string, sectionId: string): void;
+    markAnalysisError(bookId: string, sectionId: string, error: string): void;
+    saveTableAdaptations(bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]): void;
 }
 
-/** Book inventory metadata the engine needs (currently just language) + change stream. */
+/** Book inventory metadata the engine needs + change stream. */
 export interface BookInfoPort {
     getBookLanguage(bookId: string): string;
+    /** Full book metadata (title, author, palette, cover, language). Async (worker-boundary-safe). */
+    getMetadata(bookId: string): Promise<BookMetadata | undefined>;
     /** Subscribe to book inventory changes; returns an unsubscribe function. */
     subscribe(listener: () => void): () => void;
 }
