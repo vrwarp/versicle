@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
-import { getAudioPlayer } from './engine/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer } from './engine/mainThreadAudioPlayer';
 import { useContentAnalysisStore, SectionAnalysis } from '../../store/useContentAnalysisStore';
 import { dbService } from '../../db/DBService';
 import { useGenAIStore } from '../../store/useGenAIStore';
@@ -73,7 +73,7 @@ describe('AudioPlayerService Content Analysis Race Condition', () => {
         (dbService.getTTSContent as any).mockResolvedValue({ sentences: [] });
 
         // Get instance
-        service = getAudioPlayer();
+        service = getInProcessAudioPlayer();
 
         // Use reflection to mock the contentPipeline's detectContentSkipMask
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

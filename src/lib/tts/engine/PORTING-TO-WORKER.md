@@ -50,23 +50,24 @@ composition root `mainThreadAudioPlayer.ts` and the worker bridge.
   *import-safety* (it surfaced and fixed: `DOMPurify.addHook` at module-init in `sanitizer.ts`,
   and `getState()` action functions in pushed snapshots).
 
-## App adoption (wired, flag-gated)
+## App runs on the worker (default)
 
-The app can run entirely on the worker, gated by a flag (off by default). `getAudioPlayer()`
-returns the in-process engine normally, or a `WorkerEngineHandle` when worker mode is enabled —
-both satisfy the `TtsEngine` interface, so no `useTTSStore` / `ReaderView` call site changes.
+`getAudioPlayer()` returns a `WorkerEngineHandle` on any platform that provides `Worker`
+(browser / Capacitor webview — i.e. always, in production); it falls back to the in-process
+engine only where `Worker` is undefined (jsdom unit tests, SSR). Both satisfy the `TtsEngine`
+interface, so no `useTTSStore` / `ReaderView` call site changed.
 
-- **Enable:** `localStorage['tts:worker'] = '1'` (runtime) or `VITE_TTS_WORKER=true` (build).
 - **`WorkerEngineHandle`** bridges the sync↔async gap: `createWorkerEngineClient()` boots
   asynchronously, so the handle queues fire-and-forget calls on the boot promise and keeps an
   internal subscription so `getQueue()` (sync) and listener fan-out behave like the in-process
   engine. `setProvider(ITTSProvider)` → `client.setProviderById(id)` (live objects can't cross
   the boundary). `TTSVoice.originalVoice` (a live `SpeechSynthesisVoice`) is stripped at the
   boundary.
-- **Verified:** `verification/test_tts_worker.spec.ts` › *"worker mode: getAudioPlayer() routes
-  the app through the Worker"* enables the flag, asserts `getAudioPlayer()` is the
-  `WorkerEngineHandle`, and round-trips `getVoices()` worker→host→worker→main.
+- **`getInProcessAudioPlayer()`** builds the engine in-process; used by the jsdom fallback and
+  by the engine-internals unit tests (which can't spawn a real Worker).
+- **Verified (real Chromium):** `verification/test_tts_worker.spec.ts` › *"the app engine
+  (getAudioPlayer) is worker-backed and routes through the Worker"* asserts `getAudioPlayer()`
+  is the `WorkerEngineHandle` and round-trips `getVoices()` worker→host→worker→main.
 
-Default production remains the synchronous in-process path. Flipping the default to worker mode
-is now a one-line flag flip after on-device QA of real playback (lock-screen controls, background
-audio, provider switching) which can't be exercised headlessly.
+Caveat: real audio playback in worker mode (lock-screen controls, background audio, provider
+switching) can't be exercised headlessly and warrants on-device QA.

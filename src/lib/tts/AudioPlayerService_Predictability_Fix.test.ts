@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
-import { getAudioPlayer } from './engine/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer } from './engine/mainThreadAudioPlayer';
 import { dbService } from '../../db/DBService';
 
 vi.mock('../../db/DBService', () => ({
@@ -68,7 +68,7 @@ describe('AudioPlayerService Predictability Fix', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        service = getAudioPlayer();
+        service = getInProcessAudioPlayer();
         service.setBookId(null);
     });
 

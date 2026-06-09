@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioPlayerService, TTSQueueItem } from './AudioPlayerService';
-import { getAudioPlayer, resetAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 import { MockCloudProvider } from './providers/MockCloudProvider';
 
 // Mock useTTSStore to avoid circular dependency crash
@@ -55,9 +55,9 @@ describe('AudioPlayerService Critical Sections', () => {
 
   beforeEach(async () => {
     // Reset singleton
-    resetAudioPlayerForTests();
+    resetInProcessAudioPlayerForTests();
 
-    service = getAudioPlayer();
+    service = getInProcessAudioPlayer();
     mockProvider = new MockCloudProvider();
     await service.setProvider(mockProvider);
   });

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
-import { getAudioPlayer, resetAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 import { BackgroundAudio } from './BackgroundAudio';
 import { dbService } from '../../db/DBService';
 import { genAIService } from '../genai/GenAIService';
@@ -142,12 +142,12 @@ describe('AudioPlayerService', () => {
         vi.spyOn(console, 'warn').mockImplementation(() => { });
 
         // Reset singleton
-        resetAudioPlayerForTests();
-        service = getAudioPlayer();
+        resetInProcessAudioPlayerForTests();
+        service = getInProcessAudioPlayer();
     });
 
     it('should be a singleton', () => {
-        const s2 = getAudioPlayer();
+        const s2 = getInProcessAudioPlayer();
         expect(s2).toBe(service);
     });
 

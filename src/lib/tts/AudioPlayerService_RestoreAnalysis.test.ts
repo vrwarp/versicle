@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
-import { getAudioPlayer, resetAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 import { dbService } from '../../db/DBService';
 
 // --- Mocks Setup ---
@@ -122,9 +122,9 @@ describe('AudioPlayerService - Restore Analysis', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        resetAudioPlayerForTests();
+        resetInProcessAudioPlayerForTests();
         try {
-            service = getAudioPlayer();
+            service = getInProcessAudioPlayer();
         } catch (e) {
             console.error("Constructor Error:", e);
             throw e;

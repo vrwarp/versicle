@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioPlayerService, TTSQueueItem } from './AudioPlayerService';
-import { getAudioPlayer, resetAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 import { MockCloudProvider } from './providers/MockCloudProvider';
 
 // Mock useTTSStore to avoid circular dependency crash
@@ -62,9 +62,9 @@ describe('AudioPlayerService Concurrency', () => {
 
   beforeEach(async () => {
     // Reset singleton
-    resetAudioPlayerForTests();
+    resetInProcessAudioPlayerForTests();
 
-    service = getAudioPlayer();
+    service = getInProcessAudioPlayer();
     mockProvider = new MockCloudProvider();
 
     // Slow down synthesis to simulate network latency and allow overlap

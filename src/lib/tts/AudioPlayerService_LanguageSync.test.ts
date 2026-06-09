@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
-import { getAudioPlayer, resetAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 import { useBookStore } from '../../store/useBookStore';
 import { useTTSStore } from '../../store/useTTSStore';
 
@@ -49,8 +49,8 @@ describe('AudioPlayerService - Language Sync', () => {
         useTTSStore.setState({ activeLanguage: 'en' });
 
         // Use a fresh instance (wired to the real stores) for isolation.
-        resetAudioPlayerForTests();
-        service = getAudioPlayer();
+        resetInProcessAudioPlayerForTests();
+        service = getInProcessAudioPlayer();
     });
 
     it('should proactively sync TTS language and clear lexicon when setBookId is called with a new book', async () => {
