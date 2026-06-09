@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { dbService } from './DBService';
+// DBService now imports the yjs-backed stores as types only; importing them here triggers
+// their self-registration with DBService so the store-backed methods (e.g. deleteBook) work.
+import '../store/useContentAnalysisStore';
+import '../store/useBookStore';
+import '../store/useAnnotationStore';
 import { getDB } from './db';
 import * as ingestion from '../lib/ingestion';
 import type { StaticBookManifest, StaticResource, NavigationItem } from '../types/db';

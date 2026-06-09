@@ -99,3 +99,7 @@ export const useBookStore = create<BookState>()(
         getYjsOptions({ atomicKeys: ['__schemaVersion'] })
     )
 );
+
+// Self-register with DBService (type-only importer); see useContentAnalysisStore for rationale.
+import { setBookStore } from '../db/storeRegistry';
+setBookStore(useBookStore);

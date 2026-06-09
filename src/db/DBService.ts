@@ -17,11 +17,28 @@ import type {
 import type { Timepoint } from '../lib/tts/providers/types';
 import { DatabaseError, StorageFullError } from '../types/errors';
 import { extractBookData, type BookExtractionData, generateFileFingerprint } from '../lib/ingestion';
-import { useContentAnalysisStore } from '../store/useContentAnalysisStore';
-import { useBookStore } from '../store/useBookStore';
-import { useAnnotationStore } from '../store/useAnnotationStore';
-
 import { createLogger } from '../lib/logger';
+// The yjs-backed stores are reached through a tiny dependency-free registry (they register
+// themselves on import). DBService never statically imports them, so the TTS engine worker —
+// which imports DBService for IndexedDB — doesn't bundle yjs or open a second Y.Doc/IndexedDB
+// connection. The engine reaches these reads/writes through the EngineContext instead.
+import { getContentAnalysisStore, getBookStore, getAnnotationStore } from './storeRegistry';
+
+function caStore() {
+    const s = getContentAnalysisStore();
+    if (!s) throw new Error('DBService: content-analysis store not registered (worker should route via EngineContext)');
+    return s.getState();
+}
+function bookStoreState() {
+    const s = getBookStore();
+    if (!s) throw new Error('DBService: book store not registered (worker should route via EngineContext)');
+    return s.getState();
+}
+function annStore() {
+    const s = getAnnotationStore();
+    if (!s) throw new Error('DBService: annotation store not registered (worker should route via EngineContext)');
+    return s.getState();
+}
 
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import type { ExtractionOptions } from '../lib/tts';
@@ -99,7 +116,7 @@ class DBService {
           }
       });
 
-      const inventoryBooks = useBookStore.getState().books;
+      const inventoryBooks = bookStoreState().books;
 
       // Map results back preserving index and handling missing records
       return ids.map((id) => {
@@ -161,7 +178,7 @@ class DBService {
       }
 
       // Get inventory from Yjs store (primary source)
-      const inventory = useBookStore.getState().books[id];
+      const inventory = bookStoreState().books[id];
 
       // coverBlob may be ArrayBuffer at runtime (stored as ArrayBuffer for WebKit IDB compatibility)
       const rawCoverBlob2 = manifest.coverBlob as unknown as Blob | ArrayBuffer | undefined;
@@ -198,7 +215,7 @@ class DBService {
    * Uses Yjs store (useBookStore) instead of IDB.
    */
   getBookIdByFilename(filename: string): string | undefined {
-    const books = useBookStore.getState().books;
+    const books = bookStoreState().books;
     for (const book of Object.values(books)) {
       if (book.sourceFilename === filename) {
         return book.bookId;
@@ -435,7 +452,7 @@ class DBService {
   async deleteBook(id: string): Promise<void> {
     try {
       // Clean up Yjs content analysis for this book
-      useContentAnalysisStore.getState().deleteBookAnalysis(id);
+      caStore().deleteBookAnalysis(id);
 
       const db = await this.getDB();
       // Delete from static and cache stores only
@@ -716,7 +733,7 @@ class DBService {
   // Uses useAnnotationStore (Yjs) as primary source.
 
   getAnnotations(bookId: string): Annotation[] {
-    const allAnnotations = useAnnotationStore.getState().annotations;
+    const allAnnotations = annStore().annotations;
     return Object.values(allAnnotations).filter(ann => ann.bookId === bookId);
   }
 
@@ -782,7 +799,7 @@ class DBService {
   // Uses useContentAnalysisStore (Yjs) as primary and only source.
 
   getContentAnalysis(bookId: string, sectionId: string): ContentAnalysis | undefined {
-    const yjsAnalysis = useContentAnalysisStore.getState().getAnalysis(bookId, sectionId);
+    const yjsAnalysis = caStore().getAnalysis(bookId, sectionId);
     if (!yjsAnalysis) return undefined;
 
     return {
@@ -800,19 +817,19 @@ class DBService {
   }
 
   saveReferenceStartCfi(bookId: string, sectionId: string, referenceStartCfi: string | undefined): void {
-    useContentAnalysisStore.getState().saveReferenceStartCfi(bookId, sectionId, referenceStartCfi);
+    caStore().saveReferenceStartCfi(bookId, sectionId, referenceStartCfi);
   }
 
   markAnalysisLoading(bookId: string, sectionId: string): void {
-    useContentAnalysisStore.getState().markAnalysisLoading(bookId, sectionId);
+    caStore().markAnalysisLoading(bookId, sectionId);
   }
 
   markAnalysisError(bookId: string, sectionId: string, error: string): void {
-    useContentAnalysisStore.getState().markAnalysisError(bookId, sectionId, error);
+    caStore().markAnalysisError(bookId, sectionId, error);
   }
 
   clearContentAnalysis(): void {
-    useContentAnalysisStore.getState().clearAll();
+    caStore().clearAll();
   }
 
   async getTableImages(bookId: string): Promise<TableImage[]> {
@@ -833,7 +850,7 @@ class DBService {
   }
 
   saveTableAdaptations(bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]): void {
-    useContentAnalysisStore.getState().saveTableAdaptations(bookId, sectionId, adaptations);
+    caStore().saveTableAdaptations(bookId, sectionId, adaptations);
   }
 
   // --- Cleanup ---
