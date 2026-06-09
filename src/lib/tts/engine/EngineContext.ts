@@ -29,10 +29,11 @@ import type { useReadingStateStore } from '../../../store/useReadingStateStore';
 import type { SectionAnalysis, TableAdaptation } from '../../../store/useContentAnalysisStore';
 import type { useAnnotationStore } from '../../../store/useAnnotationStore';
 import type { useToastStore } from '../../../store/useToastStore';
+import type { LexiconRule } from '../../../types/db';
 
 // Re-exported so the engine core and helpers (e.g. FakeEngineContext) get all
 // engine-boundary types from this one module without re-reaching into the stores.
-export type { SectionAnalysis, TableAdaptation };
+export type { SectionAnalysis, TableAdaptation, LexiconRule };
 
 // --- Snapshot / argument types reused verbatim from the existing store signatures ---
 
@@ -126,6 +127,16 @@ export interface ReaderUIPort {
 }
 
 /**
+ * Pronunciation-lexicon *reads*. The rules are stored in a yjs-backed store on the main thread;
+ * this port lets the engine fetch them (async, so it works across the worker boundary) without
+ * importing the store. Applying rules to text is done locally via the yjs-free LexiconApplier.
+ */
+export interface LexiconPort {
+    getRules(bookId: string | undefined, language: string): Promise<LexiconRule[]>;
+    getBibleLexiconPreference(bookId: string): Promise<'on' | 'off' | 'default'>;
+}
+
+/**
  * Native platform detection and capability requests. NOTE: this is distinct from the
  * audio-output `PlatformPort` introduced in Phase 3 — this port is only about *which*
  * platform we're on and one-shot native capability prompts.
@@ -153,5 +164,6 @@ export interface EngineContext {
     annotations: AnnotationPort;
     notifications: NotificationPort;
     readerUI: ReaderUIPort;
+    lexicon: LexiconPort;
     platform: PlatformInfoPort;
 }

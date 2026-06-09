@@ -1,4 +1,8 @@
-import { EpubCFI, type Book } from 'epubjs';
+// Import the CFI class from its submodule rather than the package barrel, so consumers that
+// only need CFI math (e.g. the TTS engine worker) don't bundle epubjs's DOM-heavy
+// Book/Rendition/Manager code. `Book` stays a type-only import (erased at build).
+import EpubCFI from 'epubjs/src/epubcfi';
+import type { Book } from 'epubjs';
 import { getCachedSegmenter } from './tts/segmenter-cache';
 
 export interface CfiRangeData {

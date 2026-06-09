@@ -36,6 +36,7 @@ import type {
     ToastType,
     ContentAnalysisSnapshot,
     SectionAnalysis,
+    LexiconRule,
 } from './EngineContext';
 
 /** Main-thread → worker state replication messages. */
@@ -66,6 +67,9 @@ export interface WorkerEngineContextOptions {
     /** Async platform capability checks, proxied to the main thread (e.g. via Comlink). */
     isBatteryOptimizationEnabled?: () => Promise<boolean>;
     openBatteryOptimizationSettings?: () => Promise<void>;
+    /** Lexicon rule fetching, proxied to the main thread (which owns the yjs-backed store). */
+    getRules?: (bookId: string | undefined, language: string) => Promise<LexiconRule[]>;
+    getBibleLexiconPreference?: (bookId: string) => Promise<'on' | 'off' | 'default'>;
     /** Locale-aware default; pure, computed locally. Override only for tests. */
     defaultMinSentenceLength?: (lang: string) => number;
 }
@@ -75,6 +79,8 @@ export class WorkerEngineContext implements EngineContext {
     private readonly platformName: string;
     private readonly batteryCheck: () => Promise<boolean>;
     private readonly batteryOpen: () => Promise<void>;
+    private readonly fetchRules: (bookId: string | undefined, language: string) => Promise<LexiconRule[]>;
+    private readonly fetchBiblePref: (bookId: string) => Promise<'on' | 'off' | 'default'>;
     private readonly minSentenceLength: (lang: string) => number;
 
     // Replicated state (populated by applyUpdate).
@@ -94,6 +100,8 @@ export class WorkerEngineContext implements EngineContext {
         this.platformName = opts.platformName ?? 'web';
         this.batteryCheck = opts.isBatteryOptimizationEnabled ?? (async () => false);
         this.batteryOpen = opts.openBatteryOptimizationSettings ?? (async () => {});
+        this.fetchRules = opts.getRules ?? (async () => []);
+        this.fetchBiblePref = opts.getBibleLexiconPreference ?? (async () => 'default');
         this.minSentenceLength = opts.defaultMinSentenceLength ?? ((lang) => (lang.startsWith('zh') ? 6 : 36));
     }
 
@@ -190,6 +198,11 @@ export class WorkerEngineContext implements EngineContext {
     readerUI = {
         setCurrentSection: (title: string, sectionId: string) =>
             this.post({ kind: 'setCurrentSection', title, sectionId }),
+    };
+
+    lexicon = {
+        getRules: (bookId: string | undefined, language: string) => this.fetchRules(bookId, language),
+        getBibleLexiconPreference: (bookId: string) => this.fetchBiblePref(bookId),
     };
 
     platform = {

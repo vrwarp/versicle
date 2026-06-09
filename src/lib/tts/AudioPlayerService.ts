@@ -1,6 +1,6 @@
 import type { ITTSProvider, TTSVoice } from './providers/types';
 import { SyncEngine } from './SyncEngine';
-import { LexiconService } from './LexiconService';
+import { lexiconApplier } from './LexiconApplier';
 import { dbService } from '../../db/DBService';
 import type { SectionMetadata, LexiconRule, PerceptualPalette } from '../../types/db';
 import { TaskSequencer } from './TaskSequencer';
@@ -81,7 +81,6 @@ export class AudioPlayerService {
     private providerManager: PlaybackBackend;
     private platformIntegration: MediaPlatform;
     private syncEngine: SyncEngine | null = null;
-    private lexiconService: LexiconService;
 
     private status: TTSStatus = 'stopped';
     private listeners: PlaybackListener[] = [];
@@ -111,7 +110,6 @@ export class AudioPlayerService {
         this.ctx = ctx;
         this.contentPipeline = new AudioContentPipeline(this.ctx);
         this.syncEngine = new SyncEngine();
-        this.lexiconService = LexiconService.getInstance();
 
         // Subscribe to content analysis changes (Reactive Injection)
         this.ctx.contentAnalysis.subscribe((state) => {
@@ -752,12 +750,12 @@ export class AudioPlayerService {
 
             if (!this.activeLexiconRules) {
                 const bookLang = initialBookId ? this.ctx.book.getBookLanguage(initialBookId) : 'en';
-                this.activeLexiconRules = await this.lexiconService.getRules(initialBookId || undefined, bookLang);
+                this.activeLexiconRules = await this.ctx.lexicon.getRules(initialBookId || undefined, bookLang);
                 if (this.currentBookId !== initialBookId) return;
             }
             const rules = this.activeLexiconRules;
 
-            const processedText = this.lexiconService.applyLexicon(item.text, rules);
+            const processedText = lexiconApplier.applyLexicon(item.text, rules);
 
             await this.providerManager.play(processedText, {
                 voiceId,
@@ -766,7 +764,7 @@ export class AudioPlayerService {
 
             if (this.stateManager.hasNext()) {
                 const nextItem = this.stateManager.queue[this.stateManager.currentIndex + 1];
-                const nextProcessed = this.lexiconService.applyLexicon(nextItem.text, rules);
+                const nextProcessed = lexiconApplier.applyLexicon(nextItem.text, rules);
                 this.providerManager.preload(nextProcessed, {
                     voiceId,
                     speed: this.speed

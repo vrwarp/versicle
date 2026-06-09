@@ -18,6 +18,7 @@ import type { PlaybackBackend, TTSProviderEvents } from './PlaybackBackend';
 import type { MediaPlatform } from '../PlatformIntegration';
 import type { TTSVoice } from '../providers/types';
 import type { AlignmentData } from '../SyncEngine';
+import type { LexiconRule } from './EngineContext';
 import type { MediaSessionMetadata } from '../MediaSessionManager';
 import type { BackgroundAudioMode } from '../BackgroundAudio';
 
@@ -60,6 +61,10 @@ export interface EngineHost {
     platformSetBackgroundVolume(volume: number): void;
     platformStop(): Promise<void>;
 
+    // Lexicon reads (the main thread owns the yjs-backed lexicon store).
+    lexiconGetRules(bookId: string | undefined, language: string): Promise<LexiconRule[]>;
+    lexiconGetBiblePreference(bookId: string): Promise<'on' | 'off' | 'default'>;
+
     // Worker → main-thread store writes (the WorkerEngineContext.post channel).
     applyHostCommand(command: EngineHostCommand): void;
 }
@@ -86,6 +91,8 @@ export class WorkerTtsEngine {
         this.ctx = new WorkerEngineContext({
             post: (cmd) => host.applyHostCommand(cmd),
             platformName,
+            getRules: (bookId, language) => host.lexiconGetRules(bookId, language),
+            getBibleLexiconPreference: (bookId) => host.lexiconGetBiblePreference(bookId),
         });
 
         const backendFactory = (events: TTSProviderEvents): PlaybackBackend => {

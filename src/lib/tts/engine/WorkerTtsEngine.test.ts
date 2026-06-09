@@ -68,6 +68,8 @@ describe('WorkerTtsEngine over a MessageChannel (live worker bridge)', () => {
             platformSetBackgroundAudioMode: () => {},
             platformSetBackgroundVolume: () => {},
             platformStop: async () => {},
+            lexiconGetRules: async () => [],
+            lexiconGetBiblePreference: async () => 'default',
             applyHostCommand: (cmd) => hostCommands.push(cmd),
         };
 

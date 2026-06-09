@@ -1,6 +1,6 @@
 import { dbService } from '../../db/DBService';
 import { genAIService } from '../genai/GenAIService';
-import { EpubCFI } from 'epubjs';
+import EpubCFI from 'epubjs/src/epubcfi';
 import { parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
 import type { SentenceNode } from '../tts';
 import type { EngineContext } from './engine/EngineContext';

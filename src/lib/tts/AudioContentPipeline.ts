@@ -2,7 +2,7 @@ import { dbService } from '../../db/DBService';
 import { TextSegmenter } from './TextSegmenter';
 import type { EngineContext } from './engine/EngineContext';
 import { generateSecureId } from '../crypto';
-import { EpubCFI } from 'epubjs';
+import EpubCFI from 'epubjs/src/epubcfi';
 import type { CitationMarker } from '../../types/db';
 import { genAIService } from '../genai/GenAIService';
 import { getParentCfi, generateCfiRange, parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
@@ -11,7 +11,6 @@ import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
 import type { SentenceNode } from '../tts';
 import { BIBLE_ABBREVIATIONS } from '../../data/bible-lexicon';
-import { LexiconService } from './LexiconService';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { findTocItem, resolveSyntheticPreference } from '../reader/titleResolver';
 
@@ -127,7 +126,7 @@ export class AudioContentPipeline {
                 const settings = this.ctx.config.getSettings();
 
                 // Inject Bible abbreviations if enabled
-                const biblePref = await LexiconService.getInstance().getBibleLexiconPreference(bookId);
+                const biblePref = await this.ctx.lexicon.getBibleLexiconPreference(bookId);
                 const shouldIncludeBible = biblePref === 'on' || (biblePref === 'default' && settings.isBibleLexiconEnabled);
 
                 const abbreviations = this.getMergedAbbreviations(settings.customAbbreviations, shouldIncludeBible);

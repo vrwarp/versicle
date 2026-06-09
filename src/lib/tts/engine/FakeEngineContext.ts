@@ -18,6 +18,7 @@ import type {
     ReadingEventType,
     ToastType,
     SectionAnalysis,
+    LexiconRule,
 } from './EngineContext';
 
 type AnalysisListener = (state: { sections: Record<string, SectionAnalysis> }) => void;
@@ -116,6 +117,13 @@ export class FakeEngineContext implements EngineContext {
         setCurrentSection: (title: string, sectionId: string) => {
             this.sectionTitles.push({ title, sectionId });
         },
+    };
+
+    lexiconRules: LexiconRule[] = [];
+    biblePreference: 'on' | 'off' | 'default' = 'default';
+    lexicon = {
+        getRules: async () => this.lexiconRules,
+        getBibleLexiconPreference: async () => this.biblePreference,
     };
 
     platform = {

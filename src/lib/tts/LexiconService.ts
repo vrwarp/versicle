@@ -4,35 +4,10 @@ import { BIBLE_LEXICON_RULES } from '../../data/bible-lexicon';
 import { useLexiconStore } from '../../store/useLexiconStore';
 import { waitForYjsSync } from '../../store/yjs-provider';
 import type { LexiconRule } from '../../types/db';
+import { lexiconApplier, processInitialisms } from './LexiconApplier';
 
-interface CompiledLexiconRule {
-    originalRule: LexiconRule;
-    regex: RegExp;
-    replacement: string;
-}
-
-const INITIALISM_PHONETIC_MAP: Record<string, string> = {
-    'A': 'Eigh',
-    // Future additions mapped here only as specific failures are identified
-};
-
-/**
- * Transforms initialisms to prevent prosodic breaks and phonetic errors.
- * Example: "A. W. Tozer" -> "Eigh W Tozer"
- */
-export function processInitialisms(text: string): string {
-    const initialismRegex = /\b([A-Z])\.\s*(?=[A-Z])/g;
-    
-    return text.replace(initialismRegex, (_match, letter) => {
-        const replacement = INITIALISM_PHONETIC_MAP[letter];
-        if (replacement) {
-            // Replace the letter and strip the period, maintaining the trailing space
-            return `${replacement} `; 
-        }
-        // If no phonetic patch is needed, just strip the period to fix prosody
-        return `${letter} `;
-    });
-}
+// Re-exported for back-compat; the implementation now lives in the (yjs-free) LexiconApplier.
+export { processInitialisms };
 
 /**
  * Service for managing pronunciation lexicon rules.
@@ -40,12 +15,6 @@ export function processInitialisms(text: string): string {
  */
 export class LexiconService {
     private static instance: LexiconService;
-    // OPTIMIZATION: Fast path cache for stable rule arrays (O(1) lookup).
-    private compiledRulesCache = new WeakMap<LexiconRule[], CompiledLexiconRule[]>();
-
-    // OPTIMIZATION: Secondary cache for individual compiled rules.
-    // Prevents expensive regex re-compilation when the rule array is regenerated but the rules haven't changed.
-    private compiledRegexCache = new Map<string, CompiledLexiconRule>();
     private globalBibleLexiconEnabled: boolean = true;
 
     // OPTIMIZATION: Memoize getRules output based on Zustand store state references
@@ -223,107 +192,14 @@ export class LexiconService {
         ids.forEach(id => store.deleteRule(id));
     }
 
-    private compileRule(rule: LexiconRule, effectiveMatchType: string): CompiledLexiconRule {
-        const normalizedOriginal = rule.original.normalize('NFKD');
-        const normalizedReplacement = rule.replacement.normalize('NFKD');
-        let regex: RegExp;
-
-        if (effectiveMatchType === 'regex') {
-            regex = new RegExp(normalizedOriginal, 'gi');
-        } else {
-            const escapedOriginal = normalizedOriginal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const startIsWord = /^\w/.test(normalizedOriginal);
-            const endIsWord = /\w$/.test(normalizedOriginal);
-            const regexStr = `${startIsWord ? '\\b' : ''}${escapedOriginal}${endIsWord ? '\\b' : ''}`;
-            const flags = effectiveMatchType === 'match_case' ? 'g' : 'gi';
-            regex = new RegExp(regexStr, flags);
-        }
-
-        return {
-            originalRule: rule,
-            regex,
-            replacement: normalizedReplacement
-        };
-    }
-
-    private getCompiledRules(rules: LexiconRule[]): CompiledLexiconRule[] {
-        // Fast path: O(1) lookup if array reference hasn't changed.
-        let compiled = this.compiledRulesCache.get(rules);
-        if (compiled) return compiled;
-
-        compiled = [];
-
-        for (const rule of rules) {
-            if (!rule.original || !rule.replacement) continue;
-
-            // Determine effective matchType for legacy support
-            const effectiveMatchType = rule.matchType || (rule.isRegex ? 'regex' : 'ignore_case');
-
-            // Use a safe delimiter (\0) to prevent cache key collisions
-            const cacheKey = `${rule.id || 'anon'}\0${effectiveMatchType}\0${rule.original}\0${rule.replacement}`;
-
-            let compiledRule = this.compiledRegexCache.get(cacheKey);
-
-            if (!compiledRule) {
-                try {
-                    compiledRule = this.compileRule(rule, effectiveMatchType);
-
-                    // Memory bounds for the Map cache to prevent unlimited growth if rules change frequently
-                    if (this.compiledRegexCache.size > 2000) {
-                        // Clear 10% of entries (oldest) if cache gets too large
-                        let i = 0;
-                        for (const key of this.compiledRegexCache.keys()) {
-                            if (i++ > 200) break;
-                            this.compiledRegexCache.delete(key);
-                        }
-                    }
-
-                    this.compiledRegexCache.set(cacheKey, compiledRule);
-                } catch (e) {
-                    console.warn(`Invalid regex for lexicon rule: ${rule.original}`, e);
-                    continue; // Skip appending if invalid
-                }
-            }
-
-            if (compiledRule) {
-                compiled.push(compiledRule);
-            }
-        }
-
-        // Cache the result for this specific array reference.
-        this.compiledRulesCache.set(rules, compiled);
-        return compiled;
-    }
-
+    // Text transformation is delegated to the yjs-free LexiconApplier (so the engine can apply
+    // rules off the main thread without importing this store-backed service).
     applyLexiconWithTrace(text: string, rules: LexiconRule[]): { final: string, trace: { rule: LexiconRule, before: string, after: string }[] } {
-        // Pre-process for initialisms first
-        let processedText = processInitialisms(text);
-        processedText = processedText.normalize('NFKD');
-        const trace: { rule: LexiconRule, before: string, after: string }[] = [];
-        const compiledRules = this.getCompiledRules(rules);
-
-        for (const compiled of compiledRules) {
-            const before = processedText;
-            // Use cached regex and pre-normalized replacement
-            const after = processedText.replace(compiled.regex, compiled.replacement);
-
-            if (before !== after) {
-                trace.push({ rule: compiled.originalRule, before, after });
-                processedText = after;
-            }
-        }
-        return { final: processedText, trace };
+        return lexiconApplier.applyLexiconWithTrace(text, rules);
     }
 
     applyLexicon(text: string, rules: LexiconRule[]): string {
-        let processedText = processInitialisms(text);
-        processedText = processedText.normalize('NFKD');
-        const compiledRules = this.getCompiledRules(rules);
-
-        for (const compiled of compiledRules) {
-            processedText = processedText.replace(compiled.regex, compiled.replacement);
-        }
-        return processedText;
+        return lexiconApplier.applyLexicon(text, rules);
     }
 
     async getRulesHash(rules: LexiconRule[]): Promise<string> {

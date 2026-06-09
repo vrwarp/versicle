@@ -19,6 +19,7 @@ import * as Comlink from 'comlink';
 import { Capacitor } from '@capacitor/core';
 import { TTSProviderManager } from '../TTSProviderManager';
 import { PlatformIntegration } from '../PlatformIntegration';
+import { LexiconService } from '../LexiconService';
 import { WebSpeechProvider } from '../providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from '../providers/CapacitorTTSProvider';
 import { GoogleTTSProvider } from '../providers/GoogleTTSProvider';
@@ -178,6 +179,8 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         platformSetBackgroundAudioMode: (mode, isPlaying) => platform.setBackgroundAudioMode(mode, isPlaying),
         platformSetBackgroundVolume: (volume) => platform.setBackgroundVolume(volume),
         platformStop: () => platform.stop(),
+        lexiconGetRules: (bookId, language) => LexiconService.getInstance().getRules(bookId, language),
+        lexiconGetBiblePreference: (bookId) => LexiconService.getInstance().getBibleLexiconPreference(bookId),
         applyHostCommand,
     };
 

@@ -70,6 +70,13 @@ vi.mock('epubjs', () => {
     }
 });
 
+// cfi-utils imports EpubCFI from the lean submodule (epubjs/src/epubcfi) so the TTS worker
+// doesn't bundle DOM-heavy epubjs. Mirror the 'epubjs' mock onto that path (as a default export).
+vi.mock('epubjs/src/epubcfi', async () => {
+    const epubjs = await import('epubjs') as { EpubCFI: unknown };
+    return { default: epubjs.EpubCFI };
+});
+
 // Mocking global Intl if not present (Node environment usually has it, but safe to mock specific behavior)
 // We will mock it inside the test cases where needed using vi.spyOn or modifying global
 

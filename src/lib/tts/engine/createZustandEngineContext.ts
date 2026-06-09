@@ -21,6 +21,7 @@ import { useAnnotationStore } from '../../../store/useAnnotationStore';
 import { useToastStore } from '../../../store/useToastStore';
 import { useBookStore } from '../../../store/useBookStore';
 import { useReaderUIStore } from '../../../store/useReaderUIStore';
+import { LexiconService } from '../LexiconService';
 import type { EngineContext } from './EngineContext';
 
 /**
@@ -79,6 +80,12 @@ export function createZustandEngineContext(): EngineContext {
         readerUI: {
             setCurrentSection: (title, sectionId) =>
                 useReaderUIStore.getState().setCurrentSection(title, sectionId),
+        },
+
+        lexicon: {
+            getRules: (bookId, language) => LexiconService.getInstance().getRules(bookId, language),
+            getBibleLexiconPreference: (bookId) =>
+                LexiconService.getInstance().getBibleLexiconPreference(bookId),
         },
 
         platform: {
