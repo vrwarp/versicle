@@ -60,6 +60,7 @@ export type TtsEngine = Pick<AudioPlayerService,
     | 'loadSection' | 'loadSectionBySectionId' | 'jumpTo' | 'seek'
     | 'skipToNextSection' | 'skipToPreviousSection'
     | 'setBackgroundAudioMode' | 'setBackgroundVolume' | 'setPrerollEnabled'
+    | 'engineName'
 >;
 
 /**
@@ -68,6 +69,7 @@ export type TtsEngine = Pick<AudioPlayerService,
  * media session integration, and state persistence.
  */
 export class AudioPlayerService {
+    readonly engineName: string = 'AudioPlayerService';
     // Components
     // TaskSequencer ensures async operations are executed serially to prevent race conditions.
     private taskSequencer = new TaskSequencer();

@@ -26,6 +26,7 @@ import { createWorkerEngineClient, type WorkerEngineClient } from './createWorke
 const logger = createLogger('WorkerEngineHandle');
 
 export class WorkerEngineHandle implements TtsEngine {
+    readonly engineName: string = 'WorkerEngineHandle';
     /** Resolves once the worker is booted AND the status subscription is live. */
     private booted: Promise<WorkerEngineClient>;
     private listeners = new Set<PlaybackListener>();

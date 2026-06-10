@@ -104,7 +104,7 @@ if (typeof window !== 'undefined') {
     await engine.whenReady();
     const voices = await engine.getVoices();
     return {
-      engineName: engine.constructor.name,
+      engineName: engine.engineName,
       voicesIsArray: Array.isArray(voices),
       ready: true,
     };

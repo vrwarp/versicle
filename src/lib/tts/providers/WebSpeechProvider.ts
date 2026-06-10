@@ -114,8 +114,16 @@ export class WebSpeechProvider implements ITTSProvider {
         };
         utterance.onend = () => this.emit({ type: 'end' });
         utterance.onerror = (e) => {
-            this.emit({ type: 'error', error: e });
-            reject(e);
+            const errorMsg = `SpeechSynthesisError: ${e.error}`;
+            this.emit({
+                type: 'error',
+                error: {
+                    error: e.error,
+                    message: errorMsg,
+                    type: e.type,
+                }
+            });
+            reject(new Error(errorMsg));
         };
         utterance.onboundary = (e) => this.emit({ type: 'boundary', charIndex: e.charIndex });
 

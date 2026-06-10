@@ -158,7 +158,7 @@ export class WorkerEngineContext implements EngineContext {
                 break;
             case 'analysis':
                 this.analysisSnapshot = update.snapshot;
-                this.analysisListeners.forEach((l) => l(this.analysisSnapshot));
+                this.analysisListeners.forEach((l) => l(update.snapshot));
                 break;
             case 'progress':
                 this.progressByBook[update.bookId] = update.progress;

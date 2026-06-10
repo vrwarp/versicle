@@ -30,7 +30,7 @@ export function getAudioPlayer(): TtsEngine {
     if (!instance) {
         instance = new WorkerEngineHandle();
     }
-    return instance;
+    return instance!;
 }
 
 let inProcessInstance: AudioPlayerService | null = null;
