@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mockDriveService } from '../lib/drive/MockDriveService';
+import { mockDriveService } from '../test/harness/MockDriveService';
 import { DriveScannerService } from '../lib/drive/DriveScannerService';
 import { useDriveStore } from '../store/useDriveStore';
 import { useBookStore } from '../store/useBookStore';
