@@ -975,7 +975,8 @@ export const ReaderView: React.FC = () => {
 
 
     const handlePlayFromSelection = useCallback((cfiRange: string) => {
-        const queue = getAudioPlayer().getQueue();
+        // The queue is engine state replicated into the store via the engine subscription.
+        const queue = useTTSStore.getState().queue;
         if (!queue || queue.length === 0 || !rendition) return;
 
         try {

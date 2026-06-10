@@ -21,6 +21,7 @@ import { LexiconManager } from './LexiconManager';
 export const UnifiedAudioPanel = () => {
   const {
     isPlaying,
+    engineReady,
     play,
     pause,
     rate,
@@ -38,6 +39,7 @@ export const UnifiedAudioPanel = () => {
     activeLanguage
   } = useTTSStore(useShallow(state => ({
     isPlaying: state.isPlaying,
+    engineReady: state.engineReady,
     play: state.play,
     pause: state.pause,
     rate: state.rate,
@@ -98,7 +100,7 @@ export const UnifiedAudioPanel = () => {
              <Button data-testid="tts-rewind-button" variant="ghost" size="icon" onClick={() => seek(-15)} aria-label={providerId === 'local' ? "Previous Sentence" : "Rewind 15s"}>
                 <RotateCcw className="h-6 w-6" />
              </Button>
-             <Button data-testid="tts-play-pause-button" size="icon" className="h-12 w-12 rounded-full" onClick={isPlaying ? pause : play} aria-label={isPlaying ? "Pause" : "Play"}>
+             <Button data-testid="tts-play-pause-button" size="icon" className="h-12 w-12 rounded-full" disabled={!engineReady} onClick={isPlaying ? pause : play} aria-label={isPlaying ? "Pause" : "Play"}>
                 {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
              </Button>
              <Button data-testid="tts-forward-button" variant="ghost" size="icon" onClick={() => seek(15)} aria-label={providerId === 'local' ? "Next Sentence" : "Forward 15s"}>

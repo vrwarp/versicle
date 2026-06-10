@@ -65,11 +65,11 @@ test('the app engine (getAudioPlayer) is worker-backed and routes through the Wo
             .catch((e) => { (window as unknown as { __h: unknown }).__h = { error: String(e) }; });
     });
     await page.waitForFunction(() => (window as unknown as { __h?: unknown }).__h !== undefined, null, { timeout: 30000 });
-    const r = await page.evaluate(() => (window as unknown as { __h: { engineName?: string; voicesIsArray?: boolean; queueLength?: number; error?: string } }).__h);
+    const r = await page.evaluate(() => (window as unknown as { __h: { engineName?: string; voicesIsArray?: boolean; ready?: boolean; error?: string } }).__h);
 
     if (r.error) throw new Error(`Worker handle test failed: ${r.error}`);
 
     expect(r.engineName).toBe('WorkerEngineHandle');
     expect(r.voicesIsArray).toBe(true);
-    expect(r.queueLength).toBe(0);
+    expect(r.ready).toBe(true);
 });

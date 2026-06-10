@@ -3,14 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { TTSVoice } from '../lib/tts/providers/types';
 import { getAudioPlayer } from '../lib/tts/engine/mainThreadAudioPlayer';
 import type { TTSStatus, TTSQueueItem } from '../lib/tts/AudioPlayerService';
-import { GoogleTTSProvider } from '../lib/tts/providers/GoogleTTSProvider';
-import { OpenAIProvider } from '../lib/tts/providers/OpenAIProvider';
-import { LemonFoxProvider } from '../lib/tts/providers/LemonFoxProvider';
-import { PiperProvider } from '../lib/tts/providers/PiperProvider';
-import { WebSpeechProvider } from '../lib/tts/providers/WebSpeechProvider';
-import { CapacitorTTSProvider } from '../lib/tts/providers/CapacitorTTSProvider';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/TextSegmenter';
-import { Capacitor } from '@capacitor/core';
 import { LexiconService } from '../lib/tts/LexiconService';
 import { normalizeLanguageCode } from '../lib/language-utils';
 
@@ -35,6 +28,8 @@ interface TTSState {
 
     /** Flag indicating if TTS is currently playing. */
     isPlaying: boolean;
+    /** Whether the engine is ready to accept commands (worker booted + subscribed). */
+    engineReady: boolean;
     /** Current status of playback. */
     status: TTSStatus;
     /** Speech rate (speed). Default is 1.0. */
@@ -143,6 +138,7 @@ export const useTTSStore = create<TTSState>()(
         (set, get) => {
             return {
                 isPlaying: false,
+                engineReady: false,
                 status: 'stopped',
                 rate: 1.0,
                 pitch: 1.0,
@@ -236,6 +232,9 @@ export const useTTSStore = create<TTSState>()(
 
                 initialize: () => {
                     const player = getAudioPlayer();
+                    // Engine readiness: in-process resolves immediately; the worker handle
+                    // resolves once the worker has booted and subscribed. UI can gate on this.
+                    void player.whenReady().then(() => set({ engineReady: true }));
                     // Subscribe to player updates
                     player.subscribe((status, activeCfi, currentIndex, queue, error, downloadInfo) => {
                         set(() => ({
@@ -375,28 +374,11 @@ export const useTTSStore = create<TTSState>()(
                 },
                 loadVoices: async () => {
                     const player = getAudioPlayer();
-                    // Ensure provider is set on player (in case of fresh load)
-                    const { providerId, apiKeys } = get();
-                    // We might need to check if player already has correct provider type
-                    // But simplified: just set it.
-                    let newProvider;
-                    if (providerId === 'google') {
-                        newProvider = new GoogleTTSProvider(apiKeys.google);
-                    } else if (providerId === 'openai') {
-                        newProvider = new OpenAIProvider(apiKeys.openai);
-                    } else if (providerId === 'lemonfox') {
-                        newProvider = new LemonFoxProvider(apiKeys.lemonfox);
-                    } else if (providerId === 'piper') {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        newProvider = new PiperProvider((get() as any).activeLanguage || 'en');
-                    } else {
-                        if (Capacitor.isNativePlatform()) {
-                            newProvider = new CapacitorTTSProvider();
-                        } else {
-                            newProvider = new WebSpeechProvider();
-                        }
-                    }
-                    await player.setProvider(newProvider);
+                    // Ensure provider is set on player (in case of fresh load). The id is plain
+                    // data on both engine paths; the main-thread backend constructs the live
+                    // provider (with API keys + active language) via the shared factory.
+                    const { providerId } = get();
+                    await player.setProviderById(providerId);
 
                     await player.init();
                     const voices = await player.getVoices();

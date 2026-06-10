@@ -25,6 +25,8 @@ export class FakePlaybackBackend implements PlaybackBackend {
     locale: string | null = null;
     voices: TTSVoice[] = [];
     downloadedVoices = new Set<string>();
+    /** Provider ids requested via the uniform by-id API. */
+    readonly providerIds: string[] = [];
 
     /** A PlaybackBackendFactory that produces a shared instance, captured here for assertions. */
     static factory(): { factory: PlaybackBackendFactory; get(): FakePlaybackBackend | null } {
@@ -56,6 +58,9 @@ export class FakePlaybackBackend implements PlaybackBackend {
     }
     async getVoices(): Promise<TTSVoice[]> {
         return this.voices;
+    }
+    setProviderById(providerId: string): void {
+        this.providerIds.push(providerId);
     }
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     setProvider(_provider: ITTSProvider): void {

@@ -54,9 +54,9 @@ export type PlaybackListener = (status: TTSStatus, activeCfi: string | null, cur
  */
 export type TtsEngine = Pick<AudioPlayerService,
     | 'play' | 'pause' | 'stop' | 'preview'
-    | 'setSpeed' | 'setVoice' | 'setLanguage' | 'setProvider' | 'init' | 'getVoices'
+    | 'setSpeed' | 'setVoice' | 'setLanguage' | 'setProviderById' | 'init' | 'getVoices'
     | 'downloadVoice' | 'deleteVoice' | 'isVoiceDownloaded'
-    | 'subscribe' | 'getQueue' | 'setBookId' | 'clearPauseGesture'
+    | 'subscribe' | 'setBookId' | 'clearPauseGesture' | 'whenReady'
     | 'loadSection' | 'loadSectionBySectionId' | 'jumpTo' | 'seek'
     | 'skipToNextSection' | 'skipToPreviousSection'
     | 'setBackgroundAudioMode' | 'setBackgroundVolume' | 'setPrerollEnabled'
@@ -504,11 +504,31 @@ export class AudioPlayerService {
         this.prerollEnabled = enabled;
     }
 
+    /** Swap the active provider by id — the uniform engine API on both transports. */
+    public setProviderById(providerId: string) {
+        return this.enqueue(async () => {
+            await this.stopInternal();
+            this.providerManager.setProviderById(providerId);
+        });
+    }
+
+    /**
+     * In-process/test seam: install a live provider instance through the backend's optional
+     * direct-injection hook. Not part of the {@link TtsEngine} app contract.
+     */
     public setProvider(provider: ITTSProvider) {
         return this.enqueue(async () => {
             await this.stopInternal();
-            this.providerManager.setProvider(provider);
+            this.providerManager.setProvider?.(provider);
         });
+    }
+
+    /**
+     * Resolves when the engine is ready to accept commands. The in-process engine is ready
+     * at construction; the worker handle resolves once the worker has booted and subscribed.
+     */
+    public whenReady(): Promise<void> {
+        return Promise.resolve();
     }
 
     async init() {

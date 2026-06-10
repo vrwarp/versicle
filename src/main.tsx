@@ -19,7 +19,7 @@ declare global {
     /** Verification hook: boots the TTS engine in a real Web Worker and round-trips through it. */
     __ttsWorkerSmokeTest?: () => Promise<{ ok: boolean; queueLength: number; status: string | null }>;
     /** Verification hook: exercises the app-facing engine (always worker-backed). */
-    __ttsWorkerHandleTest?: () => Promise<{ engineName: string; voicesIsArray: boolean; queueLength: number }>;
+    __ttsWorkerHandleTest?: () => Promise<{ engineName: string; voicesIsArray: boolean; ready: boolean }>;
   }
 }
 
@@ -62,11 +62,12 @@ if (typeof window !== 'undefined') {
   window.__ttsWorkerHandleTest = async () => {
     const { getAudioPlayer } = await import('./lib/tts/engine/mainThreadAudioPlayer');
     const engine = getAudioPlayer();
+    await engine.whenReady();
     const voices = await engine.getVoices();
     return {
       engineName: engine.constructor.name,
       voicesIsArray: Array.isArray(voices),
-      queueLength: engine.getQueue().length,
+      ready: true,
     };
   };
 }

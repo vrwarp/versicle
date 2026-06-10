@@ -123,8 +123,9 @@ export class WorkerTtsEngine {
                 pause: () => { void host.backendPause(); },
                 stop: () => { void host.backendStop(); },
                 getVoices: () => host.backendGetVoices(),
-                // A live ITTSProvider can't cross the boundary; the host owns provider choice.
-                setProvider: () => { /* no-op in worker mode; use host.backendSetProviderById */ },
+                // The provider id is plain data, so the swap crosses the boundary unchanged;
+                // the host's backend constructs the live provider via the shared factory.
+                setProviderById: (providerId) => { void host.backendSetProviderById(providerId); },
                 setLocale: (locale) => { void host.backendSetLocale(locale); },
                 playEarcon: (type) => { void host.backendPlayEarcon(type); },
                 downloadVoice: (voiceId) => host.backendDownloadVoice(voiceId),
@@ -199,6 +200,7 @@ export class WorkerTtsEngine {
     seek(offset: number): void { void this.e.seek(offset); }
     setSpeed(speed: number): void { void this.e.setSpeed(speed); }
     setVoice(voiceId: string): void { void this.e.setVoice(voiceId); }
+    setProviderById(providerId: string): void { void this.e.setProviderById(providerId); }
     setLanguage(lang: string): void { this.e.setLanguage(lang); }
     setPrerollEnabled(enabled: boolean): void { this.e.setPrerollEnabled(enabled); }
     setBackgroundAudioMode(mode: BackgroundAudioMode): void { this.e.setBackgroundAudioMode(mode); }

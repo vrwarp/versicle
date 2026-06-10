@@ -4,6 +4,7 @@ import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { Capacitor } from '@capacitor/core';
 import type { AlignmentData } from './SyncEngine';
 import type { PlaybackBackend } from './engine/PlaybackBackend';
+import { buildProviderById } from './providerFactory';
 
 /**
  * Interface defining the events emitted by the TTSProviderManager.
@@ -195,7 +196,15 @@ export class TTSProviderManager implements PlaybackBackend {
     }
 
     /**
-     * Explicitly sets the provider instance.
+     * Swaps the active provider by id, constructing it via the shared provider factory
+     * (which reads API keys + active language from the TTS settings store).
+     */
+    setProviderById(providerId: string) {
+         this.setProvider(buildProviderById(providerId));
+    }
+
+    /**
+     * Explicitly sets the provider instance (in-process/test seam).
      *
      * @param {ITTSProvider} provider The new provider to use.
      */

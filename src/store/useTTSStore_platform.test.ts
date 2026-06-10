@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useTTSStore } from './useTTSStore';
+import { buildProviderById } from '../lib/tts/providerFactory';
 import { Capacitor } from '@capacitor/core';
 
 // Mock Capacitor
@@ -15,16 +16,6 @@ vi.mock('../lib/tts/providers/WebSpeechProvider', () => ({
   WebSpeechProvider: class {
     _type = 'WebSpeech';
     id = 'local';
-    init = vi.fn().mockResolvedValue(undefined);
-    getVoices = vi.fn().mockResolvedValue([]);
-    synthesize = vi.fn();
-    stop = vi.fn();
-    on = vi.fn();
-    setConfig = vi.fn();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    constructor(config: any) { this.config = config; }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    config: any;
   }
 }));
 
@@ -32,11 +23,6 @@ vi.mock('../lib/tts/providers/CapacitorTTSProvider', () => ({
   CapacitorTTSProvider: class {
     _type = 'Capacitor';
     id = 'local';
-    init = vi.fn().mockResolvedValue(undefined);
-    getVoices = vi.fn().mockResolvedValue([]);
-    synthesize = vi.fn();
-    stop = vi.fn();
-    on = vi.fn();
   }
 }));
 
@@ -44,9 +30,10 @@ vi.mock('../lib/tts/providers/GoogleTTSProvider', () => ({
     GoogleTTSProvider: class {
         _type = 'Google';
         id = 'google';
-        init = vi.fn().mockResolvedValue(undefined);
-        getVoices = vi.fn().mockResolvedValue([]);
-        synthesize = vi.fn();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        constructor(apiKey?: any) { this.apiKey = apiKey; }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        apiKey: any;
     }
 }));
 
@@ -54,39 +41,36 @@ vi.mock('../lib/tts/providers/OpenAIProvider', () => ({
     OpenAIProvider: class {
         _type = 'OpenAI';
         id = 'openai';
-        init = vi.fn().mockResolvedValue(undefined);
-        getVoices = vi.fn().mockResolvedValue([]);
-        synthesize = vi.fn();
     }
 }));
 
 // Mock AudioPlayerService using vi.hoisted to share mock functions
-const { mockSetProvider, mockInit, mockGetVoices, mockSubscribe, mockSetVoice, mockSetLocalProviderConfig } = vi.hoisted(() => {
+const { mockSetProviderById, mockInit, mockGetVoices, mockSubscribe, mockSetVoice, mockWhenReady } = vi.hoisted(() => {
     return {
-        mockSetProvider: vi.fn(),
+        mockSetProviderById: vi.fn(),
         mockInit: vi.fn().mockResolvedValue(undefined),
         mockGetVoices: vi.fn().mockResolvedValue([]),
         mockSubscribe: vi.fn(),
         mockSetVoice: vi.fn(),
-        mockSetLocalProviderConfig: vi.fn(),
+        mockWhenReady: vi.fn().mockResolvedValue(undefined),
     }
 });
 
 vi.mock('../lib/tts/engine/mainThreadAudioPlayer', () => {
     return {
         getAudioPlayer: vi.fn(() => ({
-            setProvider: mockSetProvider,
+            setProviderById: mockSetProviderById,
             init: mockInit,
             getVoices: mockGetVoices,
             subscribe: mockSubscribe,
             setVoice: mockSetVoice,
-            setLocalProviderConfig: mockSetLocalProviderConfig,
+            whenReady: mockWhenReady,
         })),
         resetAudioPlayerForTests: vi.fn(),
     };
 });
 
-describe('useTTSStore Platform Detection', () => {
+describe('Provider selection (store routing + factory platform detection)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         // Reset store state
@@ -96,7 +80,8 @@ describe('useTTSStore Platform Detection', () => {
                 en: { voiceId: null, rate: 1, pitch: 1, volume: 1 }
             },
             providerId: 'local',
-            apiKeys: { google: '', openai: '' },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            apiKeys: { google: 'g-key', openai: '' } as any,
             backgroundAudioMode: 'silence',
             whiteNoiseVolume: 0.1,
             rate: 1,
@@ -107,43 +92,51 @@ describe('useTTSStore Platform Detection', () => {
         });
     });
 
-    it('should use WebSpeechProvider on web platform when selecting local provider', async () => {
-        // Mock non-native
+    it('routes the configured providerId to the engine as plain data (setProviderById)', async () => {
+        useTTSStore.getState().setProviderId('local');
+        await Promise.resolve();
+
+        expect(mockSetProviderById).toHaveBeenCalledWith('local');
+    });
+
+    it('routes a cloud providerId through the same uniform call', async () => {
+        useTTSStore.getState().setProviderId('google');
+        await Promise.resolve();
+
+        expect(mockSetProviderById).toHaveBeenCalledWith('google');
+    });
+
+    it('loadVoices re-applies the current providerId', async () => {
+        await useTTSStore.getState().loadVoices();
+
+        expect(mockSetProviderById).toHaveBeenCalledWith('local');
+        expect(mockInit).toHaveBeenCalled();
+    });
+
+    // The platform branching that used to live in the store now lives in the single factory.
+    it('factory: builds WebSpeechProvider on web for the local provider', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (Capacitor.isNativePlatform as any).mockReturnValue(false);
 
-        // Trigger provider set
-        useTTSStore.getState().setProviderId('local');
-
-        expect(mockSetProvider).toHaveBeenCalled();
-        const providerArg = mockSetProvider.mock.calls[0][0];
-        expect(providerArg._type).toBe('WebSpeech');
+        const provider = buildProviderById('local');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((provider as any)._type).toBe('WebSpeech');
     });
 
-    it('should use CapacitorTTSProvider on native platform when selecting local provider', async () => {
-        // Mock native
+    it('factory: builds CapacitorTTSProvider on native for the local provider', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (Capacitor.isNativePlatform as any).mockReturnValue(true);
 
-        // Trigger provider set
-        useTTSStore.getState().setProviderId('local');
-
-        expect(mockSetProvider).toHaveBeenCalled();
-        const providerArg = mockSetProvider.mock.calls[0][0];
-        // This assertion is expected to fail before the fix
-        expect(providerArg._type).toBe('Capacitor');
+        const provider = buildProviderById('local');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((provider as any)._type).toBe('Capacitor');
     });
 
-    it('should use CapacitorTTSProvider on native platform during loadVoices', async () => {
+    it('factory: injects the stored API key for cloud providers', () => {
+        const provider = buildProviderById('google');
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (Capacitor.isNativePlatform as any).mockReturnValue(true);
-
-        // Call loadVoices which also sets provider
-        await useTTSStore.getState().loadVoices();
-
-        expect(mockSetProvider).toHaveBeenCalled();
-        const providerArg = mockSetProvider.mock.calls[0][0];
-        // This assertion is expected to fail before the fix
-        expect(providerArg._type).toBe('Capacitor');
+        expect((provider as any)._type).toBe('Google');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((provider as any).apiKey).toBe('g-key');
     });
 });

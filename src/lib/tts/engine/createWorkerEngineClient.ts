@@ -23,12 +23,6 @@ import { LexiconService } from '../LexiconService';
 import { bookRepository } from '../../../db/BookRepository';
 import { contentAnalysisRepository } from '../../../db/ContentAnalysisRepository';
 import { genAIService } from '../../genai/GenAIService';
-import { WebSpeechProvider } from '../providers/WebSpeechProvider';
-import { CapacitorTTSProvider } from '../providers/CapacitorTTSProvider';
-import { GoogleTTSProvider } from '../providers/GoogleTTSProvider';
-import { OpenAIProvider } from '../providers/OpenAIProvider';
-import { LemonFoxProvider } from '../providers/LemonFoxProvider';
-import { PiperProvider } from '../providers/PiperProvider';
 import { useTTSStore } from '../../../store/useTTSStore';
 import { useGenAIStore } from '../../../store/useGenAIStore';
 import { useContentAnalysisStore } from '../../../store/useContentAnalysisStore';
@@ -60,16 +54,6 @@ const logger = createLogger('WorkerEngineClient');
  */
 function plain<T>(value: T): T {
     return JSON.parse(JSON.stringify(value));
-}
-
-function buildProviderById(id: string) {
-    switch (id) {
-        case 'google': return new GoogleTTSProvider();
-        case 'openai': return new OpenAIProvider();
-        case 'lemonfox': return new LemonFoxProvider();
-        case 'piper': return new PiperProvider();
-        default: return Capacitor.isNativePlatform() ? new CapacitorTTSProvider() : new WebSpeechProvider();
-    }
 }
 
 /** Apply a worker write command to the real Zustand stores (mirrors createZustandEngineContext). */
@@ -113,8 +97,6 @@ export interface WorkerEngineClient {
     subscribe(listener: StatusListener): Promise<() => void>;
     /** Replicate the current language + progress for a book, then set it on the engine. */
     setBook(bookId: string | null): Promise<void>;
-    /** Switch the active provider by id (live provider objects can't cross the worker boundary). */
-    setProviderById(providerId: string): void;
     /** Tear down the worker and store subscriptions. */
     dispose(): void;
 }
@@ -178,16 +160,13 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         backendPreload: async (text, options) => backend.preload(text, options),
         backendPause: async () => backend.pause(),
         backendStop: async () => backend.stop(),
-        // Drop `originalVoice` (a live SpeechSynthesisVoice) — it can't cross the worker
-        // boundary, and the worker only needs the serializable voice metadata + id.
-        backendGetVoices: async () =>
-            (await backend.getVoices()).map((v) => ({ id: v.id, name: v.name, lang: v.lang, provider: v.provider })),
+        backendGetVoices: () => backend.getVoices(),
         backendSetLocale: async (locale) => backend.setLocale(locale),
         backendPlayEarcon: async (type) => backend.playEarcon(type),
         backendDownloadVoice: (voiceId) => backend.downloadVoice(voiceId),
         backendDeleteVoice: (voiceId) => backend.deleteVoice(voiceId),
         backendIsVoiceDownloaded: (voiceId) => backend.isVoiceDownloaded(voiceId),
-        backendSetProviderById: async (providerId) => backend.setProvider(buildProviderById(providerId)),
+        backendSetProviderById: async (providerId) => backend.setProviderById(providerId),
         platformUpdateMetadata: (metadata) => platform.updateMetadata(metadata),
         platformUpdatePlaybackState: (status) => platform.updatePlaybackState(status),
         platformSetPositionState: (state) => platform.setPositionState(state),
@@ -252,16 +231,10 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         return () => { void remoteUnsub(); };
     };
 
-    const setProviderById = (providerId: string) => {
-        // Stop the worker engine, then swap the real (main-thread) backend provider.
-        engine.stop();
-        backend.setProvider(buildProviderById(providerId));
-    };
-
     const dispose = () => {
         try { unsubTTS(); unsubGenAI(); unsubAnalysis(); unsubBook(); } catch (e) { logger.warn('dispose error', e); }
         worker.terminate();
     };
 
-    return { engine, subscribe, setBook, setProviderById, dispose };
+    return { engine, subscribe, setBook, dispose };
 }

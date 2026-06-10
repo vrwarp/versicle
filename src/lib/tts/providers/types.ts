@@ -10,8 +10,6 @@ export interface TTSVoice {
   lang: string;
   /** The provider that owns this voice ('local', 'google', 'openai', 'lemonfox', 'piper'). */
   provider: 'local' | 'google' | 'openai' | 'lemonfox' | 'piper';
-  /** Optional reference to the original SpeechSynthesisVoice object (for local provider). */
-  originalVoice?: SpeechSynthesisVoice;
 }
 
 /**

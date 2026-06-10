@@ -69,8 +69,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
           id: v.name, // Use name directly as ID (e.g., "en-US-Standard-A")
           name: `${v.name} (${v.ssmlGender})`,
           lang: v.languageCodes[0],
-          provider: 'google',
-          originalVoice: v
+          provider: 'google'
       }));
   }
 

@@ -105,8 +105,7 @@ describe('WebSpeechProvider', () => {
               id: 'Voice 1',
               name: 'Voice 1',
               lang: 'en-US',
-              provider: 'local',
-              originalVoice: rawVoices[0]
+              provider: 'local'
           }]);
       });
   });

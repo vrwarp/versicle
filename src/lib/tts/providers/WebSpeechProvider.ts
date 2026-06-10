@@ -82,12 +82,13 @@ export class WebSpeechProvider implements ITTSProvider {
         this.voices = this.synth.getVoices();
         if (this.voices.length > 0) this.voicesLoaded = true;
     }
+    // Plain serializable voice metadata; the live SpeechSynthesisVoice stays internal
+    // (resolved from `this.voices` by id at play time).
     return this.voices.map(v => ({
       id: v.name,
       name: v.name,
       lang: v.lang,
-      provider: 'local',
-      originalVoice: v
+      provider: 'local'
     }));
   }
 

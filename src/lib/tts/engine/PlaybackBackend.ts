@@ -33,10 +33,16 @@ export interface PlaybackBackend {
     stop(): void;
     getVoices(): Promise<TTSVoice[]>;
     /**
-     * Swap the active provider. NOTE: passing a live `ITTSProvider` only works in-process;
-     * across a worker boundary the host exposes a serializable variant (e.g. by provider id).
+     * Swap the active provider by id. The id is plain data, so the call behaves identically
+     * in-process and across the worker boundary; the main-thread implementation constructs
+     * the live provider via the shared provider factory (`buildProviderById`).
      */
-    setProvider(provider: ITTSProvider): void;
+    setProviderById(providerId: string): void;
+    /**
+     * Optional in-process-only seam: install a live provider instance directly. Used by
+     * backend-level tests to inject fakes; a worker proxy cannot (and does not) implement it.
+     */
+    setProvider?(provider: ITTSProvider): void;
     setLocale(locale: string): void;
     playEarcon(type: 'bookmark_captured' | 'bookmark_failed'): void;
     downloadVoice(voiceId: string): Promise<void>;
