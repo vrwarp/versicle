@@ -729,9 +729,11 @@ class FirestoreSyncManager {
         }
 
         try {
-            // Step 1: Backup current state
+            // Step 1: Backup current state.
+            // Protected: the rolling checkpoint prune must not delete the
+            // rollback target while the migration state machine is unresolved.
             logger.info('Creating pre-migration checkpoint...');
-            const backupId = await CheckpointService.createCheckpoint('pre-migration');
+            const backupId = await CheckpointService.createCheckpoint('pre-migration', { protected: true });
             logger.info(`Pre-migration checkpoint created: #${backupId}`);
 
             // Step 2: State Lock
@@ -820,12 +822,26 @@ class FirestoreSyncManager {
 
             // Step 5: Apply & Reload
             logger.info('Applying remote state and reloading...');
-            await CheckpointService.applyRemoteState(remoteBlob);
-            // applyRemoteState triggers window.location.reload()
+            try {
+                await CheckpointService.applyRemoteState(remoteBlob);
+                // applyRemoteState triggers window.location.reload()
+            } catch (applyError) {
+                // The destructive phase may already have wiped local
+                // persistence — do NOT clear the migration state here.
+                // Transition to RESTORING_BACKUP so the boot interceptor
+                // restores the pinned pre-migration checkpoint on reload.
+                logger.error('Failed to apply remote state, rolling back to backup:', applyError);
+                MigrationStateService.setRestoringBackup();
+                useSyncStore.getState().setActiveWorkspaceId(currentWorkspaceId);
+                toast('Workspace switch failed. Restoring your previous data...', 'error');
+                window.location.reload();
+                return;
+            }
 
         } catch (error) {
             logger.error('Workspace switch failed:', error);
-            // Clean up migration state on failure (local IDB untouched)
+            // Clean up migration state on failure (nothing destructive has
+            // run before Step 5, so local IDB is genuinely untouched here)
             MigrationStateService.clear();
             // Revert workspace ID
             useSyncStore.getState().setActiveWorkspaceId(currentWorkspaceId);

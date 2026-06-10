@@ -145,18 +145,23 @@ function App() {
 
     if (migrationState) {
       if (migrationState.status === 'RESTORING_BACKUP') {
-        // Flow C: Execute rollback immediately
+        // Flow C: Execute rollback immediately.
+        // The migration state is kept until the restore SUCCEEDS —
+        // restoreCheckpoint clears it once the snapshot is fully written,
+        // just before reloading. Clearing it up-front would make a failed
+        // or interrupted rollback silently boot into the target workspace.
         logger.info('Boot interceptor: RESTORING_BACKUP detected, rolling back...');
-        MigrationStateService.clear();
         if (migrationState.backupCheckpointId != null) {
           CheckpointService.restoreCheckpoint(migrationState.backupCheckpointId)
             .catch(err => {
               logger.error('Rollback failed:', err);
-              // Clear state and reload as last resort
+              // Clear state and reload as last resort (avoids a reload loop)
+              MigrationStateService.clear();
               window.location.reload();
             });
         } else {
           logger.error('No backup checkpoint ID for rollback, reloading...');
+          MigrationStateService.clear();
           window.location.reload();
         }
         return; // HALT — restoreCheckpoint will reload

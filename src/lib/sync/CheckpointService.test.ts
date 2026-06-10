@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CheckpointService } from './CheckpointService';
+import { MigrationStateService } from './MigrationStateService';
 import * as Y from 'yjs';
 
 // Define mocks using vi.hoisted to ensure availability in vi.mock factory
@@ -231,5 +232,169 @@ describe('CheckpointService', () => {
 
         expect(id).toBe(2);
         expect(mocks.add).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'auto' }));
+    });
+
+    describe('regression: migration checkpoint pinning (protected flag)', () => {
+        /**
+         * Builds a linked chain of mock IDB cursors over the given records
+         * (oldest first, matching auto-increment key order) and records
+         * which keys get deleted/updated.
+         */
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        function makeCursorChain(records: Array<{ key: number; value: any }>) {
+            const deletedKeys: number[] = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const updates: Array<{ key: number; value: any }> = [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const cursors: any[] = records.map(r => ({
+                value: r.value,
+                primaryKey: r.key,
+                delete: vi.fn(async () => { deletedKeys.push(r.key); }),
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                update: vi.fn(async (v: any) => { updates.push({ key: r.key, value: v }); }),
+                continue: vi.fn()
+            }));
+            cursors.forEach((c, i) => c.continue.mockResolvedValue(cursors[i + 1] ?? null));
+            return { first: cursors[0] ?? null, deletedKeys, updates, cursors };
+        }
+
+        it('stores protected: true when requested (pre-migration backup)', async () => {
+            mocks.add.mockResolvedValue(42);
+            mocks.count.mockResolvedValue(3); // Under limit, no pruning
+            const chain = makeCursorChain([
+                { key: 40, value: { trigger: 'pre-sync' } },
+                { key: 41, value: { trigger: 'manual' } },
+                { key: 42, value: { trigger: 'pre-migration', protected: true } }
+            ]);
+            mocks.openCursor.mockResolvedValue(chain.first);
+
+            const id = await CheckpointService.createCheckpoint('pre-migration', { protected: true });
+
+            expect(id).toBe(42);
+            expect(mocks.add).toHaveBeenCalledWith(expect.objectContaining({
+                trigger: 'pre-migration',
+                protected: true
+            }));
+            // Nothing else was protected, and the new checkpoint itself is untouched
+            expect(chain.updates).toEqual([]);
+            expect(chain.deletedKeys).toEqual([]);
+        });
+
+        it('does not store the protected field for normal checkpoints', async () => {
+            mocks.add.mockResolvedValue(1);
+            mocks.count.mockResolvedValue(1);
+
+            await CheckpointService.createCheckpoint('manual');
+
+            expect(mocks.add).toHaveBeenCalledWith(expect.not.objectContaining({
+                protected: expect.anything()
+            }));
+        });
+
+        it('never prunes a protected checkpoint under pruning pressure', async () => {
+            // 13 stored (limit 10) → pruning wants 3 deletions
+            mocks.add.mockResolvedValue(13);
+            mocks.count.mockResolvedValue(13);
+            const chain = makeCursorChain([
+                { key: 1, value: { trigger: 'pre-migration', protected: true } }, // Oldest, pinned
+                { key: 2, value: { trigger: 'pre-sync' } },
+                { key: 3, value: { trigger: 'pre-sync' } },
+                { key: 4, value: { trigger: 'pre-sync' } },
+                { key: 5, value: { trigger: 'pre-sync' } }
+            ]);
+            mocks.openCursor.mockResolvedValue(chain.first);
+
+            await CheckpointService.createCheckpoint('pre-sync');
+
+            // The protected rollback target is skipped; the oldest unprotected go
+            expect(chain.deletedKeys).toEqual([2, 3, 4]);
+        });
+
+        it('unprotects older protected checkpoints when a new protected one is created', async () => {
+            mocks.add.mockResolvedValue(20);
+            mocks.count.mockResolvedValue(3); // Under limit, no pruning
+            const chain = makeCursorChain([
+                { key: 10, value: { trigger: 'pre-migration', protected: true, timestamp: 1 } },
+                { key: 15, value: { trigger: 'pre-sync', timestamp: 2 } },
+                { key: 20, value: { trigger: 'pre-migration', protected: true, timestamp: 3 } } // The new one
+            ]);
+            mocks.openCursor.mockResolvedValue(chain.first);
+
+            await CheckpointService.createCheckpoint('pre-migration', { protected: true });
+
+            // Only the superseded protected checkpoint is rewritten, flag removed
+            expect(chain.updates).toHaveLength(1);
+            expect(chain.updates[0].key).toBe(10);
+            expect(chain.updates[0].value.protected).toBeUndefined();
+            expect(chain.updates[0].value.trigger).toBe('pre-migration'); // Rest preserved
+            // The newly created checkpoint stays pinned
+            expect(chain.cursors[2].update).not.toHaveBeenCalled();
+        });
+
+        it('treats legacy records without the protected field as prunable', async () => {
+            mocks.add.mockResolvedValue(11);
+            mocks.count.mockResolvedValue(11); // 1 over limit
+            const chain = makeCursorChain([
+                { key: 1, value: { trigger: 'pre-sync', timestamp: 100 } }, // Legacy record: no field
+                { key: 2, value: { trigger: 'manual', timestamp: 200 } }
+            ]);
+            mocks.openCursor.mockResolvedValue(chain.first);
+
+            await CheckpointService.createCheckpoint('auto');
+
+            expect(chain.deletedKeys).toEqual([1]);
+        });
+
+        it('loads legacy records without the protected field', async () => {
+            const legacy = { id: 1, timestamp: 100, trigger: 'manual', blob: new Uint8Array(), size: 1 };
+            mocks.getAll.mockResolvedValue([legacy]);
+            mocks.get.mockResolvedValue(legacy);
+
+            const list = await CheckpointService.listCheckpoints();
+            expect(list).toHaveLength(1);
+            expect(list[0].protected).toBeUndefined();
+
+            const single = await CheckpointService.getCheckpoint(1);
+            expect(single?.id).toBe(1);
+        });
+    });
+
+    describe('regression: migration state kept until restore succeeds', () => {
+        afterEach(() => {
+            MigrationStateService.clear();
+        });
+
+        it('clears RESTORING_BACKUP state only after a successful restore', async () => {
+            MigrationStateService.setState({
+                status: 'RESTORING_BACKUP',
+                targetWorkspaceId: 'ws_target',
+                backupCheckpointId: 1
+            });
+
+            const tempDoc = new Y.Doc();
+            tempDoc.clientID = yDoc.clientID + (++tempDocCounter);
+            tempDoc.getMap('library').set('restored', true);
+            mocks.get.mockResolvedValue({ blob: Y.encodeStateAsUpdate(tempDoc) });
+
+            await CheckpointService.restoreCheckpoint(1);
+
+            expect(MigrationStateService.getState()).toBeNull();
+        });
+
+        it('keeps the migration state when the rollback checkpoint is missing', async () => {
+            MigrationStateService.setState({
+                status: 'RESTORING_BACKUP',
+                targetWorkspaceId: 'ws_target',
+                backupCheckpointId: 99
+            });
+
+            mocks.get.mockResolvedValue(undefined); // Pruned/corrupted checkpoint
+
+            await expect(CheckpointService.restoreCheckpoint(99)).rejects.toThrow('Checkpoint corrupted');
+
+            // State survives, so the boot interceptor handles the failure
+            // explicitly instead of silently booting into the target workspace.
+            expect(MigrationStateService.getState()?.status).toBe('RESTORING_BACKUP');
+        });
     });
 });

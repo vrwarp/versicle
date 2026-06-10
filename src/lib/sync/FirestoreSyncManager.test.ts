@@ -27,6 +27,12 @@ vi.mock('y-cinder', () => ({
                 listeners[event].push(cb);
             }),
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            off: vi.fn((event: string, cb: (...args: any[]) => void) => {
+                if (listeners[event]) {
+                    listeners[event] = listeners[event].filter(c => c !== cb);
+                }
+            }),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             emit: (event: string, ...args: any[]) => {
                 const callbacks = listeners[event];
                 if (callbacks) {
@@ -385,6 +391,95 @@ describe('FirestoreSyncManager', () => {
                     5000
                 );
             });
+        });
+    });
+
+    describe('regression: workspace switch pins the pre-migration checkpoint', () => {
+        let manager: ReturnType<typeof getFirestoreSyncManager>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let createCheckpointSpy: any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let applyRemoteStateSpy: any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let mainProvider: any;
+
+        beforeEach(async () => {
+            const { onAuthStateChanged } = await import('firebase/auth');
+            const { CheckpointService } = await import('./CheckpointService');
+            const { useSyncStore } = await import('./hooks/useSyncStore');
+
+            // Mock auth state change to trigger connection
+            vi.mocked(onAuthStateChanged).mockImplementation((_auth, callback) => {
+                // @ts-expect-error Mocking user
+                callback({ uid: 'test-uid', email: 'test@example.com' });
+                return () => { };
+            });
+
+            createCheckpointSpy = vi.spyOn(CheckpointService, 'createCheckpoint').mockResolvedValue(7);
+            vi.spyOn(CheckpointService, 'createAutomaticCheckpoint').mockResolvedValue(null);
+            applyRemoteStateSpy = vi.spyOn(CheckpointService, 'applyRemoteState').mockResolvedValue(undefined);
+
+            useSyncStore.getState().setActiveWorkspaceId('ws_current');
+            manager = getFirestoreSyncManager();
+            await manager.initialize();
+
+            await vi.waitFor(() => {
+                expect(manager.getStatus()).toBe('connected');
+            });
+            mainProvider = latestFireProviderInstance;
+        });
+
+        afterEach(async () => {
+            const { MigrationStateService } = await import('./MigrationStateService');
+            const { useSyncStore } = await import('./hooks/useSyncStore');
+            MigrationStateService.clear();
+            useSyncStore.getState().setActiveWorkspaceId(null);
+        });
+
+        // Drives the temp workspace-download provider to completion.
+        const completeRemoteDownload = async () => {
+            await vi.waitFor(() => {
+                expect(latestFireProviderInstance).not.toBe(mainProvider);
+            });
+            latestFireProviderInstance.emit('sync', true);
+        };
+
+        it('creates the pre-migration checkpoint with protected: true', async () => {
+            const { MigrationStateService } = await import('./MigrationStateService');
+
+            const switchPromise = manager.switchWorkspace('ws_target');
+            await completeRemoteDownload();
+            await switchPromise;
+
+            expect(createCheckpointSpy).toHaveBeenCalledWith('pre-migration', { protected: true });
+            expect(applyRemoteStateSpy).toHaveBeenCalled();
+            // The state machine references the pinned backup across the reload
+            expect(MigrationStateService.getState()).toEqual({
+                status: 'AWAITING_CONFIRMATION',
+                targetWorkspaceId: 'ws_target',
+                backupCheckpointId: 7
+            });
+        });
+
+        it('rolls back to the pinned backup instead of clearing state when applying remote state fails', async () => {
+            const { MigrationStateService } = await import('./MigrationStateService');
+            const { useSyncStore } = await import('./hooks/useSyncStore');
+
+            // The destructive apply step fails after it may have wiped IDB
+            applyRemoteStateSpy.mockRejectedValue(new Error('IDB write failed'));
+
+            const switchPromise = manager.switchWorkspace('ws_target');
+            await completeRemoteDownload();
+            await switchPromise; // Resolves: failure is routed to the rollback path
+
+            // Migration state must survive as RESTORING_BACKUP so the boot
+            // interceptor restores the pinned pre-migration checkpoint.
+            expect(MigrationStateService.getState()).toEqual({
+                status: 'RESTORING_BACKUP',
+                targetWorkspaceId: 'ws_target',
+                backupCheckpointId: 7
+            });
+            expect(useSyncStore.getState().activeWorkspaceId).toBe('ws_current');
         });
     });
 });

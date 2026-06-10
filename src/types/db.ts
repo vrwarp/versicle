@@ -818,6 +818,15 @@ export interface SyncCheckpoint {
   size: number;
   /** What triggered this checkpoint (e.g., 'pre-sync', 'manual'). */
   trigger: string;
+  /**
+   * When true, the rolling prune never deletes this checkpoint.
+   * Used to pin the pre-migration backup of an in-flight workspace switch
+   * so it cannot be rotated out before the migration state machine resolves.
+   * Optional/additive: records persisted before this field exist without it
+   * and are treated as unprotected. Only the latest protected checkpoint is
+   * kept pinned (creating a new protected checkpoint unprotects older ones).
+   */
+  protected?: boolean;
 }
 
 /**

@@ -5,6 +5,7 @@ import type { SyncCheckpoint } from '../../types/db';
 import { IndexeddbPersistence } from 'y-idb';
 import { createLogger } from '../logger';
 import { getFirestoreSyncManager } from './FirestoreSyncManager';
+import { MigrationStateService } from './MigrationStateService';
 
 const logger = createLogger('CheckpointService');
 const CHECKPOINT_LIMIT = 10;
@@ -16,34 +17,62 @@ const CHECKPOINT_LIMIT = 10;
 export class CheckpointService {
   /**
    * Captures the current Yjs state as a binary update.
+   *
+   * Pass `options.protected: true` to pin the checkpoint against the rolling
+   * prune (used for pre-migration backups that an in-flight workspace switch
+   * may need to roll back to). Only the latest protected checkpoint stays
+   * pinned: creating a new protected checkpoint returns any older protected
+   * ones to the normal pruning rotation, so they cannot accumulate forever.
+   * (Abandoned pre-migration backups are also aged out by the 7-day zombie
+   * cleanup at boot, which deletes by ID and is unaffected by the flag.)
    */
-  static async createCheckpoint(trigger: string): Promise<number> {
+  static async createCheckpoint(trigger: string, options?: { protected?: boolean }): Promise<number> {
     const stateBlob = Y.encodeStateAsUpdate(yDoc);
     const db = await getDB();
 
-    // SyncCheckpoint has 'id', 'timestamp', 'blob', 'size', 'trigger'.
+    // SyncCheckpoint has 'id', 'timestamp', 'blob', 'size', 'trigger', 'protected'.
     // id is auto-incremented, so we cast to any to satisfy TS or Omit it.
     const checkpoint = {
       timestamp: Date.now(),
       trigger,
       blob: stateBlob,
-      size: Math.round(stateBlob.byteLength / 1024) || 1 // Min 1KB display
+      size: Math.round(stateBlob.byteLength / 1024) || 1, // Min 1KB display
+      ...(options?.protected ? { protected: true } : {})
     };
 
     const tx = db.transaction('checkpoints', 'readwrite');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const id = await tx.store.add(checkpoint as any);
 
+    // Supersede older protected checkpoints: only one migration can be in
+    // flight at a time, so only the newest protected checkpoint stays pinned.
+    if (options?.protected) {
+      let cursor = await tx.store.openCursor();
+      while (cursor) {
+        if (cursor.value?.protected === true && cursor.primaryKey !== id) {
+          const unprotected = { ...cursor.value };
+          delete unprotected.protected;
+          await cursor.update(unprotected);
+          logger.info(`Unprotected superseded checkpoint #${cursor.primaryKey}`);
+        }
+        cursor = await cursor.continue();
+      }
+    }
+
     // Prune old checkpoints
     const count = await tx.store.count();
     if (count > CHECKPOINT_LIMIT) {
       // Get the oldest keys
       // Since keys are auto-incrementing integers, the smallest keys are the oldest.
+      // Protected checkpoints (in-flight migration backups) are never pruned;
+      // records persisted before the flag existed are treated as unprotected.
       let deleted = 0;
       let cursor = await tx.store.openCursor();
       while (cursor && deleted < count - CHECKPOINT_LIMIT) {
-        await cursor.delete();
-        deleted++;
+        if (cursor.value?.protected !== true) {
+          await cursor.delete();
+          deleted++;
+        }
         cursor = await cursor.continue();
       }
     }
@@ -76,6 +105,11 @@ export class CheckpointService {
 
   /**
    * Destructive Restore: Clears current Yjs types and applies snapshot.
+   *
+   * Clears the migration state machine only AFTER the snapshot has been
+   * fully written back. Clearing it earlier would let a failed or
+   * interrupted rollback silently boot into the target workspace; keeping
+   * it set means a crash mid-restore retries the rollback on next boot.
    */
   static async restoreCheckpoint(id: number): Promise<void> {
     const db = await getDB();
@@ -112,6 +146,10 @@ export class CheckpointService {
       await tempProvider.destroy();
       tempDoc.destroy();
 
+      // 5. Restore is fully persisted — only now is it safe to clear the
+      // migration state machine (no-op outside a workspace-switch rollback).
+      MigrationStateService.clear();
+
       logger.info('Hard Reset complete. Reloading...');
       window.location.reload();
     } else {
@@ -136,6 +174,9 @@ export class CheckpointService {
 
         Y.applyUpdate(yDoc, checkpoint.blob);
       }, 'restore-checkpoint');
+
+      // Restore applied — safe to clear the migration state machine.
+      MigrationStateService.clear();
     }
   }
 
