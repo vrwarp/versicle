@@ -325,5 +325,66 @@ describe('FirestoreSyncManager', () => {
                 5000
             );
         });
+
+        describe('regression: permission-denied surfaces a "rules out of date" hint (BYO-Firebase lockout)', () => {
+            const permissionDeniedError = () =>
+                Object.assign(new Error('Missing or insufficient permissions.'), {
+                    code: 'permission-denied'
+                });
+
+            it('should show the rules hint when save-rejected wraps a permission-denied error', async () => {
+                const { RULES_OUT_OF_DATE_MESSAGE } = await import('./FirestoreSyncManager');
+                const { useToastStore } = await import('../../store/useToastStore');
+                const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
+
+                mockFireProviderInstance.emit('save-rejected', {
+                    code: 'max-retries-exceeded',
+                    retries: 5,
+                    error: permissionDeniedError()
+                });
+
+                expect(manager.getStatus()).toBe('error');
+                expect(showToastMock).toHaveBeenCalledWith(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+            });
+
+            it('should show the rules hint when sync-failure wraps a permission-denied error', async () => {
+                const { RULES_OUT_OF_DATE_MESSAGE } = await import('./FirestoreSyncManager');
+                const { useToastStore } = await import('../../store/useToastStore');
+                const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
+
+                mockFireProviderInstance.emit('sync-failure', permissionDeniedError());
+
+                expect(manager.getStatus()).toBe('error');
+                expect(showToastMock).toHaveBeenCalledWith(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+            });
+
+            it('should show the rules hint when connection-error wraps a permission-denied error', async () => {
+                const { RULES_OUT_OF_DATE_MESSAGE } = await import('./FirestoreSyncManager');
+                const { useToastStore } = await import('../../store/useToastStore');
+                const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
+
+                mockFireProviderInstance.emit('connection-error', {
+                    code: 'listener-error',
+                    message: 'Listener failed',
+                    error: permissionDeniedError()
+                });
+
+                expect(manager.getStatus()).toBe('error');
+                expect(showToastMock).toHaveBeenCalledWith(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+            });
+
+            it('should keep the generic message for non-permission failures', async () => {
+                const { useToastStore } = await import('../../store/useToastStore');
+                const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
+
+                mockFireProviderInstance.emit('sync-failure', new Error('Network flake'));
+
+                expect(showToastMock).toHaveBeenCalledWith(
+                    'Sync failed after multiple attempts. Please check your connection.',
+                    'error',
+                    5000
+                );
+            });
+        });
     });
 });

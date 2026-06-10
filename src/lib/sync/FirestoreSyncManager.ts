@@ -37,6 +37,38 @@ import { useSyncStore } from './hooks/useSyncStore';
 
 const logger = createLogger('FirestoreSync');
 
+/**
+ * User-facing hint for the BYO-Firebase rules-lockout case: when the user's
+ * deployed security rules are older than what the app expects, Firestore /
+ * Cloud Storage start rejecting writes with permission-denied.
+ */
+export const RULES_OUT_OF_DATE_MESSAGE =
+    'Cloud sync was rejected by your Firebase project\'s security rules. Your deployed rules are likely out of date — redeploy firestore.rules and storage.rules from the Versicle repository (firebase deploy --only firestore:rules,storage).';
+
+/**
+ * Detects a Firebase permission-denied error anywhere in a provider event
+ * payload (events nest the original error under `error`, and errors may chain
+ * via `cause`).
+ */
+export function isPermissionDeniedEvent(event: unknown): boolean {
+    let current: unknown = event;
+    for (let depth = 0; depth < 5 && current && typeof current === 'object'; depth++) {
+        const candidate = current as { code?: unknown; message?: unknown; error?: unknown; cause?: unknown };
+        const code = typeof candidate.code === 'string' ? candidate.code : '';
+        const message = typeof candidate.message === 'string' ? candidate.message : '';
+        if (
+            code === 'permission-denied' ||
+            code === 'storage/unauthorized' ||
+            message.includes('permission-denied') ||
+            message.includes('Missing or insufficient permissions')
+        ) {
+            return true;
+        }
+        current = candidate.error ?? candidate.cause;
+    }
+    return false;
+}
+
 
 // Status types for the sync manager
 export type FirestoreSyncStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -503,13 +535,21 @@ class FirestoreSyncManager {
             this.fireProvider.on('connection-error', (event: any) => {
                 logger.error('Firestore connection error:', event);
                 this.setStatus('error');
+
+                if (isPermissionDeniedEvent(event)) {
+                    useToastStore.getState().showToast(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+                }
             });
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             this.fireProvider.on('sync-failure', (error: any) => {
                 logger.error('Firestore sync failure after max retries:', error);
                 this.setStatus('error');
-                useToastStore.getState().showToast('Sync failed after multiple attempts. Please check your connection.', 'error', 5000);
+                if (isPermissionDeniedEvent(error)) {
+                    useToastStore.getState().showToast(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+                } else {
+                    useToastStore.getState().showToast('Sync failed after multiple attempts. Please check your connection.', 'error', 5000);
+                }
             });
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -517,7 +557,9 @@ class FirestoreSyncManager {
                 logger.error('Firestore save rejected:', event);
                 this.setStatus('error');
 
-                if (event.code === 'document-too-large') {
+                if (isPermissionDeniedEvent(event)) {
+                    useToastStore.getState().showToast(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+                } else if (event.code === 'document-too-large') {
                     useToastStore.getState().showToast(`Sync disabled: Document too large (${event.sizeBytes} bytes). Please export and clear data.`, 'error', 8000);
                 } else if (event.code === 'max-retries-exceeded') {
                     useToastStore.getState().showToast('Sync save failed: Max retries exceeded. Check connection.', 'error', 5000);
