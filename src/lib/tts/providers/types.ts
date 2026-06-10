@@ -1,3 +1,13 @@
+import type { Timepoint } from '../../../types/tts';
+
+/**
+ * Canonical home of {@link Timepoint} is src/types/tts.ts (Phase 1a type
+ * split, layering-deps.md LD-1): types/db.ts (CacheAudioBlob.alignment)
+ * needs it and the types layer may not import lib/tts. Re-exported here
+ * (type-only, zero runtime change) so existing consumers keep compiling.
+ */
+export type { Timepoint } from '../../../types/tts';
+
 /**
  * Represents a Text-to-Speech voice option.
  */
@@ -23,18 +33,6 @@ export interface SpeechSegment {
   alignment?: Timepoint[];
   /** Indicates if the provider handles playback natively (e.g., Web Speech API). */
   isNative: boolean;
-}
-
-/**
- * Represents a specific point in time within the synthesized audio.
- */
-export interface Timepoint {
-  /** Time in seconds from the start of the audio. */
-  timeSeconds: number;
-  /** Index of the character in the text corresponding to this time. */
-  charIndex: number;
-  /** The type of timepoint ('word', 'sentence', or 'mark'). */
-  type?: string;
 }
 
 export interface TTSOptions {

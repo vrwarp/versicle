@@ -33,7 +33,11 @@ module.exports = {
         'Circular dependencies in the RUNTIME graph (cycles consisting ' +
         'only of non-type-only edges). These are the order-sensitive ones ' +
         'that force the dynamic-import hacks in store/yjs-provider.ts ' +
-        '(LD-2/LD-9). Sharper ratchet than no-circular.',
+        '(LD-2/LD-9). Sharper ratchet than no-circular. NOTE: the ratchet ' +
+        'script measures this rule via .dependency-cruiser.runtime.cjs ' +
+        '(tsPreCompilationDeps: false) — on the full graph the one-cycle-' +
+        'per-edge reporter undercounts runtime cycles whenever a type-only ' +
+        'cycle path masks an all-runtime one (see that file for details).',
       from: {},
       to: {
         circular: true,

@@ -1,4 +1,5 @@
 import type { ITTSProvider, TTSVoice } from './providers/types';
+import type { TTSQueueItem } from '../../types/tts';
 import { lexiconApplier } from './LexiconApplier';
 import { dbService } from '../../db/DBService';
 import type { SectionMetadata, LexiconRule, PerceptualPalette } from '../../types/db';
@@ -21,22 +22,13 @@ const logger = createLogger('AudioPlayerService');
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'completed';
 
 /**
- * Represents a single item in the TTS playback queue.
+ * Canonical home of {@link TTSQueueItem} is src/types/tts.ts (Phase 1a type
+ * split, layering-deps.md LD-1): types/db.ts (CacheSessionState.playbackQueue,
+ * TTSState.queue) needs it and the types layer may not import lib/tts.
+ * Re-exported here (type-only, zero runtime change) so existing consumers
+ * keep compiling.
  */
-export interface TTSQueueItem {
-    /** The text content to be spoken. */
-    text: string;
-    /** The Canonical Fragment Identifier (CFI) for the location in the book. */
-    cfi: string | null;
-    /** Optional chapter title (displayed as the track title). */
-    title?: string;
-    /** Indicates if this item is a pre-roll announcement. */
-    isPreroll?: boolean;
-    /** Indicates if this item should be skipped during playback. */
-    isSkipped?: boolean;
-    /** The indices of the raw source sentences that make up this item. */
-    sourceIndices?: number[];
-}
+export type { TTSQueueItem } from '../../types/tts';
 
 export interface DownloadInfo {
     voiceId: string;

@@ -26,17 +26,22 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const configFile = '.dependency-cruiser.cjs';
+const runtimeConfigFile = '.dependency-cruiser.runtime.cjs';
 const baselineFile = join(repoRoot, '.dependency-cruiser-baseline.json');
 const checkMode = process.argv.includes('--check');
 
-function currentCounts() {
+function cruise(config) {
   // depcruise exits 0 here (all rules are "warn"); JSON goes to stdout.
   const stdout = execFileSync(
     join(repoRoot, 'node_modules', '.bin', 'depcruise'),
-    ['src', '--config', configFile, '--output-type', 'json'],
+    ['src', '--config', config, '--output-type', 'json'],
     { cwd: repoRoot, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 },
   );
-  const result = JSON.parse(stdout);
+  return JSON.parse(stdout);
+}
+
+function currentCounts() {
+  const result = cruise(configFile);
 
   // Start every configured rule at 0 so clean rules are pinned at zero.
   const require = createRequire(import.meta.url);
@@ -46,6 +51,18 @@ function currentCounts() {
   for (const violation of result.summary.violations) {
     counts[violation.rule.name] = (counts[violation.rule.name] ?? 0) + 1;
   }
+
+  // no-circular-runtime is measured on the runtime-only graph instead: the
+  // full-graph cruise reports at most one cycle per edge, so type-edge
+  // cleanups can UNMASK pre-existing runtime cycles and spuriously raise
+  // the full-graph count (see .dependency-cruiser.runtime.cjs for the full
+  // story). The runtime-only cruise counts the real runtime cycles and is
+  // invariant under type-only refactors.
+  const runtimeResult = cruise(runtimeConfigFile);
+  counts['no-circular-runtime'] = runtimeResult.summary.violations.filter(
+    (violation) => violation.rule.name === 'no-circular-runtime',
+  ).length;
+
   return counts;
 }
 
@@ -58,7 +75,9 @@ if (!checkMode) {
       'Frozen dependency-cruiser violation counts (Phase 0 ratchet). ' +
       'Counts may only decrease. Regenerate with ' +
       '`node scripts/depcruise-baseline.mjs`; enforce with ' +
-      '`node scripts/depcruise-baseline.mjs --check`.',
+      '`node scripts/depcruise-baseline.mjs --check`. ' +
+      'no-circular-runtime is measured on the runtime-only graph ' +
+      '(.dependency-cruiser.runtime.cjs); all other rules on the full graph.',
     counts,
     total,
   };

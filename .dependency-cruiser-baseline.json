@@ -1,14 +1,14 @@
 {
-  "$comment": "Frozen dependency-cruiser violation counts (Phase 0 ratchet). Counts may only decrease. Regenerate with `node scripts/depcruise-baseline.mjs`; enforce with `node scripts/depcruise-baseline.mjs --check`.",
+  "$comment": "Frozen dependency-cruiser violation counts (Phase 0 ratchet). Counts may only decrease. Regenerate with `node scripts/depcruise-baseline.mjs`; enforce with `node scripts/depcruise-baseline.mjs --check`. no-circular-runtime is measured on the runtime-only graph (.dependency-cruiser.runtime.cjs); all other rules on the full graph.",
   "counts": {
-    "no-circular": 117,
-    "no-circular-runtime": 6,
-    "types-imports-nothing": 2,
+    "no-circular": 71,
+    "no-circular-runtime": 33,
+    "types-imports-nothing": 0,
     "lib-not-to-store": 54,
     "lib-not-to-components": 0,
     "db-not-to-store": 4,
     "components-not-to-db": 4,
     "worker-no-state-typegraph": 20
   },
-  "total": 207
+  "total": 186
 }

@@ -17,13 +17,21 @@ const OPT_OUT_REGISTRY = [
 describe('Sync Schema Exhaustion', () => {
   it('should ensure all sync-eligible fields in BookMetadata are present in SyncManifest', () => {
     const project = new Project();
-    const sourceFile = project.addSourceFileAtPath(
-      path.resolve(__dirname, '../../types/db.ts')
+    // Phase 1a type split: types/db.ts is a re-export shim; the declarations
+    // live in the domain modules (types/book.ts, types/sync.ts, ...).
+    const bookFile = project.addSourceFileAtPath(
+      path.resolve(__dirname, '../../types/book.ts')
     );
+    const syncFile = project.addSourceFileAtPath(
+      path.resolve(__dirname, '../../types/sync.ts')
+    );
+    // Pull in the cross-module type imports (book/user-data/tts) so that
+    // SyncManifest's Partial<BookMetadata> resolves to real properties.
+    project.resolveSourceFileDependencies();
 
     // BookMetadata is now a Type Alias (composite), so we use getTypeAliasOrThrow
-    const bookMetadataType = sourceFile.getTypeAliasOrThrow('BookMetadata').getType();
-    const syncManifest = sourceFile.getInterfaceOrThrow('SyncManifest');
+    const bookMetadataType = bookFile.getTypeAliasOrThrow('BookMetadata').getType();
+    const syncManifest = syncFile.getInterfaceOrThrow('SyncManifest');
 
     // Get the keys defined in the SyncManifest.books[id].metadata structure
     const booksProp = syncManifest.getPropertyOrThrow('books');
