@@ -12,6 +12,8 @@ shippable and user data is never half-migrated), land each rebuilt subsystem in 
 boundaries), and govern the whole program with the *contract-first* registry (every boundary
 versioned, runtime-validated, and pinned by a contract test suite).
 
+> **Phase 0 status (2026-06-10): DONE** — all eleven hotfix PRs and the trustworthy-harness work (single vitest config, typechecked tests, CI gate, depcruise + coverage ratchets, worker-chunk check, emulator suites, typed harness + test API, a11y baselines, license gate, `TESTING.md`/`AGENTS.md` rewrite, i18n ADR `docs/adr/0001-i18n-strategy.md`) are landed on this branch.
+
 ## Artifact index
 
 | Artifact | What it is |
