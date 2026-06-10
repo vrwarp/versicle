@@ -8,33 +8,24 @@ import { generateSecureId } from '../lib/crypto';
 const logger = createLogger('AnnotationStore');
 
 /**
- * UI state for the annotation popover (not synced to Yjs).
- */
-interface PopoverState {
-  visible: boolean;
-  x: number;
-  y: number;
-  cfiRange: string;
-  text: string;
-  id?: string;
-}
-
-/**
  * Annotation store state.
- * 
+ *
  * Phase 2 (Yjs Migration): This store is wrapped with yjs() middleware.
  * - `annotations` (Record): Synced to yDoc.getMap('annotations')
- * - `popover`: Transient UI state (not synced)
  * - Actions (functions): Not synced, local-only
+ *
+ * NOTE (popover-desync hotfix): the ephemeral annotation popover state used to
+ * live here, which synced screen coordinates through the CRDT to other devices.
+ * It now lives in useReaderUIStore (ephemeral, non-synced). Older documents may
+ * still contain a stale `popover` key in the `annotations` Y.Map; it is no
+ * longer read or written, and is scheduled for deletion in the v6 CRDT
+ * migration (Phase 2 of the overhaul plan). Do not reuse the `popover` key name
+ * in this store before that migration lands.
  */
 export interface AnnotationState {
   // === SYNCED STATE (persisted to Yjs) ===
   /** Map of annotations keyed by UUID. */
   annotations: Record<string, UserAnnotation>;
-
-  // === TRANSIENT STATE (local-only, not synced) ===
-  /** Popover state for creating new annotations. */
-  popover: PopoverState;
 
   // === ACTIONS (not synced to Yjs) ===
   /**
@@ -66,14 +57,6 @@ export interface AnnotationState {
    * @returns Array of annotations for the book.
    */
   getByBook: (bookId: string) => UserAnnotation[];
-  /**
-   * Shows the annotation popover.
-   */
-  showPopover: (x: number, y: number, cfiRange: string, text: string, id?: string) => void;
-  /**
-   * Hides the annotation popover.
-   */
-  hidePopover: () => void;
 }
 
 /**
@@ -87,15 +70,6 @@ export const createAnnotationStore = () => create<AnnotationState>()(
     (set, get) => ({
       // Synced state
       annotations: {},
-
-      // Transient state
-      popover: {
-        visible: false,
-        x: 0,
-        y: 0,
-        cfiRange: '',
-        text: '',
-      },
 
       // Actions
       add: (partialAnnotation) => {
@@ -160,29 +134,6 @@ export const createAnnotationStore = () => create<AnnotationState>()(
           }
         }
         return bookAnnotations.sort((a, b) => a.created - b.created);
-      },
-
-      showPopover: (x, y, cfiRange, text, id) => {
-        set({
-          popover: {
-            visible: true,
-            x,
-            y,
-            cfiRange,
-            text,
-            id,
-          },
-        });
-      },
-
-      hidePopover: () => {
-        set((state) => ({
-          popover: {
-            ...state.popover,
-            visible: false,
-            id: undefined,
-          },
-        }));
       },
     }),
     getYjsOptions()

@@ -40,7 +40,11 @@ const MOCK_READER_UI_STATE = {
     setCurrentSection: vi.fn(),
     setCurrentBookId: vi.fn(),
     resetCompassState: vi.fn(), // Added to prevent undefined() calls
-    playFromSelection: null
+    playFromSelection: null,
+    // Popover state moved here from useAnnotationStore (popover-desync hotfix)
+    showPopover: vi.fn(),
+    hidePopover: vi.fn(),
+    popover: { visible: false }
 };
 
 vi.mock('../../../store/useReaderUIStore', () => ({
@@ -106,18 +110,12 @@ vi.mock('../../../store/useAnnotationStore', () => ({
         if (selector) {
             return selector({
                 annotations: {},
-                loadAnnotations: vi.fn(),
-                showPopover: vi.fn(),
-                hidePopover: vi.fn(),
-                popover: { visible: false }
+                loadAnnotations: vi.fn()
             });
         }
         return {
             annotations: {},
-            loadAnnotations: vi.fn(),
-            showPopover: vi.fn(),
-            hidePopover: vi.fn(),
-            popover: { visible: false }
+            loadAnnotations: vi.fn()
         };
     }
 }));

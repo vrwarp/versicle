@@ -189,11 +189,13 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     pause: state.pause
   })));
 
-  const { addAnnotation, removeAnnotation, popover } = useAnnotationStore(useShallow(state => ({
+  const { addAnnotation, removeAnnotation } = useAnnotationStore(useShallow(state => ({
       addAnnotation: state.add,
-      removeAnnotation: state.remove,
-      popover: state.popover
+      removeAnnotation: state.remove
   })));
+
+  // Popover state is ephemeral UI state (never synced via Yjs) — it lives in useReaderUIStore.
+  const popover = useReaderUIStore(state => state.popover);
 
   const { knownCharacters, toggleKnownCharacter } = useVocabularyStore();
   const isChineseSelection = /[\u4e00-\u9fff]/.test(popover.text || '');
@@ -687,7 +689,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
             className="w-6 h-6 rounded-full hover:bg-muted"
             onClick={() => {
               useReaderUIStore.getState().resetCompassState();
-              useAnnotationStore.getState().hidePopover();
+              useReaderUIStore.getState().hidePopover();
             }}
             aria-label="Close"
           >
@@ -744,7 +746,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
             className="px-4 py-1.5 h-8 text-xs rounded-full font-medium"
             onClick={() => {
               useReaderUIStore.getState().resetCompassState();
-              useAnnotationStore.getState().hidePopover();
+              useReaderUIStore.getState().hidePopover();
             }}
           >
             Done

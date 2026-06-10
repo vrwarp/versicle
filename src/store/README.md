@@ -10,7 +10,7 @@ This directory contains the global state management logic for the application, i
     *   `useLibraryStore.test.ts`: Unit tests.
 *   **`usePreferencesStore.ts`**: Manages persistent user preferences like theme, font size, and line height.
     *   `usePreferencesStore.test.ts`: Unit tests.
-*   **`useReaderUIStore.ts`**: Manages ephemeral UI state for the reader, such as menu visibility and current section title.
+*   **`useReaderUIStore.ts`**: Manages ephemeral UI state for the reader, such as menu visibility, current section title, and the annotation selection popover (deliberately kept out of the Yjs-synced stores).
     *   `useReaderUIStore.test.ts`: Unit tests.
 *   **`useReadingStateStore.ts`**: Manages the persistent reading progress (CFI, completion percentage) for each book.
     *   `useReadingStateStore.test.ts`: Unit tests.

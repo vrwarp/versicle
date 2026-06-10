@@ -76,7 +76,9 @@ describe('CompassPill Note Recall', () => {
                     targetAnnotation: mockAnnotation
                 },
                 currentBookId: 'book-1',
-                currentSectionTitle: 'Chapter 1'
+                currentSectionTitle: 'Chapter 1',
+                // Popover state moved here from useAnnotationStore (popover-desync hotfix)
+                popover: { visible: true, x: 0, y: 0, cfiRange: '', text: '' }
             });
         });
 
@@ -108,7 +110,9 @@ describe('CompassPill Note Recall', () => {
                     targetAnnotation: mockAnnotation
                 },
                 currentBookId: 'book-1',
-                currentSectionTitle: 'Chapter 1'
+                currentSectionTitle: 'Chapter 1',
+                // Popover state moved here from useAnnotationStore (popover-desync hotfix)
+                popover: { visible: true, x: 0, y: 0, cfiRange: '', text: '' }
             });
         });
 
@@ -140,7 +144,9 @@ describe('CompassPill Note Recall', () => {
                     targetAnnotation: mockAnnotation
                 },
                 currentBookId: 'book-1',
-                currentSectionTitle: 'Chapter 1'
+                currentSectionTitle: 'Chapter 1',
+                // Popover state moved here from useAnnotationStore (popover-desync hotfix)
+                popover: { visible: true, x: 0, y: 0, cfiRange: '', text: '' }
             });
         });
 
@@ -196,7 +202,9 @@ describe('CompassPill Note Recall', () => {
                     targetAnnotation: annotationA
                 },
                 currentBookId: 'book-1',
-                currentSectionTitle: 'Chapter 1'
+                currentSectionTitle: 'Chapter 1',
+                // Popover state moved here from useAnnotationStore (popover-desync hotfix)
+                popover: { visible: true, x: 0, y: 0, cfiRange: '', text: '' }
             });
         });
 
@@ -211,7 +219,9 @@ describe('CompassPill Note Recall', () => {
                     targetAnnotation: annotationB
                 },
                 currentBookId: 'book-1',
-                currentSectionTitle: 'Chapter 1'
+                currentSectionTitle: 'Chapter 1',
+                // Popover state moved here from useAnnotationStore (popover-desync hotfix)
+                popover: { visible: true, x: 0, y: 0, cfiRange: '', text: '' }
             });
         });
 

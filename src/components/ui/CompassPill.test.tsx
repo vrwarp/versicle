@@ -34,7 +34,9 @@ vi.mock('../../store/useReaderUIStore', () => ({
     useReaderUIStore: (selector: any) => {
         const state = {
             currentSectionTitle: 'Test Chapter',
-            toc: []
+            toc: [],
+            // Popover state moved here from useAnnotationStore (popover-desync hotfix)
+            popover: { visible: false, x: 0, y: 0, cfiRange: '', text: '' }
         };
         return selector ? selector(state) : state;
     }

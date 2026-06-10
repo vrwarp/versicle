@@ -106,7 +106,9 @@ export const ReaderView: React.FC = () => {
         setCurrentSection,
         setCurrentBookId,
         resetCompassState,
-        resetUI
+        resetUI,
+        showPopover,
+        hidePopover
     } = useReaderUIStore(useShallow(state => ({
         toc: state.toc,
         setToc: state.setToc,
@@ -120,7 +122,9 @@ export const ReaderView: React.FC = () => {
         setCurrentSection: state.setCurrentSection,
         setCurrentBookId: state.setCurrentBookId,
         resetCompassState: state.resetCompassState,
-        resetUI: state.reset
+        resetUI: state.reset,
+        showPopover: state.showPopover,
+        hidePopover: state.hidePopover
     })));
 
     logger.debug(`viewMode: ${readerViewMode}, immersive: ${immersiveMode}`);
@@ -167,15 +171,7 @@ export const ReaderView: React.FC = () => {
     const clearError = useTTSStore(state => state.clearError);
     const isDebugModeEnabled = useGenAIStore(state => state.isDebugModeEnabled);
 
-    const {
-        loadAnnotations,
-        showPopover,
-        hidePopover
-    } = useAnnotationStore(useShallow(state => ({
-        loadAnnotations: state.loadAnnotations,
-        showPopover: state.showPopover,
-        hidePopover: state.hidePopover
-    })));
+    const loadAnnotations = useAnnotationStore(state => state.loadAnnotations);
 
     // BOLT OPTIMIZATION: Fine-grained selector for annotations
     // Only re-render when annotations for THIS specific book change, not when any annotation in the library changes.
@@ -544,7 +540,7 @@ export const ReaderView: React.FC = () => {
     }, []);
 
     // Clear selection when popover is hidden
-    const popoverVisible = useAnnotationStore(state => state.popover.visible);
+    const popoverVisible = useReaderUIStore(state => state.popover.visible);
     useEffect(() => {
         if (!popoverVisible) {
             handleClearSelection();

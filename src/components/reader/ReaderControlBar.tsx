@@ -26,12 +26,10 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
     const [dismissedSyncAlerts, setDismissedSyncAlerts] = React.useState<Set<string>>(new Set());
 
     // Store Subscriptions
-    const { popover, add, update, remove, hidePopover } = useAnnotationStore(useShallow(state => ({
-        popover: state.popover,
+    const { add, update, remove } = useAnnotationStore(useShallow(state => ({
         add: state.add,
         update: state.update,
         remove: state.remove,
-        hidePopover: state.hidePopover,
     })));
 
     // Optimization: We only need to know if the queue has items to determine variant,
@@ -39,14 +37,17 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
     const hasQueueItems = useTTSStore(state => state.queue.length > 0);
     const isPlaying = useTTSStore(state => state.isPlaying);
 
-    const { immersiveMode, toc, currentSectionTitle, currentSectionId, currentBookId, jumpToLocation, resetCompassState } = useReaderUIStore(useShallow(state => ({
+    // Popover state is ephemeral UI state (never synced via Yjs) — it lives in useReaderUIStore.
+    const { immersiveMode, toc, currentSectionTitle, currentSectionId, currentBookId, jumpToLocation, resetCompassState, popover, hidePopover } = useReaderUIStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
         toc: state.toc,
         currentSectionTitle: state.currentSectionTitle,
         currentSectionId: state.currentSectionId,
         currentBookId: state.currentBookId,
         jumpToLocation: state.jumpToLocation,
-        resetCompassState: state.resetCompassState
+        resetCompassState: state.resetCompassState,
+        popover: state.popover,
+        hidePopover: state.hidePopover
     })));
 
     // Check for remote progress

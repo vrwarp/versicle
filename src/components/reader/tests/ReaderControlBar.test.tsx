@@ -107,21 +107,23 @@ describe('ReaderControlBar', () => {
 
     // Default store states
     mockUseAnnotationStore.mockImplementation((selector: any) => selector({
-      popover: { visible: false, text: 'selected text', cfiRange: 'cfi' },
       add: vi.fn(),
       update: vi.fn(),
-      hidePopover: vi.fn(),
+      remove: vi.fn(),
     }));
     mockUseTTSStore.mockImplementation((selector: any) => selector({
       queue: [],
       isPlaying: false,
       play: vi.fn(),
     }));
+    // Popover state moved to the ephemeral reader UI store (popover-desync hotfix).
     mockUseReaderUIStore.mockImplementation((selector: any) => selector({
       immersiveMode: false,
       currentSectionTitle: null,
       currentBookId: null,
       resetCompassState: vi.fn(),
+      popover: { visible: false, text: 'selected text', cfiRange: 'cfi' },
+      hidePopover: vi.fn(),
     }));
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({ progress: {} }));
     mockUseReadingStateStore.getState = vi.fn().mockReturnValue({
@@ -140,9 +142,12 @@ describe('ReaderControlBar', () => {
   });
 
   it('renders annotation variant when popover is visible', () => {
-    mockUseAnnotationStore.mockImplementation((selector: any) => selector({
+    mockUseReaderUIStore.mockImplementation((selector: any) => selector({
+      immersiveMode: false,
+      currentSectionTitle: null,
+      currentBookId: null,
+      resetCompassState: vi.fn(),
       popover: { visible: true },
-      add: vi.fn(),
       hidePopover: vi.fn(),
     }));
     render(<ReaderControlBar />);
@@ -156,6 +161,8 @@ describe('ReaderControlBar', () => {
       currentSectionTitle: 'Chapter 1',
       currentBookId: '123',
       resetCompassState: vi.fn(),
+      popover: { visible: false },
+      hidePopover: vi.fn(),
     }));
 
     // Mock useBook for the current book
@@ -176,6 +183,8 @@ describe('ReaderControlBar', () => {
       currentSectionTitle: 'Chapter 1',
       currentBookId: '123',
       resetCompassState: vi.fn(),
+      popover: { visible: false },
+      hidePopover: vi.fn(),
     }));
 
     mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
@@ -196,6 +205,8 @@ describe('ReaderControlBar', () => {
       immersiveMode: false,
       currentSectionTitle: null,
       currentBookId: null,
+      popover: { visible: false },
+      hidePopover: vi.fn(),
     }));
 
     // Mock progress
@@ -215,6 +226,8 @@ describe('ReaderControlBar', () => {
       immersiveMode: false,
       currentSectionTitle: null,
       currentBookId: null,
+      popover: { visible: false },
+      hidePopover: vi.fn(),
     }));
 
     mockUseCurrentDeviceProgress.mockImplementation((id) => id === '123' ? { percentage: 0.25 } : null);
@@ -230,14 +243,14 @@ describe('ReaderControlBar', () => {
     const showToast = vi.fn();
 
     mockUseAnnotationStore.mockImplementation((selector: any) => selector({
-      popover: { visible: true, text: 'selected text', cfiRange: 'cfi' },
       add,
-      hidePopover,
     }));
     mockUseReaderUIStore.mockImplementation((selector: any) => selector({
       immersiveMode: false,
       currentBookId: '123',
       resetCompassState: vi.fn(),
+      popover: { visible: true, text: 'selected text', cfiRange: 'cfi' },
+      hidePopover,
     }));
 
     mockUseToastStore.mockImplementation((selector: any) => selector({
@@ -259,9 +272,12 @@ describe('ReaderControlBar', () => {
 
   it('opens LexiconManager when pronounce action is triggered', () => {
     const hidePopover = vi.fn();
-    mockUseAnnotationStore.mockImplementation((selector: any) => selector({
+    mockUseReaderUIStore.mockImplementation((selector: any) => selector({
+      immersiveMode: false,
+      currentSectionTitle: null,
+      currentBookId: null,
+      resetCompassState: vi.fn(),
       popover: { visible: true, text: 'Desolate', cfiRange: 'cfi' },
-      add: vi.fn(),
       hidePopover,
     }));
 

@@ -8,6 +8,30 @@ export interface CompassState {
     targetAnnotation?: Annotation;
 }
 
+/**
+ * UI state for the annotation selection popover.
+ * Ephemeral, device-local state: it lives in this non-synced, non-persisted store
+ * so that opening/closing the popover never writes to the Yjs CRDT
+ * (it previously lived in the synced useAnnotationStore and leaked screen
+ * coordinates to other devices).
+ */
+export interface AnnotationPopoverState {
+    visible: boolean;
+    x: number;
+    y: number;
+    cfiRange: string;
+    text: string;
+    id?: string;
+}
+
+const INITIAL_POPOVER_STATE: AnnotationPopoverState = {
+    visible: false,
+    x: 0,
+    y: 0,
+    cfiRange: '',
+    text: '',
+};
+
 interface ReaderUIState {
     isLoading: boolean;
     toc: NavigationItem[];
@@ -32,6 +56,13 @@ interface ReaderUIState {
     compassState: CompassState;
     setCompassState: (state: CompassState) => void;
     resetCompassState: () => void;
+
+    /** Annotation popover state (ephemeral, never synced). */
+    popover: AnnotationPopoverState;
+    /** Shows the annotation popover at the given screen coordinates. */
+    showPopover: (x: number, y: number, cfiRange: string, text: string, id?: string) => void;
+    /** Hides the annotation popover. */
+    hidePopover: () => void;
 
     reset: () => void;
 }
@@ -59,6 +90,14 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
     setCompassState: (state) => set({ compassState: state }),
     resetCompassState: () => set({ compassState: {} }),
 
+    popover: INITIAL_POPOVER_STATE,
+    showPopover: (x, y, cfiRange, text, id) => set({
+        popover: { visible: true, x, y, cfiRange, text, id }
+    }),
+    hidePopover: () => set((state) => ({
+        popover: { ...state.popover, visible: false, id: undefined }
+    })),
+
     reset: () => set({
         isLoading: false,
         toc: [],
@@ -68,6 +107,7 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
         currentBookId: null,
         playFromSelection: undefined,
         jumpToLocation: undefined,
-        compassState: {}
+        compassState: {},
+        popover: INITIAL_POPOVER_STATE
     })
 }));
