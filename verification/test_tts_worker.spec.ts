@@ -5,10 +5,12 @@ import { test, expect } from '@playwright/test';
  *
  * `window.__ttsWorkerSmokeTest` (installed in src/main.tsx) boots the worker — which loads
  * the entire engine module graph off the main thread (exercising worker import-safety) — and
- * drives a setQueue → getQueue round-trip plus a status subscription across the Comlink
- * boundary. If the worker failed to import or the bridge were broken, this would throw/time out.
+ * drives a FULL play cycle across the Comlink boundary: setQueue + play in, provider
+ * start/end events in, status broadcasts ('playing' → advance → 'completed') and the queue
+ * advance back out. If the worker failed to import or the bridge were broken, this would
+ * throw/time out.
  */
-test('TTS engine runs in a real Web Worker (queue round-trip across the boundary)', async ({ page }) => {
+test('TTS engine runs in a real Web Worker (full play cycle across the boundary)', async ({ page }) => {
     const errors: string[] = [];
     page.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()); });
     page.on('pageerror', (err) => errors.push(String(err)));
@@ -37,15 +39,19 @@ test('TTS engine runs in a real Web Worker (queue round-trip across the boundary
         { timeout: 30000 },
     );
 
-    const result = await page.evaluate(() => (window as unknown as { __smoke: { ok?: boolean; queueLength?: number; status?: string | null; error?: string } }).__smoke);
+    const result = await page.evaluate(() => (window as unknown as { __smoke: { ok?: boolean; queueLength?: number; status?: string | null; statuses?: string[]; maxIndex?: number; error?: string } }).__smoke);
 
     if (result.error) {
         throw new Error(`Worker smoke test failed: ${result.error}\nConsole errors:\n${errors.join('\n')}`);
     }
 
     expect(result.ok).toBe(true);
-    expect(result.queueLength).toBe(1);
+    expect(result.queueLength).toBe(2);
     expect(result.status).not.toBeNull();
+    // The full cycle ran: playback started, the queue advanced, and the queue completed.
+    expect(result.statuses).toContain('playing');
+    expect(result.statuses).toContain('completed');
+    expect(result.maxIndex).toBe(1);
 });
 
 /**

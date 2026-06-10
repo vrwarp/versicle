@@ -46,8 +46,12 @@ type StatusListener = (
 
 const logger = createLogger('WorkerEngineClient');
 
-/** Apply a worker write command to the real Zustand stores (mirrors createZustandEngineContext). */
-function applyHostCommand(command: EngineHostCommand): void {
+/**
+ * Apply a worker write command to the real Zustand stores (mirrors createZustandEngineContext).
+ * Exported for unit tests — every EngineHostCommand kind must map to the right store/repository
+ * call (createWorkerEngineClient.hostCommands.test.ts).
+ */
+export function applyHostCommand(command: EngineHostCommand): void {
     switch (command.kind) {
         case 'setActiveLanguage': useTTSStore.getState().setActiveLanguage(command.lang); break;
         case 'updateTTSProgress':
