@@ -39,6 +39,13 @@ export interface Timepoint {
 
 export interface TTSOptions {
   voiceId: string;
+  /**
+   * Playback rate (1.0 = normal). This is strictly a *playback-time* parameter:
+   * cloud providers always synthesize at 1.0 (it never appears in a synthesis
+   * request body or the audio cache key) and the rate is applied at the audio sink.
+   * Local providers (Web Speech / Capacitor) have no synthesized artifact, so they
+   * pass it as the live speech rate at speak time — same semantics, no artifact.
+   */
   speed: number;
   volume?: number;
 }

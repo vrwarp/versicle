@@ -80,6 +80,49 @@ describe('DBService', () => {
     });
   });
 
+  describe('regression: TTS cache alignment round-trip (alignmentData vs alignment drift)', () => {
+    it('should return alignment written via cacheSegment', async () => {
+      const key = 'align-rt-1';
+      const timepoints = [{ timeSeconds: 0.5, charIndex: 3, type: 'word' }];
+
+      await dbService.cacheSegment(key, new ArrayBuffer(4), timepoints);
+      const row = await dbService.getCachedSegment(key);
+
+      expect(row).toBeDefined();
+      expect(row?.alignment).toEqual(timepoints);
+    });
+
+    it('should normalize legacy rows written under the old alignmentData field', async () => {
+      const db = await getDB();
+      const key = 'align-legacy-1';
+      const timepoints = [{ timeSeconds: 1.0, charIndex: 7, type: 'word' }];
+
+      // Simulate a row persisted by a pre-unification build.
+      await db.put('cache_audio_blobs', {
+        key,
+        audio: new ArrayBuffer(2),
+        alignmentData: timepoints,
+        createdAt: 1,
+        lastAccessed: 1,
+      });
+
+      const row = await dbService.getCachedSegment(key);
+      expect(row?.alignment).toEqual(timepoints);
+    });
+
+    it('should not write the legacy alignmentData field for new rows', async () => {
+      const db = await getDB();
+      const key = 'align-new-1';
+      const timepoints = [{ timeSeconds: 0.25, charIndex: 1, type: 'word' }];
+
+      await dbService.cacheSegment(key, new ArrayBuffer(4), timepoints);
+      const raw = await db.get('cache_audio_blobs', key);
+
+      expect(raw?.alignment).toEqual(timepoints);
+      expect(raw?.alignmentData).toBeUndefined();
+    });
+  });
+
   describe('updateBookStructure', () => {
     it('should throw error if book structure not found', async () => {
       vi.spyOn(console, 'error').mockImplementation(() => {});

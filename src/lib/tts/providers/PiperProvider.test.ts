@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PiperProvider } from './PiperProvider';
+import { piperGenerate } from './piper-utils';
+
+vi.mock('./piper-utils', () => ({
+    piperGenerate: vi.fn(),
+    isModelPersisted: vi.fn(),
+    deleteCachedModel: vi.fn(),
+    fetchWithBackoff: vi.fn(),
+    cacheModel: vi.fn(),
+    stitchWavs: vi.fn(),
+}));
 
 // Mock data representing a subset of voices.json
 const mockVoicesJson = {
@@ -84,5 +94,25 @@ describe('PiperProvider Voice Filtering', () => {
 
         // Should NOT include alan (en_GB - strictly following en_US request)
         expect(voices.find(v => v.id.includes('alan'))).toBeUndefined();
+    });
+
+    describe('regression: speed policy — synthesis always at 1.0', () => {
+        it('should run WASM inference with identical arguments regardless of playback speed', async () => {
+            await provider.init();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (piperGenerate as any).mockResolvedValue({ file: new Blob(['wav'], { type: 'audio/wav' }) });
+
+            // @ts-expect-error - accessing protected
+            await provider.fetchAudioData('Hello world.', { voiceId: 'piper:en_US-ryan-high', speed: 1.0 });
+            // @ts-expect-error - accessing protected
+            await provider.fetchAudioData('Hello world.', { voiceId: 'piper:en_US-ryan-high', speed: 2.5 });
+
+            expect(piperGenerate).toHaveBeenCalledTimes(2);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const calls = (piperGenerate as any).mock.calls;
+            // All args except the trailing progress callback must be identical:
+            // the playback speed is applied at the audio sink, never at synthesis.
+            expect(calls[0].slice(0, 8)).toEqual(calls[1].slice(0, 8));
+        });
     });
 });

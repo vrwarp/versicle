@@ -106,6 +106,8 @@ export class WebSpeechProvider implements ITTSProvider {
         const utterance = new SpeechSynthesisUtterance(text);
         const voice = this.voices.find(v => v.name === options.voiceId);
         if (voice) utterance.voice = voice;
+        // Playback-time rate: local speech has no synthesized artifact (and thus no
+        // cache), so the engine legitimately speaks live at the requested rate here.
         utterance.rate = options.speed;
 
         utterance.onstart = () => {

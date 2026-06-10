@@ -133,6 +133,8 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
     this.emit({ type: 'start' });
 
+    // Playback-time rate: native speech has no synthesized artifact (and thus no
+    // cache), so the engine legitimately speaks live at the requested rate here.
     const speakPromise = TextToSpeech.speak({
         text,
         lang,

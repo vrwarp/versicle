@@ -292,7 +292,13 @@ export interface CacheAudioBlob {
   key: string;
   /** Audio data. */
   audio: ArrayBuffer;
-  /** Alignment data. */
+  /** Alignment/timepoint data (canonical field, matches the provider-side name). */
+  alignment?: Timepoint[];
+  /**
+   * Legacy field name for alignment data written by older builds.
+   * Read-shim only: `DBService.getCachedSegment` normalizes it onto `alignment`;
+   * new rows never write it.
+   */
   alignmentData?: Timepoint[];
   /** Creation timestamp. */
   createdAt: number;
@@ -572,22 +578,6 @@ export interface BookLocations {
   bookId: string;
   /** JSON string representing the epub.js location mapping. */
   locations: string;
-}
-
-/**
- * A cached audio segment for TTS.
- */
-export interface CachedSegment {
-  /** SHA-256 hash key generated from text, voice, and settings. */
-  key: string;
-  /** The raw audio data. */
-  audio: ArrayBuffer;
-  /** Optional alignment data for synchronizing text highlighting. */
-  alignment?: Timepoint[];
-  /** Timestamp when the cache entry was created. */
-  createdAt: number;
-  /** Timestamp when the cache entry was last accessed (for LRU eviction). */
-  lastAccessed: number;
 }
 
 /**

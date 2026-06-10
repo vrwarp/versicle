@@ -19,22 +19,32 @@ describe('TTSCache', () => {
 
   describe('generateKey', () => {
     it('should generate a consistent hash', async () => {
-      const key1 = await cache.generateKey('Hello', 'voice1', 1.0);
-      const key2 = await cache.generateKey('Hello', 'voice1', 1.0);
+      const key1 = await cache.generateKey('Hello', 'voice1');
+      const key2 = await cache.generateKey('Hello', 'voice1');
       expect(key1).toBe(key2);
       expect(key1).toBeTruthy();
     });
 
     it('should generate different hashes for different inputs', async () => {
-      const key1 = await cache.generateKey('Hello', 'voice1', 1.0);
-      const key2 = await cache.generateKey('World', 'voice1', 1.0);
+      const key1 = await cache.generateKey('Hello', 'voice1');
+      const key2 = await cache.generateKey('World', 'voice1');
       expect(key1).not.toBe(key2);
     });
 
     it('should include pitch in hash', async () => {
-      const key1 = await cache.generateKey('Hello', 'voice1', 1.0, 1.0);
-      const key2 = await cache.generateKey('Hello', 'voice1', 1.0, 1.2);
+      const key1 = await cache.generateKey('Hello', 'voice1', 1.0);
+      const key2 = await cache.generateKey('Hello', 'voice1', 1.2);
       expect(key1).not.toBe(key2);
+    });
+  });
+
+  describe('regression: speed policy — speed-independent cache key', () => {
+    it('takes no speed input: same text+voice always maps to the same entry', async () => {
+      // The signature is (text, voiceId, pitch?, lexiconHash?) — playback speed is
+      // applied at the audio sink, so it must never fragment the audio cache.
+      const key1 = await cache.generateKey('Hello', 'voice1');
+      const key2 = await cache.generateKey('Hello', 'voice1', 1.0, '');
+      expect(key1).toBe(key2);
     });
   });
 

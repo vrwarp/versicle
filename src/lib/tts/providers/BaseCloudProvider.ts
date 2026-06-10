@@ -50,11 +50,15 @@ export abstract class BaseCloudProvider implements ITTSProvider {
       }
 
       // 5. Play
-      this.audioPlayer.setRate(options.speed);
       // We need to wait for playback to START. playBlob returns a promise that resolves when it starts.
       if (audio) {
         await this.audioPlayer.playBlob(audio);
       }
+      // Speed policy: audio is always synthesized at 1.0; `options.speed` is a
+      // playback-time rate applied at the sink AFTER the source is loaded, because the
+      // media load algorithm resets `playbackRate` whenever a new src is assigned
+      // (the sink also pins `defaultPlaybackRate` so later loads inherit the rate).
+      this.audioPlayer.setRate(options.speed);
       this.emit({ type: 'start' });
 
     } catch (e) {
@@ -72,7 +76,9 @@ export abstract class BaseCloudProvider implements ITTSProvider {
   }
 
   protected async getOrFetch(text: string, options: TTSOptions): Promise<SpeechSegment> {
-    const cacheKey = await this.cache.generateKey(text, options.voiceId, options.speed, 1.0, '');
+    // The cache key is speed-independent: synthesis always happens at 1.0 and the
+    // playback rate is applied at the sink, so one cached blob serves every speed.
+    const cacheKey = await this.cache.generateKey(text, options.voiceId);
 
     // 1. Permanent Cache Check
     const cached = await this.cache.get(cacheKey);

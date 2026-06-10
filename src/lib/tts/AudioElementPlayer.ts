@@ -125,9 +125,16 @@ export class AudioElementPlayer implements AudioSink {
   /**
    * Sets the playback rate.
    *
+   * Pins both `defaultPlaybackRate` and `playbackRate`: the media load algorithm
+   * resets `playbackRate` to `defaultPlaybackRate` whenever a new source is loaded,
+   * so setting both makes the rate survive subsequent `src` assignments. Rate is a
+   * playback-time-only parameter — audio is always synthesized at 1.0 and sped
+   * up/slowed down here at the sink.
+   *
    * @param rate - The playback speed (e.g., 1.0 for normal speed).
    */
   public setRate(rate: number) {
+    this.audio.defaultPlaybackRate = rate;
     this.audio.playbackRate = rate;
   }
 

@@ -80,12 +80,14 @@ export class GoogleTTSProvider extends BaseCloudProvider {
 
     const url = `https://texttospeech.googleapis.com/v1beta1/text:synthesize`;
 
+    // Speed policy: always synthesize at the provider default rate (1.0). The user's
+    // playback speed is applied at the audio sink (see BaseCloudProvider.play), so
+    // cached audio is speed-independent and never re-synthesized on a rate change.
     const requestBody = {
       input: { text },
       voice: { name: options.voiceId, languageCode: options.voiceId.split('-').slice(0, 2).join('-') },
       audioConfig: {
         audioEncoding: 'MP3',
-        speakingRate: options.speed,
       },
       enableTimePointing: ["SSML_MARK"]
     };

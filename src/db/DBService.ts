@@ -9,7 +9,7 @@ import type {
   StaticBookManifest,
   StaticStructure,
   NavigationItem,
-  CachedSegment
+  CacheAudioBlob
 } from '../types/db';
 import type { Timepoint } from '../lib/tts/providers/types';
 import { DatabaseError, StorageFullError } from '../types/errors';
@@ -552,12 +552,18 @@ class DBService {
 
   // --- TTS Cache Operations ---
 
-  async getCachedSegment(key: string): Promise<CachedSegment | undefined> {
+  async getCachedSegment(key: string): Promise<CacheAudioBlob | undefined> {
     try {
       const db = await this.getDB();
       const segment = await db.get('cache_audio_blobs', key);
       if (segment) {
         db.put('cache_audio_blobs', { ...segment, lastAccessed: Date.now() }).catch(() => { });
+        // Read-shim: rows written by older builds stored alignment under
+        // `alignmentData`. Normalize them onto the canonical `alignment` field so
+        // cached cloud-TTS timepoints are never silently dropped on a cache hit.
+        if (!segment.alignment && segment.alignmentData) {
+          return { ...segment, alignment: segment.alignmentData };
+        }
       }
       return segment;
     } catch (error) {
@@ -571,7 +577,7 @@ class DBService {
       await db.put('cache_audio_blobs', {
         key,
         audio,
-        alignmentData: alignment,
+        alignment,
         createdAt: Date.now(),
         lastAccessed: Date.now(),
       });

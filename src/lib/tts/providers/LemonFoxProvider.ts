@@ -73,10 +73,12 @@ export class LemonFoxProvider extends BaseCloudProvider {
     }
 
     const url = 'https://api.lemonfox.ai/v1/audio/speech';
+    // Speed policy: always synthesize at the provider default rate (1.0). The user's
+    // playback speed is applied at the audio sink (see BaseCloudProvider.play), so
+    // cached audio is speed-independent and never re-synthesized on a rate change.
     const body = {
       input: text,
       voice: options.voiceId,
-      speed: options.speed,
       response_format: 'mp3'
     };
 

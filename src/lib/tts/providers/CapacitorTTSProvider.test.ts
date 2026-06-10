@@ -54,6 +54,27 @@ describe('CapacitorTTSProvider', () => {
     }));
   });
 
+  describe('regression: speed policy — local rate is playback-time', () => {
+    it('should pass a non-1.0 speed straight through as the live speech rate', async () => {
+      // Local providers have no synthesized artifact (and no audio cache), so
+      // options.speed legitimately reaches the native engine at speak time.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
+        voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (TextToSpeech.speak as any).mockResolvedValue(undefined);
+
+      await provider.init();
+      await provider.play('hello', { voiceId: 'voice1', speed: 1.5 });
+
+      expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
+        text: 'hello',
+        rate: 1.5,
+      }));
+    });
+  });
+
   it('should use queueStrategy 1 (Add) for preload', async () => {
      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
