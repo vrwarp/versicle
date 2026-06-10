@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SyncEngine, AlignmentData } from './SyncEngine';
+import { SyncEngine, type AlignmentData } from './SyncEngine';
 
 describe('SyncEngine', () => {
   let engine: SyncEngine;

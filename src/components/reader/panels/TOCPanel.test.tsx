@@ -1,7 +1,6 @@
-import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { TOCPanel, TOCPanelProps } from './TOCPanel';
+import { TOCPanel, type TOCPanelProps } from './TOCPanel';
 import type { NavigationItem } from 'epubjs';
 
 // Mock the ReadingHistoryPanel since it has complex dependencies

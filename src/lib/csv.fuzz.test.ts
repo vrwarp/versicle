@@ -93,7 +93,7 @@ describe('CSV Parsing Fuzzing', () => {
                     author: 'Author' + rng.nextElement(specialCharacters) + 'Name',
                     percentage: 0.5,
                     lastUpdated: Date.now(),
-                    status: 'reading' as const
+                    status: 'currently-reading' as const
                 }];
 
                 try {
@@ -175,7 +175,7 @@ describe('CSV Parsing Fuzzing', () => {
                     author: 'Author',
                     percentage: 0.5,
                     lastUpdated: Date.now(),
-                    status: 'reading' as const
+                    status: 'currently-reading' as const
                 }];
 
                 try {
@@ -202,7 +202,7 @@ describe('CSV Parsing Fuzzing', () => {
                 author: rng.nextString(500),
                 percentage: 0.5,
                 lastUpdated: Date.now(),
-                status: 'reading' as const
+                status: 'currently-reading' as const
             }];
 
             const csv = exportReadingListToCSV(entries);
@@ -235,7 +235,7 @@ describe('CSV Parsing Fuzzing', () => {
                     author: 'Author',
                     percentage,
                     lastUpdated: Date.now(),
-                    status: 'reading' as const
+                    status: 'currently-reading' as const
                 }];
 
                 try {

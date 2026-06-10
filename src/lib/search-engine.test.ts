@@ -156,7 +156,7 @@ describe('SearchEngine', () => {
         const originalRegExp = global.RegExp;
         vi.spyOn(global, 'RegExp').mockImplementation(function(...args) {
             const r = new originalRegExp(...args);
-            r.exec = function(str) {
+            r.exec = function (this: RegExp & { _count?: number }, str: string) {
                 this._count = (this._count || 0) + 1;
                 if (this._count > 100) {
                     throw new Error("Infinite loop detected!");
@@ -166,7 +166,7 @@ describe('SearchEngine', () => {
                 const matchIndex = this.lastIndex;
                 if (matchIndex < str.length) {
                     const match = Object.assign([''], { index: matchIndex, input: str });
-                    return match;
+                    return match as RegExpExecArray;
                 }
                 return null;
             };

@@ -6,7 +6,6 @@ import { useReadingStateStore } from '../../../store/useReadingStateStore';
 import { usePreferencesStore } from '../../../store/usePreferencesStore';
 import { useTTSStore } from '../../../store/useTTSStore';
 import ePub from 'epubjs';
-import React from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { CURRENT_BOOK_VERSION } from '../../../lib/constants';
 

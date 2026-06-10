@@ -68,7 +68,6 @@ describe('batch-ingestion', () => {
                 forEach: (cb: (relativePath: string, file: unknown) => void) => {
                     Object.keys(files).forEach((key) => {
                         // JSZip forEach callback: (relativePath, file)
-                        // @ts-expect-error Mocking JSZip internals
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         cb(key, (files as any)[key]);
                     });
@@ -157,7 +156,6 @@ describe('batch-ingestion', () => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 forEach: (cb: any) => {
                     Object.keys(files).forEach((key) => {
-                        // @ts-expect-error Mocking JSZip internals
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         cb(key, (files as any)[key]);
                     });

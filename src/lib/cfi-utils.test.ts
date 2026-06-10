@@ -798,7 +798,6 @@ describe('cfi-utils', () => {
           }
           
           const originalIntl = global.Intl;
-          // @ts-expect-error - overriding global Intl
           global.Intl = {
               ...originalIntl,
               // @ts-expect-error - overriding global Intl.Segmenter
@@ -837,7 +836,6 @@ describe('cfi-utils', () => {
           }
 
           const originalIntl = global.Intl;
-          // @ts-expect-error - overriding global Intl
           global.Intl = {
               ...originalIntl,
               // @ts-expect-error - overriding global Intl.Segmenter

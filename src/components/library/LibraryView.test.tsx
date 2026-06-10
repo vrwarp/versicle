@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
-import React, { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { LibraryView } from './LibraryView';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useLibraryStore, useBookStore } from '../../store/useLibraryStore';
@@ -77,14 +77,18 @@ vi.mock('../../store/useReadingStateStore', () => {
         // This will be overridden in tests that need custom progress
         return null;
     };
-    const mockStore = vi.fn((selector) => selector ? selector({ progress: {}, getProgress }) : { progress: {}, getProgress });
-    mockStore.getState = vi.fn().mockReturnValue({
-        progress: {},
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        getProgress: (_bookId: string) => null
-    });
-    mockStore.setState = vi.fn();
-    mockStore.subscribe = vi.fn();
+    const mockStore = Object.assign(
+        vi.fn((selector) => selector ? selector({ progress: {}, getProgress }) : { progress: {}, getProgress }),
+        {
+            getState: vi.fn().mockReturnValue({
+                progress: {},
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                getProgress: (_bookId: string) => null
+            }),
+            setState: vi.fn(),
+            subscribe: vi.fn(),
+        }
+    );
     return {
         useReadingStateStore: mockStore,
         isValidProgress: (p: UserProgress | null | undefined) => !!(p && p.percentage > 0.005),
@@ -123,8 +127,6 @@ describe('LibraryView', () => {
         useLibraryStore.setState({
             isLoading: false,
             error: null,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            fetchBooks: vi.fn().mockResolvedValue(undefined) as any
         });
 
         // Mock getBoundingClientRect and offsetWidth
@@ -139,9 +141,9 @@ describe('LibraryView', () => {
     it('sorts books correctly', async () => {
         useBookStore.setState({
             books: {
-                '1': { id: '1', bookId: '1', title: 'B', author: 'Z', addedAt: 100, lastRead: 200, lastInteraction: 100 } as BookMetadata,
-                '2': { id: '2', bookId: '2', title: 'A', author: 'Y', addedAt: 300, lastRead: 100, lastInteraction: 300 } as BookMetadata,
-                '3': { id: '3', bookId: '3', title: 'C', author: 'X', addedAt: 200, lastRead: 300, lastInteraction: 200 } as BookMetadata
+                '1': { bookId: '1', title: 'B', author: 'Z', addedAt: 100, lastInteraction: 100, tags: [], status: 'unread' as const },
+                '2': { bookId: '2', title: 'A', author: 'Y', addedAt: 300, lastInteraction: 300, tags: [], status: 'unread' as const },
+                '3': { bookId: '3', title: 'C', author: 'X', addedAt: 200, lastInteraction: 200, tags: [], status: 'unread' as const }
             }
         });
 
@@ -216,7 +218,7 @@ describe('LibraryView', () => {
     it('shows no results message when search returns nothing', async () => {
         useBookStore.setState({
             books: {
-                '1': { id: '1', bookId: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', lastInteraction: 100 } as BookMetadata
+                '1': { bookId: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', addedAt: 100, lastInteraction: 100, tags: [], status: 'unread' as const }
             }
         });
 

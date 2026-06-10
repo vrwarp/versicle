@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
-import { SentenceNode } from '../tts';
+import { type SentenceNode } from '../tts';
 import { SeededRandom } from '../../test/fuzz-utils';
 
 const DEFAULT_FUZZ_SEED = 12345;
@@ -85,7 +85,8 @@ describe('TableAdaptationProcessor Fuzz Test', () => {
                 const hasCfi = prng.next() > 0.1;
                 sentences.push({
                     text: `Sentence ${i}`,
-                    cfi: hasCfi ? cfi : undefined
+                    // Intentionally malformed input: exercise missing-cfi robustness.
+                    cfi: (hasCfi ? cfi : undefined) as unknown as string
                 });
 
                 if (!hasCfi && expectedMapping.has(i)) {
@@ -104,7 +105,8 @@ describe('TableAdaptationProcessor Fuzz Test', () => {
             for (const tricky of trickyStrings) {
                 sentences.push({
                     text: 'Tricky',
-                    cfi: prng.next() > 0.5 ? tricky : undefined
+                    // Intentionally malformed input: exercise missing-cfi robustness.
+                    cfi: (prng.next() > 0.5 ? tricky : undefined) as unknown as string
                 });
             }
 

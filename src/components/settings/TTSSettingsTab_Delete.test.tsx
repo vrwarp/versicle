@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { TTSSettingsTab, TTSSettingsTabProps } from './TTSSettingsTab';
+import { TTSSettingsTab, type TTSSettingsTabProps } from './TTSSettingsTab';
 
 // Mock UI components
 vi.mock('../ui/Select', () => ({

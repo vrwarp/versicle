@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, fireEvent } from '@testing-library/react';
 import { ReaderTTSController } from './ReaderTTSController';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -54,7 +53,10 @@ describe('ReaderTTSController', () => {
     });
 
     const setup = (status: 'playing' | 'paused' | 'stopped' = 'stopped', queueLength = 5, currentIndex = 0) => {
-        vi.mocked(useTTSStore).mockImplementation((selector?: (state: MockTTSState) => unknown) => {
+        // The component selects from the real TTSState; this mock serves a
+        // reduced MockTTSState. Cast the implementation to the hook's selector
+        // signature rather than widening the mock state.
+        vi.mocked(useTTSStore).mockImplementation(((selector?: (state: MockTTSState) => unknown) => {
             const state: MockTTSState = {
                 activeCfi: 'epubcfi(/6/4!/4/2)',
                 currentIndex,
@@ -66,7 +68,7 @@ describe('ReaderTTSController', () => {
                 stop: mockStop
             };
             return selector ? selector(state) : state;
-        });
+        }) as unknown as (selector: (state: ReturnType<typeof useTTSStore.getState>) => unknown) => unknown);
 
         // Mock getState on the store itself (needed for visibility change logic in component)
         (useTTSStore as unknown as MockStoreWithGetState).getState = () => ({

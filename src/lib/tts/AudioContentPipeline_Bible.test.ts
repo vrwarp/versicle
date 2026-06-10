@@ -8,7 +8,7 @@ import { useTTSStore } from '../../store/useTTSStore';
 import { TextSegmenter } from './TextSegmenter';
 import { LexiconService } from './LexiconService';
 import { BIBLE_ABBREVIATIONS } from '../../data/bible-lexicon';
-import type { BookMetadata, TTSContentAnalysis } from '../../types/db';
+import type { BookMetadata, ContentAnalysis, CacheTtsPreparation, SectionMetadata } from '../../types/db';
 
 // Explicit mocks to prevent auto-mocking issues
 vi.mock('../../db/DBService', () => ({
@@ -90,9 +90,9 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
         pipeline = new AudioContentPipeline(createZustandEngineContext());
 
         // Default Mocks
-        vi.mocked(dbService.getTTSContent).mockResolvedValue({ sentences: [{ text: 'Test.', cfi: 'cfi' }] } as unknown as { sentences: { text: string, cfi: string }[] });
+        vi.mocked(dbService.getTTSContent).mockResolvedValue({ sentences: [{ text: 'Test.', cfi: 'cfi' }] } as unknown as CacheTtsPreparation);
         vi.mocked(bookRepository.getBookMetadata).mockResolvedValue({} as BookMetadata);
-        vi.mocked(contentAnalysisRepository.getContentAnalysis).mockResolvedValue({} as TTSContentAnalysis);
+        vi.mocked(contentAnalysisRepository.getContentAnalysis).mockResolvedValue({} as ContentAnalysis);
 
         // Ensure getState returns fresh default values
         vi.mocked(useTTSStore.getState).mockReturnValue({
@@ -111,7 +111,7 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
     });
 
     it('should inject bible abbreviations when enabled globally', async () => {
-        await pipeline.loadSection('book1', { sectionId: 's1', characterCount: 100 } as unknown as BookMetadata['spineItems'][0], 0, false, 1.0);
+        await pipeline.loadSection('book1', { sectionId: 's1', characterCount: 100 } as unknown as SectionMetadata, 0, false, 1.0);
 
         expect(TextSegmenter.refineSegments).toHaveBeenCalledWith(
             expect.anything(),
@@ -133,7 +133,7 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
             isBibleLexiconEnabled: false
         } as unknown as ReturnType<typeof useTTSStore.getState>);
 
-        await pipeline.loadSection('book1', { sectionId: 's1', characterCount: 100 } as unknown as BookMetadata['spineItems'][0], 0, false, 1.0);
+        await pipeline.loadSection('book1', { sectionId: 's1', characterCount: 100 } as unknown as SectionMetadata, 0, false, 1.0);
 
         expect(TextSegmenter.refineSegments).toHaveBeenCalledWith(
             expect.anything(),
@@ -159,7 +159,7 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
             getBibleLexiconPreference: vi.fn().mockResolvedValue('on')
         } as unknown as LexiconService);
 
-        await pipeline.loadSection('book1', { sectionId: 's1', characterCount: 100 } as unknown as BookMetadata['spineItems'][0], 0, false, 1.0);
+        await pipeline.loadSection('book1', { sectionId: 's1', characterCount: 100 } as unknown as SectionMetadata, 0, false, 1.0);
 
         expect(TextSegmenter.refineSegments).toHaveBeenCalledWith(
             expect.anything(),

@@ -4,7 +4,6 @@ import { ContentAnalysisLegend } from '../ContentAnalysisLegend';
 import { useGenAIStore } from '../../../store/useGenAIStore';
 import { useReaderUIStore } from '../../../store/useReaderUIStore';
 import { dbService } from '../../../db/DBService';
-import React from 'react';
 
 // Mock Lucide icons
 vi.mock('lucide-react', () => ({
@@ -109,7 +108,7 @@ describe('ContentAnalysisLegend', () => {
 
     // Simulate selection event
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const onSelected = mockRendition.on.mock.calls.find((call: any[]) => call[0] === 'selected')[1];
+    const onSelected = mockRendition.on.mock.calls.find((call: any[]) => call[0] === 'selected')![1];
 
     mockRendition.getRange.mockReturnValue({ toString: () => 'Selected Text' });
 

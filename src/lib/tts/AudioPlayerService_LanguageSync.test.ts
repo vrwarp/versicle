@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
 import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 import { useBookStore } from '../../store/useBookStore';
+import type { UserInventoryItem } from '../../types/db';
 import { useTTSStore } from '../../store/useTTSStore';
 
 // Mock dependencies to prevent external calls during tests
@@ -41,8 +42,8 @@ describe('AudioPlayerService - Language Sync', () => {
         // Reset stores to default state
         useBookStore.setState({
             books: {
-                'book-en': { bookId: 'book-en', language: 'en', title: 'English Book' },
-                'book-zh': { bookId: 'book-zh', language: 'zh', title: 'Chinese Book' }
+                'book-en': { bookId: 'book-en', language: 'en', title: 'English Book', author: '', addedAt: 0, lastInteraction: 0, tags: [], status: 'unread' } as UserInventoryItem,
+                'book-zh': { bookId: 'book-zh', language: 'zh', title: 'Chinese Book', author: '', addedAt: 0, lastInteraction: 0, tags: [], status: 'unread' } as UserInventoryItem
             }
         });
 
@@ -91,7 +92,7 @@ describe('AudioPlayerService - Language Sync', () => {
         // Simulate a YJS sync or metadata edit that updates the current book's language
         useBookStore.setState({
             books: {
-                'book-en': { bookId: 'book-en', language: 'fr', title: 'English Book translated to French' }
+                'book-en': { bookId: 'book-en', language: 'fr', title: 'English Book translated to French', author: '', addedAt: 0, lastInteraction: 0, tags: [], status: 'unread' } as UserInventoryItem
             }
         });
 

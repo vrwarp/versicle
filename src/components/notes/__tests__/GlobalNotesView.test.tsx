@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import React from 'react';
 import { GlobalNotesView } from '../GlobalNotesView';
 import { useLibraryStore } from '../../../store/useLibraryStore';
 import { useAnnotationStore } from '../../../store/useAnnotationStore';
@@ -10,7 +9,7 @@ import { MemoryRouter, useNavigate } from 'react-router-dom';
 vi.mock('react-router-dom', async () => {
     const actual = await vi.importActual('react-router-dom');
     return {
-        ...actual as unknown,
+        ...(actual as Record<string, unknown>),
         useNavigate: vi.fn(),
     };
 });

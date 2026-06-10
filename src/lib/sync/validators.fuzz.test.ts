@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { z } from 'zod';
 import {
     UserInventoryItemSchema,
     ReadingListEntrySchema,
@@ -253,7 +254,7 @@ describe('Sync Validators Fuzzing', () => {
         it('rejects random garbage for all schemas', () => {
             const rng = new SeededRandom(SEED);
 
-            const schemas = [
+            const schemas: z.ZodSchema<unknown>[] = [
                 UserInventoryItemSchema,
                 ReadingListEntrySchema,
                 UserProgressSchema,

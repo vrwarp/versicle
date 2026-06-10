@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LexiconService } from './LexiconService';
-import { LexiconRule } from '../../types/db';
+import { type LexiconRule } from '../../types/db';
 
 const mocks = vi.hoisted(() => {
   return {

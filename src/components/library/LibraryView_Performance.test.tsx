@@ -34,14 +34,9 @@ describe('LibraryView Performance', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useLibraryStore.setState({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            books: [{ id: '1', title: 'B1' } as any],
             isLoading: false,
             error: null,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            fetchBooks: vi.fn().mockResolvedValue(undefined) as any,
             isImporting: false,
-            viewMode: 'grid', // Ensure grid mode to test virtualization if it were there
         });
 
         // Mock dimensions

@@ -85,11 +85,10 @@ vi.mock('../lib/tts/providers/CapacitorTTSProvider', () => {
 });
 
 // Now import the service
-import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
 import { getAudioPlayer } from '../lib/tts/engine/mainThreadAudioPlayer';
 
 describe('AudioPlayerService Background Crash Prevention', () => {
-  let service: AudioPlayerService;
+  let service: ReturnType<typeof getAudioPlayer>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -109,7 +108,7 @@ describe('AudioPlayerService Background Crash Prevention', () => {
         { sectionId: sectionId2, characterCount: 100 } as any
     ]);
 
-    vi.spyOn(dbService, 'getTTSContent').mockImplementation(async (bid, sid) => {
+    vi.spyOn(dbService, 'getTTSContent').mockImplementation(async (_bid, sid) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (sid === sectionId1) return { sentences: [{ text: 'Sentence 1', cfi: 'cfi1' }] } as any;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -117,10 +116,14 @@ describe('AudioPlayerService Background Crash Prevention', () => {
         return null;
     });
 
+    // getBookMetadata/getContentAnalysis no longer live on DBService (they
+    // moved to BookRepository/ContentAnalysisRepository); the vi.mock factory
+    // above still defines them, so spy through a widened view of the mock.
+    const dbServiceMock = dbService as unknown as Record<string, () => Promise<unknown>>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(dbService, 'getBookMetadata').mockResolvedValue({ title: 'Book Title', author: 'Author' } as any);
+    vi.spyOn(dbServiceMock, 'getBookMetadata').mockResolvedValue({ title: 'Book Title', author: 'Author' } as any);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(dbService, 'getContentAnalysis').mockResolvedValue({ structure: { title: 'Chapter Title' } } as any);
+    vi.spyOn(dbServiceMock, 'getContentAnalysis').mockResolvedValue({ structure: { title: 'Chapter Title' } } as any);
 
     // Initialize
     service.setBookId(bookId);

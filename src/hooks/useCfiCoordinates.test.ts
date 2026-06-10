@@ -1,9 +1,10 @@
 import { renderHook, act } from '@testing-library/react';
 import { useCfiCoordinates } from './useCfiCoordinates';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import type { Rendition } from 'epubjs';
 
 describe('useCfiCoordinates', () => {
-  let mockRendition: unknown;
+  let mockRendition: Rendition;
   let mockIframe: unknown;
   let resizeObserverCallback: ResizeObserverCallback;
 
@@ -31,7 +32,7 @@ describe('useCfiCoordinates', () => {
       getRange: vi.fn(),
       on: vi.fn(),
       off: vi.fn()
-    };
+    } as unknown as Rendition;
 
     // Capture the resize observer callback
     window.ResizeObserver = class {
@@ -58,7 +59,7 @@ describe('useCfiCoordinates', () => {
 
   it('should return empty coordinates if rendition manager is missing', () => {
     const mockEmptyRendition = { on: vi.fn(), off: vi.fn() };
-    const { result } = renderHook(() => useCfiCoordinates(mockEmptyRendition as unknown, ['epubcfi(/2/2/2)']));
+    const { result } = renderHook(() => useCfiCoordinates(mockEmptyRendition as unknown as Rendition, ['epubcfi(/2/2/2)']));
     act(() => { vi.runAllTimers(); });
     expect(result.current).toEqual([]);
   });
@@ -68,7 +69,7 @@ describe('useCfiCoordinates', () => {
       { top: 100, right: 150 },
       { top: 120, right: 180 }
     ];
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
+    (mockRendition as unknown as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
       getClientRects: () => mockRects
     });
 
@@ -86,7 +87,7 @@ describe('useCfiCoordinates', () => {
   });
 
   it('should skip calculation if getRange throws', () => {
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockImplementation(() => {
+    (mockRendition as unknown as { getRange: unknown }).getRange = vi.fn().mockImplementation(() => {
       throw new Error("Invalid CFI");
     });
     
@@ -96,7 +97,7 @@ describe('useCfiCoordinates', () => {
   });
 
   it('should skip calculation if getClientRects returns empty', () => {
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
+    (mockRendition as unknown as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
       getClientRects: () => []
     });
     
@@ -106,7 +107,7 @@ describe('useCfiCoordinates', () => {
   });
 
   it('should recalculate coordinates when relocated event fires', () => {
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
+    (mockRendition as unknown as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
       getClientRects: () => [{ top: 100, right: 150 }]
     });
 
@@ -116,13 +117,13 @@ describe('useCfiCoordinates', () => {
     expect(result.current).toEqual([{ cfi: 'epubcfi(/2/2/2)', top: 110, left: 170 }]);
 
     // Relocate moves the element
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
+    (mockRendition as unknown as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
       getClientRects: () => [{ top: 200, right: 250 }]
     });
 
     act(() => {
       // Find the relocated handler
-      const mockCalls = (mockRendition as { on: { mock: { calls: unknown[][] } } }).on.mock.calls;
+      const mockCalls = (mockRendition as unknown as { on: { mock: { calls: unknown[][] } } }).on.mock.calls;
       const relocateCall = mockCalls.find((c: unknown[]) => c[0] === 'relocated');
       expect(relocateCall).toBeDefined();
       if (relocateCall) {
@@ -135,7 +136,7 @@ describe('useCfiCoordinates', () => {
   });
 
   it('should recalculate coordinates when ResizeObserver fires', () => {
-        (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
+        (mockRendition as unknown as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
       getClientRects: () => [{ top: 100, right: 150 }]
     });
 
@@ -145,7 +146,7 @@ describe('useCfiCoordinates', () => {
     expect(result.current).toEqual([{ cfi: 'epubcfi(/2/2/2)', top: 110, left: 170 }]);
 
     // Container resizes, causing layout shift
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
+    (mockRendition as unknown as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
       getClientRects: () => [{ top: 150, right: 180 }]
     });
 
@@ -158,7 +159,7 @@ describe('useCfiCoordinates', () => {
   });
 
   it('should recalculate coordinates when a dependency changes', () => {
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
+    (mockRendition as unknown as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
       getClientRects: () => [{ top: 100, right: 150 }]
     });
 
@@ -172,7 +173,7 @@ describe('useCfiCoordinates', () => {
     expect(result.current).toEqual([{ cfi: 'epubcfi(/2/2/2)', top: 110, left: 170 }]);
 
     // Font size changes layout
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
+    (mockRendition as unknown as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
       getClientRects: () => [{ top: 250, right: 300 }]
     });
 
@@ -185,7 +186,7 @@ describe('useCfiCoordinates', () => {
   });
   
   it('should not update state unnecessarily if coordinates have not changed', () => {
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
+    (mockRendition as unknown as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
       getClientRects: () => [{ top: 100, right: 150 }]
     });
 

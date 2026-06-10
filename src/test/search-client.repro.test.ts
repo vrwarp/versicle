@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { searchClient } from '../lib/search';
-import { Book } from 'epubjs';
+import { type Book } from 'epubjs';
 
 // Mock Worker class
 class MockWorker {

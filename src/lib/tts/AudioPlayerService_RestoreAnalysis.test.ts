@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest'
 import { AudioPlayerService } from './AudioPlayerService';
 import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 import { dbService } from '../../db/DBService';
+import type { TTSState, SectionMetadata } from '../../types/db';
 
 // --- Mocks Setup ---
 
@@ -151,10 +152,10 @@ describe('AudioPlayerService - Restore Analysis', () => {
                 { text: 'Sentence 1', cfi: 'cfi1', sourceIndices: [0] }
             ],
             currentIndex: 0
-        });
+        } as unknown as TTSState);
 
         vi.mocked(dbService.getSections).mockResolvedValue([
-            { sectionId: sectionId, title: 'Chapter 1', characterCount: 100 }
+            { sectionId: sectionId, title: 'Chapter 1', characterCount: 100 } as SectionMetadata
         ]);
 
         // IMPORTANT: The real pipeline calls dbService. getContentAnalysis, getTableImages, etc.

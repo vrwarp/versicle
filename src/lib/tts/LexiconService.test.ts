@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LexiconService, processInitialisms } from './LexiconService';
 import { useLexiconStore } from '../../store/useLexiconStore';
-import { LexiconRule } from '../../types/db';
+import { type LexiconRule } from '../../types/db';
 
 // Mock getDB to prevent actual DB calls (though mostly unused now)
 vi.mock('../../db/db', () => ({
@@ -16,7 +16,7 @@ vi.mock('../../store/useLexiconStore', () => ({
 }));
 
 vi.mock('../../store/yjs-provider', () => ({
-  waitForYjsSync: vi.fn().mockResolvedValue(),
+  waitForYjsSync: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock TTS Store for Bible preference check

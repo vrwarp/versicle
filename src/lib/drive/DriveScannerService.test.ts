@@ -1,5 +1,5 @@
 
-import { describe, it, expect, vi, beforeEach, Mock, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock, afterEach } from 'vitest';
 import { DriveScannerService } from './DriveScannerService';
 import { useDriveStore } from '../../store/useDriveStore';
 import { useBookStore } from '../../store/useBookStore';
@@ -129,7 +129,7 @@ describe('DriveScannerService', () => {
             });
 
             // We mock scanAndIndex to prevent actual call if index was empty (not empty here)
-            vi.spyOn(DriveScannerService, 'scanAndIndex').mockResolvedValue();
+            vi.spyOn(DriveScannerService, 'scanAndIndex').mockResolvedValue(undefined);
 
             const newFiles = await DriveScannerService.checkForNewFiles();
 
@@ -154,7 +154,7 @@ describe('DriveScannerService', () => {
                 setScanning: vi.fn()
             });
 
-            const scanSpy = vi.spyOn(DriveScannerService, 'scanAndIndex').mockResolvedValue();
+            const scanSpy = vi.spyOn(DriveScannerService, 'scanAndIndex').mockResolvedValue(undefined);
 
             await DriveScannerService.checkForNewFiles();
 

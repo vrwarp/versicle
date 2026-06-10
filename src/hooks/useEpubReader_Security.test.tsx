@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { render, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect } from 'vitest';
-import { useEpubReader, EpubReaderOptions } from './useEpubReader';
+import { useEpubReader, type EpubReaderOptions } from './useEpubReader';
 
 // Mock dependencies
 vi.mock('../db/DBService', () => ({

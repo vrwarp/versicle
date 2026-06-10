@@ -15,8 +15,9 @@ describe('useDriveBrowser race condition', () => {
     });
 
     it('ignores stale responses if folder changes rapidly', async () => {
-        let resolveFolder1: (value: unknown) => void;
-        let resolveFolder2: (value: unknown) => void;
+        type ListFoldersResult = Awaited<ReturnType<typeof DriveService.listFolders>>;
+        let resolveFolder1: (value: ListFoldersResult | PromiseLike<ListFoldersResult>) => void;
+        let resolveFolder2: (value: ListFoldersResult | PromiseLike<ListFoldersResult>) => void;
 
         vi.mocked(DriveService.listFolders).mockImplementation(async (folderId) => {
             if (folderId === 'folder1') {
@@ -36,12 +37,12 @@ describe('useDriveBrowser race condition', () => {
 
         // Resolve folder 2 first
         act(() => {
-            resolveFolder2([{ id: '2', name: 'File 2' }]);
+            resolveFolder2([{ id: '2', name: 'File 2', mimeType: 'application/vnd.google-apps.folder' }]);
         });
 
         // Resolve folder 1 later
         act(() => {
-            resolveFolder1([{ id: '1', name: 'File 1' }]);
+            resolveFolder1([{ id: '1', name: 'File 1', mimeType: 'application/vnd.google-apps.folder' }]);
         });
 
         await waitFor(() => {
@@ -49,6 +50,6 @@ describe('useDriveBrowser race condition', () => {
         });
 
         // Expect items to be from folder 2, not folder 1!
-        expect(result.current.items).toEqual([{ id: '2', name: 'File 2' }]);
+        expect(result.current.items).toEqual([{ id: '2', name: 'File 2', mimeType: 'application/vnd.google-apps.folder' }]);
     });
 });

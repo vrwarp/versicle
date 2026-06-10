@@ -97,7 +97,6 @@ describe('useLibraryStore', () => {
       staticMetadata: {},
       isLoading: false,
       error: null,
-      sortOrder: 'last_read',
     });
     useBookStore.setState({ books: {} });
   });

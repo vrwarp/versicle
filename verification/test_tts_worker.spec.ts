@@ -1,5 +1,14 @@
 import { test, expect } from '@playwright/test';
 
+// Browser-side verification hooks installed by src/main.tsx. The e2e tsconfig
+// does not include the app sources, so re-declare the (looser) shapes here.
+declare global {
+    interface Window {
+        __ttsWorkerSmokeTest?: () => Promise<unknown>;
+        __ttsWorkerHandleTest?: () => Promise<unknown>;
+    }
+}
+
 /**
  * Verifies that the TTS orchestration engine genuinely runs inside a real Web Worker.
  *

@@ -1,7 +1,6 @@
-import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { BookListItem } from './BookListItem';
-import { BookMetadata } from '../../types/db';
+import { type BookMetadata } from '../../types/db';
 import { MemoryRouter } from 'react-router-dom';
 import { vi, describe, it, expect } from 'vitest';
 

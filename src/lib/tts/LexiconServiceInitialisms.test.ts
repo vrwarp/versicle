@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processInitialisms, LexiconService } from './LexiconService';
-import { LexiconRule } from '../../types/db';
+import { type LexiconRule } from '../../types/db';
 
 // Mock dependencies to isolate unit tests
 vi.mock('../../db/db', () => ({

@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import * as Y from 'yjs';
-import { BackupService, BackupManifestV2, BackupManifestV3 } from './BackupService';
+import { BackupService, type BackupManifestV2, type BackupManifestV3 } from './BackupService';
 import { dbService } from '../db/DBService';
 import { exportFile } from './export';
 

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import React from 'react';
 import { LibraryView } from './LibraryView';
 import { useLibraryStore, useBookStore } from '../../store/useLibraryStore';
 import { MemoryRouter } from 'react-router-dom';
@@ -51,7 +50,6 @@ describe('LibraryView Search', () => {
             isLoading: false,
             error: null,
             isImporting: false,
-            sortOrder: 'recent'
         });
         vi.useFakeTimers();
     });

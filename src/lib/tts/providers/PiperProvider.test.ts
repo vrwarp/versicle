@@ -65,7 +65,6 @@ describe('PiperProvider Voice Filtering', () => {
 
     beforeEach(() => {
         provider = new PiperProvider();
-        // @ts-expect-error Mocking global fetch
         global.fetch = vi.fn().mockResolvedValue({
             ok: true,
             json: async () => mockVoicesJson

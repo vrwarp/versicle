@@ -17,7 +17,10 @@ const ttsPolyfillContent = fs.readFileSync(ttsPolyfillPath, 'utf8');
 const idbProbePath = path.resolve(__dirname, '_idb_probe.js');
 const idbProbeContent = fs.existsSync(idbProbePath) ? fs.readFileSync(idbProbePath, 'utf8') : '';
 
-export const test = base.extend<Record<string, never>, { _suppressLogs: void }>({
+// Record<never, never> (no keys) rather than Record<string, never>: the latter's
+// string index signature intersects the worker-fixture types and collapses
+// `_suppressLogs` to `never`, rejecting the fixture tuple below.
+export const test = base.extend<Record<never, never>, { _suppressLogs: void }>({
   // Worker-scoped: runs once per worker process (not per test).
   // Patches console.log/info/debug to noop so spec-file log calls are
   // silent by default. Set DEBUG_PAGE_LOGS=1 to restore them.

@@ -3,6 +3,15 @@ import { createZustandEngineContext } from './engine/createZustandEngineContext'
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
 
+// ContentAnalysisRepository.getContentAnalysis is synchronous, but these tests
+// (written when it was async) install async implementations; the processor
+// tolerates the returned promise. Keep runtime behaviour identical and give
+// the mock an async-shaped view of the method for the type checker.
+const getContentAnalysisAsyncMock = contentAnalysisRepository.getContentAnalysis as unknown as (
+    bookId: string,
+    sectionId: string,
+) => Promise<unknown>;
+
 vi.mock('../../db/DBService', () => ({
     dbService: {
         getTableImages: vi.fn().mockResolvedValue([]),
@@ -61,7 +70,7 @@ describe('TableAdaptationProcessor - Deduplication (Vulnerability 3)', () => {
         // Track how many times the inner logic actually executes
         let executionCount = 0;
 
-        vi.mocked(contentAnalysisRepository.getContentAnalysis).mockImplementation(async () => {
+        vi.mocked(getContentAnalysisAsyncMock).mockImplementation(async () => {
             executionCount++;
             // Block the first call so we can fire a second one while it's in-flight
             if (executionCount === 1) {
@@ -89,7 +98,7 @@ describe('TableAdaptationProcessor - Deduplication (Vulnerability 3)', () => {
     it('should allow a second call after the first one completes', async () => {
         let executionCount = 0;
 
-        vi.mocked(contentAnalysisRepository.getContentAnalysis).mockImplementation(async () => {
+        vi.mocked(getContentAnalysisAsyncMock).mockImplementation(async () => {
             executionCount++;
             return { tableAdaptations: [] } as never;
         });
@@ -109,7 +118,7 @@ describe('TableAdaptationProcessor - Deduplication (Vulnerability 3)', () => {
     it('should deduplicate per section — different sections run independently', async () => {
         let executionCount = 0;
 
-        vi.mocked(contentAnalysisRepository.getContentAnalysis).mockImplementation(async () => {
+        vi.mocked(getContentAnalysisAsyncMock).mockImplementation(async () => {
             executionCount++;
             return { tableAdaptations: [] } as never;
         });
@@ -141,7 +150,7 @@ describe('TableAdaptationProcessor - Deduplication (Vulnerability 3)', () => {
         vi.mocked(contentAnalysisRepository.getContentAnalysis).mockResolvedValue({ tableAdaptations: [] } as never);
 
         let secondExecuted = false;
-        vi.mocked(contentAnalysisRepository.getContentAnalysis).mockImplementation(async () => {
+        vi.mocked(getContentAnalysisAsyncMock).mockImplementation(async () => {
             secondExecuted = true;
             return { tableAdaptations: [] } as never;
         });

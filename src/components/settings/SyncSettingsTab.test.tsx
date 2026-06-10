@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { SyncSettingsTab, SyncSettingsTabProps } from './SyncSettingsTab';
+import { SyncSettingsTab, type SyncSettingsTabProps } from './SyncSettingsTab';
 
 // Mock UI components
 vi.mock('../ui/Select', () => ({
@@ -154,7 +154,6 @@ describe('SyncSettingsTab', () => {
             render(
                 <SyncSettingsTab
                     {...defaultProps}
-                    syncProvider="firebase"
                     isFirebaseAvailable={true}
                     firebaseAuthStatus="signed-in"
                     firestoreStatus="connected"
@@ -172,7 +171,6 @@ describe('SyncSettingsTab', () => {
         render(
             <SyncSettingsTab
                 {...defaultProps}
-                syncProvider="firebase"
                 isFirebaseAvailable={true}
                 firebaseAuthStatus="signed-out"
                 isFirebaseSigningIn={true}
@@ -187,7 +185,6 @@ describe('SyncSettingsTab', () => {
         render(
             <SyncSettingsTab
                 {...defaultProps}
-                syncProvider="firebase"
                 isFirebaseAvailable={true}
                 onFirebaseSignIn={onFirebaseSignIn}
             />
@@ -203,7 +200,6 @@ describe('SyncSettingsTab', () => {
             render(
                 <SyncSettingsTab
                     {...defaultProps}
-                    syncProvider="firebase"
                     isFirebaseAvailable={true}
                     firebaseAuthStatus="signed-in"
                     firebaseUserEmail="user@example.com"
@@ -221,7 +217,6 @@ describe('SyncSettingsTab', () => {
         render(
             <SyncSettingsTab
                 {...defaultProps}
-                syncProvider="firebase"
                 isFirebaseAvailable={false}
                 onFirebaseConfigChange={onFirebaseConfigChange}
             />
@@ -231,7 +226,7 @@ describe('SyncSettingsTab', () => {
         expect(onFirebaseConfigChange).toHaveBeenCalledWith({ apiKey: 'new-key' });
     });
     it('updates Google Client IDs', () => {
-        render(<SyncSettingsTab {...defaultProps} syncProvider="none" />);
+        render(<SyncSettingsTab {...defaultProps} />);
 
         const webInput = screen.getByLabelText('Web Client ID');
         fireEvent.change(webInput, { target: { value: 'new-web-id' } });

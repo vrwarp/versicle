@@ -62,7 +62,7 @@ describe('AndroidGoogleAuthStrategy', () => {
             },
         };
 
-        vi.mocked(SocialLogin.login).mockResolvedValue(mockResult as unknown);
+        vi.mocked(SocialLogin.login).mockResolvedValue(mockResult as unknown as Awaited<ReturnType<typeof SocialLogin.login>>);
 
         const token = await strategy.getValidToken('test-service');
 

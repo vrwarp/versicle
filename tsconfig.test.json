@@ -1,0 +1,16 @@
+{
+  // Typechecks the vitest (jsdom) test code that tsconfig.app.json
+  // deliberately excludes: src/**/*.test.* plus the src/test/ harness.
+  // Wired into `tsc -b` via the root tsconfig.json references so test
+  // code typechecking is a build invariant, not a convention.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    // vitest.config.ts sets `globals: true`; vitest/globals matches that.
+    "types": ["vite/client", "vitest/globals", "node"]
+  },
+  "include": ["src"],
+  // Override tsconfig.app.json's test excludes — this project exists to
+  // check exactly those files.
+  "exclude": []
+}

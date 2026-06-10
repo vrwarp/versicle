@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PlaybackStateManager } from './PlaybackStateManager';
-import { TTSQueueItem } from './AudioPlayerService';
+import { type TTSQueueItem } from './AudioPlayerService';
 
 // Mock dbService
 vi.mock('../../db/DBService', () => ({
@@ -25,7 +25,6 @@ describe('PlaybackStateManager - Table Adaptations', () => {
         sourceIndices,
         isSkipped,
         cfi: '',
-        type: 'text'
     });
 
     it('should apply adaptation replacing single item', () => {

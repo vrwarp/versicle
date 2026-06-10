@@ -7,7 +7,7 @@ vi.mock('./yjs-provider', async () => {
     const Y = await import('yjs');
     return {
         yDoc: new Y.Doc(),
-        waitForYjsSync: vi.fn().mockResolvedValue(),
+        waitForYjsSync: vi.fn().mockResolvedValue(undefined),
         getYjsOptions: () => ({}),
     };
 });

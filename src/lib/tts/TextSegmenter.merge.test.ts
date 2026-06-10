@@ -9,7 +9,7 @@ describe('TextSegmenter.mergeByLength', () => {
         cfi,
         index: 0,
         length: text.length
-    });
+    } as SentenceNode);
 
     it('should return empty list for empty input', () => {
         expect(TextSegmenter.mergeByLength([], 10)).toEqual([]);

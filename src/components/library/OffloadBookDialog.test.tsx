@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import React from 'react';
 import { OffloadBookDialog } from './OffloadBookDialog';
 import { useLibraryStore } from '../../store/useLibraryStore';
 import { useToastStore } from '../../store/useToastStore';
-import { BookMetadata } from '../../types/db';
+import { type BookMetadata } from '../../types/db';
 
 // Mock UI components
 vi.mock('../ui/Dialog', () => ({

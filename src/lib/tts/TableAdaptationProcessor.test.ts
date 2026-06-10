@@ -4,7 +4,7 @@ import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { dbService } from '../../db/DBService';
 import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
 import { useGenAIStore } from '../../store/useGenAIStore';
-import { SentenceNode } from '../tts';
+import { type SentenceNode } from '../tts';
 
 vi.mock('../../db/DBService');
 vi.mock('../genai/GenAIService');

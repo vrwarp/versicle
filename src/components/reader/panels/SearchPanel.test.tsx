@@ -1,7 +1,6 @@
-import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SearchPanel, SearchPanelProps } from './SearchPanel';
+import { SearchPanel, type SearchPanelProps } from './SearchPanel';
 import { searchClient } from '../../../lib/search';
 
 // Mock the search client
@@ -79,7 +78,7 @@ describe('SearchPanel', () => {
 
     it('shows searching indicator while searching', async () => {
         // Delay the search promise to keep it in searching state
-        let resolveSearch: (results: unknown[]) => void = () => {};
+        let resolveSearch: (results: Awaited<ReturnType<typeof searchClient.search>>) => void = () => {};
         vi.mocked(searchClient.search).mockImplementation(() => new Promise(resolve => {
             resolveSearch = resolve;
         }));
@@ -106,7 +105,7 @@ describe('SearchPanel', () => {
             resolveIndexing = resolve;
         });
 
-        vi.mocked(searchClient.indexBook).mockImplementation(async (book, bookId, onProgress) => {
+        vi.mocked(searchClient.indexBook).mockImplementation(async (_book, _bookId, onProgress) => {
             if (onProgress) {
                 // Must not be synchronous inside mock to avoid suspended-in-act warnings
                 setTimeout(() => {

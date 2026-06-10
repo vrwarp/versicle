@@ -8,8 +8,7 @@ describe('TextSegmenter', () => {
     // But let's verify CJK punctuation is handled if we pass Chinese text.
     const segmenter = new TextSegmenter(); // English locale but CJK punctuation handled by Intl.Segmenter
     const chineseText = '你好。世界！这是一个测试？';
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const results = segmenter.segment(chineseText, { text: chineseText, cfi: '' } as any);
+    const results = segmenter.segment(chineseText);
     expect(results.length).toBeGreaterThan(1);
   });
   it('segments simple sentences correctly using Intl.Segmenter', () => {
@@ -106,7 +105,7 @@ describe('TextSegmenter', () => {
       });
 
       afterEach(() => {
-          Intl.Segmenter = originalSegmenter;
+          (Intl as { Segmenter: typeof Intl.Segmenter }).Segmenter = originalSegmenter;
       });
 
       it('segments using fallback regex when Intl.Segmenter is missing', () => {
@@ -258,7 +257,7 @@ describe('TextSegmenter', () => {
       });
 
       afterEach(() => {
-          Intl.Segmenter = originalSegmenter;
+          (Intl as { Segmenter: typeof Intl.Segmenter }).Segmenter = originalSegmenter;
       });
 
       it('keeps raw indices and normalizes outbound text', () => {

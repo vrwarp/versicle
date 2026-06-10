@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AudioPlayerService, TTSQueueItem } from './AudioPlayerService';
+import { AudioPlayerService, type TTSQueueItem } from './AudioPlayerService';
 import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 import { MockCloudProvider } from './providers/MockCloudProvider';
 

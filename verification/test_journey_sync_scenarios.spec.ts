@@ -71,7 +71,7 @@ async function clearDataAndReload(page: Page, baseURL: string) {
 
 async function pollForPersistence(page: Page, expectedKeyPattern: string, retries = 20, delay = 500): Promise<string | null> {
   for (let i = 0; i < retries; i++) {
-    const snapshotStr = await page.evaluate("localStorage.getItem('versicle_mock_firestore_snapshot')");
+    const snapshotStr = await page.evaluate(() => localStorage.getItem('versicle_mock_firestore_snapshot'));
     if (snapshotStr && snapshotStr.includes(expectedKeyPattern)) {
       return snapshotStr;
     }
@@ -434,7 +434,7 @@ test("offline resilience", async ({ browser, baseURL }) => {
     throw new Error("Device A failed to persist data to mock cloud");
   }
   await pageA.waitForTimeout(2000);
-  const finalSnapshot = await pageA.evaluate("localStorage.getItem('versicle_mock_firestore_snapshot')");
+  const finalSnapshot = await pageA.evaluate(() => localStorage.getItem('versicle_mock_firestore_snapshot'));
   const parsedSnapshot = JSON.parse(finalSnapshot!);
 
   await pageA.close();

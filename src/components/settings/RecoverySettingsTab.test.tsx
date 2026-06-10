@@ -1,7 +1,6 @@
-import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { RecoverySettingsTab, RecoverySettingsTabProps } from './RecoverySettingsTab';
+import { RecoverySettingsTab, type RecoverySettingsTabProps } from './RecoverySettingsTab';
 
 describe('RecoverySettingsTab', () => {
     const defaultProps: RecoverySettingsTabProps = {

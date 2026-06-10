@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { DriveImportDialog } from './DriveImportDialog';
 import { useDriveStore } from '../../store/useDriveStore';
-import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 
 // Mock dependencies
 vi.mock('../../store/useDriveStore');

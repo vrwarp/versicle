@@ -118,7 +118,6 @@ describe('AudioContentPipeline - triggerAnalysis', () => {
         it('should call both getOrDetectContentTypes and processTableAdaptations for the next chapter', async () => {
             const sentences = [{ text: 'Next chapter', cfi: 'cfi-next' }];
             vi.mocked(dbService.getTTSContent).mockResolvedValue({ sentences } as never);
-            vi.mocked(dbService.getContentAnalysis).mockResolvedValue(null);
 
             const detectSpy = vi.spyOn(pipeline, 'getOrDetectContentTypes').mockResolvedValue(undefined);
             const tableSpy = vi.spyOn(pipeline.tableProcessor, 'processTableAdaptations').mockResolvedValue(undefined);

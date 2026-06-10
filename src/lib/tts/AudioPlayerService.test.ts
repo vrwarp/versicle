@@ -66,7 +66,7 @@ vi.mock('../../db/DBService', () => ({
             { sectionId: 'sec2', characterCount: 0 }, // Empty section
             { sectionId: 'sec3', characterCount: 100 }
         ]),
-        getTTSContent: vi.fn().mockImplementation((bookId, sectionId) => {
+        getTTSContent: vi.fn().mockImplementation((_bookId: string, sectionId: string) => {
             if (sectionId === 'sec2') return Promise.resolve({ sentences: [] });
             return Promise.resolve({
                 sentences: [{ text: "Sentence " + sectionId, cfi: "cfi_" + sectionId }]
@@ -166,7 +166,7 @@ describe('AudioPlayerService', () => {
 
     it('should notify listeners on subscribe', () => {
         return new Promise<void>((resolve) => {
-            service.subscribe((status, activeCfi, currentIndex, queue, error) => {
+            service.subscribe((status, _activeCfi, _currentIndex, _queue, error) => {
                 expect(status).toBe('stopped');
                 expect(error).toBeNull();
                 resolve();

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, act, fireEvent } from '@testing-library/react';
-import { LibrarySearchBar, LibrarySearchBarRef } from './LibrarySearchBar';
+import { LibrarySearchBar, type LibrarySearchBarRef } from './LibrarySearchBar';
 import React from 'react';
 
 describe('LibrarySearchBar', () => {

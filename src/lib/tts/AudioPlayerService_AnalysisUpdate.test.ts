@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AudioPlayerService } from './AudioPlayerService';
 import { getInProcessAudioPlayer } from './engine/mainThreadAudioPlayer';
-import { useContentAnalysisStore, SectionAnalysis } from '../../store/useContentAnalysisStore';
+import { useContentAnalysisStore, type SectionAnalysis } from '../../store/useContentAnalysisStore';
 import { dbService } from '../../db/DBService';
 import { useGenAIStore } from '../../store/useGenAIStore';
 
@@ -68,7 +68,7 @@ describe('AudioPlayerService Content Analysis Race Condition', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getTTSState as any).mockResolvedValue({ queue: [] });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService.getBookMetadata as any).mockResolvedValue({ id: 'book1' });
+        (dbService as any).getBookMetadata.mockResolvedValue({ id: 'book1' });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (dbService.getTTSContent as any).mockResolvedValue({ sentences: [] });
 

@@ -31,7 +31,7 @@ describe('useAnnotationStore', () => {
     mockDB.get.mockResolvedValue(undefined);
     mockDB.put.mockResolvedValue(undefined);
 
-    useAnnotationStore = createAnnotationStore(async () => mockDB);
+    useAnnotationStore = createAnnotationStore();
     useAnnotationStore.setState({ annotations: {} });
 
     vi.clearAllMocks();

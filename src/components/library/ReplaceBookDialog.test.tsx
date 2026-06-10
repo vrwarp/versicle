@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
@@ -110,7 +110,7 @@ describe('ReplaceBookDialog', () => {
 
   it('catches errors from onConfirm and leaves dialog open', async () => {
     let rejectConfirm: (reason?: unknown) => void;
-    const confirmPromise = new Promise((resolve, reject) => {
+    const confirmPromise = new Promise((_resolve, reject) => {
         rejectConfirm = reject;
     });
 

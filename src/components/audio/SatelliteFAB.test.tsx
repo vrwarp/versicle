@@ -1,9 +1,11 @@
 
-import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { SatelliteFAB } from './SatelliteFAB';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { useTTSStore, TTSStore } from '../../store/useTTSStore';
+import { useTTSStore } from '../../store/useTTSStore';
+
+// The store's state interface is not exported; derive it from the hook.
+type TTSStore = ReturnType<typeof useTTSStore.getState>;
 
 // Mock Lucide icons
 vi.mock('lucide-react', () => ({

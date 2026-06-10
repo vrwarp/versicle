@@ -72,7 +72,7 @@ test("orphan repair", async ({ page }) => {
 
     await successMsg.scrollIntoViewIfNeeded();
     await expect(successMsg).toBeVisible();
-  } catch {
+  } catch (e) {
     // Capture screenshot on failure
     const screenshotsDir = path.resolve(__dirname, "screenshots");
     if (!fs.existsSync(screenshotsDir)) {

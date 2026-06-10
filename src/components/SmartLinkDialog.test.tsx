@@ -1,7 +1,6 @@
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SmartLinkDialog } from './SmartLinkDialog';
-import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 import { useReadingListStore } from '../store/useReadingListStore';
 import { useBookStore } from '../store/useBookStore';
 import { useGenAIStore } from '../store/useGenAIStore';

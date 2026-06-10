@@ -1,7 +1,6 @@
-import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { GeneralSettingsTab } from './GeneralSettingsTab';
+import { GeneralSettingsTab, type GeneralSettingsTabProps } from './GeneralSettingsTab';
 
 // Mock ThemeSelector
 vi.mock('../ThemeSelector', () => ({
@@ -14,7 +13,7 @@ vi.mock('../ThemeSelector', () => ({
 }));
 
 describe('GeneralSettingsTab', () => {
-    const defaultProps = {
+    const defaultProps: GeneralSettingsTabProps = {
         currentTheme: 'light',
         onThemeChange: vi.fn(),
         isImporting: false,

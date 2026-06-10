@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { AnnotationList } from '../AnnotationList';
 import { useAnnotationStore } from '../../../store/useAnnotationStore';
@@ -12,7 +11,7 @@ vi.mock('lucide-react', () => ({
 
 describe('AnnotationList', () => {
   beforeEach(() => {
-    useAnnotationStore.setState({ annotations: [] });
+    useAnnotationStore.setState({ annotations: {} });
     vi.clearAllMocks();
   });
 

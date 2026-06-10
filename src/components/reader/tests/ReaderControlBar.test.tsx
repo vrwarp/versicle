@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ReaderControlBar } from '../ReaderControlBar';
@@ -17,7 +16,11 @@ const { mockUseBook, mockUseLastReadBook, mockUseCurrentDeviceProgress } = vi.ho
 const mockUseAnnotationStore = vi.fn();
 const mockUseTTSStore = vi.fn();
 const mockUseReaderUIStore = vi.fn();
-const mockUseReadingStateStore = vi.fn();
+const mockUseReadingStateStore = Object.assign(vi.fn(), {
+  getState: undefined as (() => unknown) | undefined,
+  setState: undefined as ((state: unknown) => unknown) | undefined,
+  subscribe: undefined as ((listener: unknown) => unknown) | undefined,
+});
 const mockUseLibraryStore = vi.fn();
 const mockUseToastStore = vi.fn();
 const mockUseNavigate = vi.fn();

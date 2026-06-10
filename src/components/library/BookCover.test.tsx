@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { BookCover } from './BookCover';
 import type { BookMetadata } from '../../types/db';
