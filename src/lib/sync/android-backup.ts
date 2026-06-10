@@ -1,5 +1,5 @@
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
-import type { BackupManifestV2 } from '../BackupService';
+import type { BackupManifest, BackupManifestV3 } from '../BackupService';
 import { backupService } from '../BackupService';
 import { createLogger } from '../logger';
 
@@ -18,7 +18,7 @@ export class AndroidBackupService {
      */
     static async writeBackupPayload(): Promise<void> {
         try {
-            const manifest: BackupManifestV2 = await backupService.generateManifest();
+            const manifest: BackupManifestV3 = await backupService.generateManifest();
             await Filesystem.writeFile({
                 path: BACKUP_FILENAME,
                 data: JSON.stringify(manifest),
@@ -34,7 +34,7 @@ export class AndroidBackupService {
     /**
      * Reads the backup payload (useful for debugging or restore verification).
      */
-    static async readBackupPayload(): Promise<BackupManifestV2 | null> {
+    static async readBackupPayload(): Promise<BackupManifest | null> {
         try {
             const result = await Filesystem.readFile({
                 path: BACKUP_FILENAME,
@@ -43,7 +43,7 @@ export class AndroidBackupService {
             });
 
             if (typeof result.data === 'string') {
-                return JSON.parse(result.data) as BackupManifestV2;
+                return JSON.parse(result.data) as BackupManifest;
             }
             return null;
         } catch (e) {

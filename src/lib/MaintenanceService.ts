@@ -7,6 +7,9 @@ import { createLogger } from './logger';
 
 const logger = createLogger('MaintenanceService');
 
+/** localStorage flag marking the one-time corrupt-coverBlob repair as complete. */
+const COVER_BLOB_REPAIR_FLAG = 'versicle_cover_blob_repair_v1';
+
 /**
  * Service to handle database maintenance and integrity checks.
  * 
@@ -15,6 +18,68 @@ const logger = createLogger('MaintenanceService');
  * are now in Yjs and managed by their respective stores.
  */
 export class MaintenanceService {
+  /**
+   * One-time boot repair for cover images corrupted by pre-v3 backup restores
+   * (JSON.stringify turned binary coverBlobs into `{}`, and restore blind-put
+   * those rows over healthy local manifests).
+   *
+   * Guarded by a localStorage flag so the scan only runs once per device.
+   * The underlying repair is idempotent, so re-running after a wipe is safe.
+   */
+  async repairCorruptCoverBlobsOnce(): Promise<void> {
+    let alreadyDone = false;
+    try {
+      alreadyDone = localStorage.getItem(COVER_BLOB_REPAIR_FLAG) === '1';
+    } catch {
+      // localStorage unavailable; fall through and run the (idempotent) repair
+    }
+    if (alreadyDone) return;
+
+    const repaired = await this.repairCorruptCoverBlobs();
+    if (repaired > 0) {
+      logger.info(`Repaired ${repaired} corrupt cover blob(s) left by past backup restores`);
+    }
+
+    try {
+      localStorage.setItem(COVER_BLOB_REPAIR_FLAG, '1');
+    } catch {
+      // localStorage unavailable; repair will re-run (and no-op) next boot
+    }
+  }
+
+  /**
+   * Scans static_manifests for non-binary coverBlob values (the `{}` left
+   * behind when pre-v3 backups serialized ArrayBuffers through JSON) and
+   * removes them so covers regenerate from the EPUB. Idempotent.
+   *
+   * @returns The number of repaired manifest rows.
+   */
+  async repairCorruptCoverBlobs(): Promise<number> {
+    const db = await getDB();
+    const manifests = await db.getAll('static_manifests');
+
+    const corrupt = manifests.filter(m => {
+      const cover: unknown = m.coverBlob;
+      return cover !== undefined && cover !== null
+        && !(cover instanceof Blob) && !(cover instanceof ArrayBuffer);
+    });
+
+    if (corrupt.length === 0) {
+      return 0;
+    }
+
+    const tx = db.transaction('static_manifests', 'readwrite');
+    const putPromises: Promise<unknown>[] = [];
+    for (const manifest of corrupt) {
+      delete manifest.coverBlob;
+      putPromises.push(tx.store.put(manifest));
+    }
+    await Promise.all(putPromises);
+    await tx.done;
+
+    return corrupt.length;
+  }
+
   /**
    * Scans the database for orphaned records (files, cache data without a parent book).
    *

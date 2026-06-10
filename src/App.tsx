@@ -23,6 +23,7 @@ import { RootLayout } from './layouts/RootLayout';
 import { getFirestoreSyncManager } from './lib/sync/FirestoreSyncManager';
 import { useDriveStore } from './store/useDriveStore';
 import { DriveScannerService } from './lib/drive/DriveScannerService';
+import { maintenanceService } from './lib/MaintenanceService';
 
 import './App.css';
 
@@ -206,6 +207,14 @@ function App() {
         setStatusMessage('Connecting to database...');
         // Initialize DB
         await getDB();
+
+        // One-time repair: strip corrupt (non-binary) coverBlobs left behind by
+        // pre-v3 backup restores so covers can regenerate (see BackupService v3).
+        try {
+          await maintenanceService.repairCorruptCoverBlobsOnce();
+        } catch (repairErr) {
+          logger.warn('Cover blob repair failed:', repairErr);
+        }
 
         // Register device if not present
         const deviceId = getDeviceId();

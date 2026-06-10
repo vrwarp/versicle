@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MaintenanceService } from './MaintenanceService';
+import { getDB } from '../db/db';
 
 // --- Mocks ---
 
@@ -202,6 +203,71 @@ describe('MaintenanceService', () => {
                 sourceFilename: 'b2.epub',
             }));
             consoleErrorSpy.mockRestore();
+        });
+    });
+
+    describe('regression: corrupt {} coverBlob repair (pre-v3 backup restores)', () => {
+        const REPAIR_FLAG = 'versicle_cover_blob_repair_v1';
+
+        function setupDb(manifests: Record<string, unknown>[]) {
+            const putMock = vi.fn().mockResolvedValue(undefined);
+            const dbMock = {
+                getAll: vi.fn().mockResolvedValue(manifests),
+                transaction: vi.fn().mockReturnValue({
+                    store: { put: putMock },
+                    done: Promise.resolve(),
+                }),
+            };
+            vi.mocked(getDB).mockResolvedValue(dbMock as never);
+            return { putMock, dbMock };
+        }
+
+        beforeEach(() => {
+            localStorage.removeItem(REPAIR_FLAG);
+        });
+
+        it('strips non-binary coverBlob values and leaves healthy rows alone', async () => {
+            const healthyCover = new ArrayBuffer(4);
+            const { putMock, dbMock } = setupDb([
+                { bookId: 'corrupt', title: 'Corrupt', coverBlob: {} },
+                { bookId: 'healthy-buffer', title: 'Healthy', coverBlob: healthyCover },
+                { bookId: 'healthy-blob', title: 'Healthy Blob', coverBlob: new Blob([new Uint8Array([1])]) },
+                { bookId: 'no-cover', title: 'No Cover' },
+            ]);
+
+            const repaired = await service.repairCorruptCoverBlobs();
+
+            expect(repaired).toBe(1);
+            expect(dbMock.transaction).toHaveBeenCalledWith('static_manifests', 'readwrite');
+            expect(putMock).toHaveBeenCalledTimes(1);
+            const written = putMock.mock.calls[0][0];
+            expect(written.bookId).toBe('corrupt');
+            expect('coverBlob' in written).toBe(false);
+        });
+
+        it('is a no-op (no readwrite transaction) when nothing is corrupt', async () => {
+            const { putMock, dbMock } = setupDb([
+                { bookId: 'healthy', title: 'Healthy', coverBlob: new ArrayBuffer(4) },
+                { bookId: 'no-cover', title: 'No Cover' },
+            ]);
+
+            const repaired = await service.repairCorruptCoverBlobs();
+
+            expect(repaired).toBe(0);
+            expect(dbMock.transaction).not.toHaveBeenCalled();
+            expect(putMock).not.toHaveBeenCalled();
+        });
+
+        it('repairCorruptCoverBlobsOnce only scans once per device', async () => {
+            const { dbMock } = setupDb([
+                { bookId: 'corrupt', title: 'Corrupt', coverBlob: {} },
+            ]);
+
+            await service.repairCorruptCoverBlobsOnce();
+            await service.repairCorruptCoverBlobsOnce();
+
+            expect(dbMock.getAll).toHaveBeenCalledTimes(1);
+            expect(localStorage.getItem(REPAIR_FLAG)).toBe('1');
         });
     });
 });

@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import * as Y from 'yjs';
-import { BackupService, BackupManifestV2 } from './BackupService';
+import { BackupService, BackupManifestV2, BackupManifestV3 } from './BackupService';
 import { dbService } from '../db/DBService';
 import { exportFile } from './export';
 
@@ -10,7 +10,17 @@ const mocks = vi.hoisted(() => ({
   capturedDocs: [] as any[],
   persistenceMock: {
     clearData: vi.fn(() => Promise.resolve()),
+  },
+  checkpointMock: {
+    createCheckpoint: vi.fn<(trigger: string) => Promise<number>>(async () => 1),
   }
+}));
+
+// Mock CheckpointService (dynamically imported by processManifest)
+vi.mock('./sync/CheckpointService', () => ({
+  CheckpointService: {
+    createCheckpoint: (trigger: string) => mocks.checkpointMock.createCheckpoint(trigger),
+  },
 }));
 
 // Mock y-indexeddb to avoid side effects in yjs-provider
@@ -103,6 +113,9 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
     vi.clearAllMocks();
     mocks.capturedDocs.length = 0; // Clear captured docs
 
+    // Default: no existing rows in IDB (restore merges against existing manifests)
+    mockDB.getAll.mockResolvedValue([]);
+
     // Get the mocked yDoc
     const yjsProvider = await import('../store/yjs-provider');
     mockYDoc = yjsProvider.yDoc;
@@ -144,8 +157,8 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
       expect(filename).toContain('.json');
       expect(mimeType).toBe('application/json');
 
-      const manifest: BackupManifestV2 = JSON.parse(data as string);
-      expect(manifest.version).toBe(2);
+      const manifest: BackupManifestV3 = JSON.parse(data as string);
+      expect(manifest.version).toBe(3);
       expect(manifest.yjsSnapshot).toBeDefined();
       expect(typeof manifest.yjsSnapshot).toBe('string');
       expect(manifest.yjsSnapshot.length).toBeGreaterThan(0);
@@ -337,6 +350,188 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
       const restoredProgress = freshDoc.getMap('progress').get('book1') as any;
       expect(restoredProgress).toBeDefined();
       expect(restoredProgress.percentage).toBe(0.5);
+    });
+  });
+
+  // Helpers for restore regression tests
+  function makeSnapshotBase64(): string {
+    const doc = new Y.Doc();
+    doc.getMap('library').set('books', new Y.Map());
+    const snapshot = Y.encodeStateAsUpdate(doc);
+    return btoa(String.fromCharCode(...snapshot));
+  }
+
+  function setupRestoreTx() {
+    const putMock = vi.fn().mockResolvedValue(undefined);
+    const mockTx = {
+      objectStore: vi.fn().mockReturnValue({
+        get: vi.fn().mockResolvedValue(undefined),
+        put: putMock,
+      }),
+      done: Promise.resolve(),
+    };
+    mockDB.transaction.mockReturnValue(mockTx);
+    return putMock;
+  }
+
+  describe('regression: restore validates before destroying local data', () => {
+    function expectLocalDataUntouched() {
+      expect(mocks.persistenceMock.clearData).not.toHaveBeenCalled();
+      expect(mockDB.transaction).not.toHaveBeenCalled();
+    }
+
+    it('rejects a structurally invalid manifest and leaves local data untouched', async () => {
+      // Missing required `timestamp`
+      const file = new File(
+        [JSON.stringify({ version: 2, yjsSnapshot: makeSnapshotBase64() })],
+        'backup.json'
+      );
+
+      await expect(service.restoreBackup(file)).rejects.toThrow(/Invalid backup manifest/);
+      expectLocalDataUntouched();
+      expect(mocks.checkpointMock.createCheckpoint).not.toHaveBeenCalled();
+    });
+
+    it('rejects an unknown manifest version and leaves local data untouched', async () => {
+      const file = new File(
+        [JSON.stringify({ version: 4, timestamp: '2023-01-01', yjsSnapshot: makeSnapshotBase64() })],
+        'backup.json'
+      );
+
+      await expect(service.restoreBackup(file)).rejects.toThrow(/Invalid backup manifest/);
+      expectLocalDataUntouched();
+    });
+
+    it('rejects a snapshot that is not valid base64 and leaves local data untouched', async () => {
+      const file = new File(
+        [JSON.stringify({ version: 2, timestamp: '2023-01-01', yjsSnapshot: '%%%not-base64%%%', staticManifests: [], locations: [] })],
+        'backup.json'
+      );
+
+      await expect(service.restoreBackup(file)).rejects.toThrow(/not valid base64/);
+      expectLocalDataUntouched();
+      expect(mocks.checkpointMock.createCheckpoint).not.toHaveBeenCalled();
+    });
+
+    it('dry-runs the snapshot on a scratch doc and rejects garbage bytes, leaving local data untouched', async () => {
+      const file = new File(
+        [JSON.stringify({
+          version: 2,
+          timestamp: '2023-01-01',
+          yjsSnapshot: btoa('definitely not a yjs update'),
+          staticManifests: [],
+          locations: []
+        })],
+        'backup.json'
+      );
+
+      await expect(service.restoreBackup(file)).rejects.toThrow(/not a decodable Yjs update/);
+      expectLocalDataUntouched();
+      expect(mocks.checkpointMock.createCheckpoint).not.toHaveBeenCalled();
+    });
+
+    it('creates a pre-restore checkpoint before clearing local persistence', async () => {
+      setupRestoreTx();
+      const file = new File(
+        [JSON.stringify({ version: 2, timestamp: '2023-01-01', yjsSnapshot: makeSnapshotBase64(), staticManifests: [], locations: [] })],
+        'backup.json'
+      );
+
+      await service.restoreBackup(file);
+
+      expect(mocks.checkpointMock.createCheckpoint).toHaveBeenCalledWith('pre-restore');
+      expect(mocks.persistenceMock.clearData).toHaveBeenCalled();
+
+      const checkpointOrder = mocks.checkpointMock.createCheckpoint.mock.invocationCallOrder[0];
+      const clearOrder = mocks.persistenceMock.clearData.mock.invocationCallOrder[0];
+      expect(checkpointOrder).toBeLessThan(clearOrder);
+    });
+
+    it('aborts the restore (data untouched) when the pre-restore checkpoint cannot be created', async () => {
+      mocks.checkpointMock.createCheckpoint.mockRejectedValueOnce(new Error('disk full'));
+      const file = new File(
+        [JSON.stringify({ version: 2, timestamp: '2023-01-01', yjsSnapshot: makeSnapshotBase64(), staticManifests: [], locations: [] })],
+        'backup.json'
+      );
+
+      await expect(service.restoreBackup(file)).rejects.toThrow(/pre-restore checkpoint/);
+      expectLocalDataUntouched();
+    });
+  });
+
+  describe('regression: cover blob corruption (backup manifest v3)', () => {
+    it('exports v3 with covers base64-encoded so JSON round-trips are lossless', async () => {
+      const coverBytes = new Uint8Array([1, 2, 3, 250, 255]);
+      mockDB.getAll.mockImplementation((store: string) => {
+        if (store === 'static_manifests') return Promise.resolve([
+          {
+            bookId: 'b1', title: 'Covered Book', author: 'A', fileHash: 'h',
+            fileSize: 1, totalChars: 1, schemaVersion: 1, coverBlob: coverBytes.buffer
+          }
+        ]);
+        return Promise.resolve([]);
+      });
+
+      await service.createLightBackup();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = (exportFile as any).mock.calls[0][0];
+      const manifest: BackupManifestV3 = JSON.parse(data as string);
+
+      expect(manifest.version).toBe(3);
+      // Raw binary never enters the JSON (v2 corrupted it to `{}`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((manifest.staticManifests[0] as any).coverBlob).toBeUndefined();
+      expect(typeof manifest.staticManifests[0].coverBlobBase64).toBe('string');
+
+      // Restore the exported JSON and verify the cover bytes survive intact
+      mockDB.getAll.mockResolvedValue([]);
+      const putMock = setupRestoreTx();
+      await service.restoreBackup(new File([data as string], 'backup.json'));
+
+      const putRows = putMock.mock.calls.map(c => c[0]);
+      const restored = putRows.find(r => r.bookId === 'b1' && 'coverBlob' in r);
+      expect(restored).toBeDefined();
+      expect(restored.coverBlob).toBeInstanceOf(ArrayBuffer);
+      expect(Array.from(new Uint8Array(restored.coverBlob))).toEqual([1, 2, 3, 250, 255]);
+      expect(restored.coverBlobBase64).toBeUndefined();
+    });
+
+    it('sanitizes corrupt {} covers from v2 backups and never clobbers healthy local covers', async () => {
+      const localCover = new Uint8Array([9, 9, 9]).buffer;
+      mockDB.getAll.mockImplementation((store: string) => {
+        if (store === 'static_manifests') return Promise.resolve([
+          { bookId: 'b1', title: 'Healthy Local', coverBlob: localCover }
+        ]);
+        return Promise.resolve([]);
+      });
+      const putMock = setupRestoreTx();
+
+      // A v2 backup that went through JSON.stringify: covers degraded to `{}`
+      const manifest = {
+        version: 2,
+        timestamp: '2023-01-01',
+        yjsSnapshot: makeSnapshotBase64(),
+        staticManifests: [
+          { bookId: 'b1', title: 'Healthy Local', coverBlob: {} },
+          { bookId: 'b2', title: 'New Book', coverBlob: {} }
+        ],
+        locations: []
+      };
+
+      await service.restoreBackup(new File([JSON.stringify(manifest)], 'backup.json'));
+
+      const putRows = putMock.mock.calls.map(c => c[0]);
+
+      // b1: the healthy local cover is preserved (not overwritten with `{}`)
+      const b1 = putRows.find(r => r.bookId === 'b1');
+      expect(b1).toBeDefined();
+      expect(b1.coverBlob).toBe(localCover);
+
+      // b2: the corrupt `{}` cover is stripped, never written to IDB
+      const b2 = putRows.find(r => r.bookId === 'b2');
+      expect(b2).toBeDefined();
+      expect('coverBlob' in b2).toBe(false);
     });
   });
 });
