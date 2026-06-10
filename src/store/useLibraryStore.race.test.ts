@@ -1,33 +1,29 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createLibraryStore, useBookStore } from './useLibraryStore';
+import { autoResetStores, makeLibraryDbDouble, makeBookMetadata, makeInventoryItem } from '../test/harness';
 
 describe('LibraryStore race conditions', () => {
-  beforeEach(() => {
-    useBookStore.setState({ books: {} });
-  });
+  autoResetStores(useBookStore);
 
   it('should not overwrite concurrent additions or updates when hydrating static metadata', async () => {
-    // 1. Setup mock DB
-    const mockDb = {
-      getBookMetadata: vi.fn(async (id) => {
+    // 1. Typed DB double from the harness (only the methods this flow uses)
+    const mockDb = makeLibraryDbDouble({
+      getBookMetadata: vi.fn(async (id: string) => {
         // Simulate a slow DB read
         await new Promise((resolve) => setTimeout(resolve, 50));
-        return { id, title: `Book ${id} from DB` };
+        return makeBookMetadata({ id, title: `Book ${id} from DB` });
       }),
-      getOffloadedStatus: vi.fn(async () => new Map()),
-    };
+      getOffloadedStatus: vi.fn(async () => new Map<string, boolean>()),
+    });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const useLibraryStore = createLibraryStore(mockDb as any);
+    const useLibraryStore = createLibraryStore(mockDb);
 
     // 2. Put a book in the sync store so hydrate has something to do
     useBookStore.setState({
       books: {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        'old-book': { bookId: 'old-book', title: 'Old Book' } as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        'existing-book': { bookId: 'existing-book', title: 'Existing Book' } as any
-      }
+        'old-book': makeInventoryItem({ bookId: 'old-book', title: 'Old Book' }),
+        'existing-book': makeInventoryItem({ bookId: 'existing-book', title: 'Existing Book' }),
+      },
     });
 
     // 3. Start hydration (reads from DB)
@@ -37,11 +33,9 @@ describe('LibraryStore race conditions', () => {
     useLibraryStore.setState((state) => ({
       staticMetadata: {
         ...state.staticMetadata,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        'new-book': { id: 'new-book', title: 'New Book' } as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        'existing-book': { id: 'existing-book', title: 'Existing Book Updated Concurrently' } as any
-      }
+        'new-book': makeBookMetadata({ id: 'new-book', title: 'New Book' }),
+        'existing-book': makeBookMetadata({ id: 'existing-book', title: 'Existing Book Updated Concurrently' }),
+      },
     }));
 
     // 5. Wait for hydration to finish

@@ -106,8 +106,10 @@ interface LibraryState {
   restoreBook: (id: string, file: File) => Promise<void>;
 }
 
-// DB Service Interface for injection (updated for Phase 2)
-interface IDBService {
+// DB Service Interface for injection (updated for Phase 2).
+// Exported so the shared test harness (src/test/harness/doubles.ts) can build
+// typed doubles against the real seam instead of `as any` mocks.
+export interface IDBService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   addBook: (file: File, options: any, onProgress: (progress: number, message: string) => void) => Promise<StaticBookManifest>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

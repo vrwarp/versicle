@@ -2,13 +2,12 @@ import { render, fireEvent } from '@testing-library/react';
 import { ReaderTTSController } from './ReaderTTSController';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { useTTSStore } from '../../store/useTTSStore';
+import { autoResetStores, makeTTSQueue, seedStore } from '../../test/harness';
 import type { Rendition } from 'epubjs';
 
-// Mock useTTSStore
-vi.mock('../../store/useTTSStore', () => ({
-    getDefaultMinSentenceLength: () => 36,
-    useTTSStore: vi.fn()
-}));
+// Harness migration (Phase 0): seeds the REAL useTTSStore (state + action
+// spies via setState) instead of vi.mock'ing the store module, so the test
+// compiles against the real TTSState shape.
 
 // Mock Rendition (simplified)
 const mockRendition = {
@@ -20,28 +19,13 @@ const mockRendition = {
     views: vi.fn().mockReturnValue([])
 };
 
-// Define mock state shape
-interface MockTTSState {
-    activeCfi: string;
-    currentIndex: number;
-    status: 'playing' | 'paused' | 'stopped';
-    queue: { title: string }[];
-    jumpTo: () => void;
-    play: () => void;
-    pause: () => void;
-    stop: () => void;
-}
-
-// Interface for mocked store with getState
-interface MockStoreWithGetState {
-    getState: () => Partial<MockTTSState>;
-}
-
 describe('ReaderTTSController', () => {
     const mockJumpTo = vi.fn();
     const mockPlay = vi.fn();
     const mockPause = vi.fn();
     const mockStop = vi.fn();
+
+    autoResetStores(useTTSStore);
 
     beforeEach(() => {
         vi.spyOn(console, 'error').mockImplementation(() => { });
@@ -53,27 +37,16 @@ describe('ReaderTTSController', () => {
     });
 
     const setup = (status: 'playing' | 'paused' | 'stopped' = 'stopped', queueLength = 5, currentIndex = 0) => {
-        // The component selects from the real TTSState; this mock serves a
-        // reduced MockTTSState. Cast the implementation to the hook's selector
-        // signature rather than widening the mock state.
-        vi.mocked(useTTSStore).mockImplementation(((selector?: (state: MockTTSState) => unknown) => {
-            const state: MockTTSState = {
-                activeCfi: 'epubcfi(/6/4!/4/2)',
-                currentIndex,
-                status,
-                queue: new Array(queueLength).fill({ title: 'Item' }),
-                jumpTo: mockJumpTo,
-                play: mockPlay,
-                pause: mockPause,
-                stop: mockStop
-            };
-            return selector ? selector(state) : state;
-        }) as unknown as (selector: (state: ReturnType<typeof useTTSStore.getState>) => unknown) => unknown);
-
-        // Mock getState on the store itself (needed for visibility change logic in component)
-        (useTTSStore as unknown as MockStoreWithGetState).getState = () => ({
+        seedStore(useTTSStore, {
             activeCfi: 'epubcfi(/6/4!/4/2)',
-            status
+            currentIndex,
+            status,
+            isPlaying: status === 'playing',
+            queue: makeTTSQueue(queueLength),
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause,
+            stop: mockStop
         });
 
         return render(
