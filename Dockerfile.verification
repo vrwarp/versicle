@@ -15,6 +15,9 @@ COPY . .
 
 # 4. Build the App (with HTTPS disabled for verification)
 ENV VITE_HTTPS=false
+# Install the typed window.__versicleTest API (flushPersistence/resetApp) in
+# the E2E build — the deterministic waits in verification/utils.ts need it.
+ENV VITE_E2E=true
 RUN npm run build
 
 # 5. Set Entrypoint

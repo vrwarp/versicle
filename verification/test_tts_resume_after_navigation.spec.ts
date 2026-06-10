@@ -65,8 +65,8 @@ test("tts resume after leaving book", async ({ page, baseURL }) => {
   await page.getByTestId("reader-back-button").click();
   await expect(page).toHaveURL(new RegExp(finalBaseURL.replace(/\/$/, "") + "/?$"), { timeout: 10000 });
 
-  // Wait a moment for state to persist
-  await page.waitForTimeout(1000);
+  // Flush debounced persistence deterministically (replaces a 1000ms sleep)
+  await waitForPersistedWrites(page);
 
   // Re-open the book
   console.log("Re-opening book...");

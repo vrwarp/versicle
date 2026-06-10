@@ -30,6 +30,15 @@ declare global {
   }
 }
 
+// Typed E2E test API (window.__versicleTest): flushPersistence/resetApp.
+// DEV + E2E builds only (Dockerfile.verification sets VITE_E2E=true); the
+// gate keeps the module out of the production execution path.
+if (import.meta.env.DEV || import.meta.env.VITE_E2E === 'true') {
+  void import('./lib/test-api')
+    .then(({ installTestApi }) => installTestApi())
+    .catch((error) => console.error('Failed to install test API:', error));
+}
+
 // Expose stores to window for verification tests
 if (typeof window !== 'undefined') {
   window.useTTSStore = useTTSStore;

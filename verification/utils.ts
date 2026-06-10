@@ -20,6 +20,22 @@ const idbProbeContent = fs.existsSync(idbProbePath) ? fs.readFileSync(idbProbePa
 // Record<never, never> (no keys) rather than Record<string, never>: the latter's
 // string index signature intersects the worker-fixture types and collapses
 // `_suppressLogs` to `never`, rejecting the fixture tuple below.
+/**
+ * The typed page-side test API installed by src/lib/test-api.ts (DEV and
+ * VITE_E2E builds only). Mirrored here because tsconfig.e2e.json does not
+ * include src/.
+ */
+interface VersicleTestApi {
+  flushPersistence(): Promise<void>;
+  resetApp(): Promise<void>;
+}
+
+declare global {
+  interface Window {
+    __versicleTest?: VersicleTestApi;
+  }
+}
+
 export const test = base.extend<Record<never, never>, { _suppressLogs: void }>({
   // Worker-scoped: runs once per worker process (not per test).
   // Patches console.log/info/debug to noop so spec-file log calls are
@@ -109,6 +125,37 @@ export async function resetApp(page: Page) {
   await page.reload();
 
   await page.evaluate(async () => {
+    // Unregister Service Workers (with timeout — WebKit's unregister() can hang indefinitely)
+    const unregisterServiceWorkers = async () => {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await Promise.race([
+            registration.unregister(),
+            new Promise<void>(resolve => setTimeout(resolve, 2000)),
+          ]);
+        }
+      }
+    };
+
+    // Preferred path: the typed test API (DEV/VITE_E2E builds). Its resetApp
+    // delegates to the app's own wipeAllData() — flush + close every writer,
+    // delete both app databases, clear Versicle-owned localStorage and caches.
+    const api = window.__versicleTest;
+    if (api?.resetApp) {
+      await unregisterServiceWorkers();
+      try {
+        await api.resetApp();
+      } catch (err) {
+        // wipeAllData throws when a deletion is blocked by another holder;
+        // surface it but let the reload below proceed (legacy behavior).
+        console.warn(`__versicleTest.resetApp reported: ${err}`);
+      }
+      localStorage.clear();
+      return;
+    }
+
+    // Legacy fallback (builds without the test API).
     // Disconnect Yjs to release IDB locks
     if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__ === 'function') {
       await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__();
@@ -119,16 +166,7 @@ export async function resetApp(page: Page) {
       await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__();
     }
 
-    // Unregister Service Workers (with timeout — WebKit's unregister() can hang indefinitely)
-    if ('serviceWorker' in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      for (const registration of registrations) {
-        await Promise.race([
-          registration.unregister(),
-          new Promise<void>(resolve => setTimeout(resolve, 2000)),
-        ]);
-      }
-    }
+    await unregisterServiceWorkers();
 
     // Clear DBs
     const dbs = await window.indexedDB.databases();
@@ -177,13 +215,28 @@ export async function resetApp(page: Page) {
  * Both flush asynchronously and cannot be guaranteed to commit during page teardown, so a
  * `page.reload()` issued immediately after a write tears the page down with the bytes still
  * buffered — and the state is gone after reload. Tests that assert "X survives a reload" must
- * let those windows drain first (the in-SPA navigation tests already wait ~1s "to persist").
+ * let those windows drain first.
  *
- * The wait comfortably exceeds the longest debounce (500ms) plus write time; once the test
- * goes idle here no new writes are issued, so the timers fire and the queued writes complete.
+ * Deterministic path: `window.__versicleTest.flushPersistence()` (src/lib/test-api.ts,
+ * installed in DEV/VITE_E2E builds) forces both queues to flush NOW and resolves when the
+ * transactions have committed — no timing knowledge duplicated here. The 1500ms sleep
+ * remains only as a fallback for stale builds without the API, so a mismatched app build
+ * degrades to the old slow-but-safe behavior instead of flaking.
  */
 export async function waitForPersistedWrites(page: Page) {
-  await page.waitForTimeout(1500);
+  const flushed = await page.evaluate(async () => {
+    const api = window.__versicleTest;
+    if (!api?.flushPersistence) return false;
+    await api.flushPersistence();
+    return true;
+  });
+  if (!flushed) {
+    console.warn(
+      'waitForPersistedWrites: window.__versicleTest.flushPersistence unavailable ' +
+      '(app built without DEV/VITE_E2E?) — falling back to the legacy 1500ms sleep.'
+    );
+    await page.waitForTimeout(1500);
+  }
 }
 
 export async function ensureLibraryWithBook(page: Page) {

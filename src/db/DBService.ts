@@ -530,6 +530,24 @@ class DBService {
     }, 500);
   }
 
+  /**
+   * Deterministically flush the debounced cache_session_state writes NOW
+   * instead of waiting out the 500ms timer. Used by the E2E test API
+   * (`window.__versicleTest.flushPersistence()`) so tests can await
+   * persistence instead of sleeping past the debounce window; safe for any
+   * caller because writeSession is serialised through the shared exclusive
+   * IDB write lock like every other session write.
+   */
+  async flushSessionWrites(): Promise<void> {
+    if (this.sessionFlushTimer) {
+      clearTimeout(this.sessionFlushTimer);
+      this.sessionFlushTimer = null;
+    }
+    const books = [...this.sessionDirty];
+    this.sessionDirty.clear();
+    await Promise.all(books.map((id) => this.writeSession(id)));
+  }
+
   async getTTSState(bookId: string): Promise<TTSState | undefined> {
     try {
       const db = await this.getDB();

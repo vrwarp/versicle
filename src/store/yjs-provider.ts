@@ -50,6 +50,17 @@ if (isStorageSupported()) {
  */
 export const yjsPersistence = persistence;
 
+/**
+ * Live accessor for the persistence instance. Unlike the `yjsPersistence`
+ * const snapshot above (which keeps pointing at a destroyed instance after
+ * `disconnectYjs()`), this always reflects the current value — use it for
+ * anything that must observe disconnection (e.g. the E2E test API's
+ * `flushPersistence`).
+ */
+export function getYjsPersistence(): IndexeddbPersistence | null {
+    return persistence;
+}
+
 // ─── Client Quarantine ──────────────────────────────────────────────────────
 /**
  * Fires when FirestoreSyncManager pulls a document with a newer schema version.
