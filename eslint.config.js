@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'venv', 'android'] },
+  // .claude holds agent worktrees (full checkouts under .claude/worktrees/<name>/);
+  // without the ignore, a top-level `eslint .` would also lint every worktree's copy.
+  { ignores: ['dist', 'coverage', 'venv', 'android', '.claude'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],
