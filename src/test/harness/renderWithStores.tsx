@@ -16,8 +16,10 @@ import { render } from '@testing-library/react';
 import type { RenderOptions, RenderResult } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { onTestFinished } from 'vitest';
+import type { AxeResults, RunOptions } from 'axe-core';
 import { resetStore, seedStore } from './stores';
 import type { HarnessStore } from './stores';
+import { runAxe } from './axe';
 
 export interface StoreSeed<S> {
   store: HarnessStore<S>;
@@ -45,6 +47,12 @@ export interface RenderWithStoresOptions extends RenderOptions {
 export type RenderWithStoresResult = RenderResult & {
   /** Reset all seeded stores immediately (also happens automatically at test end). */
   resetSeededStores: () => void;
+  /**
+   * Opt-in accessibility assertion: run axe on the rendered container.
+   * `expect(await view.axe()).toHaveNoViolations()` — the matcher is
+   * registered by importing the harness (see ./axe.ts).
+   */
+  axe: (options?: RunOptions) => Promise<AxeResults>;
 };
 
 export function renderWithStores(
@@ -62,5 +70,8 @@ export function renderWithStores(
   onTestFinished(resetSeededStores);
 
   const result = render(ui, renderOptions);
-  return Object.assign(result, { resetSeededStores });
+  return Object.assign(result, {
+    resetSeededStores,
+    axe: (axeOptions?: RunOptions) => runAxe(result.container, axeOptions),
+  });
 }

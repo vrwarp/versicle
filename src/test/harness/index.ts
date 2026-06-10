@@ -14,6 +14,7 @@
  * seeding the real store over re-declaring its shape. New tests should not
  * hand-roll DBService/useTTSStore mocks — extend the harness instead.
  */
+export { runAxe } from './axe';
 export { resetStore, resetStores, seedStore, autoResetStores } from './stores';
 export type { HarnessStore } from './stores';
 export { makeDbServiceDouble, makeLibraryDbDouble } from './doubles';
