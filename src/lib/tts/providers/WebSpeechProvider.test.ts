@@ -152,9 +152,16 @@ describe('WebSpeechProvider', () => {
           const errorEvent = { error: 'some error' };
           if (mockUtterance.onerror) mockUtterance.onerror(errorEvent);
 
-          // Expect promise rejection
-          await expect(playPromise).rejects.toEqual(errorEvent);
-          expect(callback).toHaveBeenCalledWith({ type: 'error', error: errorEvent });
+          // Expect promise rejection with the provider's wrapped Error
+          await expect(playPromise).rejects.toThrow('SpeechSynthesisError: some error');
+          expect(callback).toHaveBeenCalledWith({
+              type: 'error',
+              error: {
+                  error: 'some error',
+                  message: 'SpeechSynthesisError: some error',
+                  type: undefined,
+              },
+          });
       });
   });
 
