@@ -1,0 +1,85 @@
+# Phase 0 PR gate (plan/overhaul/README.md §5 P0): lint, typecheck (app +
+# test + e2e code via tsc -b project references), sharded vitest, production
+# build, worker-chunk purity, dependency-cruiser ratchet, license gate.
+#
+# Conventions (do not regress):
+#   - Node comes from .nvmrc — never hardcode a version here.
+#   - npm ci only. `npm install` in CI re-resolves git deps and can test a
+#     different tree than the lockfile (this exact failure mode existed in
+#     the retired npm-test.yml).
+#   - The Docker/Playwright E2E lane is NOT a PR gate (runners unverified);
+#     it lives in e2e-verification.yml (nightly + manual, experimental).
+name: CI
+
+on:
+  push:
+    # antigravity is the integration branch; main kept during transition
+    # (several legacy workflows still reference it).
+    branches: [antigravity, main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  quality:
+    name: Lint, typecheck, boundaries, licenses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck (app + tests + e2e)
+        run: npx tsc -b
+      - name: Dependency boundaries (warn-mode ratchet)
+        # All boundary rules are severity "warn" (Phase 0) so plain depcruise
+        # exits 0; the check fails only if a rule's violation count exceeds
+        # the committed baseline (.dependency-cruiser-baseline.json).
+        run: npm run depcruise:check
+      - name: License gate
+        # Fails on production deps with licenses outside the GPL-3.0-compatible
+        # allowlist and on incomplete third-party/inventory.json entries.
+        run: npm run licenses:check
+
+  test:
+    name: Vitest (shard ${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run vitest shard
+        run: npx vitest run --shard=${{ matrix.shard }}/2
+
+  build:
+    name: Build + worker-chunk purity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build (tsc -b && vite build)
+        run: npm run build
+      - name: Worker-chunk purity (C12)
+        # Reuses dist/ from the build step above; asserts the TTS worker
+        # bundle contains no zustand/yjs/src-store code.
+        run: npm run check:worker-chunk -- --skip-build
