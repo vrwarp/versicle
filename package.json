@@ -16,6 +16,7 @@
     "licenses:check": "node scripts/license-gate.mjs",
     "test": "vitest run",
     "tests": "vitest run",
+    "coverage": "vitest run --coverage",
     "preview": "vite preview",
     "prepare-piper": "mkdir -p public/piper && cp node_modules/piper-wasm/build/piper_phonemize.js public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.wasm public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.data public/piper/ && cp node_modules/piper-wasm/build/worker/piper_worker.js public/piper/ && node scripts/patch_piper_worker.js",
     "postinstall": "patch-package && npm run prepare-piper"

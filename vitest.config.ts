@@ -18,5 +18,19 @@ export default defineConfig({
     // Defense in depth if the include ever widens: never descend into the
     // Playwright suite (verification/) or .claude/ worktrees.
     exclude: [...configDefaults.exclude, 'verification/**', '.claude/**', '**/.claude/**'],
+    // Coverage baseline (Phase 0; plan/overhaul/README.md §4 rule 8): run via
+    // `npm run coverage`; totals are pinned in coverage-baseline.json and may
+    // not decrease. Not a PR-blocking gate yet — the ratchet is enforced by
+    // review against the committed baseline until a CI gate lands.
+    coverage: {
+      provider: 'v8',
+      // Count ALL src code (not just files a test happens to import) so the
+      // denominator is stable: deleting a test (or its imports) cannot
+      // inflate the percentages. Test files themselves are excluded by
+      // vitest automatically; src/test/ harness code is excluded here.
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/test/**'],
+      reporter: ['text-summary', 'json-summary'],
+    },
   },
 });

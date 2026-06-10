@@ -1,0 +1,10 @@
+{
+  "$comment": "Phase 0 coverage baseline (plan/overhaul/README.md §4 rule 3 ratchet + rule 8 test-absorption ledger: 'the Phase 0 coverage baseline never decreases'). Generated with `npm run coverage` (vitest run --coverage, @vitest/coverage-v8; settings in vitest.config.ts: include src/**/*.{ts,tsx}, exclude src/test/**) — totals copied from coverage/coverage-summary.json. Suite state at capture: 253 test files (252 passed, 1 skipped), 1863 tests (1848 passed, 15 skipped). NOT a PR-blocking gate yet: test-consolidation PRs must re-run `npm run coverage` and show these totals did not drop; regenerate this file (and explain the delta) in the same PR when coverage legitimately moves.",
+  "command": "npm run coverage",
+  "totals": {
+    "lines": { "total": 12644, "covered": 8257, "pct": 65.3 },
+    "statements": { "total": 13794, "covered": 8835, "pct": 64.04 },
+    "functions": { "total": 3079, "covered": 1806, "pct": 58.65 },
+    "branches": { "total": 8188, "covered": 4592, "pct": 56.08 }
+  }
+}
