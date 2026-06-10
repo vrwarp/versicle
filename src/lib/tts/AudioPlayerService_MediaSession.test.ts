@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AudioPlayerService } from './AudioPlayerService';
+import type { AudioPlayerService } from './AudioPlayerService';
 import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 import type { TTSEvent, ITTSProvider } from './providers/types';
 

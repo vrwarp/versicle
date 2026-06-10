@@ -1,4 +1,4 @@
-import React from 'react';
+import type React from 'react';
 import { useReadingStateStore } from '../../store/useReadingStateStore';
 import { useHistoryHighlights } from './useHistoryHighlights';
 import { useShallow } from 'zustand/react/shallow';

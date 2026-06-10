@@ -1,4 +1,4 @@
-import React from 'react';
+import type React from 'react';
 import { useSyncToasts } from '../../lib/sync/hooks/useSyncToasts';
 
 /**
