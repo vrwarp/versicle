@@ -159,7 +159,7 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 
 ## Bundled npm packages (production dependency tree)
 
-581 packages, grouped by license. The private
+579 packages, grouped by license. The private
 fork `zustand-middleware-yjs` (MIT) is excluded from the scan and recorded
 in the inventory section above.
 
@@ -336,7 +336,7 @@ in the inventory section above.
 - `yaml@2.9.0` — Copyright Eemeli Aro <eemeli@gmail.com> — <https://github.com/eemeli/yaml>
 - `yargs-parser@21.1.1` — Copyright (c) 2016, Contributors — <https://github.com/yargs/yargs-parser>
 
-### MIT (447)
+### MIT (445)
 
 - `@alloc/quick-lru@5.2.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com) — <https://github.com/sindresorhus/quick-lru>
 - `@apideck/better-ajv-errors@0.3.6` — Copyright (c) 2021 Apideck — <https://github.com/apideck-libraries/better-ajv-errors>
@@ -601,7 +601,6 @@ in the inventory section above.
 - `has-tostringtag@1.0.2` — Copyright (c) 2021 Inspect JS — <https://github.com/inspect-js/has-tostringtag>
 - `hasown@2.0.4` — Copyright (c) Jordan Harband and contributors — <https://github.com/inspect-js/hasOwn>
 - `http-parser-js@0.5.10` — Copyright (c) 2015 Tim Caswell (https://github.com/creationix) and other. contributors. All rights reserved. — <https://github.com/creationix/http-parser-js>
-- `husky@9.1.7` — Copyright (c) 2021 typicode — <https://github.com/typicode/husky>
 - `immediate@3.0.6` — Copyright (c) 2012 Barnesandnoble.com, llc, Donavon West, Domenic Denicola, Brian Cavalier — <https://github.com/calvinmetcalf/immediate>
 - `internal-slot@1.1.0` — Copyright (c) 2019 Jordan Harband — <https://github.com/ljharb/internal-slot>
 - `is-array-buffer@3.0.5` — Copyright (c) 2015 Chen Gengyuan, Inspect JS — <https://github.com/inspect-js/is-array-buffer>
@@ -682,7 +681,6 @@ in the inventory section above.
 - `react-router-dom@7.17.0` — Copyright (c) React Training LLC 2015-2019. Copyright (c) Remix Software Inc. 2020-2021. Copyright (c) Shopify Inc. 2022-2023 — <https://github.com/remix-run/react-router>
 - `react-router@7.17.0` — Copyright (c) React Training LLC 2015-2019. Copyright (c) Remix Software Inc. 2020-2021. Copyright (c) Shopify Inc. 2022-2023 — <https://github.com/remix-run/react-router>
 - `react-style-singleton@2.2.3` — Copyright (c) 2017 Anton Korzunov — <https://github.com/theKashey/react-style-singleton>
-- `react-window@2.2.3` — Copyright (c) 2018 Brian Vaughn — <https://github.com/bvaughn/react-window>
 - `react@19.2.3` — Copyright (c) Meta Platforms, Inc. and affiliates. — <https://github.com/facebook/react>
 - `readable-stream@2.3.8` — <https://github.com/nodejs/readable-stream>
 - `reflect.getprototypeof@1.0.10` — Copyright (c) 2021 ECMAScript Shims — <https://github.com/es-shims/Reflect.getPrototypeOf>
