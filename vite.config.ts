@@ -1,6 +1,4 @@
-/// <reference types="vitest" />
 import { defineConfig, loadEnv } from 'vite'
-import { configDefaults } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import mkcert from 'vite-plugin-mkcert'
@@ -72,15 +70,9 @@ export default defineConfig(({ mode }) => {
         }
       })
     ],
-    test: {
-      environment: 'jsdom',
-      globals: true,
-      setupFiles: ['./src/test/setup.ts'],
-      // Don't discover tests inside .claude/ — agent worktrees live under
-      // .claude/worktrees/<name>/ as full checkouts, so without this a top-level
-      // `npm test` would also run every worktree's copy of the suite.
-      exclude: [...configDefaults.exclude, '.claude/**', '**/.claude/**'],
-    },
+    // NOTE: no `test` block here on purpose. Vitest is configured exclusively
+    // in vitest.config.ts — a root vitest.config.ts overrides (not merges)
+    // any `test` field in this file, so settings added here would be dead.
     server: {
       proxy: {
         '/__/auth': {
