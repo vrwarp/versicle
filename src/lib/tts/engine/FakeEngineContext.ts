@@ -39,10 +39,20 @@ export class FakeEngineContext implements EngineContext {
     batteryOptimizationEnabled = false;
     minSentenceLengthByLang: (lang: string) => number = (lang) => (lang.startsWith('zh') ? 6 : 36);
 
+    /** Whether the fake GenAI client reports itself as configured. */
+    genAIConfigured = false;
+    /** Configurable model-call results for the GenAI port. */
+    contentTypeDetections: { classifications: { id: string; type: string }[]; justification: string; agreedWithHeuristic: boolean } =
+        { classifications: [], justification: '', agreedWithHeuristic: false };
+    tableAdaptationResults: { cfi: string; adaptation: string }[] = [];
+
     // --- Recorded outputs (assert against these) ---
     readonly toasts: Array<{ message: string; type?: ToastType }> = [];
     readonly addedAnnotations: AnnotationInput[] = [];
     readonly genAILogs: GenAILogEntry[] = [];
+    readonly genAIConfigureCalls: Array<{ apiKey: string; model: string }> = [];
+    readonly detectContentTypesCalls: Array<{ nodes: { id: string; sampleText: string }[]; hints: { enumeratorCandidate: number } }> = [];
+    readonly generateTableAdaptationsCalls: Array<{ nodes: { rootCfi: string }[]; thinkingBudget: number }> = [];
     readonly ttsProgressWrites: Array<{ bookId: string; queueIndex: number; sectionIndex: number }> = [];
     readonly completedRanges: Array<{ bookId: string; cfiRange: string; type?: ReadingEventType }> = [];
     readonly playbackPositions: Array<{ bookId: string; lastPlayedCfi: string }> = [];
@@ -70,6 +80,25 @@ export class FakeEngineContext implements EngineContext {
         subscribe: (listener: () => void) => {
             this.genAIListeners.add(listener);
             return () => this.genAIListeners.delete(listener);
+        },
+        isConfigured: () => this.genAIConfigured,
+        configure: (apiKey: string, model: string) => {
+            this.genAIConfigureCalls.push({ apiKey, model });
+            this.genAIConfigured = true;
+        },
+        detectContentTypes: async (
+            nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
+            hints: { enumeratorCandidate: number },
+        ) => {
+            this.detectContentTypesCalls.push({ nodes, hints });
+            return this.contentTypeDetections as never;
+        },
+        generateTableAdaptations: async (
+            nodes: { rootCfi: string; imageBlob: Blob }[],
+            thinkingBudget: number,
+        ) => {
+            this.generateTableAdaptationsCalls.push({ nodes, thinkingBudget });
+            return this.tableAdaptationResults;
         },
     };
 

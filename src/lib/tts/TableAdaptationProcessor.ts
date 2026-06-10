@@ -1,5 +1,4 @@
 import { dbService } from '../../db/DBService';
-import { genAIService } from '../genai/GenAIService';
 import EpubCFI from 'epubjs/src/epubcfi';
 import { parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
 import type { SentenceNode } from '../tts';
@@ -75,15 +74,15 @@ export class TableAdaptationProcessor {
             if (workSet.length === 0) return;
 
             // 4. Check if GenAI is configured
-            const canUseGenAI = genAISettings.isEnabled && (genAIService.isConfigured() || !!genAISettings.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse')));
+            const canUseGenAI = genAISettings.isEnabled && ((await this.ctx.genAI.isConfigured()) || !!genAISettings.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse')));
             if (!canUseGenAI) return;
 
             // Ensure service is configured
-            if (!genAIService.isConfigured() && genAISettings.apiKey) {
-                genAIService.configure(genAISettings.apiKey, 'gemini-1.5-flash');
+            if (!(await this.ctx.genAI.isConfigured()) && genAISettings.apiKey) {
+                this.ctx.genAI.configure(genAISettings.apiKey, 'gemini-1.5-flash');
             }
 
-            if (genAIService.isConfigured()) {
+            if (await this.ctx.genAI.isConfigured()) {
                 const nodes = workSet.map(img => ({
                     rootCfi: img.cfi,
                     imageBlob: img.imageBlob
@@ -107,7 +106,7 @@ export class TableAdaptationProcessor {
                 if (structure && structure.toc) findSectionTitle(structure.toc);
                 const sectionTitle = sectionMap.get(sectionId) || 'Unknown Section';
 
-                const results = await genAIService.generateTableAdaptations(nodes, 512, { bookTitle, sectionTitle });
+                const results = await this.ctx.genAI.generateTableAdaptations(nodes, 512, { bookTitle, sectionTitle });
 
                 // 5. Update DB
                 await this.ctx.contentAnalysis.saveTableAdaptations(bookId, sectionId, results.map(r => ({

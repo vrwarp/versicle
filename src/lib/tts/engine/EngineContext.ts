@@ -30,6 +30,7 @@ import type { SectionAnalysis, TableAdaptation } from '../../../store/useContent
 import type { useAnnotationStore } from '../../../store/useAnnotationStore';
 import type { useToastStore } from '../../../store/useToastStore';
 import type { LexiconRule, ContentAnalysis, BookMetadata } from '../../../types/db';
+import type { ContentType } from '../../../types/content-analysis';
 
 // Re-exported so the engine core and helpers (e.g. FakeEngineContext) get all
 // engine-boundary types from this one module without re-reaching into the stores.
@@ -72,12 +73,41 @@ export interface TTSConfigPort {
     getDefaultMinSentenceLength(lang: string): number;
 }
 
-/** GenAI settings + activity log + change notifications. */
+/** The classification result for one content group, as returned by content-type detection. */
+export interface ContentTypeDetectionResult {
+    classifications: { id: string; type: ContentType }[];
+    justification: string;
+    agreedWithHeuristic: boolean;
+}
+
+/**
+ * GenAI settings + activity log + change notifications, plus the model calls themselves.
+ *
+ * The model calls live on the port (not in the engine) so the GenAI SDK stays on the
+ * main thread: the worker context bridges these to the host, which owns the SDK. All
+ * arguments and results are structured-cloneable (Blobs included).
+ */
 export interface GenAIPort {
     getSettings(): GenAISettingsSnapshot;
     addLog(entry: GenAILogEntry): void;
     /** Subscribe to settings changes; returns an unsubscribe function. */
     subscribe(listener: () => void): () => void;
+    /** Whether the underlying GenAI client currently holds a usable configuration. */
+    isConfigured(): Promise<boolean> | boolean;
+    /** Configure the underlying GenAI client (no-op if the host rejects the key). */
+    configure(apiKey: string, model: string): void;
+    /** Classify content groups (main text vs references/footnotes…) via the model. */
+    detectContentTypes(
+        nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
+        hints: { enumeratorCandidate: number },
+        context?: { bookTitle?: string; sectionTitle?: string },
+    ): Promise<ContentTypeDetectionResult>;
+    /** Generate TTS-friendly narrative adaptations for table images via the model. */
+    generateTableAdaptations(
+        nodes: { rootCfi: string; imageBlob: Blob }[],
+        thinkingBudget: number,
+        context?: { bookTitle?: string; sectionTitle?: string },
+    ): Promise<{ cfi: string; adaptation: string }[]>;
 }
 
 /** Per-book reading progress and completed-range history. */

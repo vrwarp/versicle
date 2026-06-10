@@ -72,6 +72,10 @@ describe('WorkerTtsEngine over a MessageChannel (live worker bridge)', () => {
             lexiconGetBiblePreference: async () => 'default',
             getContentAnalysis: async () => undefined,
             getBookMetadata: async () => undefined,
+            genAIIsConfigured: async () => false,
+            genAIConfigure: () => {},
+            genAIDetectContentTypes: async () => ({ classifications: [], justification: '', agreedWithHeuristic: false }),
+            genAIGenerateTableAdaptations: async () => [],
             applyHostCommand: (cmd) => hostCommands.push(cmd),
         };
 

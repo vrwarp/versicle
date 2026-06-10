@@ -39,6 +39,7 @@ import type {
     LexiconRule,
     ContentAnalysis,
     BookMetadata,
+    GenAIPort,
 } from './EngineContext';
 
 /** Main-thread → worker state replication messages. */
@@ -79,6 +80,11 @@ export interface WorkerEngineContextOptions {
     /** Async reads proxied to the main thread (content-analysis + book metadata live in yjs stores). */
     getContentAnalysis?: (bookId: string, sectionId: string) => Promise<ContentAnalysis | undefined>;
     getBookMetadata?: (bookId: string) => Promise<BookMetadata | undefined>;
+    /** GenAI model calls, proxied to the main thread (which owns the SDK). */
+    genAIIsConfigured?: () => Promise<boolean>;
+    genAIConfigure?: (apiKey: string, model: string) => void;
+    genAIDetectContentTypes?: GenAIPort['detectContentTypes'];
+    genAIGenerateTableAdaptations?: GenAIPort['generateTableAdaptations'];
     /** Locale-aware default; pure, computed locally. Override only for tests. */
     defaultMinSentenceLength?: (lang: string) => number;
 }
@@ -92,6 +98,10 @@ export class WorkerEngineContext implements EngineContext {
     private readonly fetchBiblePref: (bookId: string) => Promise<'on' | 'off' | 'default'>;
     private readonly fetchContentAnalysis: (bookId: string, sectionId: string) => Promise<ContentAnalysis | undefined>;
     private readonly fetchBookMetadata: (bookId: string) => Promise<BookMetadata | undefined>;
+    private readonly genAIIsConfiguredFn: () => Promise<boolean>;
+    private readonly genAIConfigureFn: (apiKey: string, model: string) => void;
+    private readonly genAIDetectFn: GenAIPort['detectContentTypes'];
+    private readonly genAIAdaptFn: GenAIPort['generateTableAdaptations'];
     private readonly minSentenceLength: (lang: string) => number;
 
     // Replicated state (populated by applyUpdate).
@@ -115,6 +125,11 @@ export class WorkerEngineContext implements EngineContext {
         this.fetchBiblePref = opts.getBibleLexiconPreference ?? (async () => 'default');
         this.fetchContentAnalysis = opts.getContentAnalysis ?? (async () => undefined);
         this.fetchBookMetadata = opts.getBookMetadata ?? (async () => undefined);
+        this.genAIIsConfiguredFn = opts.genAIIsConfigured ?? (async () => false);
+        this.genAIConfigureFn = opts.genAIConfigure ?? (() => {});
+        this.genAIDetectFn = opts.genAIDetectContentTypes ??
+            (async () => ({ classifications: [], justification: '', agreedWithHeuristic: false }));
+        this.genAIAdaptFn = opts.genAIGenerateTableAdaptations ?? (async () => []);
         this.minSentenceLength = opts.defaultMinSentenceLength ?? ((lang) => (lang.startsWith('zh') ? 6 : 36));
     }
 
@@ -170,6 +185,19 @@ export class WorkerEngineContext implements EngineContext {
             this.genAIListeners.add(listener);
             return () => this.genAIListeners.delete(listener);
         },
+        // Model calls bridge to the main thread, which owns the GenAI SDK.
+        isConfigured: () => this.genAIIsConfiguredFn(),
+        configure: (apiKey: string, model: string) => this.genAIConfigureFn(apiKey, model),
+        detectContentTypes: (
+            nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
+            hints: { enumeratorCandidate: number },
+            context?: { bookTitle?: string; sectionTitle?: string },
+        ) => this.genAIDetectFn(nodes, hints, context),
+        generateTableAdaptations: (
+            nodes: { rootCfi: string; imageBlob: Blob }[],
+            thinkingBudget: number,
+            context?: { bookTitle?: string; sectionTitle?: string },
+        ) => this.genAIAdaptFn(nodes, thinkingBudget, context),
     };
 
     readingState = {

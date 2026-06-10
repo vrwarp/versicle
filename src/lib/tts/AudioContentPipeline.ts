@@ -4,7 +4,6 @@ import type { EngineContext } from './engine/EngineContext';
 import { generateSecureId } from '../crypto';
 import EpubCFI from 'epubjs/src/epubcfi';
 import type { CitationMarker } from '../../types/db';
-import { genAIService } from '../genai/GenAIService';
 import { getParentCfi, generateCfiRange, parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
 import type { SectionMetadata } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
@@ -471,7 +470,7 @@ export class AudioContentPipeline {
                 return detCfi ?? undefined;
             }
 
-            const canUseGenAI = aiStore.isEnabled && (genAIService.isConfigured() || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse')));
+            const canUseGenAI = aiStore.isEnabled && ((await this.ctx.genAI.isConfigured()) || !!aiStore.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse')));
 
             if (!canUseGenAI) {
                 return null;
@@ -503,11 +502,11 @@ export class AudioContentPipeline {
                 });
 
                 // Ensure service is configured if we have a key
-                if (!genAIService.isConfigured() && aiStore.apiKey) {
-                    genAIService.configure(aiStore.apiKey, 'gemini-1.5-flash'); // Fallback default
+                if (!(await this.ctx.genAI.isConfigured()) && aiStore.apiKey) {
+                    this.ctx.genAI.configure(aiStore.apiKey, 'gemini-1.5-flash'); // Fallback default
                 }
 
-                if (genAIService.isConfigured()) {
+                if (await this.ctx.genAI.isConfigured()) {
                     const bookMetadata = await this.ctx.book.getMetadata(bookId);
                     const bookTitle = bookMetadata?.title || 'Unknown Book';
                     const structure = await dbService.getBookStructure(bookId);
@@ -526,7 +525,7 @@ export class AudioContentPipeline {
                     if (structure && structure.toc) findSectionTitle(structure.toc);
                     const sectionTitle = sectionMap.get(sectionId) || 'Unknown Section';
 
-                    const { classifications: results, justification, agreedWithHeuristic } = await genAIService.detectContentTypes(
+                    const { classifications: results, justification, agreedWithHeuristic } = await this.ctx.genAI.detectContentTypes(
                         nodesToDetect,
                         { enumeratorCandidate: enumeratorCandidateIndex },
                         { bookTitle, sectionTitle }

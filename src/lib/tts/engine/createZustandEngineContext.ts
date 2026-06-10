@@ -24,6 +24,7 @@ import { useReaderUIStore } from '../../../store/useReaderUIStore';
 import { LexiconService } from '../LexiconService';
 import { bookRepository } from '../../../db/BookRepository';
 import { contentAnalysisRepository } from '../../../db/ContentAnalysisRepository';
+import { genAIService } from '../../genai/GenAIService';
 import type { EngineContext } from './EngineContext';
 
 /**
@@ -45,6 +46,12 @@ export function createZustandEngineContext(): EngineContext {
                 typeof useGenAIStore.subscribe === 'function'
                     ? useGenAIStore.subscribe(listener)
                     : () => {},
+            isConfigured: () => genAIService.isConfigured(),
+            configure: (apiKey, model) => genAIService.configure(apiKey, model),
+            detectContentTypes: (nodes, hints, context) =>
+                genAIService.detectContentTypes(nodes, hints, context),
+            generateTableAdaptations: (nodes, thinkingBudget, context) =>
+                genAIService.generateTableAdaptations(nodes, thinkingBudget, context),
         },
 
         readingState: {

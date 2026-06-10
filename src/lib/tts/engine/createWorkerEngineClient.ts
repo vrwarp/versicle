@@ -22,6 +22,7 @@ import { PlatformIntegration } from '../PlatformIntegration';
 import { LexiconService } from '../LexiconService';
 import { bookRepository } from '../../../db/BookRepository';
 import { contentAnalysisRepository } from '../../../db/ContentAnalysisRepository';
+import { genAIService } from '../../genai/GenAIService';
 import { WebSpeechProvider } from '../providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from '../providers/CapacitorTTSProvider';
 import { GoogleTTSProvider } from '../providers/GoogleTTSProvider';
@@ -198,6 +199,12 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         getContentAnalysis: async (bookId, sectionId) =>
             contentAnalysisRepository.getContentAnalysis(bookId, sectionId),
         getBookMetadata: (bookId) => bookRepository.getBookMetadata(bookId),
+        genAIIsConfigured: async () => genAIService.isConfigured(),
+        genAIConfigure: (apiKey, model) => genAIService.configure(apiKey, model),
+        genAIDetectContentTypes: (nodes, hints, context) =>
+            genAIService.detectContentTypes(nodes, hints, context),
+        genAIGenerateTableAdaptations: (nodes, thinkingBudget, context) =>
+            genAIService.generateTableAdaptations(nodes, thinkingBudget, context),
         applyHostCommand,
     };
 

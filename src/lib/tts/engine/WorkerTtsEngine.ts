@@ -18,7 +18,7 @@ import type { PlaybackBackend, TTSProviderEvents } from './PlaybackBackend';
 import type { MediaPlatform } from '../PlatformIntegration';
 import type { TTSVoice } from '../providers/types';
 import type { AlignmentData } from '../SyncEngine';
-import type { LexiconRule, ContentAnalysis, BookMetadata } from './EngineContext';
+import type { LexiconRule, ContentAnalysis, BookMetadata, GenAIPort } from './EngineContext';
 import type { MediaSessionMetadata } from '../MediaSessionManager';
 import type { BackgroundAudioMode } from '../BackgroundAudio';
 
@@ -70,6 +70,12 @@ export interface EngineHost {
     getContentAnalysis(bookId: string, sectionId: string): Promise<ContentAnalysis | undefined>;
     getBookMetadata(bookId: string): Promise<BookMetadata | undefined>;
 
+    // GenAI model calls (the main thread owns the GenAI SDK).
+    genAIIsConfigured(): Promise<boolean>;
+    genAIConfigure(apiKey: string, model: string): void;
+    genAIDetectContentTypes: GenAIPort['detectContentTypes'];
+    genAIGenerateTableAdaptations: GenAIPort['generateTableAdaptations'];
+
     // Worker → main-thread store writes (the WorkerEngineContext.post channel).
     applyHostCommand(command: EngineHostCommand): void;
 }
@@ -100,6 +106,12 @@ export class WorkerTtsEngine {
             getBibleLexiconPreference: (bookId) => host.lexiconGetBiblePreference(bookId),
             getContentAnalysis: (bookId, sectionId) => host.getContentAnalysis(bookId, sectionId),
             getBookMetadata: (bookId) => host.getBookMetadata(bookId),
+            genAIIsConfigured: () => host.genAIIsConfigured(),
+            genAIConfigure: (apiKey, model) => { void host.genAIConfigure(apiKey, model); },
+            genAIDetectContentTypes: (nodes, hints, context) =>
+                host.genAIDetectContentTypes(nodes, hints, context),
+            genAIGenerateTableAdaptations: (nodes, thinkingBudget, context) =>
+                host.genAIGenerateTableAdaptations(nodes, thinkingBudget, context),
         });
 
         const backendFactory = (events: TTSProviderEvents): PlaybackBackend => {
