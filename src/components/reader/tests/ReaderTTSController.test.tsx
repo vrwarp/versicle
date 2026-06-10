@@ -15,13 +15,9 @@ vi.mock('../../../store/useTTSStore', () => ({
 
 describe('ReaderTTSController', () => {
   let jumpToMock: ReturnType<typeof vi.fn>;
-  let onNextMock: ReturnType<typeof vi.fn>;
-  let onPrevMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     jumpToMock = vi.fn();
-    onNextMock = vi.fn();
-    onPrevMock = vi.fn();
     mockGetState.mockReturnValue({
         activeCfi: 'cfi-1',
         status: 'playing',
@@ -46,8 +42,6 @@ describe('ReaderTTSController', () => {
       <ReaderTTSController
         rendition={null}
         viewMode="scrolled"
-        onNext={onNextMock}
-        onPrev={onPrevMock}
       />
     );
 
@@ -58,11 +52,9 @@ describe('ReaderTTSController', () => {
     // Fire event on the input, so it bubbles to window and e.target is the input
     fireEvent.keyDown(input, { key: 'ArrowLeft', bubbles: true });
     expect(jumpToMock).not.toHaveBeenCalled();
-    expect(onPrevMock).not.toHaveBeenCalled();
 
     fireEvent.keyDown(input, { key: 'ArrowRight', bubbles: true });
     expect(jumpToMock).not.toHaveBeenCalled();
-    expect(onNextMock).not.toHaveBeenCalled();
 
     document.body.removeChild(input);
   });
@@ -72,8 +64,6 @@ describe('ReaderTTSController', () => {
       <ReaderTTSController
         rendition={null}
         viewMode="scrolled"
-        onNext={onNextMock}
-        onPrev={onPrevMock}
       />
     );
 
@@ -84,11 +74,9 @@ describe('ReaderTTSController', () => {
     // Fire event on the textarea
     fireEvent.keyDown(textarea, { key: 'ArrowLeft', bubbles: true });
     expect(jumpToMock).not.toHaveBeenCalled();
-    expect(onPrevMock).not.toHaveBeenCalled();
 
     fireEvent.keyDown(textarea, { key: 'ArrowRight', bubbles: true });
     expect(jumpToMock).not.toHaveBeenCalled();
-    expect(onNextMock).not.toHaveBeenCalled();
 
     document.body.removeChild(textarea);
   });
@@ -98,8 +86,6 @@ describe('ReaderTTSController', () => {
       <ReaderTTSController
         rendition={null}
         viewMode="scrolled"
-        onNext={onNextMock}
-        onPrev={onPrevMock}
       />
     );
 
@@ -130,8 +116,6 @@ describe('ReaderTTSController', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         rendition={mockRendition as any}
         viewMode="paginated"
-        onNext={onNextMock}
-        onPrev={onPrevMock}
       />
     );
 

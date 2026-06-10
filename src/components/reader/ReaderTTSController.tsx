@@ -6,9 +6,21 @@ import { useShallow } from 'zustand/react/shallow';
 interface ReaderTTSControllerProps {
   rendition: Rendition | null;
   viewMode: string;
-  onNext: () => void;
-  onPrev: () => void;
 }
+
+// HOTFIX keyboard-gating (interim until the Phase 8 KeyboardShortcutService):
+// Focused interactive controls own Space themselves; hijacking it for play/pause
+// (and calling preventDefault) would swallow e.g. a header button's activation.
+const INTERACTIVE_TARGET_SELECTOR = 'button, a[href], select, summary, [role="button"]';
+
+// An open overlay (Radix dialog/sheet/menu/popover) owns Escape: it dismisses the
+// overlay, and stopping playback at the same time would kill the audio session the
+// user only meant to close a dialog over.
+const OPEN_OVERLAY_SELECTOR = [
+  '[role="dialog"][data-state="open"]',
+  '[role="alertdialog"][data-state="open"]',
+  '[data-radix-popper-content-wrapper] [data-state="open"]'
+].join(', ');
 
 /**
  * Component to handle TTS-related side effects that update frequently.
@@ -22,9 +34,7 @@ interface ReaderTTSControllerProps {
  */
 export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   rendition,
-  viewMode,
-  onNext,
-  onPrev
+  viewMode
 }) => {
   // We subscribe to these changing values here, so ReaderView doesn't have to.
   // Use shallow comparison for primitive values to avoid unnecessary re-renders
@@ -161,6 +171,9 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent holding the key down from spamming actions (matches useReaderNavigation)
+      if (e.repeat) return;
+
       const target = e.target as HTMLElement;
       if (
         target.tagName === 'INPUT' ||
@@ -172,21 +185,22 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
 
       const { status: currentStatus, currentIndex: idx, queue: q, play: doPlay, pause: doPause, stop: doStop } = stateRef.current;
 
-      if (e.key === 'ArrowLeft') {
-        if (currentStatus === 'playing' || currentStatus === 'paused') {
-          if (idx > 0) jumpTo(idx - 1);
-        } else {
-          onPrev();
-        }
+      // HOTFIX keyboard-gating: this controller only owns the keyboard while TTS is
+      // playing or paused. Otherwise useReaderNavigation owns ArrowLeft/ArrowRight
+      // (page turns) — acting here too would turn the page twice per keypress.
+      const ttsOwnsKeys = currentStatus === 'playing' || currentStatus === 'paused';
+
+      if (e.key === 'ArrowLeft' && ttsOwnsKeys) {
+        if (idx > 0) jumpTo(idx - 1);
       }
-      if (e.key === 'ArrowRight') {
-        if (currentStatus === 'playing' || currentStatus === 'paused') {
-          if (idx < q.length - 1) jumpTo(idx + 1);
-        } else {
-          onNext();
-        }
+      if (e.key === 'ArrowRight' && ttsOwnsKeys) {
+        if (idx < q.length - 1) jumpTo(idx + 1);
       }
       if (e.key === ' ' || e.code === 'Space') {
+        // Let a focused interactive control keep its own Space activation.
+        if (target instanceof Element && target.closest(INTERACTIVE_TARGET_SELECTOR)) {
+          return;
+        }
         if (currentStatus === 'playing') {
           e.preventDefault();
           doPause();
@@ -196,7 +210,11 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
         }
       }
       if (e.key === 'Escape') {
-        if (currentStatus === 'playing' || currentStatus === 'paused') {
+        if (ttsOwnsKeys) {
+          // Escape closes the topmost overlay before it may stop playback.
+          if (document.querySelector(OPEN_OVERLAY_SELECTOR)) {
+            return;
+          }
           e.preventDefault();
           doStop();
         }
@@ -204,7 +222,7 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [jumpTo, onPrev, onNext]);
+  }, [jumpTo]);
 
   return null;
 };

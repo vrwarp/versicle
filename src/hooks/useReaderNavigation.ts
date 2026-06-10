@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTTSStore } from '../store/useTTSStore';
 
 interface UseReaderNavigationProps {
     rendition: unknown;
@@ -85,6 +86,15 @@ export function useReaderNavigation({
                     target.tagName === 'TEXTAREA' ||
                     (target as HTMLElement).isContentEditable)
             ) {
+                return;
+            }
+
+            // HOTFIX keyboard-gating: while TTS is playing or paused, ReaderTTSController
+            // owns ArrowLeft/ArrowRight (sentence jumps). Both registries listen globally,
+            // so acting here too would fire a page turn on top of the sentence jump.
+            // Interim mitigation until the Phase 8 KeyboardShortcutService replaces both.
+            const ttsStatus = useTTSStore.getState().status;
+            if (ttsStatus === 'playing' || ttsStatus === 'paused') {
                 return;
             }
 

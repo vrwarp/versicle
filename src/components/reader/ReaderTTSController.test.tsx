@@ -43,8 +43,6 @@ describe('ReaderTTSController', () => {
     const mockPlay = vi.fn();
     const mockPause = vi.fn();
     const mockStop = vi.fn();
-    const mockOnNext = vi.fn();
-    const mockOnPrev = vi.fn();
 
     beforeEach(() => {
         vi.spyOn(console, 'error').mockImplementation(() => { });
@@ -80,8 +78,6 @@ describe('ReaderTTSController', () => {
             <ReaderTTSController
                 rendition={mockRendition as unknown as Rendition}
                 viewMode="paginated"
-                onNext={mockOnNext}
-                onPrev={mockOnPrev}
             />
         );
     };
@@ -90,28 +86,24 @@ describe('ReaderTTSController', () => {
         setup('playing', 5, 0);
         fireEvent.keyDown(window, { key: 'ArrowRight' });
         expect(mockJumpTo).toHaveBeenCalledWith(1);
-        expect(mockOnNext).not.toHaveBeenCalled();
     });
 
-    it('handles ArrowRight: navigates to next page when stopped', () => {
+    it('handles ArrowRight: does nothing when stopped (useReaderNavigation owns page turns)', () => {
         setup('stopped', 5, 0);
         fireEvent.keyDown(window, { key: 'ArrowRight' });
         expect(mockJumpTo).not.toHaveBeenCalled();
-        expect(mockOnNext).toHaveBeenCalled();
     });
 
     it('handles ArrowLeft: jumps to previous sentence when playing', () => {
         setup('playing', 5, 1);
         fireEvent.keyDown(window, { key: 'ArrowLeft' });
         expect(mockJumpTo).toHaveBeenCalledWith(0);
-        expect(mockOnPrev).not.toHaveBeenCalled();
     });
 
-    it('handles ArrowLeft: navigates to previous page when stopped', () => {
+    it('handles ArrowLeft: does nothing when stopped (useReaderNavigation owns page turns)', () => {
         setup('stopped', 5, 0);
         fireEvent.keyDown(window, { key: 'ArrowLeft' });
         expect(mockJumpTo).not.toHaveBeenCalled();
-        expect(mockOnPrev).toHaveBeenCalled();
     });
 
     it('handles Space: pauses when playing', () => {
@@ -153,5 +145,71 @@ describe('ReaderTTSController', () => {
         setup('stopped');
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(mockStop).not.toHaveBeenCalled();
+    });
+
+    describe('regression: overlapping global keyboard registries (keyboard-gating hotfix)', () => {
+        it('ignores key auto-repeat for sentence jumps', () => {
+            setup('playing', 5, 0);
+            fireEvent.keyDown(window, { key: 'ArrowRight', repeat: true });
+            expect(mockJumpTo).not.toHaveBeenCalled();
+        });
+
+        it('leaves Space to a focused interactive control instead of toggling playback', () => {
+            setup('playing');
+            const button = document.createElement('button');
+            document.body.appendChild(button);
+            button.focus();
+
+            const notPrevented = fireEvent.keyDown(button, { key: ' ' });
+
+            expect(mockPause).not.toHaveBeenCalled();
+            expect(mockPlay).not.toHaveBeenCalled();
+            // The button keeps its own Space activation (no preventDefault)
+            expect(notPrevented).toBe(true);
+
+            document.body.removeChild(button);
+        });
+
+        it('still toggles playback on Space when no interactive control is focused', () => {
+            setup('playing');
+            fireEvent.keyDown(document.body, { key: ' ' });
+            expect(mockPause).toHaveBeenCalled();
+        });
+
+        it('does not stop playback on Escape while an overlay is open', () => {
+            setup('playing');
+            const dialog = document.createElement('div');
+            dialog.setAttribute('role', 'dialog');
+            dialog.setAttribute('data-state', 'open');
+            document.body.appendChild(dialog);
+
+            fireEvent.keyDown(window, { key: 'Escape' });
+            expect(mockStop).not.toHaveBeenCalled();
+
+            // Once the overlay is closed, Escape stops playback again
+            document.body.removeChild(dialog);
+            fireEvent.keyDown(window, { key: 'Escape' });
+            expect(mockStop).toHaveBeenCalled();
+        });
+
+        it('does not stop playback on Escape while an overlay is closing (data-state="closed" ignored, popper open honored)', () => {
+            setup('playing');
+            const popperWrapper = document.createElement('div');
+            popperWrapper.setAttribute('data-radix-popper-content-wrapper', '');
+            const popperContent = document.createElement('div');
+            popperContent.setAttribute('data-state', 'open');
+            popperWrapper.appendChild(popperContent);
+            document.body.appendChild(popperWrapper);
+
+            fireEvent.keyDown(window, { key: 'Escape' });
+            expect(mockStop).not.toHaveBeenCalled();
+
+            // A closing (animating-out) overlay no longer owns Escape
+            popperContent.setAttribute('data-state', 'closed');
+            fireEvent.keyDown(window, { key: 'Escape' });
+            expect(mockStop).toHaveBeenCalled();
+
+            document.body.removeChild(popperWrapper);
+        });
     });
 });

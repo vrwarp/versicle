@@ -1113,8 +1113,6 @@ export const ReaderView: React.FC = () => {
             <ReaderTTSController
                 rendition={rendition}
                 viewMode={readerViewMode}
-                onPrev={handlePrev}
-                onNext={handleNext}
             />
 
             {/* Immersive Mode Exit Button */}
