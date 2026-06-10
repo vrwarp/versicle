@@ -132,51 +132,32 @@ npm run build
 
 ### Testing
 
-#### Unit Tests (Vitest)
-```bash
-# Run all tests
-vitest run
+**`TESTING.md` is the canonical testing document** — all commands below and
+more (typechecking, boundary/coverage ratchets, the emulator-gated suites,
+a11y scans) are specified and kept current there.
 
-# Run specific test file
-npx vitest src/lib/ingestion.test.ts
-```
-
-#### Linting
 ```bash
-npm run lint
+npm test                                   # unit/integration tests (vitest)
+npx vitest run src/lib/ingestion.test.ts   # a single test file
+npm run lint                               # eslint
+npx tsc -b                                 # typecheck (app + tests + e2e)
 ```
 
 #### Android Tests (Docker)
-We use Docker to run Android unit tests in a consistent environment.
+```bash
+docker build -t versicle-android -f Dockerfile.android .
+docker run --rm versicle-android
+```
 
-1.  **Build the Image**:
-    ```bash
-    docker build -t versicle-android -f Dockerfile.android .
-    ```
+#### Verification Suite (Playwright E2E, Docker)
+The end-to-end suite is Playwright specs in `verification/*.spec.ts`, run
+hermetically in Docker:
 
-2.  **Run Tests**:
-    ```bash
-    docker run --rm versicle-android
-    ```
-
-#### Verification Suite (Docker)
-We use Docker to run end-to-end tests in a consistent environment using Playwright.
-
-1.  **Build the Image**:
-    ```bash
-    docker build -t versicle-verification -f Dockerfile.verification .
-    ```
-
-2.  **Run All Tests**:
-    ```bash
-    docker run --rm versicle-verification
-    ```
-
-3.  **Run Specific Verification Script**:
-    ```bash
-    # Run a specific verification script (e.g., layout test)
-    docker run --rm versicle-verification /app/verification/test_journey_reading.py
-    ```
+```bash
+./run_verification.sh                                      # desktop + mobile projects
+./run_verification.sh verification/test_journey_reading.spec.ts
+./run_verification.sh --help                               # full usage
+```
 
 ## Contributing
 

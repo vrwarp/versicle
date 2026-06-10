@@ -1,5 +1,14 @@
 # Versicle Architecture
 
+> **⚠️ Stale — read `plan/overhaul/README.md` first (banner added
+> 2026-06-10).** This document describes the PRE-overhaul architecture and
+> has drifted from the tree in places. The current architectural direction —
+> target module geography, boundary rules, contract registry, and the
+> phase-by-phase roadmap — is the master plan at `plan/overhaul/README.md`.
+> This document will be regenerated from the registries in Phase 9; until
+> then treat it as historical background, and do not invest in updating it
+> piecemeal. For how to verify changes, see `TESTING.md`.
+
 ## 1. High-Level Overview
 
 Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook player that runs entirely in the browser (or as a Hybrid Mobile App via Capacitor).
