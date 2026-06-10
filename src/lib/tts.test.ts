@@ -185,3 +185,70 @@ describe('citation marker leading flag', () => {
     expect(markers[0].leading).toBe(false);
   });
 });
+
+describe('regression: NFKD normalization corrupted sentence CFI ranges for non-ASCII text', () => {
+  // Segmentation offsets used to be computed against NFKD-normalized text and then
+  // mapped onto the raw (un-normalized) DOM text nodes: every decomposable character
+  // (NFC é, ligature ﬁ, …) before a sentence start shifted the Range — and therefore
+  // the persisted CFI — to the right by the cumulative length drift. Ranges must
+  // cover the exact raw characters; only the outbound sentence text is normalized.
+  const extractWithRanges = (html: string) => {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    const ranges: string[] = [];
+    const cfiGenerator = (range: Range) => {
+      ranges.push(range.toString());
+      return `cfi(${ranges.length})`;
+    };
+    const { sentences } = extractSentencesFromNode(div, cfiGenerator);
+    return { sentences, ranges };
+  };
+
+  it('ranges cover the exact raw characters when precomposed accents precede a sentence', () => {
+    const { sentences, ranges } = extractWithRanges('<p>Le café est bon. Voilà le chat. Fin.</p>');
+
+    // Pre-fix, "café"/"Voilà" each lengthened under NFKD, so the second and third
+    // ranges started 1 and 2 characters too far right.
+    expect(ranges).toEqual(['Le café est bon. ', 'Voilà le chat. ', 'Fin.']);
+    expect(sentences).toHaveLength(3);
+    expect(sentences[2].text).toBe('Fin.');
+  });
+
+  it('ranges cover the exact raw characters with combining-mark accents (e + U+0301)', () => {
+    const { sentences, ranges } = extractWithRanges('<p>Le cafe\u0301 est bon. Fin.</p>');
+
+    expect(ranges).toEqual(['Le cafe\u0301 est bon. ', 'Fin.']);
+    expect(sentences).toHaveLength(2);
+    expect(sentences[1].text).toBe('Fin.');
+  });
+
+  it('ranges stay correct when the accented text spans multiple text nodes', () => {
+    // Pre-fix, the drifted end offset overran the last text node and the final
+    // sentence was silently dropped (no CFI could be generated).
+    const { sentences, ranges } = extractWithRanges('<p>Le caf<em>é</em> est bon. Fin.</p>');
+
+    expect(ranges).toEqual(['Le café est bon. ', 'Fin.']);
+    expect(sentences).toHaveLength(2);
+    expect(sentences[1].text).toBe('Fin.');
+  });
+
+  it('ranges cover the exact raw characters across ligatures (ﬁ)', () => {
+    const { sentences, ranges } = extractWithRanges('<p>The ﬁrst rule. The second rule.</p>');
+
+    expect(ranges).toEqual(['The ﬁrst rule. ', 'The second rule.']);
+    expect(sentences).toHaveLength(2);
+    // Outbound sentence text is still NFKD-normalized: the ligature decomposes.
+    expect(sentences[0].text).toBe('The first rule.');
+    expect(sentences[1].text).toBe('The second rule.');
+  });
+
+  it('ranges cover the exact raw characters for CJK text', () => {
+    const { sentences, ranges } = extractWithRanges('<p>你好。世界！这是一个测试？</p>');
+
+    expect(ranges).toEqual(['你好。', '世界！', '这是一个测试？']);
+    // Outbound text is NFKD-normalized (fullwidth punctuation decomposes to ASCII).
+    expect(sentences.map(s => s.text)).toEqual(
+      ['你好。', '世界！', '这是一个测试？'].map(t => t.normalize('NFKD'))
+    );
+  });
+});

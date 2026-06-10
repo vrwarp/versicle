@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { extractBookData, validateZipSignature } from './ingestion';
 import type { BookExtractionData } from './ingestion';
+import { TTS_EXTRACTION_VERSION } from './tts';
 
 // Mock browser-image-compression
 vi.mock('browser-image-compression', () => ({
@@ -246,5 +247,19 @@ describe('ingestion', () => {
     expect(data.manifest.title).not.toBe(longTitle);
     consoleSpy.mockRestore();
     warnSpy.mockRestore();
+  });
+
+  describe('regression: NFKD/CFI fix-forward extraction version stamp', () => {
+    it('stamps newly written TTS preparation rows with the current extraction version', async () => {
+      const mockFile = createMockFile(true);
+      const data: BookExtractionData = await extractBookData(mockFile);
+
+      // Rows without this stamp predate the raw-offset segmentation fix and may
+      // carry drifted CFIs for non-ASCII books (re-ingestion targets them later).
+      expect(data.ttsContentBatches.length).toBeGreaterThan(0);
+      for (const batch of data.ttsContentBatches) {
+        expect(batch.extractionVersion).toBe(TTS_EXTRACTION_VERSION);
+      }
+    });
   });
 });

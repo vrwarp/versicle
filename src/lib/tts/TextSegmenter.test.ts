@@ -181,4 +181,98 @@ describe('TextSegmenter', () => {
         expect(merged[0].text).toBe('Start.');
     });
   });
+
+  describe('regression: NFKD normalization must not shift raw-text offsets (CFI drift on non-ASCII books)', () => {
+    // segment() used to NFKD-normalize its input and return indices into the
+    // normalized string. Every decomposable character (é → e+◌́, ﬁ → fi) before a
+    // sentence start shifted the offsets that extractSentencesFromNode maps back
+    // onto raw DOM text nodes, corrupting the persisted CFIs. The contract is:
+    // index/length address the RAW input; only the outbound text is NFKD-normalized.
+    const segmentAndCheckRoundTrip = (text: string) => {
+      const segmenter = new TextSegmenter();
+      const segments = segmenter.segment(text);
+      for (const s of segments) {
+        const rawSlice = text.slice(s.index, s.index + s.length);
+        expect(s.text).toBe(rawSlice.normalize('NFKD'));
+      }
+      return segments;
+    };
+
+    it('keeps raw indices when precomposed accents (NFC é, à) precede a sentence', () => {
+      const text = 'Le café est bon. Voilà le chat. Fin.';
+      const segments = segmentAndCheckRoundTrip(text);
+
+      expect(segments).toHaveLength(3);
+      // Pre-fix, NFKD lengthened "café"/"Voilà" so these indices were 1 and 2
+      // characters too far right (18 and 34 instead of 17 and 32).
+      expect(segments[1].index).toBe(text.indexOf('Voilà'));
+      expect(segments[2].index).toBe(text.indexOf('Fin.'));
+      expect(text.slice(segments[2].index, segments[2].index + segments[2].length)).toBe('Fin.');
+    });
+
+    it('keeps raw indices with combining-mark accents (e + U+0301)', () => {
+      const text = 'Le cafe\u0301 est bon. Fin.';
+      const segments = segmentAndCheckRoundTrip(text);
+
+      expect(segments).toHaveLength(2);
+      expect(segments[1].index).toBe(text.indexOf('Fin.'));
+    });
+
+    it('keeps raw indices across ligatures (ﬁ) while still decomposing outbound text', () => {
+      const text = 'The ﬁrst rule. The second rule.';
+      const segments = segmentAndCheckRoundTrip(text);
+
+      expect(segments).toHaveLength(2);
+      expect(segments[1].index).toBe(text.indexOf('The second'));
+      expect(text.slice(segments[1].index, segments[1].index + segments[1].length)).toBe('The second rule.');
+      // Outbound text is still NFKD-normalized: the ligature decomposes.
+      expect(segments[0].text).toContain('first');
+    });
+
+    it('keeps raw indices for CJK text', () => {
+      const text = '你好。世界！这是一个测试？';
+      const segments = segmentAndCheckRoundTrip(text);
+
+      expect(segments.length).toBeGreaterThan(1);
+      expect(text.slice(segments[1].index, segments[1].index + segments[1].length)).toBe('世界！');
+    });
+
+    it('still normalizes the outbound segment text (nbsp → space)', () => {
+      const text = 'Word1 Word2.';
+      const segments = segmentAndCheckRoundTrip(text);
+
+      expect(segments).toHaveLength(1);
+      expect(segments[0].text).toBe('Word1 Word2.');
+      // nbsp is length-preserving under NFKD, so raw length still matches.
+      expect(segments[0].length).toBe(text.length);
+    });
+
+    describe('fallback regex path', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let originalSegmenter: any;
+
+      beforeEach(() => {
+          originalSegmenter = Intl.Segmenter;
+          // @ts-expect-error - Mocking Intl.Segmenter
+          Intl.Segmenter = undefined;
+      });
+
+      afterEach(() => {
+          Intl.Segmenter = originalSegmenter;
+      });
+
+      it('keeps raw indices and normalizes outbound text', () => {
+          const segmenter = new TextSegmenter();
+          const text = 'Le café est bon. Fin.';
+          const segments = segmenter.segment(text);
+
+          expect(segments).toHaveLength(2);
+          for (const s of segments) {
+              const rawSlice = text.slice(s.index, s.index + s.length);
+              expect(s.text).toBe(rawSlice.normalize('NFKD'));
+          }
+          expect(segments[1].index).toBe(text.indexOf(' Fin.'));
+      });
+    });
+  });
 });

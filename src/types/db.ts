@@ -353,6 +353,13 @@ export interface CacheTtsPreparation {
   }[];
   /** Citation markers detected during extraction (superscripts, symbol footnotes). */
   citationMarkers?: CitationMarker[];
+  /**
+   * Version of the sentence-extraction algorithm that produced this row
+   * (`TTS_EXTRACTION_VERSION` in `lib/tts.ts`). Absent on rows written before
+   * the NFKD/CFI offset fix (extraction v2) — those rows may carry drifted CFIs
+   * for non-ASCII text and are candidates for background re-extraction.
+   */
+  extractionVersion?: number;
 }
 
 /**

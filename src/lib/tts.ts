@@ -22,6 +22,18 @@ export interface ExtractionResult {
     citationMarkers: CitationMarker[];
 }
 
+/**
+ * Version of the sentence-extraction algorithm, stamped onto newly written
+ * `cache_tts_preparation` rows (`CacheTtsPreparation.extractionVersion`).
+ *
+ * v2: segmentation offsets are computed against the RAW text (NFKD applies only
+ * to the outbound sentence text), so Range/CFI positions are correct for
+ * non-ASCII books. Rows without a version (implicit v1) were segmented against
+ * NFKD-normalized text and may carry drifted CFIs wherever decomposable
+ * characters (é, ﬁ, …) precede a sentence start.
+ */
+export const TTS_EXTRACTION_VERSION = 2;
+
 // Font-size ratio below which an inline element is treated as superscript/subscript.
 // Used as a fixed diagnostic threshold — not a tuning target.
 const CITATION_FONT_SIZE_RATIO = 0.85;

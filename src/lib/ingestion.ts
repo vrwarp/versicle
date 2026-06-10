@@ -6,7 +6,7 @@ import { getDB } from '../db/db';
 import type { SectionMetadata, CacheTtsPreparation, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry, PerceptualPalette } from '../types/db';
 import type { ProcessedChapter } from './offscreen-renderer';
 import { getSanitizedBookMetadata } from '../db/validators';
-import type { ExtractionOptions } from './tts';
+import { TTS_EXTRACTION_VERSION, type ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
 import { CURRENT_BOOK_VERSION } from './constants';
 import { extractCoverPalette } from './cover-palette';
@@ -22,6 +22,7 @@ function toCacheTtsPrep(bookId: string, chapter: ProcessedChapter): CacheTtsPrep
         sectionId: chapter.href,
         sentences: chapter.sentences,
         citationMarkers: chapter.citationMarkers?.length > 0 ? chapter.citationMarkers : undefined,
+        extractionVersion: TTS_EXTRACTION_VERSION,
     };
 }
 
