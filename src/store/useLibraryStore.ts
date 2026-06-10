@@ -7,11 +7,24 @@ import { StorageFullError, DuplicateBookError } from '../types/errors';
 import { useTTSStore } from './useTTSStore';
 import { useReadingListStore } from './useReadingListStore';
 import { processBatchImport } from '../lib/batch-ingestion';
+import type { BatchImportFailure } from '../lib/batch-ingestion';
 import { extractBookMetadata } from '../lib/ingestion';
 import { useBookStore } from './useBookStore';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('LibraryStore');
+
+/**
+ * Per-file outcome summary of the most recent batch import.
+ */
+export interface BatchImportSummary {
+  /** Number of books successfully imported. */
+  imported: number;
+  /** Filenames skipped because a book with the same source filename already exists. */
+  skipped: string[];
+  /** Files that failed to import, with reasons. */
+  failed: BatchImportFailure[];
+}
 
 /**
  * State interface for the Library store.
@@ -42,6 +55,8 @@ interface LibraryState {
   uploadProgress: number;
   /** Status message of the current upload/extraction. */
   uploadStatus: string;
+  /** Per-file outcome summary of the last batch import, or null if none/dismissed. */
+  batchImportSummary: BatchImportSummary | null;
   /** Error message if an operation failed, or null. */
   error: string | null;
 
@@ -63,6 +78,10 @@ interface LibraryState {
    * @param files - The array of files to import.
    */
   addBooks: (files: File[]) => Promise<void>;
+  /**
+   * Clears the per-file batch import summary (e.g. when the user dismisses it).
+   */
+  clearBatchImportSummary: () => void;
   /**
    * Updates user-editable metadata for a book.
    * @param id - The unique identifier of the book to update.
@@ -241,6 +260,22 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
       }
     };
 
+    // Filename-based duplicate detection, shared by addBook (single import) and
+    // addBooks (batch import). Checks the synced inventory first (synchronous,
+    // avoids race conditions with recent adds), then falls back to the DB index.
+    const findExistingBookIdByFilename = async (filename: string): Promise<string | undefined> => {
+      const books = useBookStore.getState().books;
+      for (const key in books) {
+        if (!Object.prototype.hasOwnProperty.call(books, key)) continue;
+        if (books[key] && books[key].sourceFilename === filename) {
+          return books[key].bookId;
+        }
+      }
+
+      // If not found in store (e.g. not fully synced?), try DB as backup
+      return await injectedDB.getBookIdByFilename(filename);
+    };
+
     return {
       // Transient state
       staticMetadata: {},
@@ -253,6 +288,7 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
     importStatus: '',
     uploadProgress: 0,
     uploadStatus: '',
+    batchImportSummary: null,
     error: null,
 
       // Actions
@@ -266,30 +302,13 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
         importStatus: 'Starting import...',
         uploadProgress: 0,
         uploadStatus: '',
+        batchImportSummary: null,
         error: null
       });
 
       try {
-        // Check for duplicates
-        // Use Store state first (synchronous check to avoid race conditions with recent adds)
-        const books = useBookStore.getState().books;
-        let existingId: string | undefined;
-        let matchingBook;
-        for (const key in books) {
-          if (!Object.prototype.hasOwnProperty.call(books, key)) continue;
-          if (books[key] && books[key].sourceFilename === file.name) {
-            matchingBook = books[key];
-            break;
-          }
-        }
-        if (matchingBook) {
-          existingId = matchingBook.bookId;
-        }
-
-        // If not found in store (e.g. not fully synced?), try DB as backup
-        if (!existingId) {
-          existingId = await injectedDB.getBookIdByFilename(file.name);
-        }
+        // Check for duplicates by filename (store first, DB as backup)
+        const existingId = await findExistingBookIdByFilename(file.name);
 
         if (existingId) {
           if (options?.overwrite) {
@@ -575,13 +594,14 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
         importStatus: 'Pending...',
         uploadProgress: 0,
         uploadStatus: 'Starting processing...',
+        batchImportSummary: null,
         error: null
       });
       try {
         const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
 
         // Process files and get returns manifests
-        const { successful } = await processBatchImport(
+        const { successful, skipped, failed } = await processBatchImport(
           files,
           {
             abbreviations: [],
@@ -601,8 +621,20 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
               uploadProgress: percent,
               uploadStatus: status
             });
+          },
+          {
+            // Same filename-based duplicate detection as the single-import path,
+            // so re-importing a folder/ZIP no longer duplicates the library.
+            isDuplicate: async (filename) => !!(await findExistingBookIdByFilename(filename))
           }
         );
+
+        if (skipped.length > 0 || failed.length > 0) {
+          logger.warn(
+            `Batch import finished with ${skipped.length} duplicate(s) skipped and ${failed.length} failure(s).`,
+            { skipped, failed }
+          );
+        }
 
         // Phase 2: Explicitly add new books to Yjs inventory
         // OPTIMIZATION: Use addBooks (batch) to avoid cascaded state updates
@@ -633,7 +665,12 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
           importProgress: 0,
           importStatus: '',
           uploadProgress: 0,
-          uploadStatus: ''
+          uploadStatus: '',
+          batchImportSummary: {
+            imported: successful.length,
+            skipped,
+            failed
+          }
         });
       } catch (err) {
         logger.error('Failed to batch import books:', err);
@@ -651,6 +688,10 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
         });
         throw err;
       }
+    },
+
+    clearBatchImportSummary: () => {
+      set({ batchImportSummary: null });
     },
 
     updateBook: (id, updates) => {

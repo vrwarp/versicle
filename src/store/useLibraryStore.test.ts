@@ -308,7 +308,7 @@ describe('useLibraryStore', () => {
     // Mock processBatchImport to return successful manifests
     const { processBatchImport } = await import('../lib/batch-ingestion');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(processBatchImport).mockResolvedValue({ successful: mockManifests, failed: [] } as any);
+    vi.mocked(processBatchImport).mockResolvedValue({ successful: mockManifests, skipped: [], failed: [] } as any);
 
     // Spy on addBooks
     const addBooksSpy = vi.spyOn(useBookStore.getState(), 'addBooks');
@@ -335,6 +335,83 @@ describe('useLibraryStore', () => {
     expect(bookState.books['b1'].coverPalette).toEqual([1, 2, 3, 4, 5]);
     expect(bookState.books['b2']).toBeDefined();
     expect(bookState.books['b2'].coverPalette).toEqual([6, 7, 8, 9, 10]);
+  });
+
+  describe('regression: batch import surfaces per-file outcomes and duplicate detection (D1)', () => {
+    it('passes a duplicate check to processBatchImport that matches inventory by sourceFilename', async () => {
+      const { processBatchImport } = await import('../lib/batch-ingestion');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(processBatchImport).mockResolvedValue({ successful: [], skipped: [], failed: [] } as any);
+      // Earlier tests give this mock a lingering implementation; pin it for this test.
+      vi.mocked(mockDBService.getBookIdByFilename).mockReturnValue(undefined);
+
+      // Existing book in the synced inventory
+      useBookStore.getState().addBook({
+        bookId: 'existing-id',
+        sourceFilename: 'existing.epub',
+        title: 'Existing',
+        author: 'Author',
+        addedAt: 1,
+        lastInteraction: 1,
+        status: 'unread',
+        tags: []
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+
+      await useLibraryStore.getState().addBooks([new File([''], 'new.epub')]);
+
+      const checks = vi.mocked(processBatchImport).mock.calls[0][4];
+      expect(checks?.isDuplicate).toBeTypeOf('function');
+      await expect(checks!.isDuplicate!('existing.epub')).resolves.toBe(true);
+      await expect(checks!.isDuplicate!('new.epub')).resolves.toBe(false);
+    });
+
+    it('falls back to the DB filename index for duplicate detection', async () => {
+      const { processBatchImport } = await import('../lib/batch-ingestion');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(processBatchImport).mockResolvedValue({ successful: [], skipped: [], failed: [] } as any);
+      vi.mocked(mockDBService.getBookIdByFilename).mockImplementation((filename: string) =>
+        filename === 'db-only.epub' ? 'db-id' : undefined
+      );
+
+      await useLibraryStore.getState().addBooks([new File([''], 'db-only.epub')]);
+
+      const checks = vi.mocked(processBatchImport).mock.calls[0][4];
+      await expect(checks!.isDuplicate!('db-only.epub')).resolves.toBe(true);
+    });
+
+    it('stores a per-file outcome summary including skipped duplicates and failures', async () => {
+      const { processBatchImport } = await import('../lib/batch-ingestion');
+      vi.mocked(processBatchImport).mockResolvedValue({
+        successful: [
+          { manifest: { bookId: 'b1', title: 'Book 1', author: 'A', coverPalette: [1, 2, 3, 4, 5] }, sourceFilename: 'good.epub' }
+        ],
+        skipped: ['dup.epub'],
+        failed: [{ filename: 'bad.epub', reason: 'Corrupt EPUB structure' }]
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+
+      await useLibraryStore.getState().addBooks([
+        new File([''], 'good.epub'),
+        new File([''], 'dup.epub'),
+        new File([''], 'bad.epub')
+      ]);
+
+      // The successful book still lands in the inventory
+      expect(useBookStore.getState().books['b1']).toBeDefined();
+
+      // Skips and failures are surfaced instead of silently dropped
+      const summary = useLibraryStore.getState().batchImportSummary;
+      expect(summary).toEqual({
+        imported: 1,
+        skipped: ['dup.epub'],
+        failed: [{ filename: 'bad.epub', reason: 'Corrupt EPUB structure' }]
+      });
+
+      // Dismissal clears the summary
+      useLibraryStore.getState().clearBatchImportSummary();
+      expect(useLibraryStore.getState().batchImportSummary).toBeNull();
+    });
   });
 
   describe('removeBook predictability', () => {

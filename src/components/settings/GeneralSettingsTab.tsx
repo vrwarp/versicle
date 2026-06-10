@@ -95,6 +95,8 @@ export const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({
                         <ImportProgressUI />
                     </div>
                 )}
+                {/* Per-file outcome summary, shown after a batch import completes */}
+                {!isImporting && <ImportProgressUI />}
             </div>
 
             <div className="border-t pt-6 space-y-4">

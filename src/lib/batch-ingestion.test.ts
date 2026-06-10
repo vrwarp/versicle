@@ -48,6 +48,7 @@ describe('batch-ingestion', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.spyOn(console, 'error').mockImplementation(() => { });
+        vi.spyOn(console, 'warn').mockImplementation(() => { });
         vi.spyOn(console, 'log').mockImplementation(() => { });
     });
 
@@ -215,6 +216,93 @@ describe('batch-ingestion', () => {
 
             expect(onUploadProgress).toHaveBeenCalled();
             expect(onUploadProgress).toHaveBeenLastCalledWith(100, expect.stringContaining('All files processed'));
+        });
+    });
+
+    describe('regression: batch import surfaces per-file outcomes (duplicates + failures)', () => {
+        it('reports a duplicate and a corrupt file accurately while importing the rest', async () => {
+            const good = new File(['content'], 'good.epub');
+            const dup = new File(['content'], 'dup.epub');
+            const bad = new File(['content'], 'bad.epub');
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (bookImportService.addBook as any).mockImplementation((file: File) => {
+                if (file.name === 'bad.epub') return Promise.reject(new Error('Corrupt EPUB structure'));
+                return Promise.resolve({ bookId: `id-${file.name}` });
+            });
+
+            const isDuplicate = vi.fn(async (filename: string) => filename === 'dup.epub');
+
+            const result = await processBatchImport([good, dup, bad], undefined, undefined, undefined, { isDuplicate });
+
+            expect(result.successful).toHaveLength(1);
+            expect(result.successful[0].sourceFilename).toBe('good.epub');
+            expect(result.skipped).toEqual(['dup.epub']);
+            expect(result.failed).toEqual([{ filename: 'bad.epub', reason: 'Corrupt EPUB structure' }]);
+
+            // The duplicate must never reach the import pipeline (it would get a fresh UUID)
+            expect(bookImportService.addBook).toHaveBeenCalledTimes(2);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const importedNames = (bookImportService.addBook as any).mock.calls.map((call: [File]) => call[0].name);
+            expect(importedNames).toEqual(['good.epub', 'bad.epub']);
+        });
+
+        it('skips repeated filenames within the same batch', async () => {
+            const first = new File(['content'], 'same.epub');
+            const second = new File(['content'], 'same.epub');
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (bookImportService.addBook as any).mockResolvedValue({ bookId: 'id-1' });
+
+            const result = await processBatchImport([first, second]);
+
+            expect(bookImportService.addBook).toHaveBeenCalledTimes(1);
+            expect(result.successful).toHaveLength(1);
+            expect(result.skipped).toEqual(['same.epub']);
+            expect(result.failed).toEqual([]);
+        });
+
+        it('records a failure when a ZIP cannot be extracted', async () => {
+            const zipFile = new File(['bad'], 'broken.zip');
+            const epubFile = new File(['content'], 'fine.epub');
+
+            mockLoadAsync.mockRejectedValue(new Error('Corrupted zip'));
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (bookImportService.addBook as any).mockResolvedValue({ bookId: 'id-fine' });
+
+            const result = await processBatchImport([zipFile, epubFile]);
+
+            expect(result.successful).toHaveLength(1);
+            expect(result.successful[0].sourceFilename).toBe('fine.epub');
+            expect(result.failed).toEqual([
+                { filename: 'broken.zip', reason: expect.stringContaining('Failed to process ZIP file') }
+            ]);
+        });
+
+        it('records a failure for unsupported file types', async () => {
+            const txt = new File(['hello'], 'notes.txt');
+
+            const result = await processBatchImport([txt]);
+
+            expect(bookImportService.addBook).not.toHaveBeenCalled();
+            expect(result.successful).toHaveLength(0);
+            expect(result.failed).toEqual([
+                { filename: 'notes.txt', reason: expect.stringContaining('Unsupported file type') }
+            ]);
+        });
+
+        it('records a failure when import produces no manifest', async () => {
+            const file = new File(['content'], 'empty.epub');
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (bookImportService.addBook as any).mockResolvedValue(undefined);
+
+            const result = await processBatchImport([file]);
+
+            expect(result.successful).toHaveLength(0);
+            expect(result.failed).toEqual([
+                { filename: 'empty.epub', reason: 'Import did not produce a book manifest.' }
+            ]);
         });
     });
 

@@ -270,6 +270,9 @@ export const FileUploader: React.FC = () => {
         )}
       </div>
 
+      {/* Per-file outcome summary, shown after a batch import completes */}
+      {!isImporting && <ImportProgressUI />}
+
       <ReplaceBookDialog
         isOpen={!!currentDuplicate}
         onClose={() => setDuplicateQueue(prev => prev.slice(1))}
