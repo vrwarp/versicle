@@ -40,10 +40,10 @@ describe('TTSCache', () => {
 
   describe('regression: speed policy — speed-independent cache key', () => {
     it('takes no speed input: same text+voice always maps to the same entry', async () => {
-      // The signature is (text, voiceId, pitch?, lexiconHash?) — playback speed is
+      // The signature is (text, voiceId, pitch?) — playback speed is
       // applied at the audio sink, so it must never fragment the audio cache.
       const key1 = await cache.generateKey('Hello', 'voice1');
-      const key2 = await cache.generateKey('Hello', 'voice1', 1.0, '');
+      const key2 = await cache.generateKey('Hello', 'voice1', 1.0);
       expect(key1).toBe(key2);
     });
   });

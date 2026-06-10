@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
  * "brain") entirely through injected fakes — a FakeEngineContext for host state and a
  * FakePlaybackBackend for audio output. No Zustand stores, no real providers, no
  * HTMLAudioElement. The remaining main-thread "shell" collaborators that aren't yet behind
- * ports (PlatformIntegration, SyncEngine, LexiconService, dbService) are stubbed.
+ * ports (PlatformIntegration, LexiconService, dbService) are stubbed.
  */
 vi.mock('../PlatformIntegration', () => ({
     PlatformIntegration: vi.fn(function () {
@@ -18,12 +18,6 @@ vi.mock('../PlatformIntegration', () => ({
             setBackgroundVolume: vi.fn(),
             setPositionState: vi.fn(),
         };
-    }),
-}));
-
-vi.mock('../SyncEngine', () => ({
-    SyncEngine: vi.fn(function () {
-        return { setOnHighlight: vi.fn(), updateTime: vi.fn(), loadAlignment: vi.fn() };
     }),
 }));
 

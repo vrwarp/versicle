@@ -1,5 +1,4 @@
 import type { ITTSProvider, TTSVoice } from './providers/types';
-import { SyncEngine } from './SyncEngine';
 import { lexiconApplier } from './LexiconApplier';
 import { dbService } from '../../db/DBService';
 import type { SectionMetadata, LexiconRule, PerceptualPalette } from '../../types/db';
@@ -82,7 +81,6 @@ export class AudioPlayerService {
     private readonly ctx: EngineContext;
     private providerManager: PlaybackBackend;
     private platformIntegration: MediaPlatform;
-    private syncEngine: SyncEngine | null = null;
 
     private status: TTSStatus = 'stopped';
     private listeners: PlaybackListener[] = [];
@@ -111,7 +109,6 @@ export class AudioPlayerService {
     ) {
         this.ctx = ctx;
         this.contentPipeline = new AudioContentPipeline(this.ctx);
-        this.syncEngine = new SyncEngine();
 
         // Subscribe to content analysis changes (Reactive Injection)
         this.ctx.contentAnalysis.subscribe((state) => {
@@ -152,26 +149,13 @@ export class AudioPlayerService {
                 this.notifyError("Playback Error: " + (error?.message || "Unknown error"));
             },
             onTimeUpdate: (currentTime) => {
-                this.syncEngine?.updateTime(currentTime);
                 this.updateSectionMediaPosition(currentTime);
-            },
-            onBoundary: () => {
-                // Optionally update sync engine or progress
-            },
-            onMeta: (alignment) => {
-                if (this.syncEngine) {
-                    this.syncEngine.loadAlignment(alignment);
-                }
             },
             onDownloadProgress: (voiceId, percent, status) => {
                 this.notifyDownloadProgress(voiceId, percent, status);
             }
         };
         this.providerManager = backendFactory(providerEvents);
-
-        this.syncEngine.setOnHighlight(() => {
-            // No action currently
-        });
 
         // Subscribe to state manager changes
         this.stateManager.subscribe((snapshot) => {

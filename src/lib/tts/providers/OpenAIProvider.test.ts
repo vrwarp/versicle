@@ -4,7 +4,6 @@ import type { TTSOptions } from './types';
 
 vi.mock('../AudioElementPlayer');
 vi.mock('../TTSCache');
-vi.mock('../CostEstimator');
 
 describe('OpenAIProvider', () => {
   let provider: OpenAIProvider;

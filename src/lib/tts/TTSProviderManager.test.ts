@@ -54,8 +54,6 @@ describe('TTSProviderManager', () => {
             onEnd: vi.fn(),
             onError: vi.fn(),
             onTimeUpdate: vi.fn(),
-            onBoundary: vi.fn(),
-            onMeta: vi.fn(),
             onDownloadProgress: vi.fn(),
         };
         manager = new TTSProviderManager(events);

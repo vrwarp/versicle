@@ -48,14 +48,6 @@ vi.mock('./PlatformIntegration', () => ({
     })
 }));
 
-vi.mock('./SyncEngine', () => ({
-    SyncEngine: vi.fn(function () {
-        return {
-            setOnHighlight: vi.fn(),
-        };
-    })
-}));
-
 vi.mock('./LexiconService', () => ({
     LexiconService: {
         getInstance: vi.fn(() => ({
@@ -111,7 +103,6 @@ vi.mock('../../store/useReadingStateStore', () => ({
         }))
     }
 }));
-vi.mock('./CostEstimator');
 
 
 describe('AudioPlayerService - Restore Analysis', () => {

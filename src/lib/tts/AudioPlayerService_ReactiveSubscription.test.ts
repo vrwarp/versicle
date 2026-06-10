@@ -62,13 +62,6 @@ vi.mock('./PlatformIntegration', () => ({
     })
 }));
 
-vi.mock('./SyncEngine', () => ({
-    SyncEngine: vi.fn(function () {
-        return {
-            setOnHighlight: vi.fn(),
-        };
-    })
-}));
 
 vi.mock('./LexiconService', () => ({
     LexiconService: {
@@ -122,8 +115,6 @@ vi.mock('../../store/useReadingStateStore', () => ({
         }))
     }
 }));
-
-vi.mock('./CostEstimator');
 
 describe('AudioPlayerService - Reactive Store Subscription (Vulnerability 2)', () => {
     let service: AudioPlayerService;

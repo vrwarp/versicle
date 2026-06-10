@@ -19,11 +19,10 @@ export class TTSCache {
    * @param text - The text content.
    * @param voiceId - The ID of the voice used.
    * @param pitch - The pitch setting (default 1.0).
-   * @param lexiconHash - Hash of the current lexicon rules (default '').
    * @returns A Promise that resolves to the hex string hash key.
    */
-  async generateKey(text: string, voiceId: string, pitch: number = 1.0, lexiconHash: string = ''): Promise<string> {
-    const data = `${text}|${voiceId}|${pitch}|${lexiconHash}`;
+  async generateKey(text: string, voiceId: string, pitch: number = 1.0): Promise<string> {
+    const data = `${text}|${voiceId}|${pitch}`;
     const encoder = new TextEncoder();
     const dataBuffer = encoder.encode(data);
     const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);

@@ -129,8 +129,6 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
             void engine.dispatchBackendEvent({ type: 'error', error: safe });
         },
         onTimeUpdate: (currentTime) => { void engine.dispatchBackendEvent({ type: 'timeupdate', currentTime }); },
-        onBoundary: (charIndex) => { void engine.dispatchBackendEvent({ type: 'boundary', charIndex }); },
-        onMeta: (alignment) => { void engine.dispatchBackendEvent({ type: 'meta', alignment }); },
         onDownloadProgress: (voiceId, percent, status) => {
             void engine.dispatchBackendEvent({ type: 'downloadProgress', voiceId, percent, status });
         },

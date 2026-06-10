@@ -122,12 +122,6 @@ interface TTSState {
      * Should be called once at app startup.
      */
     initialize: () => void;
-
-    /**
-     * Internal sync method called by AudioPlayerService
-     * @internal
-     */
-    syncState: (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: readonly TTSQueueItem[], error: string | null) => void;
 }
 
 /**
@@ -443,15 +437,6 @@ export const useTTSStore = create<TTSState>()(
                 clearError: () => {
                     set({ lastError: null });
                 },
-
-                syncState: (status, activeCfi, currentIndex, queue, error) => set({
-                    status,
-                    isPlaying: status === 'playing' || status === 'loading' || status === 'completed',
-                    activeCfi,
-                    currentIndex,
-                    queue,
-                    lastError: error
-                }),
             };
         },
         {

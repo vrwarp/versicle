@@ -2,7 +2,6 @@ import type { ITTSProvider, TTSVoice } from './providers/types';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { Capacitor } from '@capacitor/core';
-import type { AlignmentData } from './SyncEngine';
 import type { PlaybackBackend } from './engine/PlaybackBackend';
 import { buildProviderById } from './providerFactory';
 
@@ -25,16 +24,6 @@ export interface TTSProviderEvents {
      * @param currentTime The current playback position in seconds.
      */
     onTimeUpdate: (currentTime: number) => void;
-    /**
-     * Triggered when a word or sentence boundary is reached.
-     * @param charIndex The character index of the boundary.
-     */
-    onBoundary: (charIndex: number) => void;
-    /**
-     * Triggered when alignment metadata is available.
-     * @param alignment The alignment data.
-     */
-    onMeta: (alignment: AlignmentData[]) => void;
     /**
      * Triggered during voice download progress.
      * @param voiceId The ID of the voice being downloaded.
@@ -94,17 +83,6 @@ export class TTSProviderManager implements PlaybackBackend {
 
             } else if (event.type === 'timeupdate') {
                 this.events.onTimeUpdate(event.currentTime);
-            } else if (event.type === 'boundary') {
-                this.events.onBoundary(event.charIndex);
-            } else if (event.type === 'meta') {
-                if (event.alignment) {
-                     const alignmentData: AlignmentData[] = event.alignment.map(tp => ({
-                         time: tp.timeSeconds,
-                         textOffset: tp.charIndex,
-                         type: (tp.type as 'word' | 'sentence') || 'word'
-                     }));
-                     this.events.onMeta(alignmentData);
-                }
             } else if (event.type === 'download-progress') {
                 this.events.onDownloadProgress(event.voiceId, event.percent, event.status);
             }

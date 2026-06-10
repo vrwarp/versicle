@@ -43,7 +43,6 @@ vi.mock('./providers/CapacitorTTSProvider', () => {
 });
 
 // Mock Dependencies
-vi.mock('./SyncEngine');
 vi.mock('./LexiconService', () => ({
     LexiconService: {
         getInstance: vi.fn(() => ({
@@ -98,7 +97,6 @@ vi.mock('../../db/BookRepository', () => ({
         }),
     }
 }));
-vi.mock('./CostEstimator');
 
 // Mock useTTSStore to avoid circular dependency
 vi.mock('../../store/useTTSStore', () => ({

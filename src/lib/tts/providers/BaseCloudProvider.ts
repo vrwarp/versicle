@@ -2,7 +2,6 @@ import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice, SpeechSegment } from
 import { AudioElementPlayer } from '../AudioElementPlayer';
 import type { AudioSink } from '../engine/AudioSink';
 import { TTSCache } from '../TTSCache';
-import { CostEstimator } from '../CostEstimator';
 
 export abstract class BaseCloudProvider implements ITTSProvider {
   abstract id: string;
@@ -42,12 +41,7 @@ export abstract class BaseCloudProvider implements ITTSProvider {
 
   async play(text: string, options: TTSOptions): Promise<void> {
     try {
-      const { audio, alignment } = await this.getOrFetch(text, options);
-
-      // 4. Emit Meta
-      if (alignment) {
-        this.emit({ type: 'meta', alignment });
-      }
+      const { audio } = await this.getOrFetch(text, options);
 
       // 5. Play
       // We need to wait for playback to START. playBlob returns a promise that resolves when it starts.
@@ -97,9 +91,6 @@ export abstract class BaseCloudProvider implements ITTSProvider {
     }
 
     // 3. Initiate Fetch (Owner)
-    // Only the owner tracks cost
-    CostEstimator.getInstance().track(text);
-
     const fetchPromise = (async () => {
       try {
         const result = await this.fetchAudioData(text, options);

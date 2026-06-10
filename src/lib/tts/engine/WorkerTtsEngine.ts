@@ -17,7 +17,6 @@ import { WorkerEngineContext, type EngineStateUpdate, type EngineHostCommand } f
 import type { PlaybackBackend, TTSProviderEvents } from './PlaybackBackend';
 import type { MediaPlatform } from '../PlatformIntegration';
 import type { TTSVoice } from '../providers/types';
-import type { AlignmentData } from '../SyncEngine';
 import type { LexiconRule, ContentAnalysis, BookMetadata, GenAIPort } from './EngineContext';
 import type { MediaSessionMetadata } from '../MediaSessionManager';
 import type { BackgroundAudioMode } from '../BackgroundAudio';
@@ -28,8 +27,6 @@ export type BackendEvent =
     | { type: 'end' }
     | { type: 'error'; error: unknown }
     | { type: 'timeupdate'; currentTime: number }
-    | { type: 'boundary'; charIndex: number }
-    | { type: 'meta'; alignment: AlignmentData[] }
     | { type: 'downloadProgress'; voiceId: string; percent: number; status: string };
 
 /**
@@ -175,8 +172,6 @@ export class WorkerTtsEngine {
             case 'end': ev.onEnd(); break;
             case 'error': ev.onError(event.error); break;
             case 'timeupdate': ev.onTimeUpdate(event.currentTime); break;
-            case 'boundary': ev.onBoundary(event.charIndex); break;
-            case 'meta': ev.onMeta(event.alignment); break;
             case 'downloadProgress':
                 ev.onDownloadProgress(event.voiceId, event.percent, event.status);
                 break;

@@ -1,24 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BaseCloudProvider } from './BaseCloudProvider';
-import { CostEstimator } from '../CostEstimator';
 import { FakeAudioSink } from '../engine/FakeAudioSink';
-import type { TTSOptions, SpeechSegment, TTSEvent } from './types';
+import type { TTSOptions, SpeechSegment } from './types';
 
 // Mock dependencies
-vi.mock('../CostEstimator', () => {
-  const mockTrack = vi.fn();
-  return {
-    CostEstimator: {
-      getInstance: () => ({
-        track: mockTrack
-      })
-    },
-    useCostStore: {
-        getState: () => ({ resetSession: vi.fn() })
-    }
-  };
-});
-
 vi.mock('../AudioElementPlayer', () => {
     return {
         AudioElementPlayer: class {
@@ -77,13 +62,10 @@ class TestProvider extends BaseCloudProvider {
 
 describe('BaseCloudProvider Request Registry', () => {
   let provider: TestProvider;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let trackSpy: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     provider = new TestProvider();
-    trackSpy = CostEstimator.getInstance().track;
   });
 
   afterEach(() => {
@@ -115,10 +97,6 @@ describe('BaseCloudProvider Request Registry', () => {
 
     // Verify only one fetch was initiated
     expect(provider.fetchAudioDataMock).toHaveBeenCalledTimes(1);
-
-    // Verify cost tracking was called once
-    expect(trackSpy).toHaveBeenCalledTimes(1);
-    expect(trackSpy).toHaveBeenCalledWith(text);
 
     // Verify registry has 1 entry
     expect(provider.requestRegistrySize).toBe(1);
@@ -177,7 +155,6 @@ describe('BaseCloudProvider Request Registry', () => {
       await p;
 
       expect(provider.fetchAudioDataMock).not.toHaveBeenCalled();
-      expect(trackSpy).not.toHaveBeenCalled();
       expect(provider.requestRegistrySize).toBe(0);
   });
 });
@@ -254,22 +231,12 @@ describe('regression: cached alignment survives the cache-read path', () => {
     vi.clearAllMocks();
   });
 
-  it('surfaces alignment from the cached row and emits it as meta on play', async () => {
+  it('surfaces alignment from the cached row', async () => {
     const timepoints = [{ timeSeconds: 0.25, charIndex: 5, type: 'word' }];
     mockGet.mockResolvedValue({ audio: new ArrayBuffer(4), alignment: timepoints });
 
     const result = await provider.getOrFetchPublic('aligned text', { voiceId: 'v1', speed: 1.0 });
     expect(result.alignment).toEqual(timepoints);
     expect(provider.fetchAudioDataMock).not.toHaveBeenCalled();
-
-    const sink = new FakeAudioSink();
-    const playProvider = new TestProvider(sink);
-    const events: TTSEvent[] = [];
-    playProvider.on((e) => events.push(e));
-
-    await playProvider.play('aligned text', { voiceId: 'v1', speed: 1.0 });
-
-    const meta = events.find((e): e is Extract<TTSEvent, { type: 'meta' }> => e.type === 'meta');
-    expect(meta?.alignment).toEqual(timepoints);
   });
 });

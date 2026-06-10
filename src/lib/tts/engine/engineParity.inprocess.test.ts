@@ -19,12 +19,6 @@ vi.mock('../PlatformIntegration', () => ({
     }),
 }));
 
-vi.mock('../SyncEngine', () => ({
-    SyncEngine: vi.fn(function () {
-        return { setOnHighlight: vi.fn(), updateTime: vi.fn(), loadAlignment: vi.fn() };
-    }),
-}));
-
 vi.mock('../LexiconService', () => ({
     LexiconService: {
         getInstance: vi.fn(() => ({

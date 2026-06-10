@@ -36,17 +36,6 @@ vi.mock('./TTSCache', () => {
   };
 });
 
-// Mock CostEstimator
-vi.mock('./CostEstimator', () => {
-    return {
-        CostEstimator: {
-            getInstance: vi.fn(() => ({
-                track: vi.fn()
-            }))
-        }
-    }
-});
-
 // Mock useTTSStore
 vi.mock('../../store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,

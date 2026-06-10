@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useTTSStore } from './useTTSStore';
+import { getAudioPlayer } from '../lib/tts/engine/mainThreadAudioPlayer';
 
 // Mock the engine composition root (production now talks to getAudioPlayer()).
 vi.mock('../lib/tts/engine/mainThreadAudioPlayer', () => {
@@ -14,10 +15,8 @@ vi.mock('../lib/tts/engine/mainThreadAudioPlayer', () => {
             init: vi.fn(),
             getVoices: vi.fn(() => []),
             setProvider: vi.fn(),
-            subscribe: vi.fn(() => {
-                // Simulate playing state when play is called if needed
-                // But for unit test we might want to manually trigger syncState
-            }),
+            whenReady: vi.fn(() => Promise.resolve()),
+            subscribe: vi.fn(),
             setBackgroundAudioMode: vi.fn(),
             setBackgroundVolume: vi.fn(),
             setPrerollEnabled: vi.fn(),
@@ -56,33 +55,31 @@ describe('useTTSStore', () => {
     expect(state.voice).toBeNull();
   });
 
-  // Updated test: setPlaying doesn't exist anymore, it's driven by player events
-  it('should sync state from player', () => {
-    const store = useTTSStore.getState();
-    // Use the syncState method that is exposed on the store for internal/testing use
-    // Note: TypeScript might complain if it's internal, but for tests it should be fine if public in interface
-    // Checking interface... syncState is in TTSState but marked @internal.
-    // We can cast or just call it.
+  // State is driven by player events through the subscription wired in initialize().
+  it('should sync state from player subscription updates', () => {
+    useTTSStore.getState().initialize();
+    const player = vi.mocked(getAudioPlayer).mock.results.at(-1)!.value;
+    const listener = vi.mocked(player.subscribe).mock.calls[0][0];
 
-    store.syncState('playing', null, 0, [], null);
+    listener('playing', null, 0, [], null);
     expect(useTTSStore.getState().isPlaying).toBe(true);
     expect(useTTSStore.getState().status).toBe('playing');
 
-    store.syncState('paused', null, 0, [], null);
+    listener('paused', null, 0, [], null);
     expect(useTTSStore.getState().isPlaying).toBe(false);
     expect(useTTSStore.getState().status).toBe('paused');
 
-    // Test the fix: 'loading' should result in isPlaying = true
-    store.syncState('loading', null, 0, [], null);
+    // 'loading' should result in isPlaying = true (prevents play/pause UI flicker)
+    listener('loading', null, 0, [], null);
     expect(useTTSStore.getState().isPlaying).toBe(true);
     expect(useTTSStore.getState().status).toBe('loading');
 
     // 'completed' should result in isPlaying = true (to support continuous background audio)
-    store.syncState('completed', null, 0, [], null);
+    listener('completed', null, 0, [], null);
     expect(useTTSStore.getState().isPlaying).toBe(true);
     expect(useTTSStore.getState().status).toBe('completed');
 
-    store.syncState('stopped', null, 0, [], null);
+    listener('stopped', null, 0, [], null);
     expect(useTTSStore.getState().isPlaying).toBe(false);
     expect(useTTSStore.getState().status).toBe('stopped');
   });

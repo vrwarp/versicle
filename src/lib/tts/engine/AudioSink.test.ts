@@ -76,8 +76,6 @@ describe('regression: cloud speed/alignment policy through the real cache', () =
         // (no re-synthesis), apply the rate at the sink, and keep the timepoints.
         const sinkB = new FakeAudioSink();
         const providerB = new MockCloudProvider(sinkB);
-        const events: TTSEvent[] = [];
-        providerB.on((e) => events.push(e));
 
         await providerB.play(text, { voiceId: 'mock-male', speed: 1.75 });
 
@@ -85,8 +83,11 @@ describe('regression: cloud speed/alignment policy through the real cache', () =
         expect(sinkB.playedBlobs).toHaveLength(1);
         expect(sinkB.rate).toBe(1.75);
 
-        const meta = events.find((e): e is Extract<TTSEvent, { type: 'meta' }> => e.type === 'meta');
-        expect(meta?.alignment).toEqual([{ timeSeconds: 0, charIndex: 0, type: 'sentence' }]);
+        // The cached row keeps the timepoints intact across the speed change.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const segment = await (providerB as any).getOrFetch(text, { voiceId: 'mock-male', speed: 1.75 });
+        expect(fetchSpy).toHaveBeenCalledTimes(1); // still the same cache entry
+        expect(segment.alignment).toEqual([{ timeSeconds: 0, charIndex: 0, type: 'sentence' }]);
     });
 
     it('reads alignment from legacy rows written under the old alignmentData field', async () => {
@@ -107,15 +108,13 @@ describe('regression: cloud speed/alignment policy through the real cache', () =
             lastAccessed: 1,
         });
 
-        const events: TTSEvent[] = [];
-        provider.on((e) => events.push(e));
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const fetchSpy = vi.spyOn(MockCloudProvider.prototype as any, 'fetchAudioData');
 
-        await provider.play(text, { voiceId: 'mock-male', speed: 1.0 });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const segment = await (provider as any).getOrFetch(text, { voiceId: 'mock-male', speed: 1.0 });
 
         expect(fetchSpy).not.toHaveBeenCalled(); // legacy row is a usable cache hit
-        const meta = events.find((e): e is Extract<TTSEvent, { type: 'meta' }> => e.type === 'meta');
-        expect(meta?.alignment).toEqual(timepoints);
+        expect(segment.alignment).toEqual(timepoints);
     });
 });

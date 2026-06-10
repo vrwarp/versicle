@@ -5,7 +5,6 @@ import type { TTSOptions } from './types';
 // Mock base dependencies to avoid instantiation issues if any
 vi.mock('../AudioElementPlayer');
 vi.mock('../TTSCache');
-vi.mock('../CostEstimator');
 
 describe('GoogleTTSProvider', () => {
   let provider: GoogleTTSProvider;

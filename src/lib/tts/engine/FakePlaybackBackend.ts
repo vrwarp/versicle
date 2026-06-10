@@ -10,7 +10,6 @@
  */
 import type { ITTSProvider, TTSVoice } from '../providers/types';
 import type { PlaybackBackend, PlaybackBackendFactory, TTSProviderEvents } from './PlaybackBackend';
-import type { AlignmentData } from '../SyncEngine';
 
 export class FakePlaybackBackend implements PlaybackBackend {
     readonly events: TTSProviderEvents;
@@ -95,8 +94,5 @@ export class FakePlaybackBackend implements PlaybackBackend {
     }
     fireTimeUpdate(currentTime: number) {
         this.events.onTimeUpdate(currentTime);
-    }
-    fireMeta(alignment: AlignmentData[]) {
-        this.events.onMeta(alignment);
     }
 }
