@@ -11,6 +11,7 @@
     "depcruise": "depcruise src --config .dependency-cruiser.cjs",
     "depcruise:baseline": "node scripts/depcruise-baseline.mjs",
     "depcruise:check": "node scripts/depcruise-baseline.mjs --check",
+    "check:worker-chunk": "node scripts/check-worker-chunk.mjs",
     "test": "vitest run",
     "tests": "vitest run",
     "preview": "vite preview",
