@@ -9,8 +9,7 @@ import type { UserInventoryItem, UserProgress } from '../types/db';
 
 // Mock getDeviceId to track calls
 vi.mock('../lib/device-id', () => ({
-    getDeviceId: vi.fn(() => 'device-id-123'),
-    resetDeviceId: vi.fn()
+    getDeviceId: vi.fn(() => 'device-id-123')
 }));
 
 describe('useAllBooks Performance', () => {

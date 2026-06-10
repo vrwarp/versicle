@@ -91,13 +91,11 @@ describe('SearchEngine Fuzzing', () => {
 
                 for (let j = 0; j < numDocs; j++) {
                     const hasText = rng.nextBool();
-                    const hasXml = !hasText && rng.nextBool();
 
                     documents.push({
                         id: `section-${j}`,
                         href: `chapter${j}.xhtml`,
                         text: hasText ? rng.nextUnicodeString(rng.nextInt(0, 500)) : undefined,
-                        xml: hasXml ? `<html><body>${rng.nextUnicodeString(rng.nextInt(0, 200))}</body></html>` : undefined,
                     });
                 }
 
@@ -110,34 +108,6 @@ describe('SearchEngine Fuzzing', () => {
             }
         });
 
-        it('handles malformed XML gracefully', () => {
-            const rng = new SeededRandom(SEED);
-            const engine = new SearchEngine();
-
-            const malformedXmls = [
-                '<unclosed',
-                '<a><b></a></b>',
-                '<<double>>',
-                '<![CDATA[ unclosed',
-                rng.nextUnicodeString(100),
-            ];
-
-            engine.initIndex('malformed-book');
-
-            const documents: SearchSection[] = malformedXmls.map((xml, i) => ({
-                id: `section-${i}`,
-                href: `chapter${i}.xhtml`,
-                xml,
-            }));
-
-            try {
-                // Should not crash, may log warnings
-                engine.addDocuments('malformed-book', documents);
-            } catch (e) {
-                console.error('Crashed on malformed XML');
-                throw e;
-            }
-        });
     });
 
     describe('getExcerpt()', () => {

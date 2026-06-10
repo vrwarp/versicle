@@ -49,16 +49,6 @@ export class MigrationStateService {
     }
 
     /**
-     * Returns true if the migration state machine is in a state that
-     * should block normal application boot (sync initialization).
-     */
-    static isBlocked(): boolean {
-        const state = MigrationStateService.getState();
-        if (!state) return false;
-        return state.status === 'AWAITING_CONFIRMATION' || state.status === 'RESTORING_BACKUP';
-    }
-
-    /**
      * Transition to AWAITING_CONFIRMATION.
      * Called after backup and remote state hydration, before reload.
      */
@@ -85,18 +75,5 @@ export class MigrationStateService {
             targetWorkspaceId: current.targetWorkspaceId,
             backupCheckpointId: current.backupCheckpointId,
         });
-    }
-
-    /**
-     * Check if there's a dangling backup (status is IDLE but backupCheckpointId exists).
-     * Returns the checkpoint ID to clean up, or null.
-     */
-    static getDanglingBackupId(): number | null {
-        const state = MigrationStateService.getState();
-        if (!state) return null;
-        if (state.status === 'IDLE' && state.backupCheckpointId != null) {
-            return state.backupCheckpointId;
-        }
-        return null;
     }
 }

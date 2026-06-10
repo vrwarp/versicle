@@ -99,9 +99,6 @@ class SearchClient {
         // Init/Clear index
         await engine.initIndex(bookId);
 
-        // Check if worker supports XML parsing to offload main thread
-        const canOffload = await engine.supportsXmlParsing();
-
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const spineItems = (book.spine as any).items || (book.spine as any).spineItems;
         const total = spineItems.length;
@@ -114,7 +111,6 @@ class SearchClient {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const processedItems = await Promise.all(batch.map(async (item: any) => {
                 let text = '';
-                let xml = '';
                 try {
                     // Attempt 1: Access raw file content from the archive (fast & robust)
                     if (book.archive) {
@@ -122,14 +118,10 @@ class SearchClient {
                             const blob = await book.archive.getBlob(item.href);
                             if (blob) {
                                 const rawXml = await blob.text();
-                                if (canOffload) {
-                                    xml = rawXml;
-                                } else {
-                                    const parser = this.getParser();
-                                    if (parser) {
-                                        const doc = parser.parseFromString(rawXml, 'application/xhtml+xml');
-                                        text = doc.body.textContent || '';
-                                    }
+                                const parser = this.getParser();
+                                if (parser) {
+                                    const doc = parser.parseFromString(rawXml, 'application/xhtml+xml');
+                                    text = doc.body.textContent || '';
                                 }
                             }
                         } catch (err) {
@@ -138,7 +130,7 @@ class SearchClient {
                     }
 
                     // Attempt 2: Fallback to rendering pipeline (slow but handles resource resolution)
-                    if (!text && !xml) {
+                    if (!text) {
                         const doc = await book.load(item.href);
                         if (doc) {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -151,12 +143,11 @@ class SearchClient {
                         }
                     }
 
-                    if (text || xml) {
+                    if (text) {
                         return {
                             id: item.id,
                             href: item.href,
-                            text: text || undefined,
-                            xml: xml || undefined
+                            text
                         };
                     }
                 } catch (e) {

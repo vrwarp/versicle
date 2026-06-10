@@ -24,8 +24,6 @@ import { useDriveStore } from './store/useDriveStore';
 import { DriveScannerService } from './lib/drive/DriveScannerService';
 import { maintenanceService } from './lib/MaintenanceService';
 
-import './App.css';
-
 import { MigrationStateService } from './lib/sync/MigrationStateService';
 import { CheckpointService } from './lib/sync/CheckpointService';
 import { WorkspaceMigrationConfirmModal } from './components/sync/WorkspaceMigrationConfirmModal';
@@ -173,16 +171,6 @@ function App() {
         logger.info('Boot interceptor: AWAITING_CONFIRMATION detected, HALT sync init...');
         return; // HALT — do not initialize sync
       }
-    }
-
-    // Dangling backup cleanup
-    const danglingId = MigrationStateService.getDanglingBackupId();
-    if (danglingId != null) {
-      logger.info(`Cleaning up dangling backup checkpoint #${danglingId}`);
-      CheckpointService.deleteCheckpoint(danglingId).catch(err => {
-        logger.warn('Failed to clean up dangling backup:', err);
-      });
-      MigrationStateService.clear();
     }
 
     // Zombie backup cleanup: prune extremely old pre-migration backups that were abandoned

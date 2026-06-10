@@ -36,7 +36,6 @@ describe('SearchClient Concurrent Indexing', () => {
         // Mock comlink worker engine
         vi.spyOn(searchClient as unknown as { getEngine: () => unknown }, 'getEngine').mockReturnValue({
             initIndex: vi.fn().mockResolvedValue(undefined),
-            supportsXmlParsing: vi.fn().mockResolvedValue(true),
             addDocuments: vi.fn().mockResolvedValue(undefined)
         });
 

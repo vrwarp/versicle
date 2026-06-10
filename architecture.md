@@ -315,8 +315,7 @@ Versicle implements a strategy combining **Real-Time Sync** (via Firestore) for 
 *   **Goal**: Manages the state machine bridging page reloads during workspace context switches, safely delaying normal sync boot sequences while a migration is in-flight.
 *   **Logic**:
     *   **localStorage State**: Persists migration states (`AWAITING_CONFIRMATION`, `RESTORING_BACKUP`) and tracking details (target workspace, backup checkpoint ID) to `localStorage`, protecting state across browser reloads.
-    *   **Boot Blocking**: Integrates into the app boot sequence; if the service reports `isBlocked()`, standard Yjs/Firestore sync initialization is halted until the migration concludes or fails.
-    *   **Dangling Check**: Recovers gracefully by providing `getDanglingBackupId()` to clean up residual checkpoint states if a migration crashes or completes abnormally.
+    *   **Boot Blocking**: Integrates into the app boot sequence; when `getState()` reports an in-flight migration (`AWAITING_CONFIRMATION` or `RESTORING_BACKUP`), standard Yjs/Firestore sync initialization is halted until the migration concludes or fails.
 *   **Trade-offs**: Heavily relies on browser `localStorage`. If a user manually clears local data mid-migration, the client could be left in an inconsistent workspace state.
 
 #### `FirestoreSyncManager.ts` (Real-Time Cloud)

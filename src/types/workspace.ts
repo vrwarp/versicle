@@ -27,7 +27,6 @@ export interface YjsRootDocument {
  * Stored in localStorage to survive page reloads.
  */
 export type MigrationStatus =
-    | 'IDLE'
     | 'AWAITING_CONFIRMATION'
     | 'RESTORING_BACKUP';
 

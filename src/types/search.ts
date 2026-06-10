@@ -6,8 +6,7 @@
  * ```ts
  * const result: SearchResult = {
  *   href: "chapter1.html",
- *   excerpt: "...found this text...",
- *   cfi: "epubcfi(/6/4!/4/2/1:0)"
+ *   excerpt: "...found this text..."
  * };
  * ```
  */
@@ -16,8 +15,6 @@ export interface SearchResult {
     href: string;
     /** A snippet of text containing the search term, with surrounding context. */
     excerpt: string;
-    /** Optional Canonical Fragment Identifier (CFI) for precise location navigation. */
-    cfi?: string;
 }
 
 /**
@@ -31,6 +28,4 @@ export interface SearchSection {
     href: string;
     /** The raw text content of the section. */
     text?: string;
-    /** The raw XML content of the section (optional, for worker-side parsing). */
-    xml?: string;
 }
