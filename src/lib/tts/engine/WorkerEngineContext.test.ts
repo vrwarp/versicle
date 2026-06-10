@@ -29,7 +29,7 @@ describe('WorkerEngineContext (replicated-state context for the worker)', () => 
 
     it('throws a clear error if a snapshot is read before replication', () => {
         const { ctx } = makeCtx();
-        expect(() => ctx.config.getSettings()).toThrow(/not yet replicated/);
+        expect(() => ctx.config.getSettings()).toThrow(/never replicated/);
     });
 
     it('serves content analysis from the pushed snapshot', () => {

@@ -104,13 +104,18 @@ export class WorkerEngineContext implements EngineContext {
     private readonly genAIAdaptFn: GenAIPort['generateTableAdaptations'];
     private readonly minSentenceLength: (lang: string) => number;
 
-    // Replicated state (populated by applyUpdate).
+    // Replicated state (populated by applyUpdate). Boot slices start as `null` — "never
+    // replicated" — and their getters THROW rather than serve a silent default, so a missing
+    // pusher is a loud bug, not stale data. Per-book slices are keyed caches; the client
+    // pre-pushes the active book's entries before setBookId.
     private settings: TTSSettingsSnapshot | null = null;
     private genAISettings: GenAISettingsSnapshot | null = null;
-    private activeLanguage = 'en';
+    private activeLanguage: string | null = null;
     private bookLanguages: Record<string, string> = {};
-    private analysisSnapshot: ContentAnalysisSnapshot = { sections: {} };
+    private analysisSnapshot: ContentAnalysisSnapshot | null = null;
     private progressByBook: Record<string, Progress> = {};
+    /** Which update kinds have been replicated at least once (diagnostics + readiness). */
+    readonly receivedKinds = new Set<EngineStateUpdate['kind']>();
 
     private genAIListeners = new Set<() => void>();
     private bookListeners = new Set<() => void>();
@@ -135,6 +140,7 @@ export class WorkerEngineContext implements EngineContext {
 
     /** Apply a state snapshot pushed by the main thread, firing the relevant subscribers. */
     applyUpdate(update: EngineStateUpdate): void {
+        this.receivedKinds.add(update.kind);
         switch (update.kind) {
             case 'settings':
                 this.settings = update.settings;
@@ -157,29 +163,39 @@ export class WorkerEngineContext implements EngineContext {
             case 'progress':
                 this.progressByBook[update.bookId] = update.progress;
                 break;
+            default: {
+                // Compile-time exhaustiveness: a new EngineStateUpdate kind without a handler
+                // here fails to typecheck instead of being silently dropped.
+                const unhandled: never = update;
+                throw new Error(`WorkerEngineContext: unhandled state update ${JSON.stringify(unhandled)}`);
+            }
         }
     }
 
+    /** Loud accessor for a boot-replicated slice: throwing beats serving a silent default. */
+    private replicated<T>(value: T | null, kind: EngineStateUpdate['kind']): T {
+        if (value === null) {
+            throw new Error(
+                `WorkerEngineContext: '${kind}' was never replicated — the host must push it before the engine reads it (see replicationSpec.ts)`,
+            );
+        }
+        return value;
+    }
+
     config = {
-        getActiveLanguage: () => this.activeLanguage,
+        getActiveLanguage: () => this.replicated(this.activeLanguage, 'activeLanguage'),
         setActiveLanguage: (lang: string) => {
             // Optimistically update the local cache so subsequent sync reads are consistent,
             // and tell the host to update the real store.
             this.activeLanguage = lang;
             this.post({ kind: 'setActiveLanguage', lang });
         },
-        getSettings: () => {
-            if (!this.settings) throw new Error('WorkerEngineContext: settings snapshot not yet replicated');
-            return this.settings;
-        },
+        getSettings: () => this.replicated(this.settings, 'settings'),
         getDefaultMinSentenceLength: (lang: string) => this.minSentenceLength(lang),
     };
 
     genAI = {
-        getSettings: () => {
-            if (!this.genAISettings) throw new Error('WorkerEngineContext: genAI snapshot not yet replicated');
-            return this.genAISettings;
-        },
+        getSettings: () => this.replicated(this.genAISettings, 'genAI'),
         addLog: (entry: GenAILogEntry) => this.post({ kind: 'addGenAILog', entry }),
         subscribe: (listener: () => void) => {
             this.genAIListeners.add(listener);
@@ -212,8 +228,8 @@ export class WorkerEngineContext implements EngineContext {
 
     contentAnalysis = {
         getAnalysis: (bookId: string, sectionId: string): SectionAnalysis | undefined =>
-            this.analysisSnapshot.sections[`${bookId}/${sectionId}`],
-        getSnapshot: () => this.analysisSnapshot,
+            this.replicated(this.analysisSnapshot, 'analysis').sections[`${bookId}/${sectionId}`],
+        getSnapshot: () => this.replicated(this.analysisSnapshot, 'analysis'),
         subscribe: (listener: (s: ContentAnalysisSnapshot) => void) => {
             this.analysisListeners.add(listener);
             return () => this.analysisListeners.delete(listener);
@@ -230,7 +246,16 @@ export class WorkerEngineContext implements EngineContext {
     };
 
     book = {
-        getBookLanguage: (bookId: string) => this.bookLanguages[bookId] || 'en',
+        getBookLanguage: (bookId: string) => {
+            const lang = this.bookLanguages[bookId];
+            if (lang === undefined) {
+                // Per-book slice: the client pre-pushes the active book before setBookId, so a
+                // miss means a replication gap — be loud about it, then fall back.
+                console.warn(`WorkerEngineContext: no replicated language for book ${bookId}; defaulting to 'en'`);
+                return 'en';
+            }
+            return lang;
+        },
         getMetadata: (bookId: string) => this.fetchBookMetadata(bookId),
         subscribe: (listener: () => void) => {
             this.bookListeners.add(listener);

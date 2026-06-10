@@ -155,6 +155,17 @@ export class WorkerTtsEngine {
         this.ctx?.applyUpdate(update);
     }
 
+    /**
+     * Readiness gate: whether every listed slice has been replicated at least once. The
+     * client checks this after pushing the boot snapshots and refuses to hand out the engine
+     * if anything is missing — a forgotten pusher fails at startup, not as stale reads later.
+     */
+    hasReplicated(kinds: EngineStateUpdate['kind'][]): boolean {
+        const ctx = this.ctx;
+        if (!ctx) return false;
+        return kinds.every((kind) => ctx.receivedKinds.has(kind));
+    }
+
     /** Main → worker: deliver a backend (provider) event into the engine. */
     dispatchBackendEvent(event: BackendEvent): void {
         const ev = this.backendEvents;

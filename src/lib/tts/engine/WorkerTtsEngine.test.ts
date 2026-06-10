@@ -81,10 +81,13 @@ describe('WorkerTtsEngine over a MessageChannel (live worker bridge)', () => {
 
         await remote.connect(Comlink.proxy(host));
 
-        // Replicate the minimal store state the engine reads.
+        // Replicate the boot slices the engine reads (the same set the production client
+        // pushes before reporting ready — see replicationSpec.ts).
         await remote.applyStateUpdate({ kind: 'settings', settings: {} as never });
         await remote.applyStateUpdate({ kind: 'genAI', settings: { isEnabled: false } as never });
         await remote.applyStateUpdate({ kind: 'activeLanguage', lang: 'en' });
+        await remote.applyStateUpdate({ kind: 'analysis', snapshot: { sections: {} } });
+        expect(await remote.hasReplicated(['settings', 'genAI', 'activeLanguage', 'analysis'])).toBe(true);
 
         // Subscribe across the boundary (the callback is a Comlink proxy).
         const statuses: string[] = [];

@@ -23,10 +23,9 @@ import { LexiconService } from '../LexiconService';
 import { bookRepository } from '../../../db/BookRepository';
 import { contentAnalysisRepository } from '../../../db/ContentAnalysisRepository';
 import { genAIService } from '../../genai/GenAIService';
+import { createReplicatedSlices, bookSnapshotUpdates } from './replicationSpec';
 import { useTTSStore } from '../../../store/useTTSStore';
 import { useGenAIStore } from '../../../store/useGenAIStore';
-import { useContentAnalysisStore } from '../../../store/useContentAnalysisStore';
-import { useBookStore } from '../../../store/useBookStore';
 import { useReadingStateStore } from '../../../store/useReadingStateStore';
 import { useAnnotationStore } from '../../../store/useAnnotationStore';
 import { useToastStore } from '../../../store/useToastStore';
@@ -46,15 +45,6 @@ type StatusListener = (
 ) => void;
 
 const logger = createLogger('WorkerEngineClient');
-
-/**
- * Strip non-structured-cloneable values before crossing the worker boundary. Zustand
- * `getState()` snapshots carry action functions (and the selected voice carries a live
- * SpeechSynthesisVoice); a JSON round-trip drops those, leaving the plain data the engine reads.
- */
-function plain<T>(value: T): T {
-    return JSON.parse(JSON.stringify(value));
-}
 
 /** Apply a worker write command to the real Zustand stores (mirrors createZustandEngineContext). */
 function applyHostCommand(command: EngineHostCommand): void {
@@ -189,39 +179,33 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
 
     await withWorkerGuard('connect', engine.connect(Comlink.proxy(host)));
 
-    // --- State replication: push the current snapshots (plain data only), then keep them live. ---
-    await engine.applyStateUpdate({ kind: 'settings', settings: plain(useTTSStore.getState()) });
-    await engine.applyStateUpdate({ kind: 'genAI', settings: plain(useGenAIStore.getState()) });
-    await engine.applyStateUpdate({ kind: 'activeLanguage', lang: useTTSStore.getState().activeLanguage });
-    await engine.applyStateUpdate({ kind: 'analysis', snapshot: { sections: plain(useContentAnalysisStore.getState().sections) } });
+    // --- State replication, driven entirely by the declarative spec (replicationSpec.ts). ---
+    // Boot snapshots are awaited before this function resolves, so by the time the handle
+    // reports ready, every boot slice has been replicated at least once (the worker context
+    // throws on reads of never-replicated slices — no silent defaults).
+    let currentBookId: string | null = null;
+    const slices = createReplicatedSlices({ getCurrentBookId: () => currentBookId });
+    for (const slice of slices) {
+        for (const update of slice.snapshot()) {
+            await engine.applyStateUpdate(update);
+        }
+    }
+    const sliceUnsubs = slices.map((slice) =>
+        slice.subscribe((update) => { void engine.applyStateUpdate(update); }));
 
-    let lastActiveLanguage = useTTSStore.getState().activeLanguage;
-    const unsubTTS = useTTSStore.subscribe((state) => {
-        void engine.applyStateUpdate({ kind: 'settings', settings: plain(state) });
-        if (state.activeLanguage !== lastActiveLanguage) {
-            lastActiveLanguage = state.activeLanguage;
-            void engine.applyStateUpdate({ kind: 'activeLanguage', lang: state.activeLanguage });
-        }
-    });
-    const unsubGenAI = useGenAIStore.subscribe((state) => {
-        void engine.applyStateUpdate({ kind: 'genAI', settings: plain(state) });
-    });
-    const unsubAnalysis = useContentAnalysisStore.subscribe((state) => {
-        void engine.applyStateUpdate({ kind: 'analysis', snapshot: { sections: plain(state.sections) } });
-    });
-    const unsubBook = useBookStore.subscribe((state) => {
-        for (const [bookId, book] of Object.entries(state.books)) {
-            void engine.applyStateUpdate({ kind: 'bookLanguage', bookId, lang: book?.language || 'en' });
-        }
-    });
+    // Readiness gate: refuse to hand out the engine unless every boot slice actually landed.
+    const bootKinds = slices.filter((s) => s.replication === 'boot').map((s) => s.kind);
+    if (!(await engine.hasReplicated(bootKinds))) {
+        throw new Error(`TTS worker boot replication incomplete (expected: ${bootKinds.join(', ')})`);
+    }
 
     const setBook = async (bookId: string | null) => {
+        currentBookId = bookId;
         if (bookId) {
             // Pre-push the per-book reads the engine performs synchronously inside setBookId.
-            const lang = useBookStore.getState().books[bookId]?.language || 'en';
-            await engine.applyStateUpdate({ kind: 'bookLanguage', bookId, lang });
-            const progress = useReadingStateStore.getState().getProgress(bookId);
-            await engine.applyStateUpdate({ kind: 'progress', bookId, progress: plain(progress) });
+            for (const update of bookSnapshotUpdates(bookId)) {
+                await engine.applyStateUpdate(update);
+            }
         }
         engine.setBookId(bookId);
     };
@@ -232,7 +216,7 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
     };
 
     const dispose = () => {
-        try { unsubTTS(); unsubGenAI(); unsubAnalysis(); unsubBook(); } catch (e) { logger.warn('dispose error', e); }
+        try { sliceUnsubs.forEach((unsub) => unsub()); } catch (e) { logger.warn('dispose error', e); }
         worker.terminate();
     };
 
