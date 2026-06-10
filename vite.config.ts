@@ -3,11 +3,15 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import mkcert from 'vite-plugin-mkcert'
+import { visualizer } from 'rollup-plugin-visualizer'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const useHttps = env.VITE_HTTPS !== 'false';
+  // ANALYZE=true vite build → per-module treemaps for the main bundle (stats.html) and the
+  // TTS worker bundle (stats-worker.html). Dev-only; normal builds are unaffected.
+  const analyze = env.ANALYZE === 'true';
   return {
     base: env.VITE_BASE || '/',
     build: {
@@ -18,6 +22,9 @@ export default defineConfig(({ mode }) => {
     // { type: 'module' }, so this matches.
     worker: {
       format: 'es',
+      plugins: () => (analyze
+        ? [visualizer({ filename: 'stats-worker.html', gzipSize: true, brotliSize: true })]
+        : []),
     },
     preview: {
       headers: {
@@ -29,6 +36,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       ...(useHttps ? [mkcert()] : []),
+      ...(analyze ? [visualizer({ filename: 'stats.html', gzipSize: true, brotliSize: true })] : []),
       react(),
       VitePWA({
         devOptions: {

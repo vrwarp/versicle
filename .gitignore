@@ -44,3 +44,7 @@ playwright-report/
 
 # Flight recorder exports
 **/Export flight_anomaly_*.json
+
+# Bundle analyzer output (ANALYZE=true vite build)
+stats.html
+stats-worker.html
