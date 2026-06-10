@@ -15,10 +15,9 @@ import { useGenAIStore } from '../store/useGenAIStore';
 import { TTSAbbreviationSettings } from './reader/TTSAbbreviationSettings';
 import { LexiconManager } from './reader/LexiconManager';
 
-import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
-import { dbService } from '../db/DBService';
+import { wipeAllData } from '../db/wipe';
 import { contentAnalysisRepository } from '../db/ContentAnalysisRepository';
 import { CheckpointService } from '../lib/sync/CheckpointService';
 import { useSyncStore } from '../lib/sync/hooks/useSyncStore';
@@ -241,23 +240,10 @@ export const GlobalSettingsDialog = () => {
         if (confirm("Are you sure you want to delete ALL data? This includes books, annotations, and settings.")) {
             setIsClearing(true);
             try {
-                dbService.cleanup();
-                // Clear IndexedDB (static and cache stores)
-                const db = await getDB();
-                await db.clear('static_manifests');
-                await db.clear('static_resources');
-                await db.clear('static_structure');
-                await db.clear('cache_table_images');
-                await db.clear('cache_render_metrics');
-                await db.clear('cache_audio_blobs');
-                await db.clear('cache_session_state');
-                await db.clear('cache_tts_preparation');
-
-                // Clear LocalStorage (includes Yjs persistence)
-                localStorage.clear();
-
-                // Reload to reset Yjs stores
-                window.location.reload();
+                // Single owner of the wipe: stops sync + Yjs persistence, deletes
+                // both IndexedDB databases (EpubLibraryDB + versicle-yjs), clears
+                // Versicle localStorage keys and app caches, then reloads.
+                await wipeAllData();
             } catch (e) {
                 logger.error('Failed to clear data', e);
                 setIsClearing(false);

@@ -1,8 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import App from './App';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import React from 'react';
+import { getDB } from './db/db';
+import { wipeAllData } from './db/wipe';
 
 // Mock DB
 vi.mock('./db/db', () => ({
@@ -80,7 +82,19 @@ vi.mock('./components/reader/ReaderControlBar', () => ({ ReaderControlBar: () =>
 vi.mock('./components/ThemeSynchronizer', () => ({ ThemeSynchronizer: () => null }));
 vi.mock('./components/GlobalSettingsDialog', () => ({ GlobalSettingsDialog: () => null }));
 vi.mock('./components/ui/ToastContainer', () => ({ ToastContainer: () => null }));
-vi.mock('./components/SafeModeView', () => ({ SafeModeView: () => <div>SafeMode</div> }));
+vi.mock('./components/SafeModeView', () => ({
+  SafeModeView: ({ onReset }: { onReset: () => void }) => (
+    <div>
+      SafeMode
+      <button onClick={onReset}>Reset Database</button>
+    </div>
+  )
+}));
+
+// Mock the data wipe module (SafeMode reset must only route through it)
+vi.mock('./db/wipe', () => ({
+  wipeAllData: vi.fn().mockResolvedValue(undefined)
+}));
 vi.mock('./components/BackNavigationManager', () => ({ BackNavigationManager: () => null }));
 vi.mock('./layouts/RootLayout', () => ({ RootLayout: () => <div data-testid="root-layout">RootLayout Mock</div> }));
 
@@ -147,5 +161,60 @@ describe('App Service Worker Wait (Refactored)', () => {
       expect(screen.getByText('Critical Error')).toBeInTheDocument();
       expect(screen.getByText(/Service Worker failed to take control/)).toBeInTheDocument();
     });
+  });
+});
+
+describe('regression: wipe-all-data — SafeMode reset must route through wipeAllData', () => {
+  // The SafeMode "Reset Database" used to delete only EpubLibraryDB, silently
+  // leaving the versicle-yjs database (all user data) and Versicle
+  // localStorage keys behind. It must delegate to wipeAllData().
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (waitForServiceWorkerController as any).mockResolvedValue(undefined);
+    // Force the DB-init failure that puts the app into SafeMode.
+    vi.mocked(getDB).mockRejectedValue(new Error('DB init failed'));
+  });
+
+  afterEach(() => {
+    // Restore the suite-wide getDB behavior for other describes.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(getDB).mockReset().mockResolvedValue({} as any);
+    vi.restoreAllMocks();
+  });
+
+  it('calls wipeAllData when the user confirms the destructive reset', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('SafeMode')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Reset Database'));
+
+    await waitFor(() => {
+      expect(wipeAllData).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('does not wipe when the confirmation is declined', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('SafeMode')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Reset Database'));
+
+    await waitFor(() => {
+      expect(confirmSpy).toHaveBeenCalled();
+    });
+    expect(wipeAllData).not.toHaveBeenCalled();
   });
 });

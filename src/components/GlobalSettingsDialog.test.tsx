@@ -1,8 +1,14 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { GlobalSettingsDialog } from './GlobalSettingsDialog';
 import { useTTSStore } from '../store/useTTSStore';
+import { wipeAllData } from '../db/wipe';
+
+// Mock the data wipe module (the dialog must only route through it)
+vi.mock('../db/wipe', () => ({
+    wipeAllData: vi.fn().mockResolvedValue(undefined)
+}));
 
 // Mock Radix UI Modal to avoid title warnings
 vi.mock('./ui/Modal', () => {
@@ -265,5 +271,68 @@ describe('GlobalSettingsDialog - Piper TTS', () => {
         fireEvent.click(btn);
 
         expect(mockDownloadVoice).toHaveBeenCalledWith('piper:v1');
+    });
+});
+
+describe('regression: wipe-all-data — Clear All Data must route through wipeAllData', () => {
+    // "Clear All Data" used to hand-enumerate IDB stores and call
+    // localStorage.clear(), silently leaving the entire versicle-yjs database
+    // (all user data) behind. The dialog must delegate to wipeAllData().
+    const ttsStore = {
+        activeLanguage: 'en',
+        profiles: {},
+        providerId: 'local',
+        setProviderId: vi.fn(),
+        apiKeys: {},
+        setApiKey: vi.fn(),
+        backgroundAudioMode: 'silence',
+        setBackgroundAudioMode: vi.fn(),
+        whiteNoiseVolume: 0.1,
+        setWhiteNoiseVolume: vi.fn(),
+        voice: null,
+        voices: [],
+        setVoice: vi.fn(),
+        downloadVoice: vi.fn(),
+        deleteVoice: vi.fn(),
+        downloadProgress: 0,
+        downloadStatus: null,
+        isDownloading: false,
+        checkVoiceDownloaded: vi.fn().mockResolvedValue(false),
+        setMinSentenceLength: vi.fn()
+    };
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.mocked(wipeAllData).mockClear();
+    });
+
+    const openDataManagementTab = () => {
+        // @ts-expect-error Mock implementation
+        useTTSStore.mockReturnValue(ttsStore);
+        render(<GlobalSettingsDialog />);
+        fireEvent.click(screen.getByRole('button', { name: 'Data Management' }));
+    };
+
+    it('calls wipeAllData when the user confirms', async () => {
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+        openDataManagementTab();
+
+        fireEvent.click(screen.getByText('Clear All Data'));
+
+        await waitFor(() => {
+            expect(wipeAllData).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    it('does not wipe when the confirmation is declined', async () => {
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        openDataManagementTab();
+
+        fireEvent.click(screen.getByText('Clear All Data'));
+
+        await waitFor(() => {
+            expect(confirmSpy).toHaveBeenCalled();
+        });
+        expect(wipeAllData).not.toHaveBeenCalled();
     });
 });

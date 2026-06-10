@@ -4,10 +4,9 @@ import { ReaderView } from './components/reader/ReaderView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useEffect, useState, useRef } from 'react';
 import { getDB } from './db/db';
-import { dbService } from './db/DBService';
+import { wipeAllData } from './db/wipe';
 import { SafeModeView } from './components/SafeModeView';
 import { ObsoleteLockView } from './components/ObsoleteLockView';
-import { deleteDB } from 'idb';
 import { useToastStore } from './store/useToastStore';
 import { StorageFullError } from './types/errors';
 import { useLibraryStore, useBookStore } from './store/useLibraryStore';
@@ -313,11 +312,12 @@ function App() {
       return;
     }
     try {
-      dbService.cleanup();
-      await deleteDB('EpubLibraryDB');
-      window.location.reload();
+      // Single owner of the wipe: stops sync + Yjs persistence, deletes both
+      // IndexedDB databases (EpubLibraryDB + versicle-yjs), clears Versicle
+      // localStorage keys and app caches, then reloads.
+      await wipeAllData();
     } catch (err) {
-      logger.error('Failed to delete DB:', err);
+      logger.error('Failed to wipe data:', err);
       alert('Failed to reset database. You may need to clear browser data manually.');
     }
   };
