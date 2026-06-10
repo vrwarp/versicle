@@ -36,15 +36,9 @@ describe('TableAdaptationProcessor', () => {
         vi.clearAllMocks();
     });
 
-    describe('preprocessTableRoots', () => {
-        it('should correctly preprocess table roots', () => {
-            const images = [{ cfi: 'epubcfi(/6/14!/4,/2,/3)' }, { cfi: 'epubcfi(/6/12!/4/2)' }];
-            const roots = processor.preprocessTableRoots(images);
-            expect(roots).toHaveLength(2);
-            // Sorts by clean length descending
-            expect(roots[0].clean.length).toBeGreaterThanOrEqual(roots[1].clean.length);
-        });
-    });
+    // preprocessTableRoots was deleted (it emitted a literal 'epubcfi(${range.parent})' via an
+    // escaped template literal). Its behavior — and the regression tests — now live with the
+    // canonical preprocessBlockRoots in src/lib/cfi-utils.test.ts.
 
     describe('processTableAdaptations', () => {
         it('should process existing adaptations immediately', async () => {

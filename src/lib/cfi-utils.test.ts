@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getParentCfi, parseCfiRange, generateCfiRange, mergeCfiRanges, generateEpubCfi, snapCfiToSentence } from './cfi-utils';
+import { getParentCfi, parseCfiRange, generateCfiRange, mergeCfiRanges, generateEpubCfi, snapCfiToSentence, preprocessBlockRoots } from './cfi-utils';
 
 // --- Mocks ---
 
@@ -454,6 +454,71 @@ describe('cfi-utils', () => {
 
             // Should default to standard leaf stripping: /4/20
             expect(getParentCfi(standardInput, [standardRoot])).toBe("epubcfi(/6/2!/4/20)");
+        });
+    });
+  });
+
+  describe('preprocessBlockRoots', () => {
+    it('preserves the exact original CFI and extracts the range parent as clean', () => {
+        const rangeCfi = 'epubcfi(/6/14!/4/2,/1:0,/3:5)';
+        const [root] = preprocessBlockRoots([rangeCfi]);
+        expect(root.original).toBe(rangeCfi);
+        expect(root.clean).toBe('/6/14!/4/2');
+    });
+
+    it('strips the epubcfi() wrapper for point CFIs', () => {
+        const pointCfi = 'epubcfi(/6/12!/4/2)';
+        const [root] = preprocessBlockRoots([pointCfi]);
+        expect(root.original).toBe(pointCfi);
+        expect(root.clean).toBe('/6/12!/4/2');
+    });
+
+    it('sorts by clean length descending so the most specific root matches first', () => {
+        // Absorbed from TableAdaptationProcessor.test.ts (preprocessTableRoots, deleted)
+        const roots = preprocessBlockRoots(['epubcfi(/6/14!/4,/2,/3)', 'epubcfi(/6/12!/4/2)']);
+        expect(roots).toHaveLength(2);
+        expect(roots[0].clean.length).toBeGreaterThanOrEqual(roots[1].clean.length);
+    });
+
+    describe('regression: preprocessTableRoots escaped template literal (D2)', () => {
+        // TableAdaptationProcessor.preprocessTableRoots (deleted) escaped the interpolation —
+        // `epubcfi(\${range.parent})` — so every range-CFI table got the literal string
+        // 'epubcfi(${range.parent})' as its `original`, collapsing distinct adjacent tables
+        // into one bogus group identity. The call sites now use preprocessBlockRoots.
+        const tableRangeCfis = [
+            'epubcfi(/6/14!/4/10,/2/1:0,/8/1:20)', // table 1
+            'epubcfi(/6/14!/4/12,/2/1:0,/6/1:14)', // adjacent table 2
+        ];
+
+        it('pins the broken input from the report: original is the input CFI, not the junk constant', () => {
+            const [root] = preprocessBlockRoots(['epubcfi(/6/14!/4,/2,/3)']);
+            expect(root.original).not.toBe('epubcfi(${range.parent})');
+            expect(root.original).toBe('epubcfi(/6/14!/4,/2,/3)');
+        });
+
+        it('never emits a literal "${" placeholder in any output field', () => {
+            for (const root of preprocessBlockRoots(tableRangeCfis)) {
+                expect(root.original).not.toContain('${');
+                expect(root.clean).not.toContain('${');
+            }
+        });
+
+        it('round-trips range CFIs: original parses back to the same parent as clean', () => {
+            for (const root of preprocessBlockRoots(tableRangeCfis)) {
+                const parsed = parseCfiRange(root.original);
+                expect(parsed).not.toBeNull();
+                expect(parsed!.parent).toBe(root.clean);
+                expect(getParentCfi(root.original)).toBe(`epubcfi(${root.clean})`);
+            }
+        });
+
+        it('gives adjacent range-CFI tables distinct identities via getParentCfi', () => {
+            const roots = preprocessBlockRoots(tableRangeCfis);
+            const idTable1 = getParentCfi('epubcfi(/6/14!/4/10/2/1:5)', roots);
+            const idTable2 = getParentCfi('epubcfi(/6/14!/4/12/2/1:5)', roots);
+            expect(idTable1).toBe('epubcfi(/6/14!/4/10,/2/1:0,/8/1:20)');
+            expect(idTable2).toBe('epubcfi(/6/14!/4/12,/2/1:0,/6/1:14)');
+            expect(idTable1).not.toBe(idTable2);
         });
     });
   });

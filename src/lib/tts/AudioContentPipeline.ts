@@ -4,7 +4,7 @@ import type { EngineContext } from './engine/EngineContext';
 import { generateSecureId } from '../crypto';
 import EpubCFI from 'epubjs/src/epubcfi';
 import type { CitationMarker } from '../../types/db';
-import { getParentCfi, generateCfiRange, parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
+import { getParentCfi, generateCfiRange, parseCfiRange, preprocessBlockRoots, type PreprocessedRoot } from '../cfi-utils';
 import type { SectionMetadata } from '../../types/db';
 import type { ContentType } from '../../types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
@@ -322,7 +322,7 @@ export class AudioContentPipeline {
                     const sectionTableImages = tableImages.filter(img => img.sectionId === nextSection.sectionId);
 
                     // Preprocess table roots for efficient querying (optimized)
-                    const preprocessedTableRoots = this.tableProcessor.preprocessTableRoots(sectionTableImages);
+                    const preprocessedTableRoots = preprocessBlockRoots(sectionTableImages.map(img => img.cfi));
 
                     // Group (Using raw sentences to ensure correct parent mapping)
                     const groups = this.groupSentencesByRoot(ttsContent.sentences, preprocessedTableRoots);
@@ -383,7 +383,7 @@ export class AudioContentPipeline {
             const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
 
             // Preprocess table roots for efficient querying (optimized)
-            const preprocessedTableRoots = this.tableProcessor.preprocessTableRoots(sectionTableImages);
+            const preprocessedTableRoots = preprocessBlockRoots(sectionTableImages.map(img => img.cfi));
 
             // Group sentences by Root Node
             const groups = this.groupSentencesByRoot(targetSentences, preprocessedTableRoots);

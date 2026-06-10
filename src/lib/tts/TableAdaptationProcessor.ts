@@ -1,6 +1,6 @@
 import { dbService } from '../../db/DBService';
 import EpubCFI from 'epubjs/src/epubcfi';
-import { parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
+import { parseCfiRange } from '../cfi-utils';
 import type { SentenceNode } from '../tts';
 import type { EngineContext } from './engine/EngineContext';
 
@@ -268,28 +268,5 @@ export class TableAdaptationProcessor {
         }
 
         return result;
-    }
-
-    /**
-     * Efficiently preprocesses table images into block roots for grouping,
-     * avoiding redundant CFI parsing.
-     */
-    public preprocessTableRoots(images: { cfi: string }[]): PreprocessedRoot[] {
-        return images.map(img => {
-            const range = parseCfiRange(img.cfi);
-            if (range && range.parent) {
-                return {
-                    original: `epubcfi(\${range.parent})`,
-                    clean: range.parent
-                };
-            } else {
-                let clean = img.cfi;
-                if (clean.startsWith('epubcfi(')) clean = clean.slice(8, -1);
-                return {
-                    original: img.cfi,
-                    clean
-                };
-            }
-        }).sort((a, b) => b.clean.length - a.clean.length);
     }
 }
