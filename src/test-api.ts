@@ -7,16 +7,21 @@
  * verification Docker build sets VITE_E2E=true); production builds never
  * execute this module.
  *
+ * Lives at the src/ root next to main.tsx (its only importer): this is
+ * composition-root wiring, not a lib/ service — and lib/ may not depend on
+ * store/ (.dependency-cruiser.cjs `lib-not-to-store`). Its final home is
+ * `app/` (master plan §2 rule 9, §5 P1b).
+ *
  * The legacy globals (`__DISCONNECT_YJS__` in yjs-provider.ts, `__CLOSE_DB__`
  * in db.ts, the `__VERSICLE_MOCK_*` flags in FirestoreSyncManager) remain as
  * deprecated aliases for now — consolidating them is Phase 1 work
  * (plan/overhaul/README.md §2 rule 9, §5 P1b).
  */
 import type { IndexeddbPersistence } from 'y-idb';
-import { getYjsPersistence } from '../store/yjs-provider';
-import { dbService } from '../db/DBService';
-import { wipeAllData } from '../db/wipe';
-import { createLogger } from './logger';
+import { getYjsPersistence } from './store/yjs-provider';
+import { dbService } from './db/DBService';
+import { wipeAllData } from './db/wipe';
+import { createLogger } from './lib/logger';
 
 const logger = createLogger('TestApi');
 

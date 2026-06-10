@@ -8,11 +8,11 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { installTestApi, flushPersistence } from './test-api';
-import { dbService } from '../db/DBService';
-import { yDoc, getYjsPersistence } from '../store/yjs-provider';
-import { wipeAllData } from '../db/wipe';
+import { dbService } from './db/DBService';
+import { yDoc, getYjsPersistence } from './store/yjs-provider';
+import { wipeAllData } from './db/wipe';
 
-vi.mock('../db/wipe', () => ({
+vi.mock('./db/wipe', () => ({
   wipeAllData: vi.fn().mockResolvedValue(undefined),
 }));
 

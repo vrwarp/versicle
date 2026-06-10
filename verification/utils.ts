@@ -21,7 +21,7 @@ const idbProbeContent = fs.existsSync(idbProbePath) ? fs.readFileSync(idbProbePa
 // string index signature intersects the worker-fixture types and collapses
 // `_suppressLogs` to `never`, rejecting the fixture tuple below.
 /**
- * The typed page-side test API installed by src/lib/test-api.ts (DEV and
+ * The typed page-side test API installed by src/test-api.ts (DEV and
  * VITE_E2E builds only). Mirrored here because tsconfig.e2e.json does not
  * include src/.
  */
@@ -217,7 +217,7 @@ export async function resetApp(page: Page) {
  * buffered — and the state is gone after reload. Tests that assert "X survives a reload" must
  * let those windows drain first.
  *
- * Deterministic path: `window.__versicleTest.flushPersistence()` (src/lib/test-api.ts,
+ * Deterministic path: `window.__versicleTest.flushPersistence()` (src/test-api.ts,
  * installed in DEV/VITE_E2E builds) forces both queues to flush NOW and resolves when the
  * transactions have committed — no timing knowledge duplicated here. The 1500ms sleep
  * remains only as a fallback for stale builds without the API, so a mismatched app build
