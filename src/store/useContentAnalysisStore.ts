@@ -243,9 +243,3 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
         getYjsOptions()
     )
 );
-
-// Self-register with DBService (which imports this module as a type only). This wires DBService's
-// content-analysis methods to the live store wherever this store is used on the main thread,
-// without DBService statically importing it — keeping yjs out of the TTS engine worker bundle.
-import { setContentAnalysisStore } from '../db/storeRegistry';
-setContentAnalysisStore(useContentAnalysisStore);

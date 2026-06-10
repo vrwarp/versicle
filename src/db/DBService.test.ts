@@ -1,20 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { dbService } from './DBService';
-// DBService now imports the yjs-backed stores as types only; importing them here triggers
-// their self-registration with DBService so the store-backed methods (e.g. deleteBook) work.
-import '../store/useContentAnalysisStore';
-import '../store/useBookStore';
-import '../store/useAnnotationStore';
 import { getDB } from './db';
-import * as ingestion from '../lib/ingestion';
 import type { StaticBookManifest, StaticResource, NavigationItem } from '../types/db';
-
-// Mock ingestion
-vi.mock('../lib/ingestion', () => ({
-  processEpub: vi.fn(),
-  extractBookData: vi.fn(),
-  generateFileFingerprint: vi.fn().mockResolvedValue('hash'),
-}));
 
 describe('DBService', () => {
 
@@ -36,42 +23,6 @@ describe('DBService', () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
-
-  describe('addBook', () => {
-    it('should call extractBookData and ingestBook', async () => {
-      const file = new File(['content'], 'test.epub', { type: 'application/epub+zip' });
-      const mockData = {
-        metadata: { id: 'new-id', title: 'Test' },
-        cover: new Blob([]),
-        originalFile: file,
-        assets: { images: {}, css: {} },
-        ttsContent: [],
-        tableImages: []
-      };
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const extractSpy = vi.mocked(ingestion.extractBookData).mockResolvedValue(mockData as any);
-
-      // Spy on ingestBook (real method)
-      const ingestSpy = vi.spyOn(dbService, 'ingestBook').mockResolvedValue();
-
-      await dbService.addBook(file);
-
-      expect(extractSpy).toHaveBeenCalledWith(file, undefined, undefined);
-      expect(ingestSpy).toHaveBeenCalledWith(mockData);
-    });
-
-    it('should handle error', async () => {
-      vi.spyOn(console, 'error').mockImplementation(() => {});
-      const file = new File(['content'], 'test.epub', { type: 'application/epub+zip' });
-      vi.mocked(ingestion.extractBookData).mockRejectedValue(new Error('Ingestion failed'));
-
-      // Expect the generic error thrown by handleError
-      await expect(dbService.addBook(file)).rejects.toThrow('An unexpected database error occurred');
-    });
-  });
-
-
 
   describe('deleteBook', () => {
     it('should delete static/cache data for a book', async () => {

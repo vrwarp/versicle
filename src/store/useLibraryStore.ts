@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { dbService } from '../db/DBService';
+import { bookRepository } from '../db/BookRepository';
+import { bookImportService } from '../lib/BookImportService';
 import type { UserInventoryItem, BookMetadata, StaticBookManifest } from '../types/db';
 import { StorageFullError, DuplicateBookError } from '../types/errors';
 import { useTTSStore } from './useTTSStore';
@@ -101,8 +103,23 @@ interface IDBService {
   getBookIdByFilename: (filename: string) => string | undefined;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const createLibraryStore = (injectedDB: IDBService = dbService as any) => create<LibraryState>()(
+// Default production wiring: imports via BookImportService (heavy ingestion pipeline),
+// inventory-merged reads + deletes via BookRepository (yjs), pure-IDB calls via DBService.
+const defaultLibraryDB: IDBService = {
+  addBook: (file, options, onProgress) => bookImportService.addBook(file, options, onProgress),
+  importBookWithId: (bookId, file, options, onProgress) =>
+    bookImportService.importBookWithId(bookId, file, options, onProgress),
+  deleteBook: (id) => bookRepository.deleteBook(id),
+  offloadBook: (id) => dbService.offloadBook(id),
+  restoreBook: (id, file) => bookImportService.restoreBook(id, file),
+  getBookMetadata: (id) => bookRepository.getBookMetadata(id),
+  getBookMetadataBulk: (ids) => bookRepository.getBookMetadataBulk(ids),
+  getOffloadedStatus: (bookIds) => dbService.getOffloadedStatus(bookIds),
+  getAvailableResourceIds: () => dbService.getAvailableResourceIds(),
+  getBookIdByFilename: (filename) => bookRepository.getBookIdByFilename(filename),
+};
+
+export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) => create<LibraryState>()(
   (set, get) => {
 
     // Extracted hydrate function to avoid get() and stale closures

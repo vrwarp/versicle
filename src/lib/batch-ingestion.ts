@@ -1,6 +1,6 @@
 
 import JSZip from 'jszip';
-import { dbService } from '../db/DBService';
+import { bookImportService } from './BookImportService';
 import type { ExtractionOptions } from './tts';
 import type { StaticBookManifest } from '../types/db';
 
@@ -151,7 +151,7 @@ export async function processBatchImport(
         }
 
         try {
-            const manifest = await dbService.addBook(epub, ttsOptions);
+            const manifest = await bookImportService.addBook(epub, ttsOptions);
             if (manifest) {
                 successful.push({
                     manifest,

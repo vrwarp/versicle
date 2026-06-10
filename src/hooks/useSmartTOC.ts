@@ -3,6 +3,7 @@ import type { Book } from 'epubjs';
 import type { NavigationItem } from '../types/db';
 import { genAIService } from '../lib/genai/GenAIService';
 import { dbService } from '../db/DBService';
+import { bookRepository } from '../db/BookRepository';
 import { useGenAIStore } from '../store/useGenAIStore';
 import { useToastStore } from '../store/useToastStore';
 import { useLibraryStore } from '../store/useLibraryStore';
@@ -53,7 +54,7 @@ export function useSmartTOC(
         throw new Error('No readable content found in sections.');
       }
 
-      const bookMetadata = await dbService.getBookMetadata(bookId);
+      const bookMetadata = await bookRepository.getBookMetadata(bookId);
       const bookTitle = bookMetadata?.title || 'Unknown Book';
       const language = bookMetadata?.language;
 

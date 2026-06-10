@@ -6,8 +6,8 @@ vi.mock('./ingestion', () => ({
     validateZipSignature: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock('../db/DBService', () => ({
-    dbService: {
+vi.mock('./BookImportService', () => ({
+    bookImportService: {
         addBook: vi.fn().mockResolvedValue({
             bookId: 'mock-id',
             title: 'Mock Title',
@@ -19,7 +19,7 @@ vi.mock('../db/DBService', () => ({
     }
 }));
 
-import { dbService } from '../db/DBService';
+import { bookImportService } from './BookImportService';
 
 const { mockLoadAsync, mockAsync } = vi.hoisted(() => ({
     mockLoadAsync: vi.fn(),
@@ -131,9 +131,9 @@ describe('batch-ingestion', () => {
 
             const result = await processBatchImport([file1, file2]);
 
-            expect(dbService.addBook).toHaveBeenCalledTimes(2);
-            expect(dbService.addBook).toHaveBeenCalledWith(file1, undefined);
-            expect(dbService.addBook).toHaveBeenCalledWith(file2, undefined);
+            expect(bookImportService.addBook).toHaveBeenCalledTimes(2);
+            expect(bookImportService.addBook).toHaveBeenCalledWith(file1, undefined);
+            expect(bookImportService.addBook).toHaveBeenCalledWith(file2, undefined);
 
             // Verify structure
             expect(result.successful).toHaveLength(2);
@@ -168,10 +168,10 @@ describe('batch-ingestion', () => {
 
             const result = await processBatchImport([zipFile, epubFile]);
 
-            expect(dbService.addBook).toHaveBeenCalledTimes(2);
+            expect(bookImportService.addBook).toHaveBeenCalledTimes(2);
             // One call for extracted file (we can't easily check equality of the file object created inside, but we know it's there)
             // One call for standalone.epub
-            expect(dbService.addBook).toHaveBeenCalledWith(epubFile, undefined);
+            expect(bookImportService.addBook).toHaveBeenCalledWith(epubFile, undefined);
 
             expect(result.successful).toHaveLength(2);
             // ZIP content processed first
@@ -184,14 +184,14 @@ describe('batch-ingestion', () => {
             const file2 = new File(['content'], 'bad.epub');
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (dbService.addBook as any).mockImplementation((file: File) => {
+            (bookImportService.addBook as any).mockImplementation((file: File) => {
                 if (file.name === 'bad.epub') throw new Error('Failed');
                 return Promise.resolve({ bookId: 'book-id' });
             });
 
             const { successful } = await processBatchImport([file1, file2]);
 
-            expect(dbService.addBook).toHaveBeenCalledTimes(2);
+            expect(bookImportService.addBook).toHaveBeenCalledTimes(2);
             expect(successful.length).toBe(1);
         });
 

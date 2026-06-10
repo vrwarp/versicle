@@ -2,12 +2,31 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { dbService } from '../../db/DBService';
+import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { SentenceNode } from '../tts';
 
 vi.mock('../../db/DBService');
 vi.mock('../genai/GenAIService');
 vi.mock('../../store/useGenAIStore');
+
+vi.mock('../../db/ContentAnalysisRepository', () => ({
+    contentAnalysisRepository: {
+        getContentAnalysis: vi.fn(),
+        saveReferenceStartCfi: vi.fn(),
+        markAnalysisLoading: vi.fn(),
+        markAnalysisError: vi.fn(),
+        saveTableAdaptations: vi.fn(),
+        clearAll: vi.fn(),
+    }
+}));
+
+vi.mock('../../db/BookRepository', () => ({
+    bookRepository: {
+        getBookMetadata: vi.fn(),
+    }
+}));
+
 
 describe('TableAdaptationProcessor', () => {
     let processor: TableAdaptationProcessor;
@@ -41,7 +60,7 @@ describe('TableAdaptationProcessor', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } as any);
 
-            vi.mocked(dbService.getContentAnalysis).mockResolvedValue({
+            vi.mocked(contentAnalysisRepository.getContentAnalysis).mockResolvedValue({
                 tableAdaptations: [{ rootCfi: 'epubcfi(/6/14!/4,/2,/3)', text: 'Adapted text' }],
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } as any);

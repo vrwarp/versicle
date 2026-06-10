@@ -1,6 +1,7 @@
 import { getDB } from '../db/db';
 import { useBookStore } from '../store/useBookStore';
 import { dbService } from '../db/DBService';
+import { bookImportService } from './BookImportService';
 import { useTTSStore } from '../store/useTTSStore';
 import { createLogger } from './logger';
 
@@ -142,7 +143,7 @@ export class MaintenanceService {
 
           onProgress(current, total, `Regenerating ${books[bookId].title}...`);
 
-          const manifest = await dbService.importBookWithId(bookId, file, {
+          const manifest = await bookImportService.importBookWithId(bookId, file, {
             abbreviations: [],
             alwaysMerge: [],
             sentenceStarters,

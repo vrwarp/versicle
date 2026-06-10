@@ -194,7 +194,3 @@ export const createAnnotationStore = () => create<AnnotationState>()(
  * Wrapped with yjs() middleware for automatic CRDT synchronization.
  */
 export const useAnnotationStore = createAnnotationStore();
-
-// Self-register with DBService (type-only importer); see useContentAnalysisStore for rationale.
-import { setAnnotationStore } from '../db/storeRegistry';
-setAnnotationStore(useAnnotationStore);

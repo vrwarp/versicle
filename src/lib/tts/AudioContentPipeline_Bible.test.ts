@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { dbService } from '../../db/DBService';
+import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
+import { bookRepository } from '../../db/BookRepository';
 import { useTTSStore } from '../../store/useTTSStore';
 import { TextSegmenter } from './TextSegmenter';
 import { LexiconService } from './LexiconService';
@@ -12,9 +14,24 @@ import type { BookMetadata, TTSContentAnalysis } from '../../types/db';
 vi.mock('../../db/DBService', () => ({
     dbService: {
         getTTSContent: vi.fn(),
-        getBookMetadata: vi.fn(),
-        getContentAnalysis: vi.fn(),
         getBookStructure: vi.fn(),
+    }
+}));
+
+vi.mock('../../db/ContentAnalysisRepository', () => ({
+    contentAnalysisRepository: {
+        getContentAnalysis: vi.fn(),
+        saveReferenceStartCfi: vi.fn(),
+        markAnalysisLoading: vi.fn(),
+        markAnalysisError: vi.fn(),
+        saveTableAdaptations: vi.fn(),
+        clearAll: vi.fn(),
+    }
+}));
+
+vi.mock('../../db/BookRepository', () => ({
+    bookRepository: {
+        getBookMetadata: vi.fn(),
     }
 }));
 
@@ -74,8 +91,8 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
 
         // Default Mocks
         vi.mocked(dbService.getTTSContent).mockResolvedValue({ sentences: [{ text: 'Test.', cfi: 'cfi' }] } as unknown as { sentences: { text: string, cfi: string }[] });
-        vi.mocked(dbService.getBookMetadata).mockResolvedValue({} as BookMetadata);
-        vi.mocked(dbService.getContentAnalysis).mockResolvedValue({} as TTSContentAnalysis);
+        vi.mocked(bookRepository.getBookMetadata).mockResolvedValue({} as BookMetadata);
+        vi.mocked(contentAnalysisRepository.getContentAnalysis).mockResolvedValue({} as TTSContentAnalysis);
 
         // Ensure getState returns fresh default values
         vi.mocked(useTTSStore.getState).mockReturnValue({

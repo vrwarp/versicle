@@ -28,6 +28,11 @@ const mockImportBookWithId = vi.fn();
 vi.mock('../db/DBService', () => ({
     dbService: {
         getBookFile: (...args: unknown[]) => mockGetBookFile(...args),
+    },
+}));
+
+vi.mock('./BookImportService', () => ({
+    bookImportService: {
         importBookWithId: (...args: unknown[]) => mockImportBookWithId(...args),
     },
 }));

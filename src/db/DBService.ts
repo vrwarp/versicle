@@ -1,14 +1,11 @@
 import { getDB } from './db';
 import type {
-  BookMetadata,
   SectionMetadata,
   TableImage,
   BookLocations,
-  Annotation,
   CacheTtsPreparation,
   CacheSessionState,
   TTSState,
-  ContentAnalysis,
   StaticBookManifest,
   StaticStructure,
   NavigationItem,
@@ -16,80 +13,71 @@ import type {
 } from '../types/db';
 import type { Timepoint } from '../lib/tts/providers/types';
 import { DatabaseError, StorageFullError } from '../types/errors';
-import { extractBookData, type BookExtractionData, generateFileFingerprint } from '../lib/ingestion';
+import type { BookExtractionData } from '../lib/ingestion';
 import { createLogger } from '../lib/logger';
-// The yjs-backed stores are reached through a tiny dependency-free registry (they register
-// themselves on import). DBService never statically imports them, so the TTS engine worker —
-// which imports DBService for IndexedDB — doesn't bundle yjs or open a second Y.Doc/IndexedDB
-// connection. The engine reaches these reads/writes through the EngineContext instead.
-import { getContentAnalysisStore, getBookStore, getAnnotationStore } from './storeRegistry';
-
-function caStore() {
-    const s = getContentAnalysisStore();
-    if (!s) throw new Error('DBService: content-analysis store not registered (worker should route via EngineContext)');
-    return s.getState();
-}
-function bookStoreState() {
-    const s = getBookStore();
-    if (!s) throw new Error('DBService: book store not registered (worker should route via EngineContext)');
-    return s.getState();
-}
-function annStore() {
-    const s = getAnnotationStore();
-    if (!s) throw new Error('DBService: annotation store not registered (worker should route via EngineContext)');
-    return s.getState();
-}
-
 import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
-import type { ExtractionOptions } from '../lib/tts';
 import { runExclusiveIdbWrite } from '../lib/idb-write-lock';
 
 const logger = createLogger('DBService');
 
+/**
+ * Map a raw failure to the typed database errors. Shared with the services that layer on
+ * top of DBService (e.g. BookImportService) so error semantics stay identical across the split.
+ */
+export function handleDbError(error: unknown): never {
+  logger.error('Database operation failed', error);
+
+  if (error instanceof DatabaseError) {
+    throw error;
+  }
+
+  if (error instanceof Error) {
+    if (error.name === 'QuotaExceededError') {
+      throw new StorageFullError(error);
+    }
+  }
+  // Check if it's a DOMException with code 22 (QuotaExceededError legacy)
+  if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+    throw new StorageFullError(error);
+  }
+
+  throw new DatabaseError('An unexpected database error occurred', error);
+}
+
+/**
+ * The raw IndexedDB rows describing one book's static data. Consumed by BookRepository,
+ * which merges in the yjs-backed user inventory to produce a BookMetadata.
+ */
+export interface ManifestBundle {
+  manifest: StaticBookManifest;
+  structure: StaticStructure | undefined;
+  /** Whether the binary EPUB resource is present locally (false ⇒ offloaded). */
+  hasResource: boolean;
+}
+
+/**
+ * Pure-IndexedDB data layer. This module is worker-safe: it must not import the yjs-backed
+ * Zustand stores (book inventory, content analysis, annotations) or the EPUB ingestion
+ * pipeline — the TTS engine worker imports it for IndexedDB reads/writes. Inventory merging
+ * lives in BookRepository; book import lives in BookImportService.
+ */
 class DBService {
   private async getDB() {
     return getDB();
   }
 
   private handleError(error: unknown): never {
-    logger.error('Database operation failed', error);
-
-    if (error instanceof DatabaseError) {
-      throw error;
-    }
-
-    if (error instanceof Error) {
-      if (error.name === 'QuotaExceededError') {
-        throw new StorageFullError(error);
-      }
-    }
-    // Check if it's a DOMException with code 22 (QuotaExceededError legacy)
-    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-      throw new StorageFullError(error);
-    }
-
-    throw new DatabaseError('An unexpected database error occurred', error);
+    handleDbError(error);
   }
 
   // --- Book Operations ---
 
   /**
-   * Retrieves all books in the library.
-   * JOINS: static_manifests, user_inventory, user_progress
-   */
-
-
-  /**
-   * Retrieves a specific book and its file content.
-   */
-
-
-  /**
-   * Retrieves metadata for multiple books in a single transaction.
+   * Retrieves the raw static rows for multiple books in a single transaction.
    * Optimized for bulk hydration by querying specifically requested IDs within one transaction.
    * Preserves the exact index mapping of the input array.
    */
-  async getBookMetadataBulk(ids: string[]): Promise<(BookMetadata | undefined)[]> {
+  async getManifestBundleBulk(ids: string[]): Promise<(ManifestBundle | undefined)[]> {
     try {
       if (ids.length === 0) return [];
       const db = await this.getDB();
@@ -109,49 +97,15 @@ class DBService {
 
       await tx.done;
 
-      const manifestsMap = new Map<string, { manifest: StaticBookManifest, resourceCount: number, structure: StaticStructure | undefined }>();
+      const manifestsMap = new Map<string, ManifestBundle>();
       manifests.forEach((m, i) => {
           if (m) {
-             manifestsMap.set(m.bookId, { manifest: m, resourceCount: resourceCounts[i], structure: structures[i] });
+             manifestsMap.set(m.bookId, { manifest: m, structure: structures[i], hasResource: resourceCounts[i] > 0 });
           }
       });
 
-      const inventoryBooks = bookStoreState().books;
-
       // Map results back preserving index and handling missing records
-      return ids.map((id) => {
-          const data = manifestsMap.get(id);
-          if (!data) return undefined;
-
-          const { manifest, resourceCount, structure } = data;
-          const inventory = inventoryBooks[manifest.bookId];
-
-          // coverBlob may be ArrayBuffer at runtime (stored as ArrayBuffer for WebKit IDB compatibility)
-          const rawCoverBlob = manifest.coverBlob as unknown as Blob | ArrayBuffer | undefined;
-          return {
-            id: manifest.bookId,
-            title: inventory?.customTitle || inventory?.title || manifest.title,
-            author: inventory?.customAuthor || inventory?.author || manifest.author,
-            description: manifest.description,
-            coverBlob: rawCoverBlob instanceof ArrayBuffer ? new Blob([rawCoverBlob]) : rawCoverBlob,
-            addedAt: inventory?.addedAt || Date.now(),
-
-            bookId: manifest.bookId,
-            filename: inventory?.sourceFilename || 'unknown.epub',
-            fileHash: manifest.fileHash,
-            fileSize: manifest.fileSize,
-            totalChars: manifest.totalChars,
-            version: manifest.schemaVersion,
-            syntheticToc: structure?.toc,
-
-            isOffloaded: resourceCount === 0,
-            language: inventory?.language || manifest.language,
-            coverPalette: inventory?.coverPalette || manifest.coverPalette,
-            perceptualPalette: inventory?.perceptualPalette || manifest.perceptualPalette,
-            baseFontSize: manifest.baseFontSize,
-            baseLineHeight: manifest.baseLineHeight
-          };
-      });
+      return ids.map((id) => manifestsMap.get(id));
     } catch (error) {
       this.handleError(error);
     }
@@ -159,10 +113,10 @@ class DBService {
   }
 
   /**
-   * Retrieves only the metadata for a specific book.
-   * Post-Yjs migration: user_inventory is in Yjs (useBookStore), not IndexedDB.
+   * Retrieves the raw static rows for a specific book.
+   * Inventory merging (yjs) happens in BookRepository.
    */
-  async getBookMetadata(id: string): Promise<BookMetadata | undefined> {
+  async getManifestBundle(id: string): Promise<ManifestBundle | undefined> {
     try {
       const db = await this.getDB();
       const tx = db.transaction(['static_manifests', 'static_resources', 'static_structure'], 'readonly');
@@ -177,51 +131,10 @@ class DBService {
         return undefined;
       }
 
-      // Get inventory from Yjs store (primary source)
-      const inventory = bookStoreState().books[id];
-
-      // coverBlob may be ArrayBuffer at runtime (stored as ArrayBuffer for WebKit IDB compatibility)
-      const rawCoverBlob2 = manifest.coverBlob as unknown as Blob | ArrayBuffer | undefined;
-      return {
-        id: manifest.bookId,
-        title: inventory?.customTitle || inventory?.title || manifest.title,
-        author: inventory?.customAuthor || inventory?.author || manifest.author,
-        description: manifest.description,
-        coverBlob: rawCoverBlob2 instanceof ArrayBuffer ? new Blob([rawCoverBlob2]) : rawCoverBlob2,
-        addedAt: inventory?.addedAt || Date.now(),
-
-        bookId: manifest.bookId,
-        filename: inventory?.sourceFilename || 'unknown.epub',
-        fileHash: manifest.fileHash,
-        fileSize: manifest.fileSize,
-        totalChars: manifest.totalChars,
-        version: manifest.schemaVersion,
-        syntheticToc: structure?.toc,
-
-        isOffloaded: !resourceKey,
-        language: inventory?.language || manifest.language,
-        coverPalette: inventory?.coverPalette || manifest.coverPalette,
-        perceptualPalette: inventory?.perceptualPalette || manifest.perceptualPalette,
-        baseFontSize: manifest.baseFontSize,
-        baseLineHeight: manifest.baseLineHeight
-      };
+      return { manifest, structure, hasResource: !!resourceKey };
     } catch (error) {
       this.handleError(error);
     }
-  }
-
-  /**
-   * Retrieves the book ID associated with a given filename.
-   * Uses Yjs store (useBookStore) instead of IDB.
-   */
-  getBookIdByFilename(filename: string): string | undefined {
-    const books = bookStoreState().books;
-    for (const book of Object.values(books)) {
-      if (book.sourceFilename === filename) {
-        return book.bookId;
-      }
-    }
-    return undefined;
   }
 
   /**
@@ -258,80 +171,6 @@ class DBService {
         characterCount: item.characterCount,
         playOrder: item.index
       })).sort((a, b) => a.playOrder - b.playOrder);
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  /**
-   * Adds a new book to the library (Phase 2: Pure Ingestion).
-   * Returns the StaticBookManifest for the caller to create UserInventoryItem.
-   * Only writes to static_* and cache_* stores. Does NOT write user_inventory.
-   */
-  async addBook(
-    file: File,
-    ttsOptions?: ExtractionOptions,
-    onProgress?: (progress: number, message: string) => void
-  ): Promise<StaticBookManifest> {
-    try {
-      const data = await extractBookData(file, ttsOptions, onProgress);
-      await this.ingestBook(data);
-      return data.manifest;
-    } catch (error) {
-      this.handleError(error);
-    }
-  }
-
-  /**
-   * Imports a book with a specific book ID.
-   * Used for restoring synced books where the inventory already exists via Yjs
-   * but the local static data (manifest, resources, structure) doesn't exist.
-   * 
-   * This extracts the book, overrides all bookId references with the specified ID,
-   * then ingests the data.
-   */
-  async importBookWithId(
-    bookId: string,
-    file: File,
-    ttsOptions?: ExtractionOptions,
-    onProgress?: (progress: number, message: string) => void
-  ): Promise<StaticBookManifest> {
-    try {
-      const data = await extractBookData(file, ttsOptions, onProgress);
-
-      // Override all bookId references with the specified ID
-      const originalBookId = data.bookId;
-
-      data.bookId = bookId;
-      data.manifest.bookId = bookId;
-      data.resource.bookId = bookId;
-      data.structure.bookId = bookId;
-      data.inventory.bookId = bookId;
-      data.progress.bookId = bookId;
-      data.overrides.bookId = bookId;
-
-      // Update section IDs that include the bookId
-      data.structure.spineItems = data.structure.spineItems.map(item => ({
-        ...item,
-        id: item.id.replace(originalBookId, bookId)
-      }));
-
-      // Update TTS batch IDs
-      data.ttsContentBatches = data.ttsContentBatches.map(batch => ({
-        ...batch,
-        id: batch.id.replace(originalBookId, bookId),
-        bookId
-      }));
-
-      // Update table batch IDs
-      data.tableBatches = data.tableBatches.map(table => ({
-        ...table,
-        id: table.id.replace(originalBookId, bookId),
-        bookId
-      }));
-
-      await this.ingestBook(data, 'overwrite');
-      return data.manifest;
     } catch (error) {
       this.handleError(error);
     }
@@ -447,13 +286,11 @@ class DBService {
   }
 
   /**
-   * Deletes a book and all associated data.
+   * Deletes a book's static and cache rows. Yjs cleanup (content analysis, inventory)
+   * is orchestrated by BookRepository.deleteBook.
    */
   async deleteBook(id: string): Promise<void> {
     try {
-      // Clean up Yjs content analysis for this book
-      caStore().deleteBookAnalysis(id);
-
       const db = await this.getDB();
       // Delete from static and cache stores only
       // User data stores are managed by Yjs and cleared via their respective stores
@@ -510,35 +347,19 @@ class DBService {
   }
 
   /**
-   * Restores an offloaded book.
+   * Writes a restored book's binary content. Fingerprint verification (which needs the
+   * ingestion pipeline) happens in BookImportService.restoreBook before this is called.
+   * Stores the file as ArrayBuffer (WebKit IDB does not support Blob structured clone).
    */
-  async restoreBook(id: string, file: File): Promise<void> {
+  async restoreBookResource(id: string, epubArrayBuffer: ArrayBuffer): Promise<void> {
     try {
       const db = await this.getDB();
-
-      const manifest = await db.get('static_manifests', id);
-      if (!manifest) throw new Error('Book metadata not found');
-
-      // Verify Hash
-      const newFingerprint = await generateFileFingerprint(file, {
-        title: manifest.title,
-        author: manifest.author,
-        filename: file.name
-      });
-
-      if (manifest.fileHash && manifest.fileHash !== newFingerprint) {
-        throw new Error('File verification failed: Fingerprint mismatch.');
-      }
-
-      // Store File as ArrayBuffer (WebKit IDB does not support Blob structured clone)
-      const epubArrayBuffer = await file.arrayBuffer();
       const tx = db.transaction(['static_resources'], 'readwrite');
       const store = tx.objectStore('static_resources');
       const resource = await store.get(id) || { bookId: id, epubBlob: epubArrayBuffer };
       resource.epubBlob = epubArrayBuffer;
       await store.put(resource);
       await tx.done;
-
     } catch (error) {
       this.handleError(error);
     }
@@ -729,14 +550,6 @@ class DBService {
     }
   }
 
-  // --- Annotation Operations ---
-  // Uses useAnnotationStore (Yjs) as primary source.
-
-  getAnnotations(bookId: string): Annotation[] {
-    const allAnnotations = annStore().annotations;
-    return Object.values(allAnnotations).filter(ann => ann.bookId === bookId);
-  }
-
   // --- TTS Cache Operations ---
 
   async getCachedSegment(key: string): Promise<CachedSegment | undefined> {
@@ -795,42 +608,7 @@ class DBService {
 
 
 
-  // --- Content Analysis & Accessibility Operations ---
-  // Uses useContentAnalysisStore (Yjs) as primary and only source.
-
-  getContentAnalysis(bookId: string, sectionId: string): ContentAnalysis | undefined {
-    const yjsAnalysis = caStore().getAnalysis(bookId, sectionId);
-    if (!yjsAnalysis) return undefined;
-
-    return {
-      id: `${bookId}-${sectionId}`,
-      bookId,
-      sectionId,
-      structure: { title: yjsAnalysis.title, footnoteMatches: [] },
-      referenceStartCfi: yjsAnalysis.referenceStartCfi,
-      tableAdaptations: yjsAnalysis.tableAdaptations,
-      lastAnalyzed: yjsAnalysis.generatedAt,
-      status: yjsAnalysis.status,
-      lastError: yjsAnalysis.lastError,
-      lastAttempt: yjsAnalysis.lastAttempt,
-    };
-  }
-
-  saveReferenceStartCfi(bookId: string, sectionId: string, referenceStartCfi: string | undefined): void {
-    caStore().saveReferenceStartCfi(bookId, sectionId, referenceStartCfi);
-  }
-
-  markAnalysisLoading(bookId: string, sectionId: string): void {
-    caStore().markAnalysisLoading(bookId, sectionId);
-  }
-
-  markAnalysisError(bookId: string, sectionId: string, error: string): void {
-    caStore().markAnalysisError(bookId, sectionId, error);
-  }
-
-  clearContentAnalysis(): void {
-    caStore().clearAll();
-  }
+  // --- Table Images ---
 
   async getTableImages(bookId: string): Promise<TableImage[]> {
     try {
@@ -847,10 +625,6 @@ class DBService {
     } catch (error) {
       this.handleError(error);
     }
-  }
-
-  saveTableAdaptations(bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]): void {
-    caStore().saveTableAdaptations(bookId, sectionId, adaptations);
   }
 
   // --- Cleanup ---

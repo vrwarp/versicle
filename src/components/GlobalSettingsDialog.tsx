@@ -19,6 +19,7 @@ import { getDB } from '../db/db';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
 import { dbService } from '../db/DBService';
+import { contentAnalysisRepository } from '../db/ContentAnalysisRepository';
 import { CheckpointService } from '../lib/sync/CheckpointService';
 import { useSyncStore } from '../lib/sync/hooks/useSyncStore';
 import { useFirestoreSync } from '../lib/sync/hooks/useFirestoreSync';
@@ -154,7 +155,7 @@ export const GlobalSettingsDialog = () => {
     const handleClearContentAnalysis = async () => {
         if (confirm("Are you sure you want to clear the Content Analysis cache? This will force re-analysis of content.")) {
             try {
-                await dbService.clearContentAnalysis();
+                contentAnalysisRepository.clearAll();
                 showToast("Content Analysis cache cleared.", "success");
             } catch (e) {
                 logger.error("Failed to clear content analysis cache", e);

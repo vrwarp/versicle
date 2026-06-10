@@ -1,6 +1,6 @@
 import { useReadingStateStore } from '../store/useReadingStateStore';
 import { useReaderUIStore } from '../store/useReaderUIStore';
-import { dbService } from '../db/DBService';
+import { bookRepository } from '../db/BookRepository';
 
 // Actually, looking at the project, I don't see react-query. I'll stick to a simple hook given the constraints.
 import { useState, useEffect, useMemo } from 'react';
@@ -27,7 +27,7 @@ export function useBookProgress(bookId: string) {
         let ignore = false;
 
         if (!isCurrent && bookId) {
-            dbService.getBookMetadata(bookId).then(meta => {
+            bookRepository.getBookMetadata(bookId).then(meta => {
                 if (!ignore) {
                     if (meta) {
                         setStoredProgress({

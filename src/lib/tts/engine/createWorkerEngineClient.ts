@@ -20,7 +20,8 @@ import { Capacitor } from '@capacitor/core';
 import { TTSProviderManager } from '../TTSProviderManager';
 import { PlatformIntegration } from '../PlatformIntegration';
 import { LexiconService } from '../LexiconService';
-import { dbService } from '../../../db/DBService';
+import { bookRepository } from '../../../db/BookRepository';
+import { contentAnalysisRepository } from '../../../db/ContentAnalysisRepository';
 import { WebSpeechProvider } from '../providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from '../providers/CapacitorTTSProvider';
 import { GoogleTTSProvider } from '../providers/GoogleTTSProvider';
@@ -90,16 +91,16 @@ function applyHostCommand(command: EngineHostCommand): void {
             useReaderUIStore.getState().setCurrentSection(command.title, command.sectionId);
             break;
         case 'saveReferenceStartCfi':
-            dbService.saveReferenceStartCfi(command.bookId, command.sectionId, command.cfi);
+            contentAnalysisRepository.saveReferenceStartCfi(command.bookId, command.sectionId, command.cfi);
             break;
         case 'markAnalysisLoading':
-            dbService.markAnalysisLoading(command.bookId, command.sectionId);
+            contentAnalysisRepository.markAnalysisLoading(command.bookId, command.sectionId);
             break;
         case 'markAnalysisError':
-            dbService.markAnalysisError(command.bookId, command.sectionId, command.error);
+            contentAnalysisRepository.markAnalysisError(command.bookId, command.sectionId, command.error);
             break;
         case 'saveTableAdaptations':
-            dbService.saveTableAdaptations(command.bookId, command.sectionId, command.adaptations);
+            contentAnalysisRepository.saveTableAdaptations(command.bookId, command.sectionId, command.adaptations);
             break;
     }
 }
@@ -194,8 +195,9 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         platformStop: () => platform.stop(),
         lexiconGetRules: (bookId, language) => LexiconService.getInstance().getRules(bookId, language),
         lexiconGetBiblePreference: (bookId) => LexiconService.getInstance().getBibleLexiconPreference(bookId),
-        getContentAnalysis: async (bookId, sectionId) => dbService.getContentAnalysis(bookId, sectionId),
-        getBookMetadata: (bookId) => dbService.getBookMetadata(bookId),
+        getContentAnalysis: async (bookId, sectionId) =>
+            contentAnalysisRepository.getContentAnalysis(bookId, sectionId),
+        getBookMetadata: (bookId) => bookRepository.getBookMetadata(bookId),
         applyHostCommand,
     };
 

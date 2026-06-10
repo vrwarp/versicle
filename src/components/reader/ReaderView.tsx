@@ -20,7 +20,7 @@ import { useToastStore } from '../../store/useToastStore';
 import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
-import { dbService } from '../../db/DBService';
+import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
 import { searchClient } from '../../lib/search';
 import { SyncStatusPanel } from './SyncStatusPanel';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';
@@ -779,7 +779,7 @@ export const ReaderView: React.FC = () => {
                 const section = book.spine.get(currentSectionId!);
                 if (!section) return;
 
-                const analysis = await dbService.getContentAnalysis(bookId!, section.href);
+                const analysis = contentAnalysisRepository.getContentAnalysis(bookId!, section.href);
                 if (!analysis) return;
 
                 if (analysis.referenceStartCfi) {

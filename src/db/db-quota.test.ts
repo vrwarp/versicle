@@ -31,7 +31,7 @@ describe('DBService QuotaExceededError', () => {
       };
     });
 
-    await expect(dbService.getBookMetadata('123')).rejects.toThrow(StorageFullError);
+    await expect(dbService.getManifestBundle('123')).rejects.toThrow(StorageFullError);
   });
 
   it('should throw StorageFullError when IndexedDB quota is exceeded (Error name QuotaExceededError)', async () => {
@@ -48,6 +48,6 @@ describe('DBService QuotaExceededError', () => {
       };
     });
 
-    await expect(dbService.getBookMetadata('123')).rejects.toThrow(StorageFullError);
+    await expect(dbService.getManifestBundle('123')).rejects.toThrow(StorageFullError);
   });
 });

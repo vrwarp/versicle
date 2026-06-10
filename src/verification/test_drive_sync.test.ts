@@ -16,16 +16,29 @@ vi.mock('../lib/drive/DriveService', () => ({
     }
 }));
 
-// Mock DBService to prevent actual IndexedDB calls during import
+// Mock the DB layer to prevent actual IndexedDB calls during import
 vi.mock('../db/DBService', () => ({
     dbService: {
-        addBook: vi.fn().mockResolvedValue({ bookId: 'mock-id', title: 'Mocked Title', author: 'Mocked Author', schemaVersion: '1.0' }),
         getBookStructure: vi.fn().mockResolvedValue({}),
-        getContentAnalysis: vi.fn().mockResolvedValue({}),
-        getBookMetadata: vi.fn().mockResolvedValue({}),
-        getBookIdByFilename: vi.fn().mockResolvedValue(undefined),
-        importBookWithId: vi.fn().mockResolvedValue({ bookId: 'mock-id', title: 'Mocked Title', author: 'Mocked Author', schemaVersion: '1.0' }),
         getOffloadedStatus: vi.fn().mockResolvedValue(new Map()),
+        getAvailableResourceIds: vi.fn().mockResolvedValue(new Set()),
+    }
+}));
+
+vi.mock('../lib/BookImportService', () => ({
+    bookImportService: {
+        addBook: vi.fn().mockResolvedValue({ bookId: 'mock-id', title: 'Mocked Title', author: 'Mocked Author', schemaVersion: '1.0' }),
+        importBookWithId: vi.fn().mockResolvedValue({ bookId: 'mock-id', title: 'Mocked Title', author: 'Mocked Author', schemaVersion: '1.0' }),
+        restoreBook: vi.fn().mockResolvedValue(undefined),
+    }
+}));
+
+vi.mock('../db/BookRepository', () => ({
+    bookRepository: {
+        getBookMetadata: vi.fn().mockResolvedValue({}),
+        getBookMetadataBulk: vi.fn().mockResolvedValue([]),
+        getBookIdByFilename: vi.fn().mockReturnValue(undefined),
+        deleteBook: vi.fn().mockResolvedValue(undefined),
     }
 }));
 
@@ -120,9 +133,9 @@ describe('Google Drive Sync & Import E2E', () => {
         // Perform Import
         await DriveScannerService.importFile(fileId, 'New Adventure.epub');
 
-        const { dbService } = await import('../db/DBService');
+        const { bookImportService } = await import('../lib/BookImportService');
         // Expect addBook to be called
-        expect(dbService.addBook).toHaveBeenCalledWith(
+        expect(bookImportService.addBook).toHaveBeenCalledWith(
             expect.objectContaining({ name: 'New Adventure.epub' }),
             expect.anything(),
             expect.anything()
@@ -169,11 +182,11 @@ describe('Google Drive Sync & Import E2E', () => {
 
         await DriveScannerService.importFile(match!.id, match!.name, { overwrite: true });
 
-        const { dbService } = await import('../db/DBService');
+        const { bookImportService } = await import('../lib/BookImportService');
 
         // Since the book exists in store (matched by filename), and overwrite is true,
-        // useLibraryStore calls dbService.importBookWithId to preserve the ID
-        expect(dbService.importBookWithId).toHaveBeenCalledWith(
+        // useLibraryStore calls bookImportService.importBookWithId to preserve the ID
+        expect(bookImportService.importBookWithId).toHaveBeenCalledWith(
             ghostBookId,
             expect.objectContaining({ name: bookTitle }),
             expect.anything(),

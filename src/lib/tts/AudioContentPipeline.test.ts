@@ -2,16 +2,32 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createZustandEngineContext } from './engine/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { dbService } from '../../db/DBService';
+import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
+import { bookRepository } from '../../db/BookRepository';
 import { useGenAIStore } from '../../store/useGenAIStore';
 
 vi.mock('../../db/DBService', () => ({
     dbService: {
         getTTSContent: vi.fn(),
-        getContentAnalysis: vi.fn(),
-        getBookMetadata: vi.fn(),
-        saveReferenceStartCfi: vi.fn(),
         getBookStructure: vi.fn(),
         getTableImages: vi.fn().mockResolvedValue([]), // Added mock
+    }
+}));
+
+vi.mock('../../db/ContentAnalysisRepository', () => ({
+    contentAnalysisRepository: {
+        getContentAnalysis: vi.fn(),
+        saveReferenceStartCfi: vi.fn(),
+        markAnalysisLoading: vi.fn(),
+        markAnalysisError: vi.fn(),
+        saveTableAdaptations: vi.fn(),
+        clearAll: vi.fn(),
+    }
+}));
+
+vi.mock('../../db/BookRepository', () => ({
+    bookRepository: {
+        getBookMetadata: vi.fn(),
     }
 }));
 
@@ -71,9 +87,9 @@ describe('AudioContentPipeline', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (dbService.getTTSContent as any).mockResolvedValue({ sentences: mockSentences });
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (dbService.getBookMetadata as any).mockResolvedValue(mockMetadata);
+            (bookRepository.getBookMetadata as any).mockResolvedValue(mockMetadata);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (dbService.getContentAnalysis as any).mockResolvedValue(null);
+            (contentAnalysisRepository.getContentAnalysis as any).mockResolvedValue(null);
 
             const result = await pipeline.loadSection('book1', mockSection, 0, false, 1.0);
 
@@ -88,7 +104,7 @@ describe('AudioContentPipeline', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (dbService.getTTSContent as any).mockResolvedValue({ sentences: [] });
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (dbService.getBookMetadata as any).mockResolvedValue({});
+            (bookRepository.getBookMetadata as any).mockResolvedValue({});
 
             const result = await pipeline.loadSection('book1', mockSection, 0, false, 1.0);
 
@@ -105,7 +121,7 @@ describe('AudioContentPipeline', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (dbService.getTTSContent as any).mockResolvedValue({ sentences: mockSentences });
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (dbService.getBookMetadata as any).mockResolvedValue({});
+            (bookRepository.getBookMetadata as any).mockResolvedValue({});
 
             const result = await pipeline.loadSection('book1', mockSection, 0, true, 1.0);
 
@@ -133,7 +149,7 @@ describe('AudioContentPipeline', () => {
 
             // Mock content analysis results to classify s2 as a 'reference'.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (dbService.getContentAnalysis as any).mockResolvedValue({
+            (contentAnalysisRepository.getContentAnalysis as any).mockResolvedValue({
                 referenceStartCfi: 'epubcfi(/2/2/4:0,,)' // Matching s2 group
             });
 

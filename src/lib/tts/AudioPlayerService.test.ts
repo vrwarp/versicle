@@ -3,6 +3,7 @@ import { AudioPlayerService } from './AudioPlayerService';
 import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
 import { BackgroundAudio } from './BackgroundAudio';
 import { dbService } from '../../db/DBService';
+import { bookRepository } from '../../db/BookRepository';
 import { genAIService } from '../genai/GenAIService';
 import * as cfiUtils from '../cfi-utils';
 
@@ -56,12 +57,6 @@ vi.mock('./LexiconService', () => ({
 vi.mock('./MediaSessionManager');
 vi.mock('../../db/DBService', () => ({
     dbService: {
-        getBookMetadata: vi.fn().mockResolvedValue({
-            title: 'Test Book',
-            author: 'Test Author',
-            coverUrl: 'http://example.com/cover.jpg',
-            useSyntheticToc: true
-        }),
         getBookStructure: vi.fn().mockResolvedValue({ toc: [] }),
         updatePlaybackState: vi.fn().mockResolvedValue(undefined),
         getTTSState: vi.fn().mockResolvedValue(null),
@@ -71,7 +66,6 @@ vi.mock('../../db/DBService', () => ({
             { sectionId: 'sec2', characterCount: 0 }, // Empty section
             { sectionId: 'sec3', characterCount: 100 }
         ]),
-        getContentAnalysis: vi.fn().mockResolvedValue({ structure: { title: 'Chapter 1' } }),
         getTTSContent: vi.fn().mockImplementation((bookId, sectionId) => {
             if (sectionId === 'sec2') return Promise.resolve({ sentences: [] });
             return Promise.resolve({
@@ -79,10 +73,29 @@ vi.mock('../../db/DBService', () => ({
             });
         }),
         saveTTSPosition: vi.fn(),
-        saveReferenceStartCfi: vi.fn(),
         getTableImages: vi.fn().mockResolvedValue([]), // Added mock
+    }
+}));
+
+vi.mock('../../db/ContentAnalysisRepository', () => ({
+    contentAnalysisRepository: {
+        getContentAnalysis: vi.fn().mockResolvedValue({ structure: { title: 'Chapter 1' } }),
+        saveReferenceStartCfi: vi.fn(),
         markAnalysisLoading: vi.fn(),
         markAnalysisError: vi.fn(),
+        saveTableAdaptations: vi.fn(),
+        clearAll: vi.fn(),
+    }
+}));
+
+vi.mock('../../db/BookRepository', () => ({
+    bookRepository: {
+        getBookMetadata: vi.fn().mockResolvedValue({
+            title: 'Test Book',
+            author: 'Test Author',
+            coverUrl: 'http://example.com/cover.jpg',
+            useSyntheticToc: true
+        }),
     }
 }));
 vi.mock('./CostEstimator');
@@ -436,7 +449,7 @@ describe('AudioPlayerService', () => {
 
             // Mock DB to return book and structure for titles
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            vi.spyOn(dbService, 'getBookMetadata').mockResolvedValue({ title: 'Book 1', author: 'Author' } as any);
+            vi.spyOn(bookRepository, 'getBookMetadata').mockResolvedValue({ title: 'Book 1', author: 'Author' } as any);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(dbService, 'getBookStructure').mockResolvedValue({ toc: [{ href: 'sec1', title: 'Section 1' }] } as any);
 

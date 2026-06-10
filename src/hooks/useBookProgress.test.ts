@@ -1,13 +1,13 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useBookProgress } from './useBookProgress';
-import { dbService } from '../db/DBService';
+import { bookRepository } from '../db/BookRepository';
 import { useReadingStateStore } from '../store/useReadingStateStore';
 import { useReaderUIStore } from '../store/useReaderUIStore';
 
 // We do not mock useReadingStateStore entirely so we can use its state updates in other tests
-vi.mock('../db/DBService', () => ({
-  dbService: {
+vi.mock('../db/BookRepository', () => ({
+  bookRepository: {
     getBookMetadata: vi.fn(() => Promise.resolve(null)),
   },
 }));
@@ -31,7 +31,7 @@ describe('useBookProgress predictability bug', () => {
 
     // First call returns a promise that resolves later
     // Second call returns a promise that resolves immediately
-    vi.mocked(dbService.getBookMetadata)
+    vi.mocked(bookRepository.getBookMetadata)
       .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
       .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
 

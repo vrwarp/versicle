@@ -77,8 +77,13 @@ vi.mock('../db/DBService', () => ({
         getReadingList: vi.fn().mockResolvedValue([]),
         getReadingHistory: vi.fn().mockResolvedValue([]),
         importReadingList: vi.fn(),
-        clearContentAnalysis: vi.fn(),
         cleanup: vi.fn()
+    }
+}));
+
+vi.mock('../db/ContentAnalysisRepository', () => ({
+    contentAnalysisRepository: {
+        clearAll: vi.fn(),
     }
 }));
 
