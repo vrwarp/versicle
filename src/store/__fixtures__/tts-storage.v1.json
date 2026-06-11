@@ -1,0 +1,37 @@
+{
+  "state": {
+    "rate": 1.1,
+    "pitch": 1,
+    "voice": {
+      "id": "Google US English",
+      "name": "Google US English",
+      "lang": "en-US",
+      "provider": "local"
+    },
+    "providerId": "google",
+    "apiKeys": {
+      "google": "AIza-FIXTURE-v1-google-key",
+      "openai": "",
+      "lemonfox": ""
+    },
+    "customAbbreviations": [
+      "Mr.",
+      "Dr."
+    ],
+    "alwaysMerge": [
+      "Mr."
+    ],
+    "sentenceStarters": [
+      "The",
+      "He"
+    ],
+    "minSentenceLength": 20,
+    "enableCostWarning": true,
+    "prerollEnabled": true,
+    "sanitizationEnabled": true,
+    "isBibleLexiconEnabled": true,
+    "backgroundAudioMode": "silence",
+    "whiteNoiseVolume": 0.1
+  },
+  "version": 1
+}
