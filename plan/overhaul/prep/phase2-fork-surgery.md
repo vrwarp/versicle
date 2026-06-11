@@ -735,3 +735,41 @@ double-apply; failure → safe mode with checkpoint id) · fork contract suite i
 gate for the vendored package · zero `|| {}` hydration fallbacks (per the corrected census §2.6)
 · `yjs-provider.migration-race.test.ts` deleted · users see only faster page turns and no
 phantom-popover class of bug.
+
+---
+
+## 9. Follow-ups (appended at phase close, 2026-06-10)
+
+Phase 2 landed in full (registry + all nine per-store flips in the §2.6
+order; see the README status banner). Deliberately deferred work, with owners:
+
+1. **v7 — preferences husk-clearing (§5.3 ▲ design decision).** The legacy
+   top-level `preferences/<deviceId>` maps were folded copy-WITHOUT-clear in
+   v6; v6+ clients rebound to the keyed `preferences` map (flip wave 3) and
+   never create new husks. v7 empties the husk maps' *content* (top-level
+   shared types themselves can never be removed from a Y.Doc) once the
+   quarantined ≤v5 fleet is irrelevant.
+2. **v7 — schema-version dual-write retirement (program rule 5, P9 horizon).**
+   The coordinator dual-writes `meta.schemaVersion` + `library.__schemaVersion`
+   per step. Phase 4's synchronous pre-merge check is the first `meta` reader;
+   after one full release of readers, v7 retires the `library` write and the
+   per-map poison pill keys off `meta` alone.
+3. **`waitForYjsSync` → `whenHydrated` call-site migration (§2.4).** Boot and
+   the coordinator migrated in P2. `BackupService.ts:207`, the seven
+   `LexiconService` call sites, and `FirestoreSyncManager.ts:365` still gate
+   on IDB-synced; they want hydrated state and migrate with the Phase 4
+   decomposition (lib/ cannot import the app/boot composition today without
+   regressing the lib→store/app boundary ratchets).
+4. **Zod observe-mode schemas (C2, P2-6 scope-down).** The registry landed
+   without the optional per-store `schema?: ZodType` observe-mode validation
+   (log + flight recorder, never reject). The seam is unchanged — add the
+   field to `SyncedStoreDef` and run validation post-merge in
+   `defineSyncedStore` when C2 inbound validation is picked up
+   (observe-then-enforce, Phase 4 sync hardening is the natural home).
+5. **Registry geography note.** `defineSyncedStore`/`SyncedStoreDef` live in
+   `src/store/yjs-provider.ts` rather than `registry.ts` (§2.5's sketch): the
+   TTS worker's type-closure reaches the store modules, and stores importing
+   any NEW src/store module regresses the `worker-no-state-typegraph` ratchet
+   (20 > 19). The registry aggregates defs + the boot roster and must never be
+   imported by a store module; revisit if/when the worker type-closure is cut
+   (LD-7 ratchet work).
