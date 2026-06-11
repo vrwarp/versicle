@@ -2,6 +2,12 @@
   "files": [],
   "references": [
     {
+      "path": "./packages/zustand-middleware-yjs"
+    },
+    {
+      "path": "./packages/zustand-middleware-yjs/tsconfig.test.json"
+    },
+    {
       "path": "./tsconfig.app.json"
     },
     {

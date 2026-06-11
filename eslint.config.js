@@ -21,7 +21,23 @@ const downgradeToWarn = (rules) =>
 export default tseslint.config(
   // .claude holds agent worktrees (full checkouts under .claude/worktrees/<name>/);
   // without the ignore, a top-level `eslint .` would also lint every worktree's copy.
-  { ignores: ['dist', 'coverage', 'venv', 'android', '.claude'] },
+  // packages/zustand-middleware-yjs/src is the VENDORED fork source (incl. its
+  // ported upstream specs): it predates this repo's lint discipline and stays
+  // diff-minimal against upstream by design (PROVENANCE.md), so it is exempt.
+  // The first-party contract suite in packages/zustand-middleware-yjs/test IS
+  // linted. dist-types*/ are tsc -b declaration outputs (gitignored).
+  {
+    ignores: [
+      'dist',
+      'coverage',
+      'venv',
+      'android',
+      '.claude',
+      'packages/zustand-middleware-yjs/src',
+      'packages/*/dist-types',
+      'packages/*/dist-types-test',
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],

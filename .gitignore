@@ -13,6 +13,10 @@ dev-dist
 dist-ssr
 *.local
 
+# tsc -b declaration output of workspace packages (composite projects)
+packages/*/dist-types/
+packages/*/dist-types-test/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

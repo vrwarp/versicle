@@ -37,6 +37,12 @@ export default defineConfig(({ mode }) => {
     base: env.VITE_BASE || '/',
     resolve: {
       alias: aliases,
+      // Single-yjs-instance guard (phase2-fork-surgery.md §6.6c): the
+      // vendored zustand-middleware-yjs workspace declares yjs/zustand as
+      // peers; dedupe is the bundler-level belt-and-braces so a second copy
+      // can never split `instanceof Y.Map` identity. Keep in sync with
+      // vitest.config.ts.
+      dedupe: ['yjs', 'zustand'],
     },
     build: {
       sourcemap: true,

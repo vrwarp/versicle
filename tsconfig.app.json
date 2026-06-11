@@ -48,5 +48,12 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/integration.test.ts", "src/test/**", "src/setupTests.ts", "src/test/setup.ts"]
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/integration.test.ts", "src/test/**", "src/setupTests.ts", "src/test/setup.ts"],
+  // The vendored fork is consumed as TS source (its package.json `types`
+  // points at src/index.ts); this reference makes tsc -b typecheck it as its
+  // own composite project and redirect app imports to its emitted
+  // declarations instead of pulling foreign source into this project's
+  // (stricter) compilation. NOTE: `references` are NOT inherited via
+  // `extends` — tsconfig.test.json repeats this list.
+  "references": [{ "path": "./packages/zustand-middleware-yjs" }]
 }

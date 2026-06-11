@@ -85,12 +85,13 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 
 ### zustand-middleware-yjs (fork of joebobmiles/zustand-middleware-yjs)
 
-- **Version:** 1.3.1 @ f2842963ecbd5b2bc80fc1898267c0e41b5a1834
+- **Version:** 1.3.1, vendored from fork SHA f2842963ecbd5b2bc80fc1898267c0e41b5a1834
 - **License:** MIT
 - **Source:** https://github.com/vrwarp/zustand-middleware-yjs (upstream: https://github.com/joebobmiles/zustand-middleware-yjs)
-- **Path:** node_modules/zustand-middleware-yjs (bundled into dist/ at build)
-- **Provenance:** Personal fork consumed as a pinned git dependency (package.json); retains the upstream MIT LICENSE (Joseph R Miles) and declares fork provenance in its README.
-- **Notes:** package.json is marked private:true (hand-edited packaging), which keeps it OUT of license-checker output — this inventory entry is its license record. Same Phase 4 vendoring checklist as the other forks.
+- **Path:** packages/zustand-middleware-yjs (workspace package; src/ bundled into dist/ at build)
+- **Provenance:** Personal fork VENDORED into the repo as an npm workspace (Phase 2, plan/overhaul/prep/phase2-fork-surgery.md §6): TS source imported from the fork repo at the exact SHA the app was previously git-pinned to; the fork's committed dist/ at that SHA was verified byte-identical to the previously installed artifact. Retains the upstream MIT LICENSE (Joseph R Miles) verbatim; full lineage, pre-existing fork deltas, and a running Phase 2 modification log live in packages/zustand-middleware-yjs/PROVENANCE.md.
+- **Modifications:** Packaging only at vendor time (peerDependencies for yjs/zustand, exports point at TS source, build/release tooling deleted, jest specs ported to vitest) — zero behavior change, pinned by the contract suite in packages/zustand-middleware-yjs/test/contract/. Subsequent fork surgery is logged in PROVENANCE.md.
+- **Notes:** package.json stays private:true (never published), which keeps it OUT of license-checker output — this inventory entry plus the in-tree LICENSE file are its license record. y-idb and y-cinder remain git-pinned until their own phases.
 
 ### @capgo/capacitor-social-login local patch (login_hint passthrough)
 
@@ -159,7 +160,7 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 
 ## Bundled npm packages (production dependency tree)
 
-579 packages, grouped by license. The private
+578 packages, grouped by license. The private
 fork `zustand-middleware-yjs` (MIT) is excluded from the scan and recorded
 in the inventory section above.
 
@@ -336,7 +337,7 @@ in the inventory section above.
 - `yaml@2.9.0` — Copyright Eemeli Aro <eemeli@gmail.com> — <https://github.com/eemeli/yaml>
 - `yargs-parser@21.1.1` — Copyright (c) 2016, Contributors — <https://github.com/yargs/yargs-parser>
 
-### MIT (445)
+### MIT (444)
 
 - `@alloc/quick-lru@5.2.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com) — <https://github.com/sindresorhus/quick-lru>
 - `@apideck/better-ajv-errors@0.3.6` — Copyright (c) 2021 Apideck — <https://github.com/apideck-libraries/better-ajv-errors>
@@ -747,7 +748,6 @@ in the inventory section above.
 - `update-browserslist-db@1.2.3` — Copyright 2022 Andrey Sitnik <andrey@sitnik.ru> and other contributors — <https://github.com/browserslist/update-db>
 - `use-callback-ref@1.3.3` — Copyright (c) 2017 Anton Korzunov — <https://github.com/theKashey/use-callback-ref>
 - `use-sidecar@1.1.3` — Copyright (c) 2017 Anton Korzunov — <https://github.com/theKashey/use-sidecar>
-- `use-sync-external-store@1.6.0` — Copyright (c) Meta Platforms, Inc. and affiliates. — <https://github.com/facebook/react>
 - `util-deprecate@1.0.2` — Copyright (c) 2014 Nathan Rajlich <nathan@tootallnate.net> — <https://github.com/TooTallNate/util-deprecate>
 - `uuid@13.0.2` — Copyright (c) 2010-2020 Robert Kieffer and other contributors — <https://github.com/uuidjs/uuid>
 - `uzip@0.20201231.0` — Copyright (c) 2018 Photopea

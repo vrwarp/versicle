@@ -111,18 +111,36 @@ module.exports = {
         'asserted post-build by `npm run check:worker-chunk`.',
       from: { path: '^src/workers' },
       to: {
-        path: '^(src/store|node_modules/zustand|node_modules/yjs)',
+        // packages/zustand-middleware-yjs is the VENDORED fork (Phase 2):
+        // since vendoring, the middleware resolves to packages/…/src, not
+        // node_modules — keep it inside this rule (and includeOnly below) so
+        // the worker type-graph ratchet cannot silently lose it.
+        path: '^(src/store|packages/zustand-middleware-yjs|node_modules/zustand|node_modules/yjs)',
         reachable: true,
       },
     },
   ],
   options: {
-    doNotFollow: { path: 'node_modules' },
+    // The vendored zustand-middleware-yjs workspace is treated exactly like
+    // the external dependency it replaced (Phase 2 vendoring): visible as a
+    // boundary target (includeOnly + the worker rule above) but not cruised
+    // internally — its internal layering is its own package's concern, and
+    // following it would inflate the per-module violation counts the ratchet
+    // baseline froze (1 entry module ≙ the old node_modules leaf).
+    doNotFollow: { path: 'node_modules|^packages/zustand-middleware-yjs' },
     // Only cruise production source; tests/e2e/tooling are out of scope for
     // the layering contract.
-    includeOnly: { path: '^(src|node_modules/(zustand|yjs))' },
+    includeOnly: {
+      path: '^(src|packages/zustand-middleware-yjs/src|node_modules/(zustand|yjs))',
+    },
     exclude: {
-      path: ['\\.test\\.(ts|tsx)$', '^src/test', '^src/setupTests\\.ts$'],
+      path: [
+        '\\.test\\.(ts|tsx)$',
+        '^src/test',
+        '^src/setupTests\\.ts$',
+        // the vendored fork's ported upstream specs
+        '\\.spec\\.(ts|tsx)$',
+      ],
     },
     // Include type-only imports in the graph: the types-layer and cycle
     // rules are specifically about `import type` poisoning (LD-1), and the

@@ -78,13 +78,14 @@
     },
     {
       "name": "zustand-middleware-yjs (fork of joebobmiles/zustand-middleware-yjs)",
-      "version": "1.3.1 @ f2842963ecbd5b2bc80fc1898267c0e41b5a1834",
+      "version": "1.3.1, vendored from fork SHA f2842963ecbd5b2bc80fc1898267c0e41b5a1834",
       "source": "https://github.com/vrwarp/zustand-middleware-yjs (upstream: https://github.com/joebobmiles/zustand-middleware-yjs)",
       "license": "MIT",
-      "provenance": "Personal fork consumed as a pinned git dependency (package.json); retains the upstream MIT LICENSE (Joseph R Miles) and declares fork provenance in its README.",
-      "path": "node_modules/zustand-middleware-yjs (bundled into dist/ at build)",
+      "provenance": "Personal fork VENDORED into the repo as an npm workspace (Phase 2, plan/overhaul/prep/phase2-fork-surgery.md §6): TS source imported from the fork repo at the exact SHA the app was previously git-pinned to; the fork's committed dist/ at that SHA was verified byte-identical to the previously installed artifact. Retains the upstream MIT LICENSE (Joseph R Miles) verbatim; full lineage, pre-existing fork deltas, and a running Phase 2 modification log live in packages/zustand-middleware-yjs/PROVENANCE.md.",
+      "path": "packages/zustand-middleware-yjs (workspace package; src/ bundled into dist/ at build)",
       "distribution": ["web", "android"],
-      "notes": "package.json is marked private:true (hand-edited packaging), which keeps it OUT of license-checker output — this inventory entry is its license record. Same Phase 4 vendoring checklist as the other forks."
+      "modifications": "Packaging only at vendor time (peerDependencies for yjs/zustand, exports point at TS source, build/release tooling deleted, jest specs ported to vitest) — zero behavior change, pinned by the contract suite in packages/zustand-middleware-yjs/test/contract/. Subsequent fork surgery is logged in PROVENANCE.md.",
+      "notes": "package.json stays private:true (never published), which keeps it OUT of license-checker output — this inventory entry plus the in-tree LICENSE file are its license record. y-idb and y-cinder remain git-pinned until their own phases."
     },
     {
       "name": "@capgo/capacitor-social-login local patch (login_hint passthrough)",

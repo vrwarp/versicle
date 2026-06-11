@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "license": "GPL-3.0-or-later",
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -12,6 +15,7 @@
     "depcruise:baseline": "node scripts/depcruise-baseline.mjs",
     "depcruise:check": "node scripts/depcruise-baseline.mjs --check",
     "check:worker-chunk": "node scripts/check-worker-chunk.mjs",
+    "check:single-instance": "node scripts/assert-single-instance.cjs",
     "licenses:generate": "node scripts/generate-third-party-notices.mjs",
     "licenses:check": "node scripts/license-gate.mjs",
     "test": "vitest run",
@@ -77,7 +81,7 @@
     "yjs": "^13.6.20",
     "zod": "^4.3.5",
     "zustand": "^5.0.9",
-    "zustand-middleware-yjs": "github:vrwarp/zustand-middleware-yjs#f2842963ecbd5b2bc80fc1898267c0e41b5a1834"
+    "zustand-middleware-yjs": "file:packages/zustand-middleware-yjs"
   },
   "engines": {
     "node": ">=25 <26"

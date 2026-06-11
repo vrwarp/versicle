@@ -26,16 +26,27 @@ export default defineConfig({
       '@test': srcAlias('test'),
       '@workers': srcAlias('workers'),
     },
+    // Single-yjs-instance guard (phase2-fork-surgery.md §6.6c): the vendored
+    // zustand-middleware-yjs workspace declares yjs/zustand as peers; dedupe
+    // is the bundler-level belt-and-braces so a second copy can never split
+    // `instanceof Y.Map` identity. Keep in sync with vite.config.ts.
+    dedupe: ['yjs', 'zustand'],
   },
   test: {
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     testTimeout: 60000,
-    // All unit/integration tests live under src/. The explicit include keeps
-    // vitest from discovering stray *.test.* files at the repo root or inside
-    // agent worktrees (.claude/worktrees/<name>/ are full repo checkouts).
-    include: ['src/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
+    // All unit/integration tests live under src/, plus the vendored
+    // zustand-middleware-yjs workspace package (its ported upstream specs in
+    // src/ and the Phase 2 fork contract suite in test/). The explicit
+    // include keeps vitest from discovering stray *.test.* files at the repo
+    // root or inside agent worktrees (.claude/worktrees/<name>/ are full
+    // repo checkouts).
+    include: [
+      'src/**/*.{test,spec}.?(c|m)[jt]s?(x)',
+      'packages/*/{src,test}/**/*.{test,spec}.?(c|m)[jt]s?(x)',
+    ],
     // Defense in depth if the include ever widens: never descend into the
     // Playwright suite (verification/) or .claude/ worktrees.
     exclude: [...configDefaults.exclude, 'verification/**', '.claude/**', '**/.claude/**'],
