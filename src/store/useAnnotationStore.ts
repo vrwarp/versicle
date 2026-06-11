@@ -62,12 +62,15 @@ export interface AnnotationState {
  * Replication declaration (aggregated by src/store/registry.ts). The stale
  * `popover` doc key (see module docs) is structurally outside `syncedKeys`,
  * so it can never ride into store state again.
+ * Flipped to merge-defaults + scopedDiff in flip wave 4 (phase2-fork-surgery.md
+ * §2.6 #7): real user data but a single simple key; no top-level canaries
+ * existed (the actions already assumed `annotations` present).
  */
 export const ANNOTATIONS_STORE_DEF: SyncedStoreDef<'annotations'> = {
   name: 'annotations',
   syncedKeys: ['annotations'],
-  hydration: 'replace',
-  scopedDiff: false,
+  hydration: 'merge-defaults',
+  scopedDiff: true,
 };
 
 /**

@@ -5,13 +5,15 @@ import * as Y from 'yjs';
 import { createStore } from 'zustand/vanilla';
 import yjsMiddleware from 'zustand-middleware-yjs';
 import type { SyncedStoreDef } from '@store/yjs-provider';
-import { BOOK_EN, DEVICE_A, DEVICE_B } from '@test/fixtures/ydoc/seed';
+import { BOOK_EN, BOOK_CJK, DEVICE_A, DEVICE_B } from '@test/fixtures/ydoc/seed';
 import { CONTENT_ANALYSIS_STORE_DEF } from '@store/useContentAnalysisStore';
 import { VOCABULARY_STORE_DEF } from '@store/useVocabularyStore';
 import { DEVICES_STORE_DEF } from '@store/useDeviceStore';
 import { LEXICON_STORE_DEF } from '@store/useLexiconStore';
 import { READING_LIST_STORE_DEF } from '@store/useReadingListStore';
 import { PREFERENCES_STORE_DEF } from '@store/usePreferencesStore';
+import { ANNOTATIONS_STORE_DEF } from '@store/useAnnotationStore';
+import { LIBRARY_STORE_DEF } from '@store/useBookStore';
 import { runCrdtMigrationsOnDoc } from '@app/migrations';
 import { getDeviceId } from '@lib/device-id';
 
@@ -159,6 +161,93 @@ describe('flip wave 3: preferences (scope rebind + merge-defaults + scopedDiff)'
     await drain();
 
     expect(store.getState()).toBe(before); // reference-identical: no patch ran
+  });
+});
+
+// ─── Flip wave 4: annotations, books ────────────────────────────────────────
+
+describe('flip wave 4: annotations (merge-defaults + scopedDiff)', () => {
+  interface AnnState {
+    annotations: Record<string, { id: string; text?: string }>;
+    remove: (id: string) => void;
+  }
+  const creator = (set: (p: Partial<AnnState>) => void, get: () => AnnState): AnnState => ({
+    annotations: {},
+    remove: (id) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [id]: _removed, ...remaining } = get().annotations;
+      set({ annotations: remaining });
+    },
+  });
+
+  it('hydrates the v5 fixture; the stale popover doc key stays OUT of state (B.2 against the live def)', () => {
+    const store = bindWithDef<AnnState>(loadDoc(5), ANNOTATIONS_STORE_DEF, creator);
+
+    expect(Object.keys(store.getState().annotations).sort()).toEqual([
+      'fixture-annotation-1',
+      'fixture-annotation-2',
+    ]);
+    expect('popover' in store.getState()).toBe(false);
+  });
+
+  it('nested deletions still apply under merge-defaults (C.2: a removed annotation propagates)', async () => {
+    const doc = loadDoc(5);
+    const store = bindWithDef<AnnState>(doc, ANNOTATIONS_STORE_DEF, creator);
+
+    // Remote deletion of one annotation rides under the PRESENT top-level key.
+    (doc.getMap('annotations').get('annotations') as Y.Map<unknown>).delete(
+      'fixture-annotation-1',
+    );
+    await drain();
+    expect(Object.keys(store.getState().annotations)).toEqual(['fixture-annotation-2']);
+  });
+
+  it('A.5 rewritten: a doc missing `annotations` retains the declared default', () => {
+    const doc = new Y.Doc();
+    doc.getMap('annotations').set('popover', 'junk-only doc');
+
+    const store = bindWithDef<AnnState>(doc, ANNOTATIONS_STORE_DEF, creator);
+    expect(store.getState().annotations).toEqual({});
+  });
+});
+
+describe('flip wave 4: books / library (merge-defaults + scopedDiff)', () => {
+  interface LibState {
+    __schemaVersion: number;
+    books: Record<string, { bookId: string; title: string }>;
+    addBook: (book: { bookId: string; title: string }) => void;
+  }
+  const creator = (set: (p: Partial<LibState>) => void, get: () => LibState): LibState => ({
+    __schemaVersion: 1,
+    books: {},
+    addBook: (book) => set({ books: { ...get().books, [book.bookId]: book } }),
+  });
+
+  it('hydrates the v5 fixture fully (CJK intact, implicit __schemaVersion synced); actions need no || {} fallback', () => {
+    const store = bindWithDef<LibState>(loadDoc(5), LIBRARY_STORE_DEF, creator);
+
+    expect(Object.keys(store.getState().books).sort()).toEqual([BOOK_EN, BOOK_CJK].sort());
+    expect(store.getState().books[BOOK_CJK].title).toBe('紅樓夢');
+    expect(store.getState().__schemaVersion).toBe(5);
+
+    // The deleted canaries (`state.books || {}`) must not be needed:
+    store.getState().addBook({ bookId: 'new-book', title: 'New' });
+    expect(Object.keys(store.getState().books)).toHaveLength(3);
+  });
+
+  it('hydrates a v1 (Y.Text era) doc through the flipped options', () => {
+    const store = bindWithDef<LibState>(loadDoc(1), LIBRARY_STORE_DEF, creator);
+    expect(store.getState().books[BOOK_EN].title).toBe("Alice's Adventures in Wonderland");
+    expect(store.getState().books[BOOK_CJK].title).toBe('紅樓夢');
+  });
+
+  it('A.5 rewritten: a doc missing `books` retains the default — clean-client check works without a fallback', () => {
+    const doc = new Y.Doc();
+    doc.getMap('library').set('__schemaVersion', 5);
+
+    const store = bindWithDef<LibState>(doc, LIBRARY_STORE_DEF, creator);
+    // The FirestoreSyncManager clean-client check, post-canary-deletion:
+    expect(Object.keys(store.getState().books).length === 0).toBe(true);
   });
 });
 

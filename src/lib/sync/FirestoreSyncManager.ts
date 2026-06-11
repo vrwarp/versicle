@@ -363,7 +363,9 @@ class FirestoreSyncManager {
         const path = `users/${uid}/versicle/${workspaceId}`;
 
         await waitForYjsSync();
-        const isCleanClient = Object.keys(useBookStore.getState().books || {}).length === 0;
+        // merge-defaults hydration guarantees `books` is always present
+        // (flip wave 4) — the old `|| {}` fallback canary is gone.
+        const isCleanClient = Object.keys(useBookStore.getState().books).length === 0;
 
         if (isCleanClient) {
             logger.info('Clean client detected. Checking for cloud data...');

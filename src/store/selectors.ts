@@ -58,12 +58,14 @@ function resolveProgress(bookProgress: Record<string, UserProgress> | undefined,
  * otherwise falls back to Ghost Book metadata from Yjs inventory.
  */
 export const useAllBooks = () => {
-    const booksRaw = useBookStore(state => state.books);
+    // merge-defaults hydration guarantees `books` is always present (flip
+    // wave 4) — the old `|| {}` fallback canary is gone. The two fallbacks
+    // below guard the EPHEMERAL useLibraryStore (not yjs-backed) and stay.
+    const books = useBookStore(state => state.books);
     const staticMetadataRaw = useLibraryStore(state => state.staticMetadata);
     const offloadedBookIdsRaw = useLibraryStore(state => state.offloadedBookIds);
 
     // Memoize the defaults to prevent reference changes on every render when nullish
-    const books = useMemo(() => booksRaw || {}, [booksRaw]);
     const staticMetadata = useMemo(() => staticMetadataRaw || {}, [staticMetadataRaw]);
     const offloadedBookIds = useMemo(() => offloadedBookIdsRaw || new Set(), [offloadedBookIdsRaw]);
 
@@ -106,7 +108,7 @@ export const useAllBooks = () => {
             moduleCache.baseBookCache = new WeakMap();
         }
 
-        const booksObj = books || {};
+        const booksObj = books;
         const staticMetadataObj = staticMetadata || {};
         const offloadedBookIdsSet = offloadedBookIds || new Set();
 
