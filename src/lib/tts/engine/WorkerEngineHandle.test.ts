@@ -16,7 +16,7 @@ const { clientState } = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('./createWorkerEngineClient', () => ({
+vi.mock('../../../app/tts/createWorkerEngineClient', () => ({
     createWorkerEngineClient: vi.fn(() => new Promise((resolve, reject) => {
         clientState.resolve = resolve;
         clientState.reject = reject;

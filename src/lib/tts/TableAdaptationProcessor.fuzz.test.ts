@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createZustandEngineContext } from './engine/createZustandEngineContext';
+import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { type SentenceNode } from '../tts';
 import { SeededRandom } from '../../test/fuzz-utils';

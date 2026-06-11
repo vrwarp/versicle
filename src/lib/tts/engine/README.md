@@ -35,9 +35,10 @@ The engine core touches the outside world through exactly three interfaces:
   `readingState`, `contentAnalysis`, `book`, `annotations`, `notifications`, `readerUI`,
   `platform`). Payload types are derived from the existing store signatures, so the contract
   can't silently drift.
-- **`createZustandEngineContext.ts`** — production wiring; forwards to the live stores +
-  Capacitor. Forwarding to the same store *modules* the code used before means existing
-  `vi.mock('../../store/…')` mocks keep working unchanged.
+- **`src/app/tts/createZustandEngineContext.ts`** — production wiring (host side, so it lives
+  in the `src/app/` composition layer, not here); forwards to the live stores + Capacitor.
+  Forwarding to the same store *modules* the code used before means existing
+  `vi.mock('…/store/…')` mocks keep working unchanged.
 - **`FakeEngineContext.ts`** — deterministic in-memory `EngineContext` for tests.
 - **`WorkerEngineContext.ts`** — replicated-state `EngineContext` for running the engine in a
   Worker; serves the synchronous getters from a cache the main thread pushes into. Solves the

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
-import { getInProcessAudioPlayer } from './engine/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer } from '../../app/tts/mainThreadAudioPlayer';
 import { useContentAnalysisStore, type SectionAnalysis } from '../../store/useContentAnalysisStore';
 import { dbService } from '../../db/DBService';
 import { useGenAIStore } from '../../store/useGenAIStore';

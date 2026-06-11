@@ -130,7 +130,7 @@ vi.mock('../../../store/useToastStore', () => ({
         showToast: vi.fn()
     })
 }));
-vi.mock('../../../lib/tts/engine/mainThreadAudioPlayer', () => ({
+vi.mock('../../../app/tts/mainThreadAudioPlayer', () => ({
     getAudioPlayer: () => ({
         setBookId: vi.fn(),
         getQueue: vi.fn(),

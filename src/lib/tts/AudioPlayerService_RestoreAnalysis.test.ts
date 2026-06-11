@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
-import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '../../app/tts/mainThreadAudioPlayer';
 import { dbService } from '../../db/DBService';
 import type { TTSState, SectionMetadata } from '../../types/db';
 

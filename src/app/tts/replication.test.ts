@@ -45,14 +45,14 @@ const { fakeStores } = vi.hoisted(() => {
     };
 });
 
-vi.mock('../../../store/useTTSStore', () => ({ useTTSStore: fakeStores.tts }));
-vi.mock('../../../store/useGenAIStore', () => ({ useGenAIStore: fakeStores.genAI }));
-vi.mock('../../../store/useContentAnalysisStore', () => ({ useContentAnalysisStore: fakeStores.analysis }));
-vi.mock('../../../store/useBookStore', () => ({ useBookStore: fakeStores.book }));
-vi.mock('../../../store/useReadingStateStore', () => ({ useReadingStateStore: fakeStores.reading }));
+vi.mock('../../store/useTTSStore', () => ({ useTTSStore: fakeStores.tts }));
+vi.mock('../../store/useGenAIStore', () => ({ useGenAIStore: fakeStores.genAI }));
+vi.mock('../../store/useContentAnalysisStore', () => ({ useContentAnalysisStore: fakeStores.analysis }));
+vi.mock('../../store/useBookStore', () => ({ useBookStore: fakeStores.book }));
+vi.mock('../../store/useReadingStateStore', () => ({ useReadingStateStore: fakeStores.reading }));
 
 import { createReplicatedSlices, bookSnapshotUpdates } from './replicationSpec';
-import { WorkerEngineContext, type EngineStateUpdate } from './WorkerEngineContext';
+import { WorkerEngineContext, type EngineStateUpdate } from '../../lib/tts/engine/WorkerEngineContext';
 
 const ALL_KINDS: EngineStateUpdate['kind'][] = [
     'settings', 'genAI', 'activeLanguage', 'bookLanguage', 'analysis', 'progress',

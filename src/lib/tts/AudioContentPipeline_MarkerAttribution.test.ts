@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createZustandEngineContext } from './engine/createZustandEngineContext';
+import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { extractSentencesFromNode } from '../tts';
 import { EpubCFI } from 'epubjs';

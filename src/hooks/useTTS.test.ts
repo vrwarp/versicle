@@ -21,7 +21,7 @@ const { mockPlayerInstance, mockLoadVoices } = vi.hoisted(() => {
 });
 
 // Mock Dependencies — production talks to the engine via getAudioPlayer().
-vi.mock('../lib/tts/engine/mainThreadAudioPlayer', () => ({
+vi.mock('../app/tts/mainThreadAudioPlayer', () => ({
     getAudioPlayer: vi.fn(() => mockPlayerInstance),
     resetAudioPlayerForTests: vi.fn(),
 }));

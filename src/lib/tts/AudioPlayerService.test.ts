@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
-import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '../../app/tts/mainThreadAudioPlayer';
 import { BackgroundAudio } from './BackgroundAudio';
 import { dbService } from '../../db/DBService';
 import { bookRepository } from '../../db/BookRepository';

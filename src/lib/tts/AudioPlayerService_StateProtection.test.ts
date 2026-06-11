@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
-import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '../../app/tts/mainThreadAudioPlayer';
 
 // Mock AudioContentPipeline to avoid circular deps
 vi.mock('./AudioContentPipeline', () => ({

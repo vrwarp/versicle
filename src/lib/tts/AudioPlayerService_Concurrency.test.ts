@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { AudioPlayerService} from './AudioPlayerService';
 import { type TTSQueueItem } from './AudioPlayerService';
-import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from './engine/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '../../app/tts/mainThreadAudioPlayer';
 import { MockCloudProvider } from './providers/MockCloudProvider';
 
 // Mock useTTSStore to avoid circular dependency crash

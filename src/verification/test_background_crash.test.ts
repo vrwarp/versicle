@@ -85,7 +85,7 @@ vi.mock('../lib/tts/providers/CapacitorTTSProvider', () => {
 });
 
 // Now import the service
-import { getAudioPlayer } from '../lib/tts/engine/mainThreadAudioPlayer';
+import { getAudioPlayer } from '../app/tts/mainThreadAudioPlayer';
 
 describe('AudioPlayerService Background Crash Prevention', () => {
   let service: ReturnType<typeof getAudioPlayer>;

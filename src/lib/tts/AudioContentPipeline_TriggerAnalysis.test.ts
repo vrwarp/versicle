@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createZustandEngineContext } from './engine/createZustandEngineContext';
+import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { dbService } from '../../db/DBService';
 import { useGenAIStore } from '../../store/useGenAIStore';

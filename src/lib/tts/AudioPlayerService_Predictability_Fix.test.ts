@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
-import { getInProcessAudioPlayer } from './engine/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer } from '../../app/tts/mainThreadAudioPlayer';
 import { dbService } from '../../db/DBService';
 
 vi.mock('../../db/DBService', () => ({

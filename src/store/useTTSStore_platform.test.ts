@@ -56,7 +56,7 @@ const { mockSetProviderById, mockInit, mockGetVoices, mockSubscribe, mockSetVoic
     }
 });
 
-vi.mock('../lib/tts/engine/mainThreadAudioPlayer', () => {
+vi.mock('../app/tts/mainThreadAudioPlayer', () => {
     return {
         getAudioPlayer: vi.fn(() => ({
             setProviderById: mockSetProviderById,

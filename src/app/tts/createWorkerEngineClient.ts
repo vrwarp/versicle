@@ -17,23 +17,23 @@
  */
 import * as Comlink from 'comlink';
 import { Capacitor } from '@capacitor/core';
-import { TTSProviderManager } from '../TTSProviderManager';
-import { PlatformIntegration } from '../PlatformIntegration';
-import { LexiconService } from '../LexiconService';
-import { bookRepository } from '../../../db/BookRepository';
-import { contentAnalysisRepository } from '../../../db/ContentAnalysisRepository';
-import { genAIService } from '../../genai/GenAIService';
+import { TTSProviderManager } from '../../lib/tts/TTSProviderManager';
+import { PlatformIntegration } from '../../lib/tts/PlatformIntegration';
+import { LexiconService } from '../../lib/tts/LexiconService';
+import { bookRepository } from '../../db/BookRepository';
+import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
+import { genAIService } from '../../lib/genai/GenAIService';
 import { createReplicatedSlices, bookSnapshotUpdates } from './replicationSpec';
-import { useTTSStore } from '../../../store/useTTSStore';
-import { useGenAIStore } from '../../../store/useGenAIStore';
-import { useReadingStateStore } from '../../../store/useReadingStateStore';
-import { useAnnotationStore } from '../../../store/useAnnotationStore';
-import { useToastStore } from '../../../store/useToastStore';
-import { useReaderUIStore } from '../../../store/useReaderUIStore';
-import { createLogger } from '../../logger';
-import type { WorkerTtsEngine, EngineHost } from './WorkerTtsEngine';
-import type { EngineHostCommand } from './WorkerEngineContext';
-import type { TTSQueueItem, TTSStatus, DownloadInfo } from '../AudioPlayerService';
+import { useTTSStore } from '../../store/useTTSStore';
+import { useGenAIStore } from '../../store/useGenAIStore';
+import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useAnnotationStore } from '../../store/useAnnotationStore';
+import { useToastStore } from '../../store/useToastStore';
+import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { createLogger } from '../../lib/logger';
+import type { WorkerTtsEngine, EngineHost } from '../../lib/tts/engine/WorkerTtsEngine';
+import type { EngineHostCommand } from '../../lib/tts/engine/WorkerEngineContext';
+import type { TTSQueueItem, TTSStatus, DownloadInfo } from '../../lib/tts/AudioPlayerService';
 
 type StatusListener = (
     status: TTSStatus,
@@ -99,7 +99,7 @@ export interface WorkerEngineClient {
  * Spin up the TTS engine in a Worker and wire it to the main-thread backend + stores.
  */
 export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
-    const worker = new Worker(new URL('../../../workers/tts.worker.ts', import.meta.url), { type: 'module' });
+    const worker = new Worker(new URL('../../workers/tts.worker.ts', import.meta.url), { type: 'module' });
 
     // Surface worker load/runtime errors — otherwise a module-init failure inside the worker
     // would leave every Comlink call hanging forever (no response, no rejection).

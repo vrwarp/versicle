@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { createZustandEngineContext } from './engine/createZustandEngineContext';
+import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { type SentenceNode } from '../tts';
 

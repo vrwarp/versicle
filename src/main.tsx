@@ -53,7 +53,7 @@ if (typeof window !== 'undefined') {
   // graph off-main-thread (exercising worker import-safety).
   // Lazy import keeps the worker out of the main bundle until invoked.
   window.__ttsWorkerSmokeTest = async () => {
-    const { createWorkerEngineClient } = await import('./lib/tts/engine/createWorkerEngineClient');
+    const { createWorkerEngineClient } = await import('./app/tts/createWorkerEngineClient');
     const client = await createWorkerEngineClient();
     const events: Array<{ status: string; index: number }> = [];
     let lastStatus: string | null = null;
@@ -108,7 +108,7 @@ if (typeof window !== 'undefined') {
   // and that a store-facing call (getVoices) routes through the worker to the main-thread
   // backend and back.
   window.__ttsWorkerHandleTest = async () => {
-    const { getAudioPlayer } = await import('./lib/tts/engine/mainThreadAudioPlayer');
+    const { getAudioPlayer } = await import('./app/tts/mainThreadAudioPlayer');
     const engine = getAudioPlayer();
     await engine.whenReady();
     const voices = await engine.getVoices();

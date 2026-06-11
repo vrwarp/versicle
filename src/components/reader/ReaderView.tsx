@@ -24,7 +24,7 @@ import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
 import { searchClient } from '../../lib/search';
 import { SyncStatusPanel } from './SyncStatusPanel';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';
-import { getAudioPlayer } from '../../lib/tts/engine/mainThreadAudioPlayer';
+import { getAudioPlayer } from '../../app/tts/mainThreadAudioPlayer';
 import { ReaderTTSController } from './ReaderTTSController';
 import { generateCfiRange, snapCfiToSentence } from '../../lib/cfi-utils';
 import { TOCPanel, SearchPanel } from './panels';

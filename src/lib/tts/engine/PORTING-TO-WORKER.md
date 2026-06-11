@@ -17,7 +17,8 @@ The engine core reaches the outside world only through injected ports, so the or
 
 `AudioPlayerService.ts` has **no worker-unsafe value imports** — the main-thread deps
 (`createZustandEngineContext`, `TTSProviderManager`, `PlatformIntegration`) live only in the
-composition root `mainThreadAudioPlayer.ts` and the worker bridge.
+composition root `src/app/tts/mainThreadAudioPlayer.ts` and the worker bridge (both in
+`src/app/tts/`, the host-wiring layer).
 
 ```
  main thread                                            worker (tts.worker.ts)
@@ -35,8 +36,9 @@ composition root `mainThreadAudioPlayer.ts` and the worker bridge.
 - `WorkerTtsEngine.ts` — worker-side host: runs `AudioPlayerService` with the proxy backend +
   platform + `WorkerEngineContext`; exposes the engine API. Defines the `EngineHost` contract.
 - `src/workers/tts.worker.ts` — the Worker entry (`Comlink.expose(new WorkerTtsEngine())`).
-- `createWorkerEngineClient.ts` — main-thread bridge: creates the Worker, hosts the real
-  backend + platform, replicates store state in, applies write commands out, returns a client.
+- `src/app/tts/createWorkerEngineClient.ts` — main-thread bridge: creates the Worker, hosts the
+  real backend + platform, replicates store state in, applies write commands out, returns a
+  client.
 - `WorkerEngineContext.ts` — replicated-state `EngineContext` (solves sync-getter-over-async).
 
 ## Verification

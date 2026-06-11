@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { TTSVoice } from '../lib/tts/providers/types';
-import { getAudioPlayer } from '../lib/tts/engine/mainThreadAudioPlayer';
+import { getAudioPlayer } from '../app/tts/mainThreadAudioPlayer';
 import type { TTSStatus, TTSQueueItem } from '../lib/tts/AudioPlayerService';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../lib/tts/TextSegmenter';
 import { LexiconService } from '../lib/tts/LexiconService';
