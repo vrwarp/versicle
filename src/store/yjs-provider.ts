@@ -73,7 +73,7 @@ export function handleObsoleteClient(incomingVersion: number): void {
     );
 
     // 1. Sever cloud connection (lazy import to avoid circular deps)
-    import('../lib/sync/hooks/useSyncStore').then(({ useSyncStore }) => {
+    import('./useSyncStore').then(({ useSyncStore }) => {
         useSyncStore.getState().setFirestoreStatus('disconnected');
     }).catch(err => logger.error('Failed to import useSyncStore:', err));
 

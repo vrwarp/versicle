@@ -93,7 +93,7 @@ vi.mock('../app/repositories/ContentAnalysisRepository', () => ({
     }
 }));
 
-vi.mock('../lib/sync/hooks/useSyncStore', () => ({
+vi.mock('../store/useSyncStore', () => ({
     useSyncStore: () => ({
         googleClientId: '',
         googleApiKey: '',

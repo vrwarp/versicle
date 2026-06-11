@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
-import { type SentenceNode } from '../tts';
+import { type SentenceNode } from './sentence-extraction';
 import { SeededRandom } from '../../test/fuzz-utils';
 
 const DEFAULT_FUZZ_SEED = 12345;

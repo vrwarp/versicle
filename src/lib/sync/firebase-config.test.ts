@@ -30,7 +30,7 @@ vi.mock('../../store/useToastStore', () => ({
   },
 }));
 
-vi.mock('./hooks/useSyncStore', () => ({
+vi.mock('../../store/useSyncStore', () => ({
   useSyncStore: {
     getState: vi.fn(() => ({
       firebaseConfig: {

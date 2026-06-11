@@ -1,7 +1,7 @@
-import { TextSegmenter, DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from './tts/TextSegmenter';
-import { Sanitizer } from './tts/processors/Sanitizer';
-import { createLogger } from './logger';
-import type { CitationMarker } from '../types/db';
+import { TextSegmenter, DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from './TextSegmenter';
+import { Sanitizer } from './processors/Sanitizer';
+import { createLogger } from '../logger';
+import type { CitationMarker } from '../../types/db';
 
 const logger = createLogger('TTS-Utils');
 

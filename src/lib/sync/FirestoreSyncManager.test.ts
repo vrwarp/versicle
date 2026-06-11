@@ -406,7 +406,7 @@ describe('FirestoreSyncManager', () => {
         beforeEach(async () => {
             const { onAuthStateChanged } = await import('firebase/auth');
             const { CheckpointService } = await import('./CheckpointService');
-            const { useSyncStore } = await import('./hooks/useSyncStore');
+            const { useSyncStore } = await import('../../store/useSyncStore');
 
             // Mock auth state change to trigger connection
             vi.mocked(onAuthStateChanged).mockImplementation((_auth, callback) => {
@@ -431,7 +431,7 @@ describe('FirestoreSyncManager', () => {
 
         afterEach(async () => {
             const { MigrationStateService } = await import('./MigrationStateService');
-            const { useSyncStore } = await import('./hooks/useSyncStore');
+            const { useSyncStore } = await import('../../store/useSyncStore');
             MigrationStateService.clear();
             useSyncStore.getState().setActiveWorkspaceId(null);
         });
@@ -463,7 +463,7 @@ describe('FirestoreSyncManager', () => {
 
         it('rolls back to the pinned backup instead of clearing state when applying remote state fails', async () => {
             const { MigrationStateService } = await import('./MigrationStateService');
-            const { useSyncStore } = await import('./hooks/useSyncStore');
+            const { useSyncStore } = await import('../../store/useSyncStore');
 
             // The destructive apply step fails after it may have wiped IDB
             applyRemoteStateSpy.mockRejectedValue(new Error('IDB write failed'));

@@ -1,6 +1,6 @@
 import ePub from 'epubjs';
 import { snapdom } from '@zumer/snapdom';
-import { extractSentencesFromNode, type ExtractionOptions, type SentenceNode } from './tts';
+import { extractSentencesFromNode, type ExtractionOptions, type SentenceNode } from './tts/sentence-extraction';
 import type { CitationMarker } from '../types/db';
 import { sanitizeContent } from './sanitizer';
 import type { TableImage } from '../types/db';

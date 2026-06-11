@@ -43,7 +43,7 @@ import { useDriveStore } from '../../store/useDriveStore';
 import { DriveScannerService } from '../../lib/drive/DriveScannerService';
 import { useToastStore } from '../../store/useToastStore';
 import { getFirestoreSyncManager } from '../../lib/sync/FirestoreSyncManager';
-import { useSyncStore } from '../../lib/sync/hooks/useSyncStore';
+import { useSyncStore } from '../../store/useSyncStore';
 import { CURRENT_SCHEMA_VERSION } from '../../store/yjs-provider';
 import type { WorkspaceMetadata } from '../../types/workspace';
 

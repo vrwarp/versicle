@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TextSegmenter } from './TextSegmenter';
-import type { SentenceNode } from '../tts';
+import type { SentenceNode } from './sentence-extraction';
 
 describe('TextSegmenter.refineSegments', () => {
     it('should merge segments based on abbreviations', () => {

@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { extractBookData, validateZipSignature } from './ingestion';
 import type { BookExtractionData } from './ingestion';
-import { TTS_EXTRACTION_VERSION } from './tts';
+import { TTS_EXTRACTION_VERSION } from './tts/sentence-extraction';
 
 // Mock browser-image-compression
 vi.mock('browser-image-compression', () => ({

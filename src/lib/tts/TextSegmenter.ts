@@ -1,5 +1,5 @@
 import { tryFastMergeCfi, mergeCfiSlow } from '../cfi-utils';
-import type { SentenceNode } from '../tts';
+import type { SentenceNode } from './sentence-extraction';
 import { getCachedSegmenter } from './segmenter-cache';
 import { TextScanningTrie } from './TextScanningTrie';
 

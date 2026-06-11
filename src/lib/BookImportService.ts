@@ -8,7 +8,7 @@
  */
 import { dbService, handleDbError } from '../db/DBService';
 import { extractBookData, generateFileFingerprint } from './ingestion';
-import type { ExtractionOptions } from './tts';
+import type { ExtractionOptions } from './tts/sentence-extraction';
 import type { StaticBookManifest } from '../types/db';
 
 class BookImportService {

@@ -33,7 +33,7 @@ import { createLogger } from '../logger';
 import { generateSecureId } from '../crypto';
 import { signInWithGoogle, signOutWithGoogle } from './auth-helper';
 import { useToastStore } from '../../store/useToastStore';
-import { useSyncStore } from './hooks/useSyncStore';
+import { useSyncStore } from '../../store/useSyncStore';
 
 const logger = createLogger('FirestoreSync');
 

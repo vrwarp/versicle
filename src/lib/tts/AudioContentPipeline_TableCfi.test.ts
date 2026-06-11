@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
-import { type SentenceNode } from '../tts';
+import { type SentenceNode } from './sentence-extraction';
 
 describe('AudioContentPipeline Table CFI Logic', () => {
     const processor = new TableAdaptationProcessor(createZustandEngineContext());

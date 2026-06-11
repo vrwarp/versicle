@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { cn } from '../../lib/utils';
-import { useSyncStore } from '../../lib/sync/hooks/useSyncStore';
+import { useSyncStore } from '../../store/useSyncStore';
 import type { FirestoreSyncStatus } from '../../lib/sync/FirestoreSyncManager';
 
 /**

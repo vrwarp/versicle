@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
-import { extractSentencesFromNode } from '../tts';
+import { extractSentencesFromNode } from './sentence-extraction';
 import { EpubCFI } from 'epubjs';
 import type { CitationMarker } from '../../types/db';
 

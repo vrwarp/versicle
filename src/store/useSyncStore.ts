@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { FirestoreSyncStatus, FirebaseAuthStatus } from '../FirestoreSyncManager';
+import type { FirestoreSyncStatus, FirebaseAuthStatus } from '../lib/sync/FirestoreSyncManager';
 
 /**
  * Firebase configuration stored in settings

@@ -6,7 +6,7 @@
  */
 import { useEffect, useCallback, useMemo } from 'react';
 import { getFirestoreSyncManager } from '../FirestoreSyncManager';
-import { useSyncStore } from './useSyncStore';
+import { useSyncStore } from '../../../store/useSyncStore';
 
 /**
  * Hook to manage Firebase/Firestore sync.

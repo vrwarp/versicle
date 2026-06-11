@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TextSegmenter, DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from './TextSegmenter';
-import type { SentenceNode } from '../tts';
+import type { SentenceNode } from './sentence-extraction';
 
 describe('TextSegmenter', () => {
   it('handles CJK fallback regex', () => {

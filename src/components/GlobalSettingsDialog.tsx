@@ -20,7 +20,7 @@ import { backupService } from '../lib/BackupService';
 import { wipeAllData } from '../db/wipe';
 import { contentAnalysisRepository } from '../app/repositories/ContentAnalysisRepository';
 import { CheckpointService } from '../lib/sync/CheckpointService';
-import { useSyncStore } from '../lib/sync/hooks/useSyncStore';
+import { useSyncStore } from '../store/useSyncStore';
 import { useFirestoreSync } from '../lib/sync/hooks/useFirestoreSync';
 import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
 import { exportFile } from '../lib/export';

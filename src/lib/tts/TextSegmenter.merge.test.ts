@@ -1,7 +1,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { TextSegmenter } from './TextSegmenter';
-import type { SentenceNode } from '../tts';
+import type { SentenceNode } from './sentence-extraction';
 
 describe('TextSegmenter.mergeByLength', () => {
     const createNode = (text: string, cfi: string = ''): SentenceNode => ({

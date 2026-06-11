@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractSentencesFromNode } from '../tts';
+import { extractSentencesFromNode } from './sentence-extraction';
 
 describe('extractSentencesFromNode inline element fragmentation', () => {
     const mockCfiGenerator = (range: Range) => `cfi(${range.startOffset})`;

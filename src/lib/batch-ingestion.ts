@@ -1,7 +1,7 @@
 
 import JSZip from 'jszip';
 import { bookImportService } from './BookImportService';
-import type { ExtractionOptions } from './tts';
+import type { ExtractionOptions } from './tts/sentence-extraction';
 import type { StaticBookManifest } from '../types/db';
 
 /**
