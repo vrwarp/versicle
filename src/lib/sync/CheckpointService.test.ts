@@ -32,8 +32,9 @@ const mocks = vi.hoisted(() => {
     };
 });
 
-vi.mock('@db/db', () => ({
-    getDB: vi.fn(async () => ({
+vi.mock('@data/connection', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@data/connection')>()),
+    getConnection: vi.fn(async () => ({
         transaction: () => ({
             store: mocks.store,
             objectStore: () => mocks.store, // fallback if .store not accessed

@@ -1,4 +1,4 @@
-import { getDB } from '@db/db';
+import { checkpoints } from '@data/repos/checkpoints';
 import * as Y from 'yjs';
 import { getYDoc, getYjsPersistence, disconnectYjs } from '@store/yjs-provider';
 import type { SyncCheckpoint } from '~types/db';
@@ -8,7 +8,6 @@ import { getFirestoreSyncManager } from './FirestoreSyncManager';
 import { MigrationStateService } from './MigrationStateService';
 
 const logger = createLogger('CheckpointService');
-const CHECKPOINT_LIMIT = 10;
 
 /**
  * Service to manage synchronization checkpoints.
@@ -28,57 +27,16 @@ export class CheckpointService {
    */
   static async createCheckpoint(trigger: string, options?: { protected?: boolean }): Promise<number> {
     const stateBlob = captureDoc(getYDoc());
-    const db = await getDB();
 
-    // SyncCheckpoint has 'id', 'timestamp', 'blob', 'size', 'trigger', 'protected'.
-    // id is auto-incremented, so we cast to any to satisfy TS or Omit it.
-    const checkpoint = {
+    // The IDB transaction — including the supersede-older-protected and
+    // prune-skip-protected invariants, both inside ONE gated transaction —
+    // lives in the checkpoints repo (P3-10).
+    return checkpoints.add({
       timestamp: Date.now(),
       trigger,
       blob: stateBlob,
       size: Math.round(stateBlob.byteLength / 1024) || 1, // Min 1KB display
-      ...(options?.protected ? { protected: true } : {})
-    };
-
-    const tx = db.transaction('checkpoints', 'readwrite');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const id = await tx.store.add(checkpoint as any);
-
-    // Supersede older protected checkpoints: only one migration can be in
-    // flight at a time, so only the newest protected checkpoint stays pinned.
-    if (options?.protected) {
-      let cursor = await tx.store.openCursor();
-      while (cursor) {
-        if (cursor.value?.protected === true && cursor.primaryKey !== id) {
-          const unprotected = { ...cursor.value };
-          delete unprotected.protected;
-          await cursor.update(unprotected);
-          logger.info(`Unprotected superseded checkpoint #${cursor.primaryKey}`);
-        }
-        cursor = await cursor.continue();
-      }
-    }
-
-    // Prune old checkpoints
-    const count = await tx.store.count();
-    if (count > CHECKPOINT_LIMIT) {
-      // Get the oldest keys
-      // Since keys are auto-incrementing integers, the smallest keys are the oldest.
-      // Protected checkpoints (in-flight migration backups) are never pruned;
-      // records persisted before the flag existed are treated as unprotected.
-      let deleted = 0;
-      let cursor = await tx.store.openCursor();
-      while (cursor && deleted < count - CHECKPOINT_LIMIT) {
-        if (cursor.value?.protected !== true) {
-          await cursor.delete();
-          deleted++;
-        }
-        cursor = await cursor.continue();
-      }
-    }
-
-    await tx.done;
-    return id as number;
+    }, options);
   }
 
   /**
@@ -87,11 +45,7 @@ export class CheckpointService {
    * Returns the new checkpoint ID if created, or null if skipped.
    */
   static async createAutomaticCheckpoint(trigger: string, intervalMs: number): Promise<number | null> {
-    const db = await getDB();
-    const checkpoints = await db.getAll('checkpoints');
-    const lastCheckpoint = checkpoints
-      .filter(cp => cp.trigger === trigger)
-      .sort((a, b) => b.timestamp - a.timestamp)[0];
+    const lastCheckpoint = await checkpoints.latestByTrigger(trigger);
 
     if (lastCheckpoint) {
       const timeSinceLast = Date.now() - lastCheckpoint.timestamp;
@@ -116,8 +70,7 @@ export class CheckpointService {
    * it set means a crash mid-restore retries the rollback on next boot.
    */
   static async restoreCheckpoint(id: number): Promise<void> {
-    const db = await getDB();
-    const checkpoint = await db.get('checkpoints', id);
+    const checkpoint = await checkpoints.get(id);
     if (!checkpoint || !checkpoint.blob) throw new Error('Checkpoint corrupted');
 
     // 0a. Prove the blob applies cleanly BEFORE any destructive step.
@@ -226,8 +179,7 @@ export class CheckpointService {
    * Used to clean up migration backups after successful switch.
    */
   static async deleteCheckpoint(id: number): Promise<void> {
-    const db = await getDB();
-    await db.delete('checkpoints', id);
+    await checkpoints.remove(id);
     logger.info(`Deleted checkpoint #${id}`);
   }
 
@@ -235,16 +187,13 @@ export class CheckpointService {
    * Retrieves all available checkpoints, sorted by timestamp descending.
    */
   static async listCheckpoints(): Promise<SyncCheckpoint[]> {
-    const db = await getDB();
-    const checkpoints = await db.getAll('checkpoints');
-    return checkpoints.sort((a, b) => b.timestamp - a.timestamp);
+    return checkpoints.list();
   }
 
   /**
    * Retrieves a specific checkpoint by ID.
    */
   static async getCheckpoint(id: number): Promise<SyncCheckpoint | undefined> {
-    const db = await getDB();
-    return db.get('checkpoints', id);
+    return checkpoints.get(id);
   }
 }
