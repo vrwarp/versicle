@@ -5,7 +5,8 @@
  * plan/overhaul/prep/phase3-storage-gateway.md.
  *
  * See rows/static.ts for the shared posture (loose envelope, strict
- * required keys, `z.custom` binaries, ingress-only validation).
+ * required keys, `z.custom` binaries, ingress-only validation) and for why
+ * the `*Row` types are plain aliases rather than `z.infer`.
  */
 import { z } from 'zod';
 import type {
@@ -13,6 +14,7 @@ import type {
   CacheRenderMetrics,
   CacheSessionState,
   CacheTtsPreparation,
+  CitationMarker,
 } from '~types/cache';
 import type { TTSQueueItem, Timepoint } from '~types/tts';
 import { binaryValueSchema } from './static';
@@ -23,7 +25,11 @@ export const cacheRenderMetricsRowSchema = z.looseObject({
   locations: z.string(),
   pageCount: z.number().optional(),
 });
-export type CacheRenderMetricsRow = z.infer<typeof cacheRenderMetricsRowSchema>;
+export type CacheRenderMetricsRow = {
+  bookId: string;
+  locations: string;
+  pageCount?: number;
+};
 
 /**
  * A `cache_render_metrics` row as restored from a backup file's `locations`
@@ -63,7 +69,15 @@ export const cacheAudioBlobRowSchema = z.looseObject({
   lastAccessed: z.number(),
   size: z.number().optional(),
 });
-export type CacheAudioBlobRow = z.infer<typeof cacheAudioBlobRowSchema>;
+export type CacheAudioBlobRow = {
+  key: string;
+  audio: ArrayBuffer;
+  alignment?: Timepoint[];
+  alignmentData?: Timepoint[];
+  createdAt: number;
+  lastAccessed: number;
+  size?: number;
+};
 
 /** The persisted TTS playback queue item (embedded in `cache_session_state`). */
 export const ttsQueueItemSchema = z.looseObject({
@@ -74,7 +88,6 @@ export const ttsQueueItemSchema = z.looseObject({
   isSkipped: z.boolean().optional(),
   sourceIndices: z.array(z.number()).optional(),
 });
-export type TtsQueueItemRow = z.infer<typeof ttsQueueItemSchema>;
 
 /** `cache_session_state` row (key: bookId). */
 export const cacheSessionStateRowSchema = z.looseObject({
@@ -83,7 +96,12 @@ export const cacheSessionStateRowSchema = z.looseObject({
   lastPauseTime: z.number().optional(),
   updatedAt: z.number(),
 });
-export type CacheSessionStateRow = z.infer<typeof cacheSessionStateRowSchema>;
+export type CacheSessionStateRow = {
+  bookId: string;
+  playbackQueue: TTSQueueItem[];
+  lastPauseTime?: number;
+  updatedAt: number;
+};
 
 export const citationMarkerSchema = z.looseObject({
   cfi: z.string(),
@@ -105,7 +123,14 @@ export const cacheTtsPreparationRowSchema = z.looseObject({
   citationMarkers: z.array(citationMarkerSchema).optional(),
   extractionVersion: z.number().optional(),
 });
-export type CacheTtsPreparationRow = z.infer<typeof cacheTtsPreparationRowSchema>;
+export type CacheTtsPreparationRow = {
+  id: string;
+  bookId: string;
+  sectionId: string;
+  sentences: { text: string; cfi: string }[];
+  citationMarkers?: CitationMarker[];
+  extractionVersion?: number;
+};
 
 /**
  * `cache_table_images` row (key: `${bookId}-${cfi}`). `imageBlob` is
@@ -119,40 +144,47 @@ export const tableImageRowSchema = z.looseObject({
   cfi: z.string(),
   imageBlob: binaryValueSchema,
 });
-export type TableImageRow = z.infer<typeof tableImageRowSchema>;
+export type TableImageRow = {
+  id: string;
+  bookId: string;
+  sectionId: string;
+  cfi: string;
+  imageBlob: ArrayBuffer | Blob;
+};
 
-// ── Compile-time drift guards against ~types/cache + ~types/tts ───────────
-// See rows/static.ts for why spread assignments are used for the
-// interface → row direction. The row → interface direction uses plain
-// conditional types where it must hold (the repos hand rows straight to
-// consumers typed against the ~types interfaces).
+// ── Compile-time drift guards (see rows/static.ts for the pattern) ────────
+type _MetricsSchemaMatches = z.infer<typeof cacheRenderMetricsRowSchema> extends CacheRenderMetricsRow ? true : never;
+type _AudioSchemaMatches = z.infer<typeof cacheAudioBlobRowSchema> extends CacheAudioBlobRow ? true : never;
+type _SessionSchemaMatches = z.infer<typeof cacheSessionStateRowSchema> extends CacheSessionStateRow ? true : never;
+type _PrepSchemaMatches = z.infer<typeof cacheTtsPreparationRowSchema> extends CacheTtsPreparationRow ? true : never;
+type _QueueSchemaMatches = z.infer<typeof ttsQueueItemSchema> extends TTSQueueItem ? true : never;
+type _TimepointSchemaMatches = z.infer<typeof timepointSchema> extends Timepoint ? true : never;
+type _AudioRound = CacheAudioBlobRow extends CacheAudioBlob ? true : never;
+type _SessionRound = CacheSessionStateRow extends CacheSessionState ? true : never;
+type _PrepRound = CacheTtsPreparationRow extends CacheTtsPreparation ? true : never;
+const _schemaChecks: [
+  _MetricsSchemaMatches,
+  _AudioSchemaMatches,
+  _SessionSchemaMatches,
+  _PrepSchemaMatches,
+  _QueueSchemaMatches,
+  _TimepointSchemaMatches,
+  _AudioRound,
+  _SessionRound,
+  _PrepRound,
+] = [true, true, true, true, true, true, true, true, true];
+void _schemaChecks;
+
 function _rowTypeDriftGuard(
   metrics: CacheRenderMetrics,
   audio: CacheAudioBlob,
-  queueItem: TTSQueueItem,
   session: CacheSessionState,
   prep: CacheTtsPreparation,
-  timepoint: Timepoint,
 ): void {
-  const _metrics: CacheRenderMetricsRow = { ...metrics };
-  const _audio: CacheAudioBlobRow = {
-    ...audio,
-    alignment: audio.alignment?.map((t) => ({ ...t })),
-    alignmentData: audio.alignmentData?.map((t) => ({ ...t })),
-  };
-  const _queueItem: TtsQueueItemRow = { ...queueItem };
-  const _session: CacheSessionStateRow = { ...session, playbackQueue: [...session.playbackQueue.map((q) => ({ ...q }))] };
-  const _prep: CacheTtsPreparationRow = {
-    ...prep,
-    sentences: prep.sentences.map((s) => ({ ...s })),
-    citationMarkers: prep.citationMarkers?.map((c) => ({ ...c })),
-  };
-  const _timepoint: z.infer<typeof timepointSchema> = { ...timepoint };
-  void _metrics; void _audio; void _queueItem; void _session; void _prep; void _timepoint;
+  const _metrics: CacheRenderMetricsRow = metrics;
+  const _audio: CacheAudioBlobRow = audio;
+  const _session: CacheSessionStateRow = session;
+  const _prep: CacheTtsPreparationRow = prep;
+  void _metrics; void _audio; void _session; void _prep;
 }
 void _rowTypeDriftGuard;
-type _AudioRound = CacheAudioBlobRow extends CacheAudioBlob ? true : never;
-type _QueueRound = TtsQueueItemRow extends TTSQueueItem ? true : never;
-type _SessionRound = CacheSessionStateRow extends CacheSessionState ? true : never;
-const _roundChecks: [_AudioRound, _QueueRound, _SessionRound] = [true, true, true];
-void _roundChecks;

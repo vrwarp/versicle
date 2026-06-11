@@ -22,7 +22,6 @@ import type {
   StaticStructure,
   // Cache Domain
   CacheRenderMetrics,
-  CacheAudioBlob,
   CacheSessionState,
   CacheTtsPreparation,
   TableImage,
@@ -31,6 +30,12 @@ import type {
   SyncLogEntry,
   FlightSnapshot
 } from '~types/db';
+// rows/ is the source of truth for persisted shapes (D4). Store value types
+// migrate from the ~types interfaces to the inferred row types as the Phase 3
+// repos carve each store (the row types are supersets that include persisted
+// reality the domain interfaces elide, e.g. cache_audio_blobs.size and the
+// legacy alignmentData field).
+import type { CacheAudioBlobRow } from './rows/cache';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('DB');
@@ -77,7 +82,7 @@ export interface EpubLibraryDB extends DBSchema {
   };
   cache_audio_blobs: {
     key: string;
-    value: CacheAudioBlob;
+    value: CacheAudioBlobRow;
   };
   cache_session_state: {
     key: string;

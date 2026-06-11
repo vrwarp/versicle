@@ -30,7 +30,14 @@ export const syncCheckpointRowSchema = z.looseObject({
    */
   protected: z.boolean().optional(),
 });
-export type SyncCheckpointRow = z.infer<typeof syncCheckpointRowSchema>;
+export type SyncCheckpointRow = {
+  id: number;
+  timestamp: number;
+  blob: Uint8Array;
+  size: number;
+  trigger: string;
+  protected?: boolean;
+};
 
 /** `sync_log` row — FROZEN (dead store at HEAD, see module docs). */
 export const syncLogEntryRowSchema = z.looseObject({
@@ -40,7 +47,13 @@ export const syncLogEntryRowSchema = z.looseObject({
   message: z.string(),
   details: z.unknown().optional(),
 });
-export type SyncLogEntryRow = z.infer<typeof syncLogEntryRowSchema>;
+export type SyncLogEntryRow = {
+  id: number;
+  timestamp: number;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+  details?: unknown;
+};
 
 /** `flight_snapshots` row (key: uuid id). */
 export const flightSnapshotRowSchema = z.looseObject({
@@ -62,25 +75,49 @@ export const flightSnapshotRowSchema = z.looseObject({
   eventsJSON: z.string(),
   sizeBytes: z.number(),
 });
-export type FlightSnapshotRow = z.infer<typeof flightSnapshotRowSchema>;
+export type FlightSnapshotRow = {
+  id: string;
+  createdAt: number;
+  trigger: string;
+  note: string;
+  context: {
+    bookId: string | null;
+    sectionIndex: number;
+    currentIndex: number;
+    queueLength: number;
+    status: string;
+    skippedCount?: number;
+    nextItemSkipped?: boolean | undefined;
+  };
+  eventCount: number;
+  timeRange: { first: number; last: number };
+  eventsJSON: string;
+  sizeBytes: number;
+};
 
 // ── Compile-time drift guards (see rows/static.ts for the pattern) ────────
+type _CheckpointSchemaMatches = z.infer<typeof syncCheckpointRowSchema> extends SyncCheckpointRow ? true : never;
+type _LogSchemaMatches = z.infer<typeof syncLogEntryRowSchema> extends SyncLogEntryRow ? true : never;
+type _SnapshotSchemaMatches = z.infer<typeof flightSnapshotRowSchema> extends FlightSnapshotRow ? true : never;
+type _CheckpointRound = SyncCheckpointRow extends SyncCheckpoint ? true : never;
+type _SnapshotRound = FlightSnapshotRow extends FlightSnapshot ? true : never;
+const _schemaChecks: [
+  _CheckpointSchemaMatches,
+  _LogSchemaMatches,
+  _SnapshotSchemaMatches,
+  _CheckpointRound,
+  _SnapshotRound,
+] = [true, true, true, true, true];
+void _schemaChecks;
+
 function _rowTypeDriftGuard(
   checkpoint: SyncCheckpoint,
   logEntry: SyncLogEntry,
   snapshot: FlightSnapshot,
 ): void {
-  const _checkpoint: SyncCheckpointRow = { ...checkpoint };
-  const _logEntry: SyncLogEntryRow = { ...logEntry };
-  const _snapshot: FlightSnapshotRow = {
-    ...snapshot,
-    context: { ...snapshot.context },
-    timeRange: { ...snapshot.timeRange },
-  };
+  const _checkpoint: SyncCheckpointRow = checkpoint;
+  const _logEntry: SyncLogEntryRow = logEntry;
+  const _snapshot: FlightSnapshotRow = snapshot;
   void _checkpoint; void _logEntry; void _snapshot;
 }
 void _rowTypeDriftGuard;
-type _CheckpointRound = SyncCheckpointRow extends SyncCheckpoint ? true : never;
-type _SnapshotRound = FlightSnapshotRow extends FlightSnapshot ? true : never;
-const _roundChecks: [_CheckpointRound, _SnapshotRound] = [true, true];
-void _roundChecks;

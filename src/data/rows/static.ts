@@ -3,11 +3,13 @@
  * `static_resources`, `static_structure`) — Phase 3, D4 in
  * plan/overhaul/prep/phase3-storage-gateway.md.
  *
- * zod is the single source of truth for the PERSISTED shapes; the inferred
- * `*Row` types are the row types the repos speak. The `~types/book`
- * interfaces remain the domain-facing types (the 59-importer shim chain
- * stays compile-stable); compile-time assertions at the bottom of this file
- * keep the two from drifting.
+ * zod is the single source of truth for the PERSISTED shapes; the `*Row`
+ * types are the row types the repos speak. They are written as plain type
+ * ALIASES (not `z.infer`, which carries the loose envelope's string index
+ * signature — interfaces have no implicit index signature, so the inferred
+ * type would reject every domain-interface value at compile time).
+ * Compile-time drift guards at the bottom keep schema ⇄ row type ⇄ domain
+ * interface from drifting.
  *
  * Posture (D4 rules):
  * - `z.looseObject` at the envelope: unknown fields written by other builds
@@ -25,6 +27,7 @@
 import { z } from 'zod';
 import type {
   NavigationItem,
+  PerceptualPalette,
   StaticBookManifest,
   StaticResource,
   StaticStructure,
@@ -76,14 +79,33 @@ export const staticManifestRowSchema = z.looseObject({
   baseFontSize: z.number().optional(),
   baseLineHeight: z.number().optional(),
 });
-export type StaticManifestRow = z.infer<typeof staticManifestRowSchema>;
+export type StaticManifestRow = {
+  bookId: string;
+  title: string;
+  author: string;
+  description?: string;
+  isbn?: string;
+  fileHash: string;
+  fileSize: number;
+  totalChars: number;
+  schemaVersion: number;
+  coverBlob?: ArrayBuffer | Blob;
+  coverPalette?: number[];
+  perceptualPalette?: PerceptualPalette;
+  language?: string;
+  baseFontSize?: number;
+  baseLineHeight?: number;
+};
 
 /** `static_resources` row (key: bookId). */
 export const staticResourceRowSchema = z.looseObject({
   bookId: z.string().min(1),
   epubBlob: binaryValueSchema,
 });
-export type StaticResourceRow = z.infer<typeof staticResourceRowSchema>;
+export type StaticResourceRow = {
+  bookId: string;
+  epubBlob: ArrayBuffer | Blob;
+};
 
 export const spineItemSchema = z.looseObject({
   id: z.string(),
@@ -97,7 +119,11 @@ export const staticStructureRowSchema = z.looseObject({
   toc: z.array(navigationItemSchema),
   spineItems: z.array(spineItemSchema),
 });
-export type StaticStructureRow = z.infer<typeof staticStructureRowSchema>;
+export type StaticStructureRow = {
+  bookId: string;
+  toc: NavigationItem[];
+  spineItems: { id: string; characterCount: number; index: number }[];
+};
 
 /**
  * A `staticManifests` row as it appears INSIDE a backup file (the untrusted
@@ -119,29 +145,41 @@ export const backupStaticManifestRowSchema = z.looseObject({
 });
 export type BackupStaticManifestRow = z.infer<typeof backupStaticManifestRowSchema>;
 
-// ── Compile-time drift guards against the ~types/book interfaces ──────────
+// ── Compile-time drift guards ──────────────────────────────────────────────
 // (types/ may not import src/data — types-imports-nothing stays 0 — so the
-// assertion lives here, on the data side.) The function never runs; its body
-// fails to COMPILE if the schemas drift from the domain interfaces.
-// Direction 1 (spread assignments): every interface value is a valid row —
-// spread is required because interfaces lack the implicit index signature a
-// loose row type carries. The reverse is deliberately untrue for binary
-// fields: rows store ArrayBuffer where the interface says Blob.
-// Direction 2 (conditional type): every structure row satisfies the domain
-// interface consumers expect.
+// assertions live here, on the data side.) Three pins per store:
+//  1. schema output extends the Row alias (zod stays the source of truth);
+//  2. every domain-interface value is a valid Row (the spread is needed for
+//     coverBlob's wider persisted union);
+//  3. structure rows satisfy the domain interface consumers expect.
+type _ManifestSchemaMatches = z.infer<typeof staticManifestRowSchema> extends StaticManifestRow
+  ? true
+  : never;
+type _ResourceSchemaMatches = z.infer<typeof staticResourceRowSchema> extends StaticResourceRow
+  ? true
+  : never;
+type _StructureSchemaMatches = z.infer<typeof staticStructureRowSchema> extends StaticStructureRow
+  ? true
+  : never;
+type _StructureRound = StaticStructureRow extends StaticStructure ? true : never;
+const _schemaChecks: [
+  _ManifestSchemaMatches,
+  _ResourceSchemaMatches,
+  _StructureSchemaMatches,
+  _StructureRound,
+] = [true, true, true, true];
+void _schemaChecks;
+
 function _rowTypeDriftGuard(
-  m: Omit<StaticBookManifest, 'coverBlob'>,
+  m: StaticBookManifest,
   r: StaticResource,
   s: StaticStructure,
 ): void {
-  const _m: Omit<StaticManifestRow, 'coverBlob'> = { ...m };
-  const _r: StaticResourceRow = { ...r };
-  const _s: StaticStructureRow = { ...s };
+  const _m: StaticManifestRow = m;
+  const _r: StaticResourceRow = r;
+  const _s: StaticStructureRow = s;
   void _m;
   void _r;
   void _s;
 }
 void _rowTypeDriftGuard;
-type _StructureRound = StaticStructureRow extends StaticStructure ? true : never;
-const _structureRound: _StructureRound = true;
-void _structureRound;

@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TTSCache } from './TTSCache';
-import { dbService } from '@db/DBService';
+import { audioCache } from '@data/repos/audioCache';
 
-vi.mock('@db/DBService', () => ({
-  dbService: {
-    getCachedSegment: vi.fn(),
-    cacheSegment: vi.fn(),
+vi.mock('@data/repos/audioCache', () => ({
+  audioCache: {
+    getSegment: vi.fn(),
+    putSegment: vi.fn(),
   },
 }));
 
@@ -51,10 +51,10 @@ describe('TTSCache', () => {
   describe('get', () => {
     it('should return undefined if key not found', async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (dbService.getCachedSegment as any).mockResolvedValue(undefined);
+      (audioCache.getSegment as any).mockResolvedValue(undefined);
       const result = await cache.get('some-key');
       expect(result).toBeUndefined();
-      expect(dbService.getCachedSegment).toHaveBeenCalledWith('some-key');
+      expect(audioCache.getSegment).toHaveBeenCalledWith('some-key');
     });
 
     it('should return segment', async () => {
@@ -65,7 +65,7 @@ describe('TTSCache', () => {
         lastAccessed: 1000,
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (dbService.getCachedSegment as any).mockResolvedValue(mockSegment);
+      (audioCache.getSegment as any).mockResolvedValue(mockSegment);
 
       const result = await cache.get('some-key');
       expect(result).toBe(mockSegment);
@@ -78,7 +78,7 @@ describe('TTSCache', () => {
         const audio = new ArrayBuffer(10);
         await cache.put(key, audio);
 
-        expect(dbService.cacheSegment).toHaveBeenCalledWith(key, audio, undefined);
+        expect(audioCache.putSegment).toHaveBeenCalledWith(key, audio, undefined);
     });
 
     it('should store alignment if provided', async () => {
@@ -87,7 +87,7 @@ describe('TTSCache', () => {
         const alignment = [{ timeSeconds: 0, charIndex: 0 }];
         await cache.put(key, audio, alignment);
 
-        expect(dbService.cacheSegment).toHaveBeenCalledWith(key, audio, alignment);
+        expect(audioCache.putSegment).toHaveBeenCalledWith(key, audio, alignment);
     });
   });
 });

@@ -2,13 +2,15 @@
  * `backgroundTasks` boot phase (moved from App.tsx):
  *  - the device heartbeat interval (now started AFTER device registration —
  *    pre-C11 it raced registration from a parallel effect),
- *  - the weekly background Drive scan policy.
+ *  - the weekly background Drive scan policy,
+ *  - the audio-cache LRU eviction sweep (Phase 3 D5.1).
  */
 import type { BootTask } from '../bootstrap';
 import { getDeviceId } from '@lib/device-id';
 import { useDeviceStore } from '@store/useDeviceStore';
 import { useDriveStore } from '@store/useDriveStore';
 import { DriveScannerService } from '@lib/drive/DriveScannerService';
+import { audioCache } from '@data/repos/audioCache';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
@@ -22,6 +24,18 @@ export const deviceHeartbeatTask: BootTask = {
       useDeviceStore.getState().touchDevice(getDeviceId());
     }, HEARTBEAT_INTERVAL_MS);
     ctx.addCleanup(() => clearInterval(intervalId));
+  },
+};
+
+export const audioCacheEvictionTask: BootTask = {
+  name: 'data/audio-cache-eviction',
+  run: () => {
+    // Fire-and-forget: the sweep streams a cursor and deletes through the
+    // write gate, so it can never overlap a playback write. Boot must not
+    // wait on it.
+    void audioCache.runEviction().catch((err) => {
+      logger.warn('Audio cache eviction sweep failed at boot:', err);
+    });
   },
 };
 

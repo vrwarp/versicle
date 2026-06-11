@@ -18,6 +18,7 @@ import { createLogger } from '@lib/logger';
 import type { TTSQueueItem } from '@lib/tts/AudioPlayerService';
 import { runExclusiveIdbWrite } from '@data/write-gate';
 import { handleDbError } from '@data/errors';
+import { audioCache } from '@data/repos/audioCache';
 
 const logger = createLogger('DBService');
 
@@ -551,39 +552,14 @@ class DBService {
   }
 
   // --- TTS Cache Operations ---
+  // @deprecated Delegates to @data/repos/audioCache (P3-6); migrate callers.
 
   async getCachedSegment(key: string): Promise<CacheAudioBlob | undefined> {
-    try {
-      const db = await this.getDB();
-      const segment = await db.get('cache_audio_blobs', key);
-      if (segment) {
-        db.put('cache_audio_blobs', { ...segment, lastAccessed: Date.now() }).catch(() => { });
-        // Read-shim: rows written by older builds stored alignment under
-        // `alignmentData`. Normalize them onto the canonical `alignment` field so
-        // cached cloud-TTS timepoints are never silently dropped on a cache hit.
-        if (!segment.alignment && segment.alignmentData) {
-          return { ...segment, alignment: segment.alignmentData };
-        }
-      }
-      return segment;
-    } catch (error) {
-      this.handleError(error);
-    }
+    return audioCache.getSegment(key);
   }
 
   async cacheSegment(key: string, audio: ArrayBuffer, alignment?: Timepoint[]): Promise<void> {
-    try {
-      const db = await this.getDB();
-      await db.put('cache_audio_blobs', {
-        key,
-        audio,
-        alignment,
-        createdAt: Date.now(),
-        lastAccessed: Date.now(),
-      });
-    } catch (error) {
-      this.handleError(error);
-    }
+    return audioCache.putSegment(key, audio, alignment);
   }
 
   // --- Locations ---

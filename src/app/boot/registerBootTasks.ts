@@ -14,7 +14,7 @@ import { whenHydratedTask, hydrateStaticMetadataTask } from './whenHydrated';
 import { crdtMigrationsTask } from './crdtMigrations';
 import { syncInitTask } from './syncInit';
 import { ttsInitializeTask, deviceRegistrationTask } from './deviceRegistration';
-import { deviceHeartbeatTask, driveAutoScanTask } from './backgroundTasks';
+import { deviceHeartbeatTask, driveAutoScanTask, audioCacheEvictionTask } from './backgroundTasks';
 import { socialLoginTask } from './socialLogin';
 
 let registered = false;
@@ -34,5 +34,6 @@ export function registerAppBootTasks(): void {
   registerBootTask('deviceRegistration', deviceRegistrationTask);
   registerBootTask('backgroundTasks', deviceHeartbeatTask);
   registerBootTask('backgroundTasks', driveAutoScanTask);
+  registerBootTask('backgroundTasks', audioCacheEvictionTask);
   registerBootTask('backgroundTasks', socialLoginTask);
 }

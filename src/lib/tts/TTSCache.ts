@@ -1,4 +1,4 @@
-import { dbService } from '@db/DBService';
+import { audioCache } from '@data/repos/audioCache';
 import type { CacheAudioBlob } from '~types/db';
 import type { Timepoint } from './providers/types';
 
@@ -31,13 +31,14 @@ export class TTSCache {
   }
 
   /**
-   * Retrieves a cached segment if it exists and updates its last accessed time.
+   * Retrieves a cached segment if it exists and updates its last accessed time
+   * (debounced inside the repo).
    *
    * @param key - The cache key.
    * @returns A Promise that resolves to the CacheAudioBlob row or undefined if not found.
    */
   async get(key: string): Promise<CacheAudioBlob | undefined> {
-    return await dbService.getCachedSegment(key);
+    return await audioCache.getSegment(key);
   }
 
   /**
@@ -49,6 +50,6 @@ export class TTSCache {
    * @returns A Promise that resolves when the segment is stored.
    */
   async put(key: string, audio: ArrayBuffer, alignment?: Timepoint[]): Promise<void> {
-    await dbService.cacheSegment(key, audio, alignment);
+    await audioCache.putSegment(key, audio, alignment);
   }
 }
