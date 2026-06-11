@@ -3,7 +3,7 @@ import { IndexeddbPersistence } from 'y-idb';
 import type { StateCreator, StoreMutatorIdentifier } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { isStorageSupported } from '@lib/sync/support';
-import { runExclusiveIdbWrite } from '@lib/idb-write-lock';
+import { runExclusiveIdbWrite } from '@data/write-gate';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('YjsProvider');

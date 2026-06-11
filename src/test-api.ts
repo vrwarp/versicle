@@ -118,8 +118,8 @@ async function flushYjsPersistence(): Promise<void> {
 }
 
 export async function flushPersistence(): Promise<void> {
-  // Both writers funnel through the shared exclusive IDB write lock
-  // (src/lib/idb-write-lock.ts), so flushing them sequentially is also the
+  // Both writers funnel through the shared exclusive IDB write gate
+  // (src/data/write-gate.ts), so flushing them sequentially is also the
   // ordering the app itself guarantees.
   await dbService.flushSessionWrites();
   await flushYjsPersistence();

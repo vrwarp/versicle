@@ -23,8 +23,9 @@
        (vitest does not read vite.config.ts here). tsconfig.test.json
        inherits these via extends; dependency-cruiser resolves them via
        its tsConfig option; eslint-import-resolver-typescript reads them
-       from the project tsconfigs. No @data yet — src/data/ is reshaped
-       in Phase 3. src/types is "~types" NOT "@types": TypeScript
+       from the project tsconfigs. @data landed with Phase 3 (src/data/
+       is the L1 storage layer carved there, starting with the
+       write-gate). src/types is "~types" NOT "@types": TypeScript
        hard-rejects any import specifier starting with "@types/" (error
        TS6137 — that prefix is reserved for declaration packages), so the
        one root that cannot follow the @ convention uses the common
@@ -32,6 +33,7 @@
     "paths": {
       "@app/*": ["./src/app/*"],
       "@components/*": ["./src/components/*"],
+      "@data/*": ["./src/data/*"],
       "@db/*": ["./src/db/*"],
       "@hooks/*": ["./src/hooks/*"],
       "@lib/*": ["./src/lib/*"],

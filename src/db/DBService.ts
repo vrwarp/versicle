@@ -16,7 +16,7 @@ import { DatabaseError, StorageFullError } from '~types/errors';
 import type { BookExtractionData } from '@lib/ingestion';
 import { createLogger } from '@lib/logger';
 import type { TTSQueueItem } from '@lib/tts/AudioPlayerService';
-import { runExclusiveIdbWrite } from '@lib/idb-write-lock';
+import { runExclusiveIdbWrite } from '@data/write-gate';
 
 const logger = createLogger('DBService');
 
@@ -473,9 +473,9 @@ class DBService {
       const snapshot = { ...session };
       try {
         const db = await this.getDB();
-        // Serialised through the shared IDB write lock so this cache_session_state readwrite
+        // Serialised through the shared IDB write gate so this cache_session_state readwrite
         // transaction never overlaps a Yjs `updates` write — concurrent readwrite txns hang
-        // WebKit (see src/lib/idb-write-lock.ts).
+        // WebKit (see src/data/write-gate.ts).
         await runExclusiveIdbWrite(async () => {
           const tx = db.transaction('cache_session_state', 'readwrite');
           // Single synchronous put, no await before it — the WebKit-hang-safe shape.

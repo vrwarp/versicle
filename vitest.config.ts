@@ -18,6 +18,7 @@ export default defineConfig({
     alias: {
       '@app': srcAlias('app'),
       '@components': srcAlias('components'),
+      '@data': srcAlias('data'),
       '@db': srcAlias('db'),
       '@hooks': srcAlias('hooks'),
       '@lib': srcAlias('lib'),

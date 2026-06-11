@@ -17,6 +17,7 @@ const srcAlias = (dir: string) => fileURLToPath(new URL(`./src/${dir}`, import.m
 const aliases = {
   '@app': srcAlias('app'),
   '@components': srcAlias('components'),
+  '@data': srcAlias('data'),
   '@db': srcAlias('db'),
   '@hooks': srcAlias('hooks'),
   '@lib': srcAlias('lib'),
