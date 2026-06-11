@@ -101,3 +101,12 @@ branch bump.
   E.1–E.4 in `test/contract/hydration-api.test.ts` (incl. the end-to-end
   scopedDiff tripwire through `flush()`); scope cases in
   `test/contract/scope.test.ts`.
+- **`atomicKeys` status note** (design correction ▲3): the option is dead
+  code under `disableYText: true` (the app's global configuration since v4)
+  but stays in the package — the design's options surface lists it as
+  "existing, unchanged semantics", and it is still live for
+  `disableYText: false` consumers. The app's vestigial
+  `atomicKeys: ['__schemaVersion']` is deleted with `defineSyncedStore`
+  (P2-6, app-side). `test/contract/atomic-keys-dead-code.test.ts` pins that
+  the deletion is a no-behavior-change: byte-identical doc encodings with
+  and without the option under `disableYText: true`.
