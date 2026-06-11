@@ -3,6 +3,16 @@ export function fetchUpdates(idbPersistence: IndexeddbPersistence, beforeApplyUp
 export function storeState(idbPersistence: IndexeddbPersistence, forceStore?: boolean): Promise<void | undefined>;
 export function clearDocument(name: string): Promise<any>;
 /**
+ * Write `update` as the COMPLETE content of database `name` (the fork's own
+ * store layout): open/create → clear `updates` → add the single snapshot
+ * row → await the transaction commit → close. Resolves only after the
+ * commit. PRECONDITION: no live IndexeddbPersistence is bound to `name`.
+ * (Versicle fork surgery 2 — see PROVENANCE.md.)
+ */
+export function writeSnapshot(name: string, update: Uint8Array, opts?: {
+    transactionRunner?: (<T>(work: () => Promise<T>) => Promise<T>) | undefined;
+} | undefined): Promise<void>;
+/**
  * @extends Observable<string>
  */
 export class IndexeddbPersistence extends Observable<string> {
@@ -71,6 +81,14 @@ export class IndexeddbPersistence extends Observable<string> {
     _visibilityListener: (() => void) | undefined;
     _scheduleFlush(): void;
     _flush(): void;
+    /**
+     * Force-drain the pending update queue NOW, bypassing the
+     * `writeDebounceMs` timer; resolves once every queued update (including
+     * ones arriving mid-flush) is handed to a COMMITTED transaction.
+     * Resolves immediately when idle. (Versicle fork surgery 1 — see
+     * PROVENANCE.md.)
+     */
+    flush(): Promise<void>;
     /**
      * Destroys this instance and removes all data from indexeddb.
      *

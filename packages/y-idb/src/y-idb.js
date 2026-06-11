@@ -110,6 +110,62 @@ export const storeState = (idbPersistence, forceStore = true) =>
 export const clearDocument = name => idb.deleteDB(name)
 
 /**
+ * Write `update` as the COMPLETE content of database `name` using this
+ * module's own store layout: open/create the database → clear `updates` →
+ * add the single snapshot row → await the transaction commit → close.
+ * (Versicle fork surgery 2, PROVENANCE.md: the snapshot-write primitive
+ * consumers used to re-implement raw — layout knowledge lives here only.)
+ *
+ * Resolves only after the transaction has COMMITTED, so a page reload
+ * immediately afterwards cannot lose the snapshot. The optional
+ * `transactionRunner` wraps the whole open→commit→close unit (callers pass
+ * their cross-context exclusive write gate).
+ *
+ * PRECONDITION: no live IndexeddbPersistence is bound to `name` (destroy it
+ * first) — a concurrent binding could interleave its own update rows.
+ *
+ * @param {string} name
+ * @param {Uint8Array} update
+ * @param {object} [opts]
+ * @param {<T>(work: () => Promise<T>) => Promise<T>} [opts.transactionRunner]
+ * @return {Promise<void>}
+ */
+export const writeSnapshot = (name, update, { transactionRunner } = {}) => {
+  const work = () => idb.openDB(name, db =>
+    idb.createStores(db, [
+      ['updates', { autoIncrement: true }],
+      ['custom']
+    ])
+  ).then(db => new Promise((resolve, reject) => {
+    /**
+     * @type {IDBTransaction}
+     */
+    let tx
+    try {
+      tx = db.transaction([updatesStoreName], 'readwrite')
+    } catch (e) {
+      db.close()
+      reject(e)
+      return
+    }
+    // Raw requests on purpose (no promise wrappers): request failures
+    // surface through tx.onerror below instead of dangling rejections.
+    const store = tx.objectStore(updatesStoreName)
+    store.clear()
+    store.add(update)
+    tx.oncomplete = () => {
+      db.close()
+      resolve(undefined)
+    }
+    tx.onerror = tx.onabort = () => {
+      db.close()
+      reject(tx.error || new Error('writeSnapshot transaction failed'))
+    }
+  }))
+  return transactionRunner ? transactionRunner(work) : work()
+}
+
+/**
  * @extends Observable<string>
  */
 export class IndexeddbPersistence extends Observable {
@@ -174,13 +230,29 @@ export class IndexeddbPersistence extends Observable {
           return idb.addAutoKey(updatesStore, initUpdate)
         }
       }
-      const afterApplyUpdatesCallback = () => {
-        if (this._destroyed) return this
-        this.synced = true
-        this.emit('synced', [this])
-      }
-      fetchUpdates(this, beforeApplyUpdatesCallback, afterApplyUpdatesCallback).then(() => {
-        this._scheduleFlush()
+      // 'synced' durability (Versicle fork surgery 3, PROVENANCE.md): the
+      // emit is deferred to the hydration transaction's `complete` event —
+      // that transaction carries the initial-state write above, so
+      // `whenSynced` now guarantees the write COMMITTED, not merely issued.
+      // Stored updates are still applied to the doc strictly before the
+      // emit (contract Y.7/Y.10b). The fetchUpdates promise chain settles
+      // inside the success callback of the transaction's last request,
+      // strictly before the `complete` event task dispatches, so attaching
+      // the handler here cannot miss it. On abort/error the emit still
+      // happens (legacy behavior — consumers must not wedge; the data has
+      // been applied to the in-memory doc either way).
+      fetchUpdates(this, beforeApplyUpdatesCallback).then(updatesStore => {
+        if (this._destroyed || !updatesStore) return
+        const emitSynced = () => {
+          if (this._destroyed) return
+          this.synced = true
+          this.emit('synced', [this])
+          this._scheduleFlush()
+        }
+        const tx = updatesStore.transaction
+        tx.oncomplete = emitSynced
+        tx.onerror = emitSynced
+        tx.onabort = emitSynced
       })
     })
     /**
@@ -329,6 +401,47 @@ export class IndexeddbPersistence extends Observable {
       tx.onerror = onErrorOrAbort
       tx.onabort = onErrorOrAbort
     }))
+  }
+
+  /**
+   * Force-drain the pending update queue NOW, bypassing the
+   * `writeDebounceMs` timer (Versicle fork surgery 1, PROVENANCE.md):
+   * runs `_flush()` immediately, awaits the in-flight transaction commit
+   * (the existing `_flushPromise` resolves in the transaction's
+   * `oncomplete`/`onerror`), and loops until `_pendingUpdates` is empty
+   * with no flush in flight — updates that arrive mid-flush are drained
+   * too. Resolves immediately when idle. While the error-retry path is
+   * active (`_retryCount > 0`), waits for the scheduled backoff retry
+   * instead of hot-spinning a failing transaction; on persistent failure
+   * this keeps retrying like the internal machinery does (callers that
+   * need a bound race it against a deadline).
+   *
+   * A debounce timer that is already scheduled is left to fire: its
+   * `_flush()` no-ops once the queue has been drained here.
+   *
+   * @return {Promise<void>}
+   */
+  async flush () {
+    await this._db
+    for (;;) {
+      if (this._flushPromise) {
+        await this._flushPromise
+        continue
+      }
+      if (this._destroyed || this._pendingUpdates.length === 0) return
+      if (this._retryCount > 0) {
+        // A backoff retry is pending (see onErrorOrAbort) — yield until its
+        // _scheduleFlush fires rather than re-issuing the transaction hot.
+        await new Promise(resolve => setTimeout(resolve, 50))
+        continue
+      }
+      this._flush()
+      if (!this._flushPromise) {
+        // _flush declined to run (connection mid-open or a races with the
+        // debounce timer's own run) — yield and re-check.
+        await new Promise(resolve => setTimeout(resolve, 10))
+      }
+    }
   }
 
   destroy () {
