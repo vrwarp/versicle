@@ -1,0 +1,81 @@
+{
+  "$comment": "Captured Y.Doc fixtures (phase2-fork-surgery.md §4). Files are reviewed artifacts, never regenerated in CI; src/store/__tests__/crdt-contract/fixtures-manifest.test.ts pins sha256 agreement. See README.md.",
+  "fixtures": {
+    "v1": {
+      "era": 1,
+      "file": "v1.update.bin",
+      "sha256": "5b9e075521830cbb17521d85f0a27a4b48993011efb50de7e6868959e6ccdc41",
+      "method": "writer-ytext-fallback",
+      "fidelityNote": "FALLBACK fidelity (§4.2): Y.Text-encoded with the CURRENT yjs library, not captured through a historical-era worktree. Y.Text items are real; era-specific struct layout is approximated. See README.md for the worktree procedure.",
+      "generator": "scripts/capture-ydoc-fixture.ts",
+      "generatorSha": "ea5e15842766732da094b00816e576e645d5d4fa",
+      "capturedAt": "2026-06-11T03:20:32.703Z",
+      "contentChecklist": [
+        "library.__schemaVersion === 1",
+        "library.books: 2 books (one CJK title)",
+        "progress: 2 devices, one INVALID session (startTime: \"corrupt\")",
+        "annotations: 2 annotations",
+        "preferences/<dev-a|dev-b>: scalar prefs WITHOUT fontProfiles",
+        "reading-list.entries: 1; vocabulary.knownCharacters: 3; lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
+        "strings are Y.Text (pre-v4 era)"
+      ]
+    },
+    "v2": {
+      "era": 2,
+      "file": "v2.update.bin",
+      "sha256": "1030866c0047da92f3f72e43a44228f33614197f8df3c6e4b8538866c43700ee",
+      "method": "writer-ytext-fallback",
+      "fidelityNote": "FALLBACK fidelity (§4.2): Y.Text-encoded with the CURRENT yjs library, not captured through a historical-era worktree. Y.Text items are real; era-specific struct layout is approximated. See README.md for the worktree procedure.",
+      "generator": "scripts/capture-ydoc-fixture.ts",
+      "generatorSha": "ea5e15842766732da094b00816e576e645d5d4fa",
+      "capturedAt": "2026-06-11T03:20:32.749Z",
+      "contentChecklist": [
+        "library.__schemaVersion === 2",
+        "library.books: 2 books (one CJK title)",
+        "progress: 2 devices, sessions valid",
+        "annotations: 2 annotations",
+        "preferences/<dev-a|dev-b>: scalar prefs WITHOUT fontProfiles",
+        "reading-list.entries: 1; vocabulary.knownCharacters: 3; lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
+        "strings are Y.Text (pre-v4 era)"
+      ]
+    },
+    "v4": {
+      "era": 4,
+      "file": "v4.update.bin",
+      "sha256": "18398dc6648ccb74c3562604830e591d2018cc79126463ad90812d499069f9e6",
+      "method": "writer-current-mapping",
+      "fidelityNote": "Full fidelity: plain-JSON-into-Y-types via the vendored middleware mapping (v4+ encoding is exactly this).",
+      "generator": "scripts/capture-ydoc-fixture.ts",
+      "generatorSha": "ea5e15842766732da094b00816e576e645d5d4fa",
+      "capturedAt": "2026-06-11T03:20:32.794Z",
+      "contentChecklist": [
+        "library.__schemaVersion === 4",
+        "library.books: 2 books (one CJK title)",
+        "progress: 2 devices, sessions valid",
+        "annotations: 2 annotations + stale top-level popover key",
+        "preferences/<dev-a|dev-b>: scalar prefs WITHOUT fontProfiles",
+        "reading-list.entries: 1; vocabulary.knownCharacters: 3; lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
+        "strings are plain (disableYText era)"
+      ]
+    },
+    "v5": {
+      "era": 5,
+      "file": "v5.update.bin",
+      "sha256": "b8d6683d9453aed05ddbef15c281a8935fb8b3fa6f501f49b493368ff7322445",
+      "method": "writer-current-mapping",
+      "fidelityNote": "Full fidelity: plain-JSON-into-Y-types via the vendored middleware mapping (v4+ encoding is exactly this).",
+      "generator": "scripts/capture-ydoc-fixture.ts",
+      "generatorSha": "ea5e15842766732da094b00816e576e645d5d4fa",
+      "capturedAt": "2026-06-11T03:20:32.834Z",
+      "contentChecklist": [
+        "library.__schemaVersion === 5",
+        "library.books: 2 books (one CJK title)",
+        "progress: 2 devices, sessions valid",
+        "annotations: 2 annotations + stale top-level popover key",
+        "preferences/<dev-a|dev-b>: scalar prefs + fontProfiles",
+        "reading-list.entries: 1; vocabulary.knownCharacters: 3; lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
+        "strings are plain (disableYText era)"
+      ]
+    }
+  }
+}
