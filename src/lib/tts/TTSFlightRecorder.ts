@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid';
-import { getDB } from '@db/db';
+import { diagnostics } from '@data/repos/diagnostics';
 import type { 
     FlightEventSource, 
     FlightEvent, 
@@ -8,7 +8,6 @@ import type {
 
 const MAX_EVENTS = 2000;
 const MAX_STRING_LEN = 80;
-const MAX_SNAPSHOTS = 10;
 
 /**
  * Lightweight ring-buffer based event tracer for the TTS subsystem.
@@ -162,12 +161,7 @@ class TTSFlightRecorder {
     /** List all saved snapshots (metadata only). */
     async listSnapshots(): Promise<Omit<FlightSnapshot, 'eventsJSON'>[]> {
         try {
-            const db = await getDB();
-            const all = await db.getAll('flight_snapshots');
-            return all
-                .sort((a, b) => b.createdAt - a.createdAt)
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                .map(({ eventsJSON: _unused, ...meta }: FlightSnapshot) => meta);
+            return await diagnostics.listSnapshots();
         } catch (e) {
             console.error('[FlightRecorder] Failed to list snapshots', e);
             return [];
@@ -177,8 +171,7 @@ class TTSFlightRecorder {
     /** Load a full snapshot by ID. */
     async getSnapshot(id: string): Promise<FlightSnapshot | null> {
         try {
-            const db = await getDB();
-            return await db.get('flight_snapshots', id) ?? null;
+            return await diagnostics.getSnapshot(id);
         } catch {
             return null;
         }
@@ -203,37 +196,23 @@ class TTSFlightRecorder {
     /** Delete a snapshot by ID. */
     async deleteSnapshot(id: string): Promise<void> {
         try {
-            const db = await getDB();
-            await db.delete('flight_snapshots', id);
+            await diagnostics.deleteSnapshot(id);
         } catch { /* best effort */ }
     }
 
     /** Delete all saved snapshots. */
     async clearSnapshots(): Promise<void> {
         try {
-            const db = await getDB();
-            await db.clear('flight_snapshots');
+            await diagnostics.clearSnapshots();
         } catch { /* best effort */ }
     }
 
     // ─── Internal ───
 
     private async saveSnapshot(snap: FlightSnapshot) {
-        const db = await getDB();
-        const tx = db.transaction('flight_snapshots', 'readwrite');
-        const store = tx.objectStore('flight_snapshots');
-
-        const all = await store.getAll() as FlightSnapshot[];
-        if (all.length >= MAX_SNAPSHOTS) {
-            all.sort((a: FlightSnapshot, b: FlightSnapshot) => a.createdAt - b.createdAt);
-            const excess = all.length - MAX_SNAPSHOTS + 1;
-            for (let i = 0; i < excess; i++) {
-                await store.delete(all[i].id);
-            }
-        }
-
-        await store.put(snap);
-        await tx.done;
+        // Persistence (incl. the MAX_SNAPSHOTS prune in one gated txn) lives
+        // in the diagnostics repo (P3-9).
+        await diagnostics.saveSnapshot(snap);
     }
 }
 
