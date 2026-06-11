@@ -13,6 +13,8 @@ boundaries), and govern the whole program with the *contract-first* registry (ev
 versioned, runtime-validated, and pinned by a contract test suite).
 
 > **Phase 0 status (2026-06-10): DONE** — all eleven hotfix PRs and the trustworthy-harness work (single vitest config, typechecked tests, CI gate, depcruise + coverage ratchets, worker-chunk check, emulator suites, typed harness + test API, a11y baselines, license gate, `TESTING.md`/`AGENTS.md` rewrite, i18n ADR `docs/adr/0001-i18n-strategy.md`) are landed on this branch.
+>
+> **Phase 1 status (2026-06-10): DONE** — verified dead-code deletion (~2,350 LOC + assets; 4 of the proposal's items vetoed by the audit in `prep/phase1-deletions.md`), `types/db.ts` dissolved into six acyclic domain modules (shim deadline P9), C10 `AppError` taxonomy, `src/app/` composition layer (engine host-adapters, repositories), C11 bootstrap sequencer with entry-gate boot tests (`App.tsx` 375→90 lines; Yjs persistence out of module scope), path aliases codemodded repo-wide (1,069 imports; lint-enforced). Ratchets: lib→store 54→36, db→store 4→1 (named residual: `db/wipe.ts`, P3), types-imports-nothing 0, full-graph cycles 117→66. Runtime cycles (33, honest measure) are deliberately untouched — pure motion preserves cycles; they fall with the P2/P4/P5 stranglers.
 
 ## Artifact index
 
