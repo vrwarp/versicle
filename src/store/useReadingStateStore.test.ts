@@ -148,12 +148,12 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             vi.useRealTimers();
         });
 
-        it('should prune legacy history sessions via centralized runMigrations', async () => {
+        it('regression: prunes legacy history sessions via the CRDT migration coordinator', async () => {
             const bookId = 'book-legacy-prune';
             const now = Date.now();
 
-            // Dynamically import runMigrations (it uses lazy imports internally)
-            const { runMigrations } = await import('./yjs-provider');
+            const { runCrdtMigrationsOnDoc } = await import('@app/migrations');
+            const { getYDoc, CURRENT_SCHEMA_VERSION } = await import('./yjs-provider');
             const { useBookStore } = await import('./useBookStore');
 
             // Set __schemaVersion to 1 to simulate pre-migration state
@@ -191,11 +191,22 @@ describe('useReadingStateStore - Per-Device Progress', () => {
                 }
             });
 
-            // Trigger centralized migration
-            runMigrations();
+            // Drain the middleware's outbound microtask batch so the Y.Doc
+            // holds the injected state (the coordinator reads the DOC).
+            await new Promise(resolve => setTimeout(resolve, 0));
 
-            // Wait for lazy imports to resolve
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Run the coordinator on the singleton doc with a stub checkpoint
+            // (the engine never reaches IndexedDB in this unit test).
+            const result = await runCrdtMigrationsOnDoc(getYDoc(), {
+                createCheckpoint: () => Promise.resolve(101),
+            });
+            expect(result.status).toBe('migrated');
+            expect(result.from).toBe(1);
+            expect(result.to).toBe(CURRENT_SCHEMA_VERSION);
+            expect(result.checkpointId).toBe(101);
+
+            // The migration transactions reach the stores as ordinary inbound.
+            await new Promise(resolve => setTimeout(resolve, 0));
 
             const state = useReadingStateStore.getState();
             const deviceProgress = state.progress[bookId]['test-device-id'];
@@ -208,9 +219,11 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             expect(remainingSession.cfiRange).toBe('epubcfi(/6/4)');
             expect(remainingSession.startTime).toBe(now - 10000);
 
-            // Schema version should be bumped to 5 on useBookStore (migrations run v1→v2→v4→v5)
+            // Atomic dual bump: store state, library map, and meta map agree.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            expect((useBookStore.getState() as any).__schemaVersion).toBe(5);
+            expect((useBookStore.getState() as any).__schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+            expect(getYDoc().getMap('library').get('__schemaVersion')).toBe(CURRENT_SCHEMA_VERSION);
+            expect(getYDoc().getMap('meta').get('schemaVersion')).toBe(CURRENT_SCHEMA_VERSION);
         });
     });
 

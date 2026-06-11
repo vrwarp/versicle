@@ -11,6 +11,7 @@ import { migrationInterceptorTask } from './migrationInterceptor';
 import { openDatabaseTask } from './openDatabase';
 import { yjsPersistenceTask } from './yjsPersistence';
 import { whenHydratedTask, hydrateStaticMetadataTask } from './whenHydrated';
+import { crdtMigrationsTask } from './crdtMigrations';
 import { syncInitTask } from './syncInit';
 import { ttsInitializeTask, deviceRegistrationTask } from './deviceRegistration';
 import { deviceHeartbeatTask, driveAutoScanTask } from './backgroundTasks';
@@ -27,9 +28,7 @@ export function registerAppBootTasks(): void {
   registerBootTask('startYjsPersistence', yjsPersistenceTask);
   registerBootTask('whenHydrated', whenHydratedTask);
   registerBootTask('whenHydrated', hydrateStaticMetadataTask);
-  // 'migrations' phase: intentionally empty until the P2 migration
-  // coordinator lands (Yjs schema migrations still run via the store
-  // middleware's onLoaded hook — see store/yjs-provider.ts runMigrations).
+  registerBootTask('migrations', crdtMigrationsTask);
   registerBootTask('syncInit', syncInitTask);
   registerBootTask('deviceRegistration', ttsInitializeTask);
   registerBootTask('deviceRegistration', deviceRegistrationTask);

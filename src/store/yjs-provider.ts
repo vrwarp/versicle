@@ -4,14 +4,18 @@ import { isStorageSupported } from '@lib/sync/support';
 import { runExclusiveIdbWrite } from '@lib/idb-write-lock';
 import { createLogger } from '@lib/logger';
 import type { YjsOptions } from 'zustand-middleware-yjs';
-import type { UserProgress } from '~types/db';
 
 const logger = createLogger('YjsProvider');
 
 // ─── Schema Version ─────────────────────────────────────────────────────────
 // Increment this when introducing breaking changes to Yjs-synced state.
-// See: Operational Runbook for Breaking Changes in the TDD.
-export const CURRENT_SCHEMA_VERSION = 5;
+// A bump REQUIRES a matching CrdtMigration step in src/app/migrations.ts
+// (the coordinator throws on a version gap) and fixture-matrix coverage in
+// src/store/__tests__/crdt-contract/migrations.test.ts.
+// v6: popover residual key deleted, `meta` map dual-write (N+1 staged),
+// preferences folded to one keyed map (copy-without-clear) — see
+// plan/overhaul/prep/phase2-fork-surgery.md §5.3.
+export const CURRENT_SCHEMA_VERSION = 6;
 
 // Singleton Y.Doc - Source of Truth for User Data. Constructed lazily on
 // first access instead of at module scope: importing this module (e.g. for
@@ -95,127 +99,20 @@ export function handleObsoleteClient(incomingVersion: number): void {
     }).catch(err => logger.error('Failed to import useUIStore:', err));
 }
 
-// ─── Deterministic Migration Runner ─────────────────────────────────────────
-/**
- * Executes strictly deterministic Zustand state transformations.
- * Runs sequentially through each version step. Because transforms are
- * identical across all clients, Yjs LWW merges concurrent upgrades safely.
- *
- * Called via `onLoaded` after the Y.Doc is hydrated from IndexedDB/cloud.
- */
-function runMigrationsImpl(): void {
-    // Lazy import to avoid circular dependency at module init time
-    import('./useBookStore').then(({ useBookStore }) => {
-        if (!useBookStore) return; // Guard for test environments
-
-        const bookState = useBookStore.getState();
-        let currentVersion: number =
-            (bookState as unknown as Record<string, unknown>).__schemaVersion as number || 1;
-
-        if (currentVersion >= CURRENT_SCHEMA_VERSION) return;
-
-        logger.info(`Running migrations from v${currentVersion} → v${CURRENT_SCHEMA_VERSION}`);
-
-        // ── Migration v1 → v2: Prune legacy reading history ─────────────
-        if (currentVersion === 1) {
-            import('./useReadingStateStore').then(({ useReadingStateStore }) => {
-                if (!useReadingStateStore) return; // Guard for test environments
-
-                const rsState = useReadingStateStore.getState();
-                const progress = rsState.progress;
-                const nextProgress = { ...progress };
-                let migrated = false;
-
-                for (const bookId in nextProgress) {
-                    const devices = nextProgress[bookId];
-                    for (const deviceId in devices) {
-                        const userProgress: UserProgress = devices[deviceId];
-                        if (userProgress.readingSessions) {
-                            const validSessions = userProgress.readingSessions.filter(
-                                s => typeof s.startTime === 'number' && typeof s.endTime === 'number'
-                            );
-
-                            if (validSessions.length !== userProgress.readingSessions.length) {
-                                migrated = true;
-                                nextProgress[bookId] = {
-                                    ...nextProgress[bookId],
-                                    [deviceId]: {
-                                        ...userProgress,
-                                        readingSessions: validSessions
-                                    }
-                                };
-                            }
-                        }
-                    }
-                }
-
-                if (migrated) {
-                    useReadingStateStore.setState({ progress: nextProgress });
-                }
-
-                // Bump version on the primary store
-                useBookStore.setState({ __schemaVersion: 2 } as unknown as Record<string, unknown>);
-                logger.info('Migration v1 → v2 complete (legacy history pruned).');
-            }).catch(() => {
-                // Silently ignore if useReadingStateStore can't be imported (test env)
-            });
-
-            currentVersion = 2;
-        }
-
-        if (currentVersion === 2 || currentVersion === 3) {
-            useBookStore.setState({ __schemaVersion: 4 } as unknown as Record<string, unknown>);
-            logger.info('Migration v2 → v4 complete (major version bump).');
-            currentVersion = 4;
-        }
-
-        if (currentVersion === 4) {
-            import('./usePreferencesStore').then(({ usePreferencesStore }) => {
-                if (!usePreferencesStore) return;
-                const state = usePreferencesStore.getState();
-                if (!state.fontProfiles) {
-                    usePreferencesStore.setState({
-                        fontProfiles: {
-                            en: { fontSize: 100, lineHeight: 1.5 },
-                            zh: { fontSize: 120, lineHeight: 1.8 }
-                        }
-                    });
-                    logger.info('Migration v4 → v5 complete (fontProfiles initialized).');
-                }
-                useBookStore.setState({ __schemaVersion: 5 } as unknown as Record<string, unknown>);
-            }).catch(() => {});
-            currentVersion = 5;
-        }
-
-        // Future migrations added here sequentially:
-        // if (currentVersion === 5) { ... currentVersion = 6; }
-    }).catch(() => {
-        // Silently ignore if useBookStore can't be imported (test env)
-    });
-}
-
-/**
- * Defers the execution of migrations to ensure zustand-middleware-yjs has fully processed
- * the inbound snapshot into the local state via its microtask queue. Otherwise, migration logic
- * reads and modifies stale state, which can lead to overwriting the incoming remote map.
- *
- * We use nested queueMicrotask instead of setTimeout to ensure migrations run immediately
- * after the state update microtask but before any macrotasks (like React renders) can interleave.
- */
-export function runMigrations(): void {
-    queueMicrotask(() => queueMicrotask(runMigrationsImpl));
-}
-
 // ─── Shared Middleware Options ───────────────────────────────────────────────
 /**
  * Returns the standard YjsOptions to pass to every yjs() middleware call.
  * Centralises version guarding so every store consistently enforces it.
+ *
+ * Schema migrations no longer hang off `onLoaded` (the legacy runner fired
+ * up to 9× per boot and raced its own version bumps): the migration
+ * coordinator (src/app/migrations.ts) runs ONCE from the bootstrap
+ * 'migrations' phase and transforms the Y.Doc directly.
  */
 export function getYjsOptions(extra?: Partial<YjsOptions>): YjsOptions {
     return {
         schemaVersion: CURRENT_SCHEMA_VERSION,
         onObsolete: handleObsoleteClient,
-        onLoaded: runMigrations,
         disableYText: true,
         ...extra
     };

@@ -2,8 +2,10 @@ import { RouterProvider } from 'react-router-dom';
 import { router } from './app/routes';
 import { useBootSequence } from './app/boot/useBootSequence';
 import { useServiceWorkerGate } from './app/boot/useServiceWorkerGate';
+import { MigrationError } from './app/migrations';
 import { SafeModeView } from './components/SafeModeView';
 import { ObsoleteLockView } from './components/ObsoleteLockView';
+import { CriticalMigrationFailureView } from './components/sync/CriticalMigrationFailureView';
 import { WorkspaceMigrationConfirmModal } from './components/sync/WorkspaceMigrationConfirmModal';
 import { wipeAllData } from './db/wipe';
 import { createLogger } from './lib/logger';
@@ -36,6 +38,12 @@ function App() {
   };
 
   if (boot.status === 'error') {
+    // A failed CRDT migration carries its pre-migration checkpoint id; the
+    // failure view's restore button drives the existing RESTORING_BACKUP
+    // checkpoint-restore boot flow (phase2-fork-surgery.md §5.2).
+    if (boot.error instanceof MigrationError) {
+      return <CriticalMigrationFailureView backupId={boot.error.checkpointId} />;
+    }
     return <SafeModeView error={boot.error} onReset={handleReset} onRetry={() => window.location.reload()} />;
   }
 
