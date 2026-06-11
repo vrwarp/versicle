@@ -67,6 +67,7 @@ export const APP_ERROR_CODES = [
   // SYNC_* — Firestore/Yjs sync.
   'SYNC_UNKNOWN',
   'SYNC_WORKSPACE_DELETED',
+  'SYNC_MIGRATION_FAILED',
   // TTS_* — speech engine and providers.
   'TTS_UNKNOWN',
   // GENAI_* — Gemini structured-output boundary.

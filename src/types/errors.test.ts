@@ -29,6 +29,7 @@ describe('AppErrorCode union', () => {
       DB_QUOTA_EXCEEDED: 'DB',
       SYNC_UNKNOWN: 'SYNC',
       SYNC_WORKSPACE_DELETED: 'SYNC',
+      SYNC_MIGRATION_FAILED: 'SYNC',
       TTS_UNKNOWN: 'TTS',
       GENAI_UNKNOWN: 'GENAI',
       DRIVE_UNKNOWN: 'DRIVE',
