@@ -48,6 +48,13 @@ branch bump.
 
 ## Phase 2 modification log (append entries here; design doc §6.3)
 
-- (none yet — the contract suite in `test/contract/` pins the vendored
-  behavior as-is and is the acceptance gate for every subsequent surgery
-  commit)
+- **Surgery 1 — `syncedKeys` whitelist** (phase2-fork-surgery.md §2.1):
+  additive `YjsOptions.syncedKeys` filtering replication in BOTH directions
+  at the top level (`__schemaVersion` implicitly synced when `schemaVersion`
+  is set; resurrection guard for keys dropped from the whitelist; loud
+  dev-mode misconfiguration errors at store creation). Default (`undefined`)
+  is byte-for-byte legacy behavior. Internals: `patchSharedType`'s change
+  application extracted to `applyChangesToSharedType` (verbatim, incl. the
+  `previousState` delete-protection); inbound application factored into
+  `computeInboundState` (legacy path = `patchState` exactly). Contract cases
+  B.1–B.6 in `test/contract/synced-keys.test.ts`.

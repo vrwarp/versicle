@@ -3,7 +3,8 @@ import {
   StoreMutatorIdentifier,
 } from "zustand";
 import * as Y from "yjs";
-import { patchSharedType, patchState, patchStore, } from "./patching";
+import { computeInboundState, patchSharedType, patchStore, } from "./patching";
+import { isDevEnvironment, } from "./env";
 
 type Yjs = <
   T,
@@ -67,6 +68,31 @@ export interface YjsOptions {
    * @param incomingVersion The schema version found in the Yjs document.
    */
   onObsolete?: (incomingVersion: number) => void;
+
+  /**
+   * Top-level keys replicated to the Y.Map (phase2-fork-surgery.md §2.1).
+   * `undefined` = legacy behavior: every non-function top-level key syncs.
+   *
+   * When provided, the replication universe for this store is exactly this
+   * key set, BOTH directions (top level only; nesting below a synced key
+   * replicates fully):
+   *
+   * - Outbound: a non-listed key can never be inserted, updated, or deleted
+   *   in the Y.Map by this client.
+   * - Inbound: a foreign map key is never inserted into store state, and a
+   *   non-listed local key is never touched by remote updates.
+   * - Resurrection guard: a key removed from `syncedKeys` whose value still
+   *   exists in old docs is ignored both directions — only a migration can
+   *   remove it from the doc, and nothing can write it back.
+   *
+   * `__schemaVersion` is implicitly a synced key whenever `schemaVersion` is
+   * set (the poison-pill read and the migration dual-write depend on it);
+   * stores need not list it.
+   *
+   * Dev-mode misconfiguration is a loud error at store creation: every entry
+   * must exist in the initial state and must not be a function.
+   */
+  syncedKeys?: readonly string[];
 }
 
 type YjsImpl = <T>(
@@ -108,6 +134,20 @@ const yjs: YjsImpl = <S>(
   // The root Y.Map that the store is written and read from.
   const map: Y.Map<any> = doc.getMap(name);
 
+  /*
+   * The effective replication whitelist (undefined = legacy "all non-function
+   * keys"). `__schemaVersion` is implicitly synced whenever the poison pill
+   * is configured — the per-map version check and the migration dual-write
+   * depend on it reaching both the doc and store state.
+   */
+  const syncedKeySet: ReadonlySet<string> | undefined = options?.syncedKeys
+    ? new Set<string>(
+      options.schemaVersion !== undefined
+        ? [ ...options.syncedKeys, "__schemaVersion" ]
+        : options.syncedKeys
+    )
+    : undefined;
+
   // Permanent kill switch: once set, no further inbound or outbound sync occurs.
   let isObsolete = false;
 
@@ -140,7 +180,13 @@ const yjs: YjsImpl = <S>(
       batchPreviousState = undefined;
       // Read the FINAL state after all synchronous mutations this tick.
       doc.transact(() =>
-        patchSharedType(map, api.getState(), { ...options, previousState }), api);
+        patchSharedType(map, api.getState(), {
+          atomicKeys: options?.atomicKeys,
+          disableYText: options?.disableYText,
+          yTextKeys: options?.yTextKeys,
+          previousState,
+          syncedKeys: syncedKeySet,
+        }), api);
     };
 
     const scheduleOutbound = (capturedPreviousState: S) => {
@@ -172,8 +218,39 @@ const yjs: YjsImpl = <S>(
       api
     );
 
+    /*
+     * Loud dev-mode misconfiguration check (phase2-fork-surgery.md §2.1): a
+     * syncedKeys entry that is absent from the initial state would silently
+     * never sync (a typo), and a function entry could never sync (functions
+     * are excluded from replication by design).
+     */
+    if (options?.syncedKeys && isDevEnvironment()) {
+      const initialRecord = initialState as Record<string, unknown>;
+      options.syncedKeys.forEach((key) => {
+        if (!(key in initialRecord)) {
+          throw new Error(
+            `[zustand-middleware-yjs] syncedKeys entry "${key}" is not a key ` +
+            `of the initial state of store "${name}". Synced keys must exist ` +
+            `in the object returned by the state creator (likely a typo — ` +
+            `the key would otherwise silently never sync).`
+          );
+        }
+        if (initialRecord[key] instanceof Function) {
+          throw new Error(
+            `[zustand-middleware-yjs] syncedKeys entry "${key}" of store ` +
+            `"${name}" is a function. Functions are never replicated; remove ` +
+            `it from syncedKeys.`
+          );
+        }
+      });
+    }
+
     if (map.size > 0) {
-      initialState = patchState(initialState, map.toJSON());
+      initialState = computeInboundState(
+        initialState,
+        map.toJSON(),
+        { syncedKeys: syncedKeySet }
+      );
       api.setState(initialState, true as any);
     }
 
@@ -213,7 +290,8 @@ const yjs: YjsImpl = <S>(
           ...api,
           "setState": originalSetState,
         },
-        map.toJSON()
+        map.toJSON(),
+        { syncedKeys: syncedKeySet }
       );
     };
 

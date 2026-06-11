@@ -5,24 +5,64 @@ import { arrayToYArray, objectToYMap, stringToYText, } from "./mapping";
 import { StoreApi, } from "zustand/vanilla";
 
 /**
- * Diffs sharedType and newState to create a list of changes for transforming
- * the contents of sharedType into that of newState. For every nested, 'pending'
- * change detected, this function recurses, as a nested object or array is
- * represented as a Y.Map or Y.Array.
- *
- * @param sharedType The Yjs shared type to patch.
- * @param newState The new state to patch the shared type into.
+ * Options accepted by patchSharedType (and threaded through its recursion).
  */
-export const patchSharedType = (
-  sharedType: Y.Map<any> | Y.Array<any> | Y.Text,
+export interface SharedTypePatchOptions
+{
+  atomicKeys?: string[];
+  disableYText?: boolean;
+  yTextKeys?: string[];
+  previousState?: any;
 
+  /**
+   * Top-level replication whitelist (phase2-fork-surgery.md §2.1). Applied
+   * only at the ROOT diff: both the shared-type JSON and the new state are
+   * filtered to these keys before diffing, so a non-listed state key is never
+   * inserted into the Y.Map and a foreign map key is never updated or deleted
+   * by this client (the resurrection guard). NEVER threaded into recursion —
+   * nesting below a synced key replicates fully.
+   */
+  syncedKeys?: ReadonlySet<string>;
+}
+
+const isPlainRecord = (value: any): value is Record<string, any> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** Shallow-pick the listed keys (presence-preserving: `undefined` values survive). */
+const pickKeys = (
+  source: Record<string, any>,
+  keys: ReadonlySet<string>
+): Record<string, any> =>
+{
+  const picked: Record<string, any> = {};
+
+  keys.forEach((key) =>
+  {
+    if (key in source)
+      picked[key] = source[key];
+  });
+
+  return picked;
+};
+
+/**
+ * Applies an already-computed change list to a Yjs shared type. Extracted
+ * from patchSharedType so the scoped-diff path can reuse the exact same
+ * INSERT/UPDATE/DELETE/PENDING application semantics (incl. the verbatim
+ * `previousState` delete-protection and the Y.Text↔string mismatch repair).
+ *
+ * @param sharedType The Yjs shared type to apply the changes to.
+ * @param changes The change list (as produced by getChanges).
+ * @param newState The new state the changes were computed against.
+ * @param options Mapping options; `previousState` guards DELETEs.
+ */
+const applyChangesToSharedType = (
+  sharedType: Y.Map<any> | Y.Array<any> | Y.Text,
+  changes: Change[],
   newState: any,
-  options?: { atomicKeys?: string[], disableYText?: boolean, yTextKeys?: string[], previousState?: any }
+  options?: SharedTypePatchOptions
 ): void =>
 {
-  const sharedTypeJson = typeof sharedType.toJSON === "function" ? sharedType.toJSON() : sharedType.toString();
-  const changes = getChanges(sharedTypeJson, newState);
-
   changes.forEach(([ type, property, value ]) =>
   {
     switch (type)
@@ -158,7 +198,7 @@ export const patchSharedType = (
               patchSharedType(
                 existing,
                 newValue,
-                { ...options, previousState: childPreviousState }
+                { ...options, syncedKeys: undefined, previousState: childPreviousState }
               );
             }
           }
@@ -202,7 +242,7 @@ export const patchSharedType = (
               patchSharedType(
                 existing,
                 newValue,
-                { ...options, previousState: childPreviousState }
+                { ...options, syncedKeys: undefined, previousState: childPreviousState }
               );
             }
           }
@@ -214,6 +254,42 @@ export const patchSharedType = (
       break;
     }
   });
+};
+
+/**
+ * Diffs sharedType and newState to create a list of changes for transforming
+ * the contents of sharedType into that of newState. For every nested, 'pending'
+ * change detected, this function recurses, as a nested object or array is
+ * represented as a Y.Map or Y.Array.
+ *
+ * When `options.syncedKeys` is set (top-level Y.Map calls only), BOTH sides
+ * of the diff are first filtered to the whitelist, so non-listed keys are
+ * invisible in either direction (phase2-fork-surgery.md §2.1).
+ *
+ * @param sharedType The Yjs shared type to patch.
+ * @param newState The new state to patch the shared type into.
+ * @param options Mapping options, delete-protection state, and the whitelist.
+ */
+export const patchSharedType = (
+  sharedType: Y.Map<any> | Y.Array<any> | Y.Text,
+
+  newState: any,
+  options?: SharedTypePatchOptions
+): void =>
+{
+  const sharedTypeJson = typeof sharedType.toJSON === "function" ? sharedType.toJSON() : sharedType.toString();
+
+  const syncedKeys = options?.syncedKeys;
+  const applyWhitelist = syncedKeys !== undefined
+    && isPlainRecord(sharedTypeJson)
+    && isPlainRecord(newState);
+
+  const a = applyWhitelist ? pickKeys(sharedTypeJson, syncedKeys) : sharedTypeJson;
+  const b = applyWhitelist ? pickKeys(newState, syncedKeys) : newState;
+
+  const changes = getChanges(a, b);
+
+  applyChangesToSharedType(sharedType, changes, b, options);
 };
 
 /**
@@ -373,16 +449,83 @@ export const patchState = (oldState: any, newState: any): any =>
 
 
 /**
+ * Options for the inbound (Y.Map JSON → Zustand state) application path.
+ */
+export interface InboundStateOptions
+{
+  /**
+   * Top-level replication whitelist (phase2-fork-surgery.md §2.1). When set,
+   * only the listed keys are diffed (map subset vs state subset) and the
+   * patched subset is applied over the FULL state — a foreign map key is
+   * never inserted into store state, and a non-listed local key is never
+   * touched by remote updates.
+   */
+  syncedKeys?: ReadonlySet<string>;
+}
+
+/**
+ * Computes the next Zustand state for an inbound patch from map JSON.
+ *
+ * Without options this is exactly the legacy `patchState(currentState,
+ * newState)` (replace-with-delete hydration, finding D2 — pinned by contract
+ * case A.5). With `syncedKeys` the diff/application universe is restricted
+ * to the whitelist; deletes are still honored INSIDE the subset.
+ *
+ * @param currentState The current (already cloned) Zustand state.
+ * @param newState The Y.Map JSON to patch toward.
+ * @param options Inbound options (whitelist).
+ * @returns The next state object to set with replace=true.
+ */
+export const computeInboundState = (
+  currentState: any,
+  newState: any,
+  options?: InboundStateOptions
+): any =>
+{
+  const syncedKeys = options?.syncedKeys;
+
+  if (syncedKeys === undefined)
+    return patchState(currentState, newState);
+
+  // pickKeys is presence-preserving, but function-valued state keys are
+  // excluded from the replication universe entirely (functions are never
+  // synced; a function entry in syncedKeys is a dev-mode error upstream).
+  const oldSubset: Record<string, any> = {};
+  syncedKeys.forEach((key) =>
+  {
+    if (key in currentState && (currentState[key] instanceof Function) === false)
+      oldSubset[key] = currentState[key];
+  });
+
+  const newSubset = isPlainRecord(newState) ? pickKeys(newState, syncedKeys) : {};
+  const patchedSubset = patchState(oldSubset, newSubset);
+
+  // Apply the patched subset over the full state: keys deleted within the
+  // subset are absent from patchedSubset and must be removed; everything
+  // outside the whitelist is left untouched (object identity preserved).
+  const next = { ...currentState, };
+  syncedKeys.forEach((key) =>
+  {
+    if (key in next && (next[key] instanceof Function) === false)
+      delete next[key];
+  });
+
+  return Object.assign(next, patchedSubset);
+};
+
+/**
  * Diffs the current state stored in the Zustand store and the given newState.
  * The current Zustand state is patched into the given new state recursively.
  *
  * @param store The Zustand API that manages the store we want to patch.
  * @param newState The new state that the Zustand store should be patched to.
+ * @param options Inbound options (replication whitelist).
  */
 export const patchStore = <S>(
   store: StoreApi<S>,
 
-  newState: any
+  newState: any,
+  options?: InboundStateOptions
 ): void =>
 {
   // Clone the oldState instead of using it directly from store.getState().
@@ -391,7 +534,7 @@ export const patchStore = <S>(
   };
 
   store.setState(
-    patchState(oldState, newState),
+    computeInboundState(oldState, newState, options),
     true // Replace with the patched state.
   );
 };
