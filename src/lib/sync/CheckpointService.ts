@@ -2,7 +2,7 @@ import { getDB } from '@db/db';
 import * as Y from 'yjs';
 import { getYDoc, getYjsPersistence, disconnectYjs } from '@store/yjs-provider';
 import type { SyncCheckpoint } from '~types/db';
-import { IndexeddbPersistence } from 'y-idb';
+import { captureDoc, validateSnapshot, applySnapshot } from '@data/snapshot/YjsSnapshotService';
 import { createLogger } from '../logger';
 import { getFirestoreSyncManager } from './FirestoreSyncManager';
 import { MigrationStateService } from './MigrationStateService';
@@ -27,7 +27,7 @@ export class CheckpointService {
    * cleanup at boot, which deletes by ID and is unaffected by the flag.)
    */
   static async createCheckpoint(trigger: string, options?: { protected?: boolean }): Promise<number> {
-    const stateBlob = Y.encodeStateAsUpdate(getYDoc());
+    const stateBlob = captureDoc(getYDoc());
     const db = await getDB();
 
     // SyncCheckpoint has 'id', 'timestamp', 'blob', 'size', 'trigger', 'protected'.
@@ -106,6 +106,10 @@ export class CheckpointService {
   /**
    * Destructive Restore: Clears current Yjs types and applies snapshot.
    *
+   * Validate-before-destroy: the blob is proven to be an applicable Yjs
+   * update (scratch-doc dry-run, `validateSnapshot`) BEFORE anything
+   * destructive runs, so a corrupted checkpoint can never wipe live data.
+   *
    * Clears the migration state machine only AFTER the snapshot has been
    * fully written back. Clearing it earlier would let a failed or
    * interrupted rollback silently boot into the target workspace; keeping
@@ -116,7 +120,10 @@ export class CheckpointService {
     const checkpoint = await db.get('checkpoints', id);
     if (!checkpoint || !checkpoint.blob) throw new Error('Checkpoint corrupted');
 
-    // 0. Disconnect cloud sync to prevent concurrent modifications during restore
+    // 0a. Prove the blob applies cleanly BEFORE any destructive step.
+    validateSnapshot(checkpoint.blob);
+
+    // 0b. Disconnect cloud sync to prevent concurrent modifications during restore
     try {
       getFirestoreSyncManager().destroy();
       logger.info('Firestore disconnected for restore');
@@ -133,21 +140,14 @@ export class CheckpointService {
       // 2. Disconnect current persistence to close IDB connections and release locks
       await disconnectYjs();
 
-      // 3. Create a temporary Doc/Persistence to write the snapshot to IDB
-      // We do this in a clean environment to ensure no in-memory state leaks
-      const tempDoc = new Y.Doc();
-      Y.applyUpdate(tempDoc, checkpoint.blob);
+      // 3. Write the snapshot durably. applySnapshot resolves only after
+      // the transaction has COMMITTED (vendored y-idb writeSnapshot through
+      // the cross-context write gate) — this replaces the temp-doc +
+      // temp-IndexeddbPersistence + whenSynced dance, which was durable
+      // only via IDBDatabase.close() waiting out in-flight transactions.
+      await applySnapshot(checkpoint.blob);
 
-      const tempProvider = new IndexeddbPersistence('versicle-yjs', tempDoc);
-
-      // Wait for it to write to IDB
-      await tempProvider.whenSynced;
-
-      // 4. Cleanup
-      await tempProvider.destroy();
-      tempDoc.destroy();
-
-      // 5. Restore is fully persisted — only now is it safe to clear the
+      // 4. Restore is fully persisted — only now is it safe to clear the
       // migration state machine (no-op outside a workspace-switch rollback).
       MigrationStateService.clear();
 
@@ -184,11 +184,14 @@ export class CheckpointService {
 
   /**
    * Applies a downloaded remote state vector to the primary IDB persistence.
-   * Destroys existing data, writes the new state, and triggers a reload.
-   * Used during workspace context switching.
+   * Validates the blob, destroys existing data, writes the new state
+   * durably, and triggers a reload. Used during workspace context switching.
    */
   static async applyRemoteState(remoteBlob: Uint8Array): Promise<void> {
-    // 0. Disconnect cloud sync to prevent concurrent modifications
+    // 0a. Prove the blob applies cleanly BEFORE any destructive step.
+    validateSnapshot(remoteBlob);
+
+    // 0b. Disconnect cloud sync to prevent concurrent modifications
     try {
       getFirestoreSyncManager().destroy();
       logger.info('Firestore disconnected for remote state application');
@@ -205,16 +208,10 @@ export class CheckpointService {
       // 2. Disconnect current persistence to close IDB connections and release locks
       await disconnectYjs();
 
-      // 3. Write remote state to IDB via temp Doc
-      const tempDoc = new Y.Doc();
-      Y.applyUpdate(tempDoc, remoteBlob);
-
-      const tempProvider = new IndexeddbPersistence('versicle-yjs', tempDoc);
-      await tempProvider.whenSynced;
-
-      // 4. Cleanup and reload
-      await tempProvider.destroy();
-      tempDoc.destroy();
+      // 3. Write the remote state durably (commit-awaited; see
+      // restoreCheckpoint step 3 for why this replaced the temp-provider
+      // dance).
+      await applySnapshot(remoteBlob);
 
       logger.info('Remote state applied. Reloading...');
       window.location.reload();

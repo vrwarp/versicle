@@ -1,11 +1,14 @@
 import JSZip from 'jszip';
-import * as Y from 'yjs';
+// Only the Y.Map cast remains since the snapshot primitives moved to
+// YjsSnapshotService — keep yjs out of this module's runtime graph.
+import type * as Y from 'yjs';
 import { z } from 'zod';
 import { exportFile } from './export';
 import { dbService } from '@db/DBService';
 import type { BookLocations, StaticBookManifest, UserInventoryItem } from '~types/db';
 import { getDB } from '@db/db';
 import { getYDoc, waitForYjsSync, getYjsPersistence } from '@store/yjs-provider';
+import { captureDoc, validateSnapshot, applySnapshot } from '@data/snapshot/YjsSnapshotService';
 import { createLogger } from './logger';
 import { useLibraryStore } from '@store/useLibraryStore';
 
@@ -203,8 +206,11 @@ export class BackupService {
    * corrupted every cover to `{}`.
    */
   async generateManifest(): Promise<BackupManifestV3> {
-    // Ensure Yjs is synced before capturing snapshot
+    // Ensure Yjs is synced before capturing snapshot, and drain the y-idb
+    // debounce queue (fork flush(), packages/y-idb/PROVENANCE.md surgery 1)
+    // so a backup can never miss the last 200ms write window.
     await waitForYjsSync();
+    await getYjsPersistence()?.flush();
 
     // 1. Capture the entire Y.Doc state as a binary update
     // 2. Concurrently read static data from IDB and capture semantic tree
@@ -213,7 +219,7 @@ export class BackupService {
       import('./sync/semantic-tree').then(m => m.generateSemanticTree())
     ]);
 
-    const stateUpdate = Y.encodeStateAsUpdate(getYDoc());
+    const stateUpdate = captureDoc(getYDoc());
     const yjsSnapshot = this.uint8ArrayToBase64(stateUpdate);
 
     const staticManifestRows = await db.getAll('static_manifests');
@@ -303,9 +309,7 @@ export class BackupService {
     }
 
     try {
-      const scratchDoc = new Y.Doc();
-      Y.applyUpdate(scratchDoc, stateUpdate);
-      scratchDoc.destroy();
+      validateSnapshot(stateUpdate);
     } catch (e) {
       logger.error('Backup snapshot failed dry-run validation', e);
       throw new Error('Invalid backup: yjsSnapshot is not a decodable Yjs update. Local data was left untouched.');
@@ -333,46 +337,21 @@ export class BackupService {
     // Solution: Wipe IDB data, then write snapshot cleanly.
     // The App must be reloaded after this to pick up the new state.
 
-    // 1. Clear existing persistence
+    // 1. Clear existing persistence (clearData destroys the live binding —
+    //    applySnapshot's precondition).
     const persistence = getYjsPersistence();
     if (persistence) {
       logger.debug('Clearing existing database...');
       await persistence.clearData();
     }
 
-    // 2. Write snapshot safely via native IDB to guarantee completion before reload
-    // We cannot use y-indexeddb here because it writes asynchronously and lacks a flush promise.
-    // The previous 500ms timeout before reload aborted the transaction for large datasets, dropping notes.
-    logger.debug('Writing Yjs snapshot directly to IndexedDB...');
-    await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open('versicle-yjs');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      request.onupgradeneeded = (event: any) => {
-        const db = event.target.result as IDBDatabase;
-        if (!db.objectStoreNames.contains('updates')) {
-            db.createObjectStore('updates', { autoIncrement: true });
-        }
-        if (!db.objectStoreNames.contains('custom')) {
-            db.createObjectStore('custom');
-        }
-      };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      request.onsuccess = (event: any) => {
-        const db = event.target.result as IDBDatabase;
-        const tx = db.transaction(['updates'], 'readwrite');
-        const store = tx.objectStore('updates');
-        store.put(stateUpdate);
-        tx.oncomplete = () => {
-          db.close();
-          resolve();
-        };
-        tx.onerror = () => {
-          db.close();
-          reject(tx.error);
-        };
-      };
-      request.onerror = () => reject(request.error);
-    });
+    // 2. Write the snapshot durably: applySnapshot resolves only after the
+    //    transaction has COMMITTED (the vendored y-idb fork's writeSnapshot,
+    //    through the cross-context write gate), so the reload after restore
+    //    cannot lose it. This replaces the raw indexedDB.open() block that
+    //    re-implemented y-idb's store layout here.
+    logger.debug('Writing Yjs snapshot via YjsSnapshotService...');
+    await applySnapshot(stateUpdate);
 
     onProgress?.(30, 'Syncing stores...');
 
@@ -461,10 +440,9 @@ export class BackupService {
       }
     }
 
-    // Wait for Yjs persistence to flush
-    onProgress?.(90, 'Persisting data...');
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
+    // No flush wait needed: applySnapshot already awaited the commit (the
+    // 1000ms sleep that used to live here was covering for the lack of a
+    // durable write primitive).
     onProgress?.(100, 'Restore complete!');
     logger.info('Restore complete (Yjs snapshot applied)');
   }

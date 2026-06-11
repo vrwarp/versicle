@@ -46,6 +46,7 @@ export const APP_ERROR_NAMESPACES = [
   'DRIVE',
   'INGEST',
   'NET',
+  'BACKUP',
 ] as const;
 
 /** Domain namespaces for {@link AppErrorCode}. Append-only. */
@@ -79,6 +80,8 @@ export const APP_ERROR_CODES = [
   'INGEST_DUPLICATE_BOOK',
   // NET_* — generic network/fetch failures.
   'NET_UNKNOWN',
+  // BACKUP_* — backup/snapshot capture, validation, and restore.
+  'BACKUP_SNAPSHOT_INVALID',
 ] as const satisfies readonly `${AppErrorNamespace}_${Uppercase<string>}`[];
 
 /** Stable, append-only union of error codes. See {@link APP_ERROR_CODES}. */

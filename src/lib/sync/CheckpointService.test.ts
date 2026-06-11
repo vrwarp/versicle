@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
     const getAll = vi.fn();
     const del = vi.fn();
     const firestoreDestroy = vi.fn();
+    const disconnectYjs = vi.fn(async () => undefined);
 
     const store = {
         add,
@@ -22,7 +23,13 @@ const mocks = vi.hoisted(() => {
         delete: del
     };
 
-    return { add, count, openCursor, get, getAll, del, store, firestoreDestroy };
+    return {
+        add, count, openCursor, get, getAll, del, store, firestoreDestroy,
+        disconnectYjs,
+        // null = the suite's default (soft-restore fallback). The hard-reset
+        // (S.2) tests install an object with a clearData spy.
+        persistence: null as null | { clearData: () => Promise<void> }
+    };
 });
 
 vi.mock('@db/db', () => ({
@@ -43,8 +50,9 @@ vi.mock('@store/yjs-provider', async () => {
     const doc = new YActual.Doc();
     return {
         getYDoc: () => doc,
-        getYjsPersistence: () => null, // Default to null (simulate fallback behavior for these tests)
-        disconnectYjs: vi.fn(),
+        // Default null (soft-restore fallback); S.2 tests install a stub.
+        getYjsPersistence: () => mocks.persistence,
+        disconnectYjs: mocks.disconnectYjs,
     };
 });
 import { getYDoc } from '@store/yjs-provider';
@@ -76,6 +84,8 @@ describe('CheckpointService', () => {
         mocks.count.mockReset();
         mocks.openCursor.mockReset();
         mocks.firestoreDestroy.mockReset();
+        mocks.disconnectYjs.mockClear();
+        mocks.persistence = null;
 
         // Clear yDoc
         yDoc.transact(() => {
@@ -398,6 +408,142 @@ describe('CheckpointService', () => {
             // State survives, so the boot interceptor handles the failure
             // explicitly instead of silently booting into the target workspace.
             expect(MigrationStateService.getState()?.status).toBe('RESTORING_BACKUP');
+        });
+    });
+
+    /**
+     * S.2 (phase3-storage-gateway.md §Test plan, PR P3-11): the hard-reset
+     * restore path — previously a temp-doc + temp-IndexeddbPersistence +
+     * whenSynced dance, now YjsSnapshotService.applySnapshot (the vendored
+     * fork's commit-awaited writeSnapshot). These tests run the REAL
+     * snapshot service against fake-indexeddb; only the provider handle and
+     * the checkpoint store are mocked.
+     */
+    describe('regression: hard-reset restore via YjsSnapshotService (S.2)', () => {
+        const deleteYjsDatabase = () => new Promise<void>((resolve, reject) => {
+            const request = indexedDB.deleteDatabase('versicle-yjs');
+            request.onsuccess = () => resolve();
+            request.onblocked = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+
+        const readYjsUpdateRows = async (): Promise<Uint8Array[]> => {
+            const db = await new Promise<IDBDatabase>((resolve, reject) => {
+                const request = indexedDB.open('versicle-yjs');
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+            try {
+                return await new Promise<Uint8Array[]>((resolve, reject) => {
+                    const tx = db.transaction(['updates'], 'readonly');
+                    const request = tx.objectStore('updates').getAll();
+                    request.onsuccess = () => resolve(request.result as Uint8Array[]);
+                    request.onerror = () => reject(request.error);
+                });
+            } finally {
+                db.close();
+            }
+        };
+
+        let clearData: ReturnType<typeof vi.fn<() => Promise<void>>>;
+
+        beforeEach(async () => {
+            await deleteYjsDatabase();
+            clearData = vi.fn<() => Promise<void>>(async () => undefined);
+            mocks.persistence = { clearData };
+        });
+
+        afterEach(() => {
+            MigrationStateService.clear();
+        });
+
+        it('restoreCheckpoint persists the snapshot durably, then clears migration state, in order', async () => {
+            const tempDoc = new Y.Doc();
+            tempDoc.clientID = yDoc.clientID + (++tempDocCounter);
+            tempDoc.getMap('library').set('restored', 'hard');
+            const blob = Y.encodeStateAsUpdate(tempDoc);
+            tempDoc.destroy();
+            mocks.get.mockResolvedValue({ blob });
+
+            MigrationStateService.setState({
+                status: 'RESTORING_BACKUP',
+                targetWorkspaceId: 'ws_target',
+                backupCheckpointId: 1
+            });
+
+            await CheckpointService.restoreCheckpoint(1);
+
+            // Destructive sequence ran: sync severed, persistence wiped and
+            // disconnected (clearData before disconnectYjs).
+            expect(mocks.firestoreDestroy).toHaveBeenCalledTimes(1);
+            expect(clearData).toHaveBeenCalledTimes(1);
+            expect(mocks.disconnectYjs).toHaveBeenCalledTimes(1);
+            expect(clearData.mock.invocationCallOrder[0])
+                .toBeLessThan(mocks.disconnectYjs.mock.invocationCallOrder[0]);
+
+            // The snapshot is durably in versicle-yjs: exactly one row,
+            // byte-identical, hydrating a fresh doc to the checkpoint state.
+            const rows = await readYjsUpdateRows();
+            expect(rows).toHaveLength(1);
+            expect(Array.from(rows[0])).toEqual(Array.from(blob));
+            const fresh = new Y.Doc();
+            Y.applyUpdate(fresh, rows[0]);
+            expect(fresh.getMap('library').get('restored')).toBe('hard');
+            fresh.destroy();
+
+            // ▲9 ordering preserved: migration state cleared only AFTER the
+            // snapshot was fully persisted.
+            expect(MigrationStateService.getState()).toBeNull();
+        });
+
+        it('restoreCheckpoint rejects a corrupted blob BEFORE anything destructive runs', async () => {
+            mocks.get.mockResolvedValue({
+                blob: new TextEncoder().encode('garbage, not a yjs update')
+            });
+            MigrationStateService.setState({
+                status: 'RESTORING_BACKUP',
+                targetWorkspaceId: 'ws_target',
+                backupCheckpointId: 1
+            });
+
+            await expect(CheckpointService.restoreCheckpoint(1)).rejects.toMatchObject({
+                code: 'BACKUP_SNAPSHOT_INVALID'
+            });
+
+            // Validate-before-destroy: nothing was severed or wiped, and the
+            // migration state machine survives for the boot interceptor.
+            expect(mocks.firestoreDestroy).not.toHaveBeenCalled();
+            expect(clearData).not.toHaveBeenCalled();
+            expect(mocks.disconnectYjs).not.toHaveBeenCalled();
+            expect(MigrationStateService.getState()?.status).toBe('RESTORING_BACKUP');
+        });
+
+        it('applyRemoteState persists the remote blob durably through the same path', async () => {
+            const remoteDoc = new Y.Doc();
+            remoteDoc.clientID = yDoc.clientID + (++tempDocCounter);
+            remoteDoc.getMap('library').set('workspace', 'remote');
+            const remoteBlob = Y.encodeStateAsUpdate(remoteDoc);
+            remoteDoc.destroy();
+
+            await CheckpointService.applyRemoteState(remoteBlob);
+
+            expect(mocks.firestoreDestroy).toHaveBeenCalledTimes(1);
+            expect(clearData).toHaveBeenCalledTimes(1);
+            expect(mocks.disconnectYjs).toHaveBeenCalledTimes(1);
+
+            const rows = await readYjsUpdateRows();
+            expect(rows).toHaveLength(1);
+            expect(Array.from(rows[0])).toEqual(Array.from(remoteBlob));
+        });
+
+        it('applyRemoteState rejects a corrupted blob before anything destructive runs', async () => {
+            await expect(
+                CheckpointService.applyRemoteState(new Uint8Array(0))
+            ).rejects.toMatchObject({ code: 'BACKUP_SNAPSHOT_INVALID' });
+
+            expect(mocks.firestoreDestroy).not.toHaveBeenCalled();
+            expect(clearData).not.toHaveBeenCalled();
+            expect(mocks.disconnectYjs).not.toHaveBeenCalled();
         });
     });
 });

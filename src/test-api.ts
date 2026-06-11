@@ -74,46 +74,34 @@ declare global {
 /** Upper bound for a flush; a hung IDB transaction must fail the test loudly. */
 const FLUSH_DEADLINE_MS = 10_000;
 
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
 /**
- * Drain the y-idb persistence queue. The fork's public surface (see
- * dist/src/y-idb.d.ts) exposes the queue internals; we force `_flush()`
- * instead of waiting out the 200ms write debounce, then await the in-flight
- * transaction. Updates that arrive mid-flush land back in `_pendingUpdates`,
- * so loop until quiescent. (P4 vendors the fork as a workspace and can
- * expose a first-class `flush()` — track it there.)
+ * Drain the y-idb persistence queue via the vendored fork's first-class
+ * `flush()` (packages/y-idb/PROVENANCE.md surgery 1): it bypasses the 200ms
+ * write debounce, awaits the in-flight transaction commit, and loops until
+ * quiescent — including updates that arrive mid-flush. The deadline race
+ * keeps a hung IDB transaction failing the test loudly instead of stalling
+ * the suite (flush() itself retries forever, mirroring the internal
+ * machinery).
  */
 async function flushYjsPersistence(): Promise<void> {
   const persistence: IndexeddbPersistence | null = getYjsPersistence();
-  if (!persistence) return;
+  if (!persistence || persistence._destroyed) return;
 
-  const deadline = Date.now() + FLUSH_DEADLINE_MS;
-  while (!persistence._destroyed) {
-    if (persistence._flushPromise) {
-      // A transaction is in flight — wait for it (errors re-queue the batch
-      // and are surfaced via the persistence 'error' event; the loop retries).
-      await Promise.resolve(persistence._flushPromise).catch(() => undefined);
-    } else if (persistence._pendingUpdates.length > 0) {
-      if (!persistence._writing) {
-        persistence._flush();
-      }
-      if (!persistence._flushPromise) {
-        // The IDB connection is still opening; the constructor schedules a
-        // flush once it is ready.
-        await sleep(10);
-      }
-    } else if (persistence._writing) {
-      await sleep(10);
-    } else {
-      return; // queue empty, nothing in flight — durable.
-    }
-    if (Date.now() > deadline) {
-      throw new Error(
-        `[test-api] flushPersistence: y-idb queue did not drain within ${FLUSH_DEADLINE_MS}ms ` +
-          `(pending=${persistence._pendingUpdates.length}, writing=${persistence._writing})`,
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    deadlineTimer = setTimeout(() => {
+      reject(
+        new Error(
+          `[test-api] flushPersistence: y-idb queue did not drain within ${FLUSH_DEADLINE_MS}ms ` +
+            `(pending=${persistence._pendingUpdates.length}, writing=${persistence._writing})`,
+        ),
       );
-    }
+    }, FLUSH_DEADLINE_MS);
+  });
+  try {
+    await Promise.race([persistence.flush(), deadline]);
+  } finally {
+    clearTimeout(deadlineTimer);
   }
 }
 

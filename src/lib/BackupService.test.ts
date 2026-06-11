@@ -23,8 +23,12 @@ vi.mock('./sync/CheckpointService', () => ({
   },
 }));
 
-// Mock y-indexeddb to avoid side effects in yjs-provider
-vi.mock('y-idb', () => ({
+// Mock y-idb's IndexeddbPersistence to avoid side effects in yjs-provider,
+// but keep the REAL writeSnapshot: it is the restore path's durable write
+// (via YjsSnapshotService.applySnapshot) and the v2-restore test below
+// asserts its effect on the raw fake-indexeddb 'updates' store.
+vi.mock('y-idb', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('y-idb')>()),
   IndexeddbPersistence: class {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     constructor(_name: string, doc: any) {
@@ -47,7 +51,9 @@ vi.mock('@store/yjs-provider', async (importOriginal) => {
     waitForYjsSync: vi.fn(() => Promise.resolve()),
     // Ensure we expose a mock persistence if the real one isn't initialized
     getYjsPersistence: () => ({
-      clearData: mocks.persistenceMock.clearData
+      clearData: mocks.persistenceMock.clearData,
+      // generateManifest drains the debounce queue before capturing
+      flush: vi.fn(() => Promise.resolve())
     })
   };
 });

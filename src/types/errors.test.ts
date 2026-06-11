@@ -35,11 +35,12 @@ describe('AppErrorCode union', () => {
       DRIVE_UNKNOWN: 'DRIVE',
       INGEST_UNKNOWN: 'INGEST',
       INGEST_DUPLICATE_BOOK: 'INGEST',
-      NET_UNKNOWN: 'NET'
+      NET_UNKNOWN: 'NET',
+      BACKUP_SNAPSHOT_INVALID: 'BACKUP'
     };
     for (const code of APP_ERROR_CODES) {
       expect(code.startsWith(`${namespaceOf[code]}_`)).toBe(true);
-      expect(code).toMatch(/^(APP|DB|SYNC|TTS|GENAI|DRIVE|INGEST|NET)_[A-Z0-9_]+$/);
+      expect(code).toMatch(/^(APP|DB|SYNC|TTS|GENAI|DRIVE|INGEST|NET|BACKUP)_[A-Z0-9_]+$/);
     }
   });
 
