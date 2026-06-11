@@ -19,7 +19,7 @@
 import type { BootTask } from '../bootstrap';
 import type { YjsStoreHandle } from 'zustand-middleware-yjs';
 import { getYDoc, waitForYjsSync } from '@store/yjs-provider';
-import { SYNCED_STORES, yjsHandleOf } from '@store/syncedStores';
+import { SYNCED_STORES, syncedDataMapIsEmpty, yjsHandleOf } from '@store/registry';
 import { useLibraryStore } from '@store/useLibraryStore';
 import { createLogger } from '@lib/logger';
 
@@ -29,14 +29,16 @@ export async function whenHydrated(timeoutMs = 8000): Promise<void> {
   // 1. IDB load complete (existing gate; resolves immediately without persistence).
   await waitForYjsSync(timeoutMs);
 
-  // 2. Empty maps: those stores start from their declared defaults — no
+  // 2. Empty data maps: those stores start from their declared defaults — no
   // inbound patch will ever arrive, so the provider marks them hydrated.
+  // (Scope-aware: a scoped store hydrates from a nested child map, which may
+  // be absent even when its root map carries other devices' entries.)
   const yDoc = getYDoc();
   const handles: YjsStoreHandle[] = [];
-  for (const { mapName, store } of SYNCED_STORES) {
+  for (const { def, store } of SYNCED_STORES) {
     const handle = yjsHandleOf(store);
     if (handle === undefined) continue; // store module mocked in tests
-    if (yDoc.getMap(mapName).size === 0) handle.markHydrated();
+    if (syncedDataMapIsEmpty(yDoc, def)) handle.markHydrated();
     handles.push(handle);
   }
 

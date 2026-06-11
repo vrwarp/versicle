@@ -1,7 +1,17 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
-import { getYDoc, getYjsOptions } from './yjs-provider';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
 import type { UserInventoryItem } from '~types/db';
+
+/**
+ * Replication declaration (aggregated by src/store/registry.ts).
+ * Y.Map 'library' — matches the existing data structure for 'books'.
+ */
+export const LIBRARY_STORE_DEF: SyncedStoreDef<'books'> = {
+    name: 'library',
+    syncedKeys: ['books'],
+    hydration: 'replace',
+    scopedDiff: false,
+};
 
 /**
  * State interface for the Book store (Synced).
@@ -11,7 +21,10 @@ import type { UserInventoryItem } from '~types/db';
  */
 interface BookState {
     // === SYNCED STATE (persisted to Yjs) ===
-    /** Schema version marker. Must be an atomicKey to prevent Y.Text overhead. */
+    /**
+     * Schema version marker (implicitly synced; the middleware's poison pill
+     * and the migration coordinator's dual-write read/write it on this map).
+     */
     __schemaVersion: number;
     /** Map of user inventory items (book metadata + user data), keyed by Book ID. */
     books: Record<string, UserInventoryItem>;
@@ -44,9 +57,8 @@ interface BookState {
 }
 
 export const useBookStore = create<BookState>()(
-    yjs(
-        getYDoc(),
-        'library', // Share name 'library' to match existing data structure for 'books'
+    defineSyncedStore(
+        LIBRARY_STORE_DEF,
         (set) => ({
             __schemaVersion: 1, // Default for empty/new documents
             books: {},
@@ -95,7 +107,6 @@ export const useBookStore = create<BookState>()(
                         }
                     };
                 })
-        }),
-        getYjsOptions({ atomicKeys: ['__schemaVersion'] })
+        })
     )
 );

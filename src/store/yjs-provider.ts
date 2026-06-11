@@ -1,9 +1,10 @@
 import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-idb';
+import type { StateCreator, StoreMutatorIdentifier } from 'zustand';
+import yjs from 'zustand-middleware-yjs';
 import { isStorageSupported } from '@lib/sync/support';
 import { runExclusiveIdbWrite } from '@lib/idb-write-lock';
 import { createLogger } from '@lib/logger';
-import type { YjsOptions } from 'zustand-middleware-yjs';
 
 const logger = createLogger('YjsProvider');
 
@@ -19,9 +20,9 @@ export const CURRENT_SCHEMA_VERSION = 6;
 
 // Singleton Y.Doc - Source of Truth for User Data. Constructed lazily on
 // first access instead of at module scope: importing this module (e.g. for
-// CURRENT_SCHEMA_VERSION) must not create CRDT state. Synced stores still
-// call getYDoc() while wiring their middleware at module init — full
-// construction-on-boot lands with the P2 store registry.
+// CURRENT_SCHEMA_VERSION) must not create CRDT state. Synced stores reach
+// it through `defineSyncedStore` (src/store/registry.ts) while wiring their
+// middleware at module init.
 let doc: Y.Doc | null = null;
 
 export function getYDoc(): Y.Doc {
@@ -99,23 +100,80 @@ export function handleObsoleteClient(incomingVersion: number): void {
     }).catch(err => logger.error('Failed to import useUIStore:', err));
 }
 
-// ─── Shared Middleware Options ───────────────────────────────────────────────
+// ─── The synced-store seam ───────────────────────────────────────────────────
+
 /**
- * Returns the standard YjsOptions to pass to every yjs() middleware call.
- * Centralises version guarding so every store consistently enforces it.
+ * Declaration of one CRDT-synced store (phase2-fork-surgery.md §2.5). Each
+ * synced store module declares and exports its own def; the store registry
+ * (src/store/registry.ts) aggregates them into the three-tier table and the
+ * boot roster.
  *
- * Schema migrations no longer hang off `onLoaded` (the legacy runner fired
- * up to 9× per boot and raced its own version bumps): the migration
- * coordinator (src/app/migrations.ts) runs ONCE from the bootstrap
- * 'migrations' phase and transforms the Y.Doc directly.
+ * `K` is the union of top-level state keys that replicate; declaring a def
+ * as `SyncedStoreDef<'books'>` and passing it to
+ * `defineSyncedStore<BookState>` proves at compile time that every synced
+ * key exists on the state type (the middleware additionally fails loudly at
+ * store creation in dev mode on a mismatch).
+ *
+ * (This type and {@link defineSyncedStore} live HERE rather than in the
+ * registry because the TTS worker's type-closure already reaches this
+ * module — a store importing any NEW src/store module would regress the
+ * `worker-no-state-typegraph` depcruise ratchet. The registry must stay out
+ * of the worker closure, so stores must never import it.)
  */
-export function getYjsOptions(extra?: Partial<YjsOptions>): YjsOptions {
-    return {
+export interface SyncedStoreDef<K extends string = string> {
+    /**
+     * Top-level Y.Map name. FROZEN: map names are user-data format surface —
+     * renaming one is a schema migration, not a refactor.
+     */
+    readonly name: string;
+    /**
+     * The replication whitelist (fork option `syncedKeys`). Top level only;
+     * nesting below a synced key replicates fully. `__schemaVersion` is
+     * implicitly synced and need not be listed.
+     */
+    readonly syncedKeys: readonly K[];
+    /**
+     * Inbound semantics for top-level keys absent from the map.
+     * 'merge-defaults' suppresses top-level deletes of declared defaults (the
+     * D2 fix: new fields survive hydration from older docs); 'replace' is the
+     * legacy wipe. Flipped per store in the phase2-fork-surgery.md §2.6 order.
+     */
+    readonly hydration: 'replace' | 'merge-defaults';
+    /** Per-top-level-key diffing (the D13 write-amplification fix). */
+    readonly scopedDiff: boolean;
+    /** Bind to a nested Y.Map at `getMap(name).get(scope.key)` (preferences fold). */
+    readonly scope?: { readonly key: string };
+}
+
+/**
+ * The single seam wiring a synced store to the shared Y.Doc (replaces the
+ * legacy `getYjsOptions()`): every synced store consistently gets the
+ * schema-version poison pill, the obsolete-client handler, and plain-string
+ * encoding (`disableYText` — the v4 format), plus its declared replication
+ * options. This is the ONLY production `yjs()` call site (lint-enforced via
+ * no-restricted-imports).
+ *
+ * Schema migrations do not hang off `onLoaded`: the migration coordinator
+ * (src/app/migrations.ts) runs ONCE from the bootstrap 'migrations' phase
+ * and transforms the Y.Doc directly.
+ */
+export function defineSyncedStore<
+    S,
+    Mps extends [StoreMutatorIdentifier, unknown][] = [],
+    Mcs extends [StoreMutatorIdentifier, unknown][] = [],
+>(
+    def: SyncedStoreDef<keyof S & string>,
+    creator: StateCreator<S, Mps, Mcs>,
+): StateCreator<S, Mps, Mcs> {
+    return yjs(getYDoc(), def.name, creator, {
         schemaVersion: CURRENT_SCHEMA_VERSION,
         onObsolete: handleObsoleteClient,
         disableYText: true,
-        ...extra
-    };
+        syncedKeys: def.syncedKeys,
+        hydration: def.hydration,
+        scopedDiff: def.scopedDiff,
+        scope: def.scope,
+    });
 }
 
 /**

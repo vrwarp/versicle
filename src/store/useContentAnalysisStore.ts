@@ -1,7 +1,14 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
-import { getYDoc, getYjsOptions } from './yjs-provider';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
 import type { AnalysisStatus } from '~types/content-analysis';
+
+/** Replication declaration (aggregated by src/store/registry.ts). */
+export const CONTENT_ANALYSIS_STORE_DEF: SyncedStoreDef<'sections'> = {
+    name: 'contentAnalysis',
+    syncedKeys: ['sections'],
+    hydration: 'replace',
+    scopedDiff: false,
+};
 
 /**
  * A table adaptation entry (CFI -> spoken text).
@@ -109,9 +116,8 @@ function makeKey(bookId: string, sectionId: string): string {
 }
 
 export const useContentAnalysisStore = create<ContentAnalysisState>()(
-    yjs(
-        getYDoc(),
-        'contentAnalysis', // Yjs map name
+    defineSyncedStore(
+        CONTENT_ANALYSIS_STORE_DEF,
         (set, get) => ({
             sections: {},
 
@@ -239,7 +245,6 @@ export const useContentAnalysisStore = create<ContentAnalysisState>()(
                 }),
 
             clearAll: () => set({ sections: {} })
-        }),
-        getYjsOptions()
+        })
     )
 );

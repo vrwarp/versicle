@@ -1,8 +1,15 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
 import { UAParser } from 'ua-parser-js';
-import { getYDoc, getYjsOptions } from './yjs-provider';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
 import type { DeviceInfo, DeviceProfile } from '~types/device';
+
+/** Replication declaration (aggregated by src/store/registry.ts). */
+export const DEVICES_STORE_DEF: SyncedStoreDef<'devices'> = {
+    name: 'devices',
+    syncedKeys: ['devices'],
+    hydration: 'replace',
+    scopedDiff: false,
+};
 import packageJson from '../../package.json';
 
 /**
@@ -40,9 +47,8 @@ interface DeviceState {
 const HEARTBEAT_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes
 
 export const useDeviceStore = create<DeviceState>()(
-    yjs(
-        getYDoc(),
-        'devices', // Shared map name in Yjs
+    defineSyncedStore(
+        DEVICES_STORE_DEF,
         (set) => ({
             devices: {},
 
@@ -130,7 +136,6 @@ export const useDeviceStore = create<DeviceState>()(
                     const { [deviceId]: _removed, ...rest } = state.devices;
                     return { devices: rest };
                 }),
-        }),
-        getYjsOptions()
+        })
     )
 );

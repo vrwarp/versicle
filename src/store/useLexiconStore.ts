@@ -1,8 +1,15 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
-import { getYDoc, getYjsOptions } from './yjs-provider';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
 import type { LexiconRule } from '~types/db';
 import { v4 as uuidv4 } from 'uuid';
+
+/** Replication declaration (aggregated by src/store/registry.ts). */
+export const LEXICON_STORE_DEF: SyncedStoreDef<'rules' | 'settings'> = {
+    name: 'lexicon',
+    syncedKeys: ['rules', 'settings'],
+    hydration: 'replace',
+    scopedDiff: false,
+};
 
 export interface LexiconState {
     // === SYNCED STATE (Yjs Map 'lexicon') ===
@@ -32,9 +39,8 @@ export interface LexiconState {
 }
 
 export const useLexiconStore = create<LexiconState>()(
-    yjs(
-        getYDoc(),
-        'lexicon',
+    defineSyncedStore(
+        LEXICON_STORE_DEF,
         (set) => ({
             rules: {},
             settings: {},
@@ -106,7 +112,6 @@ export const useLexiconStore = create<LexiconState>()(
                     }
                 }
             }))
-        }),
-        getYjsOptions()
+        })
     )
 );

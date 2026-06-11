@@ -99,6 +99,14 @@ vi.mock('./layouts/RootLayout', () => ({ RootLayout: () => <div data-testid="roo
 
 // Mock Device Store to avoid Yjs middleware execution
 vi.mock('./store/useDeviceStore', () => ({
+  // The store registry aggregates each synced store's def at import time —
+  // a wholesale module mock must keep exporting it.
+  DEVICES_STORE_DEF: {
+    name: 'devices',
+    syncedKeys: ['devices'],
+    hydration: 'replace',
+    scopedDiff: false,
+  },
   useDeviceStore: {
     getState: vi.fn().mockReturnValue({
       devices: {},

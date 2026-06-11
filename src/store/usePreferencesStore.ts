@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
-import { getYDoc, getYjsOptions } from './yjs-provider';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
 import { getDeviceId } from '@lib/device-id';
 
 /**
@@ -80,15 +79,43 @@ const defaultPreferences = {
 };
 
 /**
+ * Replication declaration (aggregated by src/store/registry.ts).
+ * Per-device top-level map until the flip item rebinds to the v6-folded
+ * keyed map (name 'preferences', scope: { key: getDeviceId() } —
+ * phase2-fork-surgery.md §5.3).
+ */
+export const PREFERENCES_STORE_DEF: SyncedStoreDef<keyof typeof defaultPreferences> = {
+    name: `preferences/${getDeviceId()}`,
+    syncedKeys: [
+        'currentTheme',
+        'customTheme',
+        'fontFamily',
+        'lineHeight',
+        'fontSize',
+        'shouldForceFont',
+        'readerViewMode',
+        'libraryLayout',
+        'libraryFilterMode',
+        'librarySortOrder',
+        'activeContext',
+        'fontProfiles',
+        'forceTraditionalChinese',
+        'showPinyin',
+        'pinyinSize',
+    ],
+    hydration: 'replace',
+    scopedDiff: false,
+};
+
+/**
  * Zustand store for user preferences (theme, font, etc.).
  * Wrapped with yjs() middleware for automatic CRDT synchronization.
  *
  * Keyed by device ID so each device maintains its own persistent preferences.
  */
 export const usePreferencesStore = create<PreferencesState>()(
-    yjs(
-        getYDoc(),
-        `preferences/${getDeviceId()}`,
+    defineSyncedStore(
+        PREFERENCES_STORE_DEF,
         (set) => ({
             ...defaultPreferences,
 
@@ -117,7 +144,6 @@ export const usePreferencesStore = create<PreferencesState>()(
                     }
                 };
             }),
-        }),
-        getYjsOptions()
+        })
     )
 );

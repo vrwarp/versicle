@@ -13,12 +13,9 @@ vi.mock('./yjs-provider', () => ({
         })),
         transact: (cb: any) => cb(),
     }),
-    getYjsOptions: () => ({})
-}));
-
-// Mock zustand-middleware-yjs
-vi.mock('zustand-middleware-yjs', () => ({
-    default: (_doc: any, _name: any, config: any) => config
+    // Pass-through seam: this suite tests the store's ACTIONS, not the
+    // middleware (the contract suite owns that).
+    defineSyncedStore: (_def: any, config: any) => config,
 }));
 
 describe('useDeviceStore', () => {

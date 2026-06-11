@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
-import { getYDoc, getYjsOptions } from './yjs-provider';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
 import type { UserProgress, ReadingEventType, ReadingSession } from '~types/db';
 import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
@@ -118,14 +117,21 @@ export const getMostRecentProgress = (bookProgress: Record<string, UserProgress>
     return mostRecent;
 };
 
+/** Replication declaration (aggregated by src/store/registry.ts). */
+export const PROGRESS_STORE_DEF: SyncedStoreDef<'progress'> = {
+    name: 'progress',
+    syncedKeys: ['progress'],
+    hydration: 'replace',
+    scopedDiff: false,
+};
+
 /**
  * Zustand store for reading progress and state.
  * Wrapped with yjs() middleware for automatic CRDT synchronization.
  */
 export const useReadingStateStore = create<ReadingState>()(
-    yjs(
-        getYDoc(),
-        'progress',
+    defineSyncedStore(
+        PROGRESS_STORE_DEF,
         (set, get) => ({
             // Synced state (per-device structure)
             progress: {},
@@ -432,8 +438,7 @@ export const useReadingStateStore = create<ReadingState>()(
             reset: () => set({
                 progress: {},
             })
-        }),
-        getYjsOptions()
+        })
     )
 );
 

@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
-import { getYDoc, getYjsOptions } from './yjs-provider';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
 import type { UserAnnotation } from '~types/db';
 import { createLogger } from '@lib/logger';
 import { generateSecureId } from '@lib/crypto';
@@ -60,13 +59,24 @@ export interface AnnotationState {
 }
 
 /**
+ * Replication declaration (aggregated by src/store/registry.ts). The stale
+ * `popover` doc key (see module docs) is structurally outside `syncedKeys`,
+ * so it can never ride into store state again.
+ */
+export const ANNOTATIONS_STORE_DEF: SyncedStoreDef<'annotations'> = {
+  name: 'annotations',
+  syncedKeys: ['annotations'],
+  hydration: 'replace',
+  scopedDiff: false,
+};
+
+/**
  * Factory to create the Annotation store with dependency injection.
  * In Phase 2, this no longer needs dbProvider since Yjs handles persistence.
  */
 export const createAnnotationStore = () => create<AnnotationState>()(
-  yjs(
-    getYDoc(),
-    'annotations',
+  defineSyncedStore(
+    ANNOTATIONS_STORE_DEF,
     (set, get) => ({
       // Synced state
       annotations: {},
@@ -135,8 +145,7 @@ export const createAnnotationStore = () => create<AnnotationState>()(
         }
         return bookAnnotations.sort((a, b) => a.created - b.created);
       },
-    }),
-    getYjsOptions()
+    })
   )
 );
 

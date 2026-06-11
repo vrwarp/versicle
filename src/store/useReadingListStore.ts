@@ -1,7 +1,14 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
-import { getYDoc, getYjsOptions } from './yjs-provider';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
 import type { ReadingListEntry } from '~types/db';
+
+/** Replication declaration (aggregated by src/store/registry.ts). */
+export const READING_LIST_STORE_DEF: SyncedStoreDef<'entries'> = {
+    name: 'reading-list',
+    syncedKeys: ['entries'],
+    hydration: 'replace',
+    scopedDiff: false,
+};
 
 interface ReadingListState {
     entries: Record<string, ReadingListEntry>;
@@ -13,9 +20,8 @@ interface ReadingListState {
 }
 
 export const useReadingListStore = create<ReadingListState>()(
-    yjs(
-        getYDoc(),
-        'reading-list',
+    defineSyncedStore(
+        READING_LIST_STORE_DEF,
         (set) => ({
             entries: {},
 
@@ -45,7 +51,6 @@ export const useReadingListStore = create<ReadingListState>()(
             upsertEntry: (entry) => set((state) => ({
                 entries: { ...(state.entries || {}), [entry.filename]: entry }
             }))
-        }),
-        getYjsOptions()
+        })
     )
 );

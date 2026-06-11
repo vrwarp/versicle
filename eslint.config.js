@@ -18,6 +18,17 @@ const downgradeToWarn = (rules) =>
     ]),
   );
 
+// Shared by the base no-restricted-imports rule and the store-registry
+// override below (flat-config rule entries replace, never merge — the
+// override must restate the cross-root pattern or it would silently vanish
+// for the files it matches).
+const crossRootRelativeImportPattern = {
+  regex:
+    '^(\\.\\./)+(app|components|db|hooks|lib|store|types|test|workers)(/|$)',
+  message:
+    'Cross-root relative import. Use the path alias for this root instead (e.g. @lib/foo, @store/bar, ~types/baz — see tsconfig.app.json "paths"). Run `node scripts/codemod-aliases.mjs` to fix in bulk.',
+};
+
 export default tseslint.config(
   // .claude holds agent worktrees (full checkouts under .claude/worktrees/<name>/);
   // without the ignore, a top-level `eslint .` would also lint every worktree's copy.
@@ -109,12 +120,33 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
-          patterns: [
+          patterns: [crossRootRelativeImportPattern],
+        },
+      ],
+    },
+  },
+  // Store-registry seam (Phase 2, phase2-fork-surgery.md §2.5): synced stores
+  // are wired exclusively through defineSyncedStore in
+  // src/store/yjs-provider.ts — that module is the only production `yjs()`
+  // call site (the def aggregation lives in src/store/registry.ts, which
+  // stores must never import — see its module docs). Banning the
+  // middleware's default import everywhere else makes the seam structural.
+  // Named (type) imports — YjsOptions, YjsStoreHandle, getYjsStoreHandle —
+  // stay allowed, as do tests (contract/fixture suites bind mirror stores).
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/store/yjs-provider.ts', 'src/**/*.test.{ts,tsx}', 'src/test/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [crossRootRelativeImportPattern],
+          paths: [
             {
-              regex:
-                '^(\\.\\./)+(app|components|db|hooks|lib|store|types|test|workers)(/|$)',
+              name: 'zustand-middleware-yjs',
+              importNames: ['default'],
               message:
-                'Cross-root relative import. Use the path alias for this root instead (e.g. @lib/foo, @store/bar, ~types/baz — see tsconfig.app.json "paths"). Run `node scripts/codemod-aliases.mjs` to fix in bulk.',
+                'Create synced stores via defineSyncedStore (src/store/registry.ts) — the registry is the only production yjs() middleware call site.',
             },
           ],
         },

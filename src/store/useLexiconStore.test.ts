@@ -3,13 +3,14 @@ import { useLexiconStore } from './useLexiconStore';
 
 // Mock Yjs provider with a real Y.Doc instance
 // This ensures zustand-middleware-yjs works correctly with actual Yjs types
-vi.mock('./yjs-provider', async () => {
+vi.mock('./yjs-provider', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('./yjs-provider')>();
     const Y = await import('yjs');
     const doc = new Y.Doc();
     return {
+        ...actual, // incl. defineSyncedStore (used by the store module)
         getYDoc: () => doc,
         waitForYjsSync: vi.fn().mockResolvedValue(undefined),
-        getYjsOptions: () => ({}),
     };
 });
 
