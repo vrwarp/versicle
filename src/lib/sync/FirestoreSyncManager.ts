@@ -70,9 +70,11 @@ export function isPermissionDeniedEvent(event: unknown): boolean {
 }
 
 
-// Status types for the sync manager
-export type FirestoreSyncStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
-export type FirebaseAuthStatus = 'signed-out' | 'signed-in' | 'loading';
+// Status types for the sync manager. Canonical home is types/sync.ts so
+// store/UI consumers don't need a type edge into this service module
+// (layering-deps.md LD-7); re-exported here for existing importers.
+import type { FirestoreSyncStatus, FirebaseAuthStatus } from '../../types/sync';
+export type { FirestoreSyncStatus, FirebaseAuthStatus };
 
 // Event callback types
 type StatusChangeCallback = (status: FirestoreSyncStatus) => void;
