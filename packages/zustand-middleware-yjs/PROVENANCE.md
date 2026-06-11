@@ -58,3 +58,15 @@ branch bump.
   `previousState` delete-protection); inbound application factored into
   `computeInboundState` (legacy path = `patchState` exactly). Contract cases
   B.1–B.6 in `test/contract/synced-keys.test.ts`.
+- **Surgery 2 — `hydration: 'merge-defaults'`** (phase2-fork-surgery.md
+  §2.2): additive `YjsOptions.hydration` (default `'replace'` = legacy
+  replace-with-delete, still pinned by contract A.5). Under
+  `'merge-defaults'` the middleware captures the declared defaults (the
+  non-function keys of the state creator's initial state, before any
+  patching) and suppresses ONLY top-level inbound DELETEs for those keys —
+  the top-level change list is filtered in `patchState`; `getRecordChanges`
+  is untouched so nested deletes keep propagating. The outbound
+  `previousState` delete-protection is kept verbatim (strangler risk row 2,
+  pinned by A.3). Fixes finding D2 (new top-level fields wiped on hydration
+  from older docs — the v4→v5 fontProfiles class). Contract cases C.1–C.8 in
+  `test/contract/merge-defaults.test.ts`.

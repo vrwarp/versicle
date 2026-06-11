@@ -293,19 +293,48 @@ export const patchSharedType = (
 };
 
 /**
+ * Options for patchState.
+ */
+export interface PatchStateOptions
+{
+  /**
+   * Merge-over-declared-defaults hydration (phase2-fork-surgery.md §2.2):
+   * a TOP-LEVEL `[DELETE, key]` change is suppressed iff `key` is in this
+   * set. Everything else — inserts, updates, and ALL nested deletes (which
+   * ride inside PENDING chains under a present top-level key) — applies
+   * unchanged. Only the top-level change list is filtered; getRecordChanges
+   * itself is untouched, so recursion keeps emitting nested deletes.
+   */
+  suppressTopLevelDeleteKeys?: ReadonlySet<string>;
+}
+
+/**
  * Patches oldState to be identical to newState. This function recurses when
  * an array or object is encountered. If oldState and newState are already
  * identical (indicated by an empty diff), then oldState is returned.
  *
  * @param oldState The state we want to patch.
  * @param newState The state we want oldState to match after patching.
+ * @param options Top-level delete suppression (merge-defaults hydration).
  *
- * @returns The patched oldState, identical to newState.
+ * @returns The patched oldState, identical to newState (modulo retained keys).
  */
 
-export const patchState = (oldState: any, newState: any): any =>
+export const patchState = (
+  oldState: any,
+  newState: any,
+  options?: PatchStateOptions
+): any =>
 {
-  const changes = getChanges(oldState, newState);
+  let changes = getChanges(oldState, newState);
+
+  const retain = options?.suppressTopLevelDeleteKeys;
+
+  if (retain !== undefined)
+  {
+    changes = changes.filter(([ type, property ]) =>
+      !(type === ChangeType.DELETE && retain.has(property as string)));
+  }
 
   const applyChanges = (
     state: (string | any[] | Record<string, any>),
@@ -461,6 +490,14 @@ export interface InboundStateOptions
    * touched by remote updates.
    */
   syncedKeys?: ReadonlySet<string>;
+
+  /**
+   * Merge-over-declared-defaults hydration (phase2-fork-surgery.md §2.2):
+   * top-level DELETEs for these keys are suppressed — the store keeps its
+   * current value (the declared default, or whatever local writes produced
+   * since). Nested deletes still propagate. Undefined = legacy 'replace'.
+   */
+  suppressTopLevelDeleteKeys?: ReadonlySet<string>;
 }
 
 /**
@@ -483,9 +520,12 @@ export const computeInboundState = (
 ): any =>
 {
   const syncedKeys = options?.syncedKeys;
+  const patchOptions: PatchStateOptions = {
+    suppressTopLevelDeleteKeys: options?.suppressTopLevelDeleteKeys,
+  };
 
   if (syncedKeys === undefined)
-    return patchState(currentState, newState);
+    return patchState(currentState, newState, patchOptions);
 
   // pickKeys is presence-preserving, but function-valued state keys are
   // excluded from the replication universe entirely (functions are never
@@ -498,7 +538,7 @@ export const computeInboundState = (
   });
 
   const newSubset = isPlainRecord(newState) ? pickKeys(newState, syncedKeys) : {};
-  const patchedSubset = patchState(oldSubset, newSubset);
+  const patchedSubset = patchState(oldSubset, newSubset, patchOptions);
 
   // Apply the patched subset over the full state: keys deleted within the
   // subset are absent from patchedSubset and must be removed; everything

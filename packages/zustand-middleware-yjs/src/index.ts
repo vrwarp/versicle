@@ -93,6 +93,28 @@ export interface YjsOptions {
    * must exist in the initial state and must not be a function.
    */
   syncedKeys?: readonly string[];
+
+  /**
+   * Inbound semantics for top-level state keys absent from the Y.Map
+   * (phase2-fork-surgery.md §2.2). Default `'replace'` = legacy
+   * replace-with-delete hydration (finding D2: a field newly added to a
+   * synced store's initial state is wiped on first hydration from an older
+   * doc).
+   *
+   * `'merge-defaults'`: a TOP-LEVEL inbound DELETE is suppressed iff the key
+   * is one of the store's declared defaults (the non-function keys of the
+   * initial state as returned by the state creator, captured before any
+   * patching). Everything else applies unchanged — inserts, updates, and ALL
+   * nested deletes (the only deletions normal operation produces; they ride
+   * inside a present top-level key). Retention is top-level-key-presence
+   * based and shallow: a map key that is present but "poorer" than the
+   * default (e.g. an empty record) wins entirely. A retained default is not
+   * written back to the doc until something actually set()s it (lazy
+   * backfill). Deliberate top-level key removal remains a migration concern:
+   * remove the key from defaults/syncedKeys and bump the schema version in
+   * the same release.
+   */
+  hydration?: 'replace' | 'merge-defaults';
 }
 
 type YjsImpl = <T>(
@@ -219,6 +241,23 @@ const yjs: YjsImpl = <S>(
     );
 
     /*
+     * Merge-over-declared-defaults hydration (phase2-fork-surgery.md §2.2):
+     * capture the declared defaults — the non-function keys of the initial
+     * state as returned by the state creator, BEFORE any patching. Inbound
+     * top-level DELETEs for these keys are suppressed; nested deletes still
+     * propagate. Undefined (hydration 'replace', the default) = legacy
+     * replace-with-delete behavior, pinned by contract case A.5.
+     */
+    const declaredDefaultKeys: ReadonlySet<string> | undefined =
+      options?.hydration === "merge-defaults"
+        ? new Set(
+          Object.entries(initialState as Record<string, unknown>)
+            .filter(([ , value ]) => (value instanceof Function) === false)
+            .map(([ key ]) => key)
+        )
+        : undefined;
+
+    /*
      * Loud dev-mode misconfiguration check (phase2-fork-surgery.md §2.1): a
      * syncedKeys entry that is absent from the initial state would silently
      * never sync (a typo), and a function entry could never sync (functions
@@ -249,7 +288,10 @@ const yjs: YjsImpl = <S>(
       initialState = computeInboundState(
         initialState,
         map.toJSON(),
-        { syncedKeys: syncedKeySet }
+        {
+          syncedKeys: syncedKeySet,
+          suppressTopLevelDeleteKeys: declaredDefaultKeys,
+        }
       );
       api.setState(initialState, true as any);
     }
@@ -291,7 +333,10 @@ const yjs: YjsImpl = <S>(
           "setState": originalSetState,
         },
         map.toJSON(),
-        { syncedKeys: syncedKeySet }
+        {
+          syncedKeys: syncedKeySet,
+          suppressTopLevelDeleteKeys: declaredDefaultKeys,
+        }
       );
     };
 
