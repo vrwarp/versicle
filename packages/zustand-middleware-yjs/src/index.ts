@@ -150,7 +150,66 @@ export interface YjsOptions {
    *   re-read and patched; untouched keys keep their object identity.
    */
   scopedDiff?: boolean;
+
+  /**
+   * Bind the store to a NESTED Y.Map at `doc.getMap(name).get(scope.key)`
+   * instead of the top-level map (phase2-fork-surgery.md §2, §5.3 — designed
+   * for the preferences fold: an unchanged flat state binds to
+   * `preferences.<deviceId>` so zero consumer call sites change).
+   *
+   * Semantics:
+   * - The nested map is created lazily on the first outbound flush; a store
+   *   whose scope key has no entry starts from its declared defaults.
+   * - Inbound path filtering: only transactions touching the scope key
+   *   reach this store — sibling entries never patch it.
+   * - The `__schemaVersion` poison pill still reads the TOP-LEVEL named map
+   *   (the obsolete check is unaffected by scoping).
+   */
+  scope?: { key: string };
 }
+
+/**
+ * The per-store sync/hydration handle, attached to the store api as
+ * `api.yjs` (modeled on `zustand/persist`'s `api.persist`;
+ * phase2-fork-surgery.md §2 "Store API augmentation" and §2.4).
+ */
+export interface YjsStoreHandle {
+  /** True once the store has applied its first patch from the doc (or was marked). */
+  hasHydrated(): boolean;
+  /**
+   * Resolves after hydration; resolution strictly follows the hydrating
+   * `setState`, so an awaiting caller always observes hydrated state. This
+   * is the structural replacement for the provider's nested-queueMicrotask
+   * ordering hack.
+   */
+  whenHydrated(): Promise<void>;
+  /**
+   * Provider calls this when the doc is synced and this store's map is
+   * legitimately empty (the fork alone cannot detect that — the knowledge
+   * belongs to the persistence layer). Idempotent; safe after real
+   * hydration.
+   */
+  markHydrated(): void;
+  /** Test API: synchronously drain the pending outbound microtask. */
+  flush(): void;
+  /** True once the schema-version poison pill permanently halted sync. */
+  isObsolete(): boolean;
+}
+
+/**
+ * Typed accessor for the `api.yjs` handle the middleware attaches.
+ * Throws if the store was not created with this middleware.
+ */
+export const getYjsStoreHandle = (store: unknown): YjsStoreHandle => {
+  const handle = (store as { yjs?: YjsStoreHandle }).yjs;
+  if (handle === undefined) {
+    throw new Error(
+      "[zustand-middleware-yjs] store has no `yjs` handle — was it created " +
+      "with the yjs middleware?"
+    );
+  }
+  return handle;
+};
 
 type YjsImpl = <T>(
   doc: Y.Doc,
@@ -188,8 +247,28 @@ const yjs: YjsImpl = <S>(
   config: StateCreator<S>,
   options?: YjsOptions
 ): StateCreator<S> => {
-  // The root Y.Map that the store is written and read from.
-  const map: Y.Map<any> = doc.getMap(name);
+  // The top-level named Y.Map. Without `scope` this IS the store's data
+  // map; with `scope` the data lives in a nested Y.Map under scope.key and
+  // the named map remains the observation root and the poison-pill surface.
+  const rootMap: Y.Map<any> = doc.getMap(name);
+
+  const scopeKey: string | undefined = options?.scope?.key;
+
+  /** The store's data map, or undefined while the scoped child doesn't exist. */
+  const getDataMap = (): Y.Map<any> | undefined => {
+    if (scopeKey === undefined) return rootMap;
+    const child = rootMap.get(scopeKey);
+    return child instanceof Y.Map ? child : undefined;
+  };
+
+  /** The store's data map, lazily creating the scoped child (inside a transaction). */
+  const ensureDataMap = (): Y.Map<any> => {
+    const existing = getDataMap();
+    if (existing !== undefined) return existing;
+    const created = new Y.Map();
+    rootMap.set(scopeKey as string, created);
+    return created;
+  };
 
   /*
    * The effective replication whitelist (undefined = legacy "all non-function
@@ -213,10 +292,32 @@ const yjs: YjsImpl = <S>(
     // Initialize the loading state.
     let loaded = false;
 
-    if (map.size > 0) {
+    if ((getDataMap()?.size ?? 0) > 0) {
       loaded = true;
       options?.onLoaded?.();
     }
+
+    /*
+     * Hydration state for the api.yjs handle (phase2-fork-surgery.md §2.4).
+     * `hydrated` flips at the end of whichever happens first:
+     *   (a) the synchronous initial patch when the data map is pre-populated
+     *       at store creation;
+     *   (b) the first applied inbound processBatch;
+     *   (c) api.yjs.markHydrated() (provider: doc synced + map empty).
+     * The resolve call always happens AFTER the corresponding setState
+     * returns, so an awaiting caller observes hydrated state.
+     */
+    let hydrated = false;
+    let resolveHydrated!: () => void;
+    const hydratedPromise = new Promise<void>((resolve) => {
+      resolveHydrated = resolve;
+    });
+    const markHydrated = (): void => {
+      if (!hydrated) {
+        hydrated = true;
+        resolveHydrated();
+      }
+    };
 
     /*
      * Outbound Microtask Batching: multiple Zustand set() / setState() calls
@@ -248,19 +349,22 @@ const yjs: YjsImpl = <S>(
         // each against its own subtree.
         const state = api.getState();
         doc.transact(() =>
-          patchSharedTypeScoped(map, state, previousState, sharedOptions), api);
+          patchSharedTypeScoped(ensureDataMap(), state, previousState, sharedOptions), api);
 
         // Divergence tripwire: occasionally verify the scoped flush against
         // a full diff and fail loudly on drift (mutate-in-place writes).
-        if (isDevEnvironment() && Math.random() < __scopedDiffDevSampling.rate)
-          assertScopedDiffConvergence(map, api.getState(), syncedKeySet);
+        if (isDevEnvironment() && Math.random() < __scopedDiffDevSampling.rate) {
+          const dataMap = getDataMap();
+          if (dataMap !== undefined)
+            assertScopedDiffConvergence(dataMap, api.getState(), syncedKeySet);
+        }
       }
       else {
         // Legacy full-tree diff. Also the defensive fallback for a first
         // flush without a captured previousState.
         // Read the FINAL state after all synchronous mutations this tick.
         doc.transact(() =>
-          patchSharedType(map, api.getState(), {
+          patchSharedType(ensureDataMap(), api.getState(), {
             ...sharedOptions,
             previousState,
           }), api);
@@ -274,7 +378,11 @@ const yjs: YjsImpl = <S>(
         isOutboundPending = true;
         // Record the pre-mutation state only for the FIRST set() of this batch.
         batchPreviousState = capturedPreviousState;
-        queueMicrotask(flushOutbound);
+        // The guard makes api.yjs.flush() (synchronous drain) safe: a manual
+        // flush clears the flag and the stale microtask becomes a no-op.
+        queueMicrotask(() => {
+          if (isOutboundPending) flushOutbound();
+        });
       }
     };
 
@@ -340,16 +448,18 @@ const yjs: YjsImpl = <S>(
       });
     }
 
-    if (map.size > 0) {
+    const creationDataMap = getDataMap();
+    if (creationDataMap !== undefined && creationDataMap.size > 0) {
       initialState = computeInboundState(
         initialState,
-        map.toJSON(),
+        creationDataMap.toJSON(),
         {
           syncedKeys: syncedKeySet,
           suppressTopLevelDeleteKeys: declaredDefaultKeys,
         }
       );
       api.setState(initialState, true as any);
+      markHydrated(); // hydration source (a): synchronous initial patch
     }
 
     api.setState = (partial, replace) => {
@@ -357,6 +467,22 @@ const yjs: YjsImpl = <S>(
       originalSetState(partial as any, replace as any);
       scheduleOutbound(previousState);
     };
+
+    /*
+     * Attach the per-store handle (api.yjs — the zustand/persist-style
+     * augmentation, phase2-fork-surgery.md §2.4). Consumers reach it through
+     * getYjsStoreHandle(store).
+     */
+    const handle: YjsStoreHandle = {
+      hasHydrated: () => hydrated,
+      whenHydrated: () => hydratedPromise,
+      markHydrated,
+      flush: () => {
+        if (isOutboundPending) flushOutbound();
+      },
+      isObsolete: () => isObsolete,
+    };
+    (api as unknown as { yjs: YjsStoreHandle }).yjs = handle;
 
     /*
      * We do not initialize the Yjs map with the initial state here.
@@ -382,8 +508,11 @@ const yjs: YjsImpl = <S>(
     let isUpdatePending = false;
 
     // Under scopedDiff: the top-level keys named by the foreign Yjs events
-    // of the current inbound batch (phase2-fork-surgery.md §2.3 inbound).
+    // of the current inbound batch (phase2-fork-surgery.md §2.3 inbound),
+    // plus a full-patch escape hatch for "the scoped child map itself was
+    // (re)placed" events.
     let pendingInboundKeys: Set<string> | undefined;
+    let pendingInboundFull = false;
 
     const processBatch = () => {
       isUpdatePending = false;
@@ -393,7 +522,9 @@ const yjs: YjsImpl = <S>(
         "setState": originalSetState,
       };
 
-      if (options?.scopedDiff) {
+      const dataMap = getDataMap();
+
+      if (options?.scopedDiff && !pendingInboundFull) {
         // Scoped inbound: re-read ONLY the affected top-level keys; the
         // patched subset is applied over the full state, so untouched keys
         // keep their object identity (referential stability, case D.4).
@@ -410,8 +541,8 @@ const yjs: YjsImpl = <S>(
 
         const partialMapJson: Record<string, any> = {};
         affectedKeys.forEach((key) => {
-          if (map.has(key)) {
-            const value = map.get(key);
+          if (dataMap !== undefined && dataMap.has(key)) {
+            const value = dataMap.get(key);
             partialMapJson[key] =
               value instanceof Y.AbstractType ? value.toJSON() : value;
           }
@@ -421,31 +552,52 @@ const yjs: YjsImpl = <S>(
           syncedKeys: affectedKeys,
           suppressTopLevelDeleteKeys: declaredDefaultKeys,
         });
+        markHydrated(); // hydration source (b): first applied inbound batch
         return;
       }
 
+      pendingInboundKeys = undefined;
+      pendingInboundFull = false;
+
       patchStore(
         storeForPatch,
-        map.toJSON(),
+        dataMap !== undefined ? dataMap.toJSON() : {},
         {
           syncedKeys: syncedKeySet,
           suppressTopLevelDeleteKeys: declaredDefaultKeys,
         }
       );
+      markHydrated(); // hydration source (b): first applied inbound batch
     };
 
-    map.observeDeep((events, transaction) => {
+    /*
+     * Scope relevance filter (§2 `scope`): without scoping every event is
+     * relevant; with scoping only transactions touching scope.key reach the
+     * store (deep events carry the key in path[0]; root-map events name it
+     * in changes.keys). Sibling entries never trigger inbound patches.
+     */
+    const touchesScope = (events: Y.YEvent<any>[]): boolean =>
+      scopeKey === undefined ||
+      events.some((event) =>
+        event.path.length > 0
+          ? String(event.path[0]) === scopeKey
+          : event.changes.keys.has(scopeKey));
+
+    rootMap.observeDeep((events, transaction) => {
       if (isObsolete) return; // Permanently disabled
 
-      // 1. Poison Pill Check
+      // 1. Poison Pill Check (always on the TOP-LEVEL named map — the
+      // obsolete check is unaffected by scoping).
       if (options?.schemaVersion !== undefined) {
-        const incomingVersion = (map.get('__schemaVersion') as number | undefined) || 0;
+        const incomingVersion = (rootMap.get('__schemaVersion') as number | undefined) || 0;
         if (incomingVersion > options.schemaVersion) {
           isObsolete = true;
           options.onObsolete?.(incomingVersion);
           return;
         }
       }
+
+      if (!touchesScope(events)) return;
 
       // 2. Initial Load Handling (unchanged behaviour).
       if (!loaded && transaction.origin !== api) {
@@ -459,16 +611,28 @@ const yjs: YjsImpl = <S>(
       if (transaction.origin === api) return;
 
       // Scoped inbound (§2.3): collect the affected top-level keys across
-      // the microtask batch — deep events carry the key in path[0]; events
-      // on the root map name their keys in changes.keys.
+      // the microtask batch. Key positions shift by one level under `scope`.
       if (options?.scopedDiff) {
         pendingInboundKeys ??= new Set<string>();
         const keys = pendingInboundKeys;
         events.forEach((event) => {
-          if (event.path.length > 0)
-            keys.add(String(event.path[0]));
-          else
-            event.changes.keys.forEach((_change, key) => keys.add(key));
+          if (scopeKey === undefined) {
+            if (event.path.length > 0)
+              keys.add(String(event.path[0]));
+            else
+              event.changes.keys.forEach((_change, key) => keys.add(key));
+          }
+          else if (event.path.length === 0) {
+            // The scoped child itself was inserted/replaced/deleted on the
+            // root map: fall back to a full inbound patch for this batch.
+            if (event.changes.keys.has(scopeKey)) pendingInboundFull = true;
+          }
+          else if (String(event.path[0]) === scopeKey) {
+            if (event.path.length === 1)
+              event.changes.keys.forEach((_change, key) => keys.add(key));
+            else
+              keys.add(String(event.path[1]));
+          }
         });
       }
 

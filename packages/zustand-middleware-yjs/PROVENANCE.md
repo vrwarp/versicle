@@ -85,3 +85,19 @@ branch bump.
   → legacy full diff" fallback is defensive-only; the reachable first-flush
   contract is scoped/lazy (consistent with §2.2 lazy backfill), pinned by
   D.6. Contract cases D.1–D.6 in `test/contract/scoped-diff.test.ts`.
+- **Surgery 4 — `api.yjs` store handle + `scope: { key }`**
+  (phase2-fork-surgery.md §2.4, §2 options table, §5.3): the middleware now
+  attaches a `YjsStoreHandle` (`hasHydrated`/`whenHydrated`/`markHydrated`/
+  `flush`/`isObsolete`, modeled on zustand/persist's `api.persist`; typed
+  accessor `getYjsStoreHandle`). `whenHydrated` resolves strictly after the
+  hydrating `setState` — the structural replacement for the provider's
+  nested-queueMicrotask hack. `flush()` drains the pending outbound
+  microtask synchronously (the scheduled microtask is guarded so it cannot
+  double-run). `scope: { key }` binds the store to a nested Y.Map at
+  `doc.getMap(name).get(key)` (lazily created on first outbound flush) with
+  inbound path filtering — sibling entries never patch the store — while
+  the `__schemaVersion` poison pill keeps reading the TOP-LEVEL named map
+  (obsolete check unaffected; risk R8's contract cases). Contract cases
+  E.1–E.4 in `test/contract/hydration-api.test.ts` (incl. the end-to-end
+  scopedDiff tripwire through `flush()`); scope cases in
+  `test/contract/scope.test.ts`.
