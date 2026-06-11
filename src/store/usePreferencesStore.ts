@@ -80,12 +80,18 @@ const defaultPreferences = {
 
 /**
  * Replication declaration (aggregated by src/store/registry.ts).
- * Per-device top-level map until the flip item rebinds to the v6-folded
- * keyed map (name 'preferences', scope: { key: getDeviceId() } —
- * phase2-fork-surgery.md §5.3).
+ * Flipped in flip wave 3 (phase2-fork-surgery.md §2.6 #6, §5.3): bound to
+ * the v6-folded keyed map — the unchanged flat PreferencesState lives in the
+ * nested Y.Map `preferences.<deviceId>`, so zero consumer call sites change.
+ * The legacy top-level `preferences/<deviceId>` shares are dead husks from
+ * here on (v6 copied them in, copy-without-clear; v7 clears them) and no
+ * new ones are ever created (a new device starts from declared defaults and
+ * lazily writes its sub-map). merge-defaults retires the fontProfiles wipe
+ * class (D2) this store's v4→v5 migration existed for.
  */
 export const PREFERENCES_STORE_DEF: SyncedStoreDef<keyof typeof defaultPreferences> = {
-    name: `preferences/${getDeviceId()}`,
+    name: 'preferences',
+    scope: { key: getDeviceId() },
     syncedKeys: [
         'currentTheme',
         'customTheme',
@@ -103,8 +109,8 @@ export const PREFERENCES_STORE_DEF: SyncedStoreDef<keyof typeof defaultPreferenc
         'showPinyin',
         'pinyinSize',
     ],
-    hydration: 'replace',
-    scopedDiff: false,
+    hydration: 'merge-defaults',
+    scopedDiff: true,
 };
 
 /**

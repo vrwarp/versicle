@@ -5,12 +5,15 @@ import * as Y from 'yjs';
 import { createStore } from 'zustand/vanilla';
 import yjsMiddleware from 'zustand-middleware-yjs';
 import type { SyncedStoreDef } from '@store/yjs-provider';
-import { BOOK_EN, DEVICE_A } from '@test/fixtures/ydoc/seed';
+import { BOOK_EN, DEVICE_A, DEVICE_B } from '@test/fixtures/ydoc/seed';
 import { CONTENT_ANALYSIS_STORE_DEF } from '@store/useContentAnalysisStore';
 import { VOCABULARY_STORE_DEF } from '@store/useVocabularyStore';
 import { DEVICES_STORE_DEF } from '@store/useDeviceStore';
 import { LEXICON_STORE_DEF } from '@store/useLexiconStore';
 import { READING_LIST_STORE_DEF } from '@store/useReadingListStore';
+import { PREFERENCES_STORE_DEF } from '@store/usePreferencesStore';
+import { runCrdtMigrationsOnDoc } from '@app/migrations';
+import { getDeviceId } from '@lib/device-id';
 
 /**
  * Per-store flip suite (phase2-fork-surgery.md §2.6, the F.1 re-run): as each
@@ -54,6 +57,110 @@ const bindWithDef = <S>(
       scope: def.scope,
     }),
   );
+
+// ─── Flip wave 3: preferences (scope rebind, §5.3) ──────────────────────────
+
+/** Mirror of the store's declared defaults (usePreferencesStore.ts). */
+const prefsDefaults = {
+  currentTheme: 'light',
+  customTheme: { bg: '#ffffff', fg: '#000000' },
+  fontFamily: 'serif',
+  lineHeight: 1.5,
+  fontSize: 100,
+  shouldForceFont: false,
+  readerViewMode: 'paginated',
+  libraryLayout: 'grid',
+  libraryFilterMode: 'all',
+  librarySortOrder: 'last_read',
+  activeContext: 'library',
+  forceTraditionalChinese: false,
+  showPinyin: false,
+  pinyinSize: 100,
+  fontProfiles: {
+    en: { fontSize: 100, lineHeight: 1.5 },
+    zh: { fontSize: 120, lineHeight: 1.8 },
+  } as Record<string, { fontSize: number; lineHeight: number }>,
+};
+interface PrefsState extends Record<string, unknown> {
+  setTheme: (theme: string) => void;
+}
+
+describe('flip wave 3: preferences (scope rebind + merge-defaults + scopedDiff)', () => {
+  const prefsCreator = (set: (p: Partial<PrefsState>) => void): PrefsState => ({
+    ...structuredClone(prefsDefaults),
+    setTheme: (currentTheme) => set({ currentTheme }),
+  });
+  /** The live def, rebound to a fixture device id (scope.key is runtime-derived). */
+  const scopedTo = (deviceId: string): SyncedStoreDef => ({
+    ...PREFERENCES_STORE_DEF,
+    scope: { key: deviceId },
+  });
+
+  it('the live def binds this device to the folded keyed map', () => {
+    expect(PREFERENCES_STORE_DEF.name).toBe('preferences');
+    expect(PREFERENCES_STORE_DEF.scope?.key).toBe(getDeviceId());
+    expect(PREFERENCES_STORE_DEF.hydration).toBe('merge-defaults');
+    expect(PREFERENCES_STORE_DEF.scopedDiff).toBe(true);
+  });
+
+  it('C.4 end-to-end: v4 doc → coordinator (backfill + fold) → scoped store hydrates fully', async () => {
+    const doc = loadDoc(4);
+    await runCrdtMigrationsOnDoc(doc, { createCheckpoint: async () => 1 });
+
+    const store = bindWithDef<PrefsState>(doc, scopedTo(DEVICE_A), prefsCreator);
+    const state = store.getState();
+    expect(state.currentTheme).toBe('sepia');
+    expect(state.fontFamily).toBe('Literata');
+    expect(state.showPinyin).toBe(true);
+    expect(state.pinyinSize).toBe(60);
+    // v4→v5 backfilled fontProfiles into the legacy map before the fold.
+    expect(state.fontProfiles).toEqual(prefsDefaults.fontProfiles);
+  });
+
+  it('C.4 merge under scope: a folded child missing fontProfiles retains the declared default', () => {
+    const doc = new Y.Doc();
+    const child = new Y.Map();
+    child.set('currentTheme', 'sepia');
+    doc.getMap('preferences').set(DEVICE_A, child);
+
+    const store = bindWithDef<PrefsState>(doc, scopedTo(DEVICE_A), prefsCreator);
+    expect(store.getState().currentTheme).toBe('sepia'); // doc value wins…
+    expect(store.getState().fontFamily).toBe('serif'); // …absent keys keep defaults
+    expect(store.getState().fontProfiles).toEqual(prefsDefaults.fontProfiles);
+  });
+
+  it('new device starts clean from defaults and lazily writes only what it sets — no legacy share is ever created', async () => {
+    const doc = loadDoc(5);
+    await runCrdtMigrationsOnDoc(doc, { createCheckpoint: async () => 1 });
+
+    const newDevice = 'fixture-device-new';
+    const store = bindWithDef<PrefsState>(doc, scopedTo(newDevice), prefsCreator);
+    expect(store.getState().currentTheme).toBe(prefsDefaults.currentTheme);
+
+    store.getState().setTheme('dark');
+    await drain();
+
+    const child = doc.getMap('preferences').get(newDevice) as Y.Map<unknown>;
+    expect(child).toBeInstanceOf(Y.Map);
+    // Lazy backfill (C.7): only the written key reaches the doc.
+    expect(child.toJSON()).toEqual({ currentTheme: 'dark' });
+    // The getDeviceId()-named top-level shares died with the rebind (§5.3.4).
+    expect(doc.share.has(`preferences/${newDevice}`)).toBe(false);
+  });
+
+  it('sibling devices never patch a scoped store (inbound path filtering)', async () => {
+    const doc = loadDoc(5);
+    await runCrdtMigrationsOnDoc(doc, { createCheckpoint: async () => 1 });
+
+    const store = bindWithDef<PrefsState>(doc, scopedTo(DEVICE_A), prefsCreator);
+    const before = store.getState();
+
+    (doc.getMap('preferences').get(DEVICE_B) as Y.Map<unknown>).set('fontSize', 200);
+    await drain();
+
+    expect(store.getState()).toBe(before); // reference-identical: no patch ran
+  });
+});
 
 // ─── Flip wave 1: contentAnalysis, vocabulary, devices ──────────────────────
 

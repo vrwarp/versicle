@@ -17,7 +17,7 @@ hydration modes, and the per-store flip ledger.
 | `useBookStore` | `library` | library | `books` | replace | no | Book inventory (per-book user data; carries __schemaVersion). |
 | `useReadingStateStore` | `progress` | reader | `progress` | replace | no | Reading progress per book per device, incl. reading sessions. |
 | `useAnnotationStore` | `annotations` | reader | `annotations` | replace | no | Highlights and notes, keyed by UUID. |
-| `usePreferencesStore` | `preferences/<deviceId>` | shell | `currentTheme`, `customTheme`, `fontFamily`, `lineHeight`, `fontSize`, `shouldForceFont`, `readerViewMode`, `libraryLayout`, `libraryFilterMode`, `librarySortOrder`, `activeContext`, `fontProfiles`, `forceTraditionalChinese`, `showPinyin`, `pinyinSize` | replace | no | Per-device display preferences (theme, fonts, layout, Chinese). |
+| `usePreferencesStore` | `preferences.<deviceId>` | shell | `currentTheme`, `customTheme`, `fontFamily`, `lineHeight`, `fontSize`, `shouldForceFont`, `readerViewMode`, `libraryLayout`, `libraryFilterMode`, `librarySortOrder`, `activeContext`, `fontProfiles`, `forceTraditionalChinese`, `showPinyin`, `pinyinSize` | merge-defaults | yes | Per-device display preferences (theme, fonts, layout, Chinese). |
 | `useReadingListStore` | `reading-list` | library | `entries` | merge-defaults | yes | Reading-list entries keyed by filename (progress projection). |
 | `useVocabularyStore` | `vocabulary` | chinese | `knownCharacters` | merge-defaults | yes | Known Chinese characters (char → learned-at timestamp). |
 | `useLexiconStore` | `lexicon` | audio | `rules`, `settings` | merge-defaults | yes | TTS pronunciation rules + per-book lexicon settings. |

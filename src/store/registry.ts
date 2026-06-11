@@ -164,7 +164,7 @@ export const STORE_REGISTRY: readonly StoreRegistryEntry[] = [
   {
     module: 'usePreferencesStore',
     tier: 'synced',
-    persistence: 'preferences/<deviceId>',
+    persistence: 'preferences.<deviceId>',
     owner: 'shell',
     summary: 'Per-device display preferences (theme, fonts, layout, Chinese).',
     def: SYNCED_STORE_DEFS.preferences,
