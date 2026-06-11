@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
+import { getYDoc, getYjsOptions } from './yjs-provider';
 
 export interface VocabularyState {
   // Key-value store of characters to preserve sync performance
@@ -17,7 +17,7 @@ export interface VocabularyState {
 
 export const useVocabularyStore = create<VocabularyState>()(
   yjs(
-    yDoc,
+    getYDoc(),
     'vocabulary',
     (set) => ({
       knownCharacters: {},

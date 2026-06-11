@@ -46,9 +46,9 @@ vi.mock('../store/yjs-provider', async (importOriginal) => {
     ...actual,
     waitForYjsSync: vi.fn(() => Promise.resolve()),
     // Ensure we expose a mock persistence if the real one isn't initialized
-    yjsPersistence: {
+    getYjsPersistence: () => ({
       clearData: mocks.persistenceMock.clearData
-    }
+    })
   };
 });
 
@@ -118,7 +118,7 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
 
     // Get the mocked yDoc
     const yjsProvider = await import('../store/yjs-provider');
-    mockYDoc = yjsProvider.yDoc;
+    mockYDoc = yjsProvider.getYDoc();
 
     // Clear Y.Doc maps
     mockYDoc.getMap('library').clear();

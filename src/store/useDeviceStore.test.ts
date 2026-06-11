@@ -4,7 +4,7 @@ import { useDeviceStore } from './useDeviceStore';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Mock yjs-provider
 vi.mock('./yjs-provider', () => ({
-    yDoc: {
+    getYDoc: () => ({
         getMap: vi.fn(() => ({
             observe: vi.fn(),
             toJSON: () => ({}),
@@ -12,7 +12,7 @@ vi.mock('./yjs-provider', () => ({
             get: vi.fn(),
         })),
         transact: (cb: any) => cb(),
-    },
+    }),
     getYjsOptions: () => ({})
 }));
 

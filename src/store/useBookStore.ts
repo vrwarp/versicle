@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
+import { getYDoc, getYjsOptions } from './yjs-provider';
 import type { UserInventoryItem } from '../types/db';
 
 /**
@@ -45,7 +45,7 @@ interface BookState {
 
 export const useBookStore = create<BookState>()(
     yjs(
-        yDoc,
+        getYDoc(),
         'library', // Share name 'library' to match existing data structure for 'books'
         (set) => ({
             __schemaVersion: 1, // Default for empty/new documents

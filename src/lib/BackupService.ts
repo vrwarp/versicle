@@ -5,7 +5,7 @@ import { exportFile } from './export';
 import { dbService } from '../db/DBService';
 import type { BookLocations, StaticBookManifest, UserInventoryItem } from '../types/db';
 import { getDB } from '../db/db';
-import { yDoc, waitForYjsSync, yjsPersistence } from '../store/yjs-provider';
+import { getYDoc, waitForYjsSync, getYjsPersistence } from '../store/yjs-provider';
 import { createLogger } from './logger';
 import { useLibraryStore } from '../store/useLibraryStore';
 
@@ -131,7 +131,7 @@ export class BackupService {
     if (!filesFolder) throw new Error('Failed to create zip folder');
 
     // Get book IDs from Yjs library
-    const libraryMap = yDoc.getMap('library');
+    const libraryMap = getYDoc().getMap('library');
     // Phase 2: Books are stored in 'books' submap
     const booksMap = libraryMap.get('books') as Y.Map<UserInventoryItem>;
     const bookIds = booksMap ? Array.from(booksMap.keys()) : [];
@@ -213,7 +213,7 @@ export class BackupService {
       import('./sync/semantic-tree').then(m => m.generateSemanticTree())
     ]);
 
-    const stateUpdate = Y.encodeStateAsUpdate(yDoc);
+    const stateUpdate = Y.encodeStateAsUpdate(getYDoc());
     const yjsSnapshot = this.uint8ArrayToBase64(stateUpdate);
 
     const staticManifestRows = await db.getAll('static_manifests');
@@ -334,9 +334,10 @@ export class BackupService {
     // The App must be reloaded after this to pick up the new state.
 
     // 1. Clear existing persistence
-    if (yjsPersistence) {
+    const persistence = getYjsPersistence();
+    if (persistence) {
       logger.debug('Clearing existing database...');
-      await yjsPersistence.clearData();
+      await persistence.clearData();
     }
 
     // 2. Write snapshot safely via native IDB to guarantee completion before reload

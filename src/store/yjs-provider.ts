@@ -13,21 +13,42 @@ const logger = createLogger('YjsProvider');
 // See: Operational Runbook for Breaking Changes in the TDD.
 export const CURRENT_SCHEMA_VERSION = 5;
 
-// Singleton Y.Doc instance - Source of Truth for User Data
-export const yDoc = new Y.Doc();
+// Singleton Y.Doc - Source of Truth for User Data. Constructed lazily on
+// first access instead of at module scope: importing this module (e.g. for
+// CURRENT_SCHEMA_VERSION) must not create CRDT state. Synced stores still
+// call getYDoc() while wiring their middleware at module init — full
+// construction-on-boot lands with the P2 store registry.
+let doc: Y.Doc | null = null;
 
-// Expose globally for Playwright end-to-end tests
-if (typeof window !== 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__YJS_DOC__ = yDoc;
+export function getYDoc(): Y.Doc {
+    if (!doc) {
+        doc = new Y.Doc();
+    }
+    return doc;
 }
 
 let persistence: IndexeddbPersistence | null = null;
+let persistenceStarted = false;
 
-// Initialize persistence only if supported
-if (isStorageSupported()) {
+/**
+ * Start the y-idb persistence binding for the shared Y.Doc. Idempotent.
+ *
+ * Called EXCLUSIVELY by the bootstrap `startYjsPersistence` phase
+ * (src/app/boot/yjsPersistence.ts) — persistence used to boot here at import
+ * time as a module-scope side effect (any store import started IndexedDB
+ * writes before React rendered); now boot owns the moment explicitly.
+ */
+export function startYjsPersistence(): void {
+    if (persistenceStarted) return;
+    persistenceStarted = true;
+
+    if (!isStorageSupported()) {
+        logger.warn('IndexedDB not supported. Falling back to in-memory mode.');
+        return;
+    }
+
     try {
-        persistence = new IndexeddbPersistence('versicle-yjs', yDoc, {
+        persistence = new IndexeddbPersistence('versicle-yjs', getYDoc(), {
             writeDebounceMs: 200,
             transactionRunner: runExclusiveIdbWrite,
         });
@@ -41,21 +62,12 @@ if (isStorageSupported()) {
     } catch (error) {
         logger.error('Failed to initialize IndexedDB persistence:', error);
     }
-} else {
-    logger.warn('IndexedDB not supported. Falling back to in-memory mode.');
 }
 
 /**
- * Expose the persistence instance for lower-level access (e.g., clearing data)
- */
-export const yjsPersistence = persistence;
-
-/**
- * Live accessor for the persistence instance. Unlike the `yjsPersistence`
- * const snapshot above (which keeps pointing at a destroyed instance after
- * `disconnectYjs()`), this always reflects the current value — use it for
- * anything that must observe disconnection (e.g. the E2E test API's
- * `flushPersistence`).
+ * Live accessor for the persistence instance — null until
+ * `startYjsPersistence()` has run, and again after `disconnectYjs()`.
+ * Always read it through this function; never cache the instance.
  */
 export function getYjsPersistence(): IndexeddbPersistence | null {
     return persistence;
@@ -248,8 +260,3 @@ export const disconnectYjs = async () => {
         logger.info('Persistence disconnected.');
     }
 };
-
-if (typeof window !== 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__DISCONNECT_YJS__ = disconnectYjs;
-}

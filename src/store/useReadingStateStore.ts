@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
+import { getYDoc, getYjsOptions } from './yjs-provider';
 import type { UserProgress, ReadingEventType, ReadingSession } from '../types/db';
 import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
@@ -124,7 +124,7 @@ export const getMostRecentProgress = (bookProgress: Record<string, UserProgress>
  */
 export const useReadingStateStore = create<ReadingState>()(
     yjs(
-        yDoc,
+        getYDoc(),
         'progress',
         (set, get) => ({
             // Synced state (per-device structure)

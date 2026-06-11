@@ -9,8 +9,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { installTestApi, flushPersistence } from './test-api';
 import { dbService } from './db/DBService';
-import { yDoc, getYjsPersistence } from './store/yjs-provider';
+import { getYDoc, getYjsPersistence, startYjsPersistence } from './store/yjs-provider';
 import { wipeAllData } from './db/wipe';
+
+// Persistence no longer boots at import time (Phase 1b boot sequencing) —
+// start it explicitly, as the bootstrap `startYjsPersistence` phase does.
+startYjsPersistence();
+const yDoc = getYDoc();
 
 vi.mock('./db/wipe', () => ({
   wipeAllData: vi.fn().mockResolvedValue(undefined),

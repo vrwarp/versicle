@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { UAParser } from 'ua-parser-js';
-import { yDoc, getYjsOptions } from './yjs-provider';
+import { getYDoc, getYjsOptions } from './yjs-provider';
 import type { DeviceInfo, DeviceProfile } from '../types/device';
 import packageJson from '../../package.json';
 
@@ -41,7 +41,7 @@ const HEARTBEAT_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes
 
 export const useDeviceStore = create<DeviceState>()(
     yjs(
-        yDoc,
+        getYDoc(),
         'devices', // Shared map name in Yjs
         (set) => ({
             devices: {},

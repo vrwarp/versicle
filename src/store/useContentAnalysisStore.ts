@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
+import { getYDoc, getYjsOptions } from './yjs-provider';
 import type { AnalysisStatus } from '../types/content-analysis';
 
 /**
@@ -110,7 +110,7 @@ function makeKey(bookId: string, sectionId: string): string {
 
 export const useContentAnalysisStore = create<ContentAnalysisState>()(
     yjs(
-        yDoc,
+        getYDoc(),
         'contentAnalysis', // Yjs map name
         (set, get) => ({
             sections: {},

@@ -1,7 +1,9 @@
 import { renderHook, act } from '@testing-library/react';
 import { createAnnotationStore } from './useAnnotationStore';
 import { useReaderUIStore } from './useReaderUIStore';
-import { yDoc } from './yjs-provider';
+import { getYDoc } from './yjs-provider';
+
+const yDoc = getYDoc();
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../db/db', () => ({

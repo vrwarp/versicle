@@ -1,14 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { yDoc, waitForYjsSync } from './yjs-provider';
+import { getYDoc, waitForYjsSync } from './yjs-provider';
 import * as Y from 'yjs';
 
 describe('Yjs Provider', () => {
-    it('should export a valid Y.Doc singleton', () => {
+    it('should lazily construct a single Y.Doc (no module-scope side effect)', () => {
+        const yDoc = getYDoc();
         expect(yDoc).toBeInstanceOf(Y.Doc);
+        // Repeated calls return the same singleton.
+        expect(getYDoc()).toBe(yDoc);
     });
 
     it('should allow basic Yjs operations', () => {
-        const map = yDoc.getMap('test-map');
+        const map = getYDoc().getMap('test-map');
         map.set('foo', 'bar');
         expect(map.get('foo')).toBe('bar');
     });

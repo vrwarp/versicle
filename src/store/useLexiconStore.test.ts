@@ -5,8 +5,9 @@ import { useLexiconStore } from './useLexiconStore';
 // This ensures zustand-middleware-yjs works correctly with actual Yjs types
 vi.mock('./yjs-provider', async () => {
     const Y = await import('yjs');
+    const doc = new Y.Doc();
     return {
-        yDoc: new Y.Doc(),
+        getYDoc: () => doc,
         waitForYjsSync: vi.fn().mockResolvedValue(undefined),
         getYjsOptions: () => ({}),
     };

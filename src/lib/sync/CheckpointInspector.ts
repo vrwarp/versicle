@@ -1,5 +1,5 @@
 import * as Y from 'yjs';
-import { yDoc as liveDoc } from '../../store/yjs-provider';
+import { getYDoc } from '../../store/yjs-provider';
 
 // Type definitions for the Diff result
 export interface DiffResult {
@@ -19,7 +19,7 @@ export class CheckpointInspector {
     Y.applyUpdate(tempDoc, checkpointBlob);
 
     // 2. Convert both to JSON
-    const liveJson = this.docToJson(liveDoc);
+    const liveJson = this.docToJson(getYDoc());
     const checkpointJson = this.docToJson(tempDoc);
 
     const diffs: Record<string, DiffResult> = {};

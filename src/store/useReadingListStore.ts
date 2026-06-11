@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
+import { getYDoc, getYjsOptions } from './yjs-provider';
 import type { ReadingListEntry } from '../types/db';
 
 interface ReadingListState {
@@ -14,7 +14,7 @@ interface ReadingListState {
 
 export const useReadingListStore = create<ReadingListState>()(
     yjs(
-        yDoc,
+        getYDoc(),
         'reading-list',
         (set) => ({
             entries: {},

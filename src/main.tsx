@@ -3,8 +3,6 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 
-import { SocialLogin } from '@capgo/capacitor-social-login';
-
 import { useGoogleServicesStore } from './store/useGoogleServicesStore';
 import { useTTSStore } from './store/useTTSStore';
 import { useAnnotationStore } from './store/useAnnotationStore';
@@ -120,25 +118,9 @@ if (typeof window !== 'undefined') {
   };
 }
 
-const initializeSocialLogin = async () => {
-  const { googleClientId, googleIosClientId } = useGoogleServicesStore.getState();
-
-  await SocialLogin.initialize({
-    google: {
-      webClientId: googleClientId || import.meta.env.VITE_GOOGLE_CLIENT_ID,
-      iOSClientId: googleIosClientId || import.meta.env.VITE_GOOGLE_IOS_CLIENT_ID,
-      mode: 'online',
-    },
-  });
-};
-
-initializeSocialLogin().catch(console.error);
-
-useGoogleServicesStore.subscribe((state, prevState) => {
-  if (state.googleClientId !== prevState.googleClientId || state.googleIosClientId !== prevState.googleIosClientId) {
-    initializeSocialLogin().catch(console.error);
-  }
-});
+// SocialLogin initialization (and its re-init store subscription) used to run
+// here at module scope; it is now the `google/social-login` boot task
+// (src/app/boot/socialLogin.ts) sequenced by src/app/bootstrap.ts.
 
 /**
  * Application entry point.

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
+import { getYDoc, getYjsOptions } from './yjs-provider';
 import type { UserAnnotation } from '../types/db';
 import { createLogger } from '../lib/logger';
 import { generateSecureId } from '../lib/crypto';
@@ -65,7 +65,7 @@ export interface AnnotationState {
  */
 export const createAnnotationStore = () => create<AnnotationState>()(
   yjs(
-    yDoc,
+    getYDoc(),
     'annotations',
     (set, get) => ({
       // Synced state

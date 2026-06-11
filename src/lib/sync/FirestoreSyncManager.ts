@@ -12,7 +12,7 @@ import { FireProvider } from 'y-cinder';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
-import { yDoc, CURRENT_SCHEMA_VERSION, waitForYjsSync } from '../../store/yjs-provider';
+import { getYDoc, CURRENT_SCHEMA_VERSION, waitForYjsSync } from '../../store/yjs-provider';
 import { CheckpointService } from './CheckpointService';
 import { MigrationStateService } from './MigrationStateService';
 import * as Y from 'yjs';
@@ -495,7 +495,7 @@ class FirestoreSyncManager {
             }
             logger.info('Applying downloaded cloud data to main Y.Doc...');
             const stateVector = Y.encodeStateAsUpdate(tempDoc);
-            Y.applyUpdate(yDoc, stateVector);
+            Y.applyUpdate(getYDoc(), stateVector);
 
             logger.info('Clean sync complete. Connecting main provider...');
             toast('Sync complete!', 'success');
@@ -515,7 +515,7 @@ class FirestoreSyncManager {
 
         const providerConfig = {
             firebaseApp: app,
-            ydoc: yDoc,
+            ydoc: getYDoc(),
             path,
             maxWaitTime: maxWaitTime,
             maxUpdatesThreshold: this.config.maxUpdatesThreshold

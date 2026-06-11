@@ -1,6 +1,6 @@
 import { getDB } from '../../db/db';
 import * as Y from 'yjs';
-import { yDoc, yjsPersistence, disconnectYjs } from '../../store/yjs-provider';
+import { getYDoc, getYjsPersistence, disconnectYjs } from '../../store/yjs-provider';
 import type { SyncCheckpoint } from '../../types/db';
 import { IndexeddbPersistence } from 'y-idb';
 import { createLogger } from '../logger';
@@ -27,7 +27,7 @@ export class CheckpointService {
    * cleanup at boot, which deletes by ID and is unaffected by the flag.)
    */
   static async createCheckpoint(trigger: string, options?: { protected?: boolean }): Promise<number> {
-    const stateBlob = Y.encodeStateAsUpdate(yDoc);
+    const stateBlob = Y.encodeStateAsUpdate(getYDoc());
     const db = await getDB();
 
     // SyncCheckpoint has 'id', 'timestamp', 'blob', 'size', 'trigger', 'protected'.
@@ -124,10 +124,11 @@ export class CheckpointService {
       logger.warn('Failed to disconnect Firestore during restore', e);
     }
 
-    if (yjsPersistence) {
+    const persistence = getYjsPersistence();
+    if (persistence) {
       logger.info('Performing Hard Reset restore...');
       // 1. Wipe existing persistence
-      await yjsPersistence.clearData();
+      await persistence.clearData();
 
       // 2. Disconnect current persistence to close IDB connections and release locks
       await disconnectYjs();
@@ -155,11 +156,12 @@ export class CheckpointService {
     } else {
       logger.warn('Yjs Persistence not active. Falling back to In-Memory Soft Restore (Unsafe).');
       // Atomic transaction to swap state (Fallback)
-      yDoc.transact(() => {
-        const allKeys = Array.from(yDoc.share.keys());
+      const liveDoc = getYDoc();
+      liveDoc.transact(() => {
+        const allKeys = Array.from(liveDoc.share.keys());
 
         for (const key of allKeys) {
-          const type = yDoc.share.get(key);
+          const type = liveDoc.share.get(key);
 
           if (type instanceof Y.Map) {
             Array.from(type.keys()).forEach(k => type.delete(k));
@@ -172,7 +174,7 @@ export class CheckpointService {
           }
         }
 
-        Y.applyUpdate(yDoc, checkpoint.blob);
+        Y.applyUpdate(liveDoc, checkpoint.blob);
       }, 'restore-checkpoint');
 
       // Restore applied — safe to clear the migration state machine.
@@ -194,10 +196,11 @@ export class CheckpointService {
       logger.warn('Failed to disconnect Firestore during remote state apply', e);
     }
 
-    if (yjsPersistence) {
+    const persistence = getYjsPersistence();
+    if (persistence) {
       logger.info('Applying remote state via Hard Reset...');
       // 1. Wipe existing persistence
-      await yjsPersistence.clearData();
+      await persistence.clearData();
 
       // 2. Disconnect current persistence to close IDB connections and release locks
       await disconnectYjs();

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
+import { getYDoc, getYjsOptions } from './yjs-provider';
 import type { LexiconRule } from '../types/db';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -33,7 +33,7 @@ export interface LexiconState {
 
 export const useLexiconStore = create<LexiconState>()(
     yjs(
-        yDoc,
+        getYDoc(),
         'lexicon',
         (set) => ({
             rules: {},

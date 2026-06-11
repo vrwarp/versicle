@@ -40,13 +40,16 @@ vi.mock('../../db/db', () => ({
 // Mock Yjs Provider
 vi.mock('../../store/yjs-provider', async () => {
     const YActual = await import('yjs');
+    const doc = new YActual.Doc();
     return {
-        yDoc: new YActual.Doc(),
-        yjsPersistence: null, // Default to null (simulate fallback behavior for these tests)
+        getYDoc: () => doc,
+        getYjsPersistence: () => null, // Default to null (simulate fallback behavior for these tests)
         disconnectYjs: vi.fn(),
     };
 });
-import { yDoc } from '../../store/yjs-provider';
+import { getYDoc } from '../../store/yjs-provider';
+
+const yDoc = getYDoc();
 
 vi.mock('./FirestoreSyncManager', () => ({
     getFirestoreSyncManager: () => ({

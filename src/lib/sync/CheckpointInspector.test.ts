@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as Y from 'yjs';
 import { CheckpointInspector } from './CheckpointInspector';
-import { yDoc } from '../../store/yjs-provider';
+import { getYDoc } from '../../store/yjs-provider';
+
+const yDoc = getYDoc();
 
 describe('CheckpointInspector', () => {
   beforeEach(() => {

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
+import { getYDoc, getYjsOptions } from './yjs-provider';
 import { getDeviceId } from '../lib/device-id';
 
 /**
@@ -87,7 +87,7 @@ const defaultPreferences = {
  */
 export const usePreferencesStore = create<PreferencesState>()(
     yjs(
-        yDoc,
+        getYDoc(),
         `preferences/${getDeviceId()}`,
         (set) => ({
             ...defaultPreferences,
