@@ -3,12 +3,18 @@ import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
 import type { LexiconRule } from '~types/db';
 import { v4 as uuidv4 } from 'uuid';
 
-/** Replication declaration (aggregated by src/store/registry.ts). */
+/**
+ * Replication declaration (aggregated by src/store/registry.ts).
+ * Flipped to merge-defaults + scopedDiff in flip wave 2 (phase2-fork-surgery.md
+ * §2.6 #4): small user data, low write rate, two keys. No top-level canaries
+ * existed (the per-entry `r.order || 0` guards below are NOT hydration
+ * fallbacks and stay).
+ */
 export const LEXICON_STORE_DEF: SyncedStoreDef<'rules' | 'settings'> = {
     name: 'lexicon',
     syncedKeys: ['rules', 'settings'],
-    hydration: 'replace',
-    scopedDiff: false,
+    hydration: 'merge-defaults',
+    scopedDiff: true,
 };
 
 export interface LexiconState {

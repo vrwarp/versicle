@@ -74,8 +74,9 @@ export const useAllBooks = () => {
     // which would otherwise break downstream useMemo dependency arrays.
     const progressMap = useMemo(() => progressMapRaw || {}, [progressMapRaw]);
 
-    const readingListEntriesRaw = useReadingListStore(state => state.entries);
-    const readingListEntries = useMemo(() => readingListEntriesRaw || {}, [readingListEntriesRaw]);
+    // merge-defaults hydration guarantees `entries` is always present (flip
+    // wave 2) — the old `|| {}` fallback canary is gone.
+    const readingListEntries = useReadingListStore(state => state.entries);
 
     // OPTIMIZATION: Phase 1 - Base Books
     // Memoize the "static" transformation of books (merging inventory + library metadata).

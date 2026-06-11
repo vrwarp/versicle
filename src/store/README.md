@@ -18,9 +18,9 @@ hydration modes, and the per-store flip ledger.
 | `useReadingStateStore` | `progress` | reader | `progress` | replace | no | Reading progress per book per device, incl. reading sessions. |
 | `useAnnotationStore` | `annotations` | reader | `annotations` | replace | no | Highlights and notes, keyed by UUID. |
 | `usePreferencesStore` | `preferences/<deviceId>` | shell | `currentTheme`, `customTheme`, `fontFamily`, `lineHeight`, `fontSize`, `shouldForceFont`, `readerViewMode`, `libraryLayout`, `libraryFilterMode`, `librarySortOrder`, `activeContext`, `fontProfiles`, `forceTraditionalChinese`, `showPinyin`, `pinyinSize` | replace | no | Per-device display preferences (theme, fonts, layout, Chinese). |
-| `useReadingListStore` | `reading-list` | library | `entries` | replace | no | Reading-list entries keyed by filename (progress projection). |
+| `useReadingListStore` | `reading-list` | library | `entries` | merge-defaults | yes | Reading-list entries keyed by filename (progress projection). |
 | `useVocabularyStore` | `vocabulary` | chinese | `knownCharacters` | merge-defaults | yes | Known Chinese characters (char → learned-at timestamp). |
-| `useLexiconStore` | `lexicon` | audio | `rules`, `settings` | replace | no | TTS pronunciation rules + per-book lexicon settings. |
+| `useLexiconStore` | `lexicon` | audio | `rules`, `settings` | merge-defaults | yes | TTS pronunciation rules + per-book lexicon settings. |
 | `useContentAnalysisStore` | `contentAnalysis` | audio | `sections` | merge-defaults | yes | AI content-analysis cache (references, table adaptations, titles). |
 | `useDeviceStore` | `devices` | sync | `devices` | merge-defaults | yes | Device registry of the sync mesh (UA, heartbeat, names). |
 

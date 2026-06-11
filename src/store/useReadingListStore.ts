@@ -2,12 +2,18 @@ import { create } from 'zustand';
 import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
 import type { ReadingListEntry } from '~types/db';
 
-/** Replication declaration (aggregated by src/store/registry.ts). */
+/**
+ * Replication declaration (aggregated by src/store/registry.ts).
+ * Flipped to merge-defaults + scopedDiff in flip wave 2 (phase2-fork-surgery.md
+ * §2.6 #5): entries are re-upserted from progress updates — a self-healing
+ * projection. Its four `state.entries || {}` fallbacks (plus the selectors.ts
+ * one) were deleted as the flip canaries.
+ */
 export const READING_LIST_STORE_DEF: SyncedStoreDef<'entries'> = {
     name: 'reading-list',
     syncedKeys: ['entries'],
-    hydration: 'replace',
-    scopedDiff: false,
+    hydration: 'merge-defaults',
+    scopedDiff: true,
 };
 
 interface ReadingListState {
@@ -26,30 +32,28 @@ export const useReadingListStore = create<ReadingListState>()(
             entries: {},
 
             addEntry: (entry) => set((state) => ({
-                entries: { ...(state.entries || {}), [entry.filename]: entry }
+                entries: { ...state.entries, [entry.filename]: entry }
             })),
 
             removeEntry: (filename) => set((state) => {
-                const currentEntries = state.entries || {};
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { [filename]: _removed, ...remain } = currentEntries;
+                const { [filename]: _removed, ...remain } = state.entries;
                 return { entries: remain };
             }),
 
             updateEntry: (filename, updates) => set((state) => {
-                const currentEntries = state.entries || {};
-                const existing = currentEntries[filename];
+                const existing = state.entries[filename];
                 if (!existing) return state;
                 return {
                     entries: {
-                        ...currentEntries,
+                        ...state.entries,
                         [filename]: { ...existing, ...updates }
                     }
                 };
             }),
 
             upsertEntry: (entry) => set((state) => ({
-                entries: { ...(state.entries || {}), [entry.filename]: entry }
+                entries: { ...state.entries, [entry.filename]: entry }
             }))
         })
     )

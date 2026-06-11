@@ -9,6 +9,8 @@ import { BOOK_EN, DEVICE_A } from '@test/fixtures/ydoc/seed';
 import { CONTENT_ANALYSIS_STORE_DEF } from '@store/useContentAnalysisStore';
 import { VOCABULARY_STORE_DEF } from '@store/useVocabularyStore';
 import { DEVICES_STORE_DEF } from '@store/useDeviceStore';
+import { LEXICON_STORE_DEF } from '@store/useLexiconStore';
+import { READING_LIST_STORE_DEF } from '@store/useReadingListStore';
 
 /**
  * Per-store flip suite (phase2-fork-surgery.md §2.6, the F.1 re-run): as each
@@ -123,6 +125,70 @@ describe('flip wave 1: vocabulary (merge-defaults + scopedDiff)', () => {
     expect(
       (doc.getMap('vocabulary').get('knownCharacters') as Y.Map<unknown>).toJSON(),
     ).toEqual({ 書: 42 });
+  });
+});
+
+// ─── Flip wave 2: lexicon, reading-list ─────────────────────────────────────
+
+describe('flip wave 2: lexicon (merge-defaults + scopedDiff)', () => {
+  interface LexState {
+    rules: Record<string, { id: string; order?: number }>;
+    settings: Record<string, unknown>;
+  }
+  const creator = (): LexState => ({ rules: {}, settings: {} });
+
+  it('hydrates the v5 fixture fully (both synced keys)', () => {
+    const store = bindWithDef<LexState>(loadDoc(5), LEXICON_STORE_DEF, creator);
+    expect(Object.keys(store.getState().rules).sort()).toEqual([
+      'fixture-rule-1',
+      'fixture-rule-2',
+    ]);
+    expect(Object.keys(store.getState().settings)).toEqual([BOOK_EN]);
+  });
+
+  it('A.5 rewritten: a doc carrying only `rules` retains the `settings` default', () => {
+    const doc = new Y.Doc();
+    const rules = new Y.Map();
+    rules.set('r1', new Y.Map());
+    doc.getMap('lexicon').set('rules', rules);
+
+    const store = bindWithDef<LexState>(doc, LEXICON_STORE_DEF, creator);
+    expect(Object.keys(store.getState().rules)).toEqual(['r1']);
+    // Legacy 'replace' would have deleted the doc-absent `settings` default.
+    expect(store.getState().settings).toEqual({});
+  });
+});
+
+describe('flip wave 2: reading-list (merge-defaults + scopedDiff)', () => {
+  interface RLState {
+    entries: Record<string, { filename: string; title?: string }>;
+    upsertEntry: (entry: { filename: string }) => void;
+  }
+  const creator = (set: (p: Partial<RLState>) => void, get: () => RLState): RLState => ({
+    entries: {},
+    upsertEntry: (entry) =>
+      set({ entries: { ...get().entries, [entry.filename]: entry } }),
+  });
+
+  it('hydrates the v5 fixture fully; post-hydration actions need no || {} fallback', () => {
+    const store = bindWithDef<RLState>(loadDoc(5), READING_LIST_STORE_DEF, creator);
+    expect(Object.keys(store.getState().entries)).toEqual(['frankenstein.epub']);
+
+    // The deleted canaries (`state.entries || {}`) must not be needed:
+    store.getState().upsertEntry({ filename: 'dracula.epub' });
+    expect(Object.keys(store.getState().entries).sort()).toEqual([
+      'dracula.epub',
+      'frankenstein.epub',
+    ]);
+  });
+
+  it('A.5 rewritten: a doc missing `entries` retains the declared default', () => {
+    const doc = new Y.Doc();
+    doc.getMap('reading-list').set('junkKey', 7);
+
+    const store = bindWithDef<RLState>(doc, READING_LIST_STORE_DEF, creator);
+    expect(store.getState().entries).toEqual({});
+    expect('junkKey' in store.getState()).toBe(false);
   });
 });
 
