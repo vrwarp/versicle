@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BIBLE_LEXICON_RULES } from '../../data/bible-lexicon';
+import { BIBLE_LEXICON_RULES } from './bible-lexicon';
 import { LexiconService } from './LexiconService';
 
 describe('Bible Lexicon Rules', () => {

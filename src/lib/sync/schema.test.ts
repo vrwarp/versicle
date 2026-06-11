@@ -68,8 +68,10 @@ describe('Sync Schema Exhaustion', () => {
 
   it('should ensure every Store in EpubLibraryDB has a corresponding sync strategy', () => {
     const project = new Project();
+    // P3-4: the EpubLibraryDB interface moved from src/db/db.ts (now a
+    // re-export shim) to the data layer's schema module.
     const sourceFile = project.addSourceFileAtPath(
-      path.resolve(__dirname, '../../db/db.ts')
+      path.resolve(__dirname, '../../data/schema.ts')
     );
 
     const dbInterface = sourceFile.getInterfaceOrThrow('EpubLibraryDB');

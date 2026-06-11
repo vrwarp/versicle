@@ -28,7 +28,7 @@ vi.mock('@store/useTTSStore', () => ({
 }));
 
 // Mock Bible Lexicon Data to avoid pollution
-vi.mock('../../data/bible-lexicon', () => ({
+vi.mock('./bible-lexicon', () => ({
   BIBLE_LEXICON_RULES: []
 }));
 

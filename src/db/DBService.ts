@@ -12,37 +12,19 @@ import type {
   CacheAudioBlob
 } from '~types/db';
 import type { Timepoint } from '@lib/tts/providers/types';
-import { DatabaseError, StorageFullError } from '~types/errors';
+import { DatabaseError } from '~types/errors';
 import type { BookExtractionData } from '@lib/ingestion';
 import { createLogger } from '@lib/logger';
 import type { TTSQueueItem } from '@lib/tts/AudioPlayerService';
 import { runExclusiveIdbWrite } from '@data/write-gate';
+import { handleDbError } from '@data/errors';
 
 const logger = createLogger('DBService');
 
-/**
- * Map a raw failure to the typed database errors. Shared with the services that layer on
- * top of DBService (e.g. BookImportService) so error semantics stay identical across the split.
- */
-export function handleDbError(error: unknown): never {
-  logger.error('Database operation failed', error);
-
-  if (error instanceof DatabaseError) {
-    throw error;
-  }
-
-  if (error instanceof Error) {
-    if (error.name === 'QuotaExceededError') {
-      throw new StorageFullError(error);
-    }
-  }
-  // Check if it's a DOMException with code 22 (QuotaExceededError legacy)
-  if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-    throw new StorageFullError(error);
-  }
-
-  throw new DatabaseError('An unexpected database error occurred', error);
-}
+// Relocated VERBATIM to the data layer (P3-4); re-exported here for the
+// services that import it off DBService (e.g. BookImportService) until they
+// migrate. Dies with the façade at P3-12.
+export { handleDbError } from '@data/errors';
 
 /**
  * The raw IndexedDB rows describing one book's static data. Consumed by BookRepository,

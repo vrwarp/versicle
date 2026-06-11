@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { BookCard } from './BookCard';
+import { coverUrl } from '@data/covers';
 import type { BookMetadata } from '~types/db';
 
 // Remove obsolete mock for BookActionMenu which is no longer used in BookCard
@@ -112,7 +113,7 @@ describe('BookCard', () => {
     renderCard();
 
     const img = screen.getByRole('img');
-    expect(img).toHaveAttribute('src', `/__versicle__/covers/${mockBook.id}`);
+    expect(img).toHaveAttribute('src', coverUrl(mockBook.id));
     expect(img).toHaveAttribute('alt', 'Cover of Test Title');
   });
 

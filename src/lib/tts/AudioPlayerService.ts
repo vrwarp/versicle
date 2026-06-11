@@ -13,6 +13,7 @@ import type { SectionAnalysis, TableAdaptation, EngineContext } from './engine/E
 import { mergeCfiSlow } from '../cfi-utils';
 import { createLogger } from '../logger';
 import { normalizeLanguageCode } from '../language-utils';
+import { coverUrl } from '@data/covers';
 
 const logger = createLogger('AudioPlayerService');
 
@@ -299,7 +300,7 @@ export class AudioPlayerService {
                         this.currentBookPerceptualPalette = metadata?.perceptualPalette;
                         this.currentBookTitle = metadata?.title || '';
                         this.currentBookAuthor = metadata?.author || '';
-                        this.currentBookCoverUrl = metadata?.coverUrl || (metadata?.coverBlob ? `/__versicle__/covers/${bookId}` : undefined);
+                        this.currentBookCoverUrl = metadata?.coverUrl || (metadata?.coverBlob ? coverUrl(bookId) : undefined);
                         this.updateMediaSessionMetadata();
                     }
                 }).catch(e => logger.warn("Failed to load book metadata", e));

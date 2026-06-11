@@ -40,9 +40,8 @@
  */
 import type { IDBPTransaction, StoreNames } from 'idb';
 import { createLogger } from '@lib/logger';
-// P3-3 transitional import: the connection still lives in src/db/db.ts.
-// P3-4 moves it to src/data/connection.ts and rewires this import.
-import { getDB, type EpubLibraryDB } from '@db/db';
+import { getConnection } from './connection';
+import type { EpubLibraryDB } from './schema';
 
 const logger = createLogger('WriteGate');
 
@@ -163,7 +162,7 @@ export function write<Names extends readonly StoreNames<EpubLibraryDB>[]>(
   populate: (tx: IDBPTransaction<EpubLibraryDB, Names, 'readwrite'>) => void,
 ): Promise<void> {
   return runExclusiveIdbWrite(async () => {
-    const db = await getDB();
+    const db = await getConnection();
     const tx = db.transaction(stores, 'readwrite') as IDBPTransaction<
       EpubLibraryDB,
       Names,

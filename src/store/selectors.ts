@@ -8,6 +8,7 @@ import type { AnnotationState } from './useAnnotationStore';
 import type { UserProgress, UserInventoryItem, UserAnnotation } from '~types/db';
 import { getDeviceId } from '@lib/device-id';
 import { generateMatchKey } from '@lib/entity-resolution';
+import { coverUrl as buildCoverUrl } from '@data/covers';
 
 // Module-level caches for useAllBooks to avoid strict-mode ref mutation issues
 // Using a function cache prevents React ESLint from tracking mutations.
@@ -143,7 +144,7 @@ export const useAllBooks = () => {
                 // OPTIMIZATION: Use Service Worker route for covers instead of creating blob URLs.
                 // This prevents memory leaks from unrevoked createObjectURL calls and avoids sync overhead.
                 coverUrl: hasCoverBlob
-                    ? `/__versicle__/covers/${book.bookId}`
+                    ? buildCoverUrl(book.bookId)
                     : undefined,
                 // Add other static fields for compatibility
                 fileHash: staticMetadataObj[book.bookId]?.fileHash,
@@ -343,7 +344,7 @@ export const useBook = (id: string | null) => {
             author: book.customAuthor || staticMeta?.author || book.author,
             coverBlob: staticMeta?.coverBlob || null,
             // OPTIMIZATION: Use Service Worker route
-            coverUrl: hasCoverBlob ? `/__versicle__/covers/${book.bookId}` : undefined,
+            coverUrl: hasCoverBlob ? buildCoverUrl(book.bookId) : undefined,
             fileHash: staticMeta?.fileHash,
             fileSize: staticMeta?.fileSize,
             totalChars: staticMeta?.totalChars,

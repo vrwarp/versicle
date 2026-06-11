@@ -1,6 +1,21 @@
+/**
+ * The service worker's read contract with EpubLibraryDB (Phase 3, D3 in
+ * plan/overhaul/prep/phase3-storage-gateway.md; absorbs src/sw-utils.ts).
+ *
+ * The SW runs in its own JS context and cannot share the app's connection
+ * (src/data/connection.ts), so it opens its own short-lived, read-only
+ * connection at whatever version is current (unversioned open — the SW must
+ * never trigger or block an upgrade). The database name comes from the
+ * schema module instead of the local copy sw-utils.ts used to re-declare,
+ * so the two can no longer drift.
+ *
+ * The legacy `'books'`-store fallback survives until P9: a pre-v18
+ * straggler's covers must render before their first main-app upgrade.
+ */
 import { openDB } from 'idb';
+import { DB_NAME } from './schema';
 
-export const DB_NAME = 'EpubLibraryDB';
+export { DB_NAME };
 export const STATIC_MANIFESTS_STORE = 'static_manifests';
 export const BOOKS_STORE = 'books'; // Legacy
 

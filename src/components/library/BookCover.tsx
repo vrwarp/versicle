@@ -6,6 +6,7 @@ import { getOptimizedTextColor, unpackColorToRGB } from '@lib/cover-palette';
 import { Cloud, CloudDownload, MoreVertical } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { BookActionMenu } from './BookActionMenu';
+import { coverUrl } from '@data/covers';
 import type { BookMetadata } from '~types/db';
 
 function unpackColor(packed: number): string {
@@ -25,7 +26,7 @@ interface BookCoverProps {
 export const BookCover: React.FC<BookCoverProps & { showActions?: boolean }> = React.memo(({ book, isGhostBook = false, onDelete, onOffload, onRestore, showActions = true }) => {
     // If book.coverUrl is set (external URL), use it.
     // Otherwise, if we have a blob (local), use the SW route.
-    const displayUrl = book.coverUrl || (book.coverBlob ? `/__versicle__/covers/${book.id}` : null);
+    const displayUrl = book.coverUrl || (book.coverBlob ? coverUrl(book.id) : null);
 
     const [imageError, setImageError] = React.useState(false);
 

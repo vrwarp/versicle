@@ -7,7 +7,7 @@ import { bookRepository } from '@app/repositories/BookRepository';
 import { useTTSStore } from '@store/useTTSStore';
 import { TextSegmenter } from './TextSegmenter';
 import { LexiconService } from './LexiconService';
-import { BIBLE_ABBREVIATIONS } from '../../data/bible-lexicon';
+import { BIBLE_ABBREVIATIONS } from './bible-lexicon';
 import type { BookMetadata, ContentAnalysis, CacheTtsPreparation, SectionMetadata } from '~types/db';
 
 // Explicit mocks to prevent auto-mocking issues

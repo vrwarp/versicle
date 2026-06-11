@@ -1,10 +1,39 @@
+// Absorbed from src/sw-utils.test.ts in the same PR that absorbed
+// src/sw-utils.ts into src/data/sw-contract.ts (P3-4; test-absorption
+// ledger, master plan §4 rule 8). The covers.ts suite below pins the
+// app↔SW cover-route contract that used to be five copy-pasted literals.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getCoverFromDB, createCoverResponse, STATIC_MANIFESTS_STORE, BOOKS_STORE } from './sw-utils';
+import { getCoverFromDB, createCoverResponse, STATIC_MANIFESTS_STORE, BOOKS_STORE, DB_NAME } from './sw-contract';
+import { COVERS_ENDPOINT_PREFIX, coverUrl, parseCoverPath } from './covers';
 import * as idb from 'idb';
 
 vi.mock('idb', () => ({
     openDB: vi.fn(),
 }));
+
+describe('covers.ts — the app↔SW cover-route contract', () => {
+    it('pins the route prefix (persisted-URL surface: cached SW responses)', () => {
+        // The one deliberate literal outside covers.ts: a silent prefix
+        // change would break every cached cover response.
+        expect(COVERS_ENDPOINT_PREFIX).toBe('/__versicle__/covers/');
+    });
+
+    it('coverUrl builds the SW route and parseCoverPath inverts it', () => {
+        const url = coverUrl('book-123');
+        expect(url).toBe(`${COVERS_ENDPOINT_PREFIX}book-123`);
+        expect(parseCoverPath(url)).toBe('book-123');
+    });
+
+    it('parseCoverPath rejects non-cover paths and empty ids', () => {
+        expect(parseCoverPath(COVERS_ENDPOINT_PREFIX)).toBeNull();
+        expect(parseCoverPath('/somewhere/else')).toBeNull();
+        expect(parseCoverPath(`${COVERS_ENDPOINT_PREFIX.slice(0, -1)}X/abc`)).toBeNull();
+    });
+
+    it('the SW contract reads the same database name as the schema module', () => {
+        expect(DB_NAME).toBe('EpubLibraryDB');
+    });
+});
 
 describe('Service Worker Database Utils', () => {
     const mockDb = {

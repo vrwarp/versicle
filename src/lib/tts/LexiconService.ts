@@ -1,6 +1,6 @@
 
 // import { v4 as uuidv4 } from 'uuid'; // Unused
-import { BIBLE_LEXICON_RULES } from '../../data/bible-lexicon';
+import { BIBLE_LEXICON_RULES } from './bible-lexicon';
 import { useLexiconStore } from '@store/useLexiconStore';
 import { waitForYjsSync } from '@store/yjs-provider';
 import type { LexiconRule } from '~types/db';

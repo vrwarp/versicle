@@ -7,6 +7,7 @@ import { useReaderUIStore } from '@store/useReaderUIStore';
 import { Progress } from '../ui/Progress';
 import { BookActionMenu } from './BookActionMenu';
 import { unpackColorToRGB } from '@lib/cover-palette';
+import { coverUrl } from '@data/covers';
 
 function unpackColor(packed: number): string {
     const { r, g, b } = unpackColorToRGB(packed);
@@ -64,7 +65,7 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
     // This prevents ~1000 selectors running on every store update.
     const progressPercent = book.progress ? Math.round(book.progress * 100) : 0;
 
-    const displayUrl = book.coverUrl || (book.coverBlob ? `/__versicle__/covers/${book.id}` : null);
+    const displayUrl = book.coverUrl || (book.coverBlob ? coverUrl(book.id) : null);
 
     const gradientStyle = React.useMemo(() => {
         if (!book.coverPalette || book.coverPalette.length !== 5) return undefined;

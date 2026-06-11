@@ -24,9 +24,9 @@ const downgradeToWarn = (rules) =>
 // for the files it matches).
 const crossRootRelativeImportPattern = {
   regex:
-    '^(\\.\\./)+(app|components|db|hooks|lib|store|types|test|workers)(/|$)',
+    '^(\\.\\./)+(app|components|data|db|hooks|lib|store|types|test|workers)(/|$)',
   message:
-    'Cross-root relative import. Use the path alias for this root instead (e.g. @lib/foo, @store/bar, ~types/baz — see tsconfig.app.json "paths"). Run `node scripts/codemod-aliases.mjs` to fix in bulk.',
+    'Cross-root relative import. Use the path alias for this root instead (e.g. @lib/foo, @data/bar, ~types/baz — see tsconfig.app.json "paths"). Run `node scripts/codemod-aliases.mjs` to fix in bulk.',
 };
 
 export default tseslint.config(
@@ -105,18 +105,19 @@ export default tseslint.config(
       // One canonical import path per module (Phase 1 path-alias codemod,
       // scripts/codemod-aliases.mjs): a relative specifier that climbs out
       // with `../` and re-enters one of the aliased src/ roots must use the
-      // alias instead (@app/, @components/, @db/, @hooks/, @lib/, @store/,
-      // ~types/, @test/, @workers/ — declared in tsconfig.app.json `paths`,
-      // mirrored in vite.config.ts + vitest.config.ts resolve.alias; types/
-      // is ~types because TS rejects '@types/…' specifiers, TS6137).
+      // alias instead (@app/, @components/, @data/, @db/, @hooks/, @lib/,
+      // @store/, ~types/, @test/, @workers/ — declared in tsconfig.app.json
+      // `paths`, mirrored in vite.config.ts + vitest.config.ts
+      // resolve.alias; types/ is ~types because TS rejects '@types/…'
+      // specifiers, TS6137).
       // Same-directory and within-subtree relative imports stay relative on
       // purpose. The repo was codemodded clean, so this lands at "error".
       // Scope notes: the rule covers static import/export declarations only
       // (the core rule does not visit dynamic import() or `new URL(...)`
       // worker URLs — the two `new Worker(new URL('../workers/…'))` sites
-      // stay relative deliberately); src/layouts and src/data have no alias
-      // yet (src/data is reshaped in Phase 3), so relative imports of those
-      // roots remain allowed.
+      // stay relative deliberately); src/layouts has no alias yet, so
+      // relative imports of it remain allowed. @data landed in Phase 3
+      // (P3-3/P3-4) when src/data/ became the storage layer.
       'no-restricted-imports': [
         'error',
         {

@@ -24,7 +24,7 @@ vi.mock('@store/useTTSStore', () => ({
   }
 }));
 
-vi.mock('../../data/bible-lexicon', () => ({
+vi.mock('./bible-lexicon', () => ({
   BIBLE_LEXICON_RULES: []
 }));
 

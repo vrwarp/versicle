@@ -9,7 +9,7 @@ import type { SectionMetadata } from '~types/db';
 import type { ContentType } from '~types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
 import type { SentenceNode } from './sentence-extraction';
-import { BIBLE_ABBREVIATIONS } from '../../data/bible-lexicon';
+import { BIBLE_ABBREVIATIONS } from './bible-lexicon';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { findTocItem, resolveSyntheticPreference } from '../reader/titleResolver';
 

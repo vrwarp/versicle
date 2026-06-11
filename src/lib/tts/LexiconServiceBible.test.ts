@@ -19,7 +19,7 @@ vi.mock('@db/db', () => ({
 }));
 
 // Mock Bible Lexicon Data
-vi.mock('../../data/bible-lexicon', () => ({
+vi.mock('./bible-lexicon', () => ({
   BIBLE_LEXICON_RULES: mocks.bibleLexiconRules
 }));
 
