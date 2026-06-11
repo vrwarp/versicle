@@ -2,25 +2,59 @@
  * `whenHydrated` boot phase: resolve when the Yjs-backed stores have been
  * hydrated from local persistence, then load static book metadata.
  *
- * `whenHydrated()` is deliberately ONE named function wrapping the legacy
- * mechanism (waitForYjsSync + the short book poll that used to live inline
- * in App.tsx). Phase 2's fork surgery replaces its body with the real
- * `whenHydrated()` signal from the zustand-middleware-yjs fork — callers and
- * phase position stay put (contract-first.md C2/C11).
+ * Composition (phase2-fork-surgery.md §2.4): `waitForYjsSync` gates on the
+ * IDB load; stores whose Y.Map is empty start from their declared defaults
+ * and are marked hydrated explicitly (the fork alone cannot distinguish
+ * "doc loaded and legitimately empty" from "not loaded yet" — that
+ * knowledge belongs to the persistence layer); the rest resolve via the
+ * middleware's `api.yjs.whenHydrated()`, which is the structural
+ * replacement for the legacy App.tsx book-poll (IDB-synced ≠ store-patched:
+ * the inbound patch is a microtask behind the 'synced' event, which the
+ * poll papered over with sleep(100) retries).
+ *
+ * Timeout behavior intentionally mirrors `waitForYjsSync`: warn and
+ * proceed, never hang boot (risk R3 — a corrupt IDB or swallowed
+ * persistence error must not brick startup).
  */
 import type { BootTask } from '../bootstrap';
-import { waitForYjsSync } from '@store/yjs-provider';
-import { useLibraryStore, useBookStore } from '@store/useLibraryStore';
+import type { YjsStoreHandle } from 'zustand-middleware-yjs';
+import { getYDoc, waitForYjsSync } from '@store/yjs-provider';
+import { SYNCED_STORES, yjsHandleOf } from '@store/syncedStores';
+import { useLibraryStore } from '@store/useLibraryStore';
+import { createLogger } from '@lib/logger';
 
-export async function whenHydrated(): Promise<void> {
-  await waitForYjsSync();
+const logger = createLogger('Boot');
 
-  // Wait for the yjs middleware to deliver books into the store (short poll).
-  // An empty library (first boot / post-wipe) exhausts the poll in ~1s.
-  let attempts = 0;
-  while (Object.keys(useBookStore.getState().books).length === 0 && attempts < 10) {
-    await new Promise(resolve => setTimeout(resolve, 100));
-    attempts++;
+export async function whenHydrated(timeoutMs = 8000): Promise<void> {
+  // 1. IDB load complete (existing gate; resolves immediately without persistence).
+  await waitForYjsSync(timeoutMs);
+
+  // 2. Empty maps: those stores start from their declared defaults — no
+  // inbound patch will ever arrive, so the provider marks them hydrated.
+  const yDoc = getYDoc();
+  const handles: YjsStoreHandle[] = [];
+  for (const { mapName, store } of SYNCED_STORES) {
+    const handle = yjsHandleOf(store);
+    if (handle === undefined) continue; // store module mocked in tests
+    if (yDoc.getMap(mapName).size === 0) handle.markHydrated();
+    handles.push(handle);
+  }
+
+  // 3. Await the rest, warn-and-proceed on timeout (parity with waitForYjsSync).
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      logger.warn('whenHydrated timeout — proceeding (parity with waitForYjsSync).');
+      resolve();
+    }, timeoutMs);
+  });
+  try {
+    await Promise.race([
+      Promise.all(handles.map((handle) => handle.whenHydrated())).then(() => undefined),
+      timeout,
+    ]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 

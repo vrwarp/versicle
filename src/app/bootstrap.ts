@@ -21,14 +21,13 @@ export const BOOT_PHASES = [
   'interceptMigration',
   'openDB',
   'startYjsPersistence',
-  // `whenHydrated` currently wraps waitForYjsSync + the legacy book-poll
-  // (src/app/boot/whenHydrated.ts). Phase 2 replaces the poll with the real
-  // whenHydrated() signal from the forked middleware — same phase, one swap.
+  // `whenHydrated` composes waitForYjsSync (IDB load) with the per-store
+  // hydration handles from the forked middleware (api.yjs.whenHydrated /
+  // markHydrated) — see src/app/boot/whenHydrated.ts.
   'whenHydrated',
-  // `migrations` is an intentionally empty seam today: Yjs schema migrations
-  // still run via the store middleware's onLoaded hook
-  // (store/yjs-provider.ts runMigrations). The P2 migration coordinator
-  // (static imports, sequential await, loud-fail) registers here.
+  // `migrations`: the CRDT migration coordinator (src/app/migrations.ts) —
+  // static imports, sequential awaited doc transforms, atomic transactional
+  // version bumps, loud-fail with a pre-migration checkpoint id.
   'migrations',
   'syncInit',
   'deviceRegistration',
