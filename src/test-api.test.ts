@@ -27,6 +27,10 @@ describe('installTestApi', () => {
     expect(window.__versicleTest).toBeDefined();
     expect(typeof window.__versicleTest?.flushPersistence).toBe('function');
     expect(typeof window.__versicleTest?.resetApp).toBe('function');
+    // Consolidated replacements for the legacy __DISCONNECT_YJS__ /
+    // __CLOSE_DB__ window globals (Phase 1b).
+    expect(typeof window.__versicleTest?.disconnectYjs).toBe('function');
+    expect(typeof window.__versicleTest?.closeDb).toBe('function');
   });
 
   it('resetApp delegates to wipeAllData without reloading', async () => {

@@ -13,6 +13,7 @@ import * as Y from 'yjs';
 import { ObservableV2 } from 'lib0/observable';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import { createLogger } from '../../logger';
+import { getMockSyncDelayMs } from '../../../test-flags';
 
 const logger = createLogger('MockFireProvider');
 
@@ -74,10 +75,9 @@ export class MockFireProvider extends ObservableV2<{
 
     private async initializeAsync(): Promise<void> {
         // Check for globally configured delay (testing hook)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_SYNC_DELAY__) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            MockFireProvider.syncDelay = (window as any).__VERSICLE_MOCK_SYNC_DELAY__;
+        const delayOverride = getMockSyncDelayMs();
+        if (delayOverride) {
+            MockFireProvider.syncDelay = delayOverride;
         }
 
         // Simulate network delay
@@ -256,10 +256,5 @@ export class MockFireProvider extends ObservableV2<{
     }
 }
 
-// Export type for global window augmentation
-declare global {
-    interface Window {
-        __VERSICLE_MOCK_FIRESTORE__?: boolean;
-        __VERSICLE_MOCK_USER_ID__?: string;
-    }
-}
+// The window augmentation for the __VERSICLE_MOCK_* flags lives in
+// src/test-flags.ts, the single typed reader for E2E input flags.

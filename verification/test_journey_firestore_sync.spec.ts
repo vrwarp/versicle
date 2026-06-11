@@ -53,12 +53,9 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   // Clear data
   await pageA.goto('/');
   await pageA.evaluate(async () => {
-    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__ === 'function') {
-      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__();
-    }
-    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__ === 'function') {
-      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__();
-    }
+    // Release IDB locks via the typed test API (DEV/VITE_E2E builds).
+    await window.__versicleTest?.disconnectYjs?.();
+    await window.__versicleTest?.closeDb?.();
     const dbs = await window.indexedDB.databases();
     for (const db of dbs) {
       if (db.name) {
@@ -235,12 +232,9 @@ test('Offload Status Hydration', async ({ browser }) => {
 
   await pageA.goto('/');
   await pageA.evaluate(async () => {
-    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__ === 'function') {
-      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__();
-    }
-    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__ === 'function') {
-      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__();
-    }
+    // Release IDB locks via the typed test API (DEV/VITE_E2E builds).
+    await window.__versicleTest?.disconnectYjs?.();
+    await window.__versicleTest?.closeDb?.();
     const dbs = await window.indexedDB.databases();
     for (const db of dbs) {
       if (db.name) {

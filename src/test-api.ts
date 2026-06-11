@@ -12,14 +12,17 @@
  * store/ (.dependency-cruiser.cjs `lib-not-to-store`). Its final home is
  * `app/` (master plan §2 rule 9, §5 P1b).
  *
- * The legacy globals (`__DISCONNECT_YJS__` in yjs-provider.ts, `__CLOSE_DB__`
- * in db.ts, the `__VERSICLE_MOCK_*` flags in FirestoreSyncManager) remain as
- * deprecated aliases for now — consolidating them is Phase 1 work
- * (plan/overhaul/README.md §2 rule 9, §5 P1b).
+ * The legacy function globals are consolidated here (Phase 1b):
+ * `__DISCONNECT_YJS__` → `disconnectYjs()`, `__CLOSE_DB__` → `closeDb()`.
+ * The `__VERSICLE_MOCK_*` flags stay as raw window globals — they are INPUT
+ * injected by Playwright `addInitScript()` before the app boots, so they
+ * cannot live behind installTestApi(); their typed readers are in
+ * src/test-flags.ts.
  */
 import type { IndexeddbPersistence } from 'y-idb';
-import { getYjsPersistence } from './store/yjs-provider';
+import { getYjsPersistence, disconnectYjs } from './store/yjs-provider';
 import { dbService } from './db/DBService';
+import { closeDB } from './db/db';
 import { wipeAllData } from './db/wipe';
 import { createLogger } from './lib/logger';
 
@@ -47,6 +50,19 @@ export interface VersicleTestApi {
    * owner of "what counts as all local data".
    */
   resetApp(): Promise<void>;
+
+  /**
+   * Destroy the y-idb persistence binding so the `versicle-yjs` database
+   * releases its IndexedDB locks (specs delete databases between scenarios).
+   * Replaces the legacy `window.__DISCONNECT_YJS__` global.
+   */
+  disconnectYjs(): Promise<void>;
+
+  /**
+   * Close the `EpubLibraryDB` connection so it releases its IndexedDB locks.
+   * Replaces the legacy `window.__CLOSE_DB__` global.
+   */
+  closeDb(): Promise<void>;
 }
 
 declare global {
@@ -114,6 +130,8 @@ export function installTestApi(): void {
   const api: VersicleTestApi = {
     flushPersistence,
     resetApp: () => wipeAllData({ reload: false }),
+    disconnectYjs: () => disconnectYjs(),
+    closeDb: () => closeDB(),
   };
   window.__versicleTest = api;
   logger.info('window.__versicleTest installed (DEV/VITE_E2E build)');

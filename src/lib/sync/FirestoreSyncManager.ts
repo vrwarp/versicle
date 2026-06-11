@@ -30,6 +30,11 @@ import {
 } from './firebase-config';
 import { MockFireProvider } from './drivers/MockFireProvider';
 import { createLogger } from '../logger';
+import {
+    isMockFirestoreEnabled,
+    getMockFirestoreUserId,
+    getFirestoreDebounceOverrideMs,
+} from '../../test-flags';
 import { generateSecureId } from '../crypto';
 import { signInWithGoogle, signOutWithGoogle } from './auth-helper';
 import { useToastStore } from '../../store/useToastStore';
@@ -151,11 +156,9 @@ class FirestoreSyncManager {
      */
     async initialize(): Promise<void> {
         // Support for Mock Firestore (Testing)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const w = typeof window !== 'undefined' ? (window as any) : null;
-        if (w && w.__VERSICLE_MOCK_FIRESTORE__) {
+        if (isMockFirestoreEnabled()) {
             logger.info('Mock mode detected. Simulating auth and connection.');
-            const mockUid = w.__VERSICLE_MOCK_USER_ID__ || 'mock-user';
+            const mockUid = getMockFirestoreUserId();
             const mockUser = { uid: mockUid, email: `${mockUid}@example.com` } as User;
             void this.handleAuthStateChange(mockUser);
             return;
@@ -207,8 +210,7 @@ class FirestoreSyncManager {
      * Returns true if workspace is safe to sync, false if tombstoned.
      */
     private async validateWorkspaceIsAlive(uid: string, workspaceId: string): Promise<boolean> {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+        const isMock = isMockFirestoreEnabled();
         if (isMock) {
             // Check both metadata list and document snapshot
             const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
@@ -341,8 +343,7 @@ class FirestoreSyncManager {
             // Non-blocking: proceed with sync even if checkpoint fails
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+        const isMock = isMockFirestoreEnabled();
 
         let app = getFirebaseApp();
         if (!app) {
@@ -357,8 +358,7 @@ class FirestoreSyncManager {
             }
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const maxWaitTime = (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || this.config.maxWaitFirestoreTime;
+        const maxWaitTime = getFirestoreDebounceOverrideMs() || this.config.maxWaitFirestoreTime;
 
         const path = `users/${uid}/versicle/${workspaceId}`;
 
@@ -677,8 +677,7 @@ class FirestoreSyncManager {
             schemaVersion: CURRENT_SCHEMA_VERSION,
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+        const isMock = isMockFirestoreEnabled();
 
         if (isMock) {
             // Store workspace metadata in localStorage for mock mode
@@ -748,8 +747,7 @@ class FirestoreSyncManager {
             logger.info('Downloading remote workspace state...');
             toast('Downloading workspace data...', 'info');
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+            const isMock = isMockFirestoreEnabled();
             const app = getFirebaseApp();
 
             if (!app && !isMock) {
@@ -759,8 +757,7 @@ class FirestoreSyncManager {
             const targetPath = `users/${user.uid}/versicle/${targetWorkspaceId}`;
             const tempDoc = new Y.Doc();
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const maxWaitTime = (typeof window !== 'undefined' && (window as any).__VERSICLE_FIRESTORE_DEBOUNCE_MS__) || 2000;
+            const maxWaitTime = getFirestoreDebounceOverrideMs() || 2000;
 
             const remoteBlob = await new Promise<Uint8Array>((resolve, reject) => {
                 let resolved = false;
@@ -859,8 +856,7 @@ class FirestoreSyncManager {
         const user = this.getCurrentUser();
         if (!user) return [];
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+        const isMock = isMockFirestoreEnabled();
 
         if (isMock) {
             const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
@@ -891,8 +887,7 @@ class FirestoreSyncManager {
         const user = this.getCurrentUser();
         if (!user) throw new Error('Must be authenticated to delete workspace');
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+        const isMock = isMockFirestoreEnabled();
 
         if (isMock) {
             const uid = user.uid;
@@ -1012,11 +1007,9 @@ class FirestoreSyncManager {
         if (this.currentUser) return this.currentUser;
 
         // Fallback for HMR / Dev mode where singleton state might be lost
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+        const isMock = isMockFirestoreEnabled();
         if (isMock) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const mockUid = (typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_USER_ID__) || 'mock-user';
+            const mockUid = getMockFirestoreUserId();
             this.currentUser = { uid: mockUid, email: `${mockUid}@example.com` } as User;
             return this.currentUser;
         }

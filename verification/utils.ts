@@ -28,6 +28,8 @@ const idbProbeContent = fs.existsSync(idbProbePath) ? fs.readFileSync(idbProbePa
 interface VersicleTestApi {
   flushPersistence(): Promise<void>;
   resetApp(): Promise<void>;
+  disconnectYjs(): Promise<void>;
+  closeDb(): Promise<void>;
 }
 
 declare global {
@@ -155,16 +157,12 @@ export async function resetApp(page: Page) {
       return;
     }
 
-    // Legacy fallback (builds without the test API).
+    // Legacy fallback (builds where resetApp is unavailable).
     // Disconnect Yjs to release IDB locks
-    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__ === 'function') {
-      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__();
-    }
+    await api?.disconnectYjs?.();
 
     // Disconnect main DB connection to release IndexedDB locks
-    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__ === 'function') {
-      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__();
-    }
+    await api?.closeDb?.();
 
     await unregisterServiceWorkers();
 

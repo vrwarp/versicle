@@ -42,15 +42,9 @@ function extractWorkspaceId(snapshot: unknown, testUid: string): string | null {
 async function clearDataAndReload(page: Page, baseURL: string) {
   await page.goto(baseURL || "/");
   await page.evaluate(async () => {
-    // Disconnect Yjs to release IDB locks
-    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__ === 'function') {
-      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__();
-    }
-
-    // Disconnect main DB connection to release IndexedDB locks
-    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__ === 'function') {
-      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__();
-    }
+    // Release IDB locks via the typed test API (DEV/VITE_E2E builds).
+    await window.__versicleTest?.disconnectYjs?.();
+    await window.__versicleTest?.closeDb?.();
 
     const dbs = await window.indexedDB.databases();
     for (const db of dbs) {

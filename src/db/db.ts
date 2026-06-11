@@ -198,8 +198,5 @@ export const closeDB = async () => {
     logger.info('Database connection closed.');
   }
 };
-
-if (typeof window !== 'undefined') {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (window as any).__CLOSE_DB__ = closeDB;
-}
+// The legacy window.__CLOSE_DB__ global is gone — E2E specs use the typed
+// window.__versicleTest.closeDb() (src/test-api.ts) instead.

@@ -7,6 +7,7 @@
 import { useEffect, useCallback, useMemo } from 'react';
 import { getFirestoreSyncManager } from '../FirestoreSyncManager';
 import { useSyncStore } from '../../../store/useSyncStore';
+import { isMockFirestoreEnabled } from '../../../test-flags';
 
 /**
  * Hook to manage Firebase/Firestore sync.
@@ -24,8 +25,7 @@ export const useFirestoreSync = () => {
 
     // Compute if config is valid based on store state
     const isConfigured = useMemo(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+        const isMock = isMockFirestoreEnabled();
         if (isMock) return true;
 
         return !!(
@@ -38,8 +38,7 @@ export const useFirestoreSync = () => {
 
     // Initialize sync manager when Firebase is enabled AND configured
     useEffect(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const isMock = typeof window !== 'undefined' && (window as any).__VERSICLE_MOCK_FIRESTORE__;
+        const isMock = isMockFirestoreEnabled();
 
         if ((!firebaseEnabled || !isConfigured) && !isMock) {
             return;
