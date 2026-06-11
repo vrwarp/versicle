@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from 'node:url';
 import { defineConfig, configDefaults } from 'vitest/config';
 
 // THE single vitest config. Do not add a `test` block to vite.config.ts —
@@ -5,7 +6,27 @@ import { defineConfig, configDefaults } from 'vitest/config';
 // vite.config.ts entirely, so anything added there is silently dead
 // (this exact drift already happened once: the .claude worktree excludes
 // landed in vite.config.ts and never took effect).
+//
+// Path aliases: because this file REPLACES vite.config.ts for vitest (it
+// does not merge it), the resolve.alias map below is a deliberate copy of
+// the one in vite.config.ts. Keep both in sync with the `paths` map in
+// tsconfig.app.json.
+const srcAlias = (dir: string) => fileURLToPath(new URL(`./src/${dir}`, import.meta.url));
+
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@app': srcAlias('app'),
+      '@components': srcAlias('components'),
+      '@db': srcAlias('db'),
+      '@hooks': srcAlias('hooks'),
+      '@lib': srcAlias('lib'),
+      '@store': srcAlias('store'),
+      '~types': srcAlias('types'),
+      '@test': srcAlias('test'),
+      '@workers': srcAlias('workers'),
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,

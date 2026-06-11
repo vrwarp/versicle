@@ -16,6 +16,31 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Path aliases (Phase 1 path-alias codemod). One alias per top-level
+       src/ root; cross-root imports MUST use these (enforced by the
+       no-restricted-imports rule in eslint.config.js). Keep this map in
+       sync with resolve.alias in vite.config.ts AND vitest.config.ts
+       (vitest does not read vite.config.ts here). tsconfig.test.json
+       inherits these via extends; dependency-cruiser resolves them via
+       its tsConfig option; eslint-import-resolver-typescript reads them
+       from the project tsconfigs. No @data yet — src/data/ is reshaped
+       in Phase 3. src/types is "~types" NOT "@types": TypeScript
+       hard-rejects any import specifier starting with "@types/" (error
+       TS6137 — that prefix is reserved for declaration packages), so the
+       one root that cannot follow the @ convention uses the common
+       tilde workaround. */
+    "paths": {
+      "@app/*": ["./src/app/*"],
+      "@components/*": ["./src/components/*"],
+      "@db/*": ["./src/db/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@lib/*": ["./src/lib/*"],
+      "@store/*": ["./src/store/*"],
+      "~types/*": ["./src/types/*"],
+      "@test/*": ["./src/test/*"],
+      "@workers/*": ["./src/workers/*"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,

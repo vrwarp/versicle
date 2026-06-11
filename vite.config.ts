@@ -1,8 +1,30 @@
+import { fileURLToPath, URL } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import mkcert from 'vite-plugin-mkcert'
 import { visualizer } from 'rollup-plugin-visualizer'
+
+// Path aliases (Phase 1 path-alias codemod): one alias per top-level src/
+// root. MUST stay in sync with the `paths` map in tsconfig.app.json and the
+// copy of this object in vitest.config.ts (a root vitest.config.ts does NOT
+// merge this file, so vitest needs its own resolve.alias). Vite applies
+// resolve.alias to worker bundles (worker.format: 'es') and the
+// vite-plugin-pwa sw.ts build as well. types/ is '~types' not '@types'
+// because TypeScript rejects '@types/…' specifiers (TS6137 — see
+// tsconfig.app.json).
+const srcAlias = (dir: string) => fileURLToPath(new URL(`./src/${dir}`, import.meta.url))
+const aliases = {
+  '@app': srcAlias('app'),
+  '@components': srcAlias('components'),
+  '@db': srcAlias('db'),
+  '@hooks': srcAlias('hooks'),
+  '@lib': srcAlias('lib'),
+  '@store': srcAlias('store'),
+  '~types': srcAlias('types'),
+  '@test': srcAlias('test'),
+  '@workers': srcAlias('workers'),
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -13,6 +35,9 @@ export default defineConfig(({ mode }) => {
   const analyze = env.ANALYZE === 'true';
   return {
     base: env.VITE_BASE || '/',
+    resolve: {
+      alias: aliases,
+    },
     build: {
       sourcemap: true,
     },

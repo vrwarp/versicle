@@ -19,6 +19,23 @@
     "moduleDetection": "force",
     "noEmit": true,
 
+    /* Path aliases — same map as tsconfig.app.json (this config does not
+       extend it, so the map is duplicated; keep the two in sync; see
+       tsconfig.app.json for why types/ is "~types" not "@types"). The E2E
+       suite drives the served app and currently has no src/ imports, but
+       any future type-only import of src code must use the aliases. */
+    "paths": {
+      "@app/*": ["./src/app/*"],
+      "@components/*": ["./src/components/*"],
+      "@db/*": ["./src/db/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@lib/*": ["./src/lib/*"],
+      "@store/*": ["./src/store/*"],
+      "~types/*": ["./src/types/*"],
+      "@test/*": ["./src/test/*"],
+      "@workers/*": ["./src/workers/*"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
