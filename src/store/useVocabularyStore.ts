@@ -1,12 +1,18 @@
 import { create } from 'zustand';
 import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
 
-/** Replication declaration (aggregated by src/store/registry.ts). */
+/**
+ * Replication declaration (aggregated by src/store/registry.ts).
+ * Flipped to merge-defaults + scopedDiff in flip wave 1 (phase2-fork-surgery.md
+ * §2.6 #2): single small map, low write rate. No hydration-fallback canaries
+ * existed — the actions would already crash if hydration deleted
+ * `knownCharacters`, so the flip is strictly risk-reducing.
+ */
 export const VOCABULARY_STORE_DEF: SyncedStoreDef<'knownCharacters'> = {
   name: 'vocabulary',
   syncedKeys: ['knownCharacters'],
-  hydration: 'replace',
-  scopedDiff: false,
+  hydration: 'merge-defaults',
+  scopedDiff: true,
 };
 
 export interface VocabularyState {

@@ -19,10 +19,10 @@ hydration modes, and the per-store flip ledger.
 | `useAnnotationStore` | `annotations` | reader | `annotations` | replace | no | Highlights and notes, keyed by UUID. |
 | `usePreferencesStore` | `preferences/<deviceId>` | shell | `currentTheme`, `customTheme`, `fontFamily`, `lineHeight`, `fontSize`, `shouldForceFont`, `readerViewMode`, `libraryLayout`, `libraryFilterMode`, `librarySortOrder`, `activeContext`, `fontProfiles`, `forceTraditionalChinese`, `showPinyin`, `pinyinSize` | replace | no | Per-device display preferences (theme, fonts, layout, Chinese). |
 | `useReadingListStore` | `reading-list` | library | `entries` | replace | no | Reading-list entries keyed by filename (progress projection). |
-| `useVocabularyStore` | `vocabulary` | chinese | `knownCharacters` | replace | no | Known Chinese characters (char → learned-at timestamp). |
+| `useVocabularyStore` | `vocabulary` | chinese | `knownCharacters` | merge-defaults | yes | Known Chinese characters (char → learned-at timestamp). |
 | `useLexiconStore` | `lexicon` | audio | `rules`, `settings` | replace | no | TTS pronunciation rules + per-book lexicon settings. |
-| `useContentAnalysisStore` | `contentAnalysis` | audio | `sections` | replace | no | AI content-analysis cache (references, table adaptations, titles). |
-| `useDeviceStore` | `devices` | sync | `devices` | replace | no | Device registry of the sync mesh (UA, heartbeat, names). |
+| `useContentAnalysisStore` | `contentAnalysis` | audio | `sections` | merge-defaults | yes | AI content-analysis cache (references, table adaptations, titles). |
+| `useDeviceStore` | `devices` | sync | `devices` | merge-defaults | yes | Device registry of the sync mesh (UA, heartbeat, names). |
 
 ## Local-persisted (zustand/persist → localStorage)
 

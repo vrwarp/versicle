@@ -3,12 +3,17 @@ import { UAParser } from 'ua-parser-js';
 import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
 import type { DeviceInfo, DeviceProfile } from '~types/device';
 
-/** Replication declaration (aggregated by src/store/registry.ts). */
+/**
+ * Replication declaration (aggregated by src/store/registry.ts).
+ * Flipped to merge-defaults + scopedDiff in flip wave 1 (phase2-fork-surgery.md
+ * §2.6 #3): the registry self-heals — registerCurrentDevice runs every boot.
+ * No hydration-fallback canaries existed.
+ */
 export const DEVICES_STORE_DEF: SyncedStoreDef<'devices'> = {
     name: 'devices',
     syncedKeys: ['devices'],
-    hydration: 'replace',
-    scopedDiff: false,
+    hydration: 'merge-defaults',
+    scopedDiff: true,
 };
 import packageJson from '../../package.json';
 
