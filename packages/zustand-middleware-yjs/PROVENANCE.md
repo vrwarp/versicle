@@ -70,3 +70,18 @@ branch bump.
   pinned by A.3). Fixes finding D2 (new top-level fields wiped on hydration
   from older docs — the v4→v5 fontProfiles class). Contract cases C.1–C.8 in
   `test/contract/merge-defaults.test.ts`.
+- **Surgery 3 — `scopedDiff` per-key diffing** (phase2-fork-surgery.md §2.3,
+  the D13 fix): additive `YjsOptions.scopedDiff` (default false = legacy
+  full-tree diff). Outbound diffs only `Object.is`-changed top-level keys,
+  each against its own subtree (`patchSharedTypeScoped`, reusing the legacy
+  change application verbatim — DELETE guard and Y.Text repair included);
+  inbound re-reads only the top-level keys named by the batch's Yjs events
+  (untouched keys keep object identity). Two divergence tripwires per the
+  design: a fast-check equivalence property (scoped ≡ full, incl. two-doc
+  concurrent merges) and a DEV sampling assert
+  (`assertScopedDiffConvergence`, control via `__scopedDiffDevSampling`)
+  that fails loudly on mutate-in-place writes. First-flush note: the batch
+  capture always provides a `previousState`, so the doc's "no previousState
+  → legacy full diff" fallback is defensive-only; the reachable first-flush
+  contract is scoped/lazy (consistent with §2.2 lazy backfill), pinned by
+  D.6. Contract cases D.1–D.6 in `test/contract/scoped-diff.test.ts`.

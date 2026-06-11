@@ -3,8 +3,23 @@ import {
   StoreMutatorIdentifier,
 } from "zustand";
 import * as Y from "yjs";
-import { computeInboundState, patchSharedType, patchStore, } from "./patching";
+import {
+  assertScopedDiffConvergence,
+  computeInboundState,
+  patchSharedType,
+  patchSharedTypeScoped,
+  patchStore,
+} from "./patching";
 import { isDevEnvironment, } from "./env";
+
+/**
+ * DEV-only sampling control for the scopedDiff divergence tripwire
+ * (phase2-fork-surgery.md §2.3): after a scoped flush, with this probability
+ * a full state-vs-map diff runs and asserts convergence, failing LOUDLY on
+ * mutate-in-place divergence. Exported so tests can pin it to 1 (always) or
+ * 0 (deterministic perf assertions). No-op in production builds.
+ */
+export const __scopedDiffDevSampling = { rate: 0.02 };
 
 type Yjs = <
   T,
@@ -115,6 +130,26 @@ export interface YjsOptions {
    * the same release.
    */
   hydration?: 'replace' | 'merge-defaults';
+
+  /**
+   * Per-top-level-key scoped diffing (phase2-fork-surgery.md §2.3, the D13
+   * fix). Default false = legacy full-tree diff (`sharedType.toJSON()` of
+   * the entire map on every outbound flush; `map.toJSON()` of the whole
+   * tree on every inbound batch).
+   *
+   * When true:
+   * - Outbound: only top-level keys whose value changed by `Object.is`
+   *   between the batch-start previousState and the current state are
+   *   diffed, each against its own subtree only. Sound for stores following
+   *   zustand's immutable-update convention; mutate-in-place writes are
+   *   invisible to the fast path — guarded by the DEV sampling tripwire
+   *   (loud failure) and the contract suite's fast-check equivalence
+   *   property. First-ever flush (no previousState) falls back to the full
+   *   legacy diff.
+   * - Inbound: only the top-level keys named by the batch's Yjs events are
+   *   re-read and patched; untouched keys keep their object identity.
+   */
+  scopedDiff?: boolean;
 }
 
 type YjsImpl = <T>(
@@ -200,15 +235,36 @@ const yjs: YjsImpl = <S>(
       isOutboundPending = false;
       const previousState = batchPreviousState;
       batchPreviousState = undefined;
-      // Read the FINAL state after all synchronous mutations this tick.
-      doc.transact(() =>
-        patchSharedType(map, api.getState(), {
-          atomicKeys: options?.atomicKeys,
-          disableYText: options?.disableYText,
-          yTextKeys: options?.yTextKeys,
-          previousState,
-          syncedKeys: syncedKeySet,
-        }), api);
+
+      const sharedOptions = {
+        atomicKeys: options?.atomicKeys,
+        disableYText: options?.disableYText,
+        yTextKeys: options?.yTextKeys,
+        syncedKeys: syncedKeySet,
+      };
+
+      if (options?.scopedDiff && previousState !== undefined) {
+        // Scoped path (§2.3): diff only the Object.is-changed top-level keys,
+        // each against its own subtree.
+        const state = api.getState();
+        doc.transact(() =>
+          patchSharedTypeScoped(map, state, previousState, sharedOptions), api);
+
+        // Divergence tripwire: occasionally verify the scoped flush against
+        // a full diff and fail loudly on drift (mutate-in-place writes).
+        if (isDevEnvironment() && Math.random() < __scopedDiffDevSampling.rate)
+          assertScopedDiffConvergence(map, api.getState(), syncedKeySet);
+      }
+      else {
+        // Legacy full-tree diff. Also the defensive fallback for a first
+        // flush without a captured previousState.
+        // Read the FINAL state after all synchronous mutations this tick.
+        doc.transact(() =>
+          patchSharedType(map, api.getState(), {
+            ...sharedOptions,
+            previousState,
+          }), api);
+      }
     };
 
     const scheduleOutbound = (capturedPreviousState: S) => {
@@ -325,13 +381,51 @@ const yjs: YjsImpl = <S>(
     // Flag to prevent scheduling more than one sync per event-loop tick.
     let isUpdatePending = false;
 
+    // Under scopedDiff: the top-level keys named by the foreign Yjs events
+    // of the current inbound batch (phase2-fork-surgery.md §2.3 inbound).
+    let pendingInboundKeys: Set<string> | undefined;
+
     const processBatch = () => {
       isUpdatePending = false;
+
+      const storeForPatch = {
+        ...api,
+        "setState": originalSetState,
+      };
+
+      if (options?.scopedDiff) {
+        // Scoped inbound: re-read ONLY the affected top-level keys; the
+        // patched subset is applied over the full state, so untouched keys
+        // keep their object identity (referential stability, case D.4).
+        const collected = pendingInboundKeys;
+        pendingInboundKeys = undefined;
+
+        if (collected === undefined || collected.size === 0) return;
+
+        const affectedKeys: ReadonlySet<string> = syncedKeySet
+          ? new Set([...collected].filter((key) => syncedKeySet.has(key)))
+          : collected;
+
+        if (affectedKeys.size === 0) return;
+
+        const partialMapJson: Record<string, any> = {};
+        affectedKeys.forEach((key) => {
+          if (map.has(key)) {
+            const value = map.get(key);
+            partialMapJson[key] =
+              value instanceof Y.AbstractType ? value.toJSON() : value;
+          }
+        });
+
+        patchStore(storeForPatch, partialMapJson, {
+          syncedKeys: affectedKeys,
+          suppressTopLevelDeleteKeys: declaredDefaultKeys,
+        });
+        return;
+      }
+
       patchStore(
-        {
-          ...api,
-          "setState": originalSetState,
-        },
+        storeForPatch,
         map.toJSON(),
         {
           syncedKeys: syncedKeySet,
@@ -340,7 +434,7 @@ const yjs: YjsImpl = <S>(
       );
     };
 
-    map.observeDeep((_, transaction) => {
+    map.observeDeep((events, transaction) => {
       if (isObsolete) return; // Permanently disabled
 
       // 1. Poison Pill Check
@@ -363,6 +457,20 @@ const yjs: YjsImpl = <S>(
       // If we originated this transaction, the Zustand store is already
       // up-to-date. Skip the round-trip entirely.
       if (transaction.origin === api) return;
+
+      // Scoped inbound (§2.3): collect the affected top-level keys across
+      // the microtask batch — deep events carry the key in path[0]; events
+      // on the root map name their keys in changes.keys.
+      if (options?.scopedDiff) {
+        pendingInboundKeys ??= new Set<string>();
+        const keys = pendingInboundKeys;
+        events.forEach((event) => {
+          if (event.path.length > 0)
+            keys.add(String(event.path[0]));
+          else
+            event.changes.keys.forEach((_change, key) => keys.add(key));
+        });
+      }
 
       // 3. Microtask Coalescing.
       // Schedule at most one synchronisation per event-loop tick.

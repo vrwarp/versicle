@@ -309,6 +309,154 @@ export interface PatchStateOptions
 }
 
 /**
+ * Per-key scoped outbound diff (phase2-fork-surgery.md §2.3, the D13 fix).
+ *
+ * Instead of serializing the ENTIRE Y.Map (`sharedType.toJSON()`) and
+ * deep-diffing the entire state on every flush, only top-level keys whose
+ * value changed by reference between the batch-start `previousState` and the
+ * current state are diffed — and each one only against ITS OWN subtree
+ * (`map.get(key)`). Reference equality is sound for stores following
+ * zustand's immutable-update convention; the divergence tripwires
+ * (assertScopedDiffConvergence + the fast-check equivalence property in the
+ * contract suite) guard the mutate-in-place case.
+ *
+ * Change application reuses applyChangesToSharedType verbatim, so the
+ * `previousState` DELETE guard and the Y.Text↔string mismatch repair behave
+ * exactly as in the legacy full diff.
+ *
+ * @param sharedType The top-level Y.Map the store is bound to.
+ * @param newState The post-batch state.
+ * @param previousState The pre-batch state (batch-start capture).
+ * @param options Mapping options; `syncedKeys` filters the key universe.
+ */
+export const patchSharedTypeScoped = (
+  sharedType: Y.Map<any>,
+
+  newState: any,
+  previousState: any,
+  options?: SharedTypePatchOptions
+): void =>
+{
+  const prevRecord: Record<string, any> =
+    isPlainRecord(previousState) ? previousState : {};
+  const newRecord: Record<string, any> =
+    isPlainRecord(newState) ? newState : {};
+
+  const keys = new Set([
+    ...Object.keys(prevRecord),
+    ...Object.keys(newRecord),
+  ]);
+
+  keys.forEach((key) =>
+  {
+    if (options?.syncedKeys !== undefined && options.syncedKeys.has(key) === false)
+      return;
+
+    const prevValue = prevRecord[key];
+    const nextValue = newRecord[key];
+
+    if (prevValue instanceof Function || nextValue instanceof Function)
+      return;
+
+    const presenceChanged = (key in newRecord) !== (key in prevRecord);
+
+    // The Object.is fast path: untouched keys are skipped entirely.
+    if (presenceChanged === false && Object.is(prevValue, nextValue))
+      return;
+
+    /*
+     * Confine the diff to this key's subtree: single-key records on both
+     * sides reuse the exact legacy change computation and application
+     * (INSERT/UPDATE/DELETE/PENDING, the previousState DELETE guard, and
+     * the Y.Text↔string repair). A key present in the map but in neither
+     * prev nor new state (a concurrent remote insert) never enters `keys`,
+     * so it can never be deleted here — the same protection the guard gives
+     * the legacy path.
+     */
+    const a: Record<string, any> = {};
+
+    if (sharedType.has(key))
+    {
+      const existing = sharedType.get(key);
+      a[key] = existing instanceof Y.AbstractType ? existing.toJSON() : existing;
+    }
+
+    const b: Record<string, any> = {};
+
+    if (key in newRecord)
+      b[key] = nextValue;
+
+    applyChangesToSharedType(
+      sharedType,
+      getChanges(a, b),
+      b,
+      { ...options, syncedKeys: undefined, previousState: prevRecord }
+    );
+  });
+};
+
+/**
+ * DEV-only divergence tripwire for `scopedDiff` (phase2-fork-surgery.md
+ * §2.3 edge cases): after a scoped flush, a full state-vs-map diff must find
+ * no residual UPDATE/PENDING changes — any such residual means a `set()`
+ * mutated state in place (same object reference), which the Object.is fast
+ * path cannot see, and doc/store would drift silently.
+ *
+ * Deliberately exempted residual change types (NOT divergence):
+ * - DELETE: the map can legitimately be richer than the state — a concurrent
+ *   remote insert whose inbound microtask has not run yet (the same case the
+ *   outbound previousState guard protects).
+ * - INSERT: the state can legitimately be richer than the map — a retained
+ *   declared default under `hydration: 'merge-defaults'` is only lazily
+ *   backfilled when its key is actually set() (§2.2 interplay, case C.7).
+ *
+ * @param sharedType The top-level Y.Map that was just flushed.
+ * @param state The current store state.
+ * @param syncedKeys Optional whitelist (the same filter the flush used).
+ */
+export const assertScopedDiffConvergence = (
+  sharedType: Y.Map<any>,
+  state: any,
+  syncedKeys?: ReadonlySet<string>
+): void =>
+{
+  const mapJson = sharedType.toJSON();
+
+  const stateRecord: Record<string, any> = {};
+
+  if (isPlainRecord(state))
+  {
+    Object.entries(state).forEach(([ key, value ]) =>
+    {
+      if ((value instanceof Function) === false)
+        stateRecord[key] = value;
+    });
+  }
+
+  const a = syncedKeys ? pickKeys(mapJson, syncedKeys) : mapJson;
+  const b = syncedKeys ? pickKeys(stateRecord, syncedKeys) : stateRecord;
+
+  const residual = getChanges(a, b).filter(([ type ]) =>
+    type === ChangeType.UPDATE || type === ChangeType.PENDING);
+
+  if (residual.length > 0)
+  {
+    const keys = residual
+      .map(([ type, property ]) => `"${String(property)}" (${type})`)
+      .join(", ");
+
+    throw new Error(
+      `[zustand-middleware-yjs] scopedDiff divergence tripwire: after a ` +
+      `scoped flush, a full diff still finds changes for ${keys}. This ` +
+      `almost always means a set() mutated state IN PLACE (same object ` +
+      `reference), which the Object.is fast path cannot see — the Y.Doc and ` +
+      `the store would drift silently. Fix the store to use immutable ` +
+      `updates, or turn scopedDiff off for this store.`
+    );
+  }
+};
+
+/**
  * Patches oldState to be identical to newState. This function recurses when
  * an array or object is encountered. If oldState and newState are already
  * identical (indicated by an empty diff), then oldState is returned.
