@@ -125,6 +125,49 @@ export default tseslint.config(
       ],
     },
   },
+  // Engine-dir vi.mock allowlist (Phase 5 entry gate; phase5-tts-strangler.md
+  // N3 + §vi.mock policy, README §4 rule 3 ratchet "vi.mock in
+  // engine/provider/data dirs → 0"): the engine parity/unit suites drive the
+  // engine through injected fakes (FakeEngineContext, FakePlaybackBackend),
+  // but AudioPlayerService still imports dbService directly and the pipeline
+  // reaches LexiconService/PlatformIntegration, so exactly these module mocks
+  // remain allowed inside src/lib/tts/engine/. The allowlist is FROZEN here:
+  //  - @db/DBService, ../LexiconService, ../PlatformIntegration → shrink to
+  //    ZERO at 5b-PR5 (SessionStore/lexicon ports replace the direct imports);
+  //  - @app/tts/createWorkerEngineClient (WorkerEngineHandle.test.ts only) is
+  //    the N1 inverted lib→app edge — it leaves this directory (and this
+  //    allowlist) at 5b-PR1 when WorkerEngineHandle moves to src/app/tts/.
+  // At 5b-PR5 the :not() clauses are deleted and every vi.mock/vi.doMock in
+  // the directory becomes a lint error.
+  {
+    files: ['src/lib/tts/engine/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/] > Literal" +
+            ":not([value='@db/DBService'])" +
+            ":not([value='../LexiconService'])" +
+            ":not([value='../PlatformIntegration'])" +
+            ":not([value='@app/tts/createWorkerEngineClient'])",
+          message:
+            'vi.mock in src/lib/tts/engine/ is frozen to the allowlist ' +
+            '{@db/DBService, ../LexiconService, ../PlatformIntegration, ' +
+            '@app/tts/createWorkerEngineClient} (phase5-tts-strangler.md N3; shrinks to ' +
+            'ZERO at 5b-PR5). Drive the engine through injected fakes ' +
+            '(FakeEngineContext/FakePlaybackBackend) instead.',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/][arguments.0.type!='Literal']",
+          message:
+            'vi.mock in src/lib/tts/engine/ must name its module as a plain string literal ' +
+            'so the allowlist rule above can see it (phase5-tts-strangler.md N3).',
+        },
+      ],
+    },
+  },
   // Store-registry seam (Phase 2, phase2-fork-surgery.md §2.5): synced stores
   // are wired exclusively through defineSyncedStore in
   // src/store/yjs-provider.ts — that module is the only production `yjs()`
