@@ -15,8 +15,8 @@
  *   3. THIRD-PARTY-NOTICES.md is missing (regenerate: npm run licenses:generate).
  *
  * Private packages are excluded from the npm scan: the root package and the
- * private-marked zustand-middleware-yjs fork, which is licensed via its
- * inventory.json entry instead.
+ * private-marked vendored forks (zustand-middleware-yjs, y-idb), which are
+ * licensed via their inventory.json entries instead.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';

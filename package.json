@@ -76,7 +76,7 @@
     "uuid": "^13.0.0",
     "vite-plugin-pwa": "^1.2.0",
     "y-cinder": "github:vrwarp/y-cinder#9c5c205e6bfef008c5dd8733c67619a5a73d5f62",
-    "y-idb": "github:vrwarp/y-idb#e2a21f45b55190e22d165817e9bc2a2ca1aa40cf",
+    "y-idb": "file:packages/y-idb",
     "y-protocols": "^1.0.7",
     "yjs": "^13.6.20",
     "zod": "^4.3.5",

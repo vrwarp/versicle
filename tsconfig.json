@@ -8,6 +8,9 @@
       "path": "./packages/zustand-middleware-yjs/tsconfig.test.json"
     },
     {
+      "path": "./packages/y-idb/tsconfig.test.json"
+    },
+    {
       "path": "./tsconfig.app.json"
     },
     {

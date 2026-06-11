@@ -103,8 +103,8 @@ checker.init(
     lines.push('');
     lines.push(
       `${Object.keys(packages).length} packages, grouped by license. The private`,
-      'fork `zustand-middleware-yjs` (MIT) is excluded from the scan and recorded',
-      'in the inventory section above.',
+      'vendored forks `zustand-middleware-yjs` and `y-idb` (both MIT) are',
+      'excluded from the scan and recorded in the inventory section above.',
     );
     lines.push('');
     const licenseIds = [...byLicense.keys()].sort((a, b) => a.localeCompare(b));

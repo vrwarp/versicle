@@ -42,10 +42,13 @@ const FORBIDDEN = [
   { pattern: 'node_modules/zustand', label: 'zustand (incl. zustand-middleware-yjs)' },
   { pattern: 'node_modules/yjs/', label: 'yjs' },
   { pattern: 'src/store/', label: 'src/store' },
-  // The vendored fork (Phase 2): since vendoring, its sourcemap paths are
-  // packages/zustand-middleware-yjs/src/*, not node_modules/* — keep the
-  // middleware covered by the worker-purity check.
+  // The vendored forks (Phase 2/3): since vendoring, their sourcemap paths
+  // are packages/<name>/src/*, not node_modules/* — keep them covered by the
+  // worker-purity check. y-idb in the worker chunk means a second Y.Doc
+  // persistence inside the worker, the data-corruption scenario this script
+  // exists to prevent.
   { pattern: 'packages/zustand-middleware-yjs/', label: 'zustand-middleware-yjs (vendored)' },
+  { pattern: 'packages/y-idb/', label: 'y-idb (vendored)' },
 ];
 
 if (!skipBuild) {

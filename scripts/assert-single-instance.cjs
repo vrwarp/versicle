@@ -1,21 +1,24 @@
 #!/usr/bin/env node
 /**
- * Single-instance assertion for yjs and zustand (Phase 2 vendoring,
- * plan/overhaul/prep/phase2-fork-surgery.md §6.6b).
+ * Single-instance assertion for yjs, zustand, and lib0 (Phase 2 vendoring,
+ * plan/overhaul/prep/phase2-fork-surgery.md §6.6b; extended for the Phase 3
+ * y-idb vendoring, phase3-storage-gateway.md §D6).
  *
- * The vendored zustand-middleware-yjs declares yjs and zustand as PEER
- * dependencies, so npm structurally resolves exactly one copy of each at the
- * repo root. Before vendoring they were regular dependencies of the fork and
- * single-instance was dedupe-by-luck: a second nested yjs would break every
+ * The vendored forks declare their shared runtime deps as PEER dependencies
+ * (zustand-middleware-yjs → yjs + zustand; y-idb → yjs + lib0), so npm
+ * structurally resolves exactly one copy of each at the repo root. Before
+ * vendoring they were regular dependencies of the forks and single-instance
+ * was dedupe-by-luck: a second nested yjs would break every
  * `instanceof Y.Map` branch inside the middleware and silently corrupt sync
- * (D5-adjacent hazard). This script makes the invariant CI-checkable:
+ * (D5-adjacent hazard); a second lib0 would split y-idb's Observable base
+ * from yjs's own lib0. This script makes the invariant CI-checkable:
  *
  *   npm run check:single-instance
  *
  * fails unless `npm query '#<name>'` reports exactly one PHYSICAL install of
- * yjs and of zustand in the tree (npm query returns one node per real
- * directory, unlike `npm ls --json`, whose deduped peer-link entries have no
- * stable identity to count). The runtime complement is
+ * each target in the tree (npm query returns one node per real directory,
+ * unlike `npm ls --json`, whose deduped peer-link entries have no stable
+ * identity to count). The runtime complement is
  * src/store/__tests__/crdt-contract/single-yjs-instance.test.ts (§6.6d);
  * vite.config.ts / vitest.config.ts `resolve.dedupe` is the belt-and-braces
  * bundler guard (§6.6c).
@@ -24,7 +27,7 @@ const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 
 const repoRoot = path.join(__dirname, '..');
-const TARGETS = ['yjs', 'zustand'];
+const TARGETS = ['yjs', 'zustand', 'lib0'];
 
 let failed = false;
 for (const target of TARGETS) {

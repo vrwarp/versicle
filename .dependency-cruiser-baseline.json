@@ -8,7 +8,7 @@
     "lib-not-to-components": 0,
     "db-not-to-store": 1,
     "components-not-to-db": 2,
-    "worker-no-state-typegraph": 19
+    "worker-no-state-typegraph": 20
   },
-  "total": 110
+  "total": 111
 }

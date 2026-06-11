@@ -32,11 +32,12 @@ const crossRootRelativeImportPattern = {
 export default tseslint.config(
   // .claude holds agent worktrees (full checkouts under .claude/worktrees/<name>/);
   // without the ignore, a top-level `eslint .` would also lint every worktree's copy.
-  // packages/zustand-middleware-yjs/src is the VENDORED fork source (incl. its
-  // ported upstream specs): it predates this repo's lint discipline and stays
-  // diff-minimal against upstream by design (PROVENANCE.md), so it is exempt.
-  // The first-party contract suite in packages/zustand-middleware-yjs/test IS
-  // linted. dist-types*/ are tsc -b declaration outputs (gitignored).
+  // packages/*/src is VENDORED fork source (zustand-middleware-yjs incl. its
+  // ported upstream specs; y-idb's upstream JS + hand-maintained d.ts): it
+  // predates this repo's lint discipline and stays diff-minimal against
+  // upstream by design (each package's PROVENANCE.md), so it is exempt.
+  // The first-party contract suites in packages/*/test ARE linted.
+  // dist-types*/ are tsc -b declaration outputs (gitignored).
   {
     ignores: [
       'dist',
@@ -45,6 +46,7 @@ export default tseslint.config(
       'android',
       '.claude',
       'packages/zustand-middleware-yjs/src',
+      'packages/y-idb/src',
       'packages/*/dist-types',
       'packages/*/dist-types-test',
     ],

@@ -76,12 +76,13 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 
 ### y-idb (fork of yjs/y-indexeddb)
 
-- **Version:** 9.0.12 @ e2a21f45b55190e22d165817e9bc2a2ca1aa40cf
+- **Version:** 9.0.12, vendored from fork SHA e2a21f45b55190e22d165817e9bc2a2ca1aa40cf
 - **License:** MIT
 - **Source:** https://github.com/vrwarp/y-idb (upstream: https://github.com/yjs/y-indexeddb)
-- **Path:** node_modules/y-idb (bundled into dist/ at build)
-- **Provenance:** Personal fork consumed as a pinned git dependency (package.json); retains the upstream MIT LICENSE (Kevin Jahns / RWTH Aachen) and declares fork provenance in its README.
-- **Notes:** Same Phase 4 vendoring checklist as y-cinder.
+- **Path:** packages/y-idb (workspace package; src/ bundled into dist/ at build)
+- **Provenance:** Personal fork VENDORED into the repo as an npm workspace (Phase 3, plan/overhaul/prep/phase3-storage-gateway.md §D6): ES source imported from the fork at the exact SHA the app was previously git-pinned to; src/y-idb.js verified byte-identical to the previously installed artifact, and the consumer-facing src/y-idb.d.ts is the tsc-emitted declaration from the same install. Retains the upstream MIT LICENSE (Kevin Jahns / RWTH Aachen) verbatim; full lineage, pre-existing fork deltas, and a running Phase 3 modification log live in packages/y-idb/PROVENANCE.md.
+- **Modifications:** Packaging only at vendor time (private: true, exports point at the ES source, lib0 moved to peerDependencies next to the existing yjs peer, build/release tooling dropped) — zero behavior change, pinned by the contract suite in packages/y-idb/test/contract/. Subsequent fork surgery is logged in PROVENANCE.md.
+- **Notes:** package.json stays private:true (never published), which keeps it OUT of license-checker output — this inventory entry plus the in-tree LICENSE file are its license record. y-cinder remains git-pinned until its own phase (P4).
 
 ### zustand-middleware-yjs (fork of joebobmiles/zustand-middleware-yjs)
 
@@ -91,7 +92,7 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 - **Path:** packages/zustand-middleware-yjs (workspace package; src/ bundled into dist/ at build)
 - **Provenance:** Personal fork VENDORED into the repo as an npm workspace (Phase 2, plan/overhaul/prep/phase2-fork-surgery.md §6): TS source imported from the fork repo at the exact SHA the app was previously git-pinned to; the fork's committed dist/ at that SHA was verified byte-identical to the previously installed artifact. Retains the upstream MIT LICENSE (Joseph R Miles) verbatim; full lineage, pre-existing fork deltas, and a running Phase 2 modification log live in packages/zustand-middleware-yjs/PROVENANCE.md.
 - **Modifications:** Packaging only at vendor time (peerDependencies for yjs/zustand, exports point at TS source, build/release tooling deleted, jest specs ported to vitest) — zero behavior change, pinned by the contract suite in packages/zustand-middleware-yjs/test/contract/. Subsequent fork surgery is logged in PROVENANCE.md.
-- **Notes:** package.json stays private:true (never published), which keeps it OUT of license-checker output — this inventory entry plus the in-tree LICENSE file are its license record. y-idb and y-cinder remain git-pinned until their own phases.
+- **Notes:** package.json stays private:true (never published), which keeps it OUT of license-checker output — this inventory entry plus the in-tree LICENSE file are its license record. y-idb was vendored the same way in Phase 3 (packages/y-idb); y-cinder remains git-pinned until its own phase (P4).
 
 ### @capgo/capacitor-social-login local patch (login_hint passthrough)
 
@@ -160,9 +161,9 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 
 ## Bundled npm packages (production dependency tree)
 
-578 packages, grouped by license. The private
-fork `zustand-middleware-yjs` (MIT) is excluded from the scan and recorded
-in the inventory section above.
+577 packages, grouped by license. The private
+vendored forks `zustand-middleware-yjs` and `y-idb` (both MIT) are
+excluded from the scan and recorded in the inventory section above.
 
 ### (AFL-2.1 OR BSD-3-Clause) (1)
 
@@ -337,7 +338,7 @@ in the inventory section above.
 - `yaml@2.9.0` — Copyright Eemeli Aro <eemeli@gmail.com> — <https://github.com/eemeli/yaml>
 - `yargs-parser@21.1.1` — Copyright (c) 2016, Contributors — <https://github.com/yargs/yargs-parser>
 
-### MIT (444)
+### MIT (443)
 
 - `@alloc/quick-lru@5.2.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com) — <https://github.com/sindresorhus/quick-lru>
 - `@apideck/better-ajv-errors@0.3.6` — Copyright (c) 2021 Apideck — <https://github.com/apideck-libraries/better-ajv-errors>
@@ -777,7 +778,6 @@ in the inventory section above.
 - `wrap-ansi@7.0.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com) — <https://github.com/chalk/wrap-ansi>
 - `wrap-ansi@8.1.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com) — <https://github.com/chalk/wrap-ansi>
 - `y-cinder@3.0.2603210004` — Copyright (c) 2024 Pod Raven — <https://github.com/vrwarp/y-cinder>
-- `y-idb@9.0.12` — Copyright (c) 2014.   - Kevin Jahns <kevin.jahns@rwth-aachen.de>..   - Chair of Computer Science 5 (Databases & Information Systems), RWTH Aachen University, Germany — <https://github.com/vrwarp/y-idb>
 - `y-protocols@1.0.7` — Copyright (c) 2019 Kevin Jahns <kevin.jahns@protonmail.com>. — <https://github.com/yjs/y-protocols>
 - `yargs@17.7.2` — Copyright 2010 James Halliday (mail@substack.net); Modified work Copyright 2014 Contributors (ben@npmjs.com) — <https://github.com/yargs/yargs>
 - `yjs@13.6.29` — Copyright (c) 2023.   - Kevin Jahns <kevin.jahns@protonmail.com>..   - Chair of Computer Science 5 (Databases & Information Systems), RWTH Aachen University, Germany — <https://github.com/yjs/yjs>
