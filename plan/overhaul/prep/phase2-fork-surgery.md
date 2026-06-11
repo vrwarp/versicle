@@ -773,3 +773,8 @@ order; see the README status banner). Deliberately deferred work, with owners:
    (20 > 19). The registry aggregates defs + the boot roster and must never be
    imported by a store module; revisit if/when the worker type-closure is cut
    (LD-7 ratchet work).
+
+> **Program decision (2026-06-10, post-P7-prep):** CRDT **v7** is the reading-list
+> `bookId` FK linking migration (last PR of Phase 7, gated on v6 + IDB v25 stability).
+> The preferences husk-clearing + `library.__schemaVersion` dual-write retirement
+> renumber from v7 to **v8** (Phase 9). Additive change ships before cleanup.
