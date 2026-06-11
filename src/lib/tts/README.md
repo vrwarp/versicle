@@ -11,8 +11,10 @@ This directory contains the comprehensive implementation of the Text-to-Speech s
 
 *   **`AudioPlayerService.ts`**: The heart of the TTS system. It acts as the central controller, managing the playback queue, orchestrating providers, handling buffering/pre-fetching, managing error recovery, and broadcasting state changes to the UI.
     *   `AudioPlayerService.test.ts`: Unit tests for the service.
-    *   `AudioPlayerService_Resume.test.ts`: Specific tests for resume/pause behavior.
-    *   `AudioPlayerService_SmartResume.test.ts`: Tests for the "Smart Resume" feature (rewinding context after pauses).
+    *   `engine/engineParityScenarios.ts`: the behavioral contract (23 scenarios, both
+        transports). Per-bug suites are being absorbed into its named
+        `describe('regression: …')` blocks — see
+        `plan/overhaul/prep/phase5-absorption-ledger.md` before adding a new one-off file.
 *   **`SyncEngine.ts`**: Responsible for the "Karaoke" effect. It maps audio timepoints (from providers) to the active text segment to trigger real-time highlighting.
 *   **`TTSCache.ts`**: Manages the persistence of synthesized audio segments in IndexedDB to minimize API costs and latency.
 *   **`MediaSessionManager.ts`**: Handles integration with the browser's Media Session API, allowing control via hardware keys, lock screens, and smartwatches.
