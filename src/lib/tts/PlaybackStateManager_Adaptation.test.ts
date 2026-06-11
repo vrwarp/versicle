@@ -2,12 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PlaybackStateManager } from './PlaybackStateManager';
 import { type TTSQueueItem } from './AudioPlayerService';
 
-// Mock dbService
-vi.mock('@db/DBService', () => ({
-  dbService: {
-    saveTTSPosition: vi.fn(),
-    saveTTSState: vi.fn(),
-    updatePlaybackState: vi.fn(),
+// Mock the playback session repo
+vi.mock('@data/repos/playbackCache', () => ({
+  playbackCache: {
+    saveQueue: vi.fn(),
+    savePauseTime: vi.fn(),
   }
 }));
 

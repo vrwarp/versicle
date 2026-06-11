@@ -1,13 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PlaybackStateManager } from './PlaybackStateManager';
-import { dbService } from '@db/DBService';
+import { playbackCache } from '@data/repos/playbackCache';
 
 // Mock DBService
-vi.mock('@db/DBService', () => ({
-    dbService: {
-        saveTTSState: vi.fn(),
-        saveTTSPosition: vi.fn(),
-        updatePlaybackState: vi.fn(),
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+        saveQueue: vi.fn(),
+        savePauseTime: vi.fn(),
     }
 }));
 
@@ -198,7 +197,7 @@ describe('PlaybackStateManager', () => {
             manager.setQueue(items, 0, 1);
 
             // setQueue automatically persists
-            expect(dbService.saveTTSState).toHaveBeenCalledWith('book1', items);
+            expect(playbackCache.saveQueue).toHaveBeenCalledWith('book1', items);
         });
 
         it('should save playback state', async () => {
@@ -208,14 +207,14 @@ describe('PlaybackStateManager', () => {
 
             await manager.savePlaybackState('paused');
 
-            expect(dbService.updatePlaybackState).toHaveBeenCalledWith('book1', undefined, expect.any(Number));
+            expect(playbackCache.savePauseTime).toHaveBeenCalledWith('book1', expect.any(Number));
         });
 
         it('should not persist if bookId is not set', () => {
             const items = [{ text: 'Hello', cfi: '1' }];
             manager.setQueue(items, 0, 1); // No book ID set
 
-            expect(dbService.saveTTSState).not.toHaveBeenCalled();
+            expect(playbackCache.saveQueue).not.toHaveBeenCalled();
         });
     });
 

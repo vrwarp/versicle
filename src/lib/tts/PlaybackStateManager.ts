@@ -1,5 +1,5 @@
 import type { TTSQueueItem, TTSStatus } from './AudioPlayerService';
-import { dbService } from '@db/DBService';
+import { playbackCache } from '@data/repos/playbackCache';
 import { flightRecorder } from './TTSFlightRecorder';
 
 
@@ -441,7 +441,7 @@ export class PlaybackStateManager {
             // Optimization: If queue has not changed since last persist,
             // we don't need to save the full queue to cache_session_state.
             if (this.lastPersistedQueue !== this._queue) {
-                dbService.saveTTSState(this.currentBookId, this._queue);
+                playbackCache.saveQueue(this.currentBookId, this._queue);
                 this.lastPersistedQueue = this._queue;
             }
         }
@@ -462,7 +462,7 @@ export class PlaybackStateManager {
 
         try {
             // Only update pause time in local cache session state
-            await dbService.updatePlaybackState(this.currentBookId, undefined, lastPauseTime);
+            await playbackCache.savePauseTime(this.currentBookId, lastPauseTime);
         } catch (e) {
             console.warn('Failed to save playback state', e);
         }
