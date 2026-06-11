@@ -1,6 +1,7 @@
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import type { BackupManifest, BackupManifestV3 } from '../BackupService';
 import { backupService } from '../BackupService';
+import { backupManifestEnvelopeSchema } from '@data/rows';
 import { createLogger } from '../logger';
 
 const logger = createLogger('AndroidBackupService');
@@ -33,6 +34,11 @@ export class AndroidBackupService {
 
     /**
      * Reads the backup payload (useful for debugging or restore verification).
+     *
+     * Untrusted ingress (Phase 3 D4): the file on disk is outside the app's
+     * control, so the parsed JSON is validated against the backup manifest
+     * envelope schema (src/data/rows posture) before it is handed to anyone.
+     * An unparseable or structurally invalid payload returns null.
      */
     static async readBackupPayload(): Promise<BackupManifest | null> {
         try {
@@ -43,7 +49,12 @@ export class AndroidBackupService {
             });
 
             if (typeof result.data === 'string') {
-                return JSON.parse(result.data) as BackupManifest;
+                const parsed = backupManifestEnvelopeSchema.safeParse(JSON.parse(result.data));
+                if (!parsed.success) {
+                    logger.warn('Android backup payload failed envelope validation; ignoring it', parsed.error.issues);
+                    return null;
+                }
+                return parsed.data as unknown as BackupManifest;
             }
             return null;
         } catch (e) {

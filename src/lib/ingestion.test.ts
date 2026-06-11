@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { extractBookData, validateZipSignature } from './ingestion';
+import { extractBookData, validateZipSignature, sanitizeString, getSanitizedBookMetadata } from './ingestion';
 import type { BookExtractionData } from './ingestion';
 import { TTS_EXTRACTION_VERSION } from './tts/sentence-extraction';
 
@@ -260,6 +260,102 @@ describe('ingestion', () => {
       for (const batch of data.ttsContentBatches) {
         expect(batch.extractionVersion).toBe(TTS_EXTRACTION_VERSION);
       }
+    });
+  });
+
+  // Absorbed from src/db/validators.test.ts in the same PR that dissolved
+  // src/db/validators.ts into this module (Phase 3 D4; test-absorption
+  // ledger, plan/overhaul/README.md section 4 rule 8).
+  describe('regression: metadata sanitization (absorbed from db/validators.test.ts)', () => {
+    beforeEach(() => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    describe('sanitizeString', () => {
+      it('trims whitespace', () => {
+        expect(sanitizeString('  hello  ')).toBe('hello');
+      });
+
+      it('truncates to max length', () => {
+        expect(sanitizeString('hello world', 5)).toBe('hello');
+      });
+
+      it('returns empty string for non-string input', () => {
+        expect(sanitizeString(123 as any)).toBe('');
+      });
+
+      it('robustly sanitizes tricky HTML payloads (using DOMPurify)', () => {
+        // Nested tags: DOMPurify strips tags; the first < survives as text.
+        expect(sanitizeString('<<script>script>alert(1)</script>')).toBe('<');
+        // Attribute injection
+        expect(sanitizeString('<a title=">">Link</a>')).toBe('Link');
+        // Complex image tag
+        expect(sanitizeString('<<img src=x onerror=alert(1)>')).toBe('<');
+        // Script with whitespace: element removed along with content
+        expect(sanitizeString('<script >alert(1)</script >')).toBe('');
+        // Style tag removal: element removed along with content
+        expect(sanitizeString('<style>body{color:red}</style>')).toBe('');
+      });
+    });
+
+    describe('getSanitizedBookMetadata', () => {
+      const validBook = {
+        id: '123',
+        title: 'Title',
+        author: 'Author',
+        addedAt: 1234567890,
+      };
+
+      it('sanitizes string fields and detects modifications', () => {
+        const result = getSanitizedBookMetadata({
+          ...validBook,
+          title: '  Title  ',
+          author: '  Author  ',
+          description: '  Desc  ',
+        });
+        expect(result).not.toBeNull();
+        expect(result?.wasModified).toBe(true);
+        expect(result?.sanitized.title).toBe('Title');
+        expect(result?.sanitized.author).toBe('Author');
+        expect(result?.sanitized.description).toBe('Desc');
+      });
+
+      it('truncates overly long fields and reports it', () => {
+        const longString = 'a'.repeat(3000);
+        const result = getSanitizedBookMetadata({
+          ...validBook,
+          title: longString,
+          author: longString,
+          description: longString,
+        });
+        expect(result).not.toBeNull();
+        expect(result?.wasModified).toBe(true);
+        expect(result?.sanitized.title.length).toBe(500);
+        expect(result?.sanitized.author.length).toBe(255);
+        expect(result?.sanitized.description?.length).toBe(2000);
+        expect(result?.modifications).toHaveLength(3);
+        expect(result?.modifications[0]).toContain('Title sanitized');
+      });
+
+      it('strips HTML tags but preserves math symbols', () => {
+        const result = getSanitizedBookMetadata({
+          ...validBook,
+          title: '<b>Title</b>',
+          author: 'A < B',
+          description: '<script>alert(1)</script>',
+        });
+        expect(result?.wasModified).toBe(true);
+        expect(result?.sanitized.title).toBe('Title');
+        expect(result?.sanitized.author).toBe('A < B'); // Preserved as text
+        expect(result?.sanitized.description).toBe('');
+        expect(result?.modifications[0]).toContain('Title sanitized');
+      });
+
+      it('returns null for invalid structure', () => {
+        expect(getSanitizedBookMetadata(null)).toBeNull();
+        expect(getSanitizedBookMetadata({})).toBeNull();
+      });
     });
   });
 });

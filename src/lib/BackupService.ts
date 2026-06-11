@@ -2,13 +2,13 @@ import JSZip from 'jszip';
 // Only the Y.Map cast remains since the snapshot primitives moved to
 // YjsSnapshotService — keep yjs out of this module's runtime graph.
 import type * as Y from 'yjs';
-import { z } from 'zod';
 import { exportFile } from './export';
 import { dbService } from '@db/DBService';
 import type { BookLocations, StaticBookManifest, UserInventoryItem } from '~types/db';
 import { getDB } from '@db/db';
 import { getYDoc, waitForYjsSync, getYjsPersistence } from '@store/yjs-provider';
 import { captureDoc, validateSnapshot, applySnapshot } from '@data/snapshot/YjsSnapshotService';
+import { backupManifestEnvelopeSchema, backupStaticManifestRowSchema, bookLocationsRowSchema } from '@data/rows';
 import { createLogger } from './logger';
 import { useLibraryStore } from '@store/useLibraryStore';
 
@@ -81,18 +81,9 @@ export interface BackupManifestV3 {
 /** Any backup manifest this client can restore. */
 export type BackupManifest = BackupManifestV2 | BackupManifestV3;
 
-/**
- * Structural validation for restorable backup manifests (v2 and v3).
- * Deliberately loose beyond the envelope so old v2 files keep restoring;
- * per-row binary sanitization happens in `sanitizeManifestRow`.
- */
-const BackupManifestEnvelopeSchema = z.looseObject({
-  version: z.union([z.literal(2), z.literal(3)]),
-  timestamp: z.string(),
-  yjsSnapshot: z.string().min(1),
-  staticManifests: z.array(z.looseObject({ bookId: z.string() })).optional(),
-  locations: z.array(z.looseObject({ bookId: z.string() })).optional(),
-});
+// Envelope validation lives with the other untrusted-ingress schemas in
+// src/data/rows/backup.ts (D4); per-row validation + binary sanitization
+// happen at write time in `processManifest`/`sanitizeManifestRow`.
 
 /** A loosely-typed manifest row as found inside a backup file. */
 type BackupManifestRow = { bookId: string } & Record<string, unknown>;
@@ -289,7 +280,7 @@ export class BackupService {
 
     onProgress?.(2, 'Validating backup...');
 
-    const envelope = BackupManifestEnvelopeSchema.safeParse(manifest);
+    const envelope = backupManifestEnvelopeSchema.safeParse(manifest);
     if (!envelope.success) {
       const detail = envelope.error.issues
         .map(issue => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
@@ -358,8 +349,19 @@ export class BackupService {
     // === Write Static Data to IDB ===
     const db = await getDB();
 
-    // Write static manifests (for Ghost Book support)
-    const incomingManifests = (manifest.staticManifests ?? []) as unknown as BackupManifestRow[];
+    // Write static manifests (for Ghost Book support). Untrusted-ingress row
+    // validation (src/data/rows, D4): rows that fail the backup-row schema
+    // are SKIPPED with a warning instead of being written as garbage.
+    const rawManifestRows = (manifest.staticManifests ?? []) as unknown[];
+    const incomingManifests: BackupManifestRow[] = [];
+    for (const raw of rawManifestRows) {
+      const parsed = backupStaticManifestRowSchema.safeParse(raw);
+      if (parsed.success) {
+        incomingManifests.push(parsed.data as BackupManifestRow);
+      } else {
+        logger.warn('Skipping invalid staticManifests row in backup', parsed.error.issues);
+      }
+    }
     if (incomingManifests.length > 0) {
       onProgress?.(40, 'Restoring metadata...');
 
@@ -377,15 +379,23 @@ export class BackupService {
       await tx.done;
     }
 
-    // Write locations
+    // Write locations. Untrusted-ingress row validation (src/data/rows, D4):
+    // a malformed row (e.g. `locations` missing/non-string) is skipped with a
+    // warning — the pre-rows/ behavior wrote `{ bookId, locations: undefined }`.
     if (manifest.locations && manifest.locations.length > 0) {
       onProgress?.(60, 'Restoring locations...');
+      const validLocations: { bookId: string; locations: string }[] = [];
+      for (const raw of manifest.locations as unknown[]) {
+        const parsed = bookLocationsRowSchema.safeParse(raw);
+        if (parsed.success) {
+          validLocations.push({ bookId: parsed.data.bookId, locations: parsed.data.locations });
+        } else {
+          logger.warn('Skipping invalid locations row in backup', parsed.error.issues);
+        }
+      }
       const tx = db.transaction(['cache_render_metrics'], 'readwrite');
       const locStore = tx.objectStore('cache_render_metrics');
-      await Promise.all(manifest.locations.map(loc => locStore.put({
-        bookId: loc.bookId,
-        locations: loc.locations
-      })));
+      await Promise.all(validLocations.map(loc => locStore.put(loc)));
       await tx.done;
     }
 
