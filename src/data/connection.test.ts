@@ -2,15 +2,16 @@
  * Connection-hardening suite (P3-4, design D2 in
  * plan/overhaul/prep/phase3-storage-gateway.md):
  *
- * - schema parity: the move out of src/db/db.ts kept version 24 and the
- *   exact store set (the upgrade callback is byte-identical by review;
- *   this pins its observable output);
+ * - schema parity: the exact store set at the current version (v25 since
+ *   P3-13; the store SET is unchanged from v24 — v25 added an index and
+ *   repurposed app_metadata, pinned by migrations.test.ts);
  * - open retry + reset-on-failure (▲18: db.ts cached a rejected dbPromise
  *   forever — one transient failure bricked DB access until reload);
  * - navigator.storage.persist() requested once after first success;
  * - multi-connection blocked/blocking handling (the P3-4 exit gate): the
- *   v24 holder gets onBlocking and closes so a newer-version open can
- *   proceed; the new opener sees `blocked` first.
+ *   current-version holder gets onBlocking and closes so a newer-version
+ *   open can proceed; the new opener sees `blocked` first. (The shipping
+ *   v24→v25 two-tab upgrade is pinned in migrations.test.ts M.5.)
  *
  * NOTE: this suite mutates module-level connection state, so every test
  * leaves the database deleted and the cache reset (vitest isolates files,
@@ -71,11 +72,11 @@ describe('navigator.storage.persist()', () => {
   });
 });
 
-describe('connection schema parity (the db.ts move is format-free)', () => {
-  it('opens EpubLibraryDB at version 24 with the exact v24 store set', async () => {
+describe('connection schema parity', () => {
+  it('opens EpubLibraryDB at version 25 with the exact store set', async () => {
     const db = await getConnection();
-    expect(DB_VERSION).toBe(24);
-    expect(db.version).toBe(24);
+    expect(DB_VERSION).toBe(25);
+    expect(db.version).toBe(25);
     expect(Array.from(db.objectStoreNames).sort()).toEqual([
       'app_metadata',
       'cache_audio_blobs',
@@ -138,12 +139,12 @@ describe('open retry + reset-on-failure (▲18)', () => {
 });
 
 describe('multi-connection blocked/blocking (P3-4 exit gate)', () => {
-  it('closes the v24 holder on blocking so a newer-version open proceeds', async () => {
+  it('closes the current-version holder on blocking so a newer-version open proceeds', async () => {
     const onBlocking = vi.fn();
     const blocked = vi.fn();
     configureConnectionEvents({ onBlocking });
 
-    await getConnection(); // this context now holds v24
+    await getConnection(); // this context now holds DB_VERSION
 
     // A "second tab" opens at a higher version: our holder receives
     // versionchange → blocking → closes; the opener's `blocked` callback

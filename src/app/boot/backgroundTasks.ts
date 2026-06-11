@@ -3,7 +3,9 @@
  *  - the device heartbeat interval (now started AFTER device registration —
  *    pre-C11 it raced registration from a parallel effect),
  *  - the weekly background Drive scan policy,
- *  - the audio-cache LRU eviction sweep (Phase 3 D5.1).
+ *  - the audio-cache LRU eviction sweep (Phase 3 D5.1), preceded by the
+ *    one-time v25 `size` backfill (P3-13 D7 — "post-open idle": this phase
+ *    runs after boot completes, off the critical path).
  */
 import type { BootTask } from '../bootstrap';
 import { getDeviceId } from '@lib/device-id';
@@ -30,12 +32,21 @@ export const deviceHeartbeatTask: BootTask = {
 export const audioCacheEvictionTask: BootTask = {
   name: 'data/audio-cache-eviction',
   run: () => {
-    // Fire-and-forget: the sweep streams a cursor and deletes through the
-    // write gate, so it can never overlap a playback write. Boot must not
-    // wait on it.
-    void audioCache.runEviction().catch((err) => {
-      logger.warn('Audio cache eviction sweep failed at boot:', err);
-    });
+    // Fire-and-forget: both jobs stream cursors and write through the gate,
+    // so they can never overlap a playback write. Boot must not wait on
+    // them. The backfill runs first (once; flag-guarded) so the sweep can
+    // read sizes without touching blobs; on backfill failure the flag stays
+    // unset and it retries next boot, while eviction still runs (it falls
+    // back to audio.byteLength).
+    void audioCache
+      .backfillSizesOnce()
+      .catch((err) => {
+        logger.warn('v25 audio size backfill failed (will retry next boot):', err);
+      })
+      .then(() => audioCache.runEviction())
+      .catch((err) => {
+        logger.warn('Audio cache eviction sweep failed at boot:', err);
+      });
   },
 };
 

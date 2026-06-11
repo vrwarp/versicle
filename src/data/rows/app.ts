@@ -7,9 +7,11 @@
  * - `sync_log` is a dead store at HEAD (zero readers/writers; prep ▲16) —
  *   its schema is FROZEN as-is for the P4 sync strangler to adopt or P9 to
  *   delete. Do not extend it here.
- * - `app_metadata` is repurposed by the v25 format change (D7:
- *   `schemaHistory` + `legacy-recovery` records). Those envelope schemas
- *   land with the v25 PR — the ONE format change of Phase 3 — not here.
+ * - `app_metadata` was a dead store until the v25 format change (P3-13,
+ *   D7) repurposed it as the schema-evolution envelope: `schemaHistory`
+ *   (appended on every versionchange upgrade), the `legacy-recovery-v25`
+ *   straggler snapshot, and one-time maintenance flags. The typed envelope
+ *   lives below.
  */
 import { z } from 'zod';
 import type { SyncCheckpoint, SyncLogEntry } from '~types/sync';
@@ -95,19 +97,90 @@ export type FlightSnapshotRow = {
   sizeBytes: number;
 };
 
+// ── app_metadata: the v25 schema-evolution envelope (D7) ──────────────────
+
+/**
+ * Keys of the `app_metadata` key-value store (out-of-line keys). The store
+ * existed unused since v18 (prep ▲16/P15); IDB v25 repurposed it. Keys are
+ * append-only — never reuse a retired key for a different shape.
+ */
+export const APP_METADATA_KEYS = {
+  /** `SchemaHistoryEntry[]` — one entry appended per versionchange upgrade. */
+  schemaHistory: 'schemaHistory',
+  /**
+   * `LegacyRecoveryRecord` — the v25 straggler guard's snapshot-before-delete
+   * of surviving v17/v18 user-data stores (recoverable via support/
+   * diagnostics; retention decision owed by P9).
+   */
+  legacyRecoveryV25: 'legacy-recovery-v25',
+  /** `true` once the post-open idle audio `size` backfill completed (v25). */
+  audioSizeBackfillV25: 'audio-size-backfill-v25',
+} as const;
+
+/** One `schemaHistory` entry: a versionchange upgrade that ran to completion. */
+export const schemaHistoryEntrySchema = z.looseObject({
+  from: z.number(),
+  to: z.number(),
+  at: z.number(),
+});
+export type SchemaHistoryEntry = { from: number; to: number; at: number };
+
+/**
+ * One legacy store's captured rows inside the recovery record. `rowsJSON`
+ * is a JSON array string (rows serialized one by one so the size cap can
+ * stop mid-store); binary fields are elided to
+ * `{ __binary: <ctor>, byteLength }` descriptors.
+ */
+export const legacyRecoveryStoreCaptureSchema = z.looseObject({
+  store: z.string(),
+  rowCount: z.number(),
+  capturedCount: z.number(),
+  rowsJSON: z.string(),
+});
+export type LegacyRecoveryStoreCapture = {
+  store: string;
+  rowCount: number;
+  capturedCount: number;
+  rowsJSON: string;
+};
+
+/** The `legacy-recovery-v25` record (straggler guard, D7 step 1). */
+export const legacyRecoveryRecordSchema = z.looseObject({
+  capturedAt: z.number(),
+  fromVersion: z.number(),
+  truncated: z.boolean(),
+  stores: z.array(legacyRecoveryStoreCaptureSchema),
+});
+export type LegacyRecoveryRecord = {
+  capturedAt: number;
+  fromVersion: number;
+  truncated: boolean;
+  stores: LegacyRecoveryStoreCapture[];
+};
+
+/**
+ * Everything `app_metadata` may hold — the typed envelope replacing the dead
+ * store's `any`. Readers narrow by key (see APP_METADATA_KEYS).
+ */
+export type AppMetadataValue = SchemaHistoryEntry[] | LegacyRecoveryRecord | boolean;
+
 // ── Compile-time drift guards (see rows/static.ts for the pattern) ────────
 type _CheckpointSchemaMatches = z.infer<typeof syncCheckpointRowSchema> extends SyncCheckpointRow ? true : never;
 type _LogSchemaMatches = z.infer<typeof syncLogEntryRowSchema> extends SyncLogEntryRow ? true : never;
 type _SnapshotSchemaMatches = z.infer<typeof flightSnapshotRowSchema> extends FlightSnapshotRow ? true : never;
 type _CheckpointRound = SyncCheckpointRow extends SyncCheckpoint ? true : never;
 type _SnapshotRound = FlightSnapshotRow extends FlightSnapshot ? true : never;
+type _HistorySchemaMatches = z.infer<typeof schemaHistoryEntrySchema> extends SchemaHistoryEntry ? true : never;
+type _RecoverySchemaMatches = z.infer<typeof legacyRecoveryRecordSchema> extends LegacyRecoveryRecord ? true : never;
 const _schemaChecks: [
   _CheckpointSchemaMatches,
   _LogSchemaMatches,
   _SnapshotSchemaMatches,
   _CheckpointRound,
   _SnapshotRound,
-] = [true, true, true, true, true];
+  _HistorySchemaMatches,
+  _RecoverySchemaMatches,
+] = [true, true, true, true, true, true, true];
 void _schemaChecks;
 
 function _rowTypeDriftGuard(

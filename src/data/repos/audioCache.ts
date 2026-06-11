@@ -20,14 +20,20 @@
  * store one row at a time (never `getAll` — the BOLT serialization-OOM
  * comments in the manifest bulk reads apply doubly to audio blobs), then
  * deletes oldest-first in small gated batches until under budget, skipping
- * rows touched in the last 24 h so audio cannot vanish mid-playback. The
- * `by_lastAccessed` index + size backfill that would make this cheaper are
- * the v25 format change (D7) — eviction does not wait for it.
+ * rows touched in the last 24 h so audio cannot vanish mid-playback.
+ *
+ * IDB v25 (P3-13, D7) added the `by_lastAccessed` index and this module's
+ * post-open idle `size` backfill ({@link AudioCacheRepo.backfillSizesOnce},
+ * run once from the `background` boot phase). Re-pointing the eviction scan
+ * at the index (iterate oldest-first, stop early once under budget) is a
+ * named follow-up in the prep doc — the scan still needs the total-bytes
+ * pass today.
  */
 import { getConnection } from '../connection';
 import { write } from '../write-gate';
 import { handleDbError } from '../errors';
 import type { CacheAudioBlobRow } from '../rows/cache';
+import { APP_METADATA_KEYS } from '../rows/app';
 import type { Timepoint } from '~types/tts';
 import { createLogger } from '@lib/logger';
 
@@ -47,6 +53,9 @@ const EVICTION_DELETE_BATCH = 50;
 
 /** Run an eviction sweep after every N segment puts. */
 export const EVICTION_PUT_INTERVAL = 50;
+
+/** Rows re-read + stamped per gated transaction during the size backfill. */
+const SIZE_BACKFILL_BATCH = 10;
 
 class AudioCacheRepo {
   private putsSinceEviction = 0;
@@ -110,6 +119,70 @@ class AudioCacheRepo {
       void this.runEviction().catch((error) => {
         logger.warn('Audio cache eviction sweep failed (will retry later):', error);
       });
+    }
+  }
+
+  /**
+   * v25 post-open idle backfill (D7 step 3): stamp the additive `size`
+   * field on rows written before P3-6 introduced it, so the eviction scan
+   * never has to touch the audio blob. Runs once — a completion flag in
+   * `app_metadata` short-circuits later boots. Returns the number of rows
+   * stamped.
+   *
+   * Pass 1 streams a readonly cursor collecting only the KEYS of rows
+   * missing `size`; pass 2 re-reads each row outside the gate (D1's
+   * read-modify-write recipe), stamps `size = audio.byteLength`, and puts
+   * synchronously in small gated batches. Last-write-wins between read and
+   * stamp: a concurrent putSegment stamps `size` itself, so the worst case
+   * is reverting one row's sub-hour lastAccessed bump.
+   */
+  async backfillSizesOnce(): Promise<number> {
+    try {
+      const db = await getConnection();
+      const done = await db.get('app_metadata', APP_METADATA_KEYS.audioSizeBackfillV25);
+      if (done === true) return 0;
+
+      // Pass 1: keys only (no getAll — rows hold multi-MB blobs).
+      const missing: string[] = [];
+      {
+        const tx = db.transaction('cache_audio_blobs', 'readonly');
+        let cursor = await tx.store.openCursor();
+        while (cursor) {
+          if (cursor.value.size === undefined) missing.push(cursor.value.key);
+          cursor = await cursor.continue();
+        }
+        await tx.done;
+      }
+
+      // Pass 2: stamp in small batches.
+      let stamped = 0;
+      for (let i = 0; i < missing.length; i += SIZE_BACKFILL_BATCH) {
+        const keys = missing.slice(i, i + SIZE_BACKFILL_BATCH);
+        const rows: CacheAudioBlobRow[] = [];
+        for (const key of keys) {
+          const row = await db.get('cache_audio_blobs', key);
+          if (row && row.size === undefined) {
+            rows.push({ ...row, size: row.audio?.byteLength ?? 0 });
+          }
+        }
+        if (rows.length > 0) {
+          await write(['cache_audio_blobs'], (tx) => {
+            const store = tx.objectStore('cache_audio_blobs');
+            for (const row of rows) store.put(row);
+          });
+          stamped += rows.length;
+        }
+      }
+
+      await write(['app_metadata'], (tx) => {
+        tx.objectStore('app_metadata').put(true, APP_METADATA_KEYS.audioSizeBackfillV25);
+      });
+      if (stamped > 0) {
+        logger.info(`v25 size backfill stamped ${stamped} audio cache row(s).`);
+      }
+      return stamped;
+    } catch (error) {
+      handleDbError(error);
     }
   }
 

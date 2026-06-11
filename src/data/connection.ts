@@ -16,9 +16,8 @@
  *   successful open (fire-and-forget, result logged) so the browser is far
  *   less likely to evict the library under storage pressure.
  *
- * The schema itself (store map + upgrade callback + version 24) lives in
- * ./schema.ts and is byte-identical to the src/db/db.ts original in this
- * PR — IDB v25 is exclusively P3-13.
+ * The schema itself (store map + versioned migration registry + version)
+ * lives in ./schema.ts — this module owns only the connection lifecycle.
  */
 import { openDB, type IDBPDatabase } from 'idb';
 import { createLogger } from '@lib/logger';

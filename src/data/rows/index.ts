@@ -7,8 +7,8 @@
  *   cache.ts  — cache_render_metrics, cache_audio_blobs,
  *               cache_session_state, cache_tts_preparation,
  *               cache_table_images
- *   app.ts    — checkpoints, sync_log (frozen), flight_snapshots
- *               (app_metadata envelopes land with the v25 format PR)
+ *   app.ts    — checkpoints, sync_log (frozen), flight_snapshots, and the
+ *               app_metadata schema-evolution envelope (v25, D7)
  *
  * Validation runs at untrusted ingress only (backup restore rows, the
  * android payload read) — never per read/write in production.
