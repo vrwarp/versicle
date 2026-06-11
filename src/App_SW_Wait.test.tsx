@@ -2,22 +2,14 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import App from './App';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { getDB } from './db/db';
-import { wipeAllData } from './db/wipe';
+import { getConnection as getDB } from './data/connection';
+import { wipeAllData } from './data/wipe';
 
-// Mock DB
-vi.mock('./db/db', () => ({
-  getDB: vi.fn().mockResolvedValue({})
-}));
-
-// Mock DBService
-vi.mock('./db/DBService', () => ({
-  dbService: {
-    initialize: vi.fn().mockResolvedValue(undefined),
-    cleanup: vi.fn(),
-    getAllInventoryItems: vi.fn().mockResolvedValue([]),
-    getDB: vi.fn().mockReturnValue({}),
-  }
+// Mock the storage layer connection
+vi.mock('./data/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./data/connection')>()),
+  getConnection: vi.fn().mockResolvedValue({}),
+  closeConnection: vi.fn().mockResolvedValue(undefined),
 }));
 
 
@@ -91,7 +83,8 @@ vi.mock('./components/SafeModeView', () => ({
 }));
 
 // Mock the data wipe module (SafeMode reset must only route through it)
-vi.mock('./db/wipe', () => ({
+vi.mock('./data/wipe', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./data/wipe')>()),
   wipeAllData: vi.fn().mockResolvedValue(undefined)
 }));
 vi.mock('./components/BackNavigationManager', () => ({ BackNavigationManager: () => null }));

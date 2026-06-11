@@ -1,25 +1,15 @@
+/**
+ * wipeAllData suite (moved from src/db/wipe.test.ts in the P3-12 carve;
+ * test-absorption ledger). The writer-stopping module mocks became
+ * registry hooks (D9): the suite registers its own ordering probes through
+ * registerWipeHook exactly the way the app composition manifest
+ * (src/app/boot/registerBootTasks.ts) registers sync-stop/yjs-disconnect.
+ */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { wipeAllData } from './wipe';
-import { dbService } from './DBService';
+import { wipeAllData, registerWipeHook, clearWipeHooksForTests } from './wipe';
+import { playbackCache } from './repos/playbackCache';
 
-// wipeAllData must stop every writer before deleting storage. The two
-// writer-owning modules are mocked so this suite can (a) assert ordering and
-// (b) avoid booting the real Yjs persistence / firebase dependency tree.
-const ordering = vi.hoisted(() => ({ events: [] as string[] }));
-
-vi.mock('@store/yjs-provider', () => ({
-  disconnectYjs: vi.fn(async () => {
-    ordering.events.push('stop:yjs');
-  }),
-}));
-
-vi.mock('@lib/sync/FirestoreSyncManager', () => ({
-  FirestoreSyncManager: {
-    resetInstance: vi.fn(() => {
-      ordering.events.push('stop:sync');
-    }),
-  },
-}));
+const ordering: { events: string[] } = { events: [] };
 
 /** Spec-compliant localStorage (the global test stub does not implement key()/length). */
 const installEnumerableLocalStorage = (): Storage => {
@@ -78,11 +68,19 @@ const listDatabases = async (): Promise<string[]> => {
 describe('wipeAllData', () => {
   beforeEach(() => {
     ordering.events.length = 0;
+    clearWipeHooksForTests();
     installEnumerableLocalStorage();
     vi.clearAllMocks();
+    // The app manifest's hooks, modeled: sync stop + yjs disconnect probes.
+    registerWipeHook({ name: 'sync/stop', stop: () => { ordering.events.push('stop:sync'); } });
+    registerWipeHook({
+      name: 'state/stop-yjs-persistence',
+      stop: async () => { ordering.events.push('stop:yjs'); },
+    });
   });
 
   afterEach(() => {
+    clearWipeHooksForTests();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -147,23 +145,23 @@ describe('wipeAllData', () => {
     expect(deleted).not.toContain('workbox-precache-v2-https://app/');
   });
 
-  it('stops sync, pending DB writes and Yjs persistence before deleting databases', async () => {
+  it('stops sync, pending session writes and Yjs persistence before deleting databases', async () => {
     const realDeleteDatabase = indexedDB.deleteDatabase.bind(indexedDB);
     vi.spyOn(indexedDB, 'deleteDatabase').mockImplementation((name: string) => {
       ordering.events.push(`delete:${name}`);
       return realDeleteDatabase(name);
     });
-    const realCleanup = dbService.cleanup.bind(dbService);
-    vi.spyOn(dbService, 'cleanup').mockImplementation(() => {
-      ordering.events.push('stop:db-service');
-      realCleanup();
+    const realDrop = playbackCache.dropPending.bind(playbackCache);
+    vi.spyOn(playbackCache, 'dropPending').mockImplementation(() => {
+      ordering.events.push('stop:session-writes');
+      realDrop();
     });
 
     await wipeAllData({ reload: false });
 
     const firstDelete = ordering.events.findIndex(event => event.startsWith('delete:'));
     expect(firstDelete).toBeGreaterThan(-1);
-    for (const stopEvent of ['stop:sync', 'stop:db-service', 'stop:yjs']) {
+    for (const stopEvent of ['stop:sync', 'stop:session-writes', 'stop:yjs']) {
       const stopIndex = ordering.events.indexOf(stopEvent);
       expect(stopIndex, `${stopEvent} must run`).toBeGreaterThan(-1);
       expect(stopIndex, `${stopEvent} must run before any deletion`).toBeLessThan(firstDelete);
@@ -188,5 +186,30 @@ describe('wipeAllData', () => {
       // Release the queued deletion so it cannot leak into other tests.
       otherTab.close();
     }
+  });
+
+  describe('wipe-hook registry (D9)', () => {
+    it('re-registering a hook by name replaces it (idempotent manifest imports)', async () => {
+      registerWipeHook({ name: 'sync/stop', stop: () => { ordering.events.push('stop:sync-v2'); } });
+
+      await wipeAllData({ reload: false });
+
+      expect(ordering.events).toContain('stop:sync-v2');
+      expect(ordering.events).not.toContain('stop:sync');
+    });
+
+    it('a throwing hook never aborts the wipe', async () => {
+      registerWipeHook({
+        name: 'broken/hook',
+        stop: () => {
+          throw new Error('writer refused to stop');
+        },
+      });
+      localStorage.setItem('versicle-device-id', 'device-1');
+
+      await wipeAllData({ reload: false });
+
+      expect(localStorage.getItem('versicle-device-id')).toBeNull();
+    });
   });
 });

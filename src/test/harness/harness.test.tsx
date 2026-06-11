@@ -10,7 +10,7 @@ import {
   captureToasts,
   FakeTTSProvider,
   makeBookMetadata,
-  makeDbServiceDouble,
+  makeBookContentDouble,
   makeInventoryItem,
   makeLibraryDbDouble,
   makeTTSQueue,
@@ -22,16 +22,16 @@ import {
 import type { TTSEvent } from '@lib/tts/providers/types';
 
 describe('doubles', () => {
-  it('makeDbServiceDouble: unstubbed methods throw with a clear message when called', async () => {
-    const db = makeDbServiceDouble();
-    expect(() => db.getTTSState('book-1')).toThrowError(/getTTSState\(\) was called but not stubbed/);
+  it('makeBookContentDouble: unstubbed methods throw with a clear message when called', async () => {
+    const db = makeBookContentDouble();
+    expect(() => db.getBookStructure('book-1')).toThrowError(/getBookStructure\(\) was called but not stubbed/);
   });
 
-  it('makeDbServiceDouble: overrides are used and typechecked', async () => {
-    const getTTSState = vi.fn(async () => undefined);
-    const db = makeDbServiceDouble({ getTTSState });
-    await expect(db.getTTSState('book-1')).resolves.toBeUndefined();
-    expect(getTTSState).toHaveBeenCalledWith('book-1');
+  it('makeBookContentDouble: overrides are used and typechecked', async () => {
+    const getBookStructure = vi.fn(async () => undefined);
+    const db = makeBookContentDouble({ getBookStructure });
+    await expect(db.getBookStructure('book-1')).resolves.toBeUndefined();
+    expect(getBookStructure).toHaveBeenCalledWith('book-1');
   });
 
   it('makeLibraryDbDouble: optional fast-path methods stay undefined so fallbacks run', () => {

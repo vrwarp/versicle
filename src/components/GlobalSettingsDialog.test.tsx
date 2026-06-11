@@ -3,10 +3,10 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { GlobalSettingsDialog } from './GlobalSettingsDialog';
 import { useTTSStore } from '@store/useTTSStore';
-import { wipeAllData } from '@db/wipe';
+import { wipeAllData } from '@data/wipe';
 
 // Mock the data wipe module (the dialog must only route through it)
-vi.mock('@db/wipe', () => ({
+vi.mock('@data/wipe', () => ({
     wipeAllData: vi.fn().mockResolvedValue(undefined)
 }));
 
@@ -76,15 +76,6 @@ vi.mock('@store/useLibraryStore', () => ({
         uploadProgress: 0,
         uploadStatus: ''
     }))
-}));
-
-vi.mock('@db/DBService', () => ({
-    dbService: {
-        getReadingList: vi.fn().mockResolvedValue([]),
-        getReadingHistory: vi.fn().mockResolvedValue([]),
-        importReadingList: vi.fn(),
-        cleanup: vi.fn()
-    }
 }));
 
 vi.mock('@app/repositories/ContentAnalysisRepository', () => ({

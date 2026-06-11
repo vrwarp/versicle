@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { getDB } from './db/db';
+import { getConnection as getDB } from './data/connection';
 import { useLibraryStore } from './store/useLibraryStore';
 import { useBookStore } from './store/useBookStore';
 import { useReaderUIStore } from './store/useReaderUIStore';
@@ -128,18 +128,13 @@ vi.mock('epubjs', async (importOriginal) => {
 describe('Feature Integration Tests', () => {
   vi.setConfig({ testTimeout: 120000 });
   beforeEach(async () => {
-    // Clear DB
+    // Clear DB (per-store one-shot clears — raw readwrite transactions are
+    // banned outside src/data at Phase 3 exit)
     const db = await getDB();
-    const tx = db.transaction([
-      'static_manifests', 'static_resources', 'static_structure',
-      'cache_tts_preparation'
-    ], 'readwrite');
-
-    await tx.objectStore('static_manifests').clear();
-    await tx.objectStore('static_resources').clear();
-    await tx.objectStore('static_structure').clear();
-    await tx.objectStore('cache_tts_preparation').clear();
-    await tx.done;
+    await db.clear('static_manifests');
+    await db.clear('static_resources');
+    await db.clear('static_structure');
+    await db.clear('cache_tts_preparation');
 
     // Reset stores
     useLibraryStore.setState({ staticMetadata: {}, isLoading: false, isImporting: false, error: null });

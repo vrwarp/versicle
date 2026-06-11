@@ -1,6 +1,14 @@
 /**
  * Full local data wipe — the single owner of "Clear All Data" / SafeMode
- * "Reset Database".
+ * "Reset Database". (Phase 3 D9: moved from src/db/wipe.ts; the dynamic
+ * imports of the two writers it must stop — sync + Yjs persistence — are
+ * INVERTED into the {@link registerWipeHook} registry so the data layer
+ * never reaches upward into stores/sync. Registration lives in the app
+ * composition manifest, src/app/boot/registerBootTasks.ts, where importing
+ * store + sync is legal. SafeMode safety argument: registration happens at
+ * manifest import time, not boot success — and if the app crashed before
+ * the manifest loaded, neither writer was ever started, so the missing hook
+ * stops nothing that runs.)
  *
  * User data lives across four browser storage surfaces:
  *  1. The `EpubLibraryDB` IndexedDB database (static book content, caches,
@@ -21,8 +29,8 @@
  * deleted, so nothing re-persists in the window before the page reloads.
  */
 import { createLogger } from '@lib/logger';
-import { closeDB } from './db';
-import { dbService } from './DBService';
+import { closeConnection } from './connection';
+import { playbackCache } from './repos/playbackCache';
 
 const logger = createLogger('Wipe');
 
@@ -69,6 +77,31 @@ export interface WipeOptions {
   reload?: boolean;
 }
 
+/**
+ * A writer that must be stopped before storage is deleted (e.g. the
+ * Firestore sync manager, the y-idb persistence binding).
+ */
+export interface WipeHook {
+  /** Stable name; re-registering the same name replaces the hook (idempotent). */
+  name: string;
+  stop(): Promise<void> | void;
+}
+
+const wipeHooks = new Map<string, WipeHook>();
+
+/**
+ * Register a writer-stopping hook. Idempotent by name so a re-imported
+ * composition manifest (HMR, repeated installs in tests) cannot double-stop.
+ */
+export function registerWipeHook(hook: WipeHook): void {
+  wipeHooks.set(hook.name, hook);
+}
+
+/** Test-only: reset the registry between cases. */
+export function clearWipeHooksForTests(): void {
+  wipeHooks.clear();
+}
+
 /** Awaits `promise`, but gives up (with a warning) after STEP_TIMEOUT_MS. */
 const withTimeout = async (promise: Promise<unknown>, label: string): Promise<void> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -82,31 +115,14 @@ const withTimeout = async (promise: Promise<unknown>, label: string): Promise<vo
   }
 };
 
-/**
- * Stops the Firestore sync manager (if one was ever constructed) so no remote
- * update can trigger checkpoint/sync writes mid-wipe. Imported dynamically to
- * keep this module's static graph free of the firebase dependency tree.
- */
-const stopSync = async (): Promise<void> => {
-  try {
-    const { FirestoreSyncManager } = await import('@lib/sync/FirestoreSyncManager');
-    FirestoreSyncManager.resetInstance();
-  } catch (error) {
-    logger.warn('Failed to stop cloud sync before wipe (continuing):', error);
-  }
-};
-
-/**
- * Flushes and closes the y-idb persistence so the `versicle-yjs` connection
- * is released (otherwise its deletion below would be blocked by our own tab)
- * and no debounced CRDT write can land after the database is deleted.
- */
-const stopYjsPersistence = async (): Promise<void> => {
-  try {
-    const { disconnectYjs } = await import('@store/yjs-provider');
-    await withTimeout(disconnectYjs(), 'Yjs persistence flush/close');
-  } catch (error) {
-    logger.warn('Failed to flush/close Yjs persistence before wipe (continuing):', error);
+/** Run every registered writer-stopping hook (each bounded by the step timeout). */
+const runWipeHooks = async (): Promise<void> => {
+  for (const hook of wipeHooks.values()) {
+    try {
+      await withTimeout(Promise.resolve(hook.stop()), `wipe hook '${hook.name}'`);
+    } catch (error) {
+      logger.warn(`Wipe hook '${hook.name}' failed (continuing):`, error);
+    }
   }
 };
 
@@ -186,12 +202,13 @@ export async function wipeAllData(options: WipeOptions = {}): Promise<void> {
   logger.info('Wiping all local data...');
 
   // 1. Stop every writer BEFORE deleting storage, so nothing can re-persist
-  //    in the window before the reload.
-  await stopSync();
-  dbService.cleanup(); // drop the pending (debounced) session write
-  await stopYjsPersistence();
+  //    in the window before the reload: first the registered hooks (sync
+  //    manager, y-idb persistence — registered by the app's composition
+  //    manifest), then the data layer's own writers.
+  await runWipeHooks();
+  playbackCache.dropPending(); // drop (never flush) the pending debounced session write
   try {
-    await closeDB();
+    await closeConnection();
   } catch (error) {
     // In SafeMode the EpubLibraryDB open itself may have failed; the wipe
     // must still proceed.

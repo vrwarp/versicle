@@ -6,10 +6,6 @@ import { getYDoc } from './yjs-provider';
 const yDoc = getYDoc();
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@db/db', () => ({
-  getDB: vi.fn(),
-}));
-
 vi.mock('@lib/crypto', () => ({
   generateSecureId: vi.fn(() => 'test-uuid'),
 }));

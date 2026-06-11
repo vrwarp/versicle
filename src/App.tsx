@@ -7,7 +7,7 @@ import { SafeModeView } from './components/SafeModeView';
 import { ObsoleteLockView } from './components/ObsoleteLockView';
 import { CriticalMigrationFailureView } from './components/sync/CriticalMigrationFailureView';
 import { WorkspaceMigrationConfirmModal } from './components/sync/WorkspaceMigrationConfirmModal';
-import { wipeAllData } from './db/wipe';
+import { wipeAllData } from './data/wipe';
 import { createLogger } from './lib/logger';
 
 const logger = createLogger('App');

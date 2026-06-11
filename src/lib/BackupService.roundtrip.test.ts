@@ -4,7 +4,7 @@
  *
  * This is the missing acceptance gate named by the prep doc (▲21): it runs
  * the REAL BackupService against the real shared Y.Doc and fake-indexeddb
- * (no @db/db or y-idb mocks, unlike BackupService.test.ts) and pins:
+ * (no connection or y-idb mocks, unlike BackupService.test.ts) and pins:
  *
  *   1. generate→JSON-file→restore content equality for Yjs data
  *      (library books + annotations) and binary ArrayBuffer covers;
@@ -28,7 +28,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as Y from 'yjs';
 import { backupService, type BackupManifestV3 } from './BackupService';
 import { getYDoc } from '@store/yjs-provider';
-import { getDB } from '@db/db';
+import { getConnection as getDB } from '@data/connection';
 import type { StaticBookManifest } from '~types/db';
 
 vi.mock('./sync/CheckpointService', () => ({
@@ -44,12 +44,11 @@ const BOOK_ID = 'roundtrip-book-1';
 
 async function clearAppDatabase(): Promise<void> {
   const db = await getDB();
-  const storeNames = Array.from(db.objectStoreNames);
-  const tx = db.transaction(storeNames, 'readwrite');
-  for (const store of storeNames) {
-    void tx.objectStore(store).clear();
+  // Per-store one-shot clears (no raw readwrite transaction — banned
+  // outside src/data at Phase 3 exit).
+  for (const store of Array.from(db.objectStoreNames)) {
+    await db.clear(store);
   }
-  await tx.done;
 }
 
 function deleteYjsDatabase(): Promise<void> {

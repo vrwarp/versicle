@@ -21,9 +21,9 @@
  */
 import type { IndexeddbPersistence } from 'y-idb';
 import { getYjsPersistence, disconnectYjs } from './store/yjs-provider';
-import { dbService } from './db/DBService';
-import { closeDB } from './db/db';
-import { wipeAllData } from './db/wipe';
+import { playbackCache } from './data/repos/playbackCache';
+import { closeConnection } from './data/connection';
+import { wipeAllData } from './data/wipe';
 import { createLogger } from './lib/logger';
 
 const logger = createLogger('TestApi');
@@ -31,7 +31,7 @@ const logger = createLogger('TestApi');
 export interface VersicleTestApi {
   /**
    * Deterministically flush every debounced persistence queue:
-   *  - DBService `cache_session_state` writes (500ms debounce — the TTS
+   *  - playbackCache `cache_session_state` writes (500ms debounce — the TTS
    *    playback queue / lastPauseTime mirror), and
    *  - the y-idb Yjs update queue (`writeDebounceMs: 200` — reading
    *    progress, annotations, the whole CRDT).
@@ -109,7 +109,7 @@ export async function flushPersistence(): Promise<void> {
   // Both writers funnel through the shared exclusive IDB write gate
   // (src/data/write-gate.ts), so flushing them sequentially is also the
   // ordering the app itself guarantees.
-  await dbService.flushSessionWrites();
+  await playbackCache.flushPending();
   await flushYjsPersistence();
 }
 
@@ -119,7 +119,7 @@ export function installTestApi(): void {
     flushPersistence,
     resetApp: () => wipeAllData({ reload: false }),
     disconnectYjs: () => disconnectYjs(),
-    closeDb: () => closeDB(),
+    closeDb: () => closeConnection(),
   };
   window.__versicleTest = api;
   logger.info('window.__versicleTest installed (DEV/VITE_E2E build)');

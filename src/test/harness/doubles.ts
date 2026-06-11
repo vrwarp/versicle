@@ -1,7 +1,7 @@
 /**
  * Typed factory doubles for the highest-leverage service seams.
  *
- * Replaces the per-file `vi.mock('../db/DBService', …)` pattern (36+ copies,
+ * Replaces the per-file repo-mock factory pattern (36+ copies,
  * each with a slightly different hand-rolled shape that nothing typechecks).
  * These factories are typed against the REAL service types, so a service
  * signature change breaks the double at compile time instead of letting
@@ -11,7 +11,7 @@
  * (`createLibraryStore(db)`, `AudioPlayerService.createWithContext(…)`);
  * these doubles are what you inject into them.
  */
-import type { dbService } from '@db/DBService';
+import type { bookContent } from '@data/repos/bookContent';
 import type { IDBService } from '@store/useLibraryStore';
 
 /**
@@ -21,7 +21,7 @@ import type { IDBService } from '@store/useLibraryStore';
  */
 export type PublicOf<T> = { [K in keyof T]: T[K] };
 
-export type DbServiceShape = PublicOf<typeof dbService>;
+export type BookContentShape = PublicOf<typeof bookContent>;
 
 /**
  * Loud-failure double: unstubbed members exist (so optional-feature probes
@@ -51,14 +51,15 @@ function makeLoudDouble<T extends object>(name: string, overrides: Partial<T>): 
 }
 
 /**
- * Typed double for the `dbService` singleton (`src/db/DBService.ts`).
+ * Typed double for the `bookContent` repo singleton
+ * (`src/data/repos/bookContent.ts` — the carve of the deleted DBService).
  *
  * Every unstubbed method throws when called — a test can only depend on
  * behavior it explicitly declared. Overrides are typechecked against the
- * real `dbService` instance type.
+ * real repo instance type.
  */
-export function makeDbServiceDouble(overrides: Partial<DbServiceShape> = {}): DbServiceShape {
-  return makeLoudDouble<DbServiceShape>('DbService', overrides);
+export function makeBookContentDouble(overrides: Partial<BookContentShape> = {}): BookContentShape {
+  return makeLoudDouble<BookContentShape>('BookContent', overrides);
 }
 
 const unstubbed =

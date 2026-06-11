@@ -6,8 +6,10 @@ import { Capacitor } from '@capacitor/core';
 import { AudioPlayerService } from './lib/tts/AudioPlayerService';
 
 // Mock dependencies
-vi.mock('./db/db', () => ({
-  getDB: vi.fn().mockResolvedValue({}),
+vi.mock('./data/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./data/connection')>()),
+  getConnection: vi.fn().mockResolvedValue({}),
+  closeConnection: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('./components/library/LibraryView', () => ({
   LibraryView: () => <div>LibraryView</div>,

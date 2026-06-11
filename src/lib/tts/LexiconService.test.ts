@@ -3,11 +3,6 @@ import { LexiconService, processInitialisms } from './LexiconService';
 import { useLexiconStore } from '@store/useLexiconStore';
 import { type LexiconRule } from '~types/db';
 
-// Mock getDB to prevent actual DB calls (though mostly unused now)
-vi.mock('@db/db', () => ({
-  getDB: vi.fn(),
-}));
-
 // Mock store and sync
 vi.mock('@store/useLexiconStore', () => ({
   useLexiconStore: {

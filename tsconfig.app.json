@@ -34,7 +34,6 @@
       "@app/*": ["./src/app/*"],
       "@components/*": ["./src/components/*"],
       "@data/*": ["./src/data/*"],
-      "@db/*": ["./src/db/*"],
       "@hooks/*": ["./src/hooks/*"],
       "@lib/*": ["./src/lib/*"],
       "@store/*": ["./src/store/*"],

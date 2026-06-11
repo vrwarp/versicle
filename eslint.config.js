@@ -24,9 +24,22 @@ const downgradeToWarn = (rules) =>
 // for the files it matches).
 const crossRootRelativeImportPattern = {
   regex:
-    '^(\\.\\./)+(app|components|data|db|hooks|lib|store|types|test|workers)(/|$)',
+    '^(\\.\\./)+(app|components|data|hooks|lib|store|types|test|workers)(/|$)',
   message:
     'Cross-root relative import. Use the path alias for this root instead (e.g. @lib/foo, @data/bar, ~types/baz — see tsconfig.app.json "paths"). Run `node scripts/codemod-aliases.mjs` to fix in bulk.',
+};
+
+// Storage-gateway boundary (Phase 3 D8, C12): raw `idb` access is the data
+// layer's exclusive privilege — everything else goes through the src/data
+// repos (which serialize every readwrite transaction through the
+// cross-context write gate; concurrent readwrite transactions are the proven
+// WebKit IndexedDB hang trigger). Error level: the repo was migrated clean
+// when this rule flipped (P3-12).
+const idbImportBan = {
+  name: 'idb',
+  message:
+    'Raw IndexedDB access is the data layer’s job. Use the src/data repos ' +
+    '(@data/repos/*) or, inside src/data, the connection/write-gate modules.',
 };
 
 export default tseslint.config(
@@ -107,7 +120,7 @@ export default tseslint.config(
       // One canonical import path per module (Phase 1 path-alias codemod,
       // scripts/codemod-aliases.mjs): a relative specifier that climbs out
       // with `../` and re-enters one of the aliased src/ roots must use the
-      // alias instead (@app/, @components/, @data/, @db/, @hooks/, @lib/,
+      // alias instead (@app/, @components/, @data/, @hooks/, @lib/,
       // @store/, ~types/, @test/, @workers/ — declared in tsconfig.app.json
       // `paths`, mirrored in vite.config.ts + vitest.config.ts
       // resolve.alias; types/ is ~types because TS rejects '@types/…'
@@ -136,9 +149,13 @@ export default tseslint.config(
   // middleware's default import everywhere else makes the seam structural.
   // Named (type) imports — YjsOptions, YjsStoreHandle, getYjsStoreHandle —
   // stay allowed, as do tests (contract/fixture suites bind mirror stores).
+  // Since Phase 3 (P3-12) this block also carries the production `idb`
+  // import ban (src/data is excluded — raw idb is its exclusive privilege;
+  // flat-config rule entries replace, so the cross-root pattern and the
+  // zustand ban are restated wherever this rule is re-declared).
   {
     files: ['src/**/*.{ts,tsx}'],
-    ignores: ['src/store/yjs-provider.ts', 'src/**/*.test.{ts,tsx}', 'src/test/**'],
+    ignores: ['src/data/**', 'src/store/yjs-provider.ts', 'src/**/*.test.{ts,tsx}', 'src/test/**'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -151,7 +168,48 @@ export default tseslint.config(
               message:
                 'Create synced stores via defineSyncedStore (src/store/registry.ts) — the registry is the only production yjs() middleware call site.',
             },
+            idbImportBan,
           ],
+        },
+      ],
+    },
+  },
+  // The `idb` ban extends to TEST files outside src/data (Phase 3 exit:
+  // zero exceptions — seed through the repos, the connection module, or
+  // one-shot db.get/put/clear helpers obtained from @data/connection).
+  // The zustand default-import ban deliberately does NOT apply here
+  // (contract/fixture suites bind mirror stores).
+  {
+    files: ['src/**/*.test.{ts,tsx}', 'src/test/**/*.{ts,tsx}'],
+    ignores: ['src/data/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [crossRootRelativeImportPattern],
+          paths: [idbImportBan],
+        },
+      ],
+    },
+  },
+  // Readwrite-transaction ban outside the data layer (Phase 3 D8, C12):
+  // depcruise cannot see string arguments, so the ban is syntactic. A
+  // readwrite transaction opened outside the write gate can overlap a Yjs
+  // flush — the proven cross-context WebKit hang pair (write-gate.ts docs).
+  // Reads (readonly transactions, one-shot db.get/getAll) stay free.
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/data/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.property.name='transaction'] > Literal[value='readwrite']",
+          message:
+            'readwrite transactions are banned outside src/data — route the ' +
+            'write through a @data/repos/* method (every repo writer holds ' +
+            'the cross-context IDB write gate).',
         },
       ],
     },

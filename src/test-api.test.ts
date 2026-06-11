@@ -8,16 +8,16 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { installTestApi, flushPersistence } from './test-api';
-import { dbService } from './db/DBService';
+import { playbackCache } from './data/repos/playbackCache';
 import { getYDoc, getYjsPersistence, startYjsPersistence } from './store/yjs-provider';
-import { wipeAllData } from './db/wipe';
+import { wipeAllData } from './data/wipe';
 
 // Persistence no longer boots at import time (Phase 1b boot sequencing) —
 // start it explicitly, as the bootstrap `startYjsPersistence` phase does.
 startYjsPersistence();
 const yDoc = getYDoc();
 
-vi.mock('./db/wipe', () => ({
+vi.mock('./data/wipe', () => ({
   wipeAllData: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -41,18 +41,18 @@ describe('installTestApi', () => {
 });
 
 describe('flushPersistence', () => {
-  it('drains the debounced DBService session write without waiting out the 500ms timer', async () => {
+  it('drains the debounced playbackCache session write without waiting out the 500ms timer', async () => {
     const bookId = 'flush-probe-session';
-    dbService.saveTTSState(bookId, [{ text: 'Pending sentence.', cfi: 'epubcfi(/6/2!/4/2)' }]);
+    playbackCache.saveQueue(bookId, [{ text: 'Pending sentence.', cfi: 'epubcfi(/6/2!/4/2)' }]);
 
     // The write is debounced — long before the 500ms timer fires, flush it.
     await flushPersistence();
 
-    // getTTSState reads from IndexedDB (fake-indexeddb), not the in-memory
+    // getSession reads from IndexedDB (fake-indexeddb), not the in-memory
     // mirror, so a hit proves the bytes were committed.
-    const persisted = await dbService.getTTSState(bookId);
-    expect(persisted?.queue).toHaveLength(1);
-    expect(persisted?.queue[0]?.text).toBe('Pending sentence.');
+    const persisted = await playbackCache.getSession(bookId);
+    expect(persisted?.playbackQueue).toHaveLength(1);
+    expect(persisted?.playbackQueue[0]?.text).toBe('Pending sentence.');
   });
 
   it('drains the y-idb pending update queue without waiting out the 200ms debounce', async () => {

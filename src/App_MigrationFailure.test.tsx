@@ -26,7 +26,7 @@ vi.mock('./app/boot/useServiceWorkerGate', () => ({
   useServiceWorkerGate: () => ({ swInitialized: true, swError: null }),
 }));
 
-vi.mock('./db/wipe', () => ({
+vi.mock('./data/wipe', () => ({
   wipeAllData: vi.fn().mockResolvedValue(undefined),
 }));
 

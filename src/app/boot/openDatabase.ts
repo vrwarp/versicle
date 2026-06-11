@@ -8,7 +8,7 @@
  * never imports UI — the app layer decides how to tell the user.
  */
 import type { BootTask } from '../bootstrap';
-import { getDB } from '@db/db';
+import { getConnection } from '@data/connection';
 import { configureConnectionEvents } from '@data/connection';
 import { maintenanceService } from '@lib/MaintenanceService';
 import { useToastStore } from '@store/useToastStore';
@@ -57,7 +57,7 @@ export const openDatabaseTask: BootTask = {
       },
     });
 
-    await getDB();
+    await getConnection();
 
     // One-time repair: strip corrupt (non-binary) coverBlobs left behind by
     // pre-v3 backup restores so covers can regenerate (see BackupService v3).

@@ -12,12 +12,6 @@ const mocks = vi.hoisted(() => {
 });
 
 // Mock DB (safe to mock even if unused)
-vi.mock('@db/db', () => ({
-  getDB: vi.fn().mockResolvedValue({
-    get: mocks.get,
-  }),
-}));
-
 // Mock Bible Lexicon Data
 vi.mock('./bible-lexicon', () => ({
   BIBLE_LEXICON_RULES: mocks.bibleLexiconRules

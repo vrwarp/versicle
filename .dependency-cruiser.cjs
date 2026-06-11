@@ -73,24 +73,27 @@ module.exports = {
       from: { path: '^src/lib' },
       to: { path: '^src/(components|layouts)' },
     },
+    // `db-not-to-store` was retired at Phase 3 exit (P3-12): src/db/** is
+    // deleted (the wipe's dynamic store/sync imports — the rule's last
+    // violation — became the data/wipe.ts hook registry, D9).
     {
-      name: 'db-not-to-store',
-      severity: 'warn',
+      name: 'data-no-upward',
+      severity: 'error',
       comment:
-        'db/ must not import store/ — repositories depending on UI state ' +
-        '(LD-4). The app-layer read-model mergers (BookRepository/' +
-        'ContentAnalysisRepository) moved to src/app/repositories/ in ' +
-        'Phase 1; this rule keeps db/ store-free.',
-      from: { path: '^src/db' },
-      to: { path: '^src/store' },
+        'src/data is the storage gateway (Phase 3): it may import ~types, ' +
+        '@lib/logger, idb/yjs/y-idb/zod — NEVER store/, hooks/, components/, ' +
+        'app/, or lib/sync. Born at error with baseline 0 (D8); this is what ' +
+        'keeps every repo importable from the TTS worker.',
+      from: { path: '^src/data' },
+      to: { path: '^src/(store|hooks|components|layouts|app|lib/sync)' },
     },
     {
       name: 'components-not-to-db',
       severity: 'warn',
       comment:
         'components/ and layouts/ must not import db/ internals — UI goes ' +
-        'through stores/hooks/services (problematic coupling #7 in ' +
-        'layering-deps.md).',
+        'through stores/hooks/services. src/db/** was deleted at Phase 3 ' +
+        'exit, so this is vacuously 0; the rule itself is a P9 deletion.',
       from: { path: '^src/(components|layouts)' },
       to: { path: '^src/db' },
     },

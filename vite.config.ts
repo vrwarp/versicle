@@ -18,7 +18,6 @@ const aliases = {
   '@app': srcAlias('app'),
   '@components': srcAlias('components'),
   '@data': srcAlias('data'),
-  '@db': srcAlias('db'),
   '@hooks': srcAlias('hooks'),
   '@lib': srcAlias('lib'),
   '@store': srcAlias('store'),

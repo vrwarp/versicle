@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LexiconService } from './LexiconService';
 import { type LexiconRule } from '~types/db';
 
-// Mock DB (not used directly anymore but safe to mock)
-vi.mock('@db/db', () => ({
-  getDB: vi.fn(),
-}));
-
 // Mock store and sync
 vi.mock('@store/useLexiconStore', () => ({
   useLexiconStore: {

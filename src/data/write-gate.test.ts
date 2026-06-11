@@ -20,7 +20,7 @@
  *        (request/queue semantics) — both implementations pass identically
  */
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
-import { getDB } from '@db/db';
+import { getConnection as getDB } from './connection';
 import type { StaticBookManifest } from '~types/db';
 
 interface WriteGateModule {
@@ -304,15 +304,5 @@ describe('DEV re-entrancy tripwire', () => {
     release.resolve();
     await expect(holder).resolves.toBeUndefined();
     await expect(follower).resolves.toBe('follower');
-  });
-});
-
-// ── Shim: the deprecated old import path re-exports the gate. ───────────────
-describe('deprecated src/lib/idb-write-lock shim (deletion deadline P3-12)', () => {
-  it('re-exports the write-gate functions (single gate instance)', async () => {
-    const shim = await import('@lib/idb-write-lock');
-    const gate = await import('./write-gate');
-    expect(shim.runExclusiveIdbWrite).toBe(gate.runExclusiveIdbWrite);
-    expect(shim.idbWriteLockIdle).toBe(gate.idbWriteLockIdle);
   });
 });

@@ -51,22 +51,15 @@ const h = vi.hoisted(() => {
   };
 });
 
-// ── Boot collaborators (same module paths before and after the refactor) ──
-vi.mock('./db/db', () => ({
-  getDB: vi.fn().mockResolvedValue({}),
-  closeDB: vi.fn().mockResolvedValue(undefined),
+// ── Boot collaborators (the storage layer, src/data — Phase 3) ──
+vi.mock('./data/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./data/connection')>()),
+  getConnection: vi.fn().mockResolvedValue({}),
+  closeConnection: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('./db/DBService', () => ({
-  dbService: {
-    initialize: vi.fn().mockResolvedValue(undefined),
-    cleanup: vi.fn(),
-    getAllInventoryItems: vi.fn().mockResolvedValue([]),
-    getDB: vi.fn().mockReturnValue({}),
-  },
-}));
-
-vi.mock('./db/wipe', () => ({
+vi.mock('./data/wipe', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./data/wipe')>()),
   wipeAllData: vi.fn().mockResolvedValue(undefined),
 }));
 
