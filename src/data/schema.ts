@@ -15,27 +15,29 @@
  * - APP: sync checkpoints and logs
  */
 import type { DBSchema, IDBPDatabase, IDBPTransaction, StoreNames } from 'idb';
+// rows/ is the source of truth for persisted shapes (D4): every store's
+// value type is its row type. The row types are supersets of the ~types
+// domain interfaces that include persisted reality the interfaces elide —
+// e.g. cache_audio_blobs' `size` + legacy `alignmentData` fields, and the
+// ArrayBuffer state of binary fields the interfaces call Blob (WebKit's IDB
+// cannot structured-clone Blob; ingest normalizes).
 import type {
-  // Static Domain
-  StaticBookManifest,
-  StaticResource,
-  StaticStructure,
-  // Cache Domain
-  CacheRenderMetrics,
-  CacheSessionState,
-  CacheTtsPreparation,
-  TableImage,
-  // App Types
-  SyncCheckpoint,
-  SyncLogEntry,
-  FlightSnapshot
-} from '~types/db';
-// rows/ is the source of truth for persisted shapes (D4). Store value types
-// migrate from the ~types interfaces to the inferred row types as the Phase 3
-// repos carve each store (the row types are supersets that include persisted
-// reality the domain interfaces elide, e.g. cache_audio_blobs.size and the
-// legacy alignmentData field).
-import type { CacheAudioBlobRow } from './rows/cache';
+  StaticManifestRow,
+  StaticResourceRow,
+  StaticStructureRow,
+} from './rows/static';
+import type {
+  CacheAudioBlobRow,
+  CacheRenderMetricsRow,
+  CacheSessionStateRow,
+  CacheTtsPreparationRow,
+  TableImageRow,
+} from './rows/cache';
+import type {
+  FlightSnapshotRow,
+  SyncCheckpointRow,
+  SyncLogEntryRow,
+} from './rows/app';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('DB');
@@ -57,28 +59,28 @@ export interface EpubLibraryDB extends DBSchema {
   // --- DOMAIN 1: STATIC (Immutable Book Content) ---
   static_manifests: {
     key: string;
-    value: StaticBookManifest;
+    value: StaticManifestRow;
   };
   static_resources: {
     key: string;
-    value: StaticResource;
+    value: StaticResourceRow;
   };
   static_structure: {
     key: string;
-    value: StaticStructure;
+    value: StaticStructureRow;
   };
 
   // --- DOMAIN 2: CACHE (Ephemeral, Regenerable) ---
   cache_table_images: {
     key: string;
-    value: TableImage;
+    value: TableImageRow;
     indexes: {
       by_bookId: string;
     };
   };
   cache_render_metrics: {
     key: string;
-    value: CacheRenderMetrics;
+    value: CacheRenderMetricsRow;
   };
   cache_audio_blobs: {
     key: string;
@@ -86,11 +88,11 @@ export interface EpubLibraryDB extends DBSchema {
   };
   cache_session_state: {
     key: string;
-    value: CacheSessionState;
+    value: CacheSessionStateRow;
   };
   cache_tts_preparation: {
     key: string;
-    value: CacheTtsPreparation;
+    value: CacheTtsPreparationRow;
     indexes: {
       by_bookId: string;
     };
@@ -99,14 +101,14 @@ export interface EpubLibraryDB extends DBSchema {
   // --- DOMAIN 3: APP (Sync Infrastructure) ---
   checkpoints: {
     key: number;
-    value: SyncCheckpoint;
+    value: SyncCheckpointRow;
     indexes: {
       by_timestamp: number;
     };
   };
   sync_log: {
     key: number;
-    value: SyncLogEntry;
+    value: SyncLogEntryRow;
     indexes: {
       by_timestamp: number;
     };
@@ -118,7 +120,7 @@ export interface EpubLibraryDB extends DBSchema {
   };
   flight_snapshots: {
     key: string;
-    value: FlightSnapshot;
+    value: FlightSnapshotRow;
   };
 }
 

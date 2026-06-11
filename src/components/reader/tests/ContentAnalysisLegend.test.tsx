@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContentAnalysisLegend } from '../ContentAnalysisLegend';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 
 // Mock Lucide icons
 vi.mock('lucide-react', () => ({
@@ -27,8 +27,8 @@ vi.mock('@store/useReaderUIStore', () => ({
 }));
 
 // Mock DBService
-vi.mock('@db/DBService', () => ({
-  dbService: {
+vi.mock('@data/repos/bookContent', () => ({
+  bookContent: {
     getTableImages: vi.fn(),
   },
 }));
@@ -147,7 +147,7 @@ describe('ContentAnalysisLegend', () => {
         cfi: 'epubcfi(/6/10)',
         imageBlob: new Blob([''], { type: 'image/webp' })
     };
-    (dbService.getTableImages as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([mockImage]);
+    (bookContent.getTableImages as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([mockImage]);
 
     // Mock URL.createObjectURL
     const mockCreateObjectURL = vi.fn().mockReturnValue('blob:http://localhost/uuid');

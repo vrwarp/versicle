@@ -29,13 +29,17 @@ vi.mock('../LexiconService', () => ({
     },
 }));
 
-vi.mock('@db/DBService', () => ({
-    dbService: {
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getSections: vi.fn().mockResolvedValue([]),
-        getTTSState: vi.fn().mockResolvedValue(null),
-        saveTTSState: vi.fn(),
-        updatePlaybackState: vi.fn().mockResolvedValue(undefined),
-    },
+    }
+}));
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+        getSession: vi.fn().mockResolvedValue(null),
+        saveQueue: vi.fn(),
+        savePauseTime: vi.fn().mockResolvedValue(undefined),
+    }
 }));
 
 import { AudioPlayerService } from '../AudioPlayerService';

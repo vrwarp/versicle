@@ -1,4 +1,4 @@
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 import EpubCFI from 'epubjs/src/epubcfi';
 import { parseCfiRange } from '../cfi-utils';
 import type { SentenceNode } from './sentence-extraction';
@@ -57,7 +57,7 @@ export class TableAdaptationProcessor {
 
             // 2. Identify tables that actually exist in the current section
             // Normalizing legacy Range CFIs (e.g. from buggy cfiFromRange) to their Point CFI parents
-            const tableImages = await dbService.getTableImages(bookId);
+            const tableImages = await bookContent.getTableImages(bookId);
             const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId).map(img => {
                 const range = parseCfiRange(img.cfi);
                 return {
@@ -90,7 +90,7 @@ export class TableAdaptationProcessor {
 
                 const bookMetadata = await this.ctx.book.getMetadata(bookId);
                 const bookTitle = bookMetadata?.title || 'Unknown Book';
-                const structure = await dbService.getBookStructure(bookId);
+                const structure = await bookContent.getBookStructure(bookId);
                 const sectionMap = new Map<string, string>();
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const findSectionTitle = (items: { href: string, title?: string, subitems?: any[] }[]) => {

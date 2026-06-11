@@ -1,7 +1,8 @@
 import type { ITTSProvider, TTSVoice } from './providers/types';
 import type { TTSQueueItem } from '~types/tts';
 import { lexiconApplier } from './LexiconApplier';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
+import { playbackCache } from '@data/repos/playbackCache';
 import type { SectionMetadata, LexiconRule, PerceptualPalette } from '~types/db';
 import { TaskSequencer } from './TaskSequencer';
 import { AudioContentPipeline } from './AudioContentPipeline';
@@ -305,7 +306,7 @@ export class AudioPlayerService {
                     }
                 }).catch(e => logger.warn("Failed to load book metadata", e));
 
-                this.playlistPromise = dbService.getSections(bookId).then(sections => {
+                this.playlistPromise = bookContent.getSections(bookId).then(sections => {
                     if (this.currentBookId !== bookId) return; this.playlist = sections;
                     this.restoreQueue(bookId);
                 }).catch(e => logger.error("Failed to load playlist", e));
@@ -356,7 +357,8 @@ export class AudioPlayerService {
     private async restoreQueue(bookId: string) {
         this.enqueue(async () => {
             try {
-                const state = await dbService.getTTSState(bookId);
+                const session = await playbackCache.getSession(bookId);
+                const state = session ? { bookId, queue: session.playbackQueue, updatedAt: session.updatedAt } : undefined;
                 const progress = this.ctx.readingState.getProgress(bookId);
 
                 if (this.currentBookId !== bookId) return;
@@ -1057,7 +1059,7 @@ export class AudioPlayerService {
 
                 // 2. Apply or clear Table Adaptations
                 if (genAISettings.isEnabled && genAISettings.isTableAdaptationEnabled && analysis.tableAdaptations) {
-                    const ttsContent = await dbService.getTTSContent(bookId, section.sectionId);
+                    const ttsContent = await bookContent.getTTSPreparation(bookId, section.sectionId);
                     if (ttsContent && this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
                         const adaptations = this.contentPipeline.tableProcessor.mapSentencesToAdaptations(
                             ttsContent.sentences,

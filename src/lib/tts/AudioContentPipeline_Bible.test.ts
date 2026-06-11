@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createZustandEngineContext } from '@app/tts/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
 import { bookRepository } from '@app/repositories/BookRepository';
 import { useTTSStore } from '@store/useTTSStore';
@@ -11,9 +11,9 @@ import { BIBLE_ABBREVIATIONS } from './bible-lexicon';
 import type { BookMetadata, ContentAnalysis, CacheTtsPreparation, SectionMetadata } from '~types/db';
 
 // Explicit mocks to prevent auto-mocking issues
-vi.mock('@db/DBService', () => ({
-    dbService: {
-        getTTSContent: vi.fn(),
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
+        getTTSPreparation: vi.fn(),
         getBookStructure: vi.fn(),
     }
 }));
@@ -90,7 +90,7 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
         pipeline = new AudioContentPipeline(createZustandEngineContext());
 
         // Default Mocks
-        vi.mocked(dbService.getTTSContent).mockResolvedValue({ sentences: [{ text: 'Test.', cfi: 'cfi' }] } as unknown as CacheTtsPreparation);
+        vi.mocked(bookContent.getTTSPreparation).mockResolvedValue({ sentences: [{ text: 'Test.', cfi: 'cfi' }] } as unknown as CacheTtsPreparation);
         vi.mocked(bookRepository.getBookMetadata).mockResolvedValue({} as BookMetadata);
         vi.mocked(contentAnalysisRepository.getContentAnalysis).mockResolvedValue({} as ContentAnalysis);
 

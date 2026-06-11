@@ -1,20 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createZustandEngineContext } from '@app/tts/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 import { useGenAIStore } from '@store/useGenAIStore';
 
-vi.mock('@db/DBService', () => ({
-    dbService: {
-        getTTSContent: vi.fn().mockResolvedValue({ sentences: [] }),
-        getContentAnalysis: vi.fn().mockResolvedValue(null),
-        getBookMetadata: vi.fn().mockResolvedValue({}),
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
+        getTTSPreparation: vi.fn().mockResolvedValue({ sentences: [] }),
         getBookStructure: vi.fn().mockResolvedValue(null),
-        saveReferenceStartCfi: vi.fn(),
         getTableImages: vi.fn().mockResolvedValue([]),
-        saveTableAdaptations: vi.fn(),
-        markAnalysisLoading: vi.fn(),
-        markAnalysisError: vi.fn(),
     }
 }));
 
@@ -117,7 +111,7 @@ describe('AudioContentPipeline - triggerAnalysis', () => {
     describe('Vulnerability 1: triggerNextChapterAnalysis pre-warming', () => {
         it('should call both getOrDetectContentTypes and processTableAdaptations for the next chapter', async () => {
             const sentences = [{ text: 'Next chapter', cfi: 'cfi-next' }];
-            vi.mocked(dbService.getTTSContent).mockResolvedValue({ sentences } as never);
+            vi.mocked(bookContent.getTTSPreparation).mockResolvedValue({ sentences } as never);
 
             const detectSpy = vi.spyOn(pipeline, 'getOrDetectContentTypes').mockResolvedValue(undefined);
             const tableSpy = vi.spyOn(pipeline.tableProcessor, 'processTableAdaptations').mockResolvedValue(undefined);

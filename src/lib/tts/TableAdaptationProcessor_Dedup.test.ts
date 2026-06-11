@@ -12,8 +12,8 @@ const getContentAnalysisAsyncMock = contentAnalysisRepository.getContentAnalysis
     sectionId: string,
 ) => Promise<unknown>;
 
-vi.mock('@db/DBService', () => ({
-    dbService: {
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getTableImages: vi.fn().mockResolvedValue([]),
         getBookStructure: vi.fn().mockResolvedValue(null),
     }

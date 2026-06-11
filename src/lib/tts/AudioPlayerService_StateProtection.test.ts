@@ -31,16 +31,15 @@ vi.mock('./providers/WebSpeechProvider', () => ({
 }));
 
 
-vi.mock('@db/DBService', () => ({
-    dbService: {
-        getTTSState: vi.fn(),
-        saveTTSState: vi.fn(),
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getSections: vi.fn().mockResolvedValue([]),
-        getBookMetadata: vi.fn().mockResolvedValue({
-            title: 'Test Book',
-            author: 'Test Author',
-            coverUrl: 'http://example.com/cover.jpg'
-        }),
+    }
+}));
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+        getSession: vi.fn(),
+        saveQueue: vi.fn(),
     }
 }));
 

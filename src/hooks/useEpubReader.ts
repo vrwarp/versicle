@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import ePub, { type Book, type Rendition, type Location, type NavigationItem } from 'epubjs';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 import type { BookMetadata } from '~types/db';
 import { sanitizeContent } from '@lib/sanitizer';
 import { runCancellable, CancellationError } from '@lib/cancellable-task-runner';
@@ -290,7 +290,7 @@ export function useEpubReader(
 
       try {
         // Phase 2: Get file blob from static resources only. Metadata comes from props (Store).
-        const fileData = yield dbService.getBookFile(currentBookId);
+        const fileData = yield bookContent.getBookFile(currentBookId);
 
         if (!fileData) {
           throw new Error('Book file not found');
@@ -456,7 +456,7 @@ export function useEpubReader(
           }
         };
 
-        const savedLocations = yield dbService.getLocations(currentBookId);
+        const savedLocations = yield bookContent.getLocations(currentBookId);
         if (savedLocations) {
           newBook.locations.load(savedLocations.locations);
           setAreLocationsReady(true);
@@ -465,7 +465,7 @@ export function useEpubReader(
           // Generate in background
           newBook.locations.generate(1000).then(async () => {
             const locationStr = newBook.locations.save();
-            await dbService.saveLocations(currentBookId, locationStr);
+            await bookContent.saveLocations(currentBookId, locationStr);
             setAreLocationsReady(true);
             updateProgress();
           });

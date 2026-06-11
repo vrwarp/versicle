@@ -6,15 +6,14 @@ import type { UserInventoryItem } from '~types/db';
 import { useTTSStore } from '@store/useTTSStore';
 
 // Mock dependencies to prevent external calls during tests
-vi.mock('@db/DBService', () => ({
-    dbService: {
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getSections: vi.fn().mockResolvedValue([]),
-        getTTSState: vi.fn().mockResolvedValue(null),
-        getBookMetadata: vi.fn().mockImplementation((bookId) => {
-            if (bookId === 'book-en') return Promise.resolve({ title: 'English Book', author: 'Author' });
-            if (bookId === 'book-zh') return Promise.resolve({ title: 'Chinese Book', author: 'Author' });
-            return Promise.resolve(null);
-        })
+    }
+}));
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+        getSession: vi.fn().mockResolvedValue(null),
     }
 }));
 

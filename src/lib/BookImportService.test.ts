@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { bookImportService } from './BookImportService';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 import * as ingestion from './ingestion';
 
 vi.mock('./ingestion', () => ({
@@ -8,18 +8,15 @@ vi.mock('./ingestion', () => ({
     generateFileFingerprint: vi.fn().mockResolvedValue('hash'),
 }));
 
-vi.mock('@db/DBService', async (importOriginal) => {
-    // Keep handleDbError real (error-wrapping semantics under test); stub the dbService calls.
-    const actual = await importOriginal<typeof import('@db/DBService')>();
-    return {
-        handleDbError: actual.handleDbError,
-        dbService: {
-            ingestBook: vi.fn().mockResolvedValue(undefined),
-            getManifestBundle: vi.fn(),
-            restoreBookResource: vi.fn().mockResolvedValue(undefined),
-        },
-    };
-});
+vi.mock('@data/repos/bookContent', () => ({
+    // handleDbError stays REAL (it lives in @data/errors now); only the
+    // repo calls are stubbed.
+    bookContent: {
+        ingest: vi.fn().mockResolvedValue(undefined),
+        getManifestBundle: vi.fn(),
+        restoreResource: vi.fn().mockResolvedValue(undefined),
+    },
+}));
 
 describe('BookImportService', () => {
     beforeEach(() => {
@@ -42,7 +39,7 @@ describe('BookImportService', () => {
             const manifest = await bookImportService.addBook(file);
 
             expect(ingestion.extractBookData).toHaveBeenCalledWith(file, undefined, undefined);
-            expect(dbService.ingestBook).toHaveBeenCalledWith(mockData);
+            expect(bookContent.ingest).toHaveBeenCalledWith(mockData);
             expect(manifest).toBe(mockData.manifest);
         });
 
@@ -74,8 +71,8 @@ describe('BookImportService', () => {
             await bookImportService.importBookWithId('target-id', file);
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const ingested = vi.mocked(dbService.ingestBook).mock.calls[0][0] as any;
-            expect(vi.mocked(dbService.ingestBook).mock.calls[0][1]).toBe('overwrite');
+            const ingested = vi.mocked(bookContent.ingest).mock.calls[0][0] as any;
+            expect(vi.mocked(bookContent.ingest).mock.calls[0][1]).toBe('overwrite');
             expect(ingested.bookId).toBe('target-id');
             expect(ingested.manifest.bookId).toBe('target-id');
             expect(ingested.structure.spineItems[0].id).toBe('target-id-sec1');
@@ -89,7 +86,7 @@ describe('BookImportService', () => {
 
         it('verifies the fingerprint then writes the resource', async () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            vi.mocked(dbService.getManifestBundle).mockResolvedValue({ manifest, structure: undefined, hasResource: false } as any);
+            vi.mocked(bookContent.getManifestBundle).mockResolvedValue({ manifest, structure: undefined, hasResource: false } as any);
             const file = new File([new Uint8Array([1, 2, 3])], 'book.epub');
 
             await bookImportService.restoreBook('b1', file);
@@ -97,24 +94,24 @@ describe('BookImportService', () => {
             expect(ingestion.generateFileFingerprint).toHaveBeenCalledWith(file, {
                 title: 'T', author: 'A', filename: 'book.epub'
             });
-            expect(dbService.restoreBookResource).toHaveBeenCalledWith('b1', expect.any(ArrayBuffer));
+            expect(bookContent.restoreResource).toHaveBeenCalledWith('b1', expect.any(ArrayBuffer));
         });
 
         it('rejects on fingerprint mismatch without writing', async () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            vi.mocked(dbService.getManifestBundle).mockResolvedValue({ manifest, structure: undefined, hasResource: false } as any);
+            vi.mocked(bookContent.getManifestBundle).mockResolvedValue({ manifest, structure: undefined, hasResource: false } as any);
             vi.mocked(ingestion.generateFileFingerprint).mockResolvedValueOnce('different-hash');
             const file = new File(['x'], 'book.epub');
 
             await expect(bookImportService.restoreBook('b1', file)).rejects.toThrow();
-            expect(dbService.restoreBookResource).not.toHaveBeenCalled();
+            expect(bookContent.restoreResource).not.toHaveBeenCalled();
         });
 
         it('rejects when the book has no manifest', async () => {
-            vi.mocked(dbService.getManifestBundle).mockResolvedValue(undefined);
+            vi.mocked(bookContent.getManifestBundle).mockResolvedValue(undefined);
 
             await expect(bookImportService.restoreBook('missing', new File(['x'], 'b.epub'))).rejects.toThrow();
-            expect(dbService.restoreBookResource).not.toHaveBeenCalled();
+            expect(bookContent.restoreResource).not.toHaveBeenCalled();
         });
     });
 });

@@ -1,18 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
 import { getInProcessAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 
-vi.mock('@db/DBService', () => ({
-    dbService: {
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getSections: vi.fn().mockResolvedValue([]),
-        getBookMetadata: vi.fn().mockResolvedValue({
-            title: 'Test Book',
-            author: 'Test Author',
-            coverUrl: 'http://example.com/cover.jpg'
-        }),
-        getTTSState: vi.fn(),
-        getTTSContent: vi.fn().mockResolvedValue({ sections: [] })
+        getTTSPreparation: vi.fn().mockResolvedValue({ sections: [] }),
+    }
+}));
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+        getSession: vi.fn(),
     }
 }));
 
@@ -83,7 +82,7 @@ describe('AudioPlayerService Predictability Fix', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const secondPromise = new Promise<any[]>(r => resolveSecond = r);
 
-        vi.mocked(dbService.getSections)
+        vi.mocked(bookContent.getSections)
             .mockReturnValueOnce(firstPromise)
             .mockReturnValueOnce(secondPromise);
 
@@ -106,6 +105,6 @@ describe('AudioPlayerService Predictability Fix', () => {
         // currentBookId is now 'book2'.
         await service.loadSectionBySectionId('s1');
 
-        expect(dbService.getTTSContent).not.toHaveBeenCalled();
+        expect(bookContent.getTTSPreparation).not.toHaveBeenCalled();
     });
 });

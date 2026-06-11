@@ -1,26 +1,25 @@
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
 import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '@app/tts/mainThreadAudioPlayer';
-import { dbService } from '@db/DBService';
-import type { TTSState, SectionMetadata } from '~types/db';
+import { bookContent } from '@data/repos/bookContent';
+import { playbackCache } from '@data/repos/playbackCache';
+import type { SectionMetadata } from '~types/db';
 
 // --- Mocks Setup ---
 
-// Mock DBService
-vi.mock('@db/DBService', () => ({
-    dbService: {
-        getBookMetadata: vi.fn().mockResolvedValue({}),
-        updatePlaybackState: vi.fn().mockResolvedValue(undefined),
-        getTTSState: vi.fn(),
-        saveTTSState: vi.fn(),
+// Mock the data repos
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getSections: vi.fn(),
-        getContentAnalysis: vi.fn().mockResolvedValue({}),
-        getTTSContent: vi.fn().mockResolvedValue({ sentences: [] }),
+        getTTSPreparation: vi.fn().mockResolvedValue({ sentences: [] }),
         getTableImages: vi.fn().mockResolvedValue([]),
-        saveTableAdaptations: vi.fn(),
-        saveReferenceStartCfi: vi.fn(),
-        markAnalysisLoading: vi.fn(),
-        markAnalysisError: vi.fn(),
+    }
+}));
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+        savePauseTime: vi.fn().mockResolvedValue(undefined),
+        getSession: vi.fn(),
+        saveQueue: vi.fn(),
     }
 }));
 
@@ -138,14 +137,15 @@ describe('AudioPlayerService - Restore Analysis', () => {
         const bookId = 'book-123';
         const sectionId = 'section-1';
 
-        vi.mocked(dbService.getTTSState).mockResolvedValue({
-            queue: [
+        vi.mocked(playbackCache.getSession).mockResolvedValue({
+            bookId: 'book-123',
+            playbackQueue: [
                 { text: 'Sentence 1', cfi: 'cfi1', sourceIndices: [0] }
             ],
-            currentIndex: 0
-        } as unknown as TTSState);
+            updatedAt: 0
+        });
 
-        vi.mocked(dbService.getSections).mockResolvedValue([
+        vi.mocked(bookContent.getSections).mockResolvedValue([
             { sectionId: sectionId, title: 'Chapter 1', characterCount: 100 } as SectionMetadata
         ]);
 

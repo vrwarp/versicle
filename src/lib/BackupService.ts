@@ -3,9 +3,9 @@ import JSZip from 'jszip';
 // YjsSnapshotService — keep yjs out of this module's runtime graph.
 import type * as Y from 'yjs';
 import { exportFile } from './export';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
+import type { StaticManifestRow } from '@data/rows';
 import type { BookLocations, StaticBookManifest, UserInventoryItem } from '~types/db';
-import { getDB } from '@db/db';
 import { getYDoc, waitForYjsSync, getYjsPersistence } from '@store/yjs-provider';
 import { captureDoc, validateSnapshot, applySnapshot } from '@data/snapshot/YjsSnapshotService';
 import { backupManifestEnvelopeSchema, backupStaticManifestRowSchema, bookLocationsRowSchema } from '@data/rows';
@@ -145,7 +145,7 @@ export class BackupService {
       }
 
       try {
-        const fileData = await dbService.getBookFile(bookId);
+        const fileData = await bookContent.getBookFile(bookId);
         if (fileData) {
           filesFolder.file(`${bookId}.epub`, fileData);
         } else {
@@ -204,20 +204,17 @@ export class BackupService {
     await getYjsPersistence()?.flush();
 
     // 1. Capture the entire Y.Doc state as a binary update
-    // 2. Concurrently read static data from IDB and capture semantic tree
-    const [db, semanticData] = await Promise.all([
-      getDB(),
-      import('./sync/semantic-tree').then(m => m.generateSemanticTree())
-    ]);
+    // 2. Capture the semantic tree concurrently with nothing destructive
+    const semanticData = await import('./sync/semantic-tree').then(m => m.generateSemanticTree());
 
     const stateUpdate = captureDoc(getYDoc());
     const yjsSnapshot = this.uint8ArrayToBase64(stateUpdate);
 
-    const staticManifestRows = await db.getAll('static_manifests');
+    const staticManifestRows = await bookContent.listManifests();
     const staticManifests = await Promise.all(
       staticManifestRows.map(row => this.toBackupManifestRow(row))
     );
-    const metrics = await db.getAll('cache_render_metrics');
+    const metrics = await bookContent.listLocations();
 
     // Map metrics to locations
     const locations: BookLocations[] = metrics.map(met => ({
@@ -346,8 +343,7 @@ export class BackupService {
 
     onProgress?.(30, 'Syncing stores...');
 
-    // === Write Static Data to IDB ===
-    const db = await getDB();
+    // === Write Static Data to IDB (through the bookContent repo) ===
 
     // Write static manifests (for Ghost Book support). Untrusted-ingress row
     // validation (src/data/rows, D4): rows that fail the backup-row schema
@@ -365,18 +361,15 @@ export class BackupService {
     if (incomingManifests.length > 0) {
       onProgress?.(40, 'Restoring metadata...');
 
-      // Read existing rows BEFORE opening the readwrite transaction so we can
-      // merge covers without awaiting reads inside the transaction.
-      const existingRows = ((await db.getAll('static_manifests')) ?? []) as unknown as BackupManifestRow[];
+      // Read existing rows BEFORE the write so we can merge covers (the repo
+      // writer is a synchronous gated transaction — D1 recipe).
+      const existingRows = ((await bookContent.listManifests()) ?? []) as unknown as BackupManifestRow[];
       const existingByBookId = new Map(existingRows.map(row => [row.bookId, row]));
       const sanitized = incomingManifests.map(row =>
         this.sanitizeManifestRow(row, existingByBookId.get(row.bookId))
       );
 
-      const tx = db.transaction(['static_manifests'], 'readwrite');
-      const store = tx.objectStore('static_manifests');
-      await Promise.all(sanitized.map(m => store.put(m as unknown as StaticBookManifest)));
-      await tx.done;
+      await bookContent.putManifests(sanitized as unknown as StaticManifestRow[]);
     }
 
     // Write locations. Untrusted-ingress row validation (src/data/rows, D4):
@@ -393,10 +386,7 @@ export class BackupService {
           logger.warn('Skipping invalid locations row in backup', parsed.error.issues);
         }
       }
-      const tx = db.transaction(['cache_render_metrics'], 'readwrite');
-      const locStore = tx.objectStore('cache_render_metrics');
-      await Promise.all(validLocations.map(loc => locStore.put(loc)));
-      await tx.done;
+      await bookContent.putLocations(validLocations);
     }
 
     // === Restore Files (if ZIP) ===
@@ -417,16 +407,8 @@ export class BackupService {
             const p = (async () => {
               const arrayBuffer = await zipFile.async('arraybuffer');
 
-              // Direct IDB write to bypass any store logic
-              const db = await getDB();
-              const tx = db.transaction(['static_resources'], 'readwrite');
-              const store = tx.objectStore('static_resources');
-
-              const existing = await store.get(bookId) || { bookId, epubBlob: arrayBuffer };
-              existing.epubBlob = arrayBuffer;
-
-              await store.put(existing);
-              await tx.done;
+              // Repo write (read-merge outside the gate, synchronous put inside).
+              await bookContent.restoreResource(bookId, arrayBuffer);
 
               restoredBookIds.push(bookId);
             })();
@@ -465,7 +447,7 @@ export class BackupService {
    * base64; non-binary garbage (e.g. `{}` left behind by pre-v3 restores) is
    * stripped so it never re-enters a backup file.
    */
-  private async toBackupManifestRow(manifest: StaticBookManifest): Promise<BackupStaticManifestV3> {
+  private async toBackupManifestRow(manifest: StaticManifestRow): Promise<BackupStaticManifestV3> {
     const { coverBlob, ...rest } = manifest;
     const row: BackupStaticManifestV3 = { ...rest };
     const cover: unknown = coverBlob;

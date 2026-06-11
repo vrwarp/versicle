@@ -15,16 +15,18 @@ vi.mock('@store/useTTSStore', () => ({
 }));
 
 // Mock DBService
-vi.mock('@db/DBService', () => ({
-  dbService: {
-    getBookMetadata: vi.fn().mockResolvedValue({}),
-    updatePlaybackState: vi.fn().mockResolvedValue(undefined),
-    saveTTSState: vi.fn().mockResolvedValue(undefined),
-    getTTSState: vi.fn().mockResolvedValue({ queue: [], currentIndex: 0 }),
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
     getSections: vi.fn().mockResolvedValue([]),
-    getContentAnalysis: vi.fn(),
-    getTTSContent: vi.fn(),
-  }
+    getTTSPreparation: vi.fn(),
+    }
+}));
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+    savePauseTime: vi.fn().mockResolvedValue(undefined),
+    saveQueue: vi.fn().mockResolvedValue(undefined),
+    getSession: vi.fn().mockResolvedValue({ bookId: 'b', playbackQueue: [], updatedAt: 0 }),
+    }
 }));
 
 // Mock LexiconService
@@ -68,7 +70,7 @@ describe('AudioPlayerService Critical Sections', () => {
   });
 
   it('should NOT abort setQueue when play is called immediately after', async () => {
-     const { dbService } = await import('@db/DBService');
+     const { playbackCache } = await import('@data/repos/playbackCache');
 
     let resolveUpdate: () => void;
     const updatePromise = new Promise<void>((resolve) => {
@@ -77,7 +79,7 @@ describe('AudioPlayerService Critical Sections', () => {
 
     // Mock updatePlaybackState (called by stopInternal, which is called early in setQueue)
     // This pauses execution of setQueue BEFORE it updates the queue variable.
-    vi.mocked(dbService.updatePlaybackState).mockImplementation(async () => {
+    vi.mocked(playbackCache.savePauseTime).mockImplementation(async () => {
         await updatePromise;
     });
 
@@ -114,10 +116,10 @@ describe('AudioPlayerService Critical Sections', () => {
       // B runs.
       // Final state: Queue B.
 
-      const { dbService } = await import('@db/DBService');
+      const { playbackCache } = await import('@data/repos/playbackCache');
       let resolveUpdate: () => void;
       const updatePromise = new Promise<void>((resolve) => { resolveUpdate = resolve; });
-      vi.mocked(dbService.updatePlaybackState).mockImplementation(async () => { await updatePromise; });
+      vi.mocked(playbackCache.savePauseTime).mockImplementation(async () => { await updatePromise; });
 
       const queueA: TTSQueueItem[] = [{ text: 'Item A', cfi: 'A' }];
       const queueB: TTSQueueItem[] = [{ text: 'Item B', cfi: 'B' }];

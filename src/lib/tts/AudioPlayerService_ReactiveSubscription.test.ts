@@ -22,20 +22,18 @@ vi.mock('@store/useContentAnalysisStore', () => ({
     }
 }));
 
-vi.mock('@db/DBService', () => ({
-    dbService: {
-        getBookMetadata: vi.fn().mockResolvedValue({}),
-        updatePlaybackState: vi.fn().mockResolvedValue(undefined),
-        getTTSState: vi.fn().mockResolvedValue(null),
-        saveTTSState: vi.fn(),
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getSections: vi.fn().mockResolvedValue([]),
-        getContentAnalysis: vi.fn().mockResolvedValue({}),
-        getTTSContent: vi.fn().mockResolvedValue({ sentences: [{ text: 'foo', cfi: 'cfi1' }] }),
+        getTTSPreparation: vi.fn().mockResolvedValue({ sentences: [{ text: 'foo', cfi: 'cfi1' }] }),
         getTableImages: vi.fn().mockResolvedValue([]),
-        saveTableAdaptations: vi.fn(),
-        saveReferenceStartCfi: vi.fn(),
-        markAnalysisLoading: vi.fn(),
-        markAnalysisError: vi.fn(),
+    }
+}));
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+        savePauseTime: vi.fn().mockResolvedValue(undefined),
+        getSession: vi.fn().mockResolvedValue(null),
+        saveQueue: vi.fn(),
     }
 }));
 

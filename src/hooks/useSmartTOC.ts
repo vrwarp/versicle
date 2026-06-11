@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import type { Book } from 'epubjs';
 import type { NavigationItem } from '~types/db';
 import { genAIService } from '@lib/genai/GenAIService';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 import { bookRepository } from '@app/repositories/BookRepository';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { useToastStore } from '@store/useToastStore';
@@ -66,7 +66,7 @@ export function useSmartTOC(
       const newToc = reconstructToc(originalToc, titleMap);
 
       // Persist enhanced TOC to static_structure in IDB
-      await dbService.updateBookStructure(bookId, newToc);
+      await bookContent.updateToc(bookId, newToc);
 
       // Reactively update local static metadata cache in useLibraryStore
       useLibraryStore.setState((state) => {

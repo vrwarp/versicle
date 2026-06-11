@@ -7,7 +7,7 @@
  * Y.Doc/IndexedDB connection. Worker-side engine code reaches merged book metadata
  * through the EngineContext book port, whose host implementation calls this repository.
  */
-import { dbService, type ManifestBundle } from '@db/DBService';
+import { bookContent, type ManifestBundle } from '@data/repos/bookContent';
 import { useBookStore } from '@store/useBookStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
 import type { BookMetadata, UserInventoryItem } from '~types/db';
@@ -47,7 +47,7 @@ class BookRepository {
      * Post-Yjs migration: user_inventory is in Yjs (useBookStore), not IndexedDB.
      */
     async getBookMetadata(id: string): Promise<BookMetadata | undefined> {
-        const bundle = await dbService.getManifestBundle(id);
+        const bundle = await bookContent.getManifestBundle(id);
         if (!bundle) return undefined;
         return toBookMetadata(bundle, useBookStore.getState().books[id]);
     }
@@ -57,7 +57,7 @@ class BookRepository {
      * Preserves the exact index mapping of the input array.
      */
     async getBookMetadataBulk(ids: string[]): Promise<(BookMetadata | undefined)[]> {
-        const bundles = await dbService.getManifestBundleBulk(ids);
+        const bundles = await bookContent.getManifestBundleBulk(ids);
         const inventoryBooks = useBookStore.getState().books;
         return bundles.map((bundle, i) =>
             bundle ? toBookMetadata(bundle, inventoryBooks[ids[i]]) : undefined
@@ -83,7 +83,7 @@ class BookRepository {
      */
     async deleteBook(id: string): Promise<void> {
         useContentAnalysisStore.getState().deleteBookAnalysis(id);
-        await dbService.deleteBook(id);
+        await bookContent.deleteBook(id);
     }
 }
 

@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import * as Y from 'yjs';
 import { BackupService, type BackupManifestV2, type BackupManifestV3 } from './BackupService';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 import { exportFile } from './export';
 
 // Hoist variables to capture mock interactions
@@ -58,20 +58,16 @@ vi.mock('@store/yjs-provider', async (importOriginal) => {
   };
 });
 
-// Mock DB
-const mockDB = {
-  getAll: vi.fn(),
-  transaction: vi.fn(),
-};
-
-vi.mock('@db/db', () => ({
-  getDB: vi.fn(() => Promise.resolve(mockDB)),
-}));
-
-// Mock dbService
-vi.mock('@db/DBService', () => ({
-  dbService: {
+// Mock the bookContent repo (the static/locations read+write surface the
+// backup path uses since the P3-8 carve)
+vi.mock('@data/repos/bookContent', () => ({
+  bookContent: {
+    listManifests: vi.fn(),
+    listLocations: vi.fn(),
+    putManifests: vi.fn(),
+    putLocations: vi.fn(),
     getBookFile: vi.fn(),
+    restoreResource: vi.fn(),
   },
 }));
 
@@ -120,7 +116,8 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
     mocks.capturedDocs.length = 0; // Clear captured docs
 
     // Default: no existing rows in IDB (restore merges against existing manifests)
-    mockDB.getAll.mockResolvedValue([]);
+    vi.mocked(bookContent.listManifests).mockResolvedValue([]);
+    vi.mocked(bookContent.listLocations).mockResolvedValue([]);
 
     // Get the mocked yDoc
     const yjsProvider = await import('@store/yjs-provider');
@@ -148,11 +145,8 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
         addedAt: Date.now(),
       });
 
-      mockDB.getAll.mockImplementation((store: string) => {
-        if (store === 'static_manifests') return Promise.resolve([{ bookId: 'b1', title: 'Test Book' }]);
-        if (store === 'cache_render_metrics') return Promise.resolve([]);
-        return Promise.resolve([]);
-      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(bookContent.listManifests).mockResolvedValue([{ bookId: 'b1', title: 'Test Book' } as any]);
 
       await service.createLightBackup();
 
@@ -171,12 +165,10 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
     });
 
     it('should include static manifests in backup', async () => {
-      mockDB.getAll.mockImplementation((store: string) => {
-        if (store === 'static_manifests') return Promise.resolve([
-          { bookId: 'b1', title: 'Book 1', fileHash: 'abc123' }
-        ]);
-        return Promise.resolve([]);
-      });
+      vi.mocked(bookContent.listManifests).mockResolvedValue([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { bookId: 'b1', title: 'Book 1', fileHash: 'abc123' } as any
+      ]);
 
       await service.createLightBackup();
 
@@ -199,18 +191,16 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
         author: 'Author 1',
       });
 
-      mockDB.getAll.mockImplementation((store: string) => {
-        if (store === 'static_manifests') return Promise.resolve([{ bookId: 'b1', title: 'Book 1' }]);
-        return Promise.resolve([]);
-      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(bookContent.listManifests).mockResolvedValue([{ bookId: 'b1', title: 'Book 1' } as any]);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (dbService.getBookFile as any).mockResolvedValue(new ArrayBuffer(10));
+      (bookContent.getBookFile as any).mockResolvedValue(new ArrayBuffer(10));
 
       const onProgress = vi.fn();
       await service.createFullBackup(onProgress);
 
-      expect(dbService.getBookFile).toHaveBeenCalledWith('b1');
+      expect(bookContent.getBookFile).toHaveBeenCalledWith('b1');
       expect(exportFile).toHaveBeenCalled();
       expect(onProgress).toHaveBeenCalled();
 
@@ -245,18 +235,6 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
       };
 
       const file = new File([JSON.stringify(manifest)], 'backup.json', { type: 'application/json' });
-
-      const putMock = vi.fn().mockResolvedValue(undefined);
-      const getMock = vi.fn().mockResolvedValue(undefined);
-
-      const mockTx = {
-        objectStore: vi.fn().mockReturnValue({
-          get: getMock,
-          put: putMock,
-        }),
-        done: Promise.resolve(),
-      };
-      mockDB.transaction.mockReturnValue(mockTx);
 
       await service.restoreBackup(file);
 
@@ -328,8 +306,6 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
         percentage: 0.5,
       });
 
-      mockDB.getAll.mockResolvedValue([]);
-
       await service.createLightBackup();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -367,23 +343,18 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
     return btoa(String.fromCharCode(...snapshot));
   }
 
-  function setupRestoreTx() {
-    const putMock = vi.fn().mockResolvedValue(undefined);
-    const mockTx = {
-      objectStore: vi.fn().mockReturnValue({
-        get: vi.fn().mockResolvedValue(undefined),
-        put: putMock,
-      }),
-      done: Promise.resolve(),
-    };
-    mockDB.transaction.mockReturnValue(mockTx);
-    return putMock;
+  /** Rows handed to the repo's bulk manifest writer across all calls. */
+  function manifestPutRows() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return vi.mocked(bookContent.putManifests).mock.calls.flatMap(c => c[0] as any[]);
   }
 
   describe('regression: restore validates before destroying local data', () => {
     function expectLocalDataUntouched() {
       expect(mocks.persistenceMock.clearData).not.toHaveBeenCalled();
-      expect(mockDB.transaction).not.toHaveBeenCalled();
+      expect(bookContent.putManifests).not.toHaveBeenCalled();
+      expect(bookContent.putLocations).not.toHaveBeenCalled();
+      expect(bookContent.restoreResource).not.toHaveBeenCalled();
     }
 
     it('rejects a structurally invalid manifest and leaves local data untouched', async () => {
@@ -437,7 +408,6 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
     });
 
     it('creates a pre-restore checkpoint before clearing local persistence', async () => {
-      setupRestoreTx();
       const file = new File(
         [JSON.stringify({ version: 2, timestamp: '2023-01-01', yjsSnapshot: makeSnapshotBase64(), staticManifests: [], locations: [] })],
         'backup.json'
@@ -468,15 +438,12 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
   describe('regression: cover blob corruption (backup manifest v3)', () => {
     it('exports v3 with covers base64-encoded so JSON round-trips are lossless', async () => {
       const coverBytes = new Uint8Array([1, 2, 3, 250, 255]);
-      mockDB.getAll.mockImplementation((store: string) => {
-        if (store === 'static_manifests') return Promise.resolve([
-          {
-            bookId: 'b1', title: 'Covered Book', author: 'A', fileHash: 'h',
-            fileSize: 1, totalChars: 1, schemaVersion: 1, coverBlob: coverBytes.buffer
-          }
-        ]);
-        return Promise.resolve([]);
-      });
+      vi.mocked(bookContent.listManifests).mockResolvedValue([
+        {
+          bookId: 'b1', title: 'Covered Book', author: 'A', fileHash: 'h',
+          fileSize: 1, totalChars: 1, schemaVersion: 1, coverBlob: coverBytes.buffer
+        }
+      ]);
 
       await service.createLightBackup();
 
@@ -491,11 +458,10 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
       expect(typeof manifest.staticManifests[0].coverBlobBase64).toBe('string');
 
       // Restore the exported JSON and verify the cover bytes survive intact
-      mockDB.getAll.mockResolvedValue([]);
-      const putMock = setupRestoreTx();
+      vi.mocked(bookContent.listManifests).mockResolvedValue([]);
       await service.restoreBackup(new File([data as string], 'backup.json'));
 
-      const putRows = putMock.mock.calls.map(c => c[0]);
+      const putRows = manifestPutRows();
       const restored = putRows.find(r => r.bookId === 'b1' && 'coverBlob' in r);
       expect(restored).toBeDefined();
       expect(restored.coverBlob).toBeInstanceOf(ArrayBuffer);
@@ -505,13 +471,10 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
 
     it('sanitizes corrupt {} covers from v2 backups and never clobbers healthy local covers', async () => {
       const localCover = new Uint8Array([9, 9, 9]).buffer;
-      mockDB.getAll.mockImplementation((store: string) => {
-        if (store === 'static_manifests') return Promise.resolve([
-          { bookId: 'b1', title: 'Healthy Local', coverBlob: localCover }
-        ]);
-        return Promise.resolve([]);
-      });
-      const putMock = setupRestoreTx();
+      vi.mocked(bookContent.listManifests).mockResolvedValue([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { bookId: 'b1', title: 'Healthy Local', coverBlob: localCover } as any
+      ]);
 
       // A v2 backup that went through JSON.stringify: covers degraded to `{}`
       const manifest = {
@@ -527,7 +490,7 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
 
       await service.restoreBackup(new File([JSON.stringify(manifest)], 'backup.json'));
 
-      const putRows = putMock.mock.calls.map(c => c[0]);
+      const putRows = manifestPutRows();
 
       // b1: the healthy local cover is preserved (not overwritten with `{}`)
       const b1 = putRows.find(r => r.bookId === 'b1');

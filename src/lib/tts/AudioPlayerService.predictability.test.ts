@@ -1,24 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
 import { getInProcessAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 
-vi.mock('@db/DBService', () => ({
-    dbService: {
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getSections: vi.fn().mockResolvedValue([]),
-        getBookMetadata: vi.fn().mockResolvedValue({
-            title: 'Test Book',
-            author: 'Test Author',
-            coverUrl: 'http://example.com/cover.jpg'
-        }),
-        getTTSState: vi.fn(),
-        getTTSContent: vi.fn().mockResolvedValue({
+        getTTSPreparation: vi.fn().mockResolvedValue({
             sections: [],
             content: []
         }),
-        getContentAnalysis: vi.fn().mockResolvedValue(null),
         getBookStructure: vi.fn().mockResolvedValue({ toc: [] }),
-        saveTTSContent: vi.fn()
+        saveTTSPreparation: vi.fn(),
+    }
+}));
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+        getSession: vi.fn(),
     }
 }));
 
@@ -104,7 +102,7 @@ describe('AudioPlayerService Predictability', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const secondPromise = new Promise<any[]>(r => resolveSecond = r);
 
-        vi.mocked(dbService.getSections)
+        vi.mocked(bookContent.getSections)
             .mockReturnValueOnce(firstPromise)
             .mockReturnValueOnce(secondPromise);
 
@@ -126,7 +124,7 @@ describe('AudioPlayerService Predictability', () => {
         // We'll mock getTTSContent to spy
         await service.loadSectionBySectionId('s1');
 
-        expect(dbService.getTTSContent).not.toHaveBeenCalled();
+        expect(bookContent.getTTSPreparation).not.toHaveBeenCalled();
     });
 });
 
@@ -149,7 +147,7 @@ describe('AudioPlayerService loadSection Race Condition Fix', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const secondPromise = new Promise<any[]>(r => resolveSecond = r);
 
-        vi.mocked(dbService.getSections)
+        vi.mocked(bookContent.getSections)
             .mockReturnValueOnce(firstPromise)
             .mockReturnValueOnce(secondPromise);
 
@@ -166,7 +164,7 @@ describe('AudioPlayerService loadSection Race Condition Fix', () => {
 
         // This is the important part! We want to clear the mock of getTTSContent to ensure we are only tracking what happens
         // AFTER the context switches to book2.
-        vi.mocked(dbService.getTTSContent).mockClear();
+        vi.mocked(bookContent.getTTSPreparation).mockClear();
 
         // Resolve second book request first (simulating faster response for second request)
         resolveSecond([{ sectionId: 's2', title: 'S2' }]);
@@ -182,6 +180,6 @@ describe('AudioPlayerService loadSection Race Condition Fix', () => {
         // since the context changed to book2 while we were waiting for book1's playlist
         // We only expect getTTSContent to be called with book2 if it does an automatic load, but
         // wait, loadSection(0) was for book1. So we expect getTTSContent NOT to be called with book1!
-        expect(dbService.getTTSContent).not.toHaveBeenCalledWith('book1', expect.anything());
+        expect(bookContent.getTTSPreparation).not.toHaveBeenCalledWith('book1', expect.anything());
     });
 });

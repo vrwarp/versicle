@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { bookRepository } from './BookRepository';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 import { useBookStore } from '@store/useBookStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
-import type { ManifestBundle } from '@db/DBService';
+import type { ManifestBundle } from '@data/repos/bookContent';
 
-vi.mock('@db/DBService', () => ({
-    dbService: {
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getManifestBundle: vi.fn(),
         getManifestBundleBulk: vi.fn(),
         deleteBook: vi.fn().mockResolvedValue(undefined),
@@ -51,12 +51,12 @@ describe('BookRepository', () => {
 
     describe('getBookMetadata', () => {
         it('returns undefined when there is no manifest', async () => {
-            vi.mocked(dbService.getManifestBundle).mockResolvedValue(undefined);
+            vi.mocked(bookContent.getManifestBundle).mockResolvedValue(undefined);
             expect(await bookRepository.getBookMetadata('missing')).toBeUndefined();
         });
 
         it('builds metadata from the manifest when no inventory exists', async () => {
-            vi.mocked(dbService.getManifestBundle).mockResolvedValue(bundle());
+            vi.mocked(bookContent.getManifestBundle).mockResolvedValue(bundle());
 
             const meta = await bookRepository.getBookMetadata('b1');
 
@@ -74,7 +74,7 @@ describe('BookRepository', () => {
         });
 
         it('prefers inventory overrides (custom title/author, filename, language)', async () => {
-            vi.mocked(dbService.getManifestBundle).mockResolvedValue(bundle());
+            vi.mocked(bookContent.getManifestBundle).mockResolvedValue(bundle());
             vi.mocked(useBookStore.getState).mockReturnValue({
                 books: {
                     b1: {
@@ -101,13 +101,13 @@ describe('BookRepository', () => {
         });
 
         it('flags offloaded books when the binary resource is missing', async () => {
-            vi.mocked(dbService.getManifestBundle).mockResolvedValue(bundle({}, false));
+            vi.mocked(bookContent.getManifestBundle).mockResolvedValue(bundle({}, false));
             const meta = await bookRepository.getBookMetadata('b1');
             expect(meta?.isOffloaded).toBe(true);
         });
 
         it('converts an ArrayBuffer coverBlob to a Blob (WebKit IDB storage shape)', async () => {
-            vi.mocked(dbService.getManifestBundle).mockResolvedValue(
+            vi.mocked(bookContent.getManifestBundle).mockResolvedValue(
                 bundle({ coverBlob: new ArrayBuffer(4) as never })
             );
             const meta = await bookRepository.getBookMetadata('b1');
@@ -117,7 +117,7 @@ describe('BookRepository', () => {
 
     describe('getBookMetadataBulk', () => {
         it('preserves index mapping, including missing books', async () => {
-            vi.mocked(dbService.getManifestBundleBulk).mockResolvedValue([
+            vi.mocked(bookContent.getManifestBundleBulk).mockResolvedValue([
                 bundle({ bookId: 'a' }),
                 undefined,
                 bundle({ bookId: 'c' }),
@@ -154,7 +154,7 @@ describe('BookRepository', () => {
             await bookRepository.deleteBook('b1');
 
             expect(deleteBookAnalysis).toHaveBeenCalledWith('b1');
-            expect(dbService.deleteBook).toHaveBeenCalledWith('b1');
+            expect(bookContent.deleteBook).toHaveBeenCalledWith('b1');
         });
     });
 });

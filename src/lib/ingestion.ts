@@ -2,7 +2,7 @@ import ePub from 'epubjs';
 import type { NavigationItem } from '~types/db';
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
-import { getDB } from '@db/db';
+import { bookContent } from '@data/repos/bookContent';
 import type { SectionMetadata, CacheTtsPreparation, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry, PerceptualPalette, BookMetadata } from '~types/db';
 import type { ProcessedChapter } from './offscreen-renderer';
 import { sanitizeMetadata } from './sanitizer';
@@ -176,10 +176,8 @@ export async function validateZipSignature(file: File): Promise<boolean> {
 }
 
 export async function reprocessBook(bookId: string): Promise<void> {
-    const db = await getDB();
     // v18: Get from static_resources
-    const resource = await db.get('static_resources', bookId);
-    const file = resource?.epubBlob;
+    const file = await bookContent.getBookFile(bookId);
 
     if (!file) {
         throw new Error(`Book source file not found for ID: ${bookId}`);
@@ -266,24 +264,12 @@ export async function reprocessBook(bookId: string): Promise<void> {
         }
     });
 
-    // ── Persist the reprocessed book (WebKit-IndexedDB-safe) ─────────────────────────────
-    // Two WebKit/IndexedDB hazards are handled here:
-    //  1) WebKit's structured clone cannot store Blob objects (DataCloneError: "BlobURLs are
-    //     not yet supported"). snapdom returns table images as Blobs, so convert them to
-    //     ArrayBuffer before the put — same as DBService's ingest path; getTableImages()
-    //     rehydrates the Blob on read. This is the bug that made WebKit reprocessing "hang":
-    //     the table put threw synchronously, the upgrade failed, and the reader never loaded.
-    //  2) A readwrite transaction that goes inactive across an `await` can wedge on WebKit, so
-    //     every read is hoisted out first and the transaction below issues only synchronous
-    //     put/delete, awaited once at tx.done.
-    const tableRows = await Promise.all(tableBatches.map(async (table) => ({
-        ...table,
-        imageBlob: (table.imageBlob instanceof Blob ? await table.imageBlob.arrayBuffer() : table.imageBlob) as unknown as Blob,
-    })));
-
-    const manifest = await db.get('static_manifests', bookId);
-    const oldPrepKeys = await db.getAllKeysFromIndex('cache_tts_preparation', 'by_bookId', bookId);
-    const oldTableKeys = await db.getAllKeysFromIndex('cache_table_images', 'by_bookId', bookId);
+    // ── Persist the reprocessed book ─────────────────────────────────────────────────────
+    // The WebKit-safe write discipline (Blob → ArrayBuffer conversion before
+    // the transaction; reads hoisted out; one synchronous gated transaction)
+    // lives in bookContent.replaceDerivedContent — the repo absorbed this
+    // function's raw 4-store transaction in Phase 3 (D5.3).
+    const manifest = await bookContent.getManifest(bookId);
 
     if (manifest) {
         manifest.totalChars = totalChars;
@@ -295,31 +281,20 @@ export async function reprocessBook(bookId: string): Promise<void> {
         if (reprocessedPerceptualPalette) manifest.perceptualPalette = reprocessedPerceptualPalette;
     }
 
-    const tx = db.transaction(['static_manifests', 'static_structure', 'cache_tts_preparation', 'cache_table_images'], 'readwrite');
-
-    if (manifest) tx.objectStore('static_manifests').put(manifest);
-
-    tx.objectStore('static_structure').put({
-        bookId,
-        toc: realToc.length > 0 ? realToc : syntheticToc,
-        spineItems: sections.map(s => ({
-            id: s.sectionId,
-            characterCount: s.characterCount,
-            index: s.playOrder
-        }))
+    await bookContent.replaceDerivedContent(bookId, {
+        manifest,
+        structure: {
+            bookId,
+            toc: realToc.length > 0 ? realToc : syntheticToc,
+            spineItems: sections.map(s => ({
+                id: s.sectionId,
+                characterCount: s.characterCount,
+                index: s.playOrder
+            }))
+        },
+        ttsPrep: ttsContentBatches,
+        tableImages: tableBatches,
     });
-
-    // TTS preparation cache: drop old section rows, write the new ones.
-    const prepStore = tx.objectStore('cache_tts_preparation');
-    for (const key of oldPrepKeys) prepStore.delete(key);
-    for (const batch of ttsContentBatches) prepStore.put(batch);
-
-    // Table-image cache: drop old rows, write the new ones (imageBlob now an ArrayBuffer).
-    const tableStore = tx.objectStore('cache_table_images');
-    for (const key of oldTableKeys) tableStore.delete(key);
-    for (const table of tableRows) tableStore.put(table);
-
-    await tx.done;
 
     // Update Yjs store (inventory) if palette changed
     if (reprocessedPalette || reprocessedPerceptualPalette) {

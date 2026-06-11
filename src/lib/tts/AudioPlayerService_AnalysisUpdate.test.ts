@@ -2,15 +2,19 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
 import { getInProcessAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
 import { useContentAnalysisStore, type SectionAnalysis } from '@store/useContentAnalysisStore';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
+import { playbackCache } from '@data/repos/playbackCache';
 import { useGenAIStore } from '@store/useGenAIStore';
 
-vi.mock('@db/DBService', () => ({
-    dbService: {
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getSections: vi.fn(),
-        getTTSState: vi.fn(),
-        getBookMetadata: vi.fn(),
-        getTTSContent: vi.fn(),
+        getTTSPreparation: vi.fn(),
+    }
+}));
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+        getSession: vi.fn(),
     }
 }));
 
@@ -64,13 +68,11 @@ describe('AudioPlayerService Content Analysis Race Condition', () => {
 
         // Set up dbService mocks to return valid data to pass early returns in handleContentAnalysisUpdate
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService.getSections as any).mockResolvedValue([{ sectionId: 'section1', href: 'section1.html' }]);
+        (bookContent.getSections as any).mockResolvedValue([{ sectionId: 'section1', href: 'section1.html' }]);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService.getTTSState as any).mockResolvedValue({ queue: [] });
+        (playbackCache.getSession as any).mockResolvedValue({ bookId: 'book1', playbackQueue: [], updatedAt: 0 });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService as any).getBookMetadata.mockResolvedValue({ id: 'book1' });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (dbService.getTTSContent as any).mockResolvedValue({ sentences: [] });
+        (bookContent.getTTSPreparation as any).mockResolvedValue({ sentences: [] });
 
         // Get instance
         service = getInProcessAudioPlayer();

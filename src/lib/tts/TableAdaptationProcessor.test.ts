@@ -1,12 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createZustandEngineContext } from '@app/tts/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { type SentenceNode } from './sentence-extraction';
 
-vi.mock('@db/DBService');
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
+        getTableImages: vi.fn(),
+        getBookStructure: vi.fn(),
+    }
+}));
 vi.mock('../genai/GenAIService');
 vi.mock('@store/useGenAIStore');
 
@@ -59,7 +64,7 @@ describe('TableAdaptationProcessor', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } as any);
 
-            vi.mocked(dbService.getTableImages).mockResolvedValue([]);
+            vi.mocked(bookContent.getTableImages).mockResolvedValue([]);
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             let foundAdaptations: any = null;

@@ -8,14 +8,11 @@ import * as sanitizer from '@lib/sanitizer';
 const sanitizeSpy = vi.spyOn(sanitizer, 'sanitizeContent');
 
 // Mock dependencies
-vi.mock('@db/DBService', () => ({
-  dbService: {
-    getBook: vi.fn().mockResolvedValue({ file: new ArrayBuffer(0), metadata: {} }),
+vi.mock('@data/repos/bookContent', () => ({
+  bookContent: {
     getBookFile: vi.fn().mockResolvedValue(new ArrayBuffer(0)),
     getLocations: vi.fn().mockResolvedValue(null),
     saveLocations: vi.fn().mockResolvedValue(undefined),
-    getReadingHistory: vi.fn().mockResolvedValue([]),
-    getReadingHistoryEntry: vi.fn().mockResolvedValue(undefined),
   },
 }));
 

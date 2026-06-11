@@ -17,8 +17,8 @@ vi.mock('@lib/drive/DriveService', () => ({
 }));
 
 // Mock the DB layer to prevent actual IndexedDB calls during import
-vi.mock('@db/DBService', () => ({
-    dbService: {
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getBookStructure: vi.fn().mockResolvedValue({}),
         getOffloadedStatus: vi.fn().mockResolvedValue(new Map()),
         getAvailableResourceIds: vi.fn().mockResolvedValue(new Set()),

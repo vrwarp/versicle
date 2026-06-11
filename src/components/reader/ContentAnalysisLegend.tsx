@@ -7,7 +7,7 @@ import { TYPE_COLORS } from '~types/content-analysis';
 import type { ContentType } from '~types/content-analysis';
 import type { Rendition } from 'epubjs';
 import { useToastStore } from '@store/useToastStore';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 import type { TableImage } from '~types/db';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { reprocessBook } from '@lib/ingestion';
@@ -91,7 +91,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
             // Let's rely on the fact that we replace the state below.
 
             try {
-                const images = await dbService.getTableImages(currentBookId);
+                const images = await bookContent.getTableImages(currentBookId);
                 if (isMounted && images) {
                     setTableImages(images);
 

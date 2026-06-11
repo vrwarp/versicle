@@ -6,7 +6,8 @@
  * DBService so the TTS engine worker — which imports DBService for IndexedDB — never
  * bundles the ingestion pipeline.
  */
-import { dbService, handleDbError } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
+import { handleDbError } from '@data/errors';
 import { extractBookData, generateFileFingerprint } from './ingestion';
 import type { ExtractionOptions } from './tts/sentence-extraction';
 import type { StaticBookManifest } from '~types/db';
@@ -24,7 +25,7 @@ class BookImportService {
     ): Promise<StaticBookManifest> {
         try {
             const data = await extractBookData(file, ttsOptions, onProgress);
-            await dbService.ingestBook(data);
+            await bookContent.ingest(data);
             return data.manifest;
         } catch (error) {
             handleDbError(error);
@@ -79,7 +80,7 @@ class BookImportService {
                 bookId
             }));
 
-            await dbService.ingestBook(data, 'overwrite');
+            await bookContent.ingest(data, 'overwrite');
             return data.manifest;
         } catch (error) {
             handleDbError(error);
@@ -92,7 +93,7 @@ class BookImportService {
      */
     async restoreBook(id: string, file: File): Promise<void> {
         try {
-            const bundle = await dbService.getManifestBundle(id);
+            const bundle = await bookContent.getManifestBundle(id);
             if (!bundle) throw new Error('Book metadata not found');
             const manifest = bundle.manifest;
 
@@ -107,7 +108,7 @@ class BookImportService {
                 throw new Error('File verification failed: Fingerprint mismatch.');
             }
 
-            await dbService.restoreBookResource(id, await file.arrayBuffer());
+            await bookContent.restoreResource(id, await file.arrayBuffer());
         } catch (error) {
             handleDbError(error);
         }

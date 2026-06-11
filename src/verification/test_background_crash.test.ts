@@ -1,6 +1,6 @@
 
 import { describe, it, vi, beforeEach } from 'vitest';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 
 // Mock dependencies BEFORE importing the service
 
@@ -41,18 +41,18 @@ vi.mock('@jofr/capacitor-media-session', () => ({
 }));
 
 // Mock DBService
-vi.mock('@db/DBService', () => ({
-  dbService: {
-    getTTSContent: vi.fn(),
-    getContentAnalysis: vi.fn(),
-    getBookMetadata: vi.fn(),
-    getTTSState: vi.fn(),
-    saveTTSState: vi.fn(),
-    updatePlaybackState: vi.fn(),
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
+    getTTSPreparation: vi.fn(),
     getSections: vi.fn(),
-    saveTTSPosition: vi.fn(),
-    saveReferenceStartCfi: vi.fn(),
-  },
+    }
+}));
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+    getSession: vi.fn(),
+    saveQueue: vi.fn(),
+    savePauseTime: vi.fn(),
+    }
 }));
 
 // Mock LexiconService
@@ -101,14 +101,14 @@ describe('AudioPlayerService Background Crash Prevention', () => {
     const sectionId1 = 'sec1';
     const sectionId2 = 'sec2';
 
-    vi.spyOn(dbService, 'getSections').mockResolvedValue([
+    vi.spyOn(bookContent, 'getSections').mockResolvedValue([
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         { sectionId: sectionId1, characterCount: 100 } as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         { sectionId: sectionId2, characterCount: 100 } as any
     ]);
 
-    vi.spyOn(dbService, 'getTTSContent').mockImplementation(async (_bid, sid) => {
+    vi.spyOn(bookContent, 'getTTSPreparation').mockImplementation(async (_bid, sid) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (sid === sectionId1) return { sentences: [{ text: 'Sentence 1', cfi: 'cfi1' }] } as any;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -116,14 +116,6 @@ describe('AudioPlayerService Background Crash Prevention', () => {
         return null;
     });
 
-    // getBookMetadata/getContentAnalysis no longer live on DBService (they
-    // moved to BookRepository/ContentAnalysisRepository); the vi.mock factory
-    // above still defines them, so spy through a widened view of the mock.
-    const dbServiceMock = dbService as unknown as Record<string, () => Promise<unknown>>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(dbServiceMock, 'getBookMetadata').mockResolvedValue({ title: 'Book Title', author: 'Author' } as any);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(dbServiceMock, 'getContentAnalysis').mockResolvedValue({ structure: { title: 'Chapter Title' } } as any);
 
     // Initialize
     service.setBookId(bookId);

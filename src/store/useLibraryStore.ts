@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 import { bookRepository } from '@app/repositories/BookRepository';
 import { bookImportService } from '@lib/BookImportService';
 import type { UserInventoryItem, BookMetadata, StaticBookManifest } from '~types/db';
@@ -131,12 +131,12 @@ const defaultLibraryDB: IDBService = {
   importBookWithId: (bookId, file, options, onProgress) =>
     bookImportService.importBookWithId(bookId, file, options, onProgress),
   deleteBook: (id) => bookRepository.deleteBook(id),
-  offloadBook: (id) => dbService.offloadBook(id),
+  offloadBook: (id) => bookContent.offloadBook(id),
   restoreBook: (id, file) => bookImportService.restoreBook(id, file),
   getBookMetadata: (id) => bookRepository.getBookMetadata(id),
   getBookMetadataBulk: (ids) => bookRepository.getBookMetadataBulk(ids),
-  getOffloadedStatus: (bookIds) => dbService.getOffloadedStatus(bookIds),
-  getAvailableResourceIds: () => dbService.getAvailableResourceIds(),
+  getOffloadedStatus: (bookIds) => bookContent.getOffloadedStatus(bookIds),
+  getAvailableResourceIds: () => bookContent.getAvailableResourceIds(),
   getBookIdByFilename: (filename) => bookRepository.getBookIdByFilename(filename),
 };
 

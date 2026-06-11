@@ -11,8 +11,8 @@ import { CURRENT_BOOK_VERSION } from '@lib/constants';
 
 // Mock dependencies
 vi.mock('epubjs');
-vi.mock('@db/db', () => ({
-  getDB: vi.fn(() => Promise.resolve({
+vi.mock('@data/connection', () => ({
+  getConnection: vi.fn(() => Promise.resolve({
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     get: vi.fn((store, _id) => {
       if (store === 'static_resources') return Promise.resolve({ bookId: 'test-book-id', epubBlob: new ArrayBuffer(10) });

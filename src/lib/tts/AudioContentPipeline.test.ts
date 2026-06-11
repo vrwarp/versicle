@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createZustandEngineContext } from '@app/tts/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
 import { bookRepository } from '@app/repositories/BookRepository';
 import { useGenAIStore } from '@store/useGenAIStore';
 
-vi.mock('@db/DBService', () => ({
-    dbService: {
-        getTTSContent: vi.fn(),
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
+        getTTSPreparation: vi.fn(),
         getBookStructure: vi.fn(),
         getTableImages: vi.fn().mockResolvedValue([]), // Added mock
     }
@@ -85,7 +85,7 @@ describe('AudioContentPipeline', () => {
             const mockMetadata = { title: 'Test Book', author: 'Test Author' };
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (dbService.getTTSContent as any).mockResolvedValue({ sentences: mockSentences });
+            (bookContent.getTTSPreparation as any).mockResolvedValue({ sentences: mockSentences });
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (bookRepository.getBookMetadata as any).mockResolvedValue(mockMetadata);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -102,7 +102,7 @@ describe('AudioContentPipeline', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const mockSection = { sectionId: 's1', characterCount: 0 } as any;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (dbService.getTTSContent as any).mockResolvedValue({ sentences: [] });
+            (bookContent.getTTSPreparation as any).mockResolvedValue({ sentences: [] });
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (bookRepository.getBookMetadata as any).mockResolvedValue({});
 
@@ -119,7 +119,7 @@ describe('AudioContentPipeline', () => {
             const mockSection = { sectionId: 's1', characterCount: 500 } as any;
             const mockSentences = [{ text: 'Hello', cfi: 'cfi1' }];
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (dbService.getTTSContent as any).mockResolvedValue({ sentences: mockSentences });
+            (bookContent.getTTSPreparation as any).mockResolvedValue({ sentences: mockSentences });
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (bookRepository.getBookMetadata as any).mockResolvedValue({});
 
@@ -145,7 +145,7 @@ describe('AudioContentPipeline', () => {
             const s2 = { text: 'Skip me', cfi: 'epubcfi(/2/2/4:0)', sourceIndices: [1] };
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (dbService.getTTSContent as any).mockResolvedValue({ sentences: [s1, s2] });
+            (bookContent.getTTSPreparation as any).mockResolvedValue({ sentences: [s1, s2] });
 
             // Mock content analysis results to classify s2 as a 'reference'.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -42,16 +42,18 @@ vi.mock('@store/useTTSStore', () => ({
 }));
 
 // Mock DBService
-vi.mock('@db/DBService', () => ({
-  dbService: {
-    getBookMetadata: vi.fn().mockResolvedValue({}),
-    updatePlaybackState: vi.fn().mockResolvedValue(undefined),
-    getTTSState: vi.fn().mockResolvedValue(null),
-    saveTTSState: vi.fn(),
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
     getSections: vi.fn().mockResolvedValue([]),
-    getContentAnalysis: vi.fn(),
-    getTTSContent: vi.fn(),
-  }
+    getTTSPreparation: vi.fn(),
+    }
+}));
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+    savePauseTime: vi.fn().mockResolvedValue(undefined),
+    getSession: vi.fn().mockResolvedValue(null),
+    saveQueue: vi.fn(),
+    }
 }));
 
 // Mock AudioElementPlayer with shared spies

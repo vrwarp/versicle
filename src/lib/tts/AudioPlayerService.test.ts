@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
 import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '@app/tts/mainThreadAudioPlayer';
 import { BackgroundAudio } from './BackgroundAudio';
-import { dbService } from '@db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 import { bookRepository } from '@app/repositories/BookRepository';
 import { genAIService } from '../genai/GenAIService';
 import * as cfiUtils from '../cfi-utils';
@@ -54,25 +54,28 @@ vi.mock('./LexiconService', () => ({
     }
 }));
 vi.mock('./MediaSessionManager');
-vi.mock('@db/DBService', () => ({
-    dbService: {
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getBookStructure: vi.fn().mockResolvedValue({ toc: [] }),
-        updatePlaybackState: vi.fn().mockResolvedValue(undefined),
-        getTTSState: vi.fn().mockResolvedValue(null),
-        saveTTSState: vi.fn(),
         getSections: vi.fn().mockResolvedValue([
             { sectionId: 'sec1', characterCount: 100 },
             { sectionId: 'sec2', characterCount: 0 }, // Empty section
             { sectionId: 'sec3', characterCount: 100 }
         ]),
-        getTTSContent: vi.fn().mockImplementation((_bookId: string, sectionId: string) => {
+        getTTSPreparation: vi.fn().mockImplementation((_bookId: string, sectionId: string) => {
             if (sectionId === 'sec2') return Promise.resolve({ sentences: [] });
             return Promise.resolve({
                 sentences: [{ text: "Sentence " + sectionId, cfi: "cfi_" + sectionId }]
             });
         }),
-        saveTTSPosition: vi.fn(),
         getTableImages: vi.fn().mockResolvedValue([]), // Added mock
+    }
+}));
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+        savePauseTime: vi.fn().mockResolvedValue(undefined),
+        getSession: vi.fn().mockResolvedValue(null),
+        saveQueue: vi.fn(),
     }
 }));
 
@@ -316,7 +319,7 @@ describe('AudioPlayerService', () => {
         service.setBookId('book1');
 
         // Mock getTTSContent to spy on it
-        const getTTSContentSpy = vi.mocked(dbService.getTTSContent);
+        const getTTSContentSpy = vi.mocked(bookContent.getTTSPreparation);
 
         // Load section 1 (sec2, empty) -> should trigger analysis for section 2 (sec3)
         // section index 1 corresponds to sec2
@@ -449,7 +452,7 @@ describe('AudioPlayerService', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(bookRepository, 'getBookMetadata').mockResolvedValue({ title: 'Book 1', author: 'Author' } as any);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            vi.spyOn(dbService, 'getBookStructure').mockResolvedValue({ toc: [{ href: 'sec1', title: 'Section 1' }] } as any);
+            vi.spyOn(bookContent, 'getBookStructure').mockResolvedValue({ toc: [{ href: 'sec1', title: 'Section 1' }] } as any);
 
             // Mock GenAI response
             // IDs correspond to indices: '0', '1', '2'
