@@ -7,10 +7,10 @@
  * Y.Doc/IndexedDB connection. Worker-side engine code reaches merged book metadata
  * through the EngineContext book port, whose host implementation calls this repository.
  */
-import { dbService, type ManifestBundle } from './DBService';
-import { useBookStore } from '../store/useBookStore';
-import { useContentAnalysisStore } from '../store/useContentAnalysisStore';
-import type { BookMetadata, UserInventoryItem } from '../types/db';
+import { dbService, type ManifestBundle } from '../../db/DBService';
+import { useBookStore } from '../../store/useBookStore';
+import { useContentAnalysisStore } from '../../store/useContentAnalysisStore';
+import type { BookMetadata, UserInventoryItem } from '../../types/db';
 
 function toBookMetadata(bundle: ManifestBundle, inventory: UserInventoryItem | undefined): BookMetadata {
     const { manifest, structure, hasResource } = bundle;

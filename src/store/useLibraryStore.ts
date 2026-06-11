@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { dbService } from '../db/DBService';
-import { bookRepository } from '../db/BookRepository';
+import { bookRepository } from '../app/repositories/BookRepository';
 import { bookImportService } from '../lib/BookImportService';
 import type { UserInventoryItem, BookMetadata, StaticBookManifest } from '../types/db';
 import { StorageFullError, DuplicateBookError } from '../types/errors';

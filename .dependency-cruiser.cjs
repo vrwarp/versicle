@@ -78,8 +78,9 @@ module.exports = {
       severity: 'warn',
       comment:
         'db/ must not import store/ — repositories depending on UI state ' +
-        '(LD-4: BookRepository/ContentAnalysisRepository). They are ' +
-        'app-layer read-model mergers and will move in Phase 1.',
+        '(LD-4). The app-layer read-model mergers (BookRepository/' +
+        'ContentAnalysisRepository) moved to src/app/repositories/ in ' +
+        'Phase 1; this rule keeps db/ store-free.',
       from: { path: '^src/db' },
       to: { path: '^src/store' },
     },

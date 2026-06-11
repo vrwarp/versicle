@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { dbService } from '../../db/DBService';
-import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
-import { bookRepository } from '../../db/BookRepository';
+import { contentAnalysisRepository } from '../../app/repositories/ContentAnalysisRepository';
+import { bookRepository } from '../../app/repositories/BookRepository';
 import { useTTSStore } from '../../store/useTTSStore';
 import { TextSegmenter } from './TextSegmenter';
 import { LexiconService } from './LexiconService';
@@ -18,7 +18,7 @@ vi.mock('../../db/DBService', () => ({
     }
 }));
 
-vi.mock('../../db/ContentAnalysisRepository', () => ({
+vi.mock('../../app/repositories/ContentAnalysisRepository', () => ({
     contentAnalysisRepository: {
         getContentAnalysis: vi.fn(),
         saveReferenceStartCfi: vi.fn(),
@@ -29,7 +29,7 @@ vi.mock('../../db/ContentAnalysisRepository', () => ({
     }
 }));
 
-vi.mock('../../db/BookRepository', () => ({
+vi.mock('../../app/repositories/BookRepository', () => ({
     bookRepository: {
         getBookMetadata: vi.fn(),
     }

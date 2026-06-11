@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { contentAnalysisRepository } from './ContentAnalysisRepository';
-import { useContentAnalysisStore } from '../store/useContentAnalysisStore';
+import { useContentAnalysisStore } from '../../store/useContentAnalysisStore';
 
 // Mocked as a plain state holder — the repository only reads getState().
-vi.mock('../store/useContentAnalysisStore', () => ({
+vi.mock('../../store/useContentAnalysisStore', () => ({
     useContentAnalysisStore: { getState: vi.fn() },
 }));
 

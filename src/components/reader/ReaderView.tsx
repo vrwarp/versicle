@@ -20,7 +20,7 @@ import { useToastStore } from '../../store/useToastStore';
 import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
-import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
+import { contentAnalysisRepository } from '../../app/repositories/ContentAnalysisRepository';
 import { searchClient } from '../../lib/search';
 import { SyncStatusPanel } from './SyncStatusPanel';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';

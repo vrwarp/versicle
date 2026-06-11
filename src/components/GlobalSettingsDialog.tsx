@@ -18,7 +18,7 @@ import { LexiconManager } from './reader/LexiconManager';
 import { maintenanceService } from '../lib/MaintenanceService';
 import { backupService } from '../lib/BackupService';
 import { wipeAllData } from '../db/wipe';
-import { contentAnalysisRepository } from '../db/ContentAnalysisRepository';
+import { contentAnalysisRepository } from '../app/repositories/ContentAnalysisRepository';
 import { CheckpointService } from '../lib/sync/CheckpointService';
 import { useSyncStore } from '../lib/sync/hooks/useSyncStore';
 import { useFirestoreSync } from '../lib/sync/hooks/useFirestoreSync';

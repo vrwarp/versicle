@@ -3,7 +3,7 @@ import type { Book } from 'epubjs';
 import type { NavigationItem } from '../types/db';
 import { genAIService } from '../lib/genai/GenAIService';
 import { dbService } from '../db/DBService';
-import { bookRepository } from '../db/BookRepository';
+import { bookRepository } from '../app/repositories/BookRepository';
 import { useGenAIStore } from '../store/useGenAIStore';
 import { useToastStore } from '../store/useToastStore';
 import { useLibraryStore } from '../store/useLibraryStore';

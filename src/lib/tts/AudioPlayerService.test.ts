@@ -3,7 +3,7 @@ import type { AudioPlayerService } from './AudioPlayerService';
 import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '../../app/tts/mainThreadAudioPlayer';
 import { BackgroundAudio } from './BackgroundAudio';
 import { dbService } from '../../db/DBService';
-import { bookRepository } from '../../db/BookRepository';
+import { bookRepository } from '../../app/repositories/BookRepository';
 import { genAIService } from '../genai/GenAIService';
 import * as cfiUtils from '../cfi-utils';
 
@@ -76,7 +76,7 @@ vi.mock('../../db/DBService', () => ({
     }
 }));
 
-vi.mock('../../db/ContentAnalysisRepository', () => ({
+vi.mock('../../app/repositories/ContentAnalysisRepository', () => ({
     contentAnalysisRepository: {
         getContentAnalysis: vi.fn().mockResolvedValue({ structure: { title: 'Chapter 1' } }),
         saveReferenceStartCfi: vi.fn(),
@@ -87,7 +87,7 @@ vi.mock('../../db/ContentAnalysisRepository', () => ({
     }
 }));
 
-vi.mock('../../db/BookRepository', () => ({
+vi.mock('../../app/repositories/BookRepository', () => ({
     bookRepository: {
         getBookMetadata: vi.fn().mockResolvedValue({
             title: 'Test Book',

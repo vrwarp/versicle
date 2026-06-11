@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { dbService } from '../../db/DBService';
-import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
+import { contentAnalysisRepository } from '../../app/repositories/ContentAnalysisRepository';
 import { useGenAIStore } from '../../store/useGenAIStore';
 import { type SentenceNode } from '../tts';
 
@@ -10,7 +10,7 @@ vi.mock('../../db/DBService');
 vi.mock('../genai/GenAIService');
 vi.mock('../../store/useGenAIStore');
 
-vi.mock('../../db/ContentAnalysisRepository', () => ({
+vi.mock('../../app/repositories/ContentAnalysisRepository', () => ({
     contentAnalysisRepository: {
         getContentAnalysis: vi.fn(),
         saveReferenceStartCfi: vi.fn(),
@@ -21,7 +21,7 @@ vi.mock('../../db/ContentAnalysisRepository', () => ({
     }
 }));
 
-vi.mock('../../db/BookRepository', () => ({
+vi.mock('../../app/repositories/BookRepository', () => ({
     bookRepository: {
         getBookMetadata: vi.fn(),
     }

@@ -87,7 +87,7 @@ vi.mock('../db/DBService', () => ({
     }
 }));
 
-vi.mock('../db/ContentAnalysisRepository', () => ({
+vi.mock('../app/repositories/ContentAnalysisRepository', () => ({
     contentAnalysisRepository: {
         clearAll: vi.fn(),
     }

@@ -4,7 +4,7 @@
  *
  * The TTS worker must never bundle zustand, yjs, or src/store/ modules:
  * a second Y.Doc + IndexedDB persistence inside the worker is the
- * data-corruption scenario src/db/BookRepository.ts's docstring warns
+ * data-corruption scenario src/app/repositories/BookRepository.ts's docstring warns
  * about. The source-level guards are `import type` discipline
  * (@typescript-eslint/consistent-type-imports, error) and the
  * dependency-cruiser ruleset — but with verbatimModuleSyntax on, one

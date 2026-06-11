@@ -22,8 +22,8 @@ import { useToastStore } from '../../store/useToastStore';
 import { useBookStore } from '../../store/useBookStore';
 import { useReaderUIStore } from '../../store/useReaderUIStore';
 import { LexiconService } from '../../lib/tts/LexiconService';
-import { bookRepository } from '../../db/BookRepository';
-import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
+import { bookRepository } from '../repositories/BookRepository';
+import { contentAnalysisRepository } from '../repositories/ContentAnalysisRepository';
 import { genAIService } from '../../lib/genai/GenAIService';
 import type { EngineContext } from '../../lib/tts/engine/EngineContext';
 

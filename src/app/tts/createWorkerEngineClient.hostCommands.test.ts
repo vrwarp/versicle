@@ -46,7 +46,7 @@ vi.mock('../../store/useBookStore', () => ({
     useBookStore: { getState: () => ({ books: {} }), subscribe: vi.fn(() => () => {}) },
 }));
 
-vi.mock('../../db/ContentAnalysisRepository', () => ({
+vi.mock('../repositories/ContentAnalysisRepository', () => ({
     contentAnalysisRepository: {
         saveReferenceStartCfi: vi.fn(),
         markAnalysisLoading: vi.fn(),
@@ -55,7 +55,7 @@ vi.mock('../../db/ContentAnalysisRepository', () => ({
         getContentAnalysis: vi.fn(),
     },
 }));
-vi.mock('../../db/BookRepository', () => ({
+vi.mock('../repositories/BookRepository', () => ({
     bookRepository: { getBookMetadata: vi.fn() },
 }));
 
@@ -66,7 +66,7 @@ vi.mock('../../lib/tts/LexiconService', () => ({ LexiconService: { getInstance: 
 vi.mock('../../lib/genai/GenAIService', () => ({ genAIService: {} }));
 
 import { applyHostCommand } from './createWorkerEngineClient';
-import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
+import { contentAnalysisRepository } from '../repositories/ContentAnalysisRepository';
 import type { EngineHostCommand } from '../../lib/tts/engine/WorkerEngineContext';
 
 describe('applyHostCommand — worker writes land on the right store/repository', () => {

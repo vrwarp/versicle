@@ -33,7 +33,7 @@ vi.mock('../lib/BookImportService', () => ({
     }
 }));
 
-vi.mock('../db/BookRepository', () => ({
+vi.mock('../app/repositories/BookRepository', () => ({
     bookRepository: {
         getBookMetadata: vi.fn().mockResolvedValue({}),
         getBookMetadataBulk: vi.fn().mockResolvedValue([]),

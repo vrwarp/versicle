@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
-import { contentAnalysisRepository } from '../../db/ContentAnalysisRepository';
+import { contentAnalysisRepository } from '../../app/repositories/ContentAnalysisRepository';
 
 // ContentAnalysisRepository.getContentAnalysis is synchronous, but these tests
 // (written when it was async) install async implementations; the processor
@@ -19,7 +19,7 @@ vi.mock('../../db/DBService', () => ({
     }
 }));
 
-vi.mock('../../db/ContentAnalysisRepository', () => ({
+vi.mock('../../app/repositories/ContentAnalysisRepository', () => ({
     contentAnalysisRepository: {
         getContentAnalysis: vi.fn(),
         saveReferenceStartCfi: vi.fn(),
@@ -30,7 +30,7 @@ vi.mock('../../db/ContentAnalysisRepository', () => ({
     }
 }));
 
-vi.mock('../../db/BookRepository', () => ({
+vi.mock('../../app/repositories/BookRepository', () => ({
     bookRepository: {
         getBookMetadata: vi.fn().mockResolvedValue({}),
     }
