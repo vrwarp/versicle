@@ -117,12 +117,22 @@ export const getMostRecentProgress = (bookProgress: Record<string, UserProgress>
     return mostRecent;
 };
 
-/** Replication declaration (aggregated by src/store/registry.ts). */
+/**
+ * Replication declaration (aggregated by src/store/registry.ts).
+ * Flipped to merge-defaults + scopedDiff LAST (flip wave 5,
+ * phase2-fork-surgery.md §2.6 #9): the hottest write path — every page turn
+ * writes here — flipped only after the pattern was proven on the other
+ * eight stores and verified against selectors.perf.test.ts. The only
+ * deleted canary was the selectors.ts `progressMapRaw || {}` memo; the
+ * per-book `state.progress[bookId] || {}` guards in the actions below are
+ * SECOND-LEVEL guards for a legitimately absent book (census ▲5), not
+ * hydration fallbacks — they stay.
+ */
 export const PROGRESS_STORE_DEF: SyncedStoreDef<'progress'> = {
     name: 'progress',
     syncedKeys: ['progress'],
-    hydration: 'replace',
-    scopedDiff: false,
+    hydration: 'merge-defaults',
+    scopedDiff: true,
 };
 
 /**

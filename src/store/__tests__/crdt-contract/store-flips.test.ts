@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as Y from 'yjs';
 import { createStore } from 'zustand/vanilla';
-import yjsMiddleware from 'zustand-middleware-yjs';
+import yjsMiddleware, { __scopedDiffDevSampling, getYjsStoreHandle } from 'zustand-middleware-yjs';
 import type { SyncedStoreDef } from '@store/yjs-provider';
 import { BOOK_EN, BOOK_CJK, DEVICE_A, DEVICE_B } from '@test/fixtures/ydoc/seed';
 import { CONTENT_ANALYSIS_STORE_DEF } from '@store/useContentAnalysisStore';
@@ -14,6 +14,7 @@ import { READING_LIST_STORE_DEF } from '@store/useReadingListStore';
 import { PREFERENCES_STORE_DEF } from '@store/usePreferencesStore';
 import { ANNOTATIONS_STORE_DEF } from '@store/useAnnotationStore';
 import { LIBRARY_STORE_DEF } from '@store/useBookStore';
+import { PROGRESS_STORE_DEF } from '@store/useReadingStateStore';
 import { runCrdtMigrationsOnDoc } from '@app/migrations';
 import { getDeviceId } from '@lib/device-id';
 
@@ -248,6 +249,109 @@ describe('flip wave 4: books / library (merge-defaults + scopedDiff)', () => {
     const store = bindWithDef<LibState>(doc, LIBRARY_STORE_DEF, creator);
     // The FirestoreSyncManager clean-client check, post-canary-deletion:
     expect(Object.keys(store.getState().books).length === 0).toBe(true);
+  });
+});
+
+// ─── Flip wave 5: progress (the hot path, flipped last) ─────────────────────
+
+describe('flip wave 5: progress (merge-defaults + scopedDiff)', () => {
+  interface UserProgressMini {
+    bookId: string;
+    percentage: number;
+    currentCfi: string;
+    lastRead: number;
+    completedRanges: string[];
+  }
+  interface ProgressState {
+    progress: Record<string, Record<string, UserProgressMini>>;
+    updateLocation: (bookId: string, deviceId: string, cfi: string, percentage: number) => void;
+  }
+  const creator = (
+    set: (p: Partial<ProgressState>) => void,
+    get: () => ProgressState,
+  ): ProgressState => ({
+    progress: {},
+    updateLocation: (bookId, deviceId, cfi, percentage) => {
+      const state = get();
+      // Mirrors the real action incl. the KEPT per-book second-level guard
+      // (a legitimately absent book — census ▲5, NOT a hydration canary).
+      const bookProgress = state.progress[bookId] || {};
+      set({
+        progress: {
+          ...state.progress,
+          [bookId]: {
+            ...bookProgress,
+            [deviceId]: {
+              ...bookProgress[deviceId],
+              bookId,
+              currentCfi: cfi,
+              percentage,
+              lastRead: 99,
+              completedRanges: bookProgress[deviceId]?.completedRanges || [],
+            },
+          },
+        },
+      });
+    },
+  });
+
+  it('hydrates the v5 fixture fully (per-device structure intact); page turns work for present AND absent books', () => {
+    const store = bindWithDef<ProgressState>(loadDoc(5), PROGRESS_STORE_DEF, creator);
+
+    expect(store.getState().progress[BOOK_EN][DEVICE_A].percentage).toBe(0.42);
+    expect(store.getState().progress[BOOK_EN][DEVICE_B].percentage).toBe(0.1);
+
+    // Existing book — no hydration fallback needed.
+    store.getState().updateLocation(BOOK_EN, DEVICE_A, 'epubcfi(/6/4!/4/2/1:200)', 0.5);
+    expect(store.getState().progress[BOOK_EN][DEVICE_A].percentage).toBe(0.5);
+    // Absent book — exercises the KEPT per-book guard.
+    store.getState().updateLocation('brand-new-book', DEVICE_A, 'epubcfi(/6/2!/4/2)', 0.01);
+    expect(store.getState().progress['brand-new-book'][DEVICE_A].percentage).toBe(0.01);
+  });
+
+  it('A.5 rewritten: a doc missing `progress` retains the declared default', () => {
+    const doc = new Y.Doc();
+    doc.getMap('progress').set('junkKey', 1);
+
+    const store = bindWithDef<ProgressState>(doc, PROGRESS_STORE_DEF, creator);
+    expect(store.getState().progress).toEqual({});
+  });
+
+  it('D.5 in-repo: a page-turn set() produces a SCOPED transaction — no root-map serialization, events confined to the touched book', async () => {
+    const sampleRateBefore = __scopedDiffDevSampling.rate;
+    __scopedDiffDevSampling.rate = 0; // deterministic: disable the DEV full-diff tripwire
+    const toJSON = Y.Map.prototype.toJSON;
+    const toJSONInstances: unknown[] = [];
+    Y.Map.prototype.toJSON = function spiedToJSON(this: Y.Map<unknown>) {
+      toJSONInstances.push(this);
+      return toJSON.call(this);
+    };
+    try {
+      const doc = loadDoc(5);
+      const store = bindWithDef<ProgressState>(doc, PROGRESS_STORE_DEF, creator);
+      const rootMap = doc.getMap('progress');
+
+      const eventPaths: (string | number)[][] = [];
+      rootMap.observeDeep((events) => {
+        events.forEach((event) => eventPaths.push([...event.path, ...event.changes.keys.keys()]));
+      });
+
+      toJSONInstances.length = 0;
+      store.getState().updateLocation(BOOK_EN, DEVICE_A, 'epubcfi(/6/4!/4/2/1:300)', 0.6);
+      getYjsStoreHandle(store).flush();
+
+      // The ROOT data map is never serialized whole (D13's fix): only the
+      // changed top-level key's subtree is read back for the diff.
+      expect(toJSONInstances).not.toContain(rootMap);
+      // Every change in the transaction is confined to the touched book.
+      expect(eventPaths.length).toBeGreaterThan(0);
+      for (const path of eventPaths) {
+        expect(path.slice(0, 2)).toEqual(['progress', BOOK_EN]);
+      }
+    } finally {
+      Y.Map.prototype.toJSON = toJSON;
+      __scopedDiffDevSampling.rate = sampleRateBefore;
+    }
   });
 });
 

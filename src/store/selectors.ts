@@ -69,12 +69,10 @@ export const useAllBooks = () => {
     const staticMetadata = useMemo(() => staticMetadataRaw || {}, [staticMetadataRaw]);
     const offloadedBookIds = useMemo(() => offloadedBookIdsRaw || new Set(), [offloadedBookIdsRaw]);
 
-    // Subscribe to progress changes (per-device structure)
-    // Use let to handle potential undefined state during Yjs transients
-    const progressMapRaw = useReadingStateStore(state => state.progress);
-    // OPTIMIZATION: Memoize progressMap fallback to prevent reference changes on every render
-    // which would otherwise break downstream useMemo dependency arrays.
-    const progressMap = useMemo(() => progressMapRaw || {}, [progressMapRaw]);
+    // Subscribe to progress changes (per-device structure). merge-defaults
+    // hydration guarantees `progress` is always present (flip wave 5) — the
+    // old `|| {}` fallback memo is gone.
+    const progressMap = useReadingStateStore(state => state.progress);
 
     // merge-defaults hydration guarantees `entries` is always present (flip
     // wave 2) — the old `|| {}` fallback canary is gone.

@@ -15,7 +15,7 @@ hydration modes, and the per-store flip ledger.
 | Store | Y.Map | Owner | Synced keys | Hydration | Scoped diff | Purpose |
 |---|---|---|---|---|---|---|
 | `useBookStore` | `library` | library | `books` | merge-defaults | yes | Book inventory (per-book user data; carries __schemaVersion). |
-| `useReadingStateStore` | `progress` | reader | `progress` | replace | no | Reading progress per book per device, incl. reading sessions. |
+| `useReadingStateStore` | `progress` | reader | `progress` | merge-defaults | yes | Reading progress per book per device, incl. reading sessions. |
 | `useAnnotationStore` | `annotations` | reader | `annotations` | merge-defaults | yes | Highlights and notes, keyed by UUID. |
 | `usePreferencesStore` | `preferences.<deviceId>` | shell | `currentTheme`, `customTheme`, `fontFamily`, `lineHeight`, `fontSize`, `shouldForceFont`, `readerViewMode`, `libraryLayout`, `libraryFilterMode`, `librarySortOrder`, `activeContext`, `fontProfiles`, `forceTraditionalChinese`, `showPinyin`, `pinyinSize` | merge-defaults | yes | Per-device display preferences (theme, fonts, layout, Chinese). |
 | `useReadingListStore` | `reading-list` | library | `entries` | merge-defaults | yes | Reading-list entries keyed by filename (progress projection). |
