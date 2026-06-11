@@ -691,3 +691,56 @@ deletion in the same PR as its absorption, per rule 8.
 - **P9:** deletion of the `idb-write-lock` shim is P3's own exit; `types/db.ts` shim, the
   SW legacy-`books` fallback, and `sync_log` (if P4 declines it) are P9 deletions; the
   `legacy-recovery-v25` blob gets a retention decision (delete after N releases).
+
+---
+
+## Follow-ups (appended at phase close, 2026-06-10)
+
+Phase 3 landed in full — P3-1…P3-13, including the v25 format change (see the
+README status banner). Exit criteria verified: backup round-trip green on the
+YjsSnapshotService path (written in P3-1, before the rewrite); every readwrite
+transaction through the gate (`idb`-import + readwrite bans at **error**, zero
+exceptions — the schema fixtures live inside `src/data/__fixtures__/` so the
+"zero exceptions" posture holds by construction); multi-tab upgrade tests green
+(generic mechanism in `connection.test.ts`, the shipping v24→v25 scenario in
+`migrations.test.ts` M.5); `dbService` façade, `src/db/**`, and the
+`idb-write-lock` shim deleted with zero residual importers; `db-not-to-store`
+retired at 0; v18/v24 fixture upgrades green. Deliberately deferred work, with
+owners:
+
+1. **Session-state single ownership (P13a + the dual-mirror problem) — P5b.**
+   `repos/playbackCache.ts` moved the WebKit-safe block verbatim and documents
+   both gaps in its header: the cold-start `lastPauseTime` clobber and the
+   worker + main thread each owning a `sessionCache` mirror. The fix needs the
+   EngineContext `SessionStore` port (engine surgery, not storage motion); the
+   navigator.locks gate already removed the *hang* half of the dual-context
+   hazard.
+2. **`sync_log` adopt-or-delete — P4 (P9 backstop).** Still a dead store,
+   schema frozen in `rows/app.ts` (▲16). P4's SyncEvent design decides; P9
+   deletes it otherwise.
+3. **android-backup keep-or-delete ADR — P4 (▲17).** Unwired at HEAD; passive
+   v3 format adapter; cost nothing during P3.
+4. **Eviction scan onto `by_lastAccessed` — next audioCache touch (any phase).**
+   v25 added the index and the `size` backfill; the sweep still does the
+   full-cursor total-bytes pass (it needs the total anyway). Re-pointing pass 2
+   at index order (oldest-first cursor, stop once under budget) drops the sort
+   and the in-memory entry list — cheap, but not load-bearing today.
+5. **`legacy-recovery-v25` retention — P9.** The straggler snapshot needs a
+   delete-after-N-releases decision (it is size-capped, so the cost of keeping
+   it is bounded).
+6. **P9 deletions inherited from P3:** the `types/db.ts` re-export shim; the SW
+   legacy-`books` fallback in `sw-contract.ts` (pre-v18 straggler covers); item
+   5 above; item 2 if P4 declines.
+7. **`storage.estimate()` surfacing in settings — P8.** `storage.persist()` is
+   requested at first open (D2); the UI surface was always P8 scope.
+8. **Full all-stores orphan coverage in MaintenanceService — stretch goal,
+   unowned.** The orphan scan/prune migrated onto repo methods (P3-8); coverage
+   of every store pairing was explicitly a non-exit-criterion stretch goal and
+   remains open.
+9. **v25 straggler-verification window — release engineering.** Per master plan
+   rule 4, the *next* format change (tts-storage split, P5b) lands only after
+   v25's straggler path is verified in the wild (the two-client quarantine E2E
+   on the release branch plus one release of `legacy-recovery-v25` telemetry
+   silence). The local entry gate (v6 quarantine suite green) was verified at
+   P3-13 time; the release-branch window is a CI/process gate outside this
+   repo's tree.
