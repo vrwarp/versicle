@@ -75,6 +75,34 @@ export default tseslint.config(
       // Warn until the cycles are broken in Phase 1+; the depcruise baseline
       // (.dependency-cruiser-baseline.json) is the authoritative ratchet.
       'import/no-cycle': 'warn',
+      // One canonical import path per module (Phase 1 path-alias codemod,
+      // scripts/codemod-aliases.mjs): a relative specifier that climbs out
+      // with `../` and re-enters one of the aliased src/ roots must use the
+      // alias instead (@app/, @components/, @db/, @hooks/, @lib/, @store/,
+      // ~types/, @test/, @workers/ — declared in tsconfig.app.json `paths`,
+      // mirrored in vite.config.ts + vitest.config.ts resolve.alias; types/
+      // is ~types because TS rejects '@types/…' specifiers, TS6137).
+      // Same-directory and within-subtree relative imports stay relative on
+      // purpose. The repo was codemodded clean, so this lands at "error".
+      // Scope notes: the rule covers static import/export declarations only
+      // (the core rule does not visit dynamic import() or `new URL(...)`
+      // worker URLs — the two `new Worker(new URL('../workers/…'))` sites
+      // stay relative deliberately); src/layouts and src/data have no alias
+      // yet (src/data is reshaped in Phase 3), so relative imports of those
+      // roots remain allowed.
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex:
+                '^(\\.\\./)+(app|components|db|hooks|lib|store|types|test|workers)(/|$)',
+              message:
+                'Cross-root relative import. Use the path alias for this root instead (e.g. @lib/foo, @store/bar, ~types/baz — see tsconfig.app.json "paths"). Run `node scripts/codemod-aliases.mjs` to fix in bulk.',
+            },
+          ],
+        },
+      ],
     },
   },
 );

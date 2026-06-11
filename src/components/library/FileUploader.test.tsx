@@ -1,15 +1,15 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { FileUploader } from './FileUploader';
-import { useLibraryStore } from '../../store/useLibraryStore';
-import { useToastStore } from '../../store/useToastStore';
-import { validateZipSignature } from '../../lib/ingestion';
-import { DuplicateBookError } from '../../types/errors';
+import { useLibraryStore } from '@store/useLibraryStore';
+import { useToastStore } from '@store/useToastStore';
+import { validateZipSignature } from '@lib/ingestion';
+import { DuplicateBookError } from '~types/errors';
 
 // Mock dependencies
-vi.mock('../../store/useLibraryStore');
-vi.mock('../../store/useToastStore');
-vi.mock('../../lib/ingestion', () => ({
+vi.mock('@store/useLibraryStore');
+vi.mock('@store/useToastStore');
+vi.mock('@lib/ingestion', () => ({
   validateZipSignature: vi.fn(),
 }));
 

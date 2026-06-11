@@ -1,19 +1,19 @@
 import React, { useCallback, useState } from 'react';
-import { useLibraryStore } from '../../store/useLibraryStore';
-import { useToastStore } from '../../store/useToastStore';
+import { useLibraryStore } from '@store/useLibraryStore';
+import { useToastStore } from '@store/useToastStore';
 import { UploadCloud } from 'lucide-react';
-import { cn } from '../../lib/utils';
-import { validateZipSignature } from '../../lib/ingestion';
-import { DuplicateBookError } from '../../types/errors';
+import { cn } from '@lib/utils';
+import { validateZipSignature } from '@lib/ingestion';
+import { DuplicateBookError } from '~types/errors';
 import { ImportProgressUI } from './ImportProgressUI';
 import { useShallow } from 'zustand/react/shallow';
 import { Loader2 } from 'lucide-react';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
-import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
-import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
+import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
+import { googleIntegrationManager } from '@lib/google/GoogleIntegrationManager';
 import { Button } from '../ui/Button';
 import { DriveImportDialog } from '../drive/DriveImportDialog';
-import { createLogger } from '../../lib/logger';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('FileUploader');
 

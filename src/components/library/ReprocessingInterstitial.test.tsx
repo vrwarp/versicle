@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import { ReprocessingInterstitial } from './ReprocessingInterstitial';
-import { reprocessBook } from '../../lib/ingestion';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { reprocessBook } from '@lib/ingestion';
+import { useLibraryStore } from '@store/useLibraryStore';
 
 // Mocks
-vi.mock('../../lib/ingestion', () => ({
+vi.mock('@lib/ingestion', () => ({
     reprocessBook: vi.fn(),
 }));
 
-vi.mock('../../store/useLibraryStore', () => ({
+vi.mock('@store/useLibraryStore', () => ({
     useLibraryStore: {
         getState: vi.fn(() => ({
             hydrateStaticMetadata: vi.fn().mockResolvedValue(undefined),

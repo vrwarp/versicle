@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { getYDoc, getYjsOptions } from './yjs-provider';
-import type { AnalysisStatus } from '../types/content-analysis';
+import type { AnalysisStatus } from '~types/content-analysis';
 
 /**
  * A table adaptation entry (CFI -> spoken text).

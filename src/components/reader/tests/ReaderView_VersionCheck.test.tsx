@@ -2,15 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { ReaderView } from '../ReaderView';
-import { useEpubReader } from '../../../hooks/useEpubReader';
-import { CURRENT_BOOK_VERSION } from '../../../lib/constants';
+import { useEpubReader } from '@hooks/useEpubReader';
+import { CURRENT_BOOK_VERSION } from '@lib/constants';
 
 // Hoisted mocks for selectors
 const { mockUseBook } = vi.hoisted(() => ({
     mockUseBook: vi.fn()
 }));
 
-vi.mock('../../../store/selectors', () => ({
+vi.mock('@store/selectors', () => ({
     useBook: (id: string | null) => mockUseBook(id),
     useLastReadBook: vi.fn(),
     useAllBooks: vi.fn()
@@ -26,7 +26,7 @@ vi.mock('react-router-dom', async () => {
     };
 });
 
-vi.mock('../../../hooks/useEpubReader');
+vi.mock('@hooks/useEpubReader');
 const MOCK_READER_UI_STATE = {
     setToc: vi.fn(),
     setIsLoading: vi.fn(),
@@ -46,7 +46,7 @@ const MOCK_READER_UI_STATE = {
     popover: { visible: false }
 };
 
-vi.mock('../../../store/useReaderUIStore', () => ({
+vi.mock('@store/useReaderUIStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useReaderUIStore: (selector: any) => selector(MOCK_READER_UI_STATE)
 }));
@@ -68,12 +68,12 @@ const MOCK_PREFERENCES_STATE = {
     setFontProfile: vi.fn()
 };
 
-vi.mock('../../../store/usePreferencesStore', () => ({
+vi.mock('@store/usePreferencesStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     usePreferencesStore: (selector: any) => selector(MOCK_PREFERENCES_STATE)
 }));
 const MOCK_PROGRESS = { completedRanges: [] };
-vi.mock('../../../store/useReadingStateStore', () => {
+vi.mock('@store/useReadingStateStore', () => {
     const mockState = {
         updateLocation: vi.fn(),
         reset: vi.fn(),
@@ -89,7 +89,7 @@ vi.mock('../../../store/useReadingStateStore', () => {
         useBookProgress: vi.fn(() => MOCK_PROGRESS)
     };
 });
-vi.mock('../../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useTTSStore: (selector: any) => selector({
         isPlaying: false,
@@ -98,12 +98,12 @@ vi.mock('../../../store/useTTSStore', () => ({
         status: 'stopped'
     })
 }));
-vi.mock('../../../store/useUIStore', () => ({
+vi.mock('@store/useUIStore', () => ({
     useUIStore: () => ({
         setGlobalSettingsOpen: vi.fn()
     })
 }));
-vi.mock('../../../store/useAnnotationStore', () => ({
+vi.mock('@store/useAnnotationStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useAnnotationStore: (selector: any) => {
         if (selector) {
@@ -118,19 +118,19 @@ vi.mock('../../../store/useAnnotationStore', () => ({
         };
     }
 }));
-vi.mock('../../../store/useGenAIStore', () => ({
+vi.mock('@store/useGenAIStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useGenAIStore: (selector: any) => selector({
         isDebugModeEnabled: false
     })
 }));
-vi.mock('../../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useToastStore: (selector: any) => selector({
         showToast: vi.fn()
     })
 }));
-vi.mock('../../../app/tts/mainThreadAudioPlayer', () => ({
+vi.mock('@app/tts/mainThreadAudioPlayer', () => ({
     getAudioPlayer: () => ({
         setBookId: vi.fn(),
         getQueue: vi.fn(),
@@ -140,17 +140,17 @@ vi.mock('../../../app/tts/mainThreadAudioPlayer', () => ({
     }),
     resetAudioPlayerForTests: vi.fn(),
 }));
-vi.mock('../../../hooks/useTTS', () => ({
+vi.mock('@hooks/useTTS', () => ({
     useTTS: vi.fn()
 }));
-vi.mock('../../../hooks/useSmartTOC', () => ({
+vi.mock('@hooks/useSmartTOC', () => ({
     useSmartTOC: () => ({
         enhanceTOC: vi.fn(),
         isEnhancing: false,
         progress: null
     })
 }));
-vi.mock('../../../hooks/useSidebarState', () => ({
+vi.mock('@hooks/useSidebarState', () => ({
     useSidebarState: () => ({
         activeSidebar: 'none',
         setSidebar: vi.fn()

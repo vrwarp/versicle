@@ -1,5 +1,5 @@
 import { describe, it } from 'vitest';
-import { getDB } from '../db/db';
+import { getDB } from '@db/db';
 import { v4 as uuidv4 } from 'uuid';
 
 describe('Ingestion Performance', () => {

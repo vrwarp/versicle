@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createLibraryStore, useBookStore } from './useLibraryStore';
-import { autoResetStores, makeLibraryDbDouble, makeBookMetadata, makeInventoryItem } from '../test/harness';
+import { autoResetStores, makeLibraryDbDouble, makeBookMetadata, makeInventoryItem } from '@test/harness';
 
 describe('LibraryStore race conditions', () => {
   autoResetStores(useBookStore);

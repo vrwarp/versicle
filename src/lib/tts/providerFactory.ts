@@ -9,7 +9,7 @@
  * Main-thread only (providers wrap speechSynthesis / Capacitor / cloud fetch + audio).
  */
 import { Capacitor } from '@capacitor/core';
-import { useTTSStore } from '../../store/useTTSStore';
+import { useTTSStore } from '@store/useTTSStore';
 import { GoogleTTSProvider } from './providers/GoogleTTSProvider';
 import { OpenAIProvider } from './providers/OpenAIProvider';
 import { LemonFoxProvider } from './providers/LemonFoxProvider';

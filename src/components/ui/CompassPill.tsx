@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useTTSStore } from '../../store/useTTSStore';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { useAnnotationStore } from '../../store/useAnnotationStore';
-import { useBookStore } from '../../store/useBookStore';
-import { useVocabularyStore } from '../../store/useVocabularyStore';
-import { useChineseDictionary } from '../../hooks/useChineseDictionary';
+import { useTTSStore } from '@store/useTTSStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useAnnotationStore } from '@store/useAnnotationStore';
+import { useBookStore } from '@store/useBookStore';
+import { useVocabularyStore } from '@store/useVocabularyStore';
+import { useChineseDictionary } from '@hooks/useChineseDictionary';
 import { useShallow } from 'zustand/react/shallow';
-import { useSectionDuration } from '../../hooks/useSectionDuration';
+import { useSectionDuration } from '@hooks/useSectionDuration';
 import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check, BookOpen, ArrowUpCircle, Smartphone, Trash2, GraduationCap } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { cn } from '../../lib/utils';
+import { cn } from '@lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from './Popover';
 
 export type ActionType =

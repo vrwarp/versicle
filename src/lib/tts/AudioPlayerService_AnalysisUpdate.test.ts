@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
-import { getInProcessAudioPlayer } from '../../app/tts/mainThreadAudioPlayer';
-import { useContentAnalysisStore, type SectionAnalysis } from '../../store/useContentAnalysisStore';
-import { dbService } from '../../db/DBService';
-import { useGenAIStore } from '../../store/useGenAIStore';
+import { getInProcessAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
+import { useContentAnalysisStore, type SectionAnalysis } from '@store/useContentAnalysisStore';
+import { dbService } from '@db/DBService';
+import { useGenAIStore } from '@store/useGenAIStore';
 
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getSections: vi.fn(),
         getTTSState: vi.fn(),
@@ -14,14 +14,14 @@ vi.mock('../../db/DBService', () => ({
     }
 }));
 
-vi.mock('../../store/useGenAIStore', () => ({
+vi.mock('@store/useGenAIStore', () => ({
     useGenAIStore: {
         getState: vi.fn(),
         subscribe: vi.fn(),
     }
 }));
 
-vi.mock('../../store/useContentAnalysisStore', () => {
+vi.mock('@store/useContentAnalysisStore', () => {
     let state = { sections: {} as Record<string, SectionAnalysis> };
     const listeners: ((s: typeof state) => void)[] = [];
 

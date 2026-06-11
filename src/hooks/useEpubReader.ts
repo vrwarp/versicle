@@ -1,19 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import ePub, { type Book, type Rendition, type Location, type NavigationItem } from 'epubjs';
-import { dbService } from '../db/DBService';
-import type { BookMetadata } from '../types/db';
-import { sanitizeContent } from '../lib/sanitizer';
-import { runCancellable, CancellationError } from '../lib/cancellable-task-runner';
-import { createLogger } from '../lib/logger';
-import { usePreferencesStore } from '../store/usePreferencesStore';
-import { useBookStore } from '../store/useBookStore';
-import { findTocItem } from '../lib/reader/titleResolver';
+import { dbService } from '@db/DBService';
+import type { BookMetadata } from '~types/db';
+import { sanitizeContent } from '@lib/sanitizer';
+import { runCancellable, CancellationError } from '@lib/cancellable-task-runner';
+import { createLogger } from '@lib/logger';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import { useBookStore } from '@store/useBookStore';
+import { findTocItem } from '@lib/reader/titleResolver';
 import {
   toTraditional,
   getPinyin,
   ensureOpenCC,
   ensurePinyin
-} from '../lib/chinese/ChineseTextProcessor';
+} from '@lib/chinese/ChineseTextProcessor';
 
 const logger = createLogger('useEpubReader');
 

@@ -11,8 +11,8 @@
  * (`createLibraryStore(db)`, `AudioPlayerService.createWithContext(…)`);
  * these doubles are what you inject into them.
  */
-import type { dbService } from '../../db/DBService';
-import type { IDBService } from '../../store/useLibraryStore';
+import type { dbService } from '@db/DBService';
+import type { IDBService } from '@store/useLibraryStore';
 
 /**
  * The public surface of a class instance type. `keyof` only sees public

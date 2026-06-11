@@ -17,23 +17,23 @@
  */
 import * as Comlink from 'comlink';
 import { Capacitor } from '@capacitor/core';
-import { TTSProviderManager } from '../../lib/tts/TTSProviderManager';
-import { PlatformIntegration } from '../../lib/tts/PlatformIntegration';
-import { LexiconService } from '../../lib/tts/LexiconService';
+import { TTSProviderManager } from '@lib/tts/TTSProviderManager';
+import { PlatformIntegration } from '@lib/tts/PlatformIntegration';
+import { LexiconService } from '@lib/tts/LexiconService';
 import { bookRepository } from '../repositories/BookRepository';
 import { contentAnalysisRepository } from '../repositories/ContentAnalysisRepository';
-import { genAIService } from '../../lib/genai/GenAIService';
+import { genAIService } from '@lib/genai/GenAIService';
 import { createReplicatedSlices, bookSnapshotUpdates } from './replicationSpec';
-import { useTTSStore } from '../../store/useTTSStore';
-import { useGenAIStore } from '../../store/useGenAIStore';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
-import { useAnnotationStore } from '../../store/useAnnotationStore';
-import { useToastStore } from '../../store/useToastStore';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { createLogger } from '../../lib/logger';
-import type { WorkerTtsEngine, EngineHost } from '../../lib/tts/engine/WorkerTtsEngine';
-import type { EngineHostCommand } from '../../lib/tts/engine/WorkerEngineContext';
-import type { TTSQueueItem, TTSStatus, DownloadInfo } from '../../lib/tts/AudioPlayerService';
+import { useTTSStore } from '@store/useTTSStore';
+import { useGenAIStore } from '@store/useGenAIStore';
+import { useReadingStateStore } from '@store/useReadingStateStore';
+import { useAnnotationStore } from '@store/useAnnotationStore';
+import { useToastStore } from '@store/useToastStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { createLogger } from '@lib/logger';
+import type { WorkerTtsEngine, EngineHost } from '@lib/tts/engine/WorkerTtsEngine';
+import type { EngineHostCommand } from '@lib/tts/engine/WorkerEngineContext';
+import type { TTSQueueItem, TTSStatus, DownloadInfo } from '@lib/tts/AudioPlayerService';
 
 type StatusListener = (
     status: TTSStatus,

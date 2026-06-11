@@ -3,8 +3,8 @@ import { useDriveBrowser } from './useDriveBrowser';
 import { Button } from '../ui/Button';
 import { Loader2, Folder, ChevronRight, Home, FolderOpen, AlertCircle } from 'lucide-react';
 import { ScrollArea } from '../ui/ScrollArea';
-import { cn } from '../../lib/utils';
-import { useToastStore } from '../../store/useToastStore';
+import { cn } from '@lib/utils';
+import { useToastStore } from '@store/useToastStore';
 
 interface DriveFolderPickerProps {
     onSelect: (folderId: string, folderName: string) => void;

@@ -1,16 +1,16 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SmartLinkDialog } from './SmartLinkDialog';
 import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
-import { useReadingListStore } from '../store/useReadingListStore';
-import { useBookStore } from '../store/useBookStore';
-import { useGenAIStore } from '../store/useGenAIStore';
-import { genAIService } from '../lib/genai/GenAIService';
+import { useReadingListStore } from '@store/useReadingListStore';
+import { useBookStore } from '@store/useBookStore';
+import { useGenAIStore } from '@store/useGenAIStore';
+import { genAIService } from '@lib/genai/GenAIService';
 
 // Mock dependencies
-vi.mock('../store/useReadingListStore');
-vi.mock('../store/useBookStore');
-vi.mock('../store/useGenAIStore');
-vi.mock('../lib/genai/GenAIService');
+vi.mock('@store/useReadingListStore');
+vi.mock('@store/useBookStore');
+vi.mock('@store/useGenAIStore');
+vi.mock('@lib/genai/GenAIService');
 
 describe('SmartLinkDialog', () => {
     let mockAddEntry: Mock;

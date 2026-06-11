@@ -8,7 +8,7 @@
  * start/end/boundary events.
  */
 import { vi } from 'vitest';
-import type { ITTSProvider, TTSEvent, TTSVoice } from '../../lib/tts/providers/types';
+import type { ITTSProvider, TTSEvent, TTSVoice } from '@lib/tts/providers/types';
 
 export interface FakeTTSProviderOptions {
   id?: string;

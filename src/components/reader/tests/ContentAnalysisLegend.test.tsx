@@ -1,9 +1,9 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContentAnalysisLegend } from '../ContentAnalysisLegend';
-import { useGenAIStore } from '../../../store/useGenAIStore';
-import { useReaderUIStore } from '../../../store/useReaderUIStore';
-import { dbService } from '../../../db/DBService';
+import { useGenAIStore } from '@store/useGenAIStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { dbService } from '@db/DBService';
 
 // Mock Lucide icons
 vi.mock('lucide-react', () => ({
@@ -17,17 +17,17 @@ vi.mock('lucide-react', () => ({
 }));
 
 // Mock Store
-vi.mock('../../../store/useGenAIStore', () => ({
+vi.mock('@store/useGenAIStore', () => ({
   useGenAIStore: vi.fn(),
 }));
 
 // Mock Reader Store
-vi.mock('../../../store/useReaderUIStore', () => ({
+vi.mock('@store/useReaderUIStore', () => ({
   useReaderUIStore: vi.fn(),
 }));
 
 // Mock DBService
-vi.mock('../../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
   dbService: {
     getTableImages: vi.fn(),
   },

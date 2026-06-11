@@ -4,9 +4,9 @@ import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { ScrollArea } from '../ui/ScrollArea';
-import { useAllBooks } from '../../store/selectors';
-import { useDebounce } from '../../hooks/useDebounce';
-import { cn } from '../../lib/utils';
+import { useAllBooks } from '@store/selectors';
+import { useDebounce } from '@hooks/useDebounce';
+import { cn } from '@lib/utils';
 
 interface ReassignBookDialogProps {
     isOpen: boolean;

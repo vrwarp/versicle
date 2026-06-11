@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { OffloadBookDialog } from './OffloadBookDialog';
-import { useLibraryStore } from '../../store/useLibraryStore';
-import { useToastStore } from '../../store/useToastStore';
-import { type BookMetadata } from '../../types/db';
+import { useLibraryStore } from '@store/useLibraryStore';
+import { useToastStore } from '@store/useToastStore';
+import { type BookMetadata } from '~types/db';
 
 // Mock UI components
 vi.mock('../ui/Dialog', () => ({
@@ -35,7 +35,7 @@ vi.mock('lucide-react', () => ({
 }));
 
 // Mock useToastStore
-vi.mock('../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
   useToastStore: vi.fn(),
 }));
 

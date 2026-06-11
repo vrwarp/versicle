@@ -2,7 +2,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { Progress } from '../ui/Progress';
 import { Button } from '../ui/Button';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useLibraryStore } from '@store/useLibraryStore';
 import { useShallow } from 'zustand/react/shallow';
 
 export const ImportProgressUI: React.FC = () => {

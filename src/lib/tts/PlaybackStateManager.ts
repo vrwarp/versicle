@@ -1,5 +1,5 @@
 import type { TTSQueueItem, TTSStatus } from './AudioPlayerService';
-import { dbService } from '../../db/DBService';
+import { dbService } from '@db/DBService';
 import { flightRecorder } from './TTSFlightRecorder';
 
 

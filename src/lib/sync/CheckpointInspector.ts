@@ -1,5 +1,5 @@
 import * as Y from 'yjs';
-import { getYDoc } from '../../store/yjs-provider';
+import { getYDoc } from '@store/yjs-provider';
 
 // Type definitions for the Diff result
 export interface DiffResult {

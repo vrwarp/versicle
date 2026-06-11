@@ -21,7 +21,7 @@ import type {
 } from '../AudioPlayerService';
 import type { TTSVoice } from '../providers/types';
 import { createLogger } from '../../logger';
-import { createWorkerEngineClient, type WorkerEngineClient } from '../../../app/tts/createWorkerEngineClient';
+import { createWorkerEngineClient, type WorkerEngineClient } from '@app/tts/createWorkerEngineClient';
 
 const logger = createLogger('WorkerEngineHandle');
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { useTTSStore } from '../../store/useTTSStore';
+import { useTTSStore } from '@store/useTTSStore';
 import { TTSQueueItem } from './TTSQueueItem';
 import { useShallow } from 'zustand/react/shallow';
 

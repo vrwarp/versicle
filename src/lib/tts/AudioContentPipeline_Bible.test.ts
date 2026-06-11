@@ -1,24 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
+import { createZustandEngineContext } from '@app/tts/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
-import { dbService } from '../../db/DBService';
-import { contentAnalysisRepository } from '../../app/repositories/ContentAnalysisRepository';
-import { bookRepository } from '../../app/repositories/BookRepository';
-import { useTTSStore } from '../../store/useTTSStore';
+import { dbService } from '@db/DBService';
+import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
+import { bookRepository } from '@app/repositories/BookRepository';
+import { useTTSStore } from '@store/useTTSStore';
 import { TextSegmenter } from './TextSegmenter';
 import { LexiconService } from './LexiconService';
 import { BIBLE_ABBREVIATIONS } from '../../data/bible-lexicon';
-import type { BookMetadata, ContentAnalysis, CacheTtsPreparation, SectionMetadata } from '../../types/db';
+import type { BookMetadata, ContentAnalysis, CacheTtsPreparation, SectionMetadata } from '~types/db';
 
 // Explicit mocks to prevent auto-mocking issues
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getTTSContent: vi.fn(),
         getBookStructure: vi.fn(),
     }
 }));
 
-vi.mock('../../app/repositories/ContentAnalysisRepository', () => ({
+vi.mock('@app/repositories/ContentAnalysisRepository', () => ({
     contentAnalysisRepository: {
         getContentAnalysis: vi.fn(),
         saveReferenceStartCfi: vi.fn(),
@@ -29,7 +29,7 @@ vi.mock('../../app/repositories/ContentAnalysisRepository', () => ({
     }
 }));
 
-vi.mock('../../app/repositories/BookRepository', () => ({
+vi.mock('@app/repositories/BookRepository', () => ({
     bookRepository: {
         getBookMetadata: vi.fn(),
     }
@@ -66,7 +66,7 @@ vi.mock('./AudioPlayerService', () => ({
 }));
 
 // Partially mock useTTSStore
-vi.mock('../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 0,
     useTTSStore: {
         getState: vi.fn(() => ({

@@ -1,16 +1,16 @@
 import { useState, useRef, useMemo } from 'react';
-import { LexiconService } from '../../lib/tts/LexiconService';
-import { useLexiconStore } from '../../store/useLexiconStore';
-import { getAudioPlayer } from '../../app/tts/mainThreadAudioPlayer';
-import type { LexiconRule } from '../../types/db';
+import { LexiconService } from '@lib/tts/LexiconService';
+import { useLexiconStore } from '@store/useLexiconStore';
+import { getAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
+import type { LexiconRule } from '~types/db';
 import { Plus, Trash2, Save, X, Download, Upload, ArrowUp, ArrowDown, Play, RefreshCw, CornerDownRight } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Dialog as UiDialog } from '../ui/Dialog';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { useBookStore } from '../../store/useBookStore';
-import { LEXICON_SAMPLE_CSV } from '../../lib/tts/lexiconSample';
-import { LexiconCSV } from '../../lib/tts/CsvUtils';
-import { exportFile } from '../../lib/export';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useBookStore } from '@store/useBookStore';
+import { LEXICON_SAMPLE_CSV } from '@lib/tts/lexiconSample';
+import { LexiconCSV } from '@lib/tts/CsvUtils';
+import { exportFile } from '@lib/export';
 
 interface LexiconManagerProps {
     /** Whether the dialog is open. */

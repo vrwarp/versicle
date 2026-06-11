@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { dbService } from './DBService';
 import { getDB } from './db';
-import { StorageFullError } from '../types/errors';
+import { StorageFullError } from '~types/errors';
 
 describe('DBService QuotaExceededError', () => {
   beforeEach(async () => {

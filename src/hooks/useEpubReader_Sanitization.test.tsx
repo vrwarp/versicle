@@ -2,13 +2,13 @@ import React, { useRef } from 'react';
 import { render, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, afterEach } from 'vitest';
 import { useEpubReader, type EpubReaderOptions } from './useEpubReader';
-import * as sanitizer from '../lib/sanitizer';
+import * as sanitizer from '@lib/sanitizer';
 
 // Spy on sanitizer
 const sanitizeSpy = vi.spyOn(sanitizer, 'sanitizeContent');
 
 // Mock dependencies
-vi.mock('../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
   dbService: {
     getBook: vi.fn().mockResolvedValue({ file: new ArrayBuffer(0), metadata: {} }),
     getBookFile: vi.fn().mockResolvedValue(new ArrayBuffer(0)),

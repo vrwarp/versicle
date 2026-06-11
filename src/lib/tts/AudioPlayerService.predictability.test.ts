@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
-import { getInProcessAudioPlayer } from '../../app/tts/mainThreadAudioPlayer';
-import { dbService } from '../../db/DBService';
+import { getInProcessAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
+import { dbService } from '@db/DBService';
 
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getSections: vi.fn().mockResolvedValue([]),
         getBookMetadata: vi.fn().mockResolvedValue({
@@ -60,7 +60,7 @@ vi.mock('./TTSProviderManager', () => {
 });
 
 // Avoid dealing with stores in tests unless needed
-vi.mock('../../store/useReadingStateStore', () => ({
+vi.mock('@store/useReadingStateStore', () => ({
     useReadingStateStore: {
         getState: vi.fn(() => ({
             updateTTSProgress: vi.fn(),

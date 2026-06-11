@@ -3,11 +3,11 @@ import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from '
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { Search, Download, Loader2, Cloud, X } from 'lucide-react';
-import { cn } from '../../lib/utils';
-import { useDriveStore, type DriveFileIndex } from '../../store/useDriveStore';
-import { DriveScannerService } from '../../lib/drive/DriveScannerService';
-import { useToastStore } from '../../store/useToastStore';
-import { useDebounce } from '../../hooks/useDebounce';
+import { cn } from '@lib/utils';
+import { useDriveStore, type DriveFileIndex } from '@store/useDriveStore';
+import { DriveScannerService } from '@lib/drive/DriveScannerService';
+import { useToastStore } from '@store/useToastStore';
+import { useDebounce } from '@hooks/useDebounce';
 
 function formatRelativeTime(timestamp: number | null): string {
     if (!timestamp) return 'Never';

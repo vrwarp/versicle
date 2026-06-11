@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { Checkbox } from './ui/Checkbox';
-import { useReadingListStore } from '../store/useReadingListStore';
-import { useBookStore } from '../store/useBookStore';
-import { genAIService } from '../lib/genai/GenAIService';
+import { useReadingListStore } from '@store/useReadingListStore';
+import { useBookStore } from '@store/useBookStore';
+import { genAIService } from '@lib/genai/GenAIService';
 import { Loader2, Link2, Unlink } from 'lucide-react';
-import { useGenAIStore } from '../store/useGenAIStore';
+import { useGenAIStore } from '@store/useGenAIStore';
 
 interface SmartLinkDialogProps {
     open: boolean;

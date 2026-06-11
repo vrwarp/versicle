@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
+import { createZustandEngineContext } from '@app/tts/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
-import { dbService } from '../../db/DBService';
-import { useGenAIStore } from '../../store/useGenAIStore';
+import { dbService } from '@db/DBService';
+import { useGenAIStore } from '@store/useGenAIStore';
 
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getTTSContent: vi.fn().mockResolvedValue({ sentences: [] }),
         getContentAnalysis: vi.fn().mockResolvedValue(null),
@@ -18,7 +18,7 @@ vi.mock('../../db/DBService', () => ({
     }
 }));
 
-vi.mock('../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,
     useTTSStore: {
         getState: vi.fn(() => ({
@@ -30,7 +30,7 @@ vi.mock('../../store/useTTSStore', () => ({
     }
 }));
 
-vi.mock('../../store/useGenAIStore', () => ({
+vi.mock('@store/useGenAIStore', () => ({
     useGenAIStore: {
         getState: vi.fn(() => ({
             contentFilterSkipTypes: ['reference'],

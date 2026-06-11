@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { tryFastMergeCfi, mergeCfiSlow, parseCfiRange } from './cfi-utils';
-import { SeededRandom, DEFAULT_FUZZ_SEED } from '../test/fuzz-utils';
+import { SeededRandom, DEFAULT_FUZZ_SEED } from '@test/fuzz-utils';
 
 function assertCfiEqual(actual: string | null, expected: string | null) {
     if (actual === null && expected === null) return;

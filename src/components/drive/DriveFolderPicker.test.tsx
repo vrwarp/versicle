@@ -5,7 +5,7 @@ import { DriveFolderPicker } from './DriveFolderPicker';
 import { useDriveBrowser } from './useDriveBrowser';
 
 // Mocks
-vi.mock('../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
     useToastStore: () => ({ showToast: vi.fn() })
 }));
 

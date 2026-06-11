@@ -13,12 +13,12 @@
  *
  * Main-thread module: it closes over the real Zustand stores. The worker never imports it.
  */
-import { useTTSStore } from '../../store/useTTSStore';
-import { useGenAIStore } from '../../store/useGenAIStore';
-import { useContentAnalysisStore } from '../../store/useContentAnalysisStore';
-import { useBookStore } from '../../store/useBookStore';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
-import type { EngineStateUpdate } from '../../lib/tts/engine/WorkerEngineContext';
+import { useTTSStore } from '@store/useTTSStore';
+import { useGenAIStore } from '@store/useGenAIStore';
+import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
+import { useBookStore } from '@store/useBookStore';
+import { useReadingStateStore } from '@store/useReadingStateStore';
+import type { EngineStateUpdate } from '@lib/tts/engine/WorkerEngineContext';
 
 /**
  * Strip non-structured-cloneable values before crossing the worker boundary. Zustand

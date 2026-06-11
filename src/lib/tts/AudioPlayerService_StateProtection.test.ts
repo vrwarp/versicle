@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
-import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '../../app/tts/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '@app/tts/mainThreadAudioPlayer';
 
 // Mock AudioContentPipeline to avoid circular deps
 vi.mock('./AudioContentPipeline', () => ({
@@ -11,7 +11,7 @@ vi.mock('./AudioContentPipeline', () => ({
 }));
 
 // Mock useTTSStore to avoid circular deps
-vi.mock('../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,
     useTTSStore: {
         getState: vi.fn(() => ({ activeLanguage: 'en', setActiveLanguage: vi.fn(), voices: [], profiles: { 'en': { minSentenceLength: 36 } }, customAbbreviations: [], alwaysMerge: false, sentenceStarters: [], isBibleLexiconEnabled: false })),
@@ -31,7 +31,7 @@ vi.mock('./providers/WebSpeechProvider', () => ({
 }));
 
 
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getTTSState: vi.fn(),
         saveTTSState: vi.fn(),
@@ -46,7 +46,7 @@ vi.mock('../../db/DBService', () => ({
 
 // Mock Store
 const updateTTSProgressSpy = vi.fn();
-vi.mock('../../store/useReadingStateStore', () => ({
+vi.mock('@store/useReadingStateStore', () => ({
     useReadingStateStore: {
         getState: () => ({
             updateTTSProgress: updateTTSProgressSpy,

@@ -1,7 +1,7 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import * as Y from 'yjs';
 import { BackupService, type BackupManifestV2, type BackupManifestV3 } from './BackupService';
-import { dbService } from '../db/DBService';
+import { dbService } from '@db/DBService';
 import { exportFile } from './export';
 
 // Hoist variables to capture mock interactions
@@ -40,8 +40,8 @@ vi.mock('y-idb', () => ({
 }));
 
 // Mock yjs-provider using importOriginal to preserve yDoc identity
-vi.mock('../store/yjs-provider', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../store/yjs-provider')>();
+vi.mock('@store/yjs-provider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@store/yjs-provider')>();
   return {
     ...actual,
     waitForYjsSync: vi.fn(() => Promise.resolve()),
@@ -58,12 +58,12 @@ const mockDB = {
   transaction: vi.fn(),
 };
 
-vi.mock('../db/db', () => ({
+vi.mock('@db/db', () => ({
   getDB: vi.fn(() => Promise.resolve(mockDB)),
 }));
 
 // Mock dbService
-vi.mock('../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
   dbService: {
     getBookFile: vi.fn(),
   },
@@ -75,7 +75,7 @@ vi.mock('./export', () => ({
 }));
 
 // Mock stores
-vi.mock('../store/useLibraryStore', () => ({
+vi.mock('@store/useLibraryStore', () => ({
   useLibraryStore: {
     getState: vi.fn(() => ({
       books: {},
@@ -85,7 +85,7 @@ vi.mock('../store/useLibraryStore', () => ({
   },
 }));
 
-vi.mock('../store/useReadingStateStore', () => ({
+vi.mock('@store/useReadingStateStore', () => ({
   useReadingStateStore: {
     getState: vi.fn(() => ({
       progress: {},
@@ -94,7 +94,7 @@ vi.mock('../store/useReadingStateStore', () => ({
   },
 }));
 
-vi.mock('../store/useAnnotationStore', () => ({
+vi.mock('@store/useAnnotationStore', () => ({
   useAnnotationStore: {
     getState: vi.fn(() => ({
       annotations: {},
@@ -117,7 +117,7 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
     mockDB.getAll.mockResolvedValue([]);
 
     // Get the mocked yDoc
-    const yjsProvider = await import('../store/yjs-provider');
+    const yjsProvider = await import('@store/yjs-provider');
     mockYDoc = yjsProvider.getYDoc();
 
     // Clear Y.Doc maps

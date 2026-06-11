@@ -1,10 +1,10 @@
 import React from 'react';
-import { useLibraryStore } from '../../store/useLibraryStore';
-import { useToastStore } from '../../store/useToastStore';
+import { useLibraryStore } from '@store/useLibraryStore';
+import { useToastStore } from '@store/useToastStore';
 import { Button } from '../ui/Button';
 import { Loader2, Library, BookOpen, Upload } from 'lucide-react';
 import { FileUploader } from './FileUploader';
-import { createLogger } from '../../lib/logger';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('EmptyLibrary');
 

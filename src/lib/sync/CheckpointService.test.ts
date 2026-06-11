@@ -25,7 +25,7 @@ const mocks = vi.hoisted(() => {
     return { add, count, openCursor, get, getAll, del, store, firestoreDestroy };
 });
 
-vi.mock('../../db/db', () => ({
+vi.mock('@db/db', () => ({
     getDB: vi.fn(async () => ({
         transaction: () => ({
             store: mocks.store,
@@ -38,7 +38,7 @@ vi.mock('../../db/db', () => ({
 }));
 
 // Mock Yjs Provider
-vi.mock('../../store/yjs-provider', async () => {
+vi.mock('@store/yjs-provider', async () => {
     const YActual = await import('yjs');
     const doc = new YActual.Doc();
     return {
@@ -47,7 +47,7 @@ vi.mock('../../store/yjs-provider', async () => {
         disconnectYjs: vi.fn(),
     };
 });
-import { getYDoc } from '../../store/yjs-provider';
+import { getYDoc } from '@store/yjs-provider';
 
 const yDoc = getYDoc();
 

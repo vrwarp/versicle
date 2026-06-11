@@ -20,7 +20,7 @@
  * Ordering matters: every writer is stopped/flushed BEFORE storage is
  * deleted, so nothing re-persists in the window before the page reloads.
  */
-import { createLogger } from '../lib/logger';
+import { createLogger } from '@lib/logger';
 import { closeDB } from './db';
 import { dbService } from './DBService';
 
@@ -89,7 +89,7 @@ const withTimeout = async (promise: Promise<unknown>, label: string): Promise<vo
  */
 const stopSync = async (): Promise<void> => {
   try {
-    const { FirestoreSyncManager } = await import('../lib/sync/FirestoreSyncManager');
+    const { FirestoreSyncManager } = await import('@lib/sync/FirestoreSyncManager');
     FirestoreSyncManager.resetInstance();
   } catch (error) {
     logger.warn('Failed to stop cloud sync before wipe (continuing):', error);
@@ -103,7 +103,7 @@ const stopSync = async (): Promise<void> => {
  */
 const stopYjsPersistence = async (): Promise<void> => {
   try {
-    const { disconnectYjs } = await import('../store/yjs-provider');
+    const { disconnectYjs } = await import('@store/yjs-provider');
     await withTimeout(disconnectYjs(), 'Yjs persistence flush/close');
   } catch (error) {
     logger.warn('Failed to flush/close Yjs persistence before wipe (continuing):', error);

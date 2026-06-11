@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { useLibraryStore } from '../../store/useLibraryStore';
-import { useToastStore } from '../../store/useToastStore';
-import { type BookMetadata } from '../../types/db';
+import { useLibraryStore } from '@store/useLibraryStore';
+import { useToastStore } from '@store/useToastStore';
+import { type BookMetadata } from '~types/db';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
-import { createLogger } from '../../lib/logger';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('OffloadBookDialog');
 

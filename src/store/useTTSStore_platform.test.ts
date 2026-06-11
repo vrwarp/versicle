@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useTTSStore } from './useTTSStore';
-import { buildProviderById } from '../lib/tts/providerFactory';
+import { buildProviderById } from '@lib/tts/providerFactory';
 import { Capacitor } from '@capacitor/core';
 
 // Mock Capacitor
@@ -12,21 +12,21 @@ vi.mock('@capacitor/core', () => ({
 }));
 
 // Mock Providers with identifiable property
-vi.mock('../lib/tts/providers/WebSpeechProvider', () => ({
+vi.mock('@lib/tts/providers/WebSpeechProvider', () => ({
   WebSpeechProvider: class {
     _type = 'WebSpeech';
     id = 'local';
   }
 }));
 
-vi.mock('../lib/tts/providers/CapacitorTTSProvider', () => ({
+vi.mock('@lib/tts/providers/CapacitorTTSProvider', () => ({
   CapacitorTTSProvider: class {
     _type = 'Capacitor';
     id = 'local';
   }
 }));
 
-vi.mock('../lib/tts/providers/GoogleTTSProvider', () => ({
+vi.mock('@lib/tts/providers/GoogleTTSProvider', () => ({
     GoogleTTSProvider: class {
         _type = 'Google';
         id = 'google';
@@ -37,7 +37,7 @@ vi.mock('../lib/tts/providers/GoogleTTSProvider', () => ({
     }
 }));
 
-vi.mock('../lib/tts/providers/OpenAIProvider', () => ({
+vi.mock('@lib/tts/providers/OpenAIProvider', () => ({
     OpenAIProvider: class {
         _type = 'OpenAI';
         id = 'openai';
@@ -56,7 +56,7 @@ const { mockSetProviderById, mockInit, mockGetVoices, mockSubscribe, mockSetVoic
     }
 });
 
-vi.mock('../app/tts/mainThreadAudioPlayer', () => {
+vi.mock('@app/tts/mainThreadAudioPlayer', () => {
     return {
         getAudioPlayer: vi.fn(() => ({
             setProviderById: mockSetProviderById,

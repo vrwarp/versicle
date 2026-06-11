@@ -1,51 +1,51 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import type { NavigationItem } from 'epubjs';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { useBookStore } from '../../store/useBookStore';
-import { usePreferencesStore } from '../../store/usePreferencesStore';
-import { useBook } from '../../store/selectors';
+import { useReadingStateStore } from '@store/useReadingStateStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useBookStore } from '@store/useBookStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import { useBook } from '@store/selectors';
 import { useShallow } from 'zustand/react/shallow';
-import { useTTSStore } from '../../store/useTTSStore';
-import { useUIStore } from '../../store/useUIStore';
-import { useTTS } from '../../hooks/useTTS';
-import { useEpubReader, type EpubReaderOptions } from '../../hooks/useEpubReader';
-import { useAnnotationStore } from '../../store/useAnnotationStore';
-import { findTocItem } from '../../lib/reader/titleResolver';
+import { useTTSStore } from '@store/useTTSStore';
+import { useUIStore } from '@store/useUIStore';
+import { useTTS } from '@hooks/useTTS';
+import { useEpubReader, type EpubReaderOptions } from '@hooks/useEpubReader';
+import { useAnnotationStore } from '@store/useAnnotationStore';
+import { findTocItem } from '@lib/reader/titleResolver';
 import { AnnotationList } from './AnnotationList';
 import { LexiconManager } from './LexiconManager';
 import { VisualSettings } from './VisualSettings';
-import { useToastStore } from '../../store/useToastStore';
+import { useToastStore } from '@store/useToastStore';
 import { Popover, PopoverTrigger } from '../ui/Popover';
 import { Sheet, SheetTrigger } from '../ui/Sheet';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
-import { contentAnalysisRepository } from '../../app/repositories/ContentAnalysisRepository';
-import { searchClient } from '../../lib/search';
+import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
+import { searchClient } from '@lib/search';
 import { SyncStatusPanel } from './SyncStatusPanel';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';
-import { getAudioPlayer } from '../../app/tts/mainThreadAudioPlayer';
+import { getAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
 import { ReaderTTSController } from './ReaderTTSController';
-import { generateCfiRange, snapCfiToSentence } from '../../lib/cfi-utils';
+import { generateCfiRange, snapCfiToSentence } from '@lib/cfi-utils';
 import { TOCPanel, SearchPanel } from './panels';
 import { Button } from '../ui/Button';
-import { useSmartTOC } from '../../hooks/useSmartTOC';
+import { useSmartTOC } from '@hooks/useSmartTOC';
 
-import { cn } from '../../lib/utils';
+import { cn } from '@lib/utils';
 import { Dialog } from '../ui/Dialog';
-import { useSidebarState } from '../../hooks/useSidebarState';
-import { useGenAIStore } from '../../store/useGenAIStore';
+import { useSidebarState } from '@hooks/useSidebarState';
+import { useGenAIStore } from '@store/useGenAIStore';
 import { ContentAnalysisLegend } from './ContentAnalysisLegend';
-import { TYPE_COLORS } from '../../types/content-analysis';
-import { CURRENT_BOOK_VERSION } from '../../lib/constants';
-import { createLogger } from '../../lib/logger';
-import { useDeviceStore } from '../../store/useDeviceStore';
-import { getDeviceId } from '../../lib/device-id';
+import { TYPE_COLORS } from '~types/content-analysis';
+import { CURRENT_BOOK_VERSION } from '@lib/constants';
+import { createLogger } from '@lib/logger';
+import { useDeviceStore } from '@store/useDeviceStore';
+import { getDeviceId } from '@lib/device-id';
 import { HistoryHighlighter } from './HistoryHighlighter';
 import { PinyinOverlay, type PinyinPosition } from './PinyinOverlay';
-import { useCfiCoordinates } from '../../hooks/useCfiCoordinates';
+import { useCfiCoordinates } from '@hooks/useCfiCoordinates';
 import { AnnotationMarkerOverlay } from './AnnotationMarkerOverlay';
-import { useReaderNavigation } from '../../hooks/useReaderNavigation';
+import { useReaderNavigation } from '@hooks/useReaderNavigation';
 import { ReaderHighlightsStyles } from './ReaderHighlightsStyles';
 
 const logger = createLogger('ReaderView');
@@ -248,7 +248,7 @@ export const ReaderView: React.FC = () => {
             const prepareUpdates = async () => {
                 if (!bookId) return;
 
-                const updates: import('../../store/useReadingStateStore').SessionUpdate[] = [];
+                const updates: import('@store/useReadingStateStore').SessionUpdate[] = [];
 
                 // 1. Calculate Previous Range (Async)
                 if (previousLocation.current) {
@@ -1028,7 +1028,7 @@ export const ReaderView: React.FC = () => {
         const bookProgress = state.progress?.[bookId];
         if (!bookProgress) return {};
 
-        const result: Record<string, import('../../types/db').UserProgress> = {};
+        const result: Record<string, import('~types/db').UserProgress> = {};
         for (const [deviceId, prog] of Object.entries(bookProgress)) {
             if (deviceId !== currentDeviceId) {
                 result[deviceId] = prog;

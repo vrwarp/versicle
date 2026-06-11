@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { useContentAnalysisStore } from '../../store/useContentAnalysisStore';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
-import { TYPE_COLORS, type ContentType } from '../../types/content-analysis';
+import { TYPE_COLORS, type ContentType } from '~types/content-analysis';
 import type { Rendition } from 'epubjs';
 import { ChevronRight, ChevronDown } from 'lucide-react';
-import type { NavigationItem } from '../../types/db';
+import type { NavigationItem } from '~types/db';
 
 interface ContentAnalysisReportProps {
     isOpen: boolean;

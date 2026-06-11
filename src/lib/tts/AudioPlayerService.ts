@@ -1,8 +1,8 @@
 import type { ITTSProvider, TTSVoice } from './providers/types';
-import type { TTSQueueItem } from '../../types/tts';
+import type { TTSQueueItem } from '~types/tts';
 import { lexiconApplier } from './LexiconApplier';
-import { dbService } from '../../db/DBService';
-import type { SectionMetadata, LexiconRule, PerceptualPalette } from '../../types/db';
+import { dbService } from '@db/DBService';
+import type { SectionMetadata, LexiconRule, PerceptualPalette } from '~types/db';
 import { TaskSequencer } from './TaskSequencer';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { PlaybackStateManager } from './PlaybackStateManager';
@@ -28,7 +28,7 @@ export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'complete
  * Re-exported here (type-only, zero runtime change) so existing consumers
  * keep compiling.
  */
-export type { TTSQueueItem } from '../../types/tts';
+export type { TTSQueueItem } from '~types/tts';
 
 export interface DownloadInfo {
     voiceId: string;

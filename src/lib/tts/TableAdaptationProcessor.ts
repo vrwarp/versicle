@@ -1,4 +1,4 @@
-import { dbService } from '../../db/DBService';
+import { dbService } from '@db/DBService';
 import EpubCFI from 'epubjs/src/epubcfi';
 import { parseCfiRange } from '../cfi-utils';
 import type { SentenceNode } from './sentence-extraction';

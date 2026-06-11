@@ -2,11 +2,11 @@ import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { GlobalSettingsDialog } from './GlobalSettingsDialog';
-import { useTTSStore } from '../store/useTTSStore';
-import { wipeAllData } from '../db/wipe';
+import { useTTSStore } from '@store/useTTSStore';
+import { wipeAllData } from '@db/wipe';
 
 // Mock the data wipe module (the dialog must only route through it)
-vi.mock('../db/wipe', () => ({
+vi.mock('@db/wipe', () => ({
     wipeAllData: vi.fn().mockResolvedValue(undefined)
 }));
 
@@ -30,7 +30,7 @@ vi.mock('./ui/Modal', () => {
 });
 
 // Mock useUIStore
-vi.mock('../store/useUIStore', () => ({
+vi.mock('@store/useUIStore', () => ({
     useUIStore: () => ({
         isGlobalSettingsOpen: true,
         setGlobalSettingsOpen: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock('../store/useUIStore', () => ({
 }));
 
 // Mock useGenAIStore
-vi.mock('../store/useGenAIStore', () => ({
+vi.mock('@store/useGenAIStore', () => ({
     useGenAIStore: () => ({
         apiKey: '',
         setApiKey: vi.fn(),
@@ -55,7 +55,7 @@ const mockDownloadVoice = vi.fn();
 const mockCheckVoiceDownloaded = vi.fn().mockResolvedValue(false);
 const mockSetProviderId = vi.fn();
 
-vi.mock('../store/usePreferencesStore', () => ({
+vi.mock('@store/usePreferencesStore', () => ({
     usePreferencesStore: vi.fn(() => ({
         currentTheme: 'light',
         setTheme: vi.fn(),
@@ -66,7 +66,7 @@ vi.mock('../store/usePreferencesStore', () => ({
     }))
 }));
 
-vi.mock('../store/useLibraryStore', () => ({
+vi.mock('@store/useLibraryStore', () => ({
     useLibraryStore: vi.fn(() => ({
         addBooks: vi.fn(),
         fetchBooks: vi.fn(),
@@ -78,7 +78,7 @@ vi.mock('../store/useLibraryStore', () => ({
     }))
 }));
 
-vi.mock('../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getReadingList: vi.fn().mockResolvedValue([]),
         getReadingHistory: vi.fn().mockResolvedValue([]),
@@ -87,13 +87,13 @@ vi.mock('../db/DBService', () => ({
     }
 }));
 
-vi.mock('../app/repositories/ContentAnalysisRepository', () => ({
+vi.mock('@app/repositories/ContentAnalysisRepository', () => ({
     contentAnalysisRepository: {
         clearAll: vi.fn(),
     }
 }));
 
-vi.mock('../store/useSyncStore', () => ({
+vi.mock('@store/useSyncStore', () => ({
     useSyncStore: () => ({
         googleClientId: '',
         googleApiKey: '',
@@ -103,14 +103,14 @@ vi.mock('../store/useSyncStore', () => ({
     })
 }));
 
-vi.mock('../lib/sync/CheckpointService', () => ({
+vi.mock('@lib/sync/CheckpointService', () => ({
     CheckpointService: {
         listCheckpoints: vi.fn().mockResolvedValue([]),
         restoreCheckpoint: vi.fn()
     }
 }));
 
-vi.mock('../store/useReadingListStore', () => ({
+vi.mock('@store/useReadingListStore', () => ({
     useReadingListStore: Object.assign(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (selector: any) => selector ? selector({ entries: {} }) : { entries: {} },
@@ -123,7 +123,7 @@ vi.mock('../store/useReadingListStore', () => ({
     )
 }));
 
-vi.mock('../store/useReadingStateStore', () => ({
+vi.mock('@store/useReadingStateStore', () => ({
     useReadingStateStore: Object.assign(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (selector: any) => selector ? selector({ progress: {} }) : { progress: {} },
@@ -136,12 +136,12 @@ vi.mock('../store/useReadingStateStore', () => ({
     )
 }));
 
-vi.mock('../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useToastStore: (selector: any) => selector ? selector({ showToast: vi.fn() }) : { showToast: vi.fn() }
 }));
 
-vi.mock('../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,
     useTTSStore: Object.assign(
         vi.fn((selector: (state: unknown) => unknown) => selector ? selector({

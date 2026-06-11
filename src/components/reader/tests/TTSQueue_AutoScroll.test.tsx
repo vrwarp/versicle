@@ -1,10 +1,10 @@
 import { render } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TTSQueue } from '../TTSQueue';
-import { useTTSStore } from '../../../store/useTTSStore';
+import { useTTSStore } from '@store/useTTSStore';
 
 // Mock the store
-vi.mock('../../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
   useTTSStore: vi.fn(),
 }));
 

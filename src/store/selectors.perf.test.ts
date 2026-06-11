@@ -4,11 +4,11 @@ import { useAllBooks } from './selectors';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
 import { useLibraryStore } from './useLibraryStore';
-import * as deviceIdModule from '../lib/device-id';
-import type { UserInventoryItem, UserProgress } from '../types/db';
+import * as deviceIdModule from '@lib/device-id';
+import type { UserInventoryItem, UserProgress } from '~types/db';
 
 // Mock getDeviceId to track calls
-vi.mock('../lib/device-id', () => ({
+vi.mock('@lib/device-id', () => ({
     getDeviceId: vi.fn(() => 'device-id-123')
 }));
 

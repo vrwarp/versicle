@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { getYDoc, getYjsOptions } from './yjs-provider';
-import type { UserAnnotation } from '../types/db';
-import { createLogger } from '../lib/logger';
-import { generateSecureId } from '../lib/crypto';
+import type { UserAnnotation } from '~types/db';
+import { createLogger } from '@lib/logger';
+import { generateSecureId } from '@lib/crypto';
 
 const logger = createLogger('AnnotationStore');
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { flightRecorder } from '../../lib/tts/TTSFlightRecorder';
-import type { FlightSnapshot } from '../../types/db';
+import { flightRecorder } from '@lib/tts/TTSFlightRecorder';
+import type { FlightSnapshot } from '~types/db';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { ScrollArea } from '../ui/ScrollArea';

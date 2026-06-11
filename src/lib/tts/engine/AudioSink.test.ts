@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { FakeAudioSink } from './FakeAudioSink';
 import { MockCloudProvider } from '../providers/MockCloudProvider';
-import { getDB } from '../../../db/db';
+import { getDB } from '@db/db';
 import type { TTSEvent } from '../providers/types';
 
 describe('AudioSink injection', () => {

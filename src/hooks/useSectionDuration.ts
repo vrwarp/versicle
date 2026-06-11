@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import { useTTSStore } from '../store/useTTSStore';
-import { useReaderUIStore } from '../store/useReaderUIStore';
-import { useBookStore } from '../store/useBookStore';
-import { containsCJK, isCJKLanguageCode } from '../lib/utils';
+import { useTTSStore } from '@store/useTTSStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useBookStore } from '@store/useBookStore';
+import { containsCJK, isCJKLanguageCode } from '@lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 
 export function useSectionDuration() {

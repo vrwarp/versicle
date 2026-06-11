@@ -2,11 +2,11 @@ import React, { useRef } from 'react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { CloudOff, Loader2, Download, Cloud } from 'lucide-react';
-import type { BookMetadata } from '../../types/db';
-import { useDriveStore } from '../../store/useDriveStore';
-import { DriveScannerService } from '../../lib/drive/DriveScannerService';
-import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
-import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
+import type { BookMetadata } from '~types/db';
+import { useDriveStore } from '@store/useDriveStore';
+import { DriveScannerService } from '@lib/drive/DriveScannerService';
+import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
+import { googleIntegrationManager } from '@lib/google/GoogleIntegrationManager';
 import { AlertCircle } from 'lucide-react';
 
 interface ContentMissingDialogProps {

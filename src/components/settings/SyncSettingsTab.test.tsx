@@ -20,8 +20,8 @@ vi.mock('../ui/Select', () => ({
 export const mockSetGoogleClientId = vi.fn();
 export const mockSetGoogleIosClientId = vi.fn();
 
-vi.mock('../../store/useGoogleServicesStore', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('../../store/useGoogleServicesStore')>();
+vi.mock('@store/useGoogleServicesStore', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@store/useGoogleServicesStore')>();
     return {
         ...actual,
         useGoogleServicesStore: Object.assign(

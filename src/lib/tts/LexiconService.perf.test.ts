@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { LexiconService } from './LexiconService';
-import type { LexiconRule } from '../../types/db';
+import type { LexiconRule } from '~types/db';
 
 describe('LexiconService Performance', () => {
     it('should be faster with cached compilation', () => {

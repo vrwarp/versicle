@@ -1,8 +1,8 @@
 import { Capacitor } from '@capacitor/core';
 import { WebGoogleAuthStrategy } from './WebGoogleAuthStrategy';
 import { AndroidGoogleAuthStrategy } from './AndroidGoogleAuthStrategy';
-import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
-import { useSyncStore } from '../../store/useSyncStore';
+import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
+import { useSyncStore } from '@store/useSyncStore';
 
 class GoogleIntegrationManager {
     private strategy: WebGoogleAuthStrategy | AndroidGoogleAuthStrategy;

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { dbService } from './DBService';
 import { getDB } from './db';
-import type { StaticBookManifest, StaticResource, NavigationItem } from '../types/db';
+import type { StaticBookManifest, StaticResource, NavigationItem } from '~types/db';
 
 describe('DBService', () => {
 

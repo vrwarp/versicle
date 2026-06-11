@@ -5,11 +5,11 @@
  *  - the weekly background Drive scan policy.
  */
 import type { BootTask } from '../bootstrap';
-import { getDeviceId } from '../../lib/device-id';
-import { useDeviceStore } from '../../store/useDeviceStore';
-import { useDriveStore } from '../../store/useDriveStore';
-import { DriveScannerService } from '../../lib/drive/DriveScannerService';
-import { createLogger } from '../../lib/logger';
+import { getDeviceId } from '@lib/device-id';
+import { useDeviceStore } from '@store/useDeviceStore';
+import { useDriveStore } from '@store/useDriveStore';
+import { DriveScannerService } from '@lib/drive/DriveScannerService';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
 

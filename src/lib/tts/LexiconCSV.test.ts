@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { LexiconCSV } from './CsvUtils';
-import type { LexiconRule } from '../../types/db';
+import type { LexiconRule } from '~types/db';
 
 describe('LexiconCSV', () => {
   it('should roundtrip rules with applyBeforeGlobal', () => {

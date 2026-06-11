@@ -13,19 +13,19 @@
  */
 import { Capacitor } from '@capacitor/core';
 import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-optimization';
-import { useTTSStore, getDefaultMinSentenceLength } from '../../store/useTTSStore';
-import { useGenAIStore } from '../../store/useGenAIStore';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
-import { useContentAnalysisStore } from '../../store/useContentAnalysisStore';
-import { useAnnotationStore } from '../../store/useAnnotationStore';
-import { useToastStore } from '../../store/useToastStore';
-import { useBookStore } from '../../store/useBookStore';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { LexiconService } from '../../lib/tts/LexiconService';
+import { useTTSStore, getDefaultMinSentenceLength } from '@store/useTTSStore';
+import { useGenAIStore } from '@store/useGenAIStore';
+import { useReadingStateStore } from '@store/useReadingStateStore';
+import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
+import { useAnnotationStore } from '@store/useAnnotationStore';
+import { useToastStore } from '@store/useToastStore';
+import { useBookStore } from '@store/useBookStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { LexiconService } from '@lib/tts/LexiconService';
 import { bookRepository } from '../repositories/BookRepository';
 import { contentAnalysisRepository } from '../repositories/ContentAnalysisRepository';
-import { genAIService } from '../../lib/genai/GenAIService';
-import type { EngineContext } from '../../lib/tts/engine/EngineContext';
+import { genAIService } from '@lib/genai/GenAIService';
+import type { EngineContext } from '@lib/tts/engine/EngineContext';
 
 /**
  * Build the production EngineContext backed by live Zustand stores + Capacitor.

@@ -1,15 +1,15 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DeleteBookDialog } from './DeleteBookDialog';
-import { useLibraryStore } from '../../store/useLibraryStore';
-import { useToastStore } from '../../store/useToastStore';
+import { useLibraryStore } from '@store/useLibraryStore';
+import { useToastStore } from '@store/useToastStore';
 import { act } from '@testing-library/react';
 
-vi.mock('../../store/useLibraryStore', () => ({
+vi.mock('@store/useLibraryStore', () => ({
   useLibraryStore: vi.fn(),
 }));
 
-vi.mock('../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
   useToastStore: vi.fn(),
 }));
 

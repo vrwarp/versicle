@@ -1,10 +1,10 @@
 import { render } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ThemeSynchronizer } from './ThemeSynchronizer';
-import { usePreferencesStore } from '../store/usePreferencesStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
 
 // Mock the store
-vi.mock('../store/usePreferencesStore', () => ({
+vi.mock('@store/usePreferencesStore', () => ({
   usePreferencesStore: vi.fn(),
 }));
 

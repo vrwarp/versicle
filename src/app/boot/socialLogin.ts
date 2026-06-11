@@ -9,8 +9,8 @@
  */
 import type { BootTask } from '../bootstrap';
 import { SocialLogin } from '@capgo/capacitor-social-login';
-import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
-import { createLogger } from '../../lib/logger';
+import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
 

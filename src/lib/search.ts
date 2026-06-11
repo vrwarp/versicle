@@ -1,6 +1,6 @@
 import * as Comlink from 'comlink';
 import type { Book } from 'epubjs';
-import type { SearchResult, SearchSection } from '../types/search';
+import type { SearchResult, SearchSection } from '~types/search';
 import type { SearchEngine } from './search-engine';
 
 export type { SearchResult };

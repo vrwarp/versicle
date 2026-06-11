@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { SearchEngine } from './search-engine';
-import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '../test/fuzz-utils';
-import type { SearchSection } from '../types/search';
+import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '@test/fuzz-utils';
+import type { SearchSection } from '~types/search';
 
 describe('SearchEngine Fuzzing', () => {
     const SEED = DEFAULT_FUZZ_SEED;

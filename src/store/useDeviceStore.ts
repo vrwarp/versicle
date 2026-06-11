@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { UAParser } from 'ua-parser-js';
 import { getYDoc, getYjsOptions } from './yjs-provider';
-import type { DeviceInfo, DeviceProfile } from '../types/device';
+import type { DeviceInfo, DeviceProfile } from '~types/device';
 import packageJson from '../../package.json';
 
 /**

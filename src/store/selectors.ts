@@ -5,9 +5,9 @@ import { useReadingStateStore, isValidProgress, getMostRecentProgress } from './
 import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
 import type { AnnotationState } from './useAnnotationStore';
-import type { UserProgress, UserInventoryItem, UserAnnotation } from '../types/db';
-import { getDeviceId } from '../lib/device-id';
-import { generateMatchKey } from '../lib/entity-resolution';
+import type { UserProgress, UserInventoryItem, UserAnnotation } from '~types/db';
+import { getDeviceId } from '@lib/device-id';
+import { generateMatchKey } from '@lib/entity-resolution';
 
 // Module-level caches for useAllBooks to avoid strict-mode ref mutation issues
 // Using a function cache prevents React ESLint from tracking mutations.

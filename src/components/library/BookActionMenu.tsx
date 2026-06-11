@@ -1,13 +1,13 @@
 import React, { forwardRef, useImperativeHandle } from 'react';
 import { Trash2, CloudOff, RefreshCw } from 'lucide-react';
-import type { BookMetadata } from '../../types/db';
+import type { BookMetadata } from '~types/db';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '../ui/DropdownMenu';
-import { cn } from '../../lib/utils';
+import { cn } from '@lib/utils';
 
 interface BookActionMenuProps {
     book: BookMetadata;

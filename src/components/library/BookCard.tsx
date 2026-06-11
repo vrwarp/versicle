@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { MoreVertical, Play, Trash2, CloudOff, RotateCcw } from 'lucide-react';
-import type { BookMetadata } from '../../types/db';
+import type { BookMetadata } from '~types/db';
 import { BookCover } from './BookCover';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/DropdownMenu';
 import { Button } from '../ui/Button';

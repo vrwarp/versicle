@@ -3,10 +3,10 @@ import type { Book } from 'epubjs';
 import { Input } from '../../ui/Input';
 import { Button } from '../../ui/Button';
 import { Search, Loader2, X } from 'lucide-react';
-import { cn } from '../../../lib/utils';
-import { searchClient, type SearchResult } from '../../../lib/search';
-import { useToastStore } from '../../../store/useToastStore';
-import { createLogger } from '../../../lib/logger';
+import { cn } from '@lib/utils';
+import { searchClient, type SearchResult } from '@lib/search';
+import { useToastStore } from '@store/useToastStore';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('SearchPanel');
 

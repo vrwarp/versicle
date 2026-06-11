@@ -1,14 +1,14 @@
 import { render, screen } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ReadingHistoryPanel } from './ReadingHistoryPanel';
-import type { ReadingSession } from '../../types/db';
+import type { ReadingSession } from '~types/db';
 
 // Mock the Yjs store hook
-vi.mock('../../store/useReadingStateStore', () => ({
+vi.mock('@store/useReadingStateStore', () => ({
     useBookProgress: vi.fn()
 }));
 
-import { useBookProgress } from '../../store/useReadingStateStore';
+import { useBookProgress } from '@store/useReadingStateStore';
 
 describe('ReadingHistory Integration', () => {
     beforeEach(() => {

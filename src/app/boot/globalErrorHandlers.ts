@@ -2,9 +2,9 @@
  * Window-level unhandled-rejection handler (moved verbatim from App.tsx):
  * surfaces storage-full conditions as toasts instead of silent console noise.
  */
-import { useToastStore } from '../../store/useToastStore';
-import { StorageFullError } from '../../types/errors';
-import { createLogger } from '../../lib/logger';
+import { useToastStore } from '@store/useToastStore';
+import { StorageFullError } from '~types/errors';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
 

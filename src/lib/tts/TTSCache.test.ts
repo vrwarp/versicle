@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TTSCache } from './TTSCache';
-import { dbService } from '../../db/DBService';
+import { dbService } from '@db/DBService';
 
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
   dbService: {
     getCachedSegment: vi.fn(),
     cacheSegment: vi.fn(),

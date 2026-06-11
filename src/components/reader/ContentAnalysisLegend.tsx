@@ -1,16 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useGenAIStore } from '../../store/useGenAIStore';
-import { useContentAnalysisStore } from '../../store/useContentAnalysisStore';
+import { useGenAIStore } from '@store/useGenAIStore';
+import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
 import { useShallow } from 'zustand/react/shallow';
 import { X, Copy, ChevronRight, ChevronDown, RotateCcw, Loader2, FileText } from 'lucide-react';
-import { TYPE_COLORS } from '../../types/content-analysis';
-import type { ContentType } from '../../types/content-analysis';
+import { TYPE_COLORS } from '~types/content-analysis';
+import type { ContentType } from '~types/content-analysis';
 import type { Rendition } from 'epubjs';
-import { useToastStore } from '../../store/useToastStore';
-import { dbService } from '../../db/DBService';
-import type { TableImage } from '../../types/db';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { reprocessBook } from '../../lib/ingestion';
+import { useToastStore } from '@store/useToastStore';
+import { dbService } from '@db/DBService';
+import type { TableImage } from '~types/db';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { reprocessBook } from '@lib/ingestion';
 import { ContentAnalysisReport } from './ContentAnalysisReport';
 
 interface ContentAnalysisLegendProps {

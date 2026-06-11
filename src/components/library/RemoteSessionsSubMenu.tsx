@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { Monitor } from 'lucide-react';
 
-import { useDeviceStore } from '../../store/useDeviceStore';
-import { getDeviceId } from '../../lib/device-id';
+import { useDeviceStore } from '@store/useDeviceStore';
+import { getDeviceId } from '@lib/device-id';
 import { DeviceIcon } from '../devices/DeviceIcon';
 import {
   DropdownMenuSub,

@@ -1,25 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LexiconService } from './LexiconService';
-import { type LexiconRule } from '../../types/db';
+import { type LexiconRule } from '~types/db';
 
 // Mock DB (not used directly anymore but safe to mock)
-vi.mock('../../db/db', () => ({
+vi.mock('@db/db', () => ({
   getDB: vi.fn(),
 }));
 
 // Mock store and sync
-vi.mock('../../store/useLexiconStore', () => ({
+vi.mock('@store/useLexiconStore', () => ({
   useLexiconStore: {
     getState: vi.fn(),
   }
 }));
 
-vi.mock('../../store/yjs-provider', () => ({
+vi.mock('@store/yjs-provider', () => ({
   waitForYjsSync: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock TTS Store for Bible preference check
-vi.mock('../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,
   useTTSStore: {
     getState: () => ({ isBibleLexiconEnabled: false })
@@ -41,7 +41,7 @@ describe('LexiconService Sorting', () => {
       settings: {},
     };
 
-    const { useLexiconStore } = await import('../../store/useLexiconStore');
+    const { useLexiconStore } = await import('@store/useLexiconStore');
     vi.mocked(useLexiconStore.getState).mockReturnValue(mockStore);
   });
 

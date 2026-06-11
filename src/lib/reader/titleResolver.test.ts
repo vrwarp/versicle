@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { matchPaths, findTocItem, resolveSyntheticPreference } from './titleResolver';
-import type { NavigationItem, UserInventoryItem } from '../../types/db';
+import type { NavigationItem, UserInventoryItem } from '~types/db';
 
 describe('titleResolver', () => {
   describe('matchPaths', () => {

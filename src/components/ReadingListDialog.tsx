@@ -3,13 +3,13 @@ import { Modal, ModalContent } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Checkbox } from './ui/Checkbox';
-import { useReadingListStore } from '../store/useReadingListStore';
-import type { ReadingListEntry } from '../types/db';
+import { useReadingListStore } from '@store/useReadingListStore';
+import type { ReadingListEntry } from '~types/db';
 import { ArrowUpDown, Trash2, Edit2, Download, ArrowUp, ArrowDown, BookOpen, Wand2 } from 'lucide-react';
 import { EditReadingListEntryDialog } from './EditReadingListEntryDialog';
-import { exportFile } from '../lib/export';
-import { useGenAIStore } from '../store/useGenAIStore';
-import { genAIService } from '../lib/genai/GenAIService';
+import { exportFile } from '@lib/export';
+import { useGenAIStore } from '@store/useGenAIStore';
+import { genAIService } from '@lib/genai/GenAIService';
 import { SmartLinkDialog } from './SmartLinkDialog';
 
 interface ReadingListDialogProps {

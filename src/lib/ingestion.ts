@@ -1,11 +1,11 @@
 import ePub from 'epubjs';
-import type { NavigationItem } from '../types/db';
+import type { NavigationItem } from '~types/db';
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
-import { getDB } from '../db/db';
-import type { SectionMetadata, CacheTtsPreparation, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry, PerceptualPalette } from '../types/db';
+import { getDB } from '@db/db';
+import type { SectionMetadata, CacheTtsPreparation, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry, PerceptualPalette } from '~types/db';
 import type { ProcessedChapter } from './offscreen-renderer';
-import { getSanitizedBookMetadata } from '../db/validators';
+import { getSanitizedBookMetadata } from '@db/validators';
 import { TTS_EXTRACTION_VERSION, type ExtractionOptions } from './tts/sentence-extraction';
 import { extractContentOffscreen } from './offscreen-renderer';
 import { CURRENT_BOOK_VERSION } from './constants';
@@ -210,7 +210,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
 
     // Update Yjs store (inventory) if palette changed
     if (reprocessedPalette || reprocessedPerceptualPalette) {
-        const { useBookStore } = await import('../store/useBookStore');
+        const { useBookStore } = await import('@store/useBookStore');
         const updateBook = useBookStore.getState().updateBook;
         if (updateBook) {
             updateBook(bookId, {

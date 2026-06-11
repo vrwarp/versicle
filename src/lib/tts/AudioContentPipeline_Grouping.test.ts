@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
-import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
+import { createZustandEngineContext } from '@app/tts/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { preprocessBlockRoots, parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
 

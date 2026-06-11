@@ -3,7 +3,7 @@ import { LexiconManager } from '../LexiconManager';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock DB and other dependencies
-vi.mock('../../../lib/tts/LexiconService', () => {
+vi.mock('@lib/tts/LexiconService', () => {
   const mockService = {
     getRules: vi.fn().mockResolvedValue([]),
     saveRule: vi.fn().mockResolvedValue(undefined),
@@ -20,7 +20,7 @@ vi.mock('../../../lib/tts/LexiconService', () => {
   };
 });
 
-vi.mock('../../../lib/tts/AudioPlayerService', () => ({
+vi.mock('@lib/tts/AudioPlayerService', () => ({
   AudioPlayerService: {
     getInstance: () => ({
       preview: vi.fn(),
@@ -49,7 +49,7 @@ vi.mock('../../store/useReaderUIStore', () => ({
 }));
 
 // Mock export
-vi.mock('../../../lib/export', () => ({
+vi.mock('@lib/export', () => ({
   exportFile: vi.fn(),
 }));
 
@@ -124,7 +124,7 @@ describe('LexiconManager', () => {
   });
 
   it('should call exportFile when export button is clicked', async () => {
-    const { exportFile } = await import('../../../lib/export');
+    const { exportFile } = await import('@lib/export');
     render(
       <LexiconManager
         open={true}
@@ -144,7 +144,7 @@ describe('LexiconManager', () => {
   });
 
   it('should call exportFile when download sample button is clicked', async () => {
-    const { exportFile } = await import('../../../lib/export');
+    const { exportFile } = await import('@lib/export');
     render(
       <LexiconManager
         open={true}

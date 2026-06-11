@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { ReaderView } from '../ReaderView';
-import { useReaderUIStore } from '../../../store/useReaderUIStore';
-import { useReadingStateStore } from '../../../store/useReadingStateStore';
-import { usePreferencesStore } from '../../../store/usePreferencesStore';
-import { useTTSStore } from '../../../store/useTTSStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useReadingStateStore } from '@store/useReadingStateStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import { useTTSStore } from '@store/useTTSStore';
 import ePub from 'epubjs';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import { CURRENT_BOOK_VERSION } from '../../../lib/constants';
+import { CURRENT_BOOK_VERSION } from '@lib/constants';
 
 // Mock dependencies
 vi.mock('epubjs');
-vi.mock('../../../db/db', () => ({
+vi.mock('@db/db', () => ({
   getDB: vi.fn(() => Promise.resolve({
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     get: vi.fn((store, _id) => {
@@ -60,7 +60,7 @@ vi.mock('../../../db/db', () => ({
 }));
 
 // Mock searchClient
-vi.mock('../../../lib/search', () => ({
+vi.mock('@lib/search', () => ({
   searchClient: {
     indexBook: vi.fn().mockResolvedValue(undefined),
     search: vi.fn().mockResolvedValue([]),

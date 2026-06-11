@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { getYDoc, getYjsOptions } from './yjs-provider';
-import type { ReadingListEntry } from '../types/db';
+import type { ReadingListEntry } from '~types/db';
 
 interface ReadingListState {
     entries: Record<string, ReadingListEntry>;

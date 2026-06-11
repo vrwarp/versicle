@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { useReadingStateStore } from '../store/useReadingStateStore';
-import { getDeviceId } from '../lib/device-id';
-import { useToastStore } from '../store/useToastStore';
-import { useBookStore } from '../store/useLibraryStore';
+import { useReadingStateStore } from '@store/useReadingStateStore';
+import { getDeviceId } from '@lib/device-id';
+import { useToastStore } from '@store/useToastStore';
+import { useBookStore } from '@store/useLibraryStore';
 
 /**
  * Hook to show toast notifications when sync events occur from other devices.

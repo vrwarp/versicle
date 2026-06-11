@@ -1,39 +1,39 @@
 import { useState, useEffect } from 'react';
-import { useUIStore } from '../store/useUIStore';
-import { useTTSStore } from '../store/useTTSStore';
-import { useLibraryStore, useBookStore } from '../store/useLibraryStore';
-import { useReadingListStore } from '../store/useReadingListStore';
-import { useReadingStateStore } from '../store/useReadingStateStore';
-import { usePreferencesStore } from '../store/usePreferencesStore';
-import { useToastStore } from '../store/useToastStore';
+import { useUIStore } from '@store/useUIStore';
+import { useTTSStore } from '@store/useTTSStore';
+import { useLibraryStore, useBookStore } from '@store/useLibraryStore';
+import { useReadingListStore } from '@store/useReadingListStore';
+import { useReadingStateStore } from '@store/useReadingStateStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import { useToastStore } from '@store/useToastStore';
 import { useShallow } from 'zustand/react/shallow';
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription, ModalClose } from './ui/Modal';
 import { Button } from './ui/Button';
 
 
-import { useGenAIStore } from '../store/useGenAIStore';
+import { useGenAIStore } from '@store/useGenAIStore';
 import { TTSAbbreviationSettings } from './reader/TTSAbbreviationSettings';
 import { LexiconManager } from './reader/LexiconManager';
 
-import { maintenanceService } from '../lib/MaintenanceService';
-import { backupService } from '../lib/BackupService';
-import { wipeAllData } from '../db/wipe';
-import { contentAnalysisRepository } from '../app/repositories/ContentAnalysisRepository';
-import { CheckpointService } from '../lib/sync/CheckpointService';
-import { useSyncStore } from '../store/useSyncStore';
-import { useFirestoreSync } from '../lib/sync/hooks/useFirestoreSync';
-import { exportReadingListToCSV, parseReadingListCSV } from '../lib/csv';
-import { exportFile } from '../lib/export';
+import { maintenanceService } from '@lib/MaintenanceService';
+import { backupService } from '@lib/BackupService';
+import { wipeAllData } from '@db/wipe';
+import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
+import { CheckpointService } from '@lib/sync/CheckpointService';
+import { useSyncStore } from '@store/useSyncStore';
+import { useFirestoreSync } from '@lib/sync/hooks/useFirestoreSync';
+import { exportReadingListToCSV, parseReadingListCSV } from '@lib/csv';
+import { exportFile } from '@lib/export';
 import { ReadingListDialog } from './ReadingListDialog';
 import { Loader2, X } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import { useDeviceStore } from '../store/useDeviceStore';
-import { getDeviceId } from '../lib/device-id';
+import { useDeviceStore } from '@store/useDeviceStore';
+import { getDeviceId } from '@lib/device-id';
 
 import { DeviceManager } from './devices/DeviceManager';
-import { createLogger } from '../lib/logger';
-import { BackButtonPriority } from '../store/useBackNavigationStore';
-import { useNavigationGuard } from '../hooks/useNavigationGuard';
+import { createLogger } from '@lib/logger';
+import { BackButtonPriority } from '@store/useBackNavigationStore';
+import { useNavigationGuard } from '@hooks/useNavigationGuard';
 import {
     GeneralSettingsTab,
     TTSSettingsTab,

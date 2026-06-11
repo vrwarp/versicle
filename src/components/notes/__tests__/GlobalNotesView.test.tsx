@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { GlobalNotesView } from '../GlobalNotesView';
-import { useLibraryStore } from '../../../store/useLibraryStore';
-import { useAnnotationStore } from '../../../store/useAnnotationStore';
+import { useLibraryStore } from '@store/useLibraryStore';
+import { useAnnotationStore } from '@store/useAnnotationStore';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 
 // Mock navigate
@@ -15,20 +15,20 @@ vi.mock('react-router-dom', async () => {
 });
 
 // Mock Zustand stores
-vi.mock('../../../store/useLibraryStore', () => ({
+vi.mock('@store/useLibraryStore', () => ({
     useLibraryStore: {
         getState: vi.fn(),
     }
 }));
 
-vi.mock('../../../store/useAnnotationStore', () => ({
+vi.mock('@store/useAnnotationStore', () => ({
     useAnnotationStore: Object.assign(vi.fn(), {
         getState: vi.fn(),
     })
 }));
 
 // Mock selectors
-vi.mock('../../../store/selectors', () => ({
+vi.mock('@store/selectors', () => ({
     selectPendingAudioBookmarks: (state: { annotations?: Record<string, { type: string, pending?: boolean }> }) => {
         return Object.values(state.annotations || {}).filter(
             (a: { type: string, pending?: boolean }) => a.type === 'audio_bookmark' && a.pending
@@ -37,15 +37,15 @@ vi.mock('../../../store/selectors', () => ({
 }));
 
 // Mock hooks
-vi.mock('../../../hooks/useGroupedAnnotations', () => ({
+vi.mock('@hooks/useGroupedAnnotations', () => ({
     useGroupedAnnotations: vi.fn(),
 }));
 
-vi.mock('../../../hooks/useDebounce', () => ({
+vi.mock('@hooks/useDebounce', () => ({
     useDebounce: (val: string) => val,
 }));
 
-import { useGroupedAnnotations } from '../../../hooks/useGroupedAnnotations';
+import { useGroupedAnnotations } from '@hooks/useGroupedAnnotations';
 
 // Mock sub-components
 vi.mock('../NotesSearchBar', () => ({

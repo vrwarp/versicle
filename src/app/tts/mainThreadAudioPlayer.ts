@@ -12,11 +12,11 @@
  * `PlatformIntegration`) — keeping them out of `AudioPlayerService.ts` is what makes the engine
  * module worker-importable.
  */
-import { AudioPlayerService, type TtsEngine } from '../../lib/tts/AudioPlayerService';
+import { AudioPlayerService, type TtsEngine } from '@lib/tts/AudioPlayerService';
 import { createZustandEngineContext } from './createZustandEngineContext';
-import { TTSProviderManager } from '../../lib/tts/TTSProviderManager';
-import { PlatformIntegration } from '../../lib/tts/PlatformIntegration';
-import { WorkerEngineHandle } from '../../lib/tts/engine/WorkerEngineHandle';
+import { TTSProviderManager } from '@lib/tts/TTSProviderManager';
+import { PlatformIntegration } from '@lib/tts/PlatformIntegration';
+import { WorkerEngineHandle } from '@lib/tts/engine/WorkerEngineHandle';
 
 let instance: TtsEngine | null = null;
 

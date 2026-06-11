@@ -4,7 +4,7 @@ import { vi, describe, it, expect } from 'vitest';
 import { useEpubReader, type EpubReaderOptions } from './useEpubReader';
 
 // Mock dependencies
-vi.mock('../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
   dbService: {
     getBook: vi.fn().mockResolvedValue({ file: new ArrayBuffer(0), metadata: {} }),
     getBookFile: vi.fn().mockResolvedValue(new ArrayBuffer(0)),

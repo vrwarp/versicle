@@ -1,8 +1,8 @@
 import { DriveService, type DriveFile } from './DriveService';
-import { useDriveStore } from '../../store/useDriveStore';
-import { useLibraryStore } from '../../store/useLibraryStore';
-import { useBookStore } from '../../store/useBookStore';
-import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
+import { useDriveStore } from '@store/useDriveStore';
+import { useLibraryStore } from '@store/useLibraryStore';
+import { useBookStore } from '@store/useBookStore';
+import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 import { createLogger } from '../logger';
 
 const logger = createLogger('DriveScannerService');
@@ -60,7 +60,7 @@ export class DriveScannerService {
     /**
      * Helper to map DriveFile items to lightweight DriveFileIndex
      */
-    private static mapToDriveFileIndex(file: DriveFile): import('../../store/useDriveStore').DriveFileIndex {
+    private static mapToDriveFileIndex(file: DriveFile): import('@store/useDriveStore').DriveFileIndex {
         return {
             id: file.id,
             name: file.name,
@@ -113,7 +113,7 @@ export class DriveScannerService {
      * 
      * If the index is empty, it triggers a scan first.
      */
-    static async checkForNewFiles(): Promise<import('../../store/useDriveStore').DriveFileIndex[]> {
+    static async checkForNewFiles(): Promise<import('@store/useDriveStore').DriveFileIndex[]> {
         let { index } = useDriveStore.getState();
 
         // If index is empty, force a scan

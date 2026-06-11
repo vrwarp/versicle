@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
+import { createZustandEngineContext } from '@app/tts/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { extractSentencesFromNode } from './sentence-extraction';
 import { EpubCFI } from 'epubjs';
-import type { CitationMarker } from '../../types/db';
+import type { CitationMarker } from '~types/db';
 
 // NOTE: This suite deliberately does NOT mock epubjs. Marker attribution lives or dies on the
 // real EpubCFI.compare semantics, so every assertion runs against the actual library in jsdom.

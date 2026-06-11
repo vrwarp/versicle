@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { type ReactNode } from 'react';
 import { LibraryView } from './LibraryView';
-import { usePreferencesStore } from '../../store/usePreferencesStore';
-import { useLibraryStore, useBookStore } from '../../store/useLibraryStore';
-import { useToastStore } from '../../store/useToastStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import { useLibraryStore, useBookStore } from '@store/useLibraryStore';
+import { useToastStore } from '@store/useToastStore';
 import { MemoryRouter } from 'react-router-dom';
-import type { UserProgress, BookMetadata } from '../../types/db';
+import type { UserProgress, BookMetadata } from '~types/db';
 
 // Mock zustand/middleware to disable persistence
 vi.mock('zustand/middleware', () => ({
@@ -39,7 +39,7 @@ vi.mock('./ReprocessingInterstitial', () => ({
     ReprocessingInterstitial: ({ isOpen }: ReprocessingInterstitialProps) => isOpen ? <div data-testid="reprocessing-interstitial">Processing...</div> : null
 }));
 
-vi.mock('../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
     useToastStore: vi.fn(),
 }));
 
@@ -71,7 +71,7 @@ vi.mock('../ui/Select', () => ({
     ),
 }));
 
-vi.mock('../../store/useReadingStateStore', () => {
+vi.mock('@store/useReadingStateStore', () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const getProgress = (_bookId: string) => {
         // This will be overridden in tests that need custom progress
@@ -105,7 +105,7 @@ vi.mock('../../store/useReadingStateStore', () => {
         },
     };
 });
-import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useReadingStateStore } from '@store/useReadingStateStore';
 
 describe('LibraryView', () => {
     const mockShowToast = vi.fn();

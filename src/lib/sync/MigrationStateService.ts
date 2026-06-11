@@ -5,7 +5,7 @@
  * during workspace context switches. The state machine prevents the boot
  * sequence from initializing sync while a migration is in-flight.
  */
-import type { SyncMigrationState } from '../../types/workspace';
+import type { SyncMigrationState } from '~types/workspace';
 import { createLogger } from '../logger';
 
 const logger = createLogger('MigrationState');

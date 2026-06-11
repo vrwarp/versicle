@@ -6,9 +6,9 @@ import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
 import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
-import type { UserProgress } from '../types/db';
-import { getDeviceId } from '../lib/device-id';
-import type { BookMetadata } from '../types/db';
+import type { UserProgress } from '~types/db';
+import { getDeviceId } from '@lib/device-id';
+import type { BookMetadata } from '~types/db';
 
 // Mock stores
 vi.mock('./useLocalHistoryStore', () => ({
@@ -47,7 +47,7 @@ vi.mock('./useReadingListStore', () => ({
 }));
 
 // Mock device ID
-vi.mock('../lib/device-id', () => ({
+vi.mock('@lib/device-id', () => ({
   getDeviceId: vi.fn(),
 }));
 

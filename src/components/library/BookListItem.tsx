@@ -1,12 +1,12 @@
 import React from 'react';
-import type { BookMetadata } from '../../types/db';
+import type { BookMetadata } from '~types/db';
 import { BookOpen, Cloud, MoreVertical, CloudDownload } from 'lucide-react';
-import { useToastStore } from '../../store/useToastStore';
-import { cn } from '../../lib/utils';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useToastStore } from '@store/useToastStore';
+import { cn } from '@lib/utils';
+import { useReaderUIStore } from '@store/useReaderUIStore';
 import { Progress } from '../ui/Progress';
 import { BookActionMenu } from './BookActionMenu';
-import { unpackColorToRGB } from '../../lib/cover-palette';
+import { unpackColorToRGB } from '@lib/cover-palette';
 
 function unpackColor(packed: number): string {
     const { r, g, b } = unpackColorToRGB(packed);

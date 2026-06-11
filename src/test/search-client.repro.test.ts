@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { searchClient } from '../lib/search';
+import { searchClient } from '@lib/search';
 import { type Book } from 'epubjs';
 
 // Mock Worker class

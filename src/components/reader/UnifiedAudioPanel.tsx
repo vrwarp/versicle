@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useTTSStore } from '../../store/useTTSStore';
+import { useTTSStore } from '@store/useTTSStore';
 import { useShallow } from 'zustand/react/shallow';
 import { SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../ui/Sheet';
 import { Button } from '../ui/Button';

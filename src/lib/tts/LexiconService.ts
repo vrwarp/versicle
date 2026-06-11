@@ -1,9 +1,9 @@
 
 // import { v4 as uuidv4 } from 'uuid'; // Unused
 import { BIBLE_LEXICON_RULES } from '../../data/bible-lexicon';
-import { useLexiconStore } from '../../store/useLexiconStore';
-import { waitForYjsSync } from '../../store/yjs-provider';
-import type { LexiconRule } from '../../types/db';
+import { useLexiconStore } from '@store/useLexiconStore';
+import { waitForYjsSync } from '@store/yjs-provider';
+import type { LexiconRule } from '~types/db';
 import { lexiconApplier, processInitialisms } from './LexiconApplier';
 
 // Re-exported for back-compat; the implementation now lives in the (yjs-free) LexiconApplier.

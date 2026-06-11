@@ -15,9 +15,9 @@ import {
     persistentMultipleTabManager
 } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
-import { useSyncStore } from '../../store/useSyncStore';
-import { useToastStore } from '../../store/useToastStore';
-import type { FirebaseConfigSettings } from '../../store/useSyncStore';
+import { useSyncStore } from '@store/useSyncStore';
+import { useToastStore } from '@store/useToastStore';
+import type { FirebaseConfigSettings } from '@store/useSyncStore';
 import { createLogger } from '../logger';
 
 const logger = createLogger('Firebase');

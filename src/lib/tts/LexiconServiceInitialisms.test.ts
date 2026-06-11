@@ -1,23 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processInitialisms, LexiconService } from './LexiconService';
-import { type LexiconRule } from '../../types/db';
+import { type LexiconRule } from '~types/db';
 
 // Mock dependencies to isolate unit tests
-vi.mock('../../db/db', () => ({
+vi.mock('@db/db', () => ({
   getDB: vi.fn(),
 }));
 
-vi.mock('../../store/useLexiconStore', () => ({
+vi.mock('@store/useLexiconStore', () => ({
   useLexiconStore: {
     getState: vi.fn(),
   }
 }));
 
-vi.mock('../../store/yjs-provider', () => ({
+vi.mock('@store/yjs-provider', () => ({
   waitForYjsSync: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,
   useTTSStore: {
     getState: () => ({ isBibleLexiconEnabled: true })
@@ -145,7 +145,7 @@ describe('LexiconService initialism integration', () => {
       setBiblePreference: vi.fn()
     };
 
-    const { useLexiconStore } = await import('../../store/useLexiconStore');
+    const { useLexiconStore } = await import('@store/useLexiconStore');
     vi.mocked(useLexiconStore.getState).mockReturnValue(mockStore);
   });
 

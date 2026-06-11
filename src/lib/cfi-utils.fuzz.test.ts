@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mergeCfiRanges, generateCfiRange, parseCfiRange, getParentCfi } from './cfi-utils';
-import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '../test/fuzz-utils';
+import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '@test/fuzz-utils';
 
 describe('cfi-utils Fuzzing', () => {
     const SEED = DEFAULT_FUZZ_SEED;

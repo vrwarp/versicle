@@ -1,8 +1,8 @@
 import { render, fireEvent } from '@testing-library/react';
 import { ReaderTTSController } from './ReaderTTSController';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { useTTSStore } from '../../store/useTTSStore';
-import { autoResetStores, makeTTSQueue, seedStore } from '../../test/harness';
+import { useTTSStore } from '@store/useTTSStore';
+import { autoResetStores, makeTTSQueue, seedStore } from '@test/harness';
 import type { Rendition } from 'epubjs';
 
 // Harness migration (Phase 0): seeds the REAL useTTSStore (state + action

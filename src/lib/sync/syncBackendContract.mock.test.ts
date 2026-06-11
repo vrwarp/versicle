@@ -8,8 +8,8 @@
  * mirroring below is deleted with the inline branches it documents.
  */
 import { MockFireProvider } from './drivers/MockFireProvider';
-import { CURRENT_SCHEMA_VERSION } from '../../store/yjs-provider';
-import type { WorkspaceMetadata } from '../../types/workspace';
+import { CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
+import type { WorkspaceMetadata } from '~types/workspace';
 import {
   describeSyncBackendContract,
   type SyncBackendContractHarness,

@@ -1,5 +1,5 @@
-import type { BookMetadata } from '../types/db';
-import { sanitizeMetadata } from '../lib/sanitizer';
+import type { BookMetadata } from '~types/db';
+import { sanitizeMetadata } from '@lib/sanitizer';
 
 /**
  * Validates if an object conforms to the BookMetadata interface.

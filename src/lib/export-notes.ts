@@ -1,4 +1,4 @@
-import type { UserAnnotation } from '../types/db';
+import type { UserAnnotation } from '~types/db';
 
 export const exportNotesToMarkdown = (bookTitle: string, annotations: UserAnnotation[]) => {
     let md = `# Notes from ${bookTitle}\n\n`;

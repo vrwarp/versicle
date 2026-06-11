@@ -28,8 +28,8 @@ import { resolve } from 'node:path';
 import { describe, beforeAll, afterAll } from 'vitest';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { CURRENT_SCHEMA_VERSION } from '../../store/yjs-provider';
-import type { WorkspaceMetadata } from '../../types/workspace';
+import { CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
+import type { WorkspaceMetadata } from '~types/workspace';
 import {
   describeSyncBackendContract,
   type SyncBackendContractHarness,

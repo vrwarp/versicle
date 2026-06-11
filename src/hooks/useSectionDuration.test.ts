@@ -2,13 +2,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useSectionDuration } from './useSectionDuration';
-import { useTTSStore } from '../store/useTTSStore';
-import { useReaderUIStore } from '../store/useReaderUIStore';
-import { useBookStore } from '../store/useBookStore';
+import { useTTSStore } from '@store/useTTSStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useBookStore } from '@store/useBookStore';
 
-vi.mock('../store/useTTSStore');
-vi.mock('../store/useReaderUIStore');
-vi.mock('../store/useBookStore');
+vi.mock('@store/useTTSStore');
+vi.mock('@store/useReaderUIStore');
+vi.mock('@store/useBookStore');
 
 describe('useSectionDuration', () => {
     let mockState: any;

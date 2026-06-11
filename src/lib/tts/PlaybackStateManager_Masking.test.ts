@@ -3,7 +3,7 @@ import { PlaybackStateManager } from './PlaybackStateManager';
 import type { TTSQueueItem } from './AudioPlayerService';
 
 // Mock DBService
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         saveTTSState: vi.fn(),
         saveTTSPosition: vi.fn(),

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { cn } from '../../lib/utils';
+import { cn } from '@lib/utils';
 import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
-import type { ToastType } from '../../store/useToastStore';
+import type { ToastType } from '@store/useToastStore';
 import { Button } from './Button';
 
 export interface ToastProps {

@@ -2,16 +2,16 @@ import { type ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, type Mock } from 'vitest';
 import { ContentMissingDialog } from './ContentMissingDialog';
-import { useDriveStore } from '../../store/useDriveStore';
-import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
-import { type BookMetadata } from '../../types/db';
+import { useDriveStore } from '@store/useDriveStore';
+import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
+import { type BookMetadata } from '~types/db';
 
 // Mock the store
-vi.mock('../../store/useDriveStore', () => ({
+vi.mock('@store/useDriveStore', () => ({
   useDriveStore: vi.fn(),
 }));
 
-vi.mock('../../store/useGoogleServicesStore', () => ({
+vi.mock('@store/useGoogleServicesStore', () => ({
   useGoogleServicesStore: vi.fn(),
 }));
 

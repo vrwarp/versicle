@@ -9,6 +9,6 @@
  * Mirrors src/workers/search.worker.ts.
  */
 import * as Comlink from 'comlink';
-import { WorkerTtsEngine } from '../lib/tts/engine/WorkerTtsEngine';
+import { WorkerTtsEngine } from '@lib/tts/engine/WorkerTtsEngine';
 
 Comlink.expose(new WorkerTtsEngine());

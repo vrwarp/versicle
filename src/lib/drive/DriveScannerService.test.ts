@@ -1,18 +1,18 @@
 
 import { describe, it, expect, vi, beforeEach, type Mock, afterEach } from 'vitest';
 import { DriveScannerService } from './DriveScannerService';
-import { useDriveStore } from '../../store/useDriveStore';
-import { useBookStore } from '../../store/useBookStore';
+import { useDriveStore } from '@store/useDriveStore';
+import { useBookStore } from '@store/useBookStore';
 import { DriveService } from './DriveService';
 
 // Mock dependencies
-vi.mock('../../store/useDriveStore', () => ({
+vi.mock('@store/useDriveStore', () => ({
     useDriveStore: {
         getState: vi.fn()
     }
 }));
 
-vi.mock('../../store/useBookStore', () => ({
+vi.mock('@store/useBookStore', () => ({
     useBookStore: {
         getState: vi.fn(),
         subscribe: vi.fn()

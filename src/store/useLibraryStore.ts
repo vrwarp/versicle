@@ -1,16 +1,16 @@
 import { create } from 'zustand';
-import { dbService } from '../db/DBService';
-import { bookRepository } from '../app/repositories/BookRepository';
-import { bookImportService } from '../lib/BookImportService';
-import type { UserInventoryItem, BookMetadata, StaticBookManifest } from '../types/db';
-import { StorageFullError, DuplicateBookError } from '../types/errors';
+import { dbService } from '@db/DBService';
+import { bookRepository } from '@app/repositories/BookRepository';
+import { bookImportService } from '@lib/BookImportService';
+import type { UserInventoryItem, BookMetadata, StaticBookManifest } from '~types/db';
+import { StorageFullError, DuplicateBookError } from '~types/errors';
 import { useTTSStore } from './useTTSStore';
 import { useReadingListStore } from './useReadingListStore';
-import { processBatchImport } from '../lib/batch-ingestion';
-import type { BatchImportFailure } from '../lib/batch-ingestion';
-import { extractBookMetadata } from '../lib/ingestion';
+import { processBatchImport } from '@lib/batch-ingestion';
+import type { BatchImportFailure } from '@lib/batch-ingestion';
+import { extractBookMetadata } from '@lib/ingestion';
 import { useBookStore } from './useBookStore';
-import { createLogger } from '../lib/logger';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('LibraryStore');
 

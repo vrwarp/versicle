@@ -1,5 +1,5 @@
 import React from 'react';
-import { useToastStore } from '../../store/useToastStore';
+import { useToastStore } from '@store/useToastStore';
 import { Toast } from './Toast';
 
 /**

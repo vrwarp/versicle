@@ -1,13 +1,13 @@
 import { useState, useCallback } from 'react';
 import type { Book } from 'epubjs';
-import type { NavigationItem } from '../types/db';
-import { genAIService } from '../lib/genai/GenAIService';
-import { dbService } from '../db/DBService';
-import { bookRepository } from '../app/repositories/BookRepository';
-import { useGenAIStore } from '../store/useGenAIStore';
-import { useToastStore } from '../store/useToastStore';
-import { useLibraryStore } from '../store/useLibraryStore';
-import { createLogger } from '../lib/logger';
+import type { NavigationItem } from '~types/db';
+import { genAIService } from '@lib/genai/GenAIService';
+import { dbService } from '@db/DBService';
+import { bookRepository } from '@app/repositories/BookRepository';
+import { useGenAIStore } from '@store/useGenAIStore';
+import { useToastStore } from '@store/useToastStore';
+import { useLibraryStore } from '@store/useLibraryStore';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('useSmartTOC');
 

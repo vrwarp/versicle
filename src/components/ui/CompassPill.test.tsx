@@ -2,7 +2,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { CompassPill } from './CompassPill';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { useTTSStore } from '../../store/useTTSStore';
+import { useTTSStore } from '@store/useTTSStore';
 
 // Mock Lucide icons
 vi.mock('lucide-react', () => ({
@@ -23,13 +23,13 @@ vi.mock('lucide-react', () => ({
 }));
 
 // Mock useTTSStore
-vi.mock('../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,
     useTTSStore: vi.fn()
 }));
 
 // Mock useReaderUIStore with selector support
-vi.mock('../../store/useReaderUIStore', () => ({
+vi.mock('@store/useReaderUIStore', () => ({
     useReaderUIStore: (selector: any) => {
         const state = {
             currentSectionTitle: 'Test Chapter',
@@ -42,7 +42,7 @@ vi.mock('../../store/useReaderUIStore', () => ({
 }));
 
 // Mock useSectionDuration
-vi.mock('../../hooks/useSectionDuration', () => ({
+vi.mock('@hooks/useSectionDuration', () => ({
     useSectionDuration: () => ({
         timeRemaining: 5, // 5 minutes
         progress: 50

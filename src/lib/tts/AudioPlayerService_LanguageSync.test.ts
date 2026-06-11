@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
-import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '../../app/tts/mainThreadAudioPlayer';
-import { useBookStore } from '../../store/useBookStore';
-import type { UserInventoryItem } from '../../types/db';
-import { useTTSStore } from '../../store/useTTSStore';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '@app/tts/mainThreadAudioPlayer';
+import { useBookStore } from '@store/useBookStore';
+import type { UserInventoryItem } from '~types/db';
+import { useTTSStore } from '@store/useTTSStore';
 
 // Mock dependencies to prevent external calls during tests
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getSections: vi.fn().mockResolvedValue([]),
         getTTSState: vi.fn().mockResolvedValue(null),

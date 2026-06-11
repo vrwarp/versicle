@@ -22,7 +22,7 @@ vi.mock('firebase/firestore', () => ({
 // Mock stores
 const showToastMock = vi.fn();
 
-vi.mock('../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
   useToastStore: {
     getState: vi.fn(() => ({
       showToast: showToastMock,
@@ -30,7 +30,7 @@ vi.mock('../../store/useToastStore', () => ({
   },
 }));
 
-vi.mock('../../store/useSyncStore', () => ({
+vi.mock('@store/useSyncStore', () => ({
   useSyncStore: {
     getState: vi.fn(() => ({
       firebaseConfig: {

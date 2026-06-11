@@ -1,9 +1,9 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useDriveBrowser } from './useDriveBrowser';
-import { DriveService } from '../../lib/drive/DriveService';
+import { DriveService } from '@lib/drive/DriveService';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
-vi.mock('../../lib/drive/DriveService', () => ({
+vi.mock('@lib/drive/DriveService', () => ({
     DriveService: {
         listFolders: vi.fn()
     }

@@ -1,13 +1,13 @@
 import React from 'react';
-import type { BookAnnotationGroup } from '../../hooks/useGroupedAnnotations';
-import { useBook } from '../../store/selectors';
+import type { BookAnnotationGroup } from '@hooks/useGroupedAnnotations';
+import { useBook } from '@store/selectors';
 import { AnnotationCard } from './AnnotationCard';
 import { Download, BookOpen, Link } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { exportNotesToMarkdown } from '../../lib/export-notes';
+import { exportNotesToMarkdown } from '@lib/export-notes';
 import { BookCover } from '../library/BookCover';
 import { ReassignBookDialog } from './ReassignBookDialog';
-import { useAnnotationStore } from '../../store/useAnnotationStore';
+import { useAnnotationStore } from '@store/useAnnotationStore';
 
 interface BookNotesBlockProps {
     group: BookAnnotationGroup;

@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { CompassPill } from './CompassPill';
-import { useTTSStore } from '../../store/useTTSStore';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { useSectionDuration } from '../../hooks/useSectionDuration';
+import { useTTSStore } from '@store/useTTSStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useSectionDuration } from '@hooks/useSectionDuration';
 
 // Mock the stores and hooks
-vi.mock('../../store/useTTSStore');
-vi.mock('../../store/useReaderUIStore');
-vi.mock('../../hooks/useSectionDuration');
+vi.mock('@store/useTTSStore');
+vi.mock('@store/useReaderUIStore');
+vi.mock('@hooks/useSectionDuration');
 
 describe('CompassPill Accessibility', () => {
   beforeEach(() => {

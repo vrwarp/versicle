@@ -5,7 +5,7 @@ import { Switch } from '../../ui/Switch';
 import { Label } from '../../ui/Label';
 import { Button } from '../../ui/Button';
 import { Wand2 } from 'lucide-react';
-import { cn } from '../../../lib/utils';
+import { cn } from '@lib/utils';
 import { ReadingHistoryPanel } from '../ReadingHistoryPanel';
 import { DeviceIcon } from '../DeviceIcon';
 import type { Rendition } from 'epubjs';

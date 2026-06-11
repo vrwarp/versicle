@@ -18,7 +18,7 @@ vi.mock('../LexiconService', () => ({
     },
 }));
 
-vi.mock('../../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getSections: vi.fn().mockResolvedValue([]),
         getTTSState: vi.fn().mockResolvedValue(null),

@@ -16,7 +16,7 @@ const mockSetCustomAbbreviations = vi.fn();
 const mockSetAlwaysMerge = vi.fn();
 const mockSetSentenceStarters = vi.fn();
 
-vi.mock('../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,
     useTTSStore: vi.fn(() => ({
         customAbbreviations: ['Mr.', 'Dr.'],

@@ -23,14 +23,14 @@
  * type queries on type-only imports. These imports are erased at runtime and create no
  * runtime dependency, so the core stays worker-portable.
  */
-import type { useTTSStore } from '../../../store/useTTSStore';
-import type { useGenAIStore } from '../../../store/useGenAIStore';
-import type { useReadingStateStore } from '../../../store/useReadingStateStore';
-import type { SectionAnalysis, TableAdaptation } from '../../../store/useContentAnalysisStore';
-import type { useAnnotationStore } from '../../../store/useAnnotationStore';
-import type { useToastStore } from '../../../store/useToastStore';
-import type { LexiconRule, ContentAnalysis, BookMetadata } from '../../../types/db';
-import type { ContentType } from '../../../types/content-analysis';
+import type { useTTSStore } from '@store/useTTSStore';
+import type { useGenAIStore } from '@store/useGenAIStore';
+import type { useReadingStateStore } from '@store/useReadingStateStore';
+import type { SectionAnalysis, TableAdaptation } from '@store/useContentAnalysisStore';
+import type { useAnnotationStore } from '@store/useAnnotationStore';
+import type { useToastStore } from '@store/useToastStore';
+import type { LexiconRule, ContentAnalysis, BookMetadata } from '~types/db';
+import type { ContentType } from '~types/content-analysis';
 
 // Re-exported so the engine core and helpers (e.g. FakeEngineContext) get all
 // engine-boundary types from this one module without re-reaching into the stores.

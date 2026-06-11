@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { sanitizeString, getSanitizedBookMetadata } from './validators';
-import type { BookMetadata } from '../types/db';
+import type { BookMetadata } from '~types/db';
 
 describe('validators', () => {
     beforeEach(() => {

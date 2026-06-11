@@ -2,12 +2,12 @@ import { renderHook } from '@testing-library/react';
 import { fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useReaderNavigation } from './useReaderNavigation';
-import type { TTSStatus } from '../lib/tts/AudioPlayerService';
+import type { TTSStatus } from '@lib/tts/AudioPlayerService';
 
 // Mock the TTS store: the hook only reads getState().status
 const mockGetState = vi.fn();
 
-vi.mock('../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     useTTSStore: Object.assign(vi.fn(), {
         getState: () => mockGetState(),
     }),

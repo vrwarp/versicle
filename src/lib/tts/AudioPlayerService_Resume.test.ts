@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
-import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '../../app/tts/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '@app/tts/mainThreadAudioPlayer';
 
 // --- Mocks ---
 
@@ -37,7 +37,7 @@ vi.mock('./TTSCache', () => {
 });
 
 // Mock useTTSStore
-vi.mock('../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,
     useTTSStore: {
         getState: vi.fn(() => ({
@@ -48,7 +48,7 @@ vi.mock('../../store/useTTSStore', () => ({
 }));
 
 // Mock DBService
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
   dbService: {
     getBookMetadata: vi.fn().mockResolvedValue({}),
     updatePlaybackState: vi.fn().mockResolvedValue(undefined),

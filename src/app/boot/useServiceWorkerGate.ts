@@ -6,8 +6,8 @@
  * rendering, not the data phases. Pinned by App_SW_Wait.test.tsx.
  */
 import { useEffect, useState } from 'react';
-import { waitForServiceWorkerController } from '../../lib/serviceWorkerUtils';
-import { createLogger } from '../../lib/logger';
+import { waitForServiceWorkerController } from '@lib/serviceWorkerUtils';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
 

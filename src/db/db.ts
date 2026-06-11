@@ -14,8 +14,8 @@ import type {
   SyncCheckpoint,
   SyncLogEntry,
   FlightSnapshot
-} from '../types/db';
-import { createLogger } from '../lib/logger';
+} from '~types/db';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('DB');
 

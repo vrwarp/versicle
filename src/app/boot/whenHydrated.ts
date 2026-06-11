@@ -9,8 +9,8 @@
  * phase position stay put (contract-first.md C2/C11).
  */
 import type { BootTask } from '../bootstrap';
-import { waitForYjsSync } from '../../store/yjs-provider';
-import { useLibraryStore, useBookStore } from '../../store/useLibraryStore';
+import { waitForYjsSync } from '@store/yjs-provider';
+import { useLibraryStore, useBookStore } from '@store/useLibraryStore';
 
 export async function whenHydrated(): Promise<void> {
   await waitForYjsSync();

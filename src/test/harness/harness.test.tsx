@@ -4,7 +4,7 @@
  * double, renderWithStores auto-reset).
  */
 import { describe, it, expect, vi } from 'vitest';
-import { useToastStore } from '../../store/useToastStore';
+import { useToastStore } from '@store/useToastStore';
 import {
   autoResetStores,
   captureToasts,
@@ -19,7 +19,7 @@ import {
   seedStore,
   storeSeed,
 } from './index';
-import type { TTSEvent } from '../../lib/tts/providers/types';
+import type { TTSEvent } from '@lib/tts/providers/types';
 
 describe('doubles', () => {
   it('makeDbServiceDouble: unstubbed methods throw with a clear message when called', async () => {

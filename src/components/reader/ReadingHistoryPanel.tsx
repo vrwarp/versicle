@@ -1,9 +1,9 @@
 import React, { useMemo } from 'react';
-import { useBookProgress } from '../../store/useReadingStateStore';
-import { parseCfiRange } from '../../lib/cfi-utils';
+import { useBookProgress } from '@store/useReadingStateStore';
+import { parseCfiRange } from '@lib/cfi-utils';
 import type { Rendition } from 'epubjs';
 import { BookOpen, Headphones, ScrollText } from 'lucide-react';
-import type { ReadingEventType, ReadingSession } from '../../types/db';
+import type { ReadingEventType, ReadingSession } from '~types/db';
 
 interface Props {
     bookId: string;

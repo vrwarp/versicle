@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { usePreferencesStore } from '../../store/usePreferencesStore';
-import { useVocabularyStore } from '../../store/useVocabularyStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import { useVocabularyStore } from '@store/useVocabularyStore';
 
 /**
  * Pinyin position entry.

@@ -1,6 +1,6 @@
 import { memo, forwardRef } from 'react';
-import type { TTSQueueItem as TTSQueueItemType } from '../../lib/tts/AudioPlayerService';
-import { cn } from '../../lib/utils';
+import type { TTSQueueItem as TTSQueueItemType } from '@lib/tts/AudioPlayerService';
+import { cn } from '@lib/utils';
 
 interface TTSQueueItemProps {
     item: TTSQueueItemType;

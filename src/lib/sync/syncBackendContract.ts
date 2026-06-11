@@ -18,7 +18,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
-import type { WorkspaceMetadata } from '../../types/workspace';
+import type { WorkspaceMetadata } from '~types/workspace';
 
 export interface SyncBackendConnection {
   /** Detach and flush; the workspace doc must be durable afterwards. */

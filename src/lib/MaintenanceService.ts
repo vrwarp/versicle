@@ -1,8 +1,8 @@
-import { getDB } from '../db/db';
-import { useBookStore } from '../store/useBookStore';
-import { dbService } from '../db/DBService';
+import { getDB } from '@db/db';
+import { useBookStore } from '@store/useBookStore';
+import { dbService } from '@db/DBService';
 import { bookImportService } from './BookImportService';
-import { useTTSStore } from '../store/useTTSStore';
+import { useTTSStore } from '@store/useTTSStore';
 import { createLogger } from './logger';
 
 const logger = createLogger('MaintenanceService');

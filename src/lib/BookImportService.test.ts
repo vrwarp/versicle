@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { bookImportService } from './BookImportService';
-import { dbService } from '../db/DBService';
+import { dbService } from '@db/DBService';
 import * as ingestion from './ingestion';
 
 vi.mock('./ingestion', () => ({
@@ -8,9 +8,9 @@ vi.mock('./ingestion', () => ({
     generateFileFingerprint: vi.fn().mockResolvedValue('hash'),
 }));
 
-vi.mock('../db/DBService', async (importOriginal) => {
+vi.mock('@db/DBService', async (importOriginal) => {
     // Keep handleDbError real (error-wrapping semantics under test); stub the dbService calls.
-    const actual = await importOriginal<typeof import('../db/DBService')>();
+    const actual = await importOriginal<typeof import('@db/DBService')>();
     return {
         handleDbError: actual.handleDbError,
         dbService: {

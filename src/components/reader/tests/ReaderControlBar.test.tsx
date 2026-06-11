@@ -26,19 +26,19 @@ const mockUseToastStore = vi.fn();
 const mockUseNavigate = vi.fn();
 
 // Fix paths
-vi.mock('../../../store/useAnnotationStore', () => ({
+vi.mock('@store/useAnnotationStore', () => ({
   useAnnotationStore: (selector: unknown) => mockUseAnnotationStore(selector),
 }));
 
-vi.mock('../../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
   useTTSStore: (selector: unknown) => mockUseTTSStore(selector),
 }));
 
-vi.mock('../../../store/useReaderUIStore', () => ({
+vi.mock('@store/useReaderUIStore', () => ({
   useReaderUIStore: (selector: unknown) => mockUseReaderUIStore(selector),
 }));
 
-vi.mock('../../../store/useReadingStateStore', () => ({
+vi.mock('@store/useReadingStateStore', () => ({
   useReadingStateStore: Object.assign(
     (selector: unknown) => mockUseReadingStateStore(selector),
     {
@@ -52,17 +52,17 @@ vi.mock('../../../store/useReadingStateStore', () => ({
 }));
 
 // Mock selectors
-vi.mock('../../../store/selectors', () => ({
+vi.mock('@store/selectors', () => ({
   useBook: (id: any) => mockUseBook(id),
   useLastReadBook: () => mockUseLastReadBook(),
   useAllBooks: vi.fn(),
 }));
 
-vi.mock('../../../store/useLibraryStore', () => ({
+vi.mock('@store/useLibraryStore', () => ({
   useLibraryStore: (selector: unknown) => mockUseLibraryStore(selector),
 }));
 
-vi.mock('../../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
   useToastStore: (selector: unknown) => mockUseToastStore(selector),
 }));
 

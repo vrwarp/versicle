@@ -1,10 +1,10 @@
 import { v4 as uuid } from 'uuid';
-import { getDB } from '../../db/db';
+import { getDB } from '@db/db';
 import type { 
     FlightEventSource, 
     FlightEvent, 
     FlightSnapshot 
-} from '../../types/db';
+} from '~types/db';
 
 const MAX_EVENTS = 2000;
 const MAX_STRING_LEN = 80;

@@ -7,8 +7,8 @@ import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { Progress } from '../ui/Progress';
 import { Trash2 } from 'lucide-react';
-import type { TTSVoice } from '../../lib/tts/providers/types';
-import { getDefaultMinSentenceLength } from '../../store/useTTSStore';
+import type { TTSVoice } from '@lib/tts/providers/types';
+import { getDefaultMinSentenceLength } from '@store/useTTSStore';
 
 // Re-export TTSVoice for consumers
 export type { TTSVoice };
@@ -22,7 +22,7 @@ export interface TTSSettingsTabProps {
     /** Currently active language profile (from store, driven by book context) */
     activeLanguage: string;
     /** All TTS profiles for language context */
-    profiles: Record<string, import('../../store/useTTSStore').TTSProfile>;
+    profiles: Record<string, import('@store/useTTSStore').TTSProfile>;
     // Provider
     providerId: TTSProviderId;
     onProviderChange: (providerId: TTSProviderId) => void;

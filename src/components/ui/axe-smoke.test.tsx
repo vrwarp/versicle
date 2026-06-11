@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
-import { renderWithStores, runAxe } from '../../test/harness';
+import { renderWithStores, runAxe } from '@test/harness';
 import { Button } from './Button';
 import { Toast } from './Toast';
 import { Progress } from './Progress';

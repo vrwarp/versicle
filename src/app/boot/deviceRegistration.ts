@@ -8,12 +8,12 @@
  * keeps its historical position right before device registration.
  */
 import type { BootTask } from '../bootstrap';
-import { getDeviceId } from '../../lib/device-id';
-import { useDeviceStore } from '../../store/useDeviceStore';
-import { useTTSStore } from '../../store/useTTSStore';
-import { usePreferencesStore } from '../../store/usePreferencesStore';
-import type { DeviceProfile } from '../../types/device';
-import { createLogger } from '../../lib/logger';
+import { getDeviceId } from '@lib/device-id';
+import { useDeviceStore } from '@store/useDeviceStore';
+import { useTTSStore } from '@store/useTTSStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import type { DeviceProfile } from '~types/device';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
 

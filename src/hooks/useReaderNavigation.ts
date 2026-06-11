@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useTTSStore } from '../store/useTTSStore';
+import { useTTSStore } from '@store/useTTSStore';
 
 interface UseReaderNavigationProps {
     rendition: unknown;

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { FileSearch } from 'lucide-react';
-import { CheckpointService } from '../../lib/sync/CheckpointService';
-import { CheckpointInspector, type DiffResult } from '../../lib/sync/CheckpointInspector';
+import { CheckpointService } from '@lib/sync/CheckpointService';
+import { CheckpointInspector, type DiffResult } from '@lib/sync/CheckpointInspector';
 import { CheckpointDiffView } from './CheckpointDiffView';
-import { backupService } from '../../lib/BackupService';
-import type { SyncCheckpoint } from '../../types/db';
+import { backupService } from '@lib/BackupService';
+import type { SyncCheckpoint } from '~types/db';
 import { DataRecoveryView } from './DataRecoveryView';
 import { Modal, ModalContent, ModalHeader, ModalTitle } from '../ui/Modal';
 

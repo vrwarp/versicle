@@ -15,9 +15,9 @@ export interface FirebaseConfig {
     measurementId?: string;
 }
 
-import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
-import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
-import type { FirebaseAuthStatus } from '../../lib/sync/FirestoreSyncManager';
+import { googleIntegrationManager } from '@lib/google/GoogleIntegrationManager';
+import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
+import type { FirebaseAuthStatus } from '@lib/sync/FirestoreSyncManager';
 
 export interface SyncSettingsTabProps {
     // Device
@@ -39,13 +39,13 @@ export interface SyncSettingsTabProps {
 
 import { Modal, ModalContent, ModalHeader, ModalTitle } from '../ui/Modal';
 import { DriveFolderPicker } from '../drive/DriveFolderPicker';
-import { useDriveStore } from '../../store/useDriveStore';
-import { DriveScannerService } from '../../lib/drive/DriveScannerService';
-import { useToastStore } from '../../store/useToastStore';
-import { getFirestoreSyncManager } from '../../lib/sync/FirestoreSyncManager';
-import { useSyncStore } from '../../store/useSyncStore';
-import { CURRENT_SCHEMA_VERSION } from '../../store/yjs-provider';
-import type { WorkspaceMetadata } from '../../types/workspace';
+import { useDriveStore } from '@store/useDriveStore';
+import { DriveScannerService } from '@lib/drive/DriveScannerService';
+import { useToastStore } from '@store/useToastStore';
+import { getFirestoreSyncManager } from '@lib/sync/FirestoreSyncManager';
+import { useSyncStore } from '@store/useSyncStore';
+import { CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
+import type { WorkspaceMetadata } from '~types/workspace';
 
 export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     currentDeviceId,

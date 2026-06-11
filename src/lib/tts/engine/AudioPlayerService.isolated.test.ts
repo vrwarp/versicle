@@ -30,7 +30,7 @@ vi.mock('../LexiconService', () => ({
     },
 }));
 
-vi.mock('../../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getBookMetadata: vi.fn().mockResolvedValue({}),
         getSections: vi.fn().mockResolvedValue([]),

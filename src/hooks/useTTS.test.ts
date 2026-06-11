@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useTTS } from './useTTS';
-import { useTTSStore } from '../store/useTTSStore';
-import { useReaderUIStore } from '../store/useReaderUIStore';
-import { useReadingStateStore } from '../store/useReadingStateStore';
+import { useTTSStore } from '@store/useTTSStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useReadingStateStore } from '@store/useReadingStateStore';
 
 // Hoist mocks
 const { mockPlayerInstance, mockLoadVoices } = vi.hoisted(() => {
@@ -21,12 +21,12 @@ const { mockPlayerInstance, mockLoadVoices } = vi.hoisted(() => {
 });
 
 // Mock Dependencies — production talks to the engine via getAudioPlayer().
-vi.mock('../app/tts/mainThreadAudioPlayer', () => ({
+vi.mock('@app/tts/mainThreadAudioPlayer', () => ({
     getAudioPlayer: vi.fn(() => mockPlayerInstance),
     resetAudioPlayerForTests: vi.fn(),
 }));
 
-vi.mock('../store/useTTSStore', () => {
+vi.mock('@store/useTTSStore', () => {
     const mockGetState = vi.fn(() => ({
         loadVoices: mockLoadVoices,
         prerollEnabled: false,
@@ -47,7 +47,7 @@ vi.mock('../store/useTTSStore', () => {
     return { useTTSStore };
 });
 
-vi.mock('../store/useReaderUIStore', () => {
+vi.mock('@store/useReaderUIStore', () => {
     const mockGetState = vi.fn(() => ({
         currentSectionId: 'section1',
         currentSectionTitle: 'Chapter 1',
@@ -63,7 +63,7 @@ vi.mock('../store/useReaderUIStore', () => {
     return { useReaderUIStore };
 });
 
-vi.mock('../store/useReadingStateStore', () => {
+vi.mock('@store/useReadingStateStore', () => {
     const mockGetState = vi.fn(() => ({
     }));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

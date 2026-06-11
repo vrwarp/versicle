@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { createLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
-import type { BookMetadata } from '../types/db';
-import { CURRENT_BOOK_VERSION } from '../lib/constants';
+import type { BookMetadata } from '~types/db';
+import { CURRENT_BOOK_VERSION } from '@lib/constants';
 
 // Mock DBService
 const mockDBService = {
@@ -34,18 +34,18 @@ vi.mock('zustand/middleware', async (importOriginal) => {
 });
 
 // Mock ingestion
-vi.mock('../lib/ingestion', () => ({
+vi.mock('@lib/ingestion', () => ({
   extractBookData: vi.fn(),
   extractBookMetadata: vi.fn().mockResolvedValue({ title: 'Test Book', author: 'Test Author', description: 'Desc', fileHash: 'hash' }),
 }));
 
 // Mock batch ingestion
-vi.mock('../lib/batch-ingestion', () => ({
+vi.mock('@lib/batch-ingestion', () => ({
   processBatchImport: vi.fn(),
 }));
 
 // Mock AudioPlayerService
-vi.mock('../lib/tts/AudioPlayerService', () => ({
+vi.mock('@lib/tts/AudioPlayerService', () => ({
   AudioPlayerService: {
     getInstance: () => ({
       subscribe: vi.fn(),
@@ -305,7 +305,7 @@ describe('useLibraryStore', () => {
     ];
 
     // Mock processBatchImport to return successful manifests
-    const { processBatchImport } = await import('../lib/batch-ingestion');
+    const { processBatchImport } = await import('@lib/batch-ingestion');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(processBatchImport).mockResolvedValue({ successful: mockManifests, skipped: [], failed: [] } as any);
 
@@ -338,7 +338,7 @@ describe('useLibraryStore', () => {
 
   describe('regression: batch import surfaces per-file outcomes and duplicate detection (D1)', () => {
     it('passes a duplicate check to processBatchImport that matches inventory by sourceFilename', async () => {
-      const { processBatchImport } = await import('../lib/batch-ingestion');
+      const { processBatchImport } = await import('@lib/batch-ingestion');
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(processBatchImport).mockResolvedValue({ successful: [], skipped: [], failed: [] } as any);
       // Earlier tests give this mock a lingering implementation; pin it for this test.
@@ -366,7 +366,7 @@ describe('useLibraryStore', () => {
     });
 
     it('falls back to the DB filename index for duplicate detection', async () => {
-      const { processBatchImport } = await import('../lib/batch-ingestion');
+      const { processBatchImport } = await import('@lib/batch-ingestion');
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(processBatchImport).mockResolvedValue({ successful: [], skipped: [], failed: [] } as any);
       vi.mocked(mockDBService.getBookIdByFilename).mockImplementation((filename: string) =>
@@ -380,7 +380,7 @@ describe('useLibraryStore', () => {
     });
 
     it('stores a per-file outcome summary including skipped duplicates and failures', async () => {
-      const { processBatchImport } = await import('../lib/batch-ingestion');
+      const { processBatchImport } = await import('@lib/batch-ingestion');
       vi.mocked(processBatchImport).mockResolvedValue({
         successful: [
           { manifest: { bookId: 'b1', title: 'Book 1', author: 'A', coverPalette: [1, 2, 3, 4, 5] }, sourceFilename: 'good.epub' }

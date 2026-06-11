@@ -106,6 +106,16 @@ From `plan/overhaul/README.md` §4; the ones agents trip over most:
    hand-roll new `vi.mock` piles for DBService/stores.
 5. **Commit style:** Conventional Commits — `type(scope): imperative
    subject` ≤72 chars; body explains *why*. One logical change per commit.
+6. **Cross-root imports use path aliases.** Importing across the top-level
+   `src/` roots uses the alias, never `../` chains: `@app/ @components/
+   @db/ @hooks/ @lib/ @store/ ~types/ @test/ @workers/` (declared in
+   `tsconfig.app.json` `paths`; mirrored in `vite.config.ts` AND
+   `vitest.config.ts` `resolve.alias` — vitest does not read
+   vite.config.ts). `types/` is `~types` because TypeScript rejects
+   `@types/…` specifiers (TS6137). Same-directory and within-subtree
+   imports stay relative. Enforced at error severity by
+   `no-restricted-imports` in `eslint.config.js`; bulk-fix with
+   `node scripts/codemod-aliases.mjs`.
 
 ## Project README.md
 

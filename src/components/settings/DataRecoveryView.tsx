@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-idb';
 import { Button } from '../ui/Button';
-import { createLogger } from '../../lib/logger';
+import { createLogger } from '@lib/logger';
 import { Download, RefreshCw, AlertCircle } from 'lucide-react';
-import { exportFile } from '../../lib/export';
+import { exportFile } from '@lib/export';
 
 const logger = createLogger('DataRecoveryView');
 

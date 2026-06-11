@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { DriveService, type DriveFile } from '../../lib/drive/DriveService';
+import { DriveService, type DriveFile } from '@lib/drive/DriveService';
 
 interface Breadcrumb {
     id: string;

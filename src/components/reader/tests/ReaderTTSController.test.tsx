@@ -1,12 +1,12 @@
 import { render, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ReaderTTSController } from '../ReaderTTSController';
-import { useTTSStore } from '../../../store/useTTSStore';
+import { useTTSStore } from '@store/useTTSStore';
 
 // Mock the store
 const mockGetState = vi.fn();
 
-vi.mock('../../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
   useTTSStore: Object.assign(vi.fn(), {
     getState: () => mockGetState(),
   }),

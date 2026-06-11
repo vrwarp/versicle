@@ -3,7 +3,7 @@ import { useHistoryHighlights } from './useHistoryHighlights';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 // Mock logger
-vi.mock('../../lib/logger', () => ({
+vi.mock('@lib/logger', () => ({
     createLogger: () => ({
         warn: vi.fn(),
     })

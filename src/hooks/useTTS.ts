@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import { useTTSStore } from '../store/useTTSStore';
-import { useReaderUIStore } from '../store/useReaderUIStore';
-import { getAudioPlayer } from '../app/tts/mainThreadAudioPlayer';
+import { useTTSStore } from '@store/useTTSStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { getAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
 
 /**
  * Custom hook to manage Text-to-Speech (TTS) functionality.

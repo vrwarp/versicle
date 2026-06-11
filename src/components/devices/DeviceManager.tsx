@@ -1,11 +1,11 @@
 
-import { useDeviceStore } from '../../store/useDeviceStore';
-import { getDeviceId } from '../../lib/device-id';
+import { useDeviceStore } from '@store/useDeviceStore';
+import { getDeviceId } from '@lib/device-id';
 import { DeviceList } from './DeviceList';
-import type { DeviceProfile } from '../../types/device';
-import { usePreferencesStore } from '../../store/usePreferencesStore';
-import { useTTSStore } from '../../store/useTTSStore';
-import { useToastStore } from '../../store/useToastStore';
+import type { DeviceProfile } from '~types/device';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import { useTTSStore } from '@store/useTTSStore';
+import { useToastStore } from '@store/useToastStore';
 
 export const DeviceManager = () => {
     const { devices, renameDevice, deleteDevice } = useDeviceStore();

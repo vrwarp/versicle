@@ -8,7 +8,7 @@
  * `startYjsPersistence()` and boot owns the call.
  */
 import type { BootTask } from '../bootstrap';
-import { startYjsPersistence } from '../../store/yjs-provider';
+import { startYjsPersistence } from '@store/yjs-provider';
 
 export const yjsPersistenceTask: BootTask = {
   name: 'state/start-yjs-persistence',

@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { BookListItem } from './BookListItem';
-import { type BookMetadata } from '../../types/db';
+import { type BookMetadata } from '~types/db';
 import { MemoryRouter } from 'react-router-dom';
 import { vi, describe, it, expect } from 'vitest';
 
 // Mock dependencies
-vi.mock('../../store/useLibraryStore', () => ({
+vi.mock('@store/useLibraryStore', () => ({
     useLibraryStore: vi.fn(() => ({
         removeBook: vi.fn(),
         offloadBook: vi.fn(),
@@ -13,11 +13,11 @@ vi.mock('../../store/useLibraryStore', () => ({
     })),
 }));
 
-vi.mock('../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
     useToastStore: vi.fn(() => vi.fn()),
 }));
 
-vi.mock('../../store/useReadingStateStore', () => ({
+vi.mock('@store/useReadingStateStore', () => ({
     useReadingStateStore: vi.fn(() => vi.fn()),
     useBookProgress: vi.fn(() => ({ percentage: 0.5, lastRead: Date.now() })),
 }));

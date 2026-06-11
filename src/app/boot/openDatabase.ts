@@ -3,9 +3,9 @@
  * the one-time, non-fatal cover-blob repair (moved verbatim from App.tsx).
  */
 import type { BootTask } from '../bootstrap';
-import { getDB } from '../../db/db';
-import { maintenanceService } from '../../lib/MaintenanceService';
-import { createLogger } from '../../lib/logger';
+import { getDB } from '@db/db';
+import { maintenanceService } from '@lib/MaintenanceService';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
 

@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useEffect, useRef } from 'react';
 import type { Rendition } from 'epubjs';
-import { useTTSStore } from '../../store/useTTSStore';
+import { useTTSStore } from '@store/useTTSStore';
 import { useShallow } from 'zustand/react/shallow';
 
 interface ReaderTTSControllerProps {

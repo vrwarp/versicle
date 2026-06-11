@@ -7,8 +7,8 @@
  * boot must never block on sync completion (pinned by App_Boot.test.tsx).
  */
 import type { BootTask } from '../bootstrap';
-import { getFirestoreSyncManager } from '../../lib/sync/FirestoreSyncManager';
-import { createLogger } from '../../lib/logger';
+import { getFirestoreSyncManager } from '@lib/sync/FirestoreSyncManager';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
 

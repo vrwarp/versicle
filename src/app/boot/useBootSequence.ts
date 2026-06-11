@@ -11,7 +11,7 @@ import {
 } from '../bootstrap';
 import { registerAppBootTasks } from './registerBootTasks';
 import { installGlobalErrorHandlers } from './globalErrorHandlers';
-import { createLogger } from '../../lib/logger';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
 

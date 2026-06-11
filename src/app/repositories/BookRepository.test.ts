@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { bookRepository } from './BookRepository';
-import { dbService } from '../../db/DBService';
-import { useBookStore } from '../../store/useBookStore';
-import { useContentAnalysisStore } from '../../store/useContentAnalysisStore';
-import type { ManifestBundle } from '../../db/DBService';
+import { dbService } from '@db/DBService';
+import { useBookStore } from '@store/useBookStore';
+import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
+import type { ManifestBundle } from '@db/DBService';
 
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getManifestBundle: vi.fn(),
         getManifestBundleBulk: vi.fn(),
@@ -15,11 +15,11 @@ vi.mock('../../db/DBService', () => ({
 
 // The yjs-backed stores are mocked with plain state holders: the repository only reads
 // getState(), so the merge logic is exercised without loading yjs.
-vi.mock('../../store/useBookStore', () => ({
+vi.mock('@store/useBookStore', () => ({
     useBookStore: { getState: vi.fn(() => ({ books: {} })) },
 }));
 
-vi.mock('../../store/useContentAnalysisStore', () => ({
+vi.mock('@store/useContentAnalysisStore', () => ({
     useContentAnalysisStore: { getState: vi.fn() },
 }));
 

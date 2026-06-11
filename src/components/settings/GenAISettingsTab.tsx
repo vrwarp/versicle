@@ -6,7 +6,7 @@ import { Switch } from '../ui/Switch';
 import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
 import { Download } from 'lucide-react';
-import type { ContentType } from '../../types/content-analysis';
+import type { ContentType } from '~types/content-analysis';
 
 export interface GenAILog {
     id: string;

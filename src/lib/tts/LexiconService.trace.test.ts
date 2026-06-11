@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { LexiconService } from './LexiconService';
 
 // Mock dependencies
-vi.mock('../../store/useLexiconStore', () => ({
+vi.mock('@store/useLexiconStore', () => ({
     useLexiconStore: {
         getState: vi.fn().mockReturnValue({
             rules: {},
@@ -13,7 +13,7 @@ vi.mock('../../store/useLexiconStore', () => ({
     }
 }));
 
-vi.mock('../../store/yjs-provider', async () => {
+vi.mock('@store/yjs-provider', async () => {
     const Y = await import('yjs');
     return {
         waitForYjsSync: vi.fn().mockResolvedValue(undefined),

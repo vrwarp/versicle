@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { usePreferencesStore } from '../store/usePreferencesStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
 
 /**
  * Synchronizes the reader theme with the document root class.

@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
-import type { ContentType } from '../../types/content-analysis';
+import type { ContentType } from '~types/content-analysis';
 import { createLogger } from '../logger';
 import { generateSecureId } from '../crypto';
 

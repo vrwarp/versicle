@@ -1,18 +1,18 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VisualSettings } from './VisualSettings';
-import { usePreferencesStore } from '../../store/usePreferencesStore';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { useBookStore } from '../../store/useBookStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useBookStore } from '@store/useBookStore';
 
 // Mock zustand store
-vi.mock('../../store/usePreferencesStore', () => ({
+vi.mock('@store/usePreferencesStore', () => ({
   usePreferencesStore: vi.fn(),
 }));
-vi.mock('../../store/useReaderUIStore', () => ({
+vi.mock('@store/useReaderUIStore', () => ({
   useReaderUIStore: vi.fn(),
 }));
-vi.mock('../../store/useBookStore', () => ({
+vi.mock('@store/useBookStore', () => ({
   useBookStore: Object.assign(vi.fn(), {
     getState: vi.fn(),
     subscribe: vi.fn(),

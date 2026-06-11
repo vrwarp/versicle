@@ -1,10 +1,10 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ImportProgressUI } from './ImportProgressUI';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useLibraryStore } from '@store/useLibraryStore';
 
 // Mock the store module (the component reads everything through this hook)
-vi.mock('../../store/useLibraryStore', () => ({
+vi.mock('@store/useLibraryStore', () => ({
   useLibraryStore: vi.fn(),
 }));
 

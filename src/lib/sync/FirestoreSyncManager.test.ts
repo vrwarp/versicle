@@ -56,7 +56,7 @@ vi.mock('./firebase-config', () => ({
 }));
 
 // Mock yjs-provider
-vi.mock('../../store/yjs-provider', async (importOriginal) => {
+vi.mock('@store/yjs-provider', async (importOriginal) => {
     const Y = await import('yjs');
     const actual = await importOriginal();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -284,7 +284,7 @@ describe('FirestoreSyncManager', () => {
         });
 
         it('should handle sync-failure by setting status and showing toast', async () => {
-            const { useToastStore } = await import('../../store/useToastStore');
+            const { useToastStore } = await import('@store/useToastStore');
             const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
 
             mockFireProviderInstance.emit('sync-failure', new Error('Test failure'));
@@ -298,7 +298,7 @@ describe('FirestoreSyncManager', () => {
         });
 
         it('should handle save-rejected with document-too-large', async () => {
-            const { useToastStore } = await import('../../store/useToastStore');
+            const { useToastStore } = await import('@store/useToastStore');
             const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
 
             mockFireProviderInstance.emit('save-rejected', {
@@ -316,7 +316,7 @@ describe('FirestoreSyncManager', () => {
         });
 
         it('should handle save-rejected with max-retries-exceeded', async () => {
-            const { useToastStore } = await import('../../store/useToastStore');
+            const { useToastStore } = await import('@store/useToastStore');
             const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
 
             mockFireProviderInstance.emit('save-rejected', {
@@ -340,7 +340,7 @@ describe('FirestoreSyncManager', () => {
 
             it('should show the rules hint when save-rejected wraps a permission-denied error', async () => {
                 const { RULES_OUT_OF_DATE_MESSAGE } = await import('./FirestoreSyncManager');
-                const { useToastStore } = await import('../../store/useToastStore');
+                const { useToastStore } = await import('@store/useToastStore');
                 const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
 
                 mockFireProviderInstance.emit('save-rejected', {
@@ -355,7 +355,7 @@ describe('FirestoreSyncManager', () => {
 
             it('should show the rules hint when sync-failure wraps a permission-denied error', async () => {
                 const { RULES_OUT_OF_DATE_MESSAGE } = await import('./FirestoreSyncManager');
-                const { useToastStore } = await import('../../store/useToastStore');
+                const { useToastStore } = await import('@store/useToastStore');
                 const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
 
                 mockFireProviderInstance.emit('sync-failure', permissionDeniedError());
@@ -366,7 +366,7 @@ describe('FirestoreSyncManager', () => {
 
             it('should show the rules hint when connection-error wraps a permission-denied error', async () => {
                 const { RULES_OUT_OF_DATE_MESSAGE } = await import('./FirestoreSyncManager');
-                const { useToastStore } = await import('../../store/useToastStore');
+                const { useToastStore } = await import('@store/useToastStore');
                 const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
 
                 mockFireProviderInstance.emit('connection-error', {
@@ -380,7 +380,7 @@ describe('FirestoreSyncManager', () => {
             });
 
             it('should keep the generic message for non-permission failures', async () => {
-                const { useToastStore } = await import('../../store/useToastStore');
+                const { useToastStore } = await import('@store/useToastStore');
                 const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
 
                 mockFireProviderInstance.emit('sync-failure', new Error('Network flake'));
@@ -406,7 +406,7 @@ describe('FirestoreSyncManager', () => {
         beforeEach(async () => {
             const { onAuthStateChanged } = await import('firebase/auth');
             const { CheckpointService } = await import('./CheckpointService');
-            const { useSyncStore } = await import('../../store/useSyncStore');
+            const { useSyncStore } = await import('@store/useSyncStore');
 
             // Mock auth state change to trigger connection
             vi.mocked(onAuthStateChanged).mockImplementation((_auth, callback) => {
@@ -431,7 +431,7 @@ describe('FirestoreSyncManager', () => {
 
         afterEach(async () => {
             const { MigrationStateService } = await import('./MigrationStateService');
-            const { useSyncStore } = await import('../../store/useSyncStore');
+            const { useSyncStore } = await import('@store/useSyncStore');
             MigrationStateService.clear();
             useSyncStore.getState().setActiveWorkspaceId(null);
         });
@@ -463,7 +463,7 @@ describe('FirestoreSyncManager', () => {
 
         it('rolls back to the pinned backup instead of clearing state when applying remote state fails', async () => {
             const { MigrationStateService } = await import('./MigrationStateService');
-            const { useSyncStore } = await import('../../store/useSyncStore');
+            const { useSyncStore } = await import('@store/useSyncStore');
 
             // The destructive apply step fails after it may have wiped IDB
             applyRemoteStateSpy.mockRejectedValue(new Error('IDB write failed'));

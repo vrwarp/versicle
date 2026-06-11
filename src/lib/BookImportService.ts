@@ -6,10 +6,10 @@
  * DBService so the TTS engine worker — which imports DBService for IndexedDB — never
  * bundles the ingestion pipeline.
  */
-import { dbService, handleDbError } from '../db/DBService';
+import { dbService, handleDbError } from '@db/DBService';
 import { extractBookData, generateFileFingerprint } from './ingestion';
 import type { ExtractionOptions } from './tts/sentence-extraction';
-import type { StaticBookManifest } from '../types/db';
+import type { StaticBookManifest } from '~types/db';
 
 class BookImportService {
     /**

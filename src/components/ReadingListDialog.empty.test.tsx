@@ -20,7 +20,7 @@ vi.mock('./EditReadingListEntryDialog', () => ({
 }));
 
 // Mock store with NO data
-vi.mock('../store/useReadingListStore', () => ({
+vi.mock('@store/useReadingListStore', () => ({
     useReadingListStore: Object.assign(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (selector: any) => selector ? selector({ entries: {} }) : { entries: {} },

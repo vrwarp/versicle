@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { DriveService } from '../../lib/drive/DriveService';
+import { DriveService } from '@lib/drive/DriveService';
 import { useDriveBrowser } from './useDriveBrowser';
-import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
+import { googleIntegrationManager } from '@lib/google/GoogleIntegrationManager';
 
 // Mock dependencies
-vi.mock('../../lib/google/GoogleIntegrationManager', () => ({
+vi.mock('@lib/google/GoogleIntegrationManager', () => ({
     googleIntegrationManager: {
         getValidToken: vi.fn(),
         connectService: vi.fn(),

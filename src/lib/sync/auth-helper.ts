@@ -9,7 +9,7 @@ import {
 import { SocialLogin } from '@capgo/capacitor-social-login';
 import { getFirebaseAuth } from './firebase-config';
 import { googleIntegrationManager } from '../google/GoogleIntegrationManager';
-import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
+import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 
 /**
  * Sign in with Google using a hybrid approach:

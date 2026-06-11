@@ -1,11 +1,11 @@
 import React from 'react';
 import { Dialog } from '../ui/Dialog';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
-import { useDeviceStore } from '../../store/useDeviceStore';
-import { getDeviceId } from '../../lib/device-id';
+import { useReadingStateStore } from '@store/useReadingStateStore';
+import { useDeviceStore } from '@store/useDeviceStore';
+import { getDeviceId } from '@lib/device-id';
 import { Calendar, Percent } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { cn } from '../../lib/utils'; // Assuming utils exists
+import { cn } from '@lib/utils'; // Assuming utils exists
 
 interface SyncStatusPanelProps {
     open: boolean;

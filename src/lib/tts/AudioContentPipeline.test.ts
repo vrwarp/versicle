@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
+import { createZustandEngineContext } from '@app/tts/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
-import { dbService } from '../../db/DBService';
-import { contentAnalysisRepository } from '../../app/repositories/ContentAnalysisRepository';
-import { bookRepository } from '../../app/repositories/BookRepository';
-import { useGenAIStore } from '../../store/useGenAIStore';
+import { dbService } from '@db/DBService';
+import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
+import { bookRepository } from '@app/repositories/BookRepository';
+import { useGenAIStore } from '@store/useGenAIStore';
 
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getTTSContent: vi.fn(),
         getBookStructure: vi.fn(),
@@ -14,7 +14,7 @@ vi.mock('../../db/DBService', () => ({
     }
 }));
 
-vi.mock('../../app/repositories/ContentAnalysisRepository', () => ({
+vi.mock('@app/repositories/ContentAnalysisRepository', () => ({
     contentAnalysisRepository: {
         getContentAnalysis: vi.fn(),
         saveReferenceStartCfi: vi.fn(),
@@ -25,13 +25,13 @@ vi.mock('../../app/repositories/ContentAnalysisRepository', () => ({
     }
 }));
 
-vi.mock('../../app/repositories/BookRepository', () => ({
+vi.mock('@app/repositories/BookRepository', () => ({
     bookRepository: {
         getBookMetadata: vi.fn(),
     }
 }));
 
-vi.mock('../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 0,
     useTTSStore: {
         getState: vi.fn(() => ({
@@ -43,7 +43,7 @@ vi.mock('../../store/useTTSStore', () => ({
     }
 }));
 
-vi.mock('../../store/useGenAIStore', () => ({
+vi.mock('@store/useGenAIStore', () => ({
     useGenAIStore: {
         getState: vi.fn(() => ({
             contentFilterSkipTypes: [],

@@ -6,7 +6,7 @@
  */
 import { useEffect, useCallback, useMemo } from 'react';
 import { getFirestoreSyncManager } from '../FirestoreSyncManager';
-import { useSyncStore } from '../../../store/useSyncStore';
+import { useSyncStore } from '@store/useSyncStore';
 import { isMockFirestoreEnabled } from '../../../test-flags';
 
 /**

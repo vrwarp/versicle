@@ -10,9 +10,9 @@
  * - otherwise (standard boot) → prune zombie pre-migration backups.
  */
 import type { BootTask } from '../bootstrap';
-import { MigrationStateService } from '../../lib/sync/MigrationStateService';
-import { CheckpointService } from '../../lib/sync/CheckpointService';
-import { createLogger } from '../../lib/logger';
+import { MigrationStateService } from '@lib/sync/MigrationStateService';
+import { CheckpointService } from '@lib/sync/CheckpointService';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
 

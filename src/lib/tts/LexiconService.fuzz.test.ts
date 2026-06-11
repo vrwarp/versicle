@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LexiconService } from './LexiconService';
-import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '../../test/fuzz-utils';
-import type { LexiconRule } from '../../types/db';
+import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '@test/fuzz-utils';
+import type { LexiconRule } from '~types/db';
 
 // Mock the store dependencies
-vi.mock('../../store/useLexiconStore', () => ({
+vi.mock('@store/useLexiconStore', () => ({
     useLexiconStore: {
         getState: () => ({
             rules: [],
@@ -13,7 +13,7 @@ vi.mock('../../store/useLexiconStore', () => ({
     }
 }));
 
-vi.mock('../../store/yjs-provider', () => ({
+vi.mock('@store/yjs-provider', () => ({
     waitForYjsSync: vi.fn().mockResolvedValue(undefined)
 }));
 

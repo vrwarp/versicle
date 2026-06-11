@@ -1,12 +1,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mockDriveService } from '../test/harness/MockDriveService';
-import { DriveScannerService } from '../lib/drive/DriveScannerService';
-import { useDriveStore } from '../store/useDriveStore';
-import { useBookStore } from '../store/useBookStore';
+import { mockDriveService } from '@test/harness/MockDriveService';
+import { DriveScannerService } from '@lib/drive/DriveScannerService';
+import { useDriveStore } from '@store/useDriveStore';
+import { useBookStore } from '@store/useBookStore';
 
 // Mock the real DriveService with our functional mock
-vi.mock('../lib/drive/DriveService', () => ({
+vi.mock('@lib/drive/DriveService', () => ({
     DriveService: {
         listFolders: (parentId?: string) => mockDriveService.listFolders(parentId),
         getFolderMetadata: (folderId: string) => mockDriveService.getFolderMetadata(folderId),
@@ -17,7 +17,7 @@ vi.mock('../lib/drive/DriveService', () => ({
 }));
 
 // Mock the DB layer to prevent actual IndexedDB calls during import
-vi.mock('../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getBookStructure: vi.fn().mockResolvedValue({}),
         getOffloadedStatus: vi.fn().mockResolvedValue(new Map()),
@@ -25,7 +25,7 @@ vi.mock('../db/DBService', () => ({
     }
 }));
 
-vi.mock('../lib/BookImportService', () => ({
+vi.mock('@lib/BookImportService', () => ({
     bookImportService: {
         addBook: vi.fn().mockResolvedValue({ bookId: 'mock-id', title: 'Mocked Title', author: 'Mocked Author', schemaVersion: '1.0' }),
         importBookWithId: vi.fn().mockResolvedValue({ bookId: 'mock-id', title: 'Mocked Title', author: 'Mocked Author', schemaVersion: '1.0' }),
@@ -33,7 +33,7 @@ vi.mock('../lib/BookImportService', () => ({
     }
 }));
 
-vi.mock('../app/repositories/BookRepository', () => ({
+vi.mock('@app/repositories/BookRepository', () => ({
     bookRepository: {
         getBookMetadata: vi.fn().mockResolvedValue({}),
         getBookMetadataBulk: vi.fn().mockResolvedValue([]),
@@ -133,7 +133,7 @@ describe('Google Drive Sync & Import E2E', () => {
         // Perform Import
         await DriveScannerService.importFile(fileId, 'New Adventure.epub');
 
-        const { bookImportService } = await import('../lib/BookImportService');
+        const { bookImportService } = await import('@lib/BookImportService');
         // Expect addBook to be called
         expect(bookImportService.addBook).toHaveBeenCalledWith(
             expect.objectContaining({ name: 'New Adventure.epub' }),
@@ -182,7 +182,7 @@ describe('Google Drive Sync & Import E2E', () => {
 
         await DriveScannerService.importFile(match!.id, match!.name, { overwrite: true });
 
-        const { bookImportService } = await import('../lib/BookImportService');
+        const { bookImportService } = await import('@lib/BookImportService');
 
         // Since the book exists in store (matched by filename), and overwrite is true,
         // useLibraryStore calls bookImportService.importBookWithId to preserve the ID

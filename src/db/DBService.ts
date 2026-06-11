@@ -10,13 +10,13 @@ import type {
   StaticStructure,
   NavigationItem,
   CacheAudioBlob
-} from '../types/db';
-import type { Timepoint } from '../lib/tts/providers/types';
-import { DatabaseError, StorageFullError } from '../types/errors';
-import type { BookExtractionData } from '../lib/ingestion';
-import { createLogger } from '../lib/logger';
-import type { TTSQueueItem } from '../lib/tts/AudioPlayerService';
-import { runExclusiveIdbWrite } from '../lib/idb-write-lock';
+} from '~types/db';
+import type { Timepoint } from '@lib/tts/providers/types';
+import { DatabaseError, StorageFullError } from '~types/errors';
+import type { BookExtractionData } from '@lib/ingestion';
+import { createLogger } from '@lib/logger';
+import type { TTSQueueItem } from '@lib/tts/AudioPlayerService';
+import { runExclusiveIdbWrite } from '@lib/idb-write-lock';
 
 const logger = createLogger('DBService');
 

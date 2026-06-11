@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
-import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '../../app/tts/mainThreadAudioPlayer';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '@app/tts/mainThreadAudioPlayer';
 import { BackgroundAudio } from './BackgroundAudio';
-import { dbService } from '../../db/DBService';
-import { bookRepository } from '../../app/repositories/BookRepository';
+import { dbService } from '@db/DBService';
+import { bookRepository } from '@app/repositories/BookRepository';
 import { genAIService } from '../genai/GenAIService';
 import * as cfiUtils from '../cfi-utils';
 
@@ -54,7 +54,7 @@ vi.mock('./LexiconService', () => ({
     }
 }));
 vi.mock('./MediaSessionManager');
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getBookStructure: vi.fn().mockResolvedValue({ toc: [] }),
         updatePlaybackState: vi.fn().mockResolvedValue(undefined),
@@ -76,7 +76,7 @@ vi.mock('../../db/DBService', () => ({
     }
 }));
 
-vi.mock('../../app/repositories/ContentAnalysisRepository', () => ({
+vi.mock('@app/repositories/ContentAnalysisRepository', () => ({
     contentAnalysisRepository: {
         getContentAnalysis: vi.fn().mockResolvedValue({ structure: { title: 'Chapter 1' } }),
         saveReferenceStartCfi: vi.fn(),
@@ -87,7 +87,7 @@ vi.mock('../../app/repositories/ContentAnalysisRepository', () => ({
     }
 }));
 
-vi.mock('../../app/repositories/BookRepository', () => ({
+vi.mock('@app/repositories/BookRepository', () => ({
     bookRepository: {
         getBookMetadata: vi.fn().mockResolvedValue({
             title: 'Test Book',
@@ -99,7 +99,7 @@ vi.mock('../../app/repositories/BookRepository', () => ({
 }));
 
 // Mock useTTSStore to avoid circular dependency
-vi.mock('../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,
     useTTSStore: {
         getState: vi.fn().mockReturnValue({
@@ -114,7 +114,7 @@ vi.mock('../../store/useTTSStore', () => ({
     }
 }));
 
-vi.mock('../../store/useGenAIStore', () => ({
+vi.mock('@store/useGenAIStore', () => ({
     useGenAIStore: {
         getState: vi.fn().mockReturnValue({
             isContentAnalysisEnabled: true,

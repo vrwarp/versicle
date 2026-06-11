@@ -1,10 +1,10 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SearchPanel, type SearchPanelProps } from './SearchPanel';
-import { searchClient } from '../../../lib/search';
+import { searchClient } from '@lib/search';
 
 // Mock the search client
-vi.mock('../../../lib/search', () => ({
+vi.mock('@lib/search', () => ({
     searchClient: {
         isIndexed: vi.fn(),
         indexBook: vi.fn(),
@@ -13,7 +13,7 @@ vi.mock('../../../lib/search', () => ({
 }));
 
 // Mock the toast store
-vi.mock('../../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
     useToastStore: vi.fn(() => ({ showToast: vi.fn() }))
 }));
 

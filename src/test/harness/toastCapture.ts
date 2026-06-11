@@ -6,8 +6,8 @@
  * asserting on the store state alone loses messages; the capture keeps the
  * full sequence.
  */
-import { useToastStore } from '../../store/useToastStore';
-import type { ToastType } from '../../store/useToastStore';
+import { useToastStore } from '@store/useToastStore';
+import type { ToastType } from '@store/useToastStore';
 
 export interface CapturedToast {
   message: string;

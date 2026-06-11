@@ -1,18 +1,18 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { DriveImportDialog } from './DriveImportDialog';
-import { useDriveStore } from '../../store/useDriveStore';
+import { useDriveStore } from '@store/useDriveStore';
 import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 
 // Mock dependencies
-vi.mock('../../store/useDriveStore');
-vi.mock('../../lib/drive/DriveScannerService', () => ({
+vi.mock('@store/useDriveStore');
+vi.mock('@lib/drive/DriveScannerService', () => ({
     DriveScannerService: {
         scanAndIndex: vi.fn(),
         importFile: vi.fn(),
     }
 }));
-vi.mock('../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
     useToastStore: () => vi.fn(),
 }));
 
@@ -47,7 +47,7 @@ describe('DriveImportDialog', () => {
     });
 
     it('calls scanAndIndex when Manual Sync is clicked', async () => {
-        const { DriveScannerService } = await import('../../lib/drive/DriveScannerService');
+        const { DriveScannerService } = await import('@lib/drive/DriveScannerService');
 
         render(<DriveImportDialog isOpen={true} onClose={() => {}} />);
 

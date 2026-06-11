@@ -1,5 +1,5 @@
 
-import type { DriveFile } from '../../lib/drive/DriveService';
+import type { DriveFile } from '@lib/drive/DriveService';
 
 export class MockDriveService {
     private files: Map<string, DriveFile> = new Map();

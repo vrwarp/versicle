@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { create } from 'zustand';
 import { useNavigationGuard } from './useNavigationGuard';
-import { BackButtonPriority } from '../store/useBackNavigationStore';
+import { BackButtonPriority } from '@store/useBackNavigationStore';
 
 export type SidebarType = 'none' | 'toc' | 'annotations' | 'search' | 'audio-panel' | 'visual-settings';
 

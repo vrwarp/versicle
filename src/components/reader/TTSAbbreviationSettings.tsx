@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { useTTSStore } from '../../store/useTTSStore';
+import { useTTSStore } from '@store/useTTSStore';
 import { useShallow } from 'zustand/react/shallow';
-import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '../../lib/tts/TextSegmenter';
+import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '@lib/tts/TextSegmenter';
 import { X, Plus, RotateCcw, Download, Upload } from 'lucide-react';
-import { SimpleListCSV } from '../../lib/tts/CsvUtils';
+import { SimpleListCSV } from '@lib/tts/CsvUtils';
 import { Button } from '../ui/Button';
 
 interface StringListManagerProps {

@@ -1,5 +1,5 @@
-import { dbService } from '../../db/DBService';
-import type { CacheAudioBlob } from '../../types/db';
+import { dbService } from '@db/DBService';
+import type { CacheAudioBlob } from '~types/db';
 import type { Timepoint } from './providers/types';
 
 /**

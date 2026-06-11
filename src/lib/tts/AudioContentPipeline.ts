@@ -1,12 +1,12 @@
-import { dbService } from '../../db/DBService';
+import { dbService } from '@db/DBService';
 import { TextSegmenter } from './TextSegmenter';
 import type { EngineContext } from './engine/EngineContext';
 import { generateSecureId } from '../crypto';
 import EpubCFI from 'epubjs/src/epubcfi';
-import type { CitationMarker } from '../../types/db';
+import type { CitationMarker } from '~types/db';
 import { getParentCfi, generateCfiRange, parseCfiRange, preprocessBlockRoots, type PreprocessedRoot } from '../cfi-utils';
-import type { SectionMetadata } from '../../types/db';
-import type { ContentType } from '../../types/content-analysis';
+import type { SectionMetadata } from '~types/db';
+import type { ContentType } from '~types/content-analysis';
 import type { TTSQueueItem } from './AudioPlayerService';
 import type { SentenceNode } from './sentence-extraction';
 import { BIBLE_ABBREVIATIONS } from '../../data/bible-lexicon';

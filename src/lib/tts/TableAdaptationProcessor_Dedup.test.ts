@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createZustandEngineContext } from '../../app/tts/createZustandEngineContext';
+import { createZustandEngineContext } from '@app/tts/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
-import { contentAnalysisRepository } from '../../app/repositories/ContentAnalysisRepository';
+import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
 
 // ContentAnalysisRepository.getContentAnalysis is synchronous, but these tests
 // (written when it was async) install async implementations; the processor
@@ -12,14 +12,14 @@ const getContentAnalysisAsyncMock = contentAnalysisRepository.getContentAnalysis
     sectionId: string,
 ) => Promise<unknown>;
 
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getTableImages: vi.fn().mockResolvedValue([]),
         getBookStructure: vi.fn().mockResolvedValue(null),
     }
 }));
 
-vi.mock('../../app/repositories/ContentAnalysisRepository', () => ({
+vi.mock('@app/repositories/ContentAnalysisRepository', () => ({
     contentAnalysisRepository: {
         getContentAnalysis: vi.fn(),
         saveReferenceStartCfi: vi.fn(),
@@ -30,7 +30,7 @@ vi.mock('../../app/repositories/ContentAnalysisRepository', () => ({
     }
 }));
 
-vi.mock('../../app/repositories/BookRepository', () => ({
+vi.mock('@app/repositories/BookRepository', () => ({
     bookRepository: {
         getBookMetadata: vi.fn().mockResolvedValue({}),
     }
@@ -44,7 +44,7 @@ vi.mock('../genai/GenAIService', () => ({
     }
 }));
 
-vi.mock('../../store/useGenAIStore', () => ({
+vi.mock('@store/useGenAIStore', () => ({
     useGenAIStore: {
         getState: vi.fn(() => ({
             isEnabled: true,

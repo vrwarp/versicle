@@ -1,18 +1,18 @@
 import React from 'react';
-import { useTTSStore } from '../../store/useTTSStore';
-import { useCurrentDeviceProgress, useBookProgress } from '../../store/useReadingStateStore';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { useBook, useLastReadBook } from '../../store/selectors';
-import { useAnnotationStore } from '../../store/useAnnotationStore';
+import { useTTSStore } from '@store/useTTSStore';
+import { useCurrentDeviceProgress, useBookProgress } from '@store/useReadingStateStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useBook, useLastReadBook } from '@store/selectors';
+import { useAnnotationStore } from '@store/useAnnotationStore';
 import { CompassPill } from '../ui/CompassPill';
 import type { ActionType } from '../ui/CompassPill';
-import { useToastStore } from '../../store/useToastStore';
+import { useToastStore } from '@store/useToastStore';
 import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { LexiconManager } from './LexiconManager';
 
-import { useRemoteProgress } from '../../hooks/useRemoteProgress';
-import { findTocItem, resolveSyntheticPreference } from '../../lib/reader/titleResolver';
+import { useRemoteProgress } from '@hooks/useRemoteProgress';
+import { findTocItem, resolveSyntheticPreference } from '@lib/reader/titleResolver';
 
 
 

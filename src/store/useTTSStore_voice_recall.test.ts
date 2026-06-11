@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useTTSStore } from './useTTSStore';
 
 // Mock the engine composition root (production now talks to getAudioPlayer()).
-vi.mock('../app/tts/mainThreadAudioPlayer', () => {
+vi.mock('@app/tts/mainThreadAudioPlayer', () => {
     return {
         getAudioPlayer: vi.fn(() => ({
             setSpeed: vi.fn(),

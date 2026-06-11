@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { getYDoc, getYjsOptions } from './yjs-provider';
-import type { LexiconRule } from '../types/db';
+import type { LexiconRule } from '~types/db';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface LexiconState {

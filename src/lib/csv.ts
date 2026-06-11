@@ -1,4 +1,4 @@
-import type { ReadingListEntry } from '../types/db';
+import type { ReadingListEntry } from '~types/db';
 import Papa from 'papaparse';
 
 /**

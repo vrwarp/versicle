@@ -1,7 +1,7 @@
-import { getDB } from '../../db/db';
+import { getDB } from '@db/db';
 import * as Y from 'yjs';
-import { getYDoc, getYjsPersistence, disconnectYjs } from '../../store/yjs-provider';
-import type { SyncCheckpoint } from '../../types/db';
+import { getYDoc, getYjsPersistence, disconnectYjs } from '@store/yjs-provider';
+import type { SyncCheckpoint } from '~types/db';
 import { IndexeddbPersistence } from 'y-idb';
 import { createLogger } from '../logger';
 import { getFirestoreSyncManager } from './FirestoreSyncManager';

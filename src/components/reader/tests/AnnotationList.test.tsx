@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { AnnotationList } from '../AnnotationList';
-import { useAnnotationStore } from '../../../store/useAnnotationStore';
+import { useAnnotationStore } from '@store/useAnnotationStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('lucide-react', () => ({

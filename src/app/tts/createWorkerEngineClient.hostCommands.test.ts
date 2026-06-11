@@ -21,28 +21,28 @@ const { stores } = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     useTTSStore: { getState: () => stores.tts, subscribe: vi.fn(() => () => {}) },
 }));
-vi.mock('../../store/useReadingStateStore', () => ({
+vi.mock('@store/useReadingStateStore', () => ({
     useReadingStateStore: { getState: () => stores.reading, subscribe: vi.fn(() => () => {}) },
 }));
-vi.mock('../../store/useAnnotationStore', () => ({
+vi.mock('@store/useAnnotationStore', () => ({
     useAnnotationStore: { getState: () => stores.annotation },
 }));
-vi.mock('../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
     useToastStore: { getState: () => stores.toast },
 }));
-vi.mock('../../store/useGenAIStore', () => ({
+vi.mock('@store/useGenAIStore', () => ({
     useGenAIStore: { getState: () => stores.genAI, subscribe: vi.fn(() => () => {}) },
 }));
-vi.mock('../../store/useReaderUIStore', () => ({
+vi.mock('@store/useReaderUIStore', () => ({
     useReaderUIStore: { getState: () => stores.readerUI },
 }));
-vi.mock('../../store/useContentAnalysisStore', () => ({
+vi.mock('@store/useContentAnalysisStore', () => ({
     useContentAnalysisStore: { getState: () => ({ sections: {} }), subscribe: vi.fn(() => () => {}) },
 }));
-vi.mock('../../store/useBookStore', () => ({
+vi.mock('@store/useBookStore', () => ({
     useBookStore: { getState: () => ({ books: {} }), subscribe: vi.fn(() => () => {}) },
 }));
 
@@ -60,14 +60,14 @@ vi.mock('../repositories/BookRepository', () => ({
 }));
 
 // Heavy main-thread collaborators the module imports but these tests never construct.
-vi.mock('../../lib/tts/TTSProviderManager', () => ({ TTSProviderManager: vi.fn() }));
-vi.mock('../../lib/tts/PlatformIntegration', () => ({ PlatformIntegration: vi.fn() }));
-vi.mock('../../lib/tts/LexiconService', () => ({ LexiconService: { getInstance: vi.fn() } }));
-vi.mock('../../lib/genai/GenAIService', () => ({ genAIService: {} }));
+vi.mock('@lib/tts/TTSProviderManager', () => ({ TTSProviderManager: vi.fn() }));
+vi.mock('@lib/tts/PlatformIntegration', () => ({ PlatformIntegration: vi.fn() }));
+vi.mock('@lib/tts/LexiconService', () => ({ LexiconService: { getInstance: vi.fn() } }));
+vi.mock('@lib/genai/GenAIService', () => ({ genAIService: {} }));
 
 import { applyHostCommand } from './createWorkerEngineClient';
 import { contentAnalysisRepository } from '../repositories/ContentAnalysisRepository';
-import type { EngineHostCommand } from '../../lib/tts/engine/WorkerEngineContext';
+import type { EngineHostCommand } from '@lib/tts/engine/WorkerEngineContext';
 
 describe('applyHostCommand — worker writes land on the right store/repository', () => {
     beforeEach(() => {

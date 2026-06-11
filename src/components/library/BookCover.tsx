@@ -1,12 +1,12 @@
 import React from 'react';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import 'react-lazy-load-image-component/src/effects/blur.css';
-import { cn } from '../../lib/utils';
-import { getOptimizedTextColor, unpackColorToRGB } from '../../lib/cover-palette';
+import { cn } from '@lib/utils';
+import { getOptimizedTextColor, unpackColorToRGB } from '@lib/cover-palette';
 import { Cloud, CloudDownload, MoreVertical } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { BookActionMenu } from './BookActionMenu';
-import type { BookMetadata } from '../../types/db';
+import type { BookMetadata } from '~types/db';
 
 function unpackColor(packed: number): string {
     const { r, g, b } = unpackColorToRGB(packed);

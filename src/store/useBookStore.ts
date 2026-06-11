@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { getYDoc, getYjsOptions } from './yjs-provider';
-import type { UserInventoryItem } from '../types/db';
+import type { UserInventoryItem } from '~types/db';
 
 /**
  * State interface for the Book store (Synced).

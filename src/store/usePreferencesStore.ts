@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { getYDoc, getYjsOptions } from './yjs-provider';
-import { getDeviceId } from '../lib/device-id';
+import { getDeviceId } from '@lib/device-id';
 
 /**
  * Preferences store state.

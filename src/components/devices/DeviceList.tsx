@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { Laptop, Smartphone, Globe, Edit2, Trash2, Copy, Check, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import type { DeviceInfo, DeviceProfile } from '../../types/device';
-import { cn } from '../../lib/utils'; // Assuming utils exists, or I'll use inline classes
+import type { DeviceInfo, DeviceProfile } from '~types/device';
+import { cn } from '@lib/utils'; // Assuming utils exists, or I'll use inline classes
 
 interface DeviceListProps {
     devices: DeviceInfo[];

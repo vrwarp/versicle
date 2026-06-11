@@ -1,20 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MaintenanceService } from './MaintenanceService';
-import { getDB } from '../db/db';
+import { getDB } from '@db/db';
 
 // --- Mocks ---
 
 const mockUpdateBook = vi.fn();
 const mockGetState = vi.fn();
 
-vi.mock('../store/useBookStore', () => ({
+vi.mock('@store/useBookStore', () => ({
     useBookStore: {
         getState: () => mockGetState(),
         subscribe: vi.fn()
     },
 }));
 
-vi.mock('../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     useTTSStore: {
         getState: () => ({
             sentenceStarters: [],
@@ -26,7 +26,7 @@ vi.mock('../store/useTTSStore', () => ({
 const mockGetBookFile = vi.fn();
 const mockImportBookWithId = vi.fn();
 
-vi.mock('../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getBookFile: (...args: unknown[]) => mockGetBookFile(...args),
     },
@@ -38,7 +38,7 @@ vi.mock('./BookImportService', () => ({
     },
 }));
 
-vi.mock('../db/db', () => ({
+vi.mock('@db/db', () => ({
     getDB: vi.fn(),
 }));
 

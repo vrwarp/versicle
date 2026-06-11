@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import type { AudioPlayerService } from './AudioPlayerService';
-import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '../../app/tts/mainThreadAudioPlayer';
-import { dbService } from '../../db/DBService';
-import type { TTSState, SectionMetadata } from '../../types/db';
+import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '@app/tts/mainThreadAudioPlayer';
+import { dbService } from '@db/DBService';
+import type { TTSState, SectionMetadata } from '~types/db';
 
 // --- Mocks Setup ---
 
 // Mock DBService
-vi.mock('../../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
     dbService: {
         getBookMetadata: vi.fn().mockResolvedValue({}),
         updatePlaybackState: vi.fn().mockResolvedValue(undefined),
@@ -64,7 +64,7 @@ vi.mock('./providers/WebSpeechProvider', () => ({
     }
 }));
 
-vi.mock('../../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,
     useTTSStore: {
         getState: vi.fn(() => ({
@@ -82,7 +82,7 @@ vi.mock('../../store/useTTSStore', () => ({
     }
 }));
 
-vi.mock('../../store/useGenAIStore', () => ({
+vi.mock('@store/useGenAIStore', () => ({
     useGenAIStore: {
         getState: vi.fn(() => ({
             isEnabled: true,
@@ -94,7 +94,7 @@ vi.mock('../../store/useGenAIStore', () => ({
     }
 }));
 
-vi.mock('../../store/useReadingStateStore', () => ({
+vi.mock('@store/useReadingStateStore', () => ({
     useReadingStateStore: {
         getState: vi.fn(() => ({
             getProgress: vi.fn(() => ({ currentQueueIndex: 0, currentSectionIndex: 0 })),

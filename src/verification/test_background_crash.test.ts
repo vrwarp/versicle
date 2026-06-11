@@ -1,6 +1,6 @@
 
 import { describe, it, vi, beforeEach } from 'vitest';
-import { dbService } from '../lib/tts/../../db/DBService';
+import { dbService } from '@db/DBService';
 
 // Mock dependencies BEFORE importing the service
 
@@ -10,7 +10,7 @@ vi.mock('@capawesome-team/capacitor-android-battery-optimization', () => ({
   },
 }));
 
-vi.mock('../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     useTTSStore: {
         getState: vi.fn().mockReturnValue({
             customAbbreviations: [],
@@ -41,7 +41,7 @@ vi.mock('@jofr/capacitor-media-session', () => ({
 }));
 
 // Mock DBService
-vi.mock('../db/DBService', () => ({
+vi.mock('@db/DBService', () => ({
   dbService: {
     getTTSContent: vi.fn(),
     getContentAnalysis: vi.fn(),
@@ -56,7 +56,7 @@ vi.mock('../db/DBService', () => ({
 }));
 
 // Mock LexiconService
-vi.mock('../lib/tts/LexiconService', () => ({
+vi.mock('@lib/tts/LexiconService', () => ({
   LexiconService: {
     getInstance: vi.fn().mockReturnValue({
         getRules: vi.fn().mockResolvedValue([]),
@@ -67,7 +67,7 @@ vi.mock('../lib/tts/LexiconService', () => ({
 }));
 
 // Mock WebSpeechProvider and CapacitorTTSProvider
-vi.mock('../lib/tts/providers/CapacitorTTSProvider', () => {
+vi.mock('@lib/tts/providers/CapacitorTTSProvider', () => {
   // Return a class or a constructor function
   return {
       CapacitorTTSProvider: class {
@@ -85,7 +85,7 @@ vi.mock('../lib/tts/providers/CapacitorTTSProvider', () => {
 });
 
 // Now import the service
-import { getAudioPlayer } from '../app/tts/mainThreadAudioPlayer';
+import { getAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
 
 describe('AudioPlayerService Background Crash Prevention', () => {
   let service: ReturnType<typeof getAudioPlayer>;

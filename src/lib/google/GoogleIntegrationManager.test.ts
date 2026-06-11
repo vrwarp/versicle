@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { googleIntegrationManager } from './GoogleIntegrationManager';
-import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
+import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 
 // Mock Capacitor to simulate Web platform
 vi.mock('@capacitor/core', () => ({

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { reprocessBook } from '../../lib/ingestion';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { reprocessBook } from '@lib/ingestion';
+import { useLibraryStore } from '@store/useLibraryStore';
 import { Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 

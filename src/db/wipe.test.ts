@@ -7,13 +7,13 @@ import { dbService } from './DBService';
 // (b) avoid booting the real Yjs persistence / firebase dependency tree.
 const ordering = vi.hoisted(() => ({ events: [] as string[] }));
 
-vi.mock('../store/yjs-provider', () => ({
+vi.mock('@store/yjs-provider', () => ({
   disconnectYjs: vi.fn(async () => {
     ordering.events.push('stop:yjs');
   }),
 }));
 
-vi.mock('../lib/sync/FirestoreSyncManager', () => ({
+vi.mock('@lib/sync/FirestoreSyncManager', () => ({
   FirestoreSyncManager: {
     resetInstance: vi.fn(() => {
       ordering.events.push('stop:sync');

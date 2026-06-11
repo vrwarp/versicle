@@ -1,4 +1,4 @@
-import type { Timepoint } from '../../../types/tts';
+import type { Timepoint } from '~types/tts';
 
 /**
  * Canonical home of {@link Timepoint} is src/types/tts.ts (Phase 1a type
@@ -6,7 +6,7 @@ import type { Timepoint } from '../../../types/tts';
  * needs it and the types layer may not import lib/tts. Re-exported here
  * (type-only, zero runtime change) so existing consumers keep compiling.
  */
-export type { Timepoint } from '../../../types/tts';
+export type { Timepoint } from '~types/tts';
 
 /**
  * Represents a Text-to-Speech voice option.

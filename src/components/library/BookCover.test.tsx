@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { BookCover } from './BookCover';
-import type { BookMetadata } from '../../types/db';
+import type { BookMetadata } from '~types/db';
 import { vi } from 'vitest';
 
 describe('BookCover', () => {

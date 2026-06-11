@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 // Mock device-id before importing the store
-vi.mock('../lib/device-id', () => ({
+vi.mock('@lib/device-id', () => ({
     getDeviceId: vi.fn(() => 'test-device-id')
 }));
 
 // Mock cfi-utils to avoid real epub.js interactions
-vi.mock('../lib/cfi-utils', () => ({
+vi.mock('@lib/cfi-utils', () => ({
     mergeCfiRanges: vi.fn((ranges, newRange) => {
         const last = ranges[ranges.length - 1];
         if (last === newRange) return [...ranges];
@@ -15,7 +15,7 @@ vi.mock('../lib/cfi-utils', () => ({
 }));
 
 import { useReadingStateStore } from './useReadingStateStore';
-import { getDeviceId } from '../lib/device-id';
+import { getDeviceId } from '@lib/device-id';
 
 describe('useReadingStateStore - Per-Device Progress', () => {
     beforeEach(() => {

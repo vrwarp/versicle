@@ -12,14 +12,14 @@ import { FireProvider } from 'y-cinder';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
-import { getYDoc, CURRENT_SCHEMA_VERSION, waitForYjsSync } from '../../store/yjs-provider';
+import { getYDoc, CURRENT_SCHEMA_VERSION, waitForYjsSync } from '@store/yjs-provider';
 import { CheckpointService } from './CheckpointService';
 import { MigrationStateService } from './MigrationStateService';
 import * as Y from 'yjs';
-import { useBookStore } from '../../store/useBookStore';
+import { useBookStore } from '@store/useBookStore';
 import { doc, getDoc, setDoc, collection, getDocs, query, limit, writeBatch } from 'firebase/firestore';
-import type { WorkspaceMetadata } from '../../types/workspace';
-import { WorkspaceDeletedError } from '../../types/errors';
+import type { WorkspaceMetadata } from '~types/workspace';
+import { WorkspaceDeletedError } from '~types/errors';
 
 import {
     getFirebaseApp,
@@ -37,8 +37,8 @@ import {
 } from '../../test-flags';
 import { generateSecureId } from '../crypto';
 import { signInWithGoogle, signOutWithGoogle } from './auth-helper';
-import { useToastStore } from '../../store/useToastStore';
-import { useSyncStore } from '../../store/useSyncStore';
+import { useToastStore } from '@store/useToastStore';
+import { useSyncStore } from '@store/useSyncStore';
 
 const logger = createLogger('FirestoreSync');
 
@@ -78,7 +78,7 @@ export function isPermissionDeniedEvent(event: unknown): boolean {
 // Status types for the sync manager. Canonical home is types/sync.ts so
 // store/UI consumers don't need a type edge into this service module
 // (layering-deps.md LD-7); re-exported here for existing importers.
-import type { FirestoreSyncStatus, FirebaseAuthStatus } from '../../types/sync';
+import type { FirestoreSyncStatus, FirebaseAuthStatus } from '~types/sync';
 export type { FirestoreSyncStatus, FirebaseAuthStatus };
 
 // Event callback types

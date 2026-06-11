@@ -1,4 +1,4 @@
-import type { SearchResult, SearchSection } from '../types/search';
+import type { SearchResult, SearchSection } from '~types/search';
 
 /**
  * Provides search functionality for book content using a simple RegExp scan.
