@@ -174,6 +174,42 @@ export default tseslint.config(
       ],
     },
   },
+  // Sync transport owns no UX copy (Phase 4 §D3, master plan rule 3): the
+  // toast store is banned for production sync modules — transports emit
+  // typed SyncEvents (src/domains/sync/events.ts) and the ONE subscriber,
+  // src/app/sync/wireSyncEvents.ts, maps them to user-facing strings.
+  // Error level: the repo was migrated clean when this landed (P4-3a).
+  // Tests stay exempt (they spy on the toast store to pin the mapping).
+  // Flat-config rule entries replace, so the cross-root pattern and the
+  // zustand/idb bans are restated here.
+  {
+    files: ['src/lib/sync/**/*.{ts,tsx}', 'src/domains/sync/**/*.{ts,tsx}'],
+    ignores: ['src/**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [crossRootRelativeImportPattern],
+          paths: [
+            {
+              name: 'zustand-middleware-yjs',
+              importNames: ['default'],
+              message:
+                'Create synced stores via defineSyncedStore (src/store/registry.ts) — the registry is the only production yjs() middleware call site.',
+            },
+            idbImportBan,
+            {
+              name: '@store/useToastStore',
+              message:
+                'Sync transport must not own UX copy. Emit a typed SyncEvent ' +
+                '(src/domains/sync/events.ts); the single subscriber ' +
+                '(src/app/sync/wireSyncEvents.ts) owns the toast mapping.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // The `idb` ban extends to TEST files outside src/data (Phase 3 exit:
   // zero exceptions — seed through the repos, the connection module, or
   // one-shot db.get/put/clear helpers obtained from @data/connection).

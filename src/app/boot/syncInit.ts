@@ -9,6 +9,7 @@
 import type { BootTask } from '../bootstrap';
 import { getFirestoreSyncManager } from '@lib/sync/FirestoreSyncManager';
 import { configureSyncBackendSelection } from '../sync/createSync';
+import { wireSyncEvents } from '../sync/wireSyncEvents';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
@@ -16,11 +17,14 @@ const logger = createLogger('Boot');
 export const syncInitTask: BootTask = {
   name: 'sync/initialize',
   run: async (ctx) => {
-    // Backend selection happens UNCONDITIONALLY (even when initialization
-    // is deferred): WorkspaceMigrationConfirmModal re-initializes sync after
-    // the user confirms a migration, and by then the composition decision
-    // must already be installed. Local work only — never blocks on network.
+    // Backend selection + the single SyncEvent subscriber happen
+    // UNCONDITIONALLY (even when initialization is deferred):
+    // WorkspaceMigrationConfirmModal re-initializes sync after the user
+    // confirms a migration, and by then both the composition decision and
+    // the presentation wiring must already be installed. Local work only —
+    // never blocks on network.
     await configureSyncBackendSelection();
+    ctx.addCleanup(wireSyncEvents());
 
     if (!ctx.syncAllowed) {
       logger.info('Sync init skipped: migration awaiting confirmation.');

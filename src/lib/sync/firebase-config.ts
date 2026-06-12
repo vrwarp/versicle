@@ -16,8 +16,8 @@ import {
 } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 import { useSyncStore } from '@store/useSyncStore';
-import { useToastStore } from '@store/useToastStore';
 import type { FirebaseConfigSettings } from '@store/useSyncStore';
+import { getSyncEventBus } from '@domains/sync/events';
 import { createLogger } from '../logger';
 
 const logger = createLogger('Firebase');
@@ -123,7 +123,7 @@ export const initializeFirebase = (): boolean => {
             logger.info('Offline persistence enabled');
         } catch (err) {
             logger.warn('Persistence failed, falling back to default:', err);
-            useToastStore.getState().showToast('Offline sync unavailable (persistence failed)', 'error');
+            getSyncEventBus().emit({ type: 'local-persistence-unavailable' });
             firestore = getFirestore(app);
         }
 

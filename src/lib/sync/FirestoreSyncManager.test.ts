@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { FirestoreSyncManager, getFirestoreSyncManager } from './FirestoreSyncManager';
+import { wireSyncEvents } from '@app/sync/wireSyncEvents';
 
 // Mock firebase/auth
 vi.mock('firebase/auth', () => ({
@@ -88,15 +89,22 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 describe('FirestoreSyncManager', () => {
+    let unwireSyncEvents: () => void;
+
     beforeEach(() => {
         vi.spyOn(console, 'info').mockImplementation(() => { });
         vi.spyOn(console, 'warn').mockImplementation(() => { });
         vi.spyOn(console, 'error').mockImplementation(() => { });
         // Reset singleton
         FirestoreSyncManager.resetInstance();
+        // The toast assertions below pin the SYSTEM behavior: transport
+        // emits SyncEvents, the app-side subscriber (registered by the
+        // syncInit boot task in production) maps them to user-facing copy.
+        unwireSyncEvents = wireSyncEvents();
     });
 
     afterEach(() => {
+        unwireSyncEvents();
         vi.clearAllMocks();
         vi.restoreAllMocks();
     });

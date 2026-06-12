@@ -21,6 +21,7 @@ import * as Y from 'yjs';
 import { FirestoreSyncManager, getFirestoreSyncManager } from './FirestoreSyncManager';
 import { MockFireProvider } from '@domains/sync/backend/MockFireProvider';
 import { configureSyncBackendSelection } from '@app/sync/createSync';
+import { wireSyncEvents } from '@app/sync/wireSyncEvents';
 import { CheckpointService } from './CheckpointService';
 import { MigrationStateService } from './MigrationStateService';
 import { useSyncStore } from '@store/useSyncStore';
@@ -59,6 +60,7 @@ const injectCloudSnapshot = (workspaceId: string, build: (doc: Y.Doc) => void): 
 
 describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () => {
   let showToast: ReturnType<typeof vi.spyOn>;
+  let unwireSyncEvents: () => void;
 
   beforeEach(async () => {
     vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -74,10 +76,12 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
     MigrationStateService.clear();
 
     FirestoreSyncManager.resetInstance();
-    // Since P4-2, backend selection is the composition root's job — the
-    // manager no longer reads `__VERSICLE_MOCK_FIRESTORE__` itself. This is
-    // the same call the `syncInit` boot task makes before initialize().
+    // Since P4-2/P4-3a, backend selection and the single presentation
+    // subscriber are the composition root's job — the manager no longer
+    // reads `__VERSICLE_MOCK_FIRESTORE__` or shows toasts itself. These are
+    // the same calls the `syncInit` boot task makes before initialize().
     await configureSyncBackendSelection();
+    unwireSyncEvents = wireSyncEvents();
     useSyncStore.getState().setActiveWorkspaceId(null);
     useSyncStore.getState().setFirebaseEnabled(false);
     useSyncStore.getState().setFirestoreStatus('disconnected');
@@ -92,6 +96,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
   });
 
   afterEach(() => {
+    unwireSyncEvents();
     FirestoreSyncManager.resetInstance();
     MigrationStateService.clear();
     MockFireProvider.clearMockStorage();

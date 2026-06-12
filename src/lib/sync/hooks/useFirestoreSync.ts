@@ -1,27 +1,25 @@
 /**
  * React hook for Firebase/Firestore sync integration.
- * 
- * Initializes the FirestoreSyncManager and syncs its state
- * with the useSyncStore for UI reactivity.
+ *
+ * Since the P4 SyncEvent bus landed, this hook no longer mirrors manager
+ * state into useSyncStore — `src/app/sync/wireSyncEvents.ts` is the single
+ * subscriber that owns those writes (including `lastSyncTime`, which is
+ * driven by `flushed` events instead of the old connected-transition stamp
+ * this hook used to fake it with). What remains:
+ *
+ *  - the settings-driven (re)initialization effect: boot's `syncInit` task
+ *    handles the configured-at-boot case, but enabling/configuring Firebase
+ *    from the settings UI must initialize without a reload;
+ *  - the signIn/signOut commands and the isConfigured derivation.
  */
 import { useEffect, useCallback, useMemo } from 'react';
 import { getFirestoreSyncManager } from '../FirestoreSyncManager';
 import { useSyncStore } from '@store/useSyncStore';
 import { isMockFirestoreEnabled } from '../../../test-flags';
 
-/**
- * Hook to manage Firebase/Firestore sync.
- * 
- * Initializes the sync manager when Firebase is enabled,
- * and provides methods to sign in/out.
- */
 export const useFirestoreSync = () => {
     const firebaseEnabled = useSyncStore(state => state.firebaseEnabled);
     const firebaseConfig = useSyncStore(state => state.firebaseConfig);
-    const setFirestoreStatus = useSyncStore(state => state.setFirestoreStatus);
-    const setFirebaseAuthStatus = useSyncStore(state => state.setFirebaseAuthStatus);
-    const setFirebaseUserEmail = useSyncStore(state => state.setFirebaseUserEmail);
-    const setLastSyncTime = useSyncStore(state => state.setLastSyncTime);
 
     // Compute if config is valid based on store state
     const isConfigured = useMemo(() => {
@@ -44,29 +42,10 @@ export const useFirestoreSync = () => {
             return;
         }
 
-        const manager = getFirestoreSyncManager();
-
-        // Subscribe to status changes
-        const unsubscribeStatus = manager.onStatusChange((status) => {
-            setFirestoreStatus(status);
-            if (status === 'connected') {
-                setLastSyncTime(Date.now());
-            }
-        });
-
-        const unsubscribeAuth = manager.onAuthChange((status, user) => {
-            setFirebaseAuthStatus(status);
-            setFirebaseUserEmail(user?.email ?? null);
-        });
-
-        // Initialize the manager
-        manager.initialize();
-
-        return () => {
-            unsubscribeStatus();
-            unsubscribeAuth();
-        };
-    }, [firebaseEnabled, isConfigured, setFirestoreStatus, setFirebaseAuthStatus, setFirebaseUserEmail, setLastSyncTime]);
+        // Idempotent for the already-initialized boot case; picks up
+        // settings-time enablement without a reload.
+        void getFirestoreSyncManager().initialize();
+    }, [firebaseEnabled, isConfigured]);
 
     /**
      * Sign in with Google

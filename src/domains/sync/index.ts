@@ -22,3 +22,9 @@ export { observeWorkspaceMetadata, workspaceMetadataSchema } from './backend/Syn
 export { FirestoreBackend } from './backend/FirestoreBackend';
 export { downloadWorkspaceState } from './core/downloadWorkspaceState';
 export type { DownloadWorkspaceStateOptions } from './core/downloadWorkspaceState';
+export { getSyncEventBus } from './events';
+export type { SyncEvent, SyncEventBus } from './events';
+export {
+  isPermissionDeniedEvent,
+  RULES_OUT_OF_DATE_MESSAGE,
+} from './backend/permissionDenied';

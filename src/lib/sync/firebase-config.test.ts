@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initializeFirebase, resetFirebase } from './firebase-config';
+import { wireSyncEvents } from '@app/sync/wireSyncEvents';
 import { initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 
 // Mock firebase
@@ -44,15 +45,22 @@ vi.mock('@store/useSyncStore', () => ({
 }));
 
 describe('firebase-config initialization', () => {
+  let unwireSyncEvents: () => void;
+
   beforeEach(() => {
     vi.spyOn(console, 'info').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     resetFirebase();
     vi.clearAllMocks();
+    // Since P4-3a the persistence-failure toast travels the SyncEvent bus
+    // (firebase-config emits, wireSyncEvents presents) — wire the app-side
+    // subscriber so the user-visible behavior stays pinned end-to-end.
+    unwireSyncEvents = wireSyncEvents();
   });
 
   afterEach(() => {
+    unwireSyncEvents();
     vi.restoreAllMocks();
   });
 

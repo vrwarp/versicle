@@ -25,6 +25,8 @@ import type {
 } from '@domains/sync/backend/SyncBackend';
 import { FirestoreBackend } from '@domains/sync/backend/FirestoreBackend';
 import { downloadWorkspaceState } from '@domains/sync/core/downloadWorkspaceState';
+import { getSyncEventBus } from '@domains/sync/events';
+import { isPermissionDeniedEvent, RULES_OUT_OF_DATE_MESSAGE } from '@domains/sync/backend/permissionDenied';
 
 import {
     getFirebaseApp,
@@ -36,42 +38,13 @@ import { createLogger } from '../logger';
 import { getFirestoreDebounceOverrideMs } from '../../test-flags';
 import { generateSecureId } from '../crypto';
 import { signInWithGoogle, signOutWithGoogle } from './auth-helper';
-import { useToastStore } from '@store/useToastStore';
 import { useSyncStore } from '@store/useSyncStore';
 
 const logger = createLogger('FirestoreSync');
 
-/**
- * User-facing hint for the BYO-Firebase rules-lockout case: when the user's
- * deployed security rules are older than what the app expects, Firestore /
- * Cloud Storage start rejecting writes with permission-denied.
- */
-export const RULES_OUT_OF_DATE_MESSAGE =
-    'Cloud sync was rejected by your Firebase project\'s security rules. Your deployed rules are likely out of date — redeploy firestore.rules and storage.rules from the Versicle repository (firebase deploy --only firestore:rules,storage).';
-
-/**
- * Detects a Firebase permission-denied error anywhere in a provider event
- * payload (events nest the original error under `error`, and errors may chain
- * via `cause`).
- */
-export function isPermissionDeniedEvent(event: unknown): boolean {
-    let current: unknown = event;
-    for (let depth = 0; depth < 5 && current && typeof current === 'object'; depth++) {
-        const candidate = current as { code?: unknown; message?: unknown; error?: unknown; cause?: unknown };
-        const code = typeof candidate.code === 'string' ? candidate.code : '';
-        const message = typeof candidate.message === 'string' ? candidate.message : '';
-        if (
-            code === 'permission-denied' ||
-            code === 'storage/unauthorized' ||
-            message.includes('permission-denied') ||
-            message.includes('Missing or insufficient permissions')
-        ) {
-            return true;
-        }
-        current = candidate.error ?? candidate.cause;
-    }
-    return false;
-}
+// Moved to the sync domain (P4-3a) so the presentation layer can import
+// them without pulling in this module; re-exported for existing importers.
+export { isPermissionDeniedEvent, RULES_OUT_OF_DATE_MESSAGE };
 
 
 // Status types for the sync manager. Canonical home is types/sync.ts so
@@ -220,7 +193,7 @@ class FirestoreSyncManager {
             const result = await getRedirectResult(auth);
             if (result && result.user) {
                 logger.info('Auth', 'Successfully returned from redirect flow', result.user.uid);
-                useToastStore.getState().showToast(`Signed in as ${result.user.email}`, 'success');
+                getSyncEventBus().emit({ type: 'signed-in-via-redirect', email: result.user.email ?? null });
                 // Note: handleAuthStateChange will be called by onAuthStateChanged and update useSyncStore
             }
         } catch (error) {
@@ -305,7 +278,7 @@ class FirestoreSyncManager {
             logger.warn(`Sync aborted: Workspace ${workspaceId} is tombstoned.`);
             // Sever local tie
             useSyncStore.getState().setActiveWorkspaceId(null);
-            useToastStore.getState().showToast('Sync disconnected: Remote workspace was deleted. Operating offline.', 'error', 8000);
+            getSyncEventBus().emit({ type: 'workspace-tombstoned', workspaceId, context: 'connect' });
             this.setStatus('disconnected');
             throw new WorkspaceDeletedError();
         }
@@ -356,7 +329,7 @@ class FirestoreSyncManager {
 
     private async performCleanSync(backend: SyncBackend, workspaceId: string, maxWaitTime: number): Promise<void> {
         this.setStatus('connecting');
-        const toast = useToastStore.getState().showToast;
+        const events = getSyncEventBus();
 
         try {
             const hasCloudData = await backend.probeHasData(workspaceId);
@@ -367,7 +340,7 @@ class FirestoreSyncManager {
             }
 
             logger.info('Cloud data found. Initiating temporary Y.Doc sync...');
-            toast('Syncing library from cloud...', 'info');
+            events.emit({ type: 'clean-sync', phase: 'started' });
 
             // Legacy clean-sync behavior: a connect failure or timeout
             // resolves with whatever synced (treated as "remote empty").
@@ -382,7 +355,7 @@ class FirestoreSyncManager {
             Y.applyUpdate(getYDoc(), downloaded);
 
             logger.info('Clean sync complete. Connecting main provider...');
-            toast('Sync complete!', 'success');
+            events.emit({ type: 'clean-sync', phase: 'applied' });
 
             // Connect the main provider now that the initial load is done
             this.connectFireProviderNormal(backend, workspaceId, maxWaitTime);
@@ -390,7 +363,7 @@ class FirestoreSyncManager {
         } catch (error) {
             logger.error('Failed clean sync:', error);
             this.setStatus('error');
-            toast('Failed to sync. Please try again.', 'error');
+            events.emit({ type: 'clean-sync', phase: 'failed' });
         }
     }
 
@@ -405,37 +378,41 @@ class FirestoreSyncManager {
             this.connection = connection;
             this.currentApp = getFirebaseApp();
 
-            // Transport error events, normalized by the backend adapter
+            // Transport error events, normalized by the backend adapter.
+            // No UX here: the transport announces, wireSyncEvents presents.
+            const events = getSyncEventBus();
             connection.on('connection-error', (event) => {
                 logger.error('Firestore connection error:', event);
                 this.setStatus('error');
-
-                if (isPermissionDeniedEvent(event)) {
-                    useToastStore.getState().showToast(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
-                }
+                events.emit({
+                    type: 'connection-error',
+                    permissionDenied: isPermissionDeniedEvent(event),
+                });
             });
 
             connection.on('sync-failure', (error) => {
                 logger.error('Firestore sync failure after max retries:', error);
                 this.setStatus('error');
-                if (isPermissionDeniedEvent(error)) {
-                    useToastStore.getState().showToast(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
-                } else {
-                    useToastStore.getState().showToast('Sync failed after multiple attempts. Please check your connection.', 'error', 5000);
-                }
+                events.emit({
+                    type: 'sync-failure',
+                    permissionDenied: isPermissionDeniedEvent(error),
+                });
             });
 
             connection.on('save-rejected', (event) => {
                 logger.error('Firestore save rejected:', event);
                 this.setStatus('error');
+                events.emit({
+                    type: 'save-rejected',
+                    code: event.code,
+                    sizeBytes: event.sizeBytes,
+                    permissionDenied: isPermissionDeniedEvent(event),
+                });
+            });
 
-                if (isPermissionDeniedEvent(event)) {
-                    useToastStore.getState().showToast(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
-                } else if (event.code === 'document-too-large') {
-                    useToastStore.getState().showToast(`Sync disabled: Document too large (${event.sizeBytes} bytes). Please export and clear data.`, 'error', 8000);
-                } else if (event.code === 'max-retries-exceeded') {
-                    useToastStore.getState().showToast('Sync save failed: Max retries exceeded. Check connection.', 'error', 5000);
-                }
+            // A committed save → lastSyncTime (the `flushed` semantics).
+            connection.on('saved', (at) => {
+                events.emit({ type: 'flushed', at });
             });
 
             // The provider connects automatically in the background
@@ -575,13 +552,13 @@ class FirestoreSyncManager {
         }
 
         logger.info(`Switching workspace: ${currentWorkspaceId} → ${targetWorkspaceId}`);
-        const toast = useToastStore.getState().showToast;
+        const events = getSyncEventBus();
         const backend = this.getBackend(user.uid);
 
         // Step 0: Pre-flight validation
         const isAlive = await backend.isWorkspaceAlive(targetWorkspaceId);
         if (!isAlive) {
-            toast('Cannot switch: This workspace has been deleted.', 'error');
+            events.emit({ type: 'workspace-tombstoned', workspaceId: targetWorkspaceId, context: 'switch' });
             throw new WorkspaceDeletedError();
         }
 
@@ -601,7 +578,7 @@ class FirestoreSyncManager {
 
             // Step 4: Hydrate remote state into temp Y.Doc
             logger.info('Downloading remote workspace state...');
-            toast('Downloading workspace data...', 'info');
+            events.emit({ type: 'switch', phase: 'downloading' });
 
             const maxWaitTime = getFirestoreDebounceOverrideMs() || 2000;
 
@@ -628,7 +605,7 @@ class FirestoreSyncManager {
                 logger.error('Failed to apply remote state, rolling back to backup:', applyError);
                 MigrationStateService.setRestoringBackup();
                 useSyncStore.getState().setActiveWorkspaceId(currentWorkspaceId);
-                toast('Workspace switch failed. Restoring your previous data...', 'error');
+                events.emit({ type: 'switch', phase: 'failed-rolling-back' });
                 window.location.reload();
                 return;
             }
@@ -640,7 +617,7 @@ class FirestoreSyncManager {
             MigrationStateService.clear();
             // Revert workspace ID
             useSyncStore.getState().setActiveWorkspaceId(currentWorkspaceId);
-            toast('Workspace switch failed. Please try again.', 'error');
+            events.emit({ type: 'switch', phase: 'failed-aborted' });
             throw error;
         }
     }
@@ -695,11 +672,17 @@ class FirestoreSyncManager {
         this.statusCallbacks.forEach(cb => cb(status));
         // Always update the UI store directly
         useSyncStore.getState().setFirestoreStatus(status);
+        getSyncEventBus().emit({ type: 'status', status });
     }
 
     private setAuthStatus(status: FirebaseAuthStatus): void {
         this.authStatus = status;
         this.authCallbacks.forEach(cb => cb(status, this.currentUser));
+        getSyncEventBus().emit({
+            type: 'auth',
+            status,
+            email: this.currentUser?.email ?? null,
+        });
     }
 
     /**
