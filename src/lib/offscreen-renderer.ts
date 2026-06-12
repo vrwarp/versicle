@@ -2,29 +2,15 @@ import ePub from 'epubjs';
 import { snapdom } from '@zumer/snapdom';
 import { extractSentencesFromNode, type ExtractionOptions, type SentenceNode } from './ingestion/sentence-extraction';
 import type { CitationMarker } from '~types/db';
-import { sanitizeContent } from './sanitizer';
+import {
+  registerSanitizeHook,
+  observeAndPatchSandbox,
+  type EpubJsBookLike,
+} from '@domains/reader/engine/epubSecurity';
 import type { TableImage } from '~types/db';
 import { createLogger } from './logger';
 
 const logger = createLogger('OffscreenRenderer');
-
-/**
- * Patches an iframe's sandbox attribute to ensure allow-scripts and allow-same-origin are present.
- * This is required for event handling in strict environments like WebKit.
- */
-const patchIframeSandbox = (iframe: HTMLIFrameElement) => {
-  const sandbox = iframe.getAttribute('sandbox') || '';
-  const tokens = new Set(sandbox.split(/\s+/).filter(Boolean));
-
-  tokens.add('allow-scripts');
-  tokens.add('allow-same-origin');
-
-  const newValue = Array.from(tokens).join(' ');
-  // Only set if different to avoid infinite MutationObserver loops
-  if (newValue !== sandbox) {
-    iframe.setAttribute('sandbox', newValue);
-  }
-};
 
 export interface ProcessedChapter {
   href: string;
@@ -187,17 +173,13 @@ export async function extractContentOffscreen(
   // ePub can take File, ArrayBuffer, or URL.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const book = (ePub as any)(file);
-  let observer: MutationObserver | null = null;
+  let disconnectSandboxObserver: (() => void) | null = null;
 
-  // SECURITY: Register a serialization hook to sanitize HTML content before it's rendered.
-  // This prevents XSS attacks from malicious scripts in EPUB files during the ingestion phase.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((book.spine as any).hooks?.serialize) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (book.spine as any).hooks.serialize.register((html: string) => {
-      return sanitizeContent(html);
-    });
-  }
+  // SECURITY: sanitize-at-serialize via the shared epubSecurity module —
+  // the SAME implementation the live reader renders through, so ingested
+  // sentence CFIs are computed against the DOM the user will see. The
+  // offscreen path never honors the E2E sanitization kill-switch.
+  registerSanitizeHook(book as EpubJsBookLike, { allowTestBypass: false });
 
   try {
     await book.ready;
@@ -211,34 +193,11 @@ export async function extractContentOffscreen(
       manager: 'default' // Display one chapter at a time
     });
 
-    // PATCH: Ensure all iframes (current and future) have allow-scripts to prevent blocking in strict environments.
-    // We use a MutationObserver because epubjs might recreate the iframe when displaying new chapters.
-    observer = new MutationObserver((mutations) => {
-      mutations.forEach(mutation => {
-        if (mutation.type === 'childList') {
-          mutation.addedNodes.forEach(node => {
-            const element = node as HTMLElement;
-            if (element.tagName === 'IFRAME') {
-              patchIframeSandbox(element as HTMLIFrameElement);
-            } else if (element.querySelectorAll) {
-              element.querySelectorAll('iframe').forEach(patchIframeSandbox);
-            }
-          });
-        } else if (mutation.type === 'attributes' && mutation.target.nodeName === 'IFRAME') {
-          patchIframeSandbox(mutation.target as HTMLIFrameElement);
-        }
-      });
-    });
-
-    observer.observe(container, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['sandbox']
-    });
-
-    // Initial patch for existing iframes
-    container.querySelectorAll('iframe').forEach(patchIframeSandbox);
+    // PATCH: Ensure all iframes (current and future) have allow-scripts to
+    // prevent blocking in strict environments — shared epubSecurity observer
+    // (epubjs might recreate the iframe when displaying new chapters; the
+    // helper also patches iframes already present).
+    disconnectSandboxObserver = observeAndPatchSandbox(container);
 
     // Access spine items
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -365,8 +324,8 @@ export async function extractContentOffscreen(
 
     } finally {
     // Cleanup
-    if (observer) {
-      observer.disconnect();
+    if (disconnectSandboxObserver) {
+      disconnectSandboxObserver();
     }
     if (book) {
       await book.opened.catch(() => { });

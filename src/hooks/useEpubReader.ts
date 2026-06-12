@@ -2,7 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import ePub, { type Book, type Rendition, type Location, type NavigationItem } from 'epubjs';
 import { bookContent } from '@data/repos/bookContent';
 import type { BookMetadata } from '~types/db';
-import { sanitizeContent } from '@lib/sanitizer';
+import {
+  registerSanitizeHook,
+  observeAndPatchSandbox,
+  type EpubJsBookLike,
+} from '@domains/reader/engine/epubSecurity';
 import { runCancellable, CancellationError } from '@lib/cancellable-task-runner';
 import { createLogger } from '@lib/logger';
 import { usePreferencesStore } from '@store/usePreferencesStore';
@@ -16,24 +20,6 @@ import {
 } from '@lib/chinese/ChineseTextProcessor';
 
 const logger = createLogger('useEpubReader');
-
-/**
- * Patches an iframe's sandbox attribute to ensure allow-scripts and allow-same-origin are present.
- * This is required for event handling in strict environments like WebKit.
- */
-const patchIframeSandbox = (iframe: HTMLIFrameElement) => {
-  const sandbox = iframe.getAttribute('sandbox') || '';
-  const tokens = new Set(sandbox.split(/\s+/).filter(Boolean));
-
-  tokens.add('allow-scripts');
-  tokens.add('allow-same-origin');
-
-  const newValue = Array.from(tokens).join(' ');
-  // Only set if different to avoid infinite MutationObserver loops
-  if (newValue !== sandbox) {
-    iframe.setAttribute('sandbox', newValue);
-  }
-};
 
 const STATIC_READER_STYLES = `
 `;
@@ -261,7 +247,8 @@ export function useEpubReader(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const processChineseContentRef = useRef<(contents: any) => Promise<void>>(async () => { });
   const { forceTraditionalChinese, showPinyin, pinyinSize } = usePreferencesStore();
-  const sandboxObserverRef = useRef<MutationObserver | null>(null);
+  /** Disconnects the shared sandbox-patching observer (epubSecurity). */
+  const sandboxObserverRef = useRef<(() => void) | null>(null);
 
   // Use a ref for options to access latest values in event listeners without re-binding
   const optionsRef = useRef(options);
@@ -307,20 +294,11 @@ export function useEpubReader(
 
         const newBook = ePub(fileData as ArrayBuffer);
 
-        // SECURITY: Register a serialization hook to sanitize HTML content before it's rendered.
-        // This prevents XSS attacks from malicious scripts in EPUB files.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if ((newBook.spine as any).hooks?.serialize) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (newBook.spine as any).hooks.serialize.register((html: string) => {
-            // Optimization: Allow disabling sanitization in E2E tests for performance
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            if ((window as any).__VERSICLE_SANITIZATION_DISABLED__) {
-              return html;
-            }
-            return sanitizeContent(html);
-          });
-        }
+        // SECURITY: sanitize-at-serialize via the shared epubSecurity module
+        // (one implementation for the live reader AND offscreen ingestion).
+        // The live reader is the one path allowed to honor the E2E
+        // sanitization kill-switch — and only in DEV/VITE_E2E builds.
+        registerSanitizeHook(newBook as unknown as EpubJsBookLike, { allowTestBypass: true });
 
         bookRef.current = newBook;
         setBook(newBook);
@@ -341,42 +319,15 @@ export function useEpubReader(
 
         // Cleanup old observer if any
         if (sandboxObserverRef.current) {
-          sandboxObserverRef.current.disconnect();
+          sandboxObserverRef.current();
         }
 
-        // Manually ensure allow-scripts is present to fix event handling in strict environments (like WebKit)
-        // We patch sandbox attribute manually via MutationObserver to catch dynamically created iframes
-        // and react to any attribute resets by epubjs.
-        const observer = new MutationObserver((mutations) => {
-          mutations.forEach(mutation => {
-            if (mutation.type === 'childList') {
-              mutation.addedNodes.forEach(node => {
-                const element = node as HTMLElement;
-                if (element.tagName === 'IFRAME') {
-                  patchIframeSandbox(element as HTMLIFrameElement);
-                } else if (element.querySelectorAll) {
-                  const iframes = element.querySelectorAll('iframe');
-                  iframes.forEach(patchIframeSandbox);
-                }
-              });
-            } else if (mutation.type === 'attributes' && mutation.target.nodeName === 'IFRAME') {
-              patchIframeSandbox(mutation.target as HTMLIFrameElement);
-            }
-          });
-        });
-
+        // Manually ensure allow-scripts is present to fix event handling in
+        // strict environments (like WebKit) — shared epubSecurity observer
+        // (patches existing iframes immediately and any epubjs re-creates).
         if (viewerRef.current) {
-          observer.observe(viewerRef.current, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['sandbox']
-          });
-          sandboxObserverRef.current = observer;
+          sandboxObserverRef.current = observeAndPatchSandbox(viewerRef.current);
         }
-
-        // Also patch immediately all existing iframes
-        viewerRef.current?.querySelectorAll('iframe').forEach(patchIframeSandbox);
         setRendition(newRendition);
 
         // Disable spreads
@@ -779,7 +730,7 @@ export function useEpubReader(
         }
         renditionRef.current = null;
         if (sandboxObserverRef.current) {
-          sandboxObserverRef.current.disconnect();
+          sandboxObserverRef.current();
           sandboxObserverRef.current = null;
         }
       }
