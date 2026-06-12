@@ -8,6 +8,7 @@ import { ObsoleteLockView } from './components/ObsoleteLockView';
 import { CriticalMigrationFailureView } from './components/sync/CriticalMigrationFailureView';
 import { WorkspaceMigrationConfirmModal } from './components/sync/WorkspaceMigrationConfirmModal';
 import { ToastHost } from './components/ToastHost';
+import { SWUpdatePrompt } from './components/SWUpdatePrompt';
 import { ConfirmHost, confirmDialog } from './components/ui/ConfirmDialog';
 import { useToastStore } from './store/useToastStore';
 import { wipeAllData } from './data/wipe';
@@ -24,11 +25,13 @@ const logger = createLogger('App');
  * ToastHost + ConfirmHost mount HERE, above the router gate (Phase 8 §D):
  * a toast fired during boot renders instead of being dropped, and the
  * SafeMode reset path gets the accessible confirm dialog (native
- * confirm/alert are banned at lint ERROR).
+ * confirm/alert are banned at lint ERROR). SWUpdatePrompt mounts beside
+ * them (Phase 8 §G) so even a boot-blocked client can accept an update —
+ * the recovery channel for a bad deploy.
  */
 function App() {
   const boot = useBootSequence();
-  const { swInitialized, swError } = useServiceWorkerGate();
+  const { swInitialized } = useServiceWorkerGate();
 
   const handleReset = async () => {
     const confirmed = await confirmDialog({
@@ -59,23 +62,6 @@ function App() {
         return <CriticalMigrationFailureView backupId={boot.error.checkpointId} />;
       }
       return <SafeModeView error={boot.error} onReset={handleReset} onRetry={() => window.location.reload()} />;
-    }
-
-    if (swError) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-4">
-          <div className="max-w-md text-center">
-            <h1 className="text-xl font-bold mb-2">Critical Error</h1>
-            <p className="mb-4">{swError}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded hover:opacity-90"
-            >
-              Reload
-            </button>
-          </div>
-        </div>
-      );
     }
 
     // Combined loading screen; 'halted' keeps it visible while a backup
@@ -112,6 +98,7 @@ function App() {
   return (
     <>
       <ToastHost />
+      <SWUpdatePrompt />
       <ConfirmHost />
       {body}
     </>

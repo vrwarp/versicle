@@ -6,6 +6,18 @@ import { resolveMessage, isMessageKey, type MessageInput } from '@kernel/locale/
  */
 export type ToastType = 'info' | 'error' | 'success';
 
+/**
+ * An optional action button on a toast (Phase 8 §G: the SW update prompt's
+ * persistent "Reload" toast). The label resolves through the catalog like
+ * the message itself.
+ */
+export interface ToastAction {
+  /** Catalog key (or deprecated prose) for the button label. */
+  label: MessageInput | string;
+  /** Invoked on click; the host dismisses the toast afterwards. */
+  onAction: () => void;
+}
+
 /** One queued toast. */
 export interface ToastEntry {
   /** Monotonic id (dismissal handle + React key). */
@@ -18,6 +30,8 @@ export interface ToastEntry {
   type: ToastType;
   /** Auto-dismiss after this many ms; <= 0 or Infinity = persistent. */
   duration: number;
+  /** Resolved action button, when the call site passed one. */
+  action?: { label: string; onAction: () => void };
 }
 
 /** Queue cap (risk 7: per-file import errors must not flood the screen). */
@@ -49,8 +63,14 @@ interface ToastState {
    * @param content - MessageKey, `{key, params}`, or (deprecated) prose.
    * @param type - The toast type (default: 'info').
    * @param duration - ms; defaults to 3000, errors default to 5000.
+   * @param action - Optional action button (label resolves like content).
    */
-  showToast: (content: MessageInput | string, type?: ToastType, duration?: number) => void;
+  showToast: (
+    content: MessageInput | string,
+    type?: ToastType,
+    duration?: number,
+    action?: ToastAction,
+  ) => void;
   /** Dismiss one toast by id. */
   dismissToast: (id: number) => void;
   /** Dismiss everything (legacy `hideToast()` semantics, kept for tests). */
@@ -62,19 +82,25 @@ interface ToastState {
  */
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
-  showToast: (content, type = 'info', duration) => {
+  showToast: (content, type = 'info', duration, action) => {
     const message = resolveMessage(content);
     const key =
       typeof content === 'object' ? content.key
       : isMessageKey(content) ? content
       : undefined;
     const effectiveDuration = duration ?? (type === 'error' ? 5000 : 3000);
+    const resolvedAction = action
+      ? { label: resolveMessage(action.label), onAction: action.onAction }
+      : undefined;
     set((state) => {
       // Dedupe (risk 7): an identical visible toast refreshes instead of
       // stacking — replace it with a fresh entry (new id restarts the
       // timer and re-announces).
       const kept = state.toasts.filter((t) => !(t.message === message && t.type === type));
-      const next = [...kept, { id: nextToastId++, message, key, type, duration: effectiveDuration }];
+      const next = [
+        ...kept,
+        { id: nextToastId++, message, key, type, duration: effectiveDuration, action: resolvedAction },
+      ];
       // Cap: drop the oldest beyond the limit.
       return { toasts: next.slice(-MAX_TOASTS) };
     });

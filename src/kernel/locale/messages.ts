@@ -124,6 +124,11 @@ export const messages = {
     'Are you sure you want to delete all data? This cannot be undone.',
   'app.resetAll.confirm': 'Delete everything',
   'app.resetAll.failed': 'Failed to reset database. You may need to clear browser data manually.',
+
+  // --- PWA shell (Phase 8 §G) -------------------------------------------
+  'app.updateReady': 'A new version of Versicle is ready.',
+  'app.swDegraded':
+    'Offline features are unavailable in this session — book covers may not display. Reload to retry.',
   'data.clearAll.title': 'Delete ALL data?',
   'data.clearAll.body':
     'Are you sure you want to delete ALL data? This includes books, annotations, and settings.',

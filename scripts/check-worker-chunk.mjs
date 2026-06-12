@@ -411,3 +411,48 @@ if (process.argv.includes('--update-entry-baseline')) {
       `${limit} (baseline ${baseline} + 10%).`,
   );
 }
+
+// ── Check 5: PWA shell (Phase 8 §G; phase8-shell-pwa.md PR-8) ───────────────
+// The locally-verifiable half of the Lighthouse installability pass:
+//  - built index.html links exactly ONE manifest;
+//  - the manifest carries the installability fields (id, start_url, scope,
+//    display, lang, dir, name, icons 192+512);
+//  - the SW is emitted at the root scope (dist/sw.js).
+// The interactive halves (offline smoke, two-build update-prompt journey)
+// run in the Docker/nightly Playwright lane.
+const manifestLinks = [...indexHtml.matchAll(/<link[^>]+rel="manifest"[^>]*>/g)];
+if (manifestLinks.length !== 1) {
+  console.error(
+    `\nFAIL: built index.html has ${manifestLinks.length} manifest links — ` +
+      'exactly one expected (single-manifest invariant, Phase 8 §G).',
+  );
+  process.exit(1);
+}
+const manifestHref = manifestLinks[0][0].match(/href="([^"]+)"/)?.[1];
+const manifestPath = join(repoRoot, 'dist', manifestHref?.replace(/^\//, '') ?? '');
+if (!manifestHref || !existsSync(manifestPath)) {
+  console.error(`\nFAIL: manifest link href ${manifestHref} not found in dist/.`);
+  process.exit(1);
+}
+const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+const manifestProblems = [];
+for (const field of ['id', 'start_url', 'scope', 'display', 'lang', 'dir', 'name', 'short_name']) {
+  if (!manifest[field]) manifestProblems.push(`missing '${field}'`);
+}
+for (const size of ['192x192', '512x512']) {
+  if (!manifest.icons?.some((icon) => icon.sizes === size)) {
+    manifestProblems.push(`missing ${size} icon`);
+  }
+}
+if (manifestProblems.length > 0) {
+  console.error(`\nFAIL: manifest installability fields: ${manifestProblems.join('; ')}.`);
+  process.exit(1);
+}
+if (!existsSync(join(repoRoot, 'dist', 'sw.js'))) {
+  console.error('\nFAIL: dist/sw.js missing — the service worker was not emitted.');
+  process.exit(1);
+}
+console.log(
+  `PASS: PWA shell — one manifest link (${manifestHref}), installability ` +
+    'fields present, sw.js emitted.',
+);

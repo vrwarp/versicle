@@ -16,6 +16,12 @@ const srcAlias = (dir: string) => fileURLToPath(new URL(`./src/${dir}`, import.m
 export default defineConfig({
   resolve: {
     alias: {
+      // `virtual:pwa-register/react` only exists inside a Vite build with
+      // vite-plugin-pwa active (Phase 8 §G); vitest resolves it to a typed
+      // inert stub with the same API shape.
+      'virtual:pwa-register/react': fileURLToPath(
+        new URL('./src/test/harness/pwaRegisterStub.ts', import.meta.url),
+      ),
       '@app': srcAlias('app'),
       '@components': srcAlias('components'),
       '@data': srcAlias('data'),

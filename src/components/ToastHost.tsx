@@ -41,6 +41,7 @@ export const ToastHost: React.FC = () => {
             message={toast.message}
             type={toast.type}
             duration={toast.duration}
+            action={toast.action}
             onClose={() => dismissToast(toast.id)}
           />
         ))}
@@ -52,6 +53,7 @@ export const ToastHost: React.FC = () => {
             message={toast.message}
             type={toast.type}
             duration={toast.duration}
+            action={toast.action}
             onClose={() => dismissToast(toast.id)}
           />
         ))}

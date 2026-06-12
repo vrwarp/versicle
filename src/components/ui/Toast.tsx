@@ -11,6 +11,11 @@ export interface ToastProps {
   type?: ToastVariant;
   /** Auto-dismiss after this many ms; <= 0 or Infinity = persistent. */
   duration?: number;
+  /**
+   * Optional action button (Phase 8 §G: the SW update prompt's "Reload").
+   * The toast closes itself after the action runs.
+   */
+  action?: { label: string; onAction: () => void };
   onClose: () => void;
 }
 
@@ -28,6 +33,7 @@ export const Toast: React.FC<ToastProps> = ({
   message,
   type = 'info',
   duration = 3000,
+  action,
   onClose,
 }) => {
   const [isPaused, setIsPaused] = useState(false);
@@ -83,6 +89,20 @@ export const Toast: React.FC<ToastProps> = ({
       <div className="flex-1 mr-2">
         {message}
       </div>
+      {action && (
+        <Button
+          variant="ghost"
+          size="sm"
+          data-testid="toast-action"
+          onClick={() => {
+            action.onAction();
+            onClose();
+          }}
+          className="shrink-0 font-semibold underline underline-offset-2 hover:bg-black/10"
+        >
+          {action.label}
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="icon"

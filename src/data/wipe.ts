@@ -79,12 +79,20 @@ export const APP_LOCAL_STORAGE_PREFIXES: readonly string[] = [
 ];
 
 /**
- * CacheStorage caches created by app code (Piper voice model downloads,
- * the SW's /dict/* CacheFirst runtime cache). The service-worker precache
- * is intentionally left alone: it holds no user data and is managed by the
- * SW lifecycle.
+ * CacheStorage caches created by app code: Piper voice model downloads
+ * (PiperRuntime's `piper-voices-v1`) and the SW runtime caches from
+ * src/sw.ts (Phase 8 §G) — /dict/* (`versicle-dict-assets`), /fonts/*
+ * (`versicle-fonts-v1`), /piper/* runtime pieces
+ * (`versicle-piper-runtime-v1`). Prefix-matched so `-vN` rotations stay
+ * covered. The service-worker precache is intentionally left alone: it
+ * holds no user data and is managed by the SW lifecycle.
  */
-export const APP_CACHE_PREFIXES: readonly string[] = ['piper-voices', 'versicle-dict-assets'];
+export const APP_CACHE_PREFIXES: readonly string[] = [
+  'piper-voices',
+  'versicle-dict-assets',
+  'versicle-fonts',
+  'versicle-piper-runtime',
+];
 
 /** Upper bound for any single flush/close/delete step so a wipe never hangs. */
 const STEP_TIMEOUT_MS = 5000;

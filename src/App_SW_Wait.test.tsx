@@ -83,7 +83,6 @@ vi.mock('./components/library/LibraryView', () => ({ LibraryView: () => <div dat
 vi.mock('./components/reader/ReaderView', () => ({ ReaderView: () => <div data-testid="reader-view">Reader View</div> }));
 vi.mock('./components/reader/ReaderControlBar', () => ({ ReaderControlBar: () => <div data-testid="reader-control-bar">Control Bar</div> }));
 vi.mock('./components/ThemeSynchronizer', () => ({ ThemeSynchronizer: () => null }));
-vi.mock('./components/ui/ToastContainer', () => ({ ToastContainer: () => null }));
 vi.mock('./components/SafeModeView', () => ({
   SafeModeView: ({ onReset }: { onReset: () => void }) => (
     <div>
@@ -132,8 +131,22 @@ vi.mock('react-router-dom', () => ({
 }));
 
 import { waitForServiceWorkerController } from './lib/serviceWorkerUtils';
+import {
+  notifyServiceWorkerDegradedOnce,
+  resetServiceWorkerDegradedNoticeForTests,
+} from './app/boot/useServiceWorkerGate';
+import { useToastStore } from './store/useToastStore';
 
-describe('App Service Worker Wait (Refactored)', () => {
+/**
+ * Phase 8 §G — the HONEST soft gate. `waitForServiceWorkerController`
+ * NEVER rejects (3 s ready-race + poll exhaustion both resolve), so the
+ * legacy `swError` state and App's "Critical Error" screen were
+ * unreachable dead code; both are deleted. The gate holds the boot screen
+ * briefly and then proceeds regardless; degradation (no controller →
+ * covers will not load) surfaces as a one-shot keyed toast in production
+ * builds only.
+ */
+describe('App service-worker soft gate (Phase 8 §G)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -144,34 +157,72 @@ describe('App Service Worker Wait (Refactored)', () => {
     vi.restoreAllMocks();
   });
 
-  it('initializes successfully when SW controller is ready (mocked)', async () => {
-    // Mock successful resolution
+  it('proceeds to the app once the SW wait settles', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (waitForServiceWorkerController as any).mockResolvedValue(undefined);
 
     render(<App />);
-
-    // Initially waiting (React effect cycle)
-    // Actually, if promise resolves immediately, we might see Library View immediately
-    // or brief "Connecting..."
 
     await waitFor(() => {
       expect(screen.getByText('Library View')).toBeInTheDocument();
     });
   });
 
-  it('shows critical error if SW controller wait fails', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    // Mock failure
+  it('regression: no hard SW boot block — the dead Critical Error screen stays deleted', async () => {
+    // The wait resolving WITHOUT a controller (blocked SW, poll
+    // exhaustion) must still boot the app — never an error screen.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (waitForServiceWorkerController as any).mockRejectedValue(new Error('Controller missing'));
+    (waitForServiceWorkerController as any).mockResolvedValue(undefined);
 
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText('Critical Error')).toBeInTheDocument();
-      expect(screen.getByText(/Service Worker failed to take control/)).toBeInTheDocument();
+      expect(screen.getByText('Library View')).toBeInTheDocument();
     });
+    expect(screen.queryByText('Critical Error')).toBeNull();
+  });
+});
+
+describe('regression: SW degraded-mode notice — one keyed toast, production lanes only', () => {
+  const controlled = {
+    serviceWorker: { controller: {} },
+  } as unknown as Pick<Navigator, 'serviceWorker'>;
+  const uncontrolled = {
+    serviceWorker: { controller: null },
+  } as unknown as Pick<Navigator, 'serviceWorker'>;
+  const prodEnv = { dev: false, e2e: false };
+
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    resetServiceWorkerDegradedNoticeForTests();
+    useToastStore.getState().hideToast();
+  });
+
+  afterEach(() => {
+    resetServiceWorkerDegradedNoticeForTests();
+    useToastStore.getState().hideToast();
+    vi.restoreAllMocks();
+  });
+
+  it('fires app.swDegraded exactly ONCE when no controller took over (prod)', () => {
+    notifyServiceWorkerDegradedOnce(uncontrolled, prodEnv);
+    notifyServiceWorkerDegradedOnce(uncontrolled, prodEnv);
+
+    const toasts = useToastStore.getState().toasts;
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].key).toBe('app.swDegraded');
+  });
+
+  it('stays silent when a controller is present', () => {
+    notifyServiceWorkerDegradedOnce(controlled, prodEnv);
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+  });
+
+  it('stays silent in DEV/E2E lanes (Playwright blocks service workers by design)', () => {
+    notifyServiceWorkerDegradedOnce(uncontrolled, { dev: true, e2e: false });
+    resetServiceWorkerDegradedNoticeForTests();
+    notifyServiceWorkerDegradedOnce(uncontrolled, { dev: false, e2e: true });
+    expect(useToastStore.getState().toasts).toHaveLength(0);
   });
 });
 

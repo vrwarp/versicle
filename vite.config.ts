@@ -171,21 +171,41 @@ export default defineConfig(({ mode }) => {
         strategies: 'injectManifest',
         srcDir: 'src',
         filename: 'sw.ts',
-        registerType: 'autoUpdate',
+        // Phase 8 §G: prompt-style updates. A new SW waits until the user
+        // accepts the update toast (src/components/SWUpdatePrompt.tsx →
+        // updateServiceWorker() → SKIP_WAITING message handled in src/sw.ts).
+        // The previously-fielded autoUpdate SW skipWaiting-s ITSELF out, so
+        // the transition to the first prompt-build is seamless (prep risk #1).
+        registerType: 'prompt',
         injectManifest: {
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4MB
           // The vendored onnxruntime wasm builds (dist/piper/onnxruntime/, ~10MB
           // each — see piperVendorPlugin) are far beyond any sane precache budget;
-          // they load on demand when Piper synthesizes. Same effective behavior as
-          // before the vendoring, when onnxruntime came from a CDN.
+          // they load on demand when Piper synthesizes (and are runtime-cached
+          // by the /piper/* CacheFirst route in src/sw.ts since Phase 8 §G).
           globIgnores: ['**/piper/onnxruntime/*.wasm'],
         },
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+        // Reality-checked (Phase 8 §G, prep RC-11): favicon.ico was committed
+        // as `favico.ico` (typo, now renamed), apple-touch-icon.png is
+        // generated from pwa-512x512.png, and the phantom mask-icon.svg
+        // entry was trimmed — no such asset has ever existed.
+        includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
         manifest: {
+          // `id` pins app identity across start_url changes; lang/dir feed
+          // the OS shell (Phase 8 §F: UI locale is en until a second locale
+          // ships); display/start_url are the Lighthouse installability
+          // requirements.
+          id: '/',
+          start_url: '/',
+          scope: '/',
+          display: 'standalone',
+          lang: 'en',
+          dir: 'ltr',
           name: 'Versicle Reader',
           short_name: 'Versicle',
           description: 'Local-first EPUB reader and manager.',
           theme_color: '#ffffff',
+          background_color: '#ffffff',
           icons: [
             {
               src: 'pwa-192x192.png',
