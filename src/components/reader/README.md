@@ -40,8 +40,12 @@ sole runtime epubjs importer, lint-enforced).
   Listening Room surfaces.
 * **`VisualSettings.tsx`** — the Reading Room (visual + Chinese reading
   preferences).
-* **`ReaderControlBar.tsx`** — the CompassPill host mounted from
-  `RootLayout` (talks to the reader via the ReaderCommands registry).
+* **`ReaderControlBar.tsx`** — the THIN pill variant router mounted from
+  `RootLayout` (Phase 8 §C): one priority switch dispatching to the
+  feature pills in `pills/` (AudioPill, SummaryPill, AnnotationPill,
+  AudioTriagePill), `sync/SyncAlertPill`, and `chinese/VocabTriageCard`;
+  talks to the reader via the ReaderCommands registry and restores focus
+  across variant morphs (no more key={variant} remount).
 
 Related: the Chinese reading feature module lives at `src/domains/chinese/`
 (engine/dictionary/vocabulary); its store-coupled UI (`VocabTriageCard`)

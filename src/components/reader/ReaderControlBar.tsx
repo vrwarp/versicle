@@ -1,11 +1,23 @@
-import React from 'react';
+/**
+ * ReaderControlBar — the THIN variant router over the dissolved CompassPill
+ * (Phase 8 §C): the priority switch below is the single dispatcher; each
+ * variant is its own feature component (reader/pills/*, sync/SyncAlertPill,
+ * chinese/VocabTriageCard). The `key={variant}` remount is GONE (a11y item
+ * 8): variants morph by re-render, and the router restores focus into the
+ * new pill when a morph would otherwise drop it on <body>.
+ */
+import React, { useEffect, useRef } from 'react';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useCurrentDeviceProgress, useBookProgress } from '@store/useReadingStateStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useBook, useLastReadBook } from '@store/libraryViewStore';
 import { useAnnotationStore } from '@store/useAnnotationStore';
-import { CompassPill } from '../ui/CompassPill';
-import type { ActionType } from '../ui/CompassPill';
+import { AudioPill } from './pills/AudioPill';
+import { SummaryPill } from './pills/SummaryPill';
+import { AnnotationPill, type ActionType } from './pills/AnnotationPill';
+import { AudioTriagePill } from './pills/AudioTriagePill';
+import { SyncAlertPill } from '../sync/SyncAlertPill';
+import { VocabTriageCard } from '../chinese/VocabTriageCard';
 import { useToastStore } from '@store/useToastStore';
 import { useNavigate } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
@@ -14,6 +26,10 @@ import { LexiconManager } from './LexiconManager';
 import { useRemoteProgress } from '@hooks/useRemoteProgress';
 import { findTocItem, resolveSyntheticPreference } from '@lib/reader/titleResolver';
 import { readerCommandsRegistry } from '@domains/reader/ui/ReaderCommands';
+
+type PillVariant =
+  | 'annotation' | 'active' | 'summary' | 'compact'
+  | 'sync-alert' | 'audio-triage' | 'vocab-triage';
 
 export const ReaderControlBar: React.FC = () => {
     // Correctly using the store-based toast
@@ -56,17 +72,11 @@ export const ReaderControlBar: React.FC = () => {
     // 2. Must not have been dismissed for this specific device/timestamp combo (simplified to deviceId for now)
     const showSyncAlert = remoteProgress && !dismissedSyncAlerts.has(remoteProgress.deviceId);
 
-    // OPTIMIZATION: Use granular selectors to avoid re-rendering on every library change.
-    // Previously, we subscribed to `state.books`, causing re-renders whenever *any* book changed.
-    // Now, we only re-render if the calculated `lastReadBook` or `currentBook` reference changes.
-
     // Select the most recently read book
-    // OPTIMIZATION: Use specialized selector to avoid iterating all books
     const lastReadBook = useLastReadBook();
     const lastReadBookProgress = useCurrentDeviceProgress(lastReadBook?.bookId || null);
 
     // Select the current book if active
-    // OPTIMIZATION: Use specialized selector
     const currentBook = useBook(currentBookId);
     // useBookProgress applies the same fallback logic as getProgress() (most-recent
     // across devices, with isValidProgress guard), so the scrubber always reflects
@@ -81,14 +91,12 @@ export const ReaderControlBar: React.FC = () => {
     const isAnnotationMode = popover.visible;
 
     // 2. Audio Mode OR Active Reader
-    // If we are reading a book (currentBookId exists), we are active.
-    // If audio queue has items, we are active.
     const isReaderActive = !!currentBookId;
 
     const compassState = useReaderUIStore(state => state.compassState || {});
 
-    // Logic:
-    let variant: 'annotation' | 'active' | 'summary' | 'compact' | 'sync-alert' | 'audio-triage' | 'vocab-triage' | null = null;
+    // THE single dispatcher (§C): priority switch, unchanged semantics.
+    let variant: PillVariant | null = null;
 
     if (compassState.variant) {
         variant = compassState.variant;
@@ -109,6 +117,26 @@ export const ReaderControlBar: React.FC = () => {
     } else {
         variant = null;
     }
+
+    // Focus management on variant morph (a11y item 8): if keyboard focus
+    // lived inside the pill and the morph unmounted that control, move
+    // focus to the new pill's first control instead of dropping it on
+    // <body>. The flag is event-driven (focus/blur on the region); a blur
+    // with a NULL relatedTarget means focus was destroyed (the unmount
+    // case), so it does not clear the flag.
+    const pillRegionRef = useRef<HTMLDivElement>(null);
+    const prevVariantRef = useRef<PillVariant | null>(variant);
+    const pillHadFocusRef = useRef(false);
+    useEffect(() => {
+        if (variant === prevVariantRef.current) return;
+        prevVariantRef.current = variant;
+        const region = pillRegionRef.current;
+        if (pillHadFocusRef.current && region && !region.contains(document.activeElement)) {
+            region
+                .querySelector<HTMLElement>('button, [role="button"], [tabindex="0"], textarea')
+                ?.focus();
+        }
+    }, [variant]);
 
     // Handle Annotation Actions
     const handleAnnotationAction = (action: ActionType, payload?: string) => {
@@ -221,38 +249,88 @@ export const ReaderControlBar: React.FC = () => {
         const resolvedItem = currentSectionId ? findTocItem(currentToc, currentSectionId) : null;
         subtitle = resolvedItem?.label || currentSectionTitle || undefined;
         // Only override progress when TTS is not active; when TTS has queue items,
-        // CompassPill uses its own TTS-based chapter progress from useSectionDuration.
+        // the AudioPill uses its own TTS-based chapter progress from useSectionDuration.
         if (!hasQueueItems) {
             progress = (currentBookProgress?.percentage || 0) * 100;
         }
     }
 
-    return (
-        <>
-            <div className="fixed bottom-8 left-0 right-0 z-40 px-4 pointer-events-none flex justify-center">
-                <div className="pointer-events-auto w-full max-w-md">
-                    <CompassPill
-                        key={variant}
-                        variant={variant}
+    const pill = (() => {
+        switch (variant) {
+            case 'audio-triage':
+                return <AudioTriagePill />;
+            case 'vocab-triage':
+                // Phase 6 PR-11 home: the chinese feature card (the IDB
+                // dictionary import is gated on THIS card opening).
+                return <VocabTriageCard text={popover.text || ''} />;
+            case 'sync-alert':
+                return (
+                    <SyncAlertPill
                         title={title}
                         subtitle={subtitle}
-                        progress={progress}
-                        onAnnotationAction={handleAnnotationAction}
+                        onClick={() => {
+                            const commands = readerCommandsRegistry.get();
+                            if (remoteProgress && commands) {
+                                commands.jumpTo(remoteProgress.cfi);
+                                setDismissedSyncAlerts(prev => new Set(prev).add(remoteProgress.deviceId));
+                            }
+                        }}
+                        onDismiss={() => handleAnnotationAction('dismiss')}
+                    />
+                );
+            case 'annotation':
+                return (
+                    <AnnotationPill
+                        onAction={handleAnnotationAction}
                         availableActions={{
                             play: true,
                             pronounce: true,
                             delete: !!popover.id
                         }}
+                    />
+                );
+            case 'summary':
+                return (
+                    <SummaryPill
+                        title={title}
+                        subtitle={subtitle}
+                        progress={progress}
                         onClick={() => {
-                            const commands = readerCommandsRegistry.get();
-                            if (variant === 'sync-alert' && remoteProgress && commands) {
-                                commands.jumpTo(remoteProgress.cfi);
-                                setDismissedSyncAlerts(prev => new Set(prev).add(remoteProgress.deviceId));
-                            } else if (variant === 'summary' && lastReadBook) {
-                                navigate(`/read/${lastReadBook.id}`);
-                            }
+                            if (lastReadBook) navigate(`/read/${lastReadBook.id}`);
                         }}
                     />
+                );
+            case 'active':
+            case 'compact':
+                // ONE component for both layouts: the immersive-mode morph
+                // re-renders instead of remounting.
+                return (
+                    <AudioPill
+                        compact={variant === 'compact'}
+                        title={title}
+                        subtitle={subtitle}
+                        progress={progress}
+                    />
+                );
+        }
+    })();
+
+    return (
+        <>
+            <div className="fixed bottom-8 left-0 right-0 z-40 px-4 pointer-events-none flex justify-center">
+                <div
+                    className="pointer-events-auto w-full max-w-md"
+                    ref={pillRegionRef}
+                    onFocus={() => { pillHadFocusRef.current = true; }}
+                    onBlur={(e) => {
+                        // relatedTarget null = focus destroyed (unmount) —
+                        // keep the flag so the morph effect can restore it.
+                        if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget as Node)) {
+                            pillHadFocusRef.current = false;
+                        }
+                    }}
+                >
+                    {pill}
                 </div>
             </div>
 

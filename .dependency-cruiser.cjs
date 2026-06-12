@@ -135,6 +135,27 @@ module.exports = {
       to: { path: '^src/db' },
     },
     {
+      name: 'ui-imports-kernel-only',
+      severity: 'error',
+      comment:
+        'src/components/ui is the design system (Phase 8 §L): kernel/, ' +
+        '~types, lib/utils + external (Radix/lucide/cva) only — no store/, ' +
+        'domains/, hooks/, app/, layouts/, data/, or components outside ' +
+        'ui/. Born at error when CompassPill dissolved into its feature ' +
+        'homes (P8 §C; PillShell is the dumb primitive left behind). TWO ' +
+        'named carve-outs ride the P8 toast-queue item (prep §D): ' +
+        'ToastContainer.tsx (store value import; the container moves above ' +
+        'the router gate) and Toast.tsx (type-only ToastType import). ' +
+        'Delete the pathNot when that item lands.',
+      from: {
+        path: '^src/components/ui',
+        pathNot: '^src/components/ui/(ToastContainer|Toast)\\.tsx$',
+      },
+      to: {
+        path: '^src/(store|domains|hooks|app|layouts|data|state|components(?!/ui))',
+      },
+    },
+    {
       name: 'worker-no-state-typegraph',
       severity: 'warn',
       comment:

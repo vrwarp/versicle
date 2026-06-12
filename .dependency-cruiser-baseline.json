@@ -10,6 +10,7 @@
     "data-no-upward": 0,
     "domains-no-store": 0,
     "components-not-to-db": 0,
+    "ui-imports-kernel-only": 0,
     "worker-no-state-typegraph": 16
   },
   "total": 36
