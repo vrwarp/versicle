@@ -11,7 +11,7 @@ test('Timeout Protection', async ({ page }) => {
   await utils.navigateToChapter(page, 'toc-item-6');
 
   // Wait for TTS queue sync
-  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().queue.length > 0, { timeout: 15000 });
+  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().queue.length > 0, { timeout: 15000 });
 
   // Start Playback
   await page.getByTestId('compass-pill-active').getByLabel('Play').click();
@@ -54,7 +54,7 @@ test('Navigation Guard', async ({ page }) => {
   await utils.navigateToChapter(page, 'toc-item-3');
 
   // Wait for queue to load for this chapter
-  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().queue.length > 0, { timeout: 15000 });
+  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().queue.length > 0, { timeout: 15000 });
 
   // Start Playback
   await page.getByTestId('compass-pill-active').getByLabel('Play').click();
@@ -72,7 +72,7 @@ test('Navigation Guard', async ({ page }) => {
 
   // Wait for TTS queue to reload for the new chapter
   await page.waitForFunction(() => {
-    const queue = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().queue;
+    const queue = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().queue;
     return queue.length > 0;
   }, { timeout: 15000 });
 
@@ -103,7 +103,7 @@ test('Inline HUD Discard', async ({ page }) => {
   await utils.navigateToChapter(page, 'toc-item-6');
 
   // Wait for TTS queue sync
-  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().queue.length > 0, { timeout: 15000 });
+  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().queue.length > 0, { timeout: 15000 });
 
   // Trigger bookmark via gesture
   console.log('Triggering bookmark gesture...');
@@ -167,7 +167,7 @@ test('Section Start Boundary', async ({ page }) => {
   await utils.navigateToChapter(page, 'toc-item-6');
 
   // Wait for TTS queue sync but do NOT play yet
-  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().queue.length > 0, { timeout: 15000 });
+  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().queue.length > 0, { timeout: 15000 });
 
   // At index 0: Play briefly -> Pause -> Play
   console.log('Triggering gesture at index 0...');

@@ -83,7 +83,7 @@ test("tts resume after leaving book", async ({ page, baseURL }) => {
 
   // Check that we resumed at or near item 3.
   //
-  // Verify via the TTS store (useTTSStore), which is the source of truth for the resume
+  // Verify via the TTS store (useTTSPlaybackStore), which is the source of truth for the resume
   // position. The queue DOM is just a view of it: on WebKit the audio Sheet's open
   // animation can momentarily leave the queue items `visibility:hidden`, which is a
   // rendering transient unrelated to resume correctness. Gating on DOM *visibility* here
@@ -95,7 +95,7 @@ test("tts resume after leaving book", async ({ page, baseURL }) => {
   await page.waitForFunction(
     () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const s = (window as any).useTTSStore?.getState?.();
+      const s = (window as any).useTTSPlaybackStore?.getState?.();
       return !!s && Array.isArray(s.queue) && s.queue.length > 0 && typeof s.currentIndex === 'number';
     },
     undefined,
@@ -104,7 +104,7 @@ test("tts resume after leaving book", async ({ page, baseURL }) => {
 
   const resumeIndex = await page.evaluate(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => (window as any).useTTSStore.getState().currentIndex as number
+    () => (window as any).useTTSPlaybackStore.getState().currentIndex as number
   );
   console.log(`Resumed at queue index: ${resumeIndex}`);
 
@@ -168,7 +168,7 @@ test("tts position persists across reload", async ({ page }) => {
   // load the session restore can lag, and the DOM data-current attribute follows the store.
   await page.waitForFunction(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => (window as any).useTTSStore?.getState?.().currentIndex === 5,
+    () => (window as any).useTTSPlaybackStore?.getState?.().currentIndex === 5,
     undefined,
     { timeout: 35000 }
   );

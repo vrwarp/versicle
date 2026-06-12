@@ -6,26 +6,16 @@ import './index.css'
 import { useGoogleServicesStore } from './store/useGoogleServicesStore';
 import { useTTSSettingsStore } from './store/useTTSSettingsStore';
 import { useTTSPlaybackStore } from './store/useTTSPlaybackStore';
-import { getTtsController } from './app/tts/TtsController';
 import { useAnnotationStore } from './store/useAnnotationStore';
 import { useReaderUIStore } from './store/useReaderUIStore';
 
-/**
- * Legacy verification-spec surface: playback reads (status/queue/index) plus the
- * play/pause commands the Playwright verification specs drive. The 5b store
- * split moved those off the deleted useTTSStore; this shim keeps the spec
- * contract stable (P9 retires it together with the specs' migration).
- */
-interface LegacyTTSStoreWindowShim {
-  getState: () => ReturnType<typeof useTTSPlaybackStore.getState> & {
-    play: () => void;
-    pause: () => void;
-  };
-}
+// The legacy `window.useTTSStore` shim (playback reads + play/pause for the
+// verification specs) met its named P9 deadline: the specs read
+// `useTTSPlaybackStore` directly and drive commands through the typed
+// `window.__versicleTest.tts` surface (src/test-api.ts).
 
 declare global {
   interface Window {
-    useTTSStore: LegacyTTSStoreWindowShim;
     useTTSSettingsStore: typeof useTTSSettingsStore;
     useTTSPlaybackStore: typeof useTTSPlaybackStore;
     useAnnotationStore: typeof useAnnotationStore;
@@ -58,13 +48,6 @@ if (import.meta.env.DEV || import.meta.env.VITE_E2E === 'true') {
 if (typeof window !== 'undefined') {
   window.useTTSSettingsStore = useTTSSettingsStore;
   window.useTTSPlaybackStore = useTTSPlaybackStore;
-  window.useTTSStore = {
-    getState: () => ({
-      ...useTTSPlaybackStore.getState(),
-      play: getTtsController().play,
-      pause: getTtsController().pause,
-    }),
-  };
   window.useAnnotationStore = useAnnotationStore;
   window.useGoogleServicesStore = useGoogleServicesStore;
   window.useReaderUIStore = useReaderUIStore;

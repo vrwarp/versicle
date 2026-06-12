@@ -51,6 +51,15 @@ interface VersicleTestApi {
     payload: { referenceStartCfi: string },
   ): void;
   /**
+   * TTS playback commands (Phase 9): the typed replacement for the
+   * play/pause half of the deleted `window.useTTSStore` main.tsx shim.
+   * State reads go through `window.useTTSPlaybackStore` directly.
+   */
+  tts: {
+    play(): void;
+    pause(): void;
+  };
+  /**
    * Typed reader predicates over the live ReaderEngine (Phase 6 §2b) — the
    * named replacements for the exact `window.rendition` /
    * `__reader_added_annotations_count` polls this suite used to do. All

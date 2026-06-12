@@ -21,7 +21,7 @@ async function getScrubberWidth(page: Parameters<typeof resetApp>[0]): Promise<n
 async function getTTSProgress(page: Parameters<typeof resetApp>[0]): Promise<{ index: number; total: number }> {
   return page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = (window as any).useTTSStore?.getState?.();
+    const s = (window as any).useTTSPlaybackStore?.getState?.();
     return { index: s?.currentIndex ?? 0, total: s?.queue?.length ?? 0 };
   });
 }
@@ -213,7 +213,7 @@ test("scrubber advances as TTS plays through sentences", async ({ page }) => {
   // not as the page-function argument (which would override the 10s page default).
   await page.waitForFunction(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => (window as any).useTTSStore?.getState?.().currentIndex >= 2,
+    () => (window as any).useTTSPlaybackStore?.getState?.().currentIndex >= 2,
     undefined,
     { timeout: 20000 }
   );

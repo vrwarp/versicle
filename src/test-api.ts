@@ -28,6 +28,7 @@ import { MockGenAIClient, setGenAIClient, type MockGenAIFixture } from './domain
 import { useContentAnalysisStore } from './store/useContentAnalysisStore';
 import { useGenAIStore } from './store/useGenAIStore';
 import { getActiveReaderEngine } from './domains/reader/engine/activeEngineRegistry';
+import { getTtsController } from './app/tts/TtsController';
 import type { HighlightLayerId } from './domains/reader/engine/highlightStyles';
 import { createLogger } from './lib/logger';
 
@@ -99,6 +100,19 @@ export interface VersicleTestApi {
     sectionId: string,
     payload: { referenceStartCfi: string },
   ): void;
+
+  /**
+   * TTS playback commands for the verification specs (Phase 9): the typed
+   * replacement for the play/pause half of the legacy `window.useTTSStore`
+   * shim (deleted from main.tsx at its named P9 deadline). State READS go
+   * through `window.useTTSPlaybackStore` — the real store, exposed for
+   * verification — so this surface carries only the commands, routed
+   * through the same TtsController the UI uses.
+   */
+  tts: {
+    play(): void;
+    pause(): void;
+  };
 
   /**
    * Typed reader predicates over the live ReaderEngine (Phase 6 §2b) —
@@ -183,6 +197,10 @@ export function installTestApi(): void {
         useGenAIStore.getState().setDebugModeEnabled(enabled);
         logger.info(`GenAI debug mode ${enabled ? 'enabled' : 'disabled'} (test API)`);
       },
+    },
+    tts: {
+      play: () => getTtsController().play(),
+      pause: () => getTtsController().pause(),
     },
     seedContentAnalysis: (bookId, sectionId, payload) => {
       useContentAnalysisStore
