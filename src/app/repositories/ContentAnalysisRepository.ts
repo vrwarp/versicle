@@ -1,8 +1,9 @@
 /**
  * Main-thread repository for content-analysis reads/writes.
  *
- * Thin adapter over the yjs-backed useContentAnalysisStore. Lives outside DBService so the
- * TTS engine worker — which imports DBService for IndexedDB — never bundles yjs. Worker-side
+ * Thin adapter over the yjs-backed useContentAnalysisStore. Lives outside the
+ * data layer (src/data/repos — the carve of the deleted DBService) so the TTS
+ * engine worker — which reaches IndexedDB through those repos — never bundles yjs. Worker-side
  * engine code reaches content analysis through the EngineContext contentAnalysis port, whose
  * host implementation calls this repository.
  */

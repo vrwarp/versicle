@@ -155,7 +155,8 @@ export interface ContentAnalysisPort {
     subscribe(listener: (state: ContentAnalysisSnapshot) => void): () => void;
 
     // --- Per-section read/writes (persisted analysis). Async so they work across the worker
-    // boundary; the main thread backs these with the content-analysis store via DBService. ---
+    // boundary; the main thread backs these with the content-analysis store via the
+    // ContentAnalysisRepository host adapter (src/app/repositories). ---
     /** The fully-resolved persisted analysis for a section (title, refStartCfi, adaptations, status). */
     getContentAnalysis(bookId: string, sectionId: string): Promise<ContentAnalysis | undefined>;
     saveReferenceStartCfi(bookId: string, sectionId: string, referenceStartCfi: string | undefined): void;

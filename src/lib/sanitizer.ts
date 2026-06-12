@@ -9,7 +9,8 @@ import DOMPurify from 'dompurify';
  */
 // Configure DOMPurify hooks once. DOMPurify only binds its API (addHook/sanitize) when a DOM
 // is present; in a Web Worker there is no `window`, so it's a no-op shell. Guard the init so
-// this module can be imported in a worker (e.g. transitively via DBService → validators) — TTS
+// this module can be imported in a worker (e.g. transitively via the worker engine's data-repo
+// imports) — TTS
 // orchestration never sanitizes HTML off the main thread.
 if (typeof DOMPurify.addHook === 'function') {
   DOMPurify.addHook('afterSanitizeAttributes', (node) => {

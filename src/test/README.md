@@ -9,6 +9,6 @@ This directory contains configuration and helper files for the unit testing envi
 *   **`harness/`**: The shared test harness (typed service doubles, real-store
     seed/reset helpers, toast capture, an `ITTSProvider` double, domain
     fixtures, and `renderWithStores`). New tests should consume these instead
-    of hand-rolling `vi.mock` blocks for DBService/stores — see
+    of hand-rolling `vi.mock` blocks for data repos/stores — see
     `harness/index.ts` for the full surface and the rules of thumb.
 *   **`fuzz-utils.ts`**: Seeded PRNG infrastructure for the `*.fuzz.test.ts` suites.

@@ -40,7 +40,7 @@ vi.mock('@jofr/capacitor-media-session', () => ({
     }
 }));
 
-// Mock DBService
+// Mock the bookContent repo (the DBService carve)
 vi.mock('@data/repos/bookContent', () => ({
     bookContent: {
     getTTSPreparation: vi.fn(),

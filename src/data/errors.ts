@@ -11,7 +11,8 @@ const logger = createLogger('DBService');
 
 /**
  * Map a raw failure to the typed database errors. Shared with the services that layer on
- * top of DBService (e.g. BookImportService) so error semantics stay identical across the split.
+ * top of the data repos (historically DBService + BookImportService) so error semantics
+ * stay identical across the split.
  */
 export function handleDbError(error: unknown): never {
   logger.error('Database operation failed', error);

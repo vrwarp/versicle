@@ -38,7 +38,8 @@ export interface CacheAudioBlob {
   alignment?: Timepoint[];
   /**
    * Legacy field name for alignment data written by older builds.
-   * Read-shim only: `DBService.getCachedSegment` normalizes it onto `alignment`;
+   * Read-shim only: `audioCache.getCachedSegment` (src/data/repos/audioCache.ts,
+   * the DBService carve) normalizes it onto `alignment`;
    * new rows never write it.
    */
   alignmentData?: Timepoint[];

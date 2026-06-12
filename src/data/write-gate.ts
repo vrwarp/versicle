@@ -146,7 +146,8 @@ export function idbWriteLockIdle(): Promise<void> {
  *
  * `populate` MUST be synchronous (returns void, not a Promise): issue your
  * puts/deletes and return. Intra-transaction awaits — WebKit hang trigger #2
- * (see DBService's cache_session_state docs) — are unrepresentable, and so
+ * (see the carved-verbatim WebKit notes in src/data/repos/playbackCache.ts) —
+ * are unrepresentable, and so
  * is re-entrant gate acquisition. A thenable-returning callback aborts the
  * transaction and rejects (G.4): an async populate would race transaction
  * auto-commit and corrupt silently if allowed through.

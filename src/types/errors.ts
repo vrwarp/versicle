@@ -21,7 +21,8 @@
  * ## Mapping-helper convention (the `handleDbError` pattern)
  *
  * Vendor/raw errors are mapped to typed `AppError`s at **exactly one module per boundary** —
- * the proven shape is `DBService.handleDbError` (src/db/DBService.ts): a small
+ * the proven shape came from the deleted DBService's `handleDbError` (it lives
+ * on at src/data/errors.ts): a small
  * `handleXxxError(error: unknown): never` helper that
  *
  *   1. logs via the boundary's scoped logger,

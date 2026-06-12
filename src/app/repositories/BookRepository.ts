@@ -1,10 +1,11 @@
 /**
  * Main-thread repository for book inventory reads and book deletion.
  *
- * Merges the raw static rows (IndexedDB, via the lean worker-safe DBService) with the
- * yjs-backed user inventory (useBookStore). Lives outside DBService so the TTS engine
- * worker — which imports DBService for IndexedDB — never bundles yjs or opens a second
- * Y.Doc/IndexedDB connection. Worker-side engine code reaches merged book metadata
+ * Merges the raw static rows (IndexedDB, via the worker-safe data repos —
+ * src/data/repos, the carve of the deleted DBService) with the yjs-backed user
+ * inventory (useBookStore). Lives outside the data layer so the TTS engine
+ * worker — which reaches IndexedDB through those repos — never bundles yjs or
+ * opens a second Y.Doc/IndexedDB connection. Worker-side engine code reaches merged book metadata
  * through the EngineContext book port, whose host implementation calls this repository.
  */
 import { bookContent, type ManifestBundle } from '@data/repos/bookContent';

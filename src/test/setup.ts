@@ -109,7 +109,7 @@ if (typeof window !== 'undefined') {
   // intrinsics). Real browsers are single-realm, so production never hits
   // this; without the fix, prod branches like
   // BackupService.toBackupManifestRow (cover → base64) and
-  // DBService.getTableImages (ArrayBuffer → Blob normalization) silently take
+  // bookContent.getTableImages (ArrayBuffer → Blob normalization) silently take
   // the wrong path in any test that uses real fake-indexeddb rows.
   // The wrapper rebuilds binary containers (and the plain structures holding
   // them) in the jsdom realm after the native clone. fake-indexeddb resolves
