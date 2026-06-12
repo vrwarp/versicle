@@ -32,14 +32,23 @@ export const BOOK_CJK = 'fixture-book-hongloumeng';
  * plus a vocabulary carrying TRADITIONAL keys and one trad/simp duplicate
  * pair (紅 @T0 vs 红 @T1) to exercise the v7 min-timestamp merge. The
  * duplicate's merged value (min = T0) equals the older eras' migrated 紅
- * timestamp, so the cross-era canonical-equality invariant holds. */
+ * timestamp, so the cross-era canonical-equality invariant holds.
+ *
+ * Era 7 (added for the v8 reading-list bookId FK linker, Phase 7 §D):
+ * the TERMINAL v7 shape — era 6 with the vocabulary CANONICALIZED (the v7
+ * output: simplified keys, duplicate pair min-merged to T0) and the dual
+ * version stamp at 7. Reading-list entries carry NO bookId in ANY era
+ * (the FK did not exist before v8), and the entry set is shared across
+ * all eras — one exact-filename match, one fuzzy title+author match, one
+ * orphan — so every era links identically at the v8 step and the
+ * cross-era canonical-equality invariant keeps holding. */
 
 /** Era-plausible fixed timestamps (ms). */
 const T0 = 1740000000000; // base
 const T1 = 1740000600000;
 const T2 = 1740001200000;
 
-export type FixtureEra = 1 | 2 | 4 | 5 | 6;
+export type FixtureEra = 1 | 2 | 4 | 5 | 6 | 7;
 
 export interface EraSeed {
   /** Y.Map name → plain-JSON content to encode with the era's string mapping. */
@@ -179,12 +188,36 @@ const preferencesFor = (era: FixtureEra, device: string) => ({
   ...(era >= 5 ? { fontProfiles } : {}),
 });
 
+/**
+ * Reading-list entries (same set in EVERY era; no entry carries `bookId` —
+ * the FK is born at v8, where the linker joins them against the inventory):
+ *  - 'alice.epub'   — links by EXACT filename↔sourceFilename (the title
+ *    deliberately differs from the inventory's so the exact join must win
+ *    before fuzzy gets a say).
+ *  - 'hong-lou-meng (1).epub' — exact join fails (inventory says
+ *    'hongloumeng.epub'); links by the fuzzy title+author match key.
+ *  - 'frankenstein.epub' — orphan (no inventory match); stays unlinked.
+ */
 const readingList = {
+  'alice.epub': {
+    filename: 'alice.epub',
+    title: 'Alice in Wonderland',
+    author: 'Lewis Carroll',
+    percentage: 0.42,
+    lastRead: T2,
+  },
   'frankenstein.epub': {
     filename: 'frankenstein.epub',
     title: 'Frankenstein',
     author: 'Mary Shelley',
     percentage: 0.65,
+    lastRead: T1,
+  },
+  'hong-lou-meng (1).epub': {
+    filename: 'hong-lou-meng (1).epub',
+    title: '紅樓夢',
+    author: '曹雪芹',
+    percentage: 0.05,
     lastRead: T1,
   },
 };
@@ -196,6 +229,13 @@ const vocabulary = {
 /** Era-6 vocabulary: traditional keys + the trad/simp duplicate pair. */
 const vocabularyV6 = {
   knownCharacters: { 紅: T0, 红: T1, 樓: T1, 夢: T2 },
+};
+
+/** Era-7 vocabulary: the v7 canonicalization OUTPUT (simplified keys, the
+ * 紅/红 duplicate pair min-merged to T0) — byte-for-byte what migrating the
+ * era-6 fixture produces, so the cross-era equality invariant holds. */
+const vocabularyV7 = {
+  knownCharacters: { 红: T0, 楼: T1, 梦: T2 },
 };
 
 const lexicon = {
@@ -278,15 +318,15 @@ export const seedFor = (era: FixtureEra): EraSeed => ({
             [DEVICE_A]: preferencesFor(era, DEVICE_A),
             [DEVICE_B]: preferencesFor(era, DEVICE_B),
           },
-          meta: { schemaVersion: 6 },
+          meta: { schemaVersion: era },
         }
       : {}),
     'reading-list': { entries: readingList },
-    vocabulary: era >= 6 ? vocabularyV6 : vocabulary,
+    vocabulary: era >= 7 ? vocabularyV7 : era >= 6 ? vocabularyV6 : vocabulary,
     lexicon,
     contentAnalysis,
     devices,
   },
 });
 
-export const FIXTURE_ERAS: readonly FixtureEra[] = [1, 2, 4, 5, 6];
+export const FIXTURE_ERAS: readonly FixtureEra[] = [1, 2, 4, 5, 6, 7];

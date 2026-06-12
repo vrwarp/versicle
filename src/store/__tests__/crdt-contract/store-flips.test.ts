@@ -474,13 +474,19 @@ describe('flip wave 2: reading-list (merge-defaults + scopedDiff)', () => {
 
   it('hydrates the v5 fixture fully; post-hydration actions need no || {} fallback', () => {
     const store = bindWithDef<RLState>(loadDoc(5), READING_LIST_STORE_DEF, creator);
-    expect(Object.keys(store.getState().entries)).toEqual(['frankenstein.epub']);
+    expect(Object.keys(store.getState().entries).sort()).toEqual([
+      'alice.epub',
+      'frankenstein.epub',
+      'hong-lou-meng (1).epub',
+    ]);
 
     // The deleted canaries (`state.entries || {}`) must not be needed:
     store.getState().upsertEntry({ filename: 'dracula.epub' });
     expect(Object.keys(store.getState().entries).sort()).toEqual([
+      'alice.epub',
       'dracula.epub',
       'frankenstein.epub',
+      'hong-lou-meng (1).epub',
     ]);
   });
 

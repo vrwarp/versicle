@@ -19,9 +19,15 @@ const logger = createLogger('YjsProvider');
 // plan/overhaul/prep/phase2-fork-surgery.md §5.3.
 // v7: vocabulary simplified-key canonicalization (Phase 6 §7.5, CH-6) —
 // traditional knownCharacters keys merge into their simplified form
-// (min-timestamp). Program numbering decision: v8 = reading-list bookId
-// FK (post-library-track), v9 = husk-clearing + dual-write retirement (P9).
-export const CURRENT_SCHEMA_VERSION = 7;
+// (min-timestamp).
+// v8: reading-list bookId FK (Phase 7 §D) — the one-time linker joins
+// existing entries to the inventory (exact filename, then fuzzy
+// title+author); pre-v8 clients would drop the unknown field on their
+// whole-entry rebuilds, so the bump quarantines them.
+// Program numbering decision: v9 = preferences husk-clearing +
+// library.__schemaVersion dual-write retirement + activeContext Y.Map
+// husk pruning (P9).
+export const CURRENT_SCHEMA_VERSION = 8;
 
 // Singleton Y.Doc - Source of Truth for User Data. Constructed lazily on
 // first access instead of at module scope: importing this module (e.g. for

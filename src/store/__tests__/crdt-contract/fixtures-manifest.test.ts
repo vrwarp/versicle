@@ -12,7 +12,7 @@ import {
 
 /**
  * Captured-fixture drift guard (phase2-fork-surgery.md §4.2): the committed
- * v{1,2,4,5}.update.bin files are REVIEWED artifacts — this test pins
+ * v{1,2,4,5,6,7}.update.bin files are REVIEWED artifacts — this test pins
  * manifest↔file sha256 agreement and the structural content checklist so the
  * bytes cannot drift silently (and a fixture regeneration that forgets the
  * manifest, or vice versa, fails CI).
@@ -113,14 +113,29 @@ describe('ydoc fixture manifest guard', () => {
     // fontProfiles exists from v5 on (the v4→v5 backfill).
     expect(doc.getMap(`preferences/${DEVICE_A}`).has('fontProfiles')).toBe(era >= 5);
 
-    // v6: terminal-v6 shape — folded preferences + staged meta surface +
-    // TRADITIONAL vocabulary keys incl. the 紅/红 duplicate pair (the
-    // v7 canonicalization input, Phase 6 PR-13).
+    // v6/v7: terminal era shapes — folded preferences + staged meta surface.
+    // v6 carries TRADITIONAL vocabulary keys incl. the 紅/红 duplicate pair
+    // (the v7 canonicalization input, Phase 6 PR-13); v7 carries the
+    // CANONICAL simplified keys (the v7 output, duplicate pair min-merged).
     if (era >= 6) {
-      expect(doc.getMap('meta').get('schemaVersion')).toBe(6);
+      expect(doc.getMap('meta').get('schemaVersion')).toBe(era);
       expect((doc.getMap('preferences').get(DEVICE_A) as Y.Map<unknown>).has('fontProfiles')).toBe(true);
       const vocab = (doc.getMap('vocabulary').get('knownCharacters') as Y.Map<unknown>).toJSON();
-      expect(Object.keys(vocab).sort()).toEqual(['樓', '紅', '红', '夢'].sort());
+      expect(Object.keys(vocab).sort()).toEqual(
+        era >= 7 ? ['红', '楼', '梦'].sort() : ['樓', '紅', '红', '夢'].sort(),
+      );
     }
+
+    // Reading list (every era, incl. the era-7 terminal-v7 shape): three
+    // entries — exact-filename match, fuzzy match, orphan — and NONE may
+    // carry `bookId`: the FK is born at the v8 linker step.
+    const entries = (doc.getMap('reading-list').get('entries') as Y.Map<unknown>).toJSON() as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(Object.keys(entries).sort()).toEqual(
+      ['alice.epub', 'frankenstein.epub', 'hong-lou-meng (1).epub'].sort(),
+    );
+    expect(Object.values(entries).some((entry) => 'bookId' in entry)).toBe(false);
   });
 });

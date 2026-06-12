@@ -1,4 +1,4 @@
-# Captured Y.Doc fixtures (schema eras v1 / v2 / v4 / v5)
+# Captured Y.Doc fixtures (schema eras v1 / v2 / v4 / v5 / v6 / v7)
 
 Committed binary Y.Doc snapshots of the **historical CRDT formats** Versicle
 clients have written, one per schema era that matters
@@ -14,6 +14,13 @@ all run against these bytes.
 | `v2.update.bin` | v2 | Y.Text encoding, sessions pruned (v3 is shape-identical to v2-after-bump and needs no separate fixture) |
 | `v4.update.bin` | v4 | Plain-string encoding (the `disableYText` flip, commit `fb96dd97`); preferences **without** `fontProfiles`; annotations carry the stale top-level `popover` key (pre-hotfix shape) |
 | `v5.update.bin` | v5 | v4 + `fontProfiles` (the v4→v5 backfill applied); still carries `popover` |
+| `v6.update.bin` | v6 | Terminal v6 shape: `meta` map present, preferences folded WITH the legacy per-device husks (copy-without-clear), `popover` deleted; vocabulary carries TRADITIONAL keys incl. the 紅/红 duplicate pair — the v7 canonicalization input |
+| `v7.update.bin` | v7 | Terminal v7 shape: v6 with the vocabulary CANONICALIZED (simplified keys, duplicate pair min-merged); reading-list entries carry NO `bookId` — the v8 linker input |
+
+Every era shares one reading-list entry set (exact-filename match, fuzzy
+title+author match, orphan), none carrying `bookId`: the FK is born at the
+v8 linker step, so all eras link identically and terminate canonically
+equal.
 
 Format: raw Y update encoding (`Y.encodeStateAsUpdate`), stable and
 versionless — load with:

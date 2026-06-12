@@ -1,6 +1,6 @@
 /**
  * ════════════════════════════════════════════════════════════════════════
- *  ONE-TIME READING-LIST `bookId` LINKER — AUTHORED, **NOT REGISTERED**
+ *  ONE-TIME READING-LIST `bookId` LINKER — CRDT MIGRATION v8
  * ════════════════════════════════════════════════════════════════════════
  *
  * Phase 7 §D (phase7-library-google.md): `ReadingListEntry.bookId` is the FK
@@ -10,23 +10,17 @@
  * `generateMatchKey` fuzzy join (entity-resolution demoted from render-time
  * joiner to one-time linker).
  *
- * WHY IT IS NOT IN `CRDT_MIGRATIONS` YET (the sub-track's hard exclusion):
- * old clients rebuild whole entry objects on edit
+ * Registered as `{ from: 7, to: 8 }` in src/app/migrations.ts — the rule-4
+ * post-merge step behind the P6 chain's v7. The version bump is what makes
+ * the FK safe: pre-v8 clients rebuild whole entry objects on edit
  * (useReadingListStore.ts addEntry/upsertEntry spread fresh literals) and
- * would silently DROP the unknown `bookId` field — so the linker must ride
- * a CRDT VERSION BUMP that quarantines pre-bump clients. That bump is
- * serialized by master-plan rule 4 (one in-flight format change) BEHIND the
- * P6 chain's v7; it lands post-merge on main as the next step:
- *
- *     // src/app/migrations.ts — POST-MERGE registration (~20 lines):
- *     //   import { linkReadingListEntries } from './migrations.linkReadingList';
- *     //   export const CRDT_MIGRATIONS = [
- *     //     …existing steps…,
- *     //     { from: <current>, to: <current + 1>, migrate: linkReadingListEntries },
- *     //   ];
- *     // plus: captured-doc fixture (scripts/ capture, P2 pattern) + the
- *     // two-client quarantine E2E (rule 6) + renumbering note for the
- *     // husk-clear/dual-write retirement (README §5/P9).
+ * would silently DROP the unknown `bookId` field, so the standing
+ * quarantine machinery (middleware pill + the P4 doc-level layers) locks
+ * them out of a v8 workspace. Coverage: the F.3 fixture matrix (all eras →
+ * v8, incl. the captured era-7 doc) + the F.2 v7-stack-vs-v8-doc
+ * two-client case in src/store/__tests__/crdt-contract/migrations.test.ts.
+ * Renumbering note: husk-clearing + `library.__schemaVersion` dual-write
+ * retirement + activeContext husk pruning is v9 (P9).
  *
  * Transform discipline (the F.3 pattern from the v6 work): deterministic
  * (sorted iteration), idempotent (copy-if-absent), additive (no destructive
@@ -35,16 +29,31 @@
 import * as Y from 'yjs';
 import { generateMatchKey } from '@lib/entity-resolution';
 
-const str = (value: unknown): string => (typeof value === 'string' ? value : '');
+/**
+ * String coercion for doc values. Pre-v4-era docs encode strings as Y.Text,
+ * and nothing ever rewrites values in place (pure version bumps do not touch
+ * data; the middleware repair path converts only keys a client locally
+ * rewrites) — so a long-lived install can reach v7 with Y.Text titles,
+ * authors and sourceFilenames. The join must read them like any string;
+ * `toString()` on Y.Text is deterministic.
+ */
+const str = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (value instanceof Y.Text) return value.toString();
+  return '';
+};
 
 /**
  * Link every reading-list entry lacking a `bookId` to its inventory item.
- * Pure doc transform — run it inside the coordinator's transaction when the
- * post-merge step registers it.
+ * Pure doc transform — the coordinator runs it inside the v8 step's
+ * transaction (atomic with the version bump).
  */
 export function linkReadingListEntries(doc: Y.Doc): void {
   const entriesRoot = doc.getMap('reading-list').get('entries');
-  const booksRoot = doc.getMap('books').get('books');
+  // The inventory binds to Y.Map 'library', key 'books' (useBookStore
+  // LIBRARY_STORE_DEF) — pinned by the F.3 captured-fixture matrix, which
+  // caught this transform's original 'books'-map read as a latent no-op.
+  const booksRoot = doc.getMap('library').get('books');
   if (!(entriesRoot instanceof Y.Map) || !(booksRoot instanceof Y.Map)) return;
 
   // Build the joins from the inventory — sorted iteration for determinism;

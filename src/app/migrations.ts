@@ -44,6 +44,7 @@ import { getYDoc, CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
 import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
 import { readDocSchemaVersion } from '@domains/sync/core/quarantine';
 import { canonicalizeChar, mergeCanonicalTimestamps } from '@domains/chinese/vocabulary/canonicalize';
+import { linkReadingListEntries } from './migrations.linkReadingList';
 import { AppError } from '~types/errors';
 import { createLogger } from '@lib/logger';
 
@@ -195,8 +196,9 @@ const backfillFontProfiles = (doc: Y.Doc): void => {
  *    — clearing them would let the D5 window (per-map quarantine is async
  *    and only library-guarded) wipe a still-v5 device's live preferences
  *    before its UI locks. The husks stop mattering once stores rebind to the
- *    folded map (flip item) and are cleared in v7 with the dual-write
- *    retirement.
+ *    folded map (flip item) and are cleared in v9 (P9) with the dual-write
+ *    retirement (program renumbering: v7 = vocabulary canonicalization,
+ *    v8 = reading-list bookId FK).
  *
  * The `meta` map creation + schemaVersion dual-write is NOT here — it is the
  * coordinator's generic atomic bump (every step dual-writes meta + library
@@ -260,6 +262,13 @@ const canonicalizeVocabularyKeys = (doc: Y.Doc): void => {
  * The ordered migration registry. `from: 3` exists because v3 was a pure
  * version bump (Firestore path change, no doc-shape change) — the legacy
  * runner folded v2/v3 into one branch.
+ *
+ * v7 → v8 (Phase 7 §D, the rule-4 post-merge step): the one-time
+ * reading-list `bookId` FK linker — see migrations.linkReadingList.ts for
+ * the join semantics and why the FK needs a quarantining bump (pre-v8
+ * clients drop unknown fields on whole-entry rebuilds). Next up: v9 =
+ * preferences husk-clearing + library.__schemaVersion dual-write
+ * retirement + activeContext husk pruning (P9).
  */
 export const CRDT_MIGRATIONS: readonly CrdtMigration[] = [
   { from: 1, to: 2, migrate: pruneInvalidReadingSessions },
@@ -268,6 +277,7 @@ export const CRDT_MIGRATIONS: readonly CrdtMigration[] = [
   { from: 4, to: 5, migrate: backfillFontProfiles },
   { from: 5, to: 6, migrate: migrateV5toV6 },
   { from: 6, to: 7, migrate: canonicalizeVocabularyKeys },
+  { from: 7, to: 8, migrate: linkReadingListEntries },
 ];
 
 // ─── The runner ──────────────────────────────────────────────────────────────

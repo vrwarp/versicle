@@ -1,8 +1,11 @@
 /**
  * One-time bookId linker pins (Phase 7 §D — the F.3 discipline: determinism,
- * idempotency, convergence under concurrent migration). The step is authored
- * but NOT registered; the post-merge registration extends CRDT_MIGRATIONS
- * and adds the captured-doc fixture + two-client quarantine E2E.
+ * idempotency, convergence under concurrent migration). The step is
+ * REGISTERED as CRDT v8 ({ from: 7, to: 8 } in src/app/migrations.ts);
+ * coordinator-level coverage (captured era fixtures → v8, two-client
+ * v7-vs-v8 quarantine) lives in
+ * src/store/__tests__/crdt-contract/migrations.test.ts — this suite pins
+ * the transform's join semantics in isolation.
  */
 import { describe, it, expect } from 'vitest';
 import * as Y from 'yjs';
@@ -27,7 +30,8 @@ function plainToY(value: unknown): unknown {
 function buildDoc(): Y.Doc {
   const doc = new Y.Doc();
   const books = new Y.Map();
-  doc.getMap('books').set('books', books);
+  // The real inventory address: Y.Map 'library', key 'books' (useBookStore).
+  doc.getMap('library').set('books', books);
   books.set(
     'id-exact',
     plainToY({ bookId: 'id-exact', title: 'Exact Match', author: 'A', sourceFilename: 'exact.epub' }),
@@ -93,5 +97,37 @@ describe('linkReadingListEntries', () => {
   it('tolerates docs without the maps (fresh installs, quarantined husks)', () => {
     const doc = new Y.Doc();
     expect(() => linkReadingListEntries(doc)).not.toThrow();
+  });
+
+  it('joins through Y.Text values (pre-v4-era string encoding survives pure bumps)', () => {
+    // A long-lived install can reach v7 with Y.Text titles/authors/
+    // sourceFilenames: pure version bumps never rewrote values, and the
+    // middleware repair path converts only locally-rewritten keys.
+    const doc = new Y.Doc();
+    const books = new Y.Map();
+    doc.getMap('library').set('books', books);
+    const book = new Y.Map();
+    books.set('id-ytext', book);
+    book.set('bookId', new Y.Text('id-ytext'));
+    book.set('title', new Y.Text('Moby Dick'));
+    book.set('author', new Y.Text('Melville'));
+    book.set('sourceFilename', new Y.Text('moby.epub'));
+
+    const entries = new Y.Map();
+    doc.getMap('reading-list').set('entries', entries);
+    const exact = new Y.Map();
+    exact.set('filename', new Y.Text('moby.epub'));
+    exact.set('title', new Y.Text('Different'));
+    entries.set('moby.epub', exact);
+    const fuzzy = new Y.Map();
+    fuzzy.set('filename', new Y.Text('moby_dick.epub'));
+    fuzzy.set('title', new Y.Text('Moby_Dick'));
+    fuzzy.set('author', new Y.Text('Melville'));
+    entries.set('moby_dick.epub', fuzzy);
+
+    linkReadingListEntries(doc);
+
+    expect(entryBookId(doc, 'moby.epub')).toBe('id-ytext'); // exact, via Y.Text sourceFilename
+    expect(entryBookId(doc, 'moby_dick.epub')).toBe('id-ytext'); // fuzzy, via Y.Text title/author
   });
 });
