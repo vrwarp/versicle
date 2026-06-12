@@ -4,6 +4,7 @@ import {
 } from '../../kernel/cfi';
 import type { SentenceNode } from './sentence-extraction';
 import type { EngineContext } from './engine/EngineContext';
+import { ensureGenAIReady } from './genaiReady';
 
 export class TableAdaptationProcessor {
     private tableAnalysisPromises = new Map<string, Promise<void>>();
@@ -32,8 +33,6 @@ export class TableAdaptationProcessor {
         }
 
         const promise = (async () => {
-            const genAISettings = this.ctx.genAI.getSettings();
-
             try {
                 // Ensure we have sentences
                 if (!sentences || sentences.length === 0) return;
@@ -74,16 +73,9 @@ export class TableAdaptationProcessor {
 
             if (workSet.length === 0) return;
 
-            // 4. Check if GenAI is configured
-            const canUseGenAI = genAISettings.isEnabled && ((await this.ctx.genAI.isConfigured()) || !!genAISettings.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse')));
-            if (!canUseGenAI) return;
-
-            // Ensure service is configured
-            if (!(await this.ctx.genAI.isConfigured()) && genAISettings.apiKey) {
-                this.ctx.genAI.configure(genAISettings.apiKey, 'gemini-1.5-flash');
-            }
-
-            if (await this.ctx.genAI.isConfigured()) {
+            // 4. Check if GenAI is enabled + configured (the ONE gate — 5c-PR2;
+            // configures from the stored key, DEV/E2E-gated mock seam)
+            if (await ensureGenAIReady(this.ctx.genAI)) {
                 const nodes = workSet.map(img => ({
                     rootCfi: img.cfi,
                     imageBlob: img.imageBlob

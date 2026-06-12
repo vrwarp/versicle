@@ -41,6 +41,9 @@ export { mergeCfiSlow, generateCfiRange, mergeCfiRanges, tryFastMergeCfi } from 
 
 export { generateEpubCfi } from './generate';
 
+export { groupSegmentsByRoot, attributeMarkersToGroups } from './group';
+export type { CfiGroup, CfiSegment } from './group';
+
 export { snapCfiToSentence } from './snap';
 
 export { CfiComparator, parseCfiPoint, tryParseCfiPoint, cfiFromRange } from './epubcfiShim';

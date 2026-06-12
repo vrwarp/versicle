@@ -45,10 +45,15 @@ describe('CFI kernel boundary', () => {
         expect(offenders, 'epubjs/src/epubcfi is quarantined to the kernel shim — use src/kernel/cfi instead').toEqual([]);
     });
 
-    it('src/kernel imports nothing internal outside src/kernel', () => {
+    it('src/kernel production modules import nothing internal outside src/kernel', () => {
         const offenders: string[] = [];
         for (const file of walk(join(SRC, 'kernel'))) {
             const rel = relative(SRC, file).replaceAll('\\', '/');
+            // Test files are out of scope (matches the depcruise exclude): the
+            // admission rule governs the production dependency graph; suites may
+            // pull fixtures/helpers from anywhere (e.g. group.test.ts drives the
+            // grouper through @lib/tts/sentence-extraction).
+            if (/\.test\.tsx?$/.test(rel)) continue;
             const text = readFileSync(file, 'utf8');
             for (const m of text.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
                 const spec = m[1];
@@ -56,11 +61,10 @@ describe('CFI kernel boundary', () => {
                     spec.startsWith('@app') || spec.startsWith('@components') || spec.startsWith('@data') ||
                     spec.startsWith('@domains') || spec.startsWith('@hooks') || spec.startsWith('@lib') ||
                     spec.startsWith('@store') || spec.startsWith('~types') || spec.startsWith('@workers') ||
+                    spec.startsWith('@test') ||
                     // relative escape above the kernel root (e.g. ../../lib/…)
-                    /^(\.\.\/)+(app|components|data|domains|hooks|lib|store|types|workers)(\/|$)/.test(spec);
-                // @test/* is tolerated in *.test.ts files only (fuzz utils).
-                const testUtil = spec.startsWith('@test') && /\.test\.tsx?$/.test(rel);
-                if (internal && !testUtil) offenders.push(`${rel} → ${spec}`);
+                    /^(\.\.\/)+(app|components|data|domains|hooks|lib|store|types|test|workers)(\/|$)/.test(spec);
+                if (internal) offenders.push(`${rel} → ${spec}`);
             }
         }
         expect(offenders, 'kernel admission rule: zero internal imports').toEqual([]);

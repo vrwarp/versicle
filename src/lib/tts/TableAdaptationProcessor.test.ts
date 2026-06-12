@@ -77,3 +77,31 @@ describe('TableAdaptationProcessor', () => {
         });
     });
 });
+
+describe('regression: AudioContentPipeline_TableCfi', () => {
+    // Carried verbatim from the deleted AudioContentPipeline_TableCfi.test.ts
+    // (absorption ledger row 17): range-CFI table roots must exclude siblings
+    // that merely share the parent prefix.
+    it('should correctly exclude siblings when using Range CFI with parent container', () => {
+        const processor = new TableAdaptationProcessor(createZustandEngineContext());
+
+        // Table CFI is a range within parent /6/14!/4; range covers child 2 to 3.
+        const tableCfi = 'epubcfi(/6/14!/4,/2,/3)';
+        const adaptationText = 'Table content';
+
+        const adaptationsMap = new Map<string, string>();
+        adaptationsMap.set(tableCfi, adaptationText);
+
+        const sentences: SentenceNode[] = [
+            { text: 'Inside Table', cfi: 'epubcfi(/6/14!/4/2/1:0)' },
+            { text: 'Outside Sibling', cfi: 'epubcfi(/6/14!/4/4/1:0)' }
+        ];
+
+        const result = processor.mapSentencesToAdaptations(sentences, adaptationsMap);
+
+        const indices = result.flatMap(r => r.indices);
+        expect(indices).toContain(0); // Inside
+        expect(indices).not.toContain(1); // Outside
+        expect(indices.length).toBe(1);
+    });
+});

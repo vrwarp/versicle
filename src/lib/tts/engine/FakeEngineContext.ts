@@ -195,8 +195,8 @@ export class FakeEngineContext implements EngineContext {
     // --- Storage ports (5b decomposition; in-memory, seed via the public maps) ---
     /** bookId → spine sections (content.getSections). */
     sections: Record<string, Array<{ sectionId: string; title?: string; characterCount?: number }>> = {};
-    /** `${bookId}/${sectionId}` → prepared sentences (content.getTTSPreparation). */
-    ttsContent: Record<string, { sentences: Array<{ text: string; cfi: string; sourceIndices?: number[] }> } | undefined> = {};
+    /** `${bookId}/${sectionId}` → prepared content (content.getTTSPreparation). Markers travel WITH sentences (D4). */
+    ttsContent: Record<string, { sentences: Array<{ text: string; cfi: string; sourceIndices?: number[] }>; citationMarkers?: Array<Record<string, unknown>> } | undefined> = {};
     /** bookId → persisted playback session (session.loadSession source). */
     sessions: Record<string, PlaybackSessionRow | undefined> = {};
     /** Recorded session writes (assert against these). */

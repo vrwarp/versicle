@@ -15,7 +15,7 @@
  * The applier never writes the queue itself — it hands masks/adaptations to
  * the controller-owned QueueModel inside sequenced tasks.
  */
-import type { AudioContentPipeline } from '../AudioContentPipeline';
+import type { SectionAnalysisDriver } from '../SectionAnalysisDriver';
 import type { QueueModel } from '../QueueModel';
 import type { TaskContext } from '../TaskSequencer';
 import type {
@@ -27,7 +27,7 @@ import type { SectionMetadata } from '~types/db';
 
 export interface AnalysisApplierDeps {
     ctx: EngineContext;
-    pipeline: AudioContentPipeline;
+    driver: SectionAnalysisDriver;
     queue: QueueModel;
     enqueue: <T>(label: string, task: (taskCtx: TaskContext) => Promise<T>) => Promise<T | void>;
     getBookId: () => string | null;
@@ -112,7 +112,7 @@ export class AnalysisApplier {
 
                 // 1. Apply or clear Skip Mask
                 if (genAISettings.isEnabled && genAISettings.isContentAnalysisEnabled && genAISettings.contentFilterSkipTypes.length > 0) {
-                    const mask = await this.deps.pipeline.detectContentSkipMask(bookId, section.sectionId, genAISettings.contentFilterSkipTypes);
+                    const mask = await this.deps.driver.detectContentSkipMask(bookId, section.sectionId, genAISettings.contentFilterSkipTypes);
                     if (mask.size > 0 && this.deps.getBookId() === bookId && this.deps.queue.currentSectionIndex === sectionIndex) {
                         this.deps.queue.applySkippedMask(mask, section.sectionId);
                     }
@@ -124,7 +124,7 @@ export class AnalysisApplier {
                 if (genAISettings.isEnabled && genAISettings.isTableAdaptationEnabled && analysis.tableAdaptations) {
                     const ttsContent = await this.deps.ctx.content.getTTSPreparation(bookId, section.sectionId);
                     if (ttsContent && this.deps.getBookId() === bookId && this.deps.queue.currentSectionIndex === sectionIndex) {
-                        const adaptations = this.deps.pipeline.tableProcessor.mapSentencesToAdaptations(
+                        const adaptations = this.deps.driver.tableProcessor.mapSentencesToAdaptations(
                             ttsContent.sentences,
                             new Map(analysis.tableAdaptations.map((a: TableAdaptation) => [a.rootCfi, a.text]))
                         );

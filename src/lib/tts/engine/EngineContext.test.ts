@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FakeEngineContext } from './FakeEngineContext';
-import { AudioContentPipeline } from '../AudioContentPipeline';
+import { SectionAnalysisDriver } from '../SectionAnalysisDriver';
 import { TableAdaptationProcessor } from '../TableAdaptationProcessor';
 import type { SectionAnalysis } from './EngineContext';
 
@@ -91,20 +91,20 @@ describe('FakeEngineContext', () => {
 });
 
 describe('Engine core reads through the injected context', () => {
-    it('AudioContentPipeline and TableAdaptationProcessor accept an injected context', () => {
+    it('SectionAnalysisDriver and TableAdaptationProcessor accept an injected context', () => {
         const ctx = new FakeEngineContext();
-        expect(() => new AudioContentPipeline(ctx)).not.toThrow();
+        expect(() => new SectionAnalysisDriver(ctx)).not.toThrow();
         expect(() => new TableAdaptationProcessor(ctx)).not.toThrow();
     });
 
-    it('pipeline reads GenAI settings from the injected context (not the global store)', async () => {
+    it('the analysis driver reads GenAI settings from the injected context (not the global store)', async () => {
         const ctx = new FakeEngineContext();
         ctx.genAISettings = { isEnabled: false } as never;
         const getSettingsSpy = vi.spyOn(ctx.genAI, 'getSettings');
 
-        const pipeline = new AudioContentPipeline(ctx);
+        const driver = new SectionAnalysisDriver(ctx);
         // isEnabled=false → method consults the context then early-returns without DB access.
-        await pipeline.triggerNextChapterAnalysis('book-1', 0, [
+        await driver.prewarmNextSection('book-1', 0, [
             { sectionId: 's0' },
             { sectionId: 's1' },
         ] as never);

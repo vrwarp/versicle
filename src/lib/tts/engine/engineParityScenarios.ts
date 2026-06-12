@@ -183,7 +183,7 @@ const QUEUE: TTSQueueItem[] = [
 // ---------------------------------------------------------------------------
 // CFI fixtures for the analysis scenarios (P12/P14/P15/P16).
 //
-// groupSentencesByRoot (AudioContentPipeline) groups sentences by getParentCfi and emits a
+// groupSegmentsByRoot (src/kernel/cfi/group.ts) groups sentences by getParentCfi and emits a
 // Range-CFI root per group via generateCfiRange(first, last) — so the seeded
 // `referenceStartCfi` below is computed with the SAME exported helpers, keeping the fixture
 // robust to CFI formatting. Parents: /4/2 (body), /4/4/2 (table), /4/6 (references) — none is

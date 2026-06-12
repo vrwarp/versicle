@@ -56,8 +56,9 @@ export function resetParityHostDb(db: ParityHostDbState): void {
 
 /**
  * The `BookContentPort` surface the engine graph touches in the parity
- * scenarios: PlaybackController (getSections), AudioContentPipeline +
- * TableAdaptationProcessor (getTTSPreparation/getTableImages/getBookStructure).
+ * scenarios: PlaybackController (getSections/getTTSPreparation),
+ * SectionAnalysisDriver + TableAdaptationProcessor
+ * (getTTSPreparation/getTableImages/getBookStructure).
  * The seeded literals carry only the fields the engine reads, so the factory
  * casts once to the port type.
  */

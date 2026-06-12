@@ -7,7 +7,7 @@ into a Web Worker.
 ## The core / host split
 
 The engine core (`PlaybackController` + its units `QueueModel`/`AnalysisApplier`/
-`MediaMetadataPublisher`/`DragnetGesture`, plus `AudioContentPipeline`,
+`MediaMetadataPublisher`/`DragnetGesture`, plus `SectionAnalysisDriver`,
 `TableAdaptationProcessor`, `TextSegmenter`, …) reaches the outside world **only**
 through the `EngineContext` interface — including, since the 5b decomposition, its
 storage: derived-content reads go through `ctx.content` (`BookContentPort`) and

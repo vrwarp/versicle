@@ -2,7 +2,7 @@
  * EngineContext — the single boundary between the TTS engine core and the host
  * environment (React/Zustand stores, native platform bridges).
  *
- * The engine core (PlaybackController, AudioContentPipeline, TableAdaptationProcessor)
+ * The engine core (PlaybackController, SectionAnalysisDriver, TableAdaptationProcessor)
  * must reach the outside world ONLY through this interface — including, since the
  * 5b decomposition, its storage reads/writes: {@link BookContentPort} (derived
  * content reads) and {@link SessionStore} (the playback-session persistence with
@@ -48,7 +48,7 @@ export type { SectionAnalysis, TableAdaptation, LexiconRule, ContentAnalysis, Bo
  * type-depends on the store shape, and the replication slice pushes exactly
  * these fields instead of `plain(getState())`'s everything-including-the-queue.
  * The field list is the grep audit of `ctx.config.getSettings()` accesses
- * (AudioContentPipeline: segmentation lists, Bible flag, per-language profile
+ * (the queue-building path: segmentation lists, Bible flag, per-language profile
  * minSentenceLength) plus the sanitization flag the extraction options accept.
  */
 export interface TTSSettingsData {

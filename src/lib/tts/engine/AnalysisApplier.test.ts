@@ -12,7 +12,7 @@ import { AnalysisApplier } from './AnalysisApplier';
 import { FakeEngineContext } from './FakeEngineContext';
 import { QueueModel } from '../QueueModel';
 import { TaskSequencer } from '../TaskSequencer';
-import type { AudioContentPipeline } from '../AudioContentPipeline';
+import type { SectionAnalysisDriver } from '../SectionAnalysisDriver';
 import type { SectionAnalysis } from './EngineContext';
 import type { SectionMetadata } from '~types/db';
 
@@ -22,10 +22,10 @@ function makeApplier() {
     const sequencer = new TaskSequencer();
     const detectContentSkipMask = vi.fn(async () => new Set<number>());
     const mapSentencesToAdaptations = vi.fn(() => [] as { indices: number[]; text: string }[]);
-    const pipeline = {
+    const driver = {
         detectContentSkipMask,
         tableProcessor: { mapSentencesToAdaptations },
-    } as unknown as AudioContentPipeline;
+    } as unknown as SectionAnalysisDriver;
 
     let bookId: string | null = 'book-1';
     const playlist: SectionMetadata[] = [
@@ -34,7 +34,7 @@ function makeApplier() {
 
     const applier = new AnalysisApplier({
         ctx,
-        pipeline,
+        driver,
         queue,
         enqueue: (label, task) => sequencer.enqueue(label, task),
         getBookId: () => bookId,

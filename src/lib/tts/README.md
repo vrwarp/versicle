@@ -33,8 +33,11 @@ is landed; 5b (engine decomposition) and 5c (content pipeline) follow.
 *   **`TaskSequencer.ts`**: Serializes engine commands (cancellation/epochs arrive at 5b).
 *   **`PlaybackStateManager.ts`**: Queue + index state (becomes the immutable `QueueModel`
     at 5b).
-*   **`AudioContentPipeline.ts`**: Section loading, GenAI content analysis, queue
-    building (split into `SectionQueueBuilder`/`ReferenceSectionDetector` at 5c).
+*   **`SectionQueueBuilder.ts`** (pure `{queue, title}` builder; the host orchestrates),
+    **`SectionAnalysisDriver.ts`** + **`ReferenceSectionDetector.ts`** (strategy:
+    deterministic | GenAI with deterministic shadow; injected `DetectionTelemetry`):
+    the 5c-PR2 split of the deleted `AudioContentPipeline.ts`. CFI grouping lives in
+    the kernel (`src/kernel/cfi/group.ts`).
 *   **`TTSCache.ts`**: Synthesized-audio cache over `@data/repos/audioCache`. Keys are
     SHA-256 of `text|voiceId` — deliberately speed-free (P0 speed policy: synthesis at
     1.0, playback rate applied at the sink) and pinned by a golden-key test.

@@ -4,7 +4,11 @@ import type { TTSQueueItem } from '~types/tts';
 import { lexiconApplier } from '../LexiconApplier';
 import type { SectionMetadata, LexiconRule } from '~types/db';
 import { TaskSequencer, type TaskContext } from '../TaskSequencer';
-import { AudioContentPipeline } from '../AudioContentPipeline';
+import { SectionAnalysisDriver, type SectionContent } from '../SectionAnalysisDriver';
+import { buildSectionQueue } from '../SectionQueueBuilder';
+import { resolveSectionTitle } from '../sectionTitle';
+import { AbbreviationMerger } from '../abbreviationMerge';
+import { resolveBiblePreference } from '../biblePreference';
 import { QueueModel } from '../QueueModel';
 import type { PlaybackBackend, PlaybackBackendFactory, TTSProviderEvents } from './PlaybackBackend';
 import type {
@@ -58,8 +62,11 @@ export class PlaybackController implements TtsEngine {
     readonly engineName: string = 'PlaybackController';
     // TaskSequencer ensures async operations are executed serially to prevent race conditions.
     private taskSequencer = new TaskSequencer();
-    // AudioContentPipeline handles loading content, GenAI filtering, and text refinement.
-    private contentPipeline: AudioContentPipeline;
+    // SectionAnalysisDriver runs background GenAI detection/adaptation (5c-PR2);
+    // queue building is the pure SectionQueueBuilder, orchestrated in
+    // loadSectionInternal (the strangled AudioContentPipeline is gone).
+    private analysisDriver: SectionAnalysisDriver;
+    private readonly abbreviations = new AbbreviationMerger();
     // QueueModel manages the queue (immutably), current index, and position calculations.
     private stateManager = new QueueModel();
     private readonly analysis: AnalysisApplier;
@@ -104,7 +111,7 @@ export class PlaybackController implements TtsEngine {
         platformFactory: MediaPlatformFactory,
     ) {
         this.ctx = ctx;
-        this.contentPipeline = new AudioContentPipeline(this.ctx);
+        this.analysisDriver = new SectionAnalysisDriver(this.ctx);
 
         this.platformIntegration = platformFactory({
             onPlay: () => this.play(),
@@ -174,7 +181,7 @@ export class PlaybackController implements TtsEngine {
 
         this.analysis = new AnalysisApplier({
             ctx: this.ctx,
-            pipeline: this.contentPipeline,
+            driver: this.analysisDriver,
             queue: this.stateManager,
             enqueue: (label, task) => this.enqueue(label, task),
             getBookId: () => this.currentBookId,
@@ -436,10 +443,10 @@ export class PlaybackController implements TtsEngine {
 
                         this.analysis.applyCachedAnalysis(bookId, section.sectionId);
 
-                        this.contentPipeline.triggerAnalysis(
+                        void this.analysisDriver.triggerAnalysis(
                             bookId,
                             section.sectionId,
-                            undefined, // will fetch from DB
+                            undefined, // will fetch from DB ({sentences, citationMarkers} together)
                             this.analysis.maskCallback(bookId, sectionIndex, section.sectionId),
                             this.analysis.adaptationsCallback(bookId, sectionIndex)
                         );
@@ -1078,18 +1085,56 @@ export class PlaybackController implements TtsEngine {
         this.analysis.reset();
 
         const section = this.playlist[sectionIndex];
-
         const bookId = this.currentBookId;
-        const newQueue = await this.contentPipeline.loadSection(
-            this.currentBookId,
-            section,
-            sectionIndex,
-            this.prerollEnabled,
-            this.speed,
-            sectionTitle || section.title,
-            this.analysis.maskCallback(bookId, sectionIndex, section.sectionId),
-            this.analysis.adaptationsCallback(bookId, sectionIndex)
-        );
+
+        // --- Host orchestration of the PURE SectionQueueBuilder (5c-PR2;
+        // phase5-tts-strangler.md §5c.2): fetch content, resolve the title,
+        // build — then the HOST writes the reader UI. The builder never
+        // touches ports.
+        let newQueue: TTSQueueItem[] | null = null;
+        let content: SectionContent | null = null;
+        try {
+            const ttsContent = await this.ctx.content.getTTSPreparation(bookId, section.sectionId);
+            content = {
+                sentences: ttsContent?.sentences || [],
+                citationMarkers: ttsContent?.citationMarkers || [],
+            };
+
+            const bookMetadata = await this.ctx.book.getMetadata(bookId);
+            const language = bookMetadata?.language || 'en';
+
+            const title = await resolveSectionTitle(
+                { contentAnalysis: this.ctx.contentAnalysis, content: this.ctx.content },
+                { bookId, sectionId: section.sectionId, metadata: bookMetadata, spineTitle: sectionTitle || section.title },
+            );
+
+            const settings = this.ctx.config.getSettings();
+            const biblePref = await this.ctx.lexicon.getBibleLexiconPreference(bookId);
+            const includeBible = resolveBiblePreference(biblePref, settings.isBibleLexiconEnabled);
+
+            const built = buildSectionQueue(content.sentences, {
+                abbreviations: this.abbreviations.merge(settings.customAbbreviations, includeBible),
+                alwaysMerge: settings.alwaysMerge,
+                sentenceStarters: settings.sentenceStarters,
+                minSentenceLength: settings.profiles[language]?.minSentenceLength
+                    ?? this.ctx.config.getDefaultMinSentenceLength(language),
+                language,
+            }, {
+                sectionTitle: title,
+                sectionIndex,
+                prerollEnabled: this.prerollEnabled,
+                speed: this.speed,
+                characterCount: section.characterCount,
+            });
+            newQueue = built.queue;
+
+            // Sync the Reader UI (CompassPill stays accurate during auto-advance).
+            // The HOST write — the pipeline never touches UI ports again (§5c.2).
+            this.ctx.readerUI.setCurrentSection(built.title, section.sectionId);
+        } catch (e) {
+            logger.error("Failed to load section content", e);
+            newQueue = null;
+        }
 
         flightRecorder.record('APS', 'loadSectionInternal', {
             sectionIndex,
@@ -1117,8 +1162,17 @@ export class PlaybackController implements TtsEngine {
             }
 
             this.analysis.applyCachedAnalysis(this.currentBookId, section.sectionId);
-            this.contentPipeline.triggerAnalysis(this.currentBookId, section.sectionId, undefined);
-            this.contentPipeline.triggerNextChapterAnalysis(this.currentBookId, sectionIndex, this.playlist);
+            // ONE analysis trigger, carrying {sentences, citationMarkers} TOGETHER
+            // (D4 — the legacy split between a markers-less loadSection trigger and
+            // a fetch-everything refresh trigger is gone).
+            void this.analysisDriver.triggerAnalysis(
+                bookId,
+                section.sectionId,
+                content ?? undefined,
+                this.analysis.maskCallback(bookId, sectionIndex, section.sectionId),
+                this.analysis.adaptationsCallback(bookId, sectionIndex)
+            );
+            void this.analysisDriver.prewarmNextSection(this.currentBookId, sectionIndex, this.playlist);
             return true;
         }
 
