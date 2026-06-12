@@ -1,141 +1,162 @@
 /**
- * Import-flow characterization (Phase 7 entry gate, PR-0a/PR-0b service tier
- * in plan/overhaul/prep/phase7-library-google.md §Execution order).
+ * Import-flow characterization (Phase 7; entry gate PR-0a → cutover PR-L2).
  *
- * Pins the CURRENT behavior of the five import flows — single, batch, ZIP,
- * restore, reprocess(-shaped restore) — at the service seam (the injected
- * `IDBService` + the synced stores), so the ImportOrchestrator cutover
- * (PR-L2) can prove behavior preservation. Two assertions intentionally pin
- * P0-era GAPS that PR-L2 closes on purpose (marked inline): batch import
- * bypasses ghost matching and creates no ReadingListEntry. Those assertions
- * are updated in the SAME commit that changes the behavior, never silently.
+ * Written at the phase entry gate against the legacy `useLibraryStore`
+ * workflows; now exercises the SAME flows through the ImportOrchestrator
+ * with the persistence seam injected. Two assertions that pinned P0-era
+ * GAPS flipped DELIBERATELY in the cutover commit (marked inline): the
+ * batch path now runs ghost matching and registers reading-list entries.
+ *
+ * Absorbs (ledger rows 10–11): BookImportService.test.ts (restore
+ * fingerprint verification → the acceptance cases below; the id-rewrite
+ * assertions live in import/persist.test.ts) and batch-ingestion.test.ts
+ * (per-file accounting; ZIP expansion pins live here + import/zip).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import JSZip from 'jszip';
-import { createLibraryStore, useBookStore } from '@store/useLibraryStore';
+import { useBookStore } from '@store/useBookStore';
 import { useReadingListStore } from '@store/useReadingListStore';
+import { useLibraryStore } from '@store/useLibraryStore';
 import {
   autoResetStores,
-  makeLibraryDbDouble,
+  makeLibraryPersistenceDouble,
+  makeTestLibrary,
+  makeFullExtraction,
   makeBookMetadata,
   makeInventoryItem,
 } from '@test/harness';
-import { DuplicateBookError } from '~types/errors';
-import type { StaticBookManifest } from '~types/db';
-import { extractEpubsFromZip, processBatchImport } from '@lib/batch-ingestion';
-import { extractBookMetadata } from '@lib/ingestion';
-
-vi.mock('@lib/ingestion', () => ({
-  extractBookMetadata: vi.fn(),
-}));
-
-vi.mock('@lib/batch-ingestion', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@lib/batch-ingestion')>();
-  return { ...actual, processBatchImport: vi.fn() };
-});
-
-const mockExtractBookMetadata = vi.mocked(extractBookMetadata);
-const mockProcessBatchImport = vi.mocked(processBatchImport);
-
-function makeManifest(overrides: Partial<StaticBookManifest> & Pick<StaticBookManifest, 'bookId'>): StaticBookManifest {
-  return {
-    title: `Title ${overrides.bookId}`,
-    author: 'Imported Author',
-    fileHash: 'legacy-fingerprint',
-    fileSize: 123,
-    totalChars: 1000,
-    schemaVersion: 3,
-    ...overrides,
-  };
-}
+import type { LibraryPersistence, ImportOrchestratorDeps } from '@domains/library';
+import { extractEpubsFromZip, computeLegacyFingerprint, computeContentHash } from '@domains/library';
+import type { BookMetadataExtraction } from '@domains/library';
 
 const epubFile = (name = 'test.epub') => new File(['epub-bytes'], name, { type: 'application/epub+zip' });
+
+/** Fake extractor: depth-aware, deterministic ids derived from the filename. */
+function makeFakeExtract(meta: { title?: string; author?: string } = {}): ImportOrchestratorDeps['extract'] {
+  const fake = (async (file: File, opts: { depth: 'metadata' | 'full' }) => {
+    const bookId = `id-${file.name.replace(/\W/g, '_')}`;
+    const title = meta.title ?? `Title of ${file.name}`;
+    const author = meta.author ?? 'Extracted Author';
+    if (opts.depth === 'metadata') {
+      const probe: BookMetadataExtraction = {
+        depth: 'metadata',
+        title,
+        author,
+        description: '',
+        language: 'en',
+        contentHash: `sha-${bookId}`,
+        legacyFingerprint: `${file.name}-${title}-${author}-aa-bb`,
+        toc: [],
+      };
+      return probe;
+    }
+    const full = makeFullExtraction({ bookId, title, author });
+    return {
+      ...full,
+      inventory: { ...full.inventory, sourceFilename: file.name },
+      readingListEntry: { ...full.readingListEntry, filename: file.name },
+    };
+  }) as ImportOrchestratorDeps['extract'];
+  return fake;
+}
+
+function makeOrchestrator(
+  db: Partial<LibraryPersistence>,
+  opts: { extract?: ImportOrchestratorDeps['extract']; meta?: { title?: string; author?: string } } = {},
+) {
+  const persistence = makeLibraryPersistenceDouble({
+    getBookIdByFilename: () => undefined,
+    ingest: vi.fn(async () => undefined),
+    ...db,
+  });
+  const lib = makeTestLibrary({
+    persistence,
+    extract: opts.extract ?? makeFakeExtract(opts.meta),
+  });
+  return { ...lib, persistence };
+}
+
+function resetProjection(): void {
+  useLibraryStore.setState({
+    staticMetadata: {},
+    offloadedBookIds: new Set<string>(),
+    isImporting: false,
+    batchImportSummary: null,
+    error: null,
+  });
+}
 
 describe('import flows characterization', () => {
   autoResetStores(useBookStore, useReadingListStore);
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default: the ghost probe finds nothing.
-    mockExtractBookMetadata.mockResolvedValue({
-      title: 'Unmatched Title',
-      author: 'Unmatched Author',
-      description: '',
-      fileHash: 'probe-hash',
-    });
+    resetProjection();
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   describe('single import', () => {
-    it('registers inventory + reading-list entry + static metadata, clears offloaded, resets progress flags', async () => {
-      const manifest = makeManifest({ bookId: 'b1', title: 'Moby Dick', author: 'Melville', coverPalette: [1, 2, 3] });
-      const db = makeLibraryDbDouble({
-        addBook: vi.fn(async () => manifest),
-        getBookIdByFilename: vi.fn(() => undefined),
-      });
-      const store = createLibraryStore(db);
-      store.setState({ offloadedBookIds: new Set(['b1']) });
+    it('registers inventory + reading-list entry (WITH bookId FK) + static metadata, clears offloaded, resets flags', async () => {
+      const { orchestrator } = makeOrchestrator({});
+      useLibraryStore.setState({ offloadedBookIds: new Set(['id-test_epub']) });
 
-      await store.getState().addBook(epubFile());
+      const result = await orchestrator.importFile(epubFile());
 
-      const inv = useBookStore.getState().books['b1'];
+      expect(result).toMatchObject({ status: 'imported', bookId: 'id-test_epub' });
+
+      const inv = useBookStore.getState().books['id-test_epub'];
       expect(inv).toMatchObject({
-        bookId: 'b1',
-        title: 'Moby Dick',
-        author: 'Melville',
+        bookId: 'id-test_epub',
+        title: 'Title of test.epub',
+        author: 'Extracted Author',
         sourceFilename: 'test.epub',
         status: 'unread',
-        coverPalette: [1, 2, 3],
       });
 
       const entry = useReadingListStore.getState().entries['test.epub'];
       expect(entry).toMatchObject({
         filename: 'test.epub',
-        title: 'Moby Dick',
-        author: 'Melville',
+        title: 'Title of test.epub',
         percentage: 0,
         status: 'to-read',
+        // Phase 7 §D: the FK is written at registration time.
+        bookId: 'id-test_epub',
       });
 
-      expect(store.getState().staticMetadata['b1']?.title).toBe('Moby Dick');
-      expect(store.getState().offloadedBookIds.has('b1')).toBe(false);
-      expect(store.getState().isImporting).toBe(false);
-      expect(store.getState().importProgress).toBe(0);
+      const state = useLibraryStore.getState();
+      expect(state.staticMetadata['id-test_epub']?.title).toBe('Title of test.epub');
+      expect(state.offloadedBookIds.has('id-test_epub')).toBe(false);
+      expect(state.isImporting).toBe(false);
+      expect(state.importProgress).toBe(0);
     });
 
-    it('throws DuplicateBookError on a filename already in the inventory, without importing', async () => {
-      const db = makeLibraryDbDouble({
-        addBook: vi.fn(async () => makeManifest({ bookId: 'never' })),
-        getBookIdByFilename: vi.fn(() => undefined),
-      });
-      const store = createLibraryStore(db);
+    it("returns 'duplicate' for a filename already in the inventory, without importing", async () => {
+      const { orchestrator, persistence } = makeOrchestrator({});
       useBookStore.setState({
         books: { existing: makeInventoryItem({ bookId: 'existing', sourceFilename: 'test.epub' }) },
       });
 
-      await expect(store.getState().addBook(epubFile())).rejects.toBeInstanceOf(DuplicateBookError);
-      expect(db.addBook).not.toHaveBeenCalled();
-      expect(store.getState().isImporting).toBe(false);
+      const result = await orchestrator.importFile(epubFile());
+
+      expect(result).toEqual({ status: 'duplicate', existingBookId: 'existing' });
+      expect(persistence.ingest).not.toHaveBeenCalled();
+      expect(useLibraryStore.getState().isImporting).toBe(false);
     });
 
     it('falls back to the DB filename index for duplicate detection', async () => {
-      const db = makeLibraryDbDouble({
-        addBook: vi.fn(async () => makeManifest({ bookId: 'never' })),
-        getBookIdByFilename: vi.fn(() => 'db-hit'),
-      });
-      const store = createLibraryStore(db);
+      const getBookIdByFilename = vi.fn(() => 'db-hit');
+      const { orchestrator } = makeOrchestrator({ getBookIdByFilename });
 
-      await expect(store.getState().addBook(epubFile())).rejects.toBeInstanceOf(DuplicateBookError);
-      expect(db.getBookIdByFilename).toHaveBeenCalledWith('test.epub');
+      const result = await orchestrator.importFile(epubFile());
+
+      expect(result).toEqual({ status: 'duplicate', existingBookId: 'db-hit' });
+      expect(getBookIdByFilename).toHaveBeenCalledWith('test.epub');
     });
 
-    it('overwrite replaces content but preserves addedAt/status/tags/rating and reading-list progress', async () => {
-      const manifest = makeManifest({ bookId: 'b1', title: 'New Title', author: 'New Author' });
-      const db = makeLibraryDbDouble({
-        importBookWithId: vi.fn(async () => manifest),
-        getBookIdByFilename: vi.fn(() => undefined),
-      });
-      const store = createLibraryStore(db);
+    it('replace preserves addedAt/status/tags/rating and reading-list progress', async () => {
+      const ingest = vi.fn(async () => undefined);
+      const { orchestrator } = makeOrchestrator({ ingest }, { meta: { title: 'New Title', author: 'New Author' } });
       useBookStore.setState({
         books: {
           b1: makeInventoryItem({
@@ -159,9 +180,14 @@ describe('import flows characterization', () => {
         rating: 0,
       });
 
-      await store.getState().addBook(epubFile(), { overwrite: true });
+      const result = await orchestrator.importFile(epubFile(), { onDuplicate: 'replace' });
 
-      expect(db.importBookWithId).toHaveBeenCalledWith('b1', expect.any(File), expect.anything(), expect.any(Function));
+      expect(result).toMatchObject({ status: 'replaced', bookId: 'b1' });
+      // The extraction is retargeted onto the EXISTING id and overwritten in place.
+      expect(ingest).toHaveBeenCalledWith(
+        expect.objectContaining({ bookId: 'b1' }),
+        { mode: 'overwrite' },
+      );
       const inv = useBookStore.getState().books['b1'];
       expect(inv).toMatchObject({
         title: 'New Title',
@@ -172,22 +198,27 @@ describe('import flows characterization', () => {
         rating: 4,
       });
       const entry = useReadingListStore.getState().entries['test.epub'];
-      expect(entry).toMatchObject({ title: 'New Title', percentage: 0.5 });
+      expect(entry).toMatchObject({ title: 'New Title', percentage: 0.5, bookId: 'b1' });
+    });
+
+    it("skips with onDuplicate:'skip' (the batch policy)", async () => {
+      const { orchestrator, persistence } = makeOrchestrator({});
+      useBookStore.setState({
+        books: { existing: makeInventoryItem({ bookId: 'existing', sourceFilename: 'test.epub' }) },
+      });
+
+      const result = await orchestrator.importFile(epubFile(), { onDuplicate: 'skip' });
+
+      expect(result).toEqual({ status: 'skipped', filename: 'test.epub' });
+      expect(persistence.ingest).not.toHaveBeenCalled();
     });
 
     it('links the binary to a ghost book matched by title+author instead of creating a new entry', async () => {
-      mockExtractBookMetadata.mockResolvedValue({
-        title: 'Ghost Title',
-        author: 'Ghost Author',
-        description: '',
-        fileHash: 'probe-hash',
-      });
-      const manifest = makeManifest({ bookId: 'ghost-1', title: 'Ghost Title', author: 'Ghost Author' });
-      const db = makeLibraryDbDouble({
-        importBookWithId: vi.fn(async () => manifest),
-        getBookIdByFilename: vi.fn(() => undefined),
-      });
-      const store = createLibraryStore(db);
+      const ingest = vi.fn(async () => undefined);
+      const { orchestrator } = makeOrchestrator(
+        { ingest },
+        { meta: { title: 'Ghost Title', author: 'Ghost Author' } },
+      );
       useBookStore.setState({
         books: {
           'ghost-1': makeInventoryItem({
@@ -199,108 +230,253 @@ describe('import flows characterization', () => {
         },
       });
 
-      await store.getState().addBook(epubFile('renamed.epub'));
+      const result = await orchestrator.importFile(epubFile('renamed.epub'));
 
-      expect(db.importBookWithId).toHaveBeenCalledWith('ghost-1', expect.any(File), expect.anything(), expect.any(Function));
+      expect(result).toMatchObject({ status: 'imported', bookId: 'ghost-1', adoptedGhost: true });
+      expect(ingest).toHaveBeenCalledWith(
+        expect.objectContaining({ bookId: 'ghost-1' }),
+        { mode: 'overwrite' },
+      );
       expect(Object.keys(useBookStore.getState().books)).toEqual(['ghost-1']);
-      expect(store.getState().staticMetadata['ghost-1']).toBeDefined();
+      expect(useLibraryStore.getState().staticMetadata['ghost-1']).toBeDefined();
+    });
+
+    it('a failed extraction projects the error message and returns failed', async () => {
+      const extract = vi.fn(async () => {
+        throw new Error('Invalid file format. File must be a valid EPUB (ZIP archive).');
+      }) as unknown as ImportOrchestratorDeps['extract'];
+      const { orchestrator } = makeOrchestrator({}, { extract });
+
+      const result = await orchestrator.importFile(epubFile());
+
+      expect(result.status).toBe('failed');
+      expect(useLibraryStore.getState().error).toBe('Failed to import book.');
+      expect(useLibraryStore.getState().isImporting).toBe(false);
     });
   });
 
   describe('batch import', () => {
-    it('surfaces per-file outcomes {imported, skipped, failed} and upserts inventory in one batch', async () => {
-      mockProcessBatchImport.mockResolvedValue({
-        successful: [
-          { manifest: makeManifest({ bookId: 'm1' }), sourceFilename: 'a.epub' },
-          { manifest: makeManifest({ bookId: 'm2' }), sourceFilename: 'b.epub' },
-        ],
-        skipped: ['dup.epub'],
-        failed: [{ filename: 'bad.zip', reason: 'corrupted' }],
+    it('surfaces per-file outcomes {imported, skipped, failed} and — closing the P0 gaps — registers reading-list entries with ghost matching', async () => {
+      const { orchestrator } = makeOrchestrator({});
+      useBookStore.setState({
+        books: { dup: makeInventoryItem({ bookId: 'dup', sourceFilename: 'dup.epub' }) },
       });
-      const db = makeLibraryDbDouble({
-        getBookMetadata: vi.fn(async (id: string) => makeBookMetadata({ id })),
-        getOffloadedStatus: vi.fn(async () => new Map<string, boolean>()),
-        getBookIdByFilename: vi.fn(() => undefined),
-      });
-      const store = createLibraryStore(db);
 
-      await store.getState().addBooks([epubFile('a.epub'), epubFile('b.epub')]);
+      const summary = await orchestrator.importFiles([
+        epubFile('a.epub'),
+        epubFile('b.epub'),
+        epubFile('dup.epub'),
+        new File(['x'], 'notes.txt'),
+      ]);
 
-      expect(useBookStore.getState().books['m1']?.sourceFilename).toBe('a.epub');
-      expect(useBookStore.getState().books['m2']?.sourceFilename).toBe('b.epub');
-      expect(store.getState().batchImportSummary).toEqual({
+      expect(summary).toEqual({
         imported: 2,
         skipped: ['dup.epub'],
-        failed: [{ filename: 'bad.zip', reason: 'corrupted' }],
+        failed: [{ filename: 'notes.txt', reason: 'Unsupported file type (expected .epub or .zip).' }],
       });
-      expect(store.getState().isImporting).toBe(false);
+      expect(useLibraryStore.getState().batchImportSummary).toEqual(summary);
 
-      // PINNED P0 GAP (deliberately closed by PR-L2, phase7 doc §B): the
-      // batch path registers NO reading-list entries today.
-      expect(Object.keys(useReadingListStore.getState().entries)).toEqual([]);
-      // PINNED P0 GAP: the batch path never runs the ghost probe today.
-      expect(mockExtractBookMetadata).not.toHaveBeenCalled();
+      expect(useBookStore.getState().books['id-a_epub']?.sourceFilename).toBe('a.epub');
+      expect(useBookStore.getState().books['id-b_epub']?.sourceFilename).toBe('b.epub');
+
+      // FLIPPED P0 PIN (entry gate pinned "no reading-list entries on the
+      // batch path"; PR-L2 closes the gap deliberately — phase7 doc §B):
+      expect(useReadingListStore.getState().entries['a.epub']).toMatchObject({ bookId: 'id-a_epub' });
+      expect(useReadingListStore.getState().entries['b.epub']).toMatchObject({ bookId: 'id-b_epub' });
+      expect(useLibraryStore.getState().isImporting).toBe(false);
     });
 
-    it('wires the same filename duplicate detection as the single path into the batch checks', async () => {
-      mockProcessBatchImport.mockResolvedValue({ successful: [], skipped: [], failed: [] });
-      const db = makeLibraryDbDouble({
-        getBookMetadata: vi.fn(async (id: string) => makeBookMetadata({ id })),
-        getOffloadedStatus: vi.fn(async () => new Map<string, boolean>()),
-        getBookIdByFilename: vi.fn((name: string) => (name === 'in-db.epub' ? 'db-id' : undefined)),
-      });
-      const store = createLibraryStore(db);
+    it('adopts ghosts on the batch path (the second flipped P0 pin)', async () => {
+      const ingest = vi.fn(async () => undefined);
+      const { orchestrator } = makeOrchestrator(
+        { ingest },
+        { meta: { title: 'Ghost Title', author: 'Ghost Author' } },
+      );
       useBookStore.setState({
-        books: { inv1: makeInventoryItem({ bookId: 'inv1', sourceFilename: 'in-store.epub' }) },
+        books: {
+          'ghost-1': makeInventoryItem({
+            bookId: 'ghost-1',
+            title: 'Ghost Title',
+            author: 'Ghost Author',
+            sourceFilename: 'elsewhere.epub',
+          }),
+        },
       });
 
-      await store.getState().addBooks([epubFile('a.epub')]);
+      const summary = await orchestrator.importFiles([epubFile('renamed.epub')]);
 
-      const checks = mockProcessBatchImport.mock.calls[0][4];
-      expect(checks?.isDuplicate).toBeDefined();
-      await expect(checks!.isDuplicate!('in-store.epub')).resolves.toBe(true);
-      await expect(checks!.isDuplicate!('in-db.epub')).resolves.toBe(true);
-      await expect(checks!.isDuplicate!('fresh.epub')).resolves.toBe(false);
+      expect(summary.imported).toBe(1);
+      // Linked to the existing record — no second inventory entry.
+      expect(Object.keys(useBookStore.getState().books)).toEqual(['ghost-1']);
+    });
+
+    it('expands ZIPs and accounts for corrupted archives as failures', async () => {
+      const expandZip = vi.fn(async (file: File) => {
+        if (file.name === 'bad.zip') throw new Error('Failed to process ZIP file.');
+        return [epubFile('inside.epub')];
+      }) as unknown as ImportOrchestratorDeps['expandZip'];
+      const persistence = makeLibraryPersistenceDouble({
+        getBookIdByFilename: () => undefined,
+        ingest: vi.fn(async () => undefined),
+      });
+      const { orchestrator } = makeTestLibrary({
+        persistence,
+        extract: makeFakeExtract(),
+        expandZip,
+      });
+
+      const summary = await orchestrator.importFiles([
+        new File(['z'], 'good.zip'),
+        new File(['z'], 'bad.zip'),
+      ]);
+
+      expect(summary.imported).toBe(1);
+      expect(summary.failed).toEqual([{ filename: 'bad.zip', reason: 'Failed to process ZIP file.' }]);
+      expect(useBookStore.getState().books['id-inside_epub']).toBeDefined();
     });
   });
 
   describe('restore', () => {
-    it('uses the binary-restore path when a local manifest exists', async () => {
-      const db = makeLibraryDbDouble({
-        getBookMetadata: vi.fn(async (id: string) => makeBookMetadata({ id })),
-        restoreBook: vi.fn(async () => undefined),
-        getOffloadedStatus: vi.fn(async () => new Map<string, boolean>()),
+    it('verifies via contentHash when the manifest has one, then restores the binary', async () => {
+      const file = epubFile();
+      const restoreResource = vi.fn(async () => undefined);
+      const { orchestrator } = makeOrchestrator({
+        getManifest: vi.fn(async () => ({
+          bookId: 'b1',
+          title: 'T',
+          author: 'A',
+          fileHash: 'legacy',
+          contentHash: await computeContentHash(file),
+          fileSize: 1,
+          totalChars: 1,
+          schemaVersion: 3,
+        })),
+        restoreResource,
+        getBookMetadata: vi.fn(async () => makeBookMetadata({ id: 'b1' })),
       });
-      const store = createLibraryStore(db);
       useBookStore.setState({ books: { b1: makeInventoryItem({ bookId: 'b1' }) } });
-      store.setState({ offloadedBookIds: new Set(['b1']) });
+      useLibraryStore.setState({ offloadedBookIds: new Set(['b1']) });
 
-      await store.getState().restoreBook('b1', epubFile());
+      await orchestrator.restore('b1', file);
 
-      expect(db.restoreBook).toHaveBeenCalledWith('b1', expect.any(File));
-      expect(store.getState().offloadedBookIds.has('b1')).toBe(false);
-      expect(store.getState().isImporting).toBe(false);
+      expect(restoreResource).toHaveBeenCalledWith('b1', file);
+      expect(useLibraryStore.getState().offloadedBookIds.has('b1')).toBe(false);
+      expect(useLibraryStore.getState().isImporting).toBe(false);
+    });
+
+    it('regression: accepts a RENAMED byte-identical file via the legacy tail and lazily upgrades the manifest (D7)', async () => {
+      const original = epubFile('original.epub');
+      const renamed = epubFile('renamed-by-the-os (1).epub');
+      const storedFileHash = await computeLegacyFingerprint(original, {
+        title: 'T',
+        author: 'A',
+        filename: 'original.epub',
+      });
+
+      const writeContentHash = vi.fn(async () => undefined);
+      const { orchestrator } = makeOrchestrator({
+        getManifest: vi.fn(async () => ({
+          bookId: 'b1',
+          title: 'T',
+          author: 'A',
+          fileHash: storedFileHash, // pre-P7 manifest: no contentHash
+          fileSize: 1,
+          totalChars: 1,
+          schemaVersion: 3,
+        })),
+        restoreResource: vi.fn(async () => undefined),
+        writeContentHash,
+        getBookMetadata: vi.fn(async () => makeBookMetadata({ id: 'b1' })),
+      });
+      useBookStore.setState({ books: { b1: makeInventoryItem({ bookId: 'b1' }) } });
+
+      await orchestrator.restore('b1', renamed);
+
+      expect(writeContentHash).toHaveBeenCalledWith('b1', await computeContentHash(renamed));
+    });
+
+    it('regression: rejects mismatched content with INGEST_FILE_MISMATCH (absorbed from BookImportService.test.ts)', async () => {
+      const original = epubFile('book.epub');
+      const storedFileHash = await computeLegacyFingerprint(original, {
+        title: 'T',
+        author: 'A',
+        filename: 'book.epub',
+      });
+      const { orchestrator } = makeOrchestrator({
+        getManifest: vi.fn(async () => ({
+          bookId: 'b1',
+          title: 'T',
+          author: 'A',
+          fileHash: storedFileHash,
+          fileSize: 1,
+          totalChars: 1,
+          schemaVersion: 3,
+        })),
+      });
+
+      const impostor = new File(['completely different bytes'], 'book.epub');
+      await expect(orchestrator.restore('b1', impostor)).rejects.toMatchObject({
+        code: 'INGEST_FILE_MISMATCH',
+      });
+      expect(useLibraryStore.getState().isImporting).toBe(false);
     });
 
     it('falls back to a full import-with-id when no local manifest exists (synced-book download)', async () => {
-      const manifest = makeManifest({ bookId: 'b1', title: 'Downloaded' });
-      const getBookMetadata = vi
-        .fn<(id: string) => Promise<ReturnType<typeof makeBookMetadata> | undefined>>()
-        .mockResolvedValueOnce(undefined) // restore probe: no manifest
-        .mockResolvedValue(makeBookMetadata({ id: 'b1', title: 'Downloaded' }));
-      const db = makeLibraryDbDouble({
-        getBookMetadata,
-        importBookWithId: vi.fn(async () => manifest),
-        getOffloadedStatus: vi.fn(async () => new Map<string, boolean>()),
+      const ingest = vi.fn(async () => undefined);
+      const { orchestrator } = makeOrchestrator({
+        getManifest: vi.fn(async () => undefined),
+        ingest,
       });
-      const store = createLibraryStore(db);
-      useBookStore.setState({ books: { b1: makeInventoryItem({ bookId: 'b1', addedAt: 42 }) } });
+      useBookStore.setState({ books: { 'id-test_epub': makeInventoryItem({ bookId: 'id-test_epub', addedAt: 42 }) } });
 
-      await store.getState().restoreBook('b1', epubFile());
+      await orchestrator.restore('id-test_epub', epubFile());
 
-      expect(db.importBookWithId).toHaveBeenCalledWith('b1', expect.any(File), expect.anything(), expect.any(Function));
-      expect(store.getState().staticMetadata['b1']?.title).toBe('Downloaded');
-      expect(store.getState().staticMetadata['b1']?.addedAt).toBe(42);
+      expect(ingest).toHaveBeenCalledWith(
+        expect.objectContaining({ bookId: 'id-test_epub' }),
+        { mode: 'overwrite' },
+      );
+      expect(useLibraryStore.getState().staticMetadata['id-test_epub']?.addedAt).toBe(42);
+    });
+  });
+
+  describe('reprocess (D6: same-book overlap is impossible)', () => {
+    it('routes through the queue, updates the palette, refreshes the projection', async () => {
+      const reprocess = vi.fn(async () => ({
+        coverPalette: [9, 9, 9],
+        perceptualPalette: undefined,
+        searchText: { extractionVersion: 3, sections: [] },
+      }));
+      const { orchestrator } = makeOrchestrator({
+        reprocess,
+        getBookMetadata: vi.fn(async () => makeBookMetadata({ id: 'b1', title: 'Reprocessed' })),
+      });
+      useBookStore.setState({ books: { b1: makeInventoryItem({ bookId: 'b1' }) } });
+
+      await orchestrator.reprocess('b1');
+
+      expect(reprocess).toHaveBeenCalledWith('b1', expect.objectContaining({ extraction: expect.anything() }));
+      expect(useBookStore.getState().books['b1']?.coverPalette).toEqual([9, 9, 9]);
+      expect(useLibraryStore.getState().staticMetadata['b1']?.title).toBe('Reprocessed');
+    });
+
+    it('serializes concurrent reprocess runs for the same book on its mutex', async () => {
+      const order: string[] = [];
+      const reprocess = vi.fn(async () => {
+        order.push('start');
+        await new Promise((r) => setTimeout(r, 20));
+        order.push('end');
+        return { coverPalette: undefined, perceptualPalette: undefined, searchText: { extractionVersion: 3, sections: [] } };
+      });
+      const { orchestrator } = makeOrchestrator({
+        reprocess,
+        getBookMetadata: vi.fn(async () => undefined),
+      });
+      useBookStore.setState({ books: { b1: makeInventoryItem({ bookId: 'b1' }) } });
+
+      await Promise.all([orchestrator.reprocess('b1'), orchestrator.reprocess('b1')]);
+
+      // Never interleaved: start,end,start,end.
+      expect(order).toEqual(['start', 'end', 'start', 'end']);
     });
   });
 

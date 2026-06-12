@@ -15,8 +15,9 @@ suite. Reviewers check this ledger. (Pattern: `phase5-absorption-ledger.md`.)
 | 7 | `src/store/useLibraryStore.restoreRace.test.ts` | same | `regression: I-3 restore re-validates existence` | ✅ deleted at PR-L4 cutover |
 | 8 | `src/store/useLibraryStore.offloadRevert.test.ts` | same | `regression: I-4 failure restores captured prior state` | ✅ deleted at PR-L4 cutover |
 | 9 | `src/store/useLibraryStore.offloadedRace.test.ts` | same | `regression: I-5 offloaded set is updated per-key` | ✅ deleted at PR-L4 cutover |
-| 10 | `src/lib/BookImportService.test.ts` | `src/domains/library/import/ImportOrchestrator.test.ts` (id-override + fingerprint-verification assertions) | `regression: import-with-id rewrites every bookId-bearing row` / restore acceptance cases | ✅ deleted at PR-L2 |
-| 11 | `src/lib/batch-ingestion.test.ts` | `src/domains/library/import/zip.test.ts` + orchestrator suite (per-file outcomes) | `regression: batch accounts for every input file` | ✅ deleted at PR-L2 |
+| 10 | `src/lib/BookImportService.test.ts` | `src/domains/library/import/persist.test.ts` (id rewrite) + `importFlows.characterization.test.ts` (restore acceptance) | `regression: import-with-id rewrites every bookId-bearing row` / `regression: rejects mismatched content with INGEST_FILE_MISMATCH` | ✅ deleted at PR-L2/L4 |
+| 11 | `src/lib/batch-ingestion.test.ts` | `importFlows.characterization.test.ts` (batch accounting + ZIP expansion describe) | `batch import` / `ZIP expansion (real archive)` blocks | ✅ deleted at PR-L2/L4 |
+| 12 | `src/store/useLibraryStore.test.ts` (841-line workflow-store suite) | workflow assertions → `importFlows.characterization.test.ts` + invariants suite; projection assertions → the rewritten slim `useLibraryStore.test.ts` (`regression:` blocks for D1 summary shape + reference stability) | several | ✅ rewritten at PR-L4 |
 
 Notes:
 

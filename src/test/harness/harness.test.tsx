@@ -12,7 +12,7 @@ import {
   makeBookMetadata,
   makeBookContentDouble,
   makeInventoryItem,
-  makeLibraryDbDouble,
+  makeLibraryPersistenceDouble,
   makeTTSQueue,
   renderWithStores,
   resetStore,
@@ -34,8 +34,8 @@ describe('doubles', () => {
     expect(getBookStructure).toHaveBeenCalledWith('book-1');
   });
 
-  it('makeLibraryDbDouble: optional fast-path methods stay undefined so fallbacks run', () => {
-    const db = makeLibraryDbDouble();
+  it('makeLibraryPersistenceDouble: optional fast-path methods stay undefined so fallbacks run', () => {
+    const db = makeLibraryPersistenceDouble();
     expect(db.getBookMetadataBulk).toBeUndefined();
     expect(db.getAvailableResourceIds).toBeUndefined();
     expect(() => db.deleteBook('x')).toThrowError(/deleteBook\(\) was called but not stubbed/);

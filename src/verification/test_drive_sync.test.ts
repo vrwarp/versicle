@@ -9,7 +9,12 @@ import {
 } from '@domains/google';
 import { useDriveStore } from '@store/useDriveStore';
 import { useBookStore } from '@store/useBookStore';
-import { useLibraryStore } from '@store/useLibraryStore';
+
+// Phase 7: Drive imports flow through the library port the composition root
+// wires to the ImportOrchestrator (app/google/wireGoogle.ts). The port is
+// captured here so the journeys assert the CONTRACT the scanner drives.
+const mockLibraryAddBook = vi.fn<(file: File, options?: { overwrite?: boolean }) => Promise<unknown>>()
+    .mockResolvedValue(undefined);
 
 // Phase 7: the DriveScannerService facade delegates to the composed
 // DriveLibrarySync — wire one here over the functional MockDriveService
@@ -30,7 +35,7 @@ function wireMockDriveSync(): void {
             setScannedFiles: (files) => useDriveStore.getState().setScannedFiles(files),
         },
         library: {
-            addBook: (file, options) => useLibraryStore.getState().addBook(file, options),
+            addBook: (file, options) => mockLibraryAddBook(file, options),
             getLibraryFilenames: () =>
                 new Set(Object.values(useBookStore.getState().books).map((b) => b.sourceFilename)),
         },
@@ -44,14 +49,6 @@ vi.mock('@data/repos/bookContent', () => ({
         getBookStructure: vi.fn().mockResolvedValue({}),
         getOffloadedStatus: vi.fn().mockResolvedValue(new Map()),
         getAvailableResourceIds: vi.fn().mockResolvedValue(new Set()),
-    }
-}));
-
-vi.mock('@lib/BookImportService', () => ({
-    bookImportService: {
-        addBook: vi.fn().mockResolvedValue({ bookId: 'mock-id', title: 'Mocked Title', author: 'Mocked Author', schemaVersion: '1.0' }),
-        importBookWithId: vi.fn().mockResolvedValue({ bookId: 'mock-id', title: 'Mocked Title', author: 'Mocked Author', schemaVersion: '1.0' }),
-        restoreBook: vi.fn().mockResolvedValue(undefined),
     }
 }));
 
@@ -156,12 +153,10 @@ describe('Google Drive Sync & Import E2E', () => {
         // Perform Import
         await DriveScannerService.importFile(fileId, 'New Adventure.epub');
 
-        const { bookImportService } = await import('@lib/BookImportService');
-        // Expect addBook to be called
-        expect(bookImportService.addBook).toHaveBeenCalledWith(
+        // Expect the library port (the orchestrator in production) to receive the file.
+        expect(mockLibraryAddBook).toHaveBeenCalledWith(
             expect.objectContaining({ name: 'New Adventure.epub' }),
-            expect.anything(),
-            expect.anything()
+            undefined
         );
     });
 
@@ -205,15 +200,12 @@ describe('Google Drive Sync & Import E2E', () => {
 
         await DriveScannerService.importFile(match!.id, match!.name, { overwrite: true });
 
-        const { bookImportService } = await import('@lib/BookImportService');
-
-        // Since the book exists in store (matched by filename), and overwrite is true,
-        // useLibraryStore calls bookImportService.importBookWithId to preserve the ID
-        expect(bookImportService.importBookWithId).toHaveBeenCalledWith(
-            ghostBookId,
+        // Since the book exists in store (matched by filename), and overwrite is
+        // true, the scanner asks the library port to replace in place — the
+        // orchestrator's replace flow preserves the existing id (ghostBookId).
+        expect(mockLibraryAddBook).toHaveBeenCalledWith(
             expect.objectContaining({ name: bookTitle }),
-            expect.anything(),
-            expect.anything()
+            expect.objectContaining({ overwrite: true })
         );
     });
 

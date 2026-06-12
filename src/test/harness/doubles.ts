@@ -12,7 +12,7 @@
  * these doubles are what you inject into them.
  */
 import type { bookContent } from '@data/repos/bookContent';
-import type { IDBService } from '@store/useLibraryStore';
+import type { LibraryPersistence } from '@domains/library/ports';
 
 /**
  * The public surface of a class instance type. `keyof` only sees public
@@ -65,28 +65,33 @@ export function makeBookContentDouble(overrides: Partial<BookContentShape> = {})
 const unstubbed =
   (name: string) =>
   (): never => {
-    throw new Error(`[test-harness] libraryDb.${name}() was called but not stubbed.`);
+    throw new Error(`[test-harness] libraryPersistence.${name}() was called but not stubbed.`);
   };
 
 /**
- * Typed double for the `IDBService` seam injected into
- * `createLibraryStore(db)` (`src/store/useLibraryStore.ts`).
+ * Typed double for the `LibraryPersistence` seam injected into the
+ * ImportOrchestrator/LibraryService (`src/domains/library/ports.ts` —
+ * Phase 7 replacement of the deleted `IDBService` store seam).
  *
  * Required methods default to loud throwers; the OPTIONAL fast-path methods
  * (`getBookMetadataBulk`, `getAvailableResourceIds`) stay `undefined` unless
- * overridden, so the store exercises the same fallback paths it would with a
- * minimal real backend.
+ * overridden, so the service exercises the same fallback paths it would with
+ * a minimal real backend.
  */
-export function makeLibraryDbDouble(overrides: Partial<IDBService> = {}): IDBService {
+export function makeLibraryPersistenceDouble(
+  overrides: Partial<LibraryPersistence> = {},
+): LibraryPersistence {
   return {
-    addBook: unstubbed('addBook'),
-    importBookWithId: unstubbed('importBookWithId'),
+    ingest: unstubbed('ingest'),
     deleteBook: unstubbed('deleteBook'),
     offloadBook: unstubbed('offloadBook'),
-    restoreBook: unstubbed('restoreBook'),
+    restoreResource: unstubbed('restoreResource'),
+    getManifest: unstubbed('getManifest'),
+    writeContentHash: unstubbed('writeContentHash'),
     getBookMetadata: unstubbed('getBookMetadata'),
     getOffloadedStatus: unstubbed('getOffloadedStatus'),
     getBookIdByFilename: unstubbed('getBookIdByFilename'),
+    reprocess: unstubbed('reprocess'),
     ...overrides,
   };
 }

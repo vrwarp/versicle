@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { reprocessBook } from '@lib/ingestion';
-import { useLibraryStore } from '@store/useLibraryStore';
+import { libraryController } from '@app/library/useImportController';
 import { Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button';
 
@@ -26,9 +25,11 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
         const runReprocessing = async () => {
             setProgress('processing');
             try {
-                await reprocessBook(bookId);
-                // Refresh store to get updated metadata (especially schemaVersion)
-                await useLibraryStore.getState().hydrateStaticMetadata([bookId]);
+                // Phase 7: routed through the ImportOrchestrator queue — the
+                // book mutex makes overlapping reprocess runs impossible
+                // (D6), and the job refreshes the static-metadata projection
+                // itself (no manual hydrate needed).
+                await libraryController.reprocessBook(bookId);
                 onComplete();
             } catch (e) {
                 console.error("Reprocessing failed", e);

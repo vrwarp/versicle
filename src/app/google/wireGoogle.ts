@@ -31,8 +31,8 @@ import { setConsentResolver } from '@kernel/net';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 import { useSyncStore } from '@store/useSyncStore';
 import { useDriveStore } from '@store/useDriveStore';
-import { useLibraryStore } from '@store/useLibraryStore';
 import { useBookStore } from '@store/useBookStore';
+import { libraryController } from '@app/library/useImportController';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
@@ -70,7 +70,14 @@ export function wireGoogleDomain(): void {
         setScannedFiles: (files) => useDriveStore.getState().setScannedFiles(files),
       },
       library: {
-        addBook: (file, options) => useLibraryStore.getState().addBook(file, options),
+        // Phase 7: Drive imports flow through the SAME ImportOrchestrator
+        // queue as every other entry point (ghost matching + reading-list
+        // registration included). Duplicates still throw DuplicateBookError
+        // — the pre-P7 addBook contract Drive flows are built around.
+        addBook: (file, options) =>
+          options?.overwrite
+            ? libraryController.replaceFile(file)
+            : libraryController.importFile(file),
         getLibraryFilenames: () =>
           new Set(Object.values(useBookStore.getState().books).map((b) => b.sourceFilename)),
       },

@@ -1,6 +1,6 @@
 /**
- * The library invariant suite (Phase 7 entry gate, PR-0a in
- * plan/overhaul/prep/phase7-library-google.md §C).
+ * The library invariant suite (Phase 7 §C; entry gate PR-0a → cutover
+ * PR-L4).
  *
  * Five historical race-regression files pinned exactly one interleaving
  * each; this suite lifts them into named SERVICE invariants:
@@ -16,37 +16,36 @@
  *   I-5  the offloaded set is updated per-key (add/remove deltas), never
  *        replaced wholesale from a stale snapshot.
  *
- * The suite runs against the `LibraryWorkflows` harness seam. At entry-gate
- * time the harness adapts the CURRENT `useLibraryStore`; the PR-L4 cutover
- * swaps the adapter for the real `LibraryService` WITHOUT changing a single
- * assertion (program rule 7: characterization before change). The five
- * per-bug files are deleted only in the cutover PR that absorbs them here
- * (program rule 8; see plan/overhaul/prep/phase7-absorption-ledger.md).
+ * CUTOVER NOTE (PR-L4): the suite was written at the phase entry gate
+ * against the legacy `useLibraryStore` workflows through the
+ * `LibraryWorkflows` adapter below; the adapter NOW constructs the real
+ * `LibraryService`/`ImportOrchestrator` over the real stores — the
+ * assertions are unchanged. The five per-bug files were deleted in the same
+ * PR (rule 8; plan/overhaul/prep/phase7-absorption-ledger.md rows 5–9):
+ *
+ *   useLibraryStore.race.test.ts          → I-1
+ *   useLibraryStore.removeRace.test.ts    → I-2
+ *   useLibraryStore.restoreRace.test.ts   → I-3
+ *   useLibraryStore.offloadRevert.test.ts → I-4
+ *   useLibraryStore.offloadedRace.test.ts → I-5
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createLibraryStore, useBookStore } from '@store/useLibraryStore';
-import type { IDBService } from '@store/useLibraryStore';
+import { useBookStore } from '@store/useBookStore';
+import { useLibraryStore } from '@store/useLibraryStore';
 import {
   autoResetStores,
-  makeLibraryDbDouble,
+  makeLibraryPersistenceDouble,
+  makeTestLibrary,
+  makeFullExtraction,
   makeBookMetadata,
   makeInventoryItem,
 } from '@test/harness';
-import type { BookMetadata, StaticBookManifest } from '~types/db';
-
-vi.mock('@lib/ingestion', () => ({
-  extractBookMetadata: vi.fn().mockResolvedValue({
-    title: 'Unmatched Title',
-    author: 'Unmatched Author',
-    description: '',
-    fileHash: 'hash',
-  }),
-}));
+import type { LibraryPersistence } from '@domains/library';
+import type { BookMetadata } from '~types/db';
 
 /**
- * The workflow surface the invariants run against. The current adapter wraps
- * `useLibraryStore`; the real `LibraryService` satisfies this shape at the
- * PR-L4 cutover.
+ * The workflow surface the invariants run against — satisfied by the real
+ * LibraryService since the PR-L4 cutover.
  */
 interface LibraryWorkflows {
   hydrate(forceBookIds?: string[]): Promise<void>;
@@ -61,34 +60,57 @@ interface LibraryWorkflows {
   setOffloadedSet(ids: string[]): void;
 }
 
-function makeWorkflows(db: Partial<IDBService>): LibraryWorkflows {
-  const store = createLibraryStore(makeLibraryDbDouble(db));
+const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function makeWorkflows(db: Partial<LibraryPersistence>): LibraryWorkflows {
+  const persistence = makeLibraryPersistenceDouble(db);
+  const { service } = makeTestLibrary({
+    persistence,
+    // Restore's synced-download path runs a full extraction; the fake keeps
+    // the legacy 50ms "slow import" latency the I-3 pin was written with.
+    extract: vi.fn(async (file: File) => {
+      await tick(50);
+      return makeFullExtraction({ bookId: 'zombie-book', title: `Book from ${file.name}` });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    }) as any,
+  });
+
   return {
-    hydrate: (forceBookIds) => store.getState().hydrateStaticMetadata(forceBookIds),
-    restore: (id, file) => store.getState().restoreBook(id, file),
-    offload: (id) => store.getState().offloadBook(id),
-    remove: (id) => store.getState().removeBook(id),
-    staticMetadata: () => store.getState().staticMetadata,
-    offloaded: () => store.getState().offloadedBookIds,
+    hydrate: (forceBookIds) => service.hydrate(forceBookIds),
+    restore: (id, file) => service.restore(id, file).catch(() => undefined),
+    offload: (id) => service.offload(id),
+    remove: (id) => service.remove(id),
+    staticMetadata: () => useLibraryStore.getState().staticMetadata,
+    offloaded: () => useLibraryStore.getState().offloadedBookIds,
     writeStatic: (entries) =>
-      store.setState((state) => ({ staticMetadata: { ...state.staticMetadata, ...entries } })),
+      useLibraryStore.setState((state) => ({ staticMetadata: { ...state.staticMetadata, ...entries } })),
     dropStatic: (id) =>
-      store.setState((state) => {
+      useLibraryStore.setState((state) => {
         const next = { ...state.staticMetadata };
         delete next[id];
         return { staticMetadata: next };
       }),
-    setOffloadedSet: (ids) => store.setState({ offloadedBookIds: new Set(ids) }),
+    setOffloadedSet: (ids) => useLibraryStore.setState({ offloadedBookIds: new Set(ids) }),
   };
 }
 
-const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
+function resetProjection(): void {
+  useLibraryStore.setState({
+    staticMetadata: {},
+    offloadedBookIds: new Set<string>(),
+    isHydrating: false,
+    hasHydrated: false,
+    error: null,
+  });
+}
 
 describe('LibraryService invariants (I-1..I-5)', () => {
   autoResetStores(useBookStore);
 
   beforeEach(() => {
+    resetProjection();
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   describe('regression: I-1 hydrate is a per-key merge (useLibraryStore.race.test.ts)', () => {
@@ -166,19 +188,9 @@ describe('LibraryService invariants (I-1..I-5)', () => {
   describe('regression: I-3 restore re-validates existence (useLibraryStore.restoreRace.test.ts)', () => {
     it('does not resurrect concurrently removed books during restore', async () => {
       const wf = makeWorkflows({
+        getManifest: vi.fn(async () => undefined), // synced-book download path
+        ingest: vi.fn(async () => undefined),
         getBookMetadata: vi.fn(async () => undefined),
-        importBookWithId: vi.fn(async (id: string): Promise<StaticBookManifest> => {
-          await tick(50); // slow import
-          return {
-            bookId: id,
-            schemaVersion: 1,
-            title: `Book ${id} from DB`,
-            author: 'Test Author',
-            fileHash: 'hash',
-            fileSize: 1,
-            totalChars: 1,
-          };
-        }),
         getBookIdByFilename: vi.fn(() => undefined),
         deleteBook: vi.fn(async () => undefined),
         getOffloadedStatus: vi.fn(async () => new Map<string, boolean>()),
@@ -280,7 +292,7 @@ describe('LibraryService invariants (I-1..I-5)', () => {
       wf.setOffloadedSet([]);
     };
 
-    const makeDb = (latency: () => number): Partial<IDBService> => ({
+    const makeDb = (latency: () => number): Partial<LibraryPersistence> => ({
       getBookMetadata: vi.fn(async (id: string) => {
         await tick(latency());
         return makeBookMetadata({ id, title: `${id} from DB` });
@@ -295,10 +307,11 @@ describe('LibraryService invariants (I-1..I-5)', () => {
       deleteBook: vi.fn(async () => {
         await tick(latency());
       }),
-      restoreBook: vi.fn(async () => {
+      restoreResource: vi.fn(async () => {
         await tick(latency());
       }),
-      importBookWithId: vi.fn(),
+      getManifest: vi.fn(async () => undefined),
+      ingest: vi.fn(async () => undefined),
       getBookIdByFilename: vi.fn(() => undefined),
     });
 
@@ -314,6 +327,7 @@ describe('LibraryService invariants (I-1..I-5)', () => {
         // Enumerate the sequentially-reachable terminal states.
         const reachable: Terminal[] = [];
         for (const order of [0, 1]) {
+          resetProjection();
           const wf = makeWorkflows(makeDb(() => 0));
           seedBook(wf, id);
           if (order === 0) {
@@ -327,6 +341,7 @@ describe('LibraryService invariants (I-1..I-5)', () => {
         }
 
         for (let seed = 1; seed <= 16; seed++) {
+          resetProjection();
           const rand = mulberry32(seed);
           const latency = () => Math.floor(rand() * 4) * 10;
           const wf = makeWorkflows(makeDb(latency));

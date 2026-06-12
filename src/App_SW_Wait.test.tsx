@@ -28,6 +28,18 @@ vi.mock('@capacitor/app', () => ({
   }
 }));
 
+// Phase 7: boot hydration goes through the library composition.
+vi.mock('./app/library/createLibrary', () => ({
+  getLibrary: () => ({
+    service: {
+      start: vi.fn(),
+      hydrate: vi.fn().mockResolvedValue(undefined),
+    },
+    orchestrator: {},
+    mutex: {},
+  }),
+}));
+
 // Mock useLibraryStore
 vi.mock('./store/useLibraryStore', () => {
   const hydrate = vi.fn().mockResolvedValue(undefined);

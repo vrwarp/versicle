@@ -1,7 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { extractBookData, validateZipSignature, sanitizeString, getSanitizedBookMetadata } from './ingestion';
-import type { BookExtractionData } from './ingestion';
+import { validateZipSignature, sanitizeString, getSanitizedBookMetadata } from './ingestion';
+import { extractBook, type FullBookExtraction } from '@domains/library/import/extract';
+
+// Re-pointed at PR-L1/L2 (phase7): `extractBookData` was a deleted delegate;
+// the same assertions now exercise the unified extractor directly.
+const extractBookData = (file: File) => extractBook(file, { depth: 'full' });
 import { TTS_EXTRACTION_VERSION } from './ingestion/sentence-extraction';
 
 // Mock browser-image-compression
@@ -113,7 +117,7 @@ describe('ingestion', () => {
 
   it('should extract book data correctly', async () => {
     const mockFile = createMockFile(true);
-    const data: BookExtractionData = await extractBookData(mockFile);
+    const data: FullBookExtraction = await extractBookData(mockFile);
 
     expect(data.bookId).toBe('mock-uuid');
     expect(data.manifest.title).toBe('Mock Title');
@@ -252,7 +256,7 @@ describe('ingestion', () => {
   describe('regression: NFKD/CFI fix-forward extraction version stamp', () => {
     it('stamps newly written TTS preparation rows with the current extraction version', async () => {
       const mockFile = createMockFile(true);
-      const data: BookExtractionData = await extractBookData(mockFile);
+      const data: FullBookExtraction = await extractBookData(mockFile);
 
       // Rows without this stamp predate the raw-offset segmentation fix and may
       // carry drifted CFIs for non-ASCII books (re-ingestion targets them later).

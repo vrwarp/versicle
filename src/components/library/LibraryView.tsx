@@ -28,6 +28,8 @@ import { DuplicateBookError } from '~types/errors';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
 import { useNavigationGuard } from '@hooks/useNavigationGuard';
 import { BackButtonPriority } from '@store/useBackNavigationStore';
+import { useImportController } from '@app/library/useImportController';
+import { presentError } from '@app/errors/presentError';
 import { LibrarySearchBar, type LibrarySearchBarRef } from './LibrarySearchBar';
 
 /**
@@ -45,18 +47,13 @@ export const LibraryView: React.FC = () => {
   const {
     isLoading,
     error,
-    addBook,
-    restoreBook,
-    isImporting,
-    hydrateStaticMetadata
+    isImporting
   } = useLibraryStore(useShallow(state => ({
     isLoading: state.isLoading,
     error: state.error,
-    addBook: state.addBook,
-    restoreBook: state.restoreBook,
-    isImporting: state.isImporting,
-    hydrateStaticMetadata: state.hydrateStaticMetadata
+    isImporting: state.isImporting
   })));
+  const controller = useImportController();
 
 
   const { libraryLayout, setLibraryLayout, libraryFilterMode, setLibraryFilterMode, librarySortOrder, setLibrarySortOrder, activeContext, setActiveContext } = usePreferencesStore(useShallow(state => ({
@@ -114,33 +111,15 @@ export const LibraryView: React.FC = () => {
     }
   }, [location.state]);
 
-  // Phase 2: Hydrate static metadata after Yjs sync completes
-  // Wait for books to be populated by Yjs before hydrating static metadata
-  const bookCount = books.length; // useAllBooks returns array
-  const { staticMetadata, offloadedBookIds, hasHydrated } = useLibraryStore(useShallow(state => ({
+  const { staticMetadata, offloadedBookIds } = useLibraryStore(useShallow(state => ({
     staticMetadata: state.staticMetadata,
-    offloadedBookIds: state.offloadedBookIds,
-    hasHydrated: state.hasHydrated
+    offloadedBookIds: state.offloadedBookIds
   })));
 
-  // Track previous book count to detect when new books sync
-  const prevBookCountRef = useRef(0);
-
-  useEffect(() => {
-    // Only hydrate when:
-    // 1. Books exist AND book count increased (new books added)
-    // 2. OR books exist but nothing has been hydrated yet (initial load on fresh device)
-    const bookCountIncreased = bookCount > prevBookCountRef.current;
-    const needsInitialHydration = bookCount > 0 && !hasHydrated;
-
-    if (bookCountIncreased || needsInitialHydration) {
-      hydrateStaticMetadata();
-    }
-
-    prevBookCountRef.current = bookCount;
-  }, [bookCount, hasHydrated, hydrateStaticMetadata]);
-
-  // Phase 2: fetchBooks removed - data auto-syncs via Yjs middleware
+  // Phase 7 (D16 paid): static-metadata hydration has ONE owner — the
+  // LibraryService inventory-delta subscription started by the boot task
+  // (src/app/boot/whenHydrated.ts). The prevBookCountRef heuristic that
+  // duplicated it here is gone.
 
   // Phase 5: Drive Import
   const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
@@ -169,7 +148,7 @@ export const LibraryView: React.FC = () => {
 
     setIsRestoring(true);
     try {
-      await restoreBook(bookToRestore.id, file);
+      await controller.restoreBook(bookToRestore.id, file);
       showToast(`Restored "${bookToRestore.title}"`, 'success');
       setIsContentMissingOpen(false);
       setBookToRestore(null);
@@ -217,13 +196,13 @@ export const LibraryView: React.FC = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      addBook(file).then(() => {
+      controller.importFile(file).then(() => {
         showToast("Book imported successfully", "success");
       }).catch((err) => {
         if (err instanceof DuplicateBookError) {
           setDuplicateQueue(prev => [...prev, file]);
         } else {
-          showToast(`Import failed: ${err.message}`, "error");
+          showToast(`Import failed: ${presentError(err)}`, "error");
         }
       });
     }
@@ -236,11 +215,10 @@ export const LibraryView: React.FC = () => {
   const handleConfirmReplace = async () => {
     if (!currentDuplicate) return;
     try {
-      await addBook(currentDuplicate, { overwrite: true });
+      await controller.replaceFile(currentDuplicate);
       showToast("Book replaced successfully", "success");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      showToast(`Replace failed: ${msg}`, "error");
+      showToast(`Replace failed: ${presentError(e)}`, "error");
       throw e;
     }
   };
@@ -277,17 +255,17 @@ export const LibraryView: React.FC = () => {
         return;
       }
 
-      addBook(file).then(() => {
+      controller.importFile(file).then(() => {
         showToast("Book imported successfully", "success", 5000);
       }).catch((err) => {
         if (err instanceof DuplicateBookError) {
           setDuplicateQueue(prev => [...prev, file]);
         } else {
-          showToast(`Import failed: ${err.message}`, "error");
+          showToast(`Import failed: ${presentError(err)}`, "error");
         }
       });
     }
-  }, [addBook, showToast]);
+  }, [controller, showToast]);
 
   const triggerFileUpload = () => {
     fileInputRef.current?.click();

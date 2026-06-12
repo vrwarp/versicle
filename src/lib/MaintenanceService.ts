@@ -1,6 +1,7 @@
 import { useBookStore } from '@store/useBookStore';
 import { bookContent } from '@data/repos/bookContent';
-import { bookImportService } from './BookImportService';
+import { extractBook, retargetExtraction } from '@domains/library';
+import { searchTextRepo } from '@data/repos/searchText';
 import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { createLogger } from './logger';
 
@@ -137,9 +138,30 @@ export class MaintenanceService {
 
           onProgress(current, total, `Regenerating ${books[bookId].title}...`);
 
-          const manifest = await bookImportService.importBookWithId(bookId, file, {
-            sanitizationEnabled
+          // Phase 7: BookImportService died with the orchestrator cutover —
+          // regeneration is extract → retarget-onto-existing-id → overwrite
+          // ingest (+ the search corpus that rides every ingest, §F).
+          const extraction = retargetExtraction(
+            await extractBook(file, { depth: 'full', extraction: { sanitizationEnabled } }),
+            bookId,
+          );
+          await bookContent.ingest(
+            {
+              bookId,
+              manifest: extraction.manifest,
+              resource: extraction.resource,
+              structure: extraction.structure,
+              ttsContentBatches: extraction.ttsContentBatches,
+              tableBatches: extraction.tableBatches,
+            },
+            'overwrite',
+          );
+          await searchTextRepo.put({
+            bookId,
+            extractionVersion: extraction.searchText.extractionVersion,
+            sections: extraction.searchText.sections,
           });
+          const manifest = extraction.manifest;
 
           // If no filename was found from the blob or inventory, construct one from metadata
           const sourceFilename = knownFilename || `${manifest.title} - ${manifest.author}.epub`;
