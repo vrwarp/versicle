@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Loader2, Library, BookOpen, Upload } from 'lucide-react';
 import { FileUploader } from './FileUploader';
 import { createLogger } from '@lib/logger';
+import { localFetch } from '@kernel/net';
 
 const logger = createLogger('EmptyLibrary');
 
@@ -29,7 +30,7 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
 
   const handleLoadDemo = async () => {
     try {
-      const response = await fetch('/books/alice.epub');
+      const response = await localFetch('/books/alice.epub');
       if (!response.ok) throw new Error('Failed to load demo book');
       const blob = await response.blob();
       const file = new File([blob], 'Alice in Wonderland.epub', { type: 'application/epub+zip' });

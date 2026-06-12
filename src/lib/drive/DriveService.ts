@@ -1,4 +1,5 @@
 import { googleIntegrationManager } from '../google/GoogleIntegrationManager';
+import { egress } from '@kernel/net';
 
 export interface DriveFile {
     id: string;
@@ -21,7 +22,7 @@ export const DriveService = {
         let token = await googleIntegrationManager.getValidToken('drive');
 
         const makeRequest = async (authToken: string) => {
-            return fetch(url, {
+            return egress('drive', url, {
                 ...options,
                 headers: {
                     ...options.headers,

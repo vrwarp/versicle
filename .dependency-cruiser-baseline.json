@@ -6,6 +6,7 @@
     "types-imports-nothing": 0,
     "lib-not-to-store": 27,
     "lib-not-to-components": 0,
+    "kernel-imports-nothing": 0,
     "data-no-upward": 0,
     "domains-no-store": 0,
     "components-not-to-db": 0,

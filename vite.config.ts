@@ -6,6 +6,31 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import mkcert from 'vite-plugin-mkcert'
 import { visualizer } from 'rollup-plugin-visualizer'
+import { renderCsp } from './src/kernel/net/csp'
+
+/**
+ * CSP injection (Phase 7 §I): the policy is GENERATED from the egress
+ * destination registry (src/kernel/net/destinations.ts) — renderCsp() is the
+ * single renderer behind nginx.conf (scripts/generate-csp.mjs), the preview
+ * headers below, and this build-time index.html <meta> tag. The meta tag is
+ * what gives the Capacitor Android WebView a CSP at all (it serves dist/
+ * without nginx; before Phase 7 it ran with none — privacy report D4).
+ * Injected at BUILD only: the dev server needs the HMR websocket (ws:),
+ * which a committed meta would block. The registry==CSP unit test
+ * (src/kernel/net/csp.test.ts) pins all copies against the registry.
+ */
+function cspMetaPlugin(): Plugin {
+  return {
+    name: 'versicle:csp-meta',
+    apply: 'build',
+    transformIndexHtml(html) {
+      return html.replace(
+        '<meta charset="UTF-8" />',
+        `<meta charset="UTF-8" />\n  <meta http-equiv="Content-Security-Policy" content="${renderCsp()}" />`,
+      )
+    },
+  }
+}
 
 /**
  * Serve + ship the vendored Piper runtime (Phase 5a-PR3,
@@ -85,6 +110,7 @@ const aliases = {
   '@data': srcAlias('data'),
   '@domains': srcAlias('domains'),
   '@hooks': srcAlias('hooks'),
+  '@kernel': srcAlias('kernel'),
   '@lib': srcAlias('lib'),
   '@store': srcAlias('store'),
   '~types': srcAlias('types'),
@@ -127,11 +153,13 @@ export default defineConfig(({ mode }) => {
         'X-Frame-Options': 'SAMEORIGIN',
         'X-Content-Type-Options': 'nosniff',
         'Referrer-Policy': 'strict-origin-when-cross-origin',
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://apis.google.com https://*.firebaseapp.com; style-src 'self' 'unsafe-inline' blob:; img-src 'self' data: blob: https:; connect-src 'self' https: blob: https://*.googleapis.com https://*.firebaseio.com; font-src 'self' data:;"
+        // Generated from the egress destination registry — see cspMetaPlugin.
+        'Content-Security-Policy': renderCsp()
       }
     },
     plugins: [
       piperVendorPlugin(),
+      cspMetaPlugin(),
       ...(useHttps ? [mkcert()] : []),
       ...(analyze ? [visualizer({ filename: 'stats.html', gzipSize: true, brotliSize: true })] : []),
       react(),

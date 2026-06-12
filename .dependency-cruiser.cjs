@@ -77,6 +77,17 @@ module.exports = {
     // deleted (the wipe's dynamic store/sync imports — the rule's last
     // violation — became the data/wipe.ts hook registry, D9).
     {
+      name: 'kernel-imports-nothing',
+      severity: 'error',
+      comment:
+        'src/kernel is the L0 layer (Phase 7; master plan §2 rule 1 + the ' +
+        'C12 admission rule): zero internal imports beyond ~types. ' +
+        'kernel/net (the NetworkGateway + egress destination registry) is ' +
+        'born at error with baseline 0 — the anti-junk-drawer rule.',
+      from: { path: '^src/kernel' },
+      to: { path: '^src', pathNot: '^src/(kernel|types)' },
+    },
+    {
       name: 'data-no-upward',
       severity: 'error',
       comment:
