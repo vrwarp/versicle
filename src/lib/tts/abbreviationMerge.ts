@@ -4,13 +4,14 @@
  * array reference stable across calls with the same inputs so TextSegmenter
  * can skip rebuilding its internal trie caches.
  */
-import { BIBLE_ABBREVIATIONS } from './bible-lexicon';
+import { loadBibleLexicon } from './bible-lexicon';
 
 export class AbbreviationMerger {
     private lastInputs: { custom: string[]; bible: boolean } | null = null;
     private lastResult: string[] | null = null;
 
-    merge(customAbbreviations: string[], includeBible: boolean): string[] {
+    /** Async since 5c-PR3: the Bible list is lazy-loaded JSON (one fetch, cached). */
+    async merge(customAbbreviations: string[], includeBible: boolean): Promise<string[]> {
         if (
             this.lastInputs &&
             this.lastInputs.custom === customAbbreviations &&
@@ -21,7 +22,8 @@ export class AbbreviationMerger {
 
         let merged = customAbbreviations;
         if (includeBible) {
-            merged = [...customAbbreviations, ...BIBLE_ABBREVIATIONS];
+            const { abbreviations } = await loadBibleLexicon();
+            merged = [...customAbbreviations, ...abbreviations];
         }
 
         this.lastInputs = { custom: customAbbreviations, bible: includeBible };

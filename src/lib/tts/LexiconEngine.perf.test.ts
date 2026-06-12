@@ -1,11 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { LexiconService } from './LexiconService';
+import { lexiconApplier } from './LexiconApplier';
 import type { LexiconRule } from '~types/db';
 
-describe('LexiconService Performance', () => {
+describe('LexiconEngine perf companion', () => {
     it('should be faster with cached compilation', () => {
-        const service = LexiconService.getInstance();
-        const rules: LexiconRule[] = [];
+                const rules: LexiconRule[] = [];
 
         // Generate 50 rules
         for (let i = 0; i < 50; i++) {
@@ -32,19 +31,19 @@ describe('LexiconService Performance', () => {
         const text = "This is a test text with word1 and word20 and v45 inside.";
 
         // Warmup
-        service.applyLexicon(text, rules);
+        lexiconApplier.applyLexicon(text, rules);
 
         const start = performance.now();
         const iterations = 10000;
         for (let i = 0; i < iterations; i++) {
-            service.applyLexicon(text, rules);
+            lexiconApplier.applyLexicon(text, rules);
         }
         const end = performance.now();
 
         console.log(`Execution time for ${iterations} iterations: ${end - start}ms`);
 
         // Correctness check
-        const result = service.applyLexicon(text, rules);
+        const result = lexiconApplier.applyLexicon(text, rules);
         expect(result).toContain('replacement1');
         expect(result).toContain('verse 45');
     });

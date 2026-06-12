@@ -123,7 +123,7 @@ describeEngineParity('worker bridge (MessageChannel + Comlink)', async (): Promi
         platformSetBackgroundAudioMode: () => {},
         platformSetBackgroundVolume: () => {},
         platformStop: async () => {},
-        lexiconGetRules: async () => [],
+        lexiconGetCompiled: async () => ({ rules: [], version: 0 }),
         lexiconGetBiblePreference: async () => 'default',
         getContentAnalysis: async (bookId, sectionId) => {
             analysisFetchLog.push(`${bookId}/${sectionId}`);

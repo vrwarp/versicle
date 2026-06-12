@@ -27,6 +27,7 @@
  */
 import type {
     EngineContext,
+    CompiledLexicon,
     TTSSettingsData,
     GenAISettingsSnapshot,
     GenAILogEntry,
@@ -36,7 +37,6 @@ import type {
     ToastType,
     ContentAnalysisSnapshot,
     SectionAnalysis,
-    LexiconRule,
     ContentAnalysis,
     BookMetadata,
     GenAIPort,
@@ -52,7 +52,10 @@ export type EngineStateUpdate =
     | { kind: 'activeLanguage'; lang: string }
     | { kind: 'bookLanguage'; bookId: string; lang: string }
     | { kind: 'analysis'; snapshot: ContentAnalysisSnapshot }
-    | { kind: 'progress'; bookId: string; progress: Progress };
+    | { kind: 'progress'; bookId: string; progress: Progress }
+    // Lexicon invalidation ping (5c-PR3): the assembled rules are PULLED via the
+    // lexicon port; this update only tells the engine its handle went stale.
+    | { kind: 'lexicon'; version: number };
 
 /** Worker → main-thread side-effect / write commands (fire-and-forget). */
 export type EngineHostCommand =
@@ -77,8 +80,8 @@ export interface WorkerEngineContextOptions {
     /** Async platform capability checks, proxied to the main thread (e.g. via Comlink). */
     isBatteryOptimizationEnabled?: () => Promise<boolean>;
     openBatteryOptimizationSettings?: () => Promise<void>;
-    /** Lexicon rule fetching, proxied to the main thread (which owns the yjs-backed store). */
-    getRules?: (bookId: string | undefined, language: string) => Promise<LexiconRule[]>;
+    /** Assembled-lexicon fetching, proxied to the main thread (which owns the yjs-backed store). */
+    getCompiledLexicon?: (bookId: string | undefined, language: string) => Promise<CompiledLexicon>;
     getBibleLexiconPreference?: (bookId: string) => Promise<'on' | 'off' | 'default'>;
     /** Async reads proxied to the main thread (content-analysis + book metadata live in yjs stores). */
     getContentAnalysis?: (bookId: string, sectionId: string) => Promise<ContentAnalysis | undefined>;
@@ -106,7 +109,7 @@ export class WorkerEngineContext implements EngineContext {
     private readonly platformName: string;
     private readonly batteryCheck: () => Promise<boolean>;
     private readonly batteryOpen: () => Promise<void>;
-    private readonly fetchRules: (bookId: string | undefined, language: string) => Promise<LexiconRule[]>;
+    private readonly fetchCompiledLexicon: (bookId: string | undefined, language: string) => Promise<CompiledLexicon>;
     private readonly fetchBiblePref: (bookId: string) => Promise<'on' | 'off' | 'default'>;
     private readonly fetchContentAnalysis: (bookId: string, sectionId: string) => Promise<ContentAnalysis | undefined>;
     private readonly fetchBookMetadata: (bookId: string) => Promise<BookMetadata | undefined>;
@@ -133,6 +136,7 @@ export class WorkerEngineContext implements EngineContext {
 
     private genAIListeners = new Set<() => void>();
     private bookListeners = new Set<() => void>();
+    private lexiconListeners = new Set<() => void>();
     private analysisListeners = new Set<(s: ContentAnalysisSnapshot) => void>();
 
     constructor(opts: WorkerEngineContextOptions) {
@@ -140,7 +144,7 @@ export class WorkerEngineContext implements EngineContext {
         this.platformName = opts.platformName ?? 'web';
         this.batteryCheck = opts.isBatteryOptimizationEnabled ?? (async () => false);
         this.batteryOpen = opts.openBatteryOptimizationSettings ?? (async () => {});
-        this.fetchRules = opts.getRules ?? (async () => []);
+        this.fetchCompiledLexicon = opts.getCompiledLexicon ?? (async () => ({ rules: [], version: 0 }));
         this.fetchBiblePref = opts.getBibleLexiconPreference ?? (async () => 'default');
         this.fetchContentAnalysis = opts.getContentAnalysis ?? (async () => undefined);
         this.fetchBookMetadata = opts.getBookMetadata ?? (async () => undefined);
@@ -178,6 +182,9 @@ export class WorkerEngineContext implements EngineContext {
                 break;
             case 'progress':
                 this.progressByBook[update.bookId] = update.progress;
+                break;
+            case 'lexicon':
+                this.lexiconListeners.forEach((l) => l());
                 break;
             default: {
                 // Compile-time exhaustiveness: a new EngineStateUpdate kind without a handler
@@ -293,8 +300,12 @@ export class WorkerEngineContext implements EngineContext {
     };
 
     lexicon = {
-        getRules: (bookId: string | undefined, language: string) => this.fetchRules(bookId, language),
+        getCompiled: (bookId: string | undefined, language: string) => this.fetchCompiledLexicon(bookId, language),
         getBibleLexiconPreference: (bookId: string) => this.fetchBiblePref(bookId),
+        subscribe: (listener: () => void) => {
+            this.lexiconListeners.add(listener);
+            return () => this.lexiconListeners.delete(listener);
+        },
     };
 
     platform = {

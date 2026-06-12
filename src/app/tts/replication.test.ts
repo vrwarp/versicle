@@ -48,6 +48,7 @@ const { fakeStores } = vi.hoisted(() => {
             }),
             playback: fakeStore({ status: 'stopped', queue: [], currentIndex: 0 }),
             genAI: fakeStore({ isEnabled: false, logs: [] }),
+            lexicon: fakeStore({ rules: {}, settings: {} }),
             analysis: fakeStore({ sections: {} }),
             book: fakeStore({ books: { b1: { bookId: 'b1', language: 'fr' } } }),
             reading: fakeStore({ getProgress: () => null }),
@@ -58,6 +59,7 @@ const { fakeStores } = vi.hoisted(() => {
 vi.mock('@store/useTTSSettingsStore', () => ({ useTTSSettingsStore: fakeStores.tts }));
 vi.mock('@store/useTTSPlaybackStore', () => ({ useTTSPlaybackStore: fakeStores.playback }));
 vi.mock('@store/useGenAIStore', () => ({ useGenAIStore: fakeStores.genAI }));
+vi.mock('@store/useLexiconStore', () => ({ useLexiconStore: fakeStores.lexicon }));
 vi.mock('@store/useContentAnalysisStore', () => ({ useContentAnalysisStore: fakeStores.analysis }));
 vi.mock('@store/useBookStore', () => ({ useBookStore: fakeStores.book }));
 vi.mock('@store/useReadingStateStore', () => ({ useReadingStateStore: fakeStores.reading }));
@@ -66,7 +68,7 @@ import { createReplicatedSlices, bookSnapshotUpdates } from './replicationSpec';
 import { WorkerEngineContext, type EngineStateUpdate } from '@lib/tts/engine/WorkerEngineContext';
 
 const ALL_KINDS: EngineStateUpdate['kind'][] = [
-    'settings', 'genAI', 'activeLanguage', 'bookLanguage', 'analysis', 'progress',
+    'settings', 'genAI', 'activeLanguage', 'bookLanguage', 'analysis', 'progress', 'lexicon',
 ];
 
 function makeSlices(currentBookId: string | null = 'b1') {
@@ -99,6 +101,7 @@ describe('replication spec completeness', () => {
             fakeStores.analysis.emit({ sections: { 'b1/s1': { title: 'T' } } });
             fakeStores.book.emit({ books: { b1: { bookId: 'b1', language: 'fr' } } });
             fakeStores.reading.emit({ getProgress: () => ({ percentage: 10 }) });
+            fakeStores.lexicon.emit({ rules: { [`r-${i}`]: { id: `r-${i}` } }, settings: {} });
 
             expect(pushed.length, `slice '${slice.kind}' must push on store change`).toBeGreaterThan(0);
             for (const u of pushed) expect(u.kind).toBe(slice.kind);

@@ -20,7 +20,7 @@ import { WorkerEngineContext, type EngineStateUpdate, type EngineHostCommand } f
 import type { PlaybackBackend, TTSProviderEvents } from './PlaybackBackend';
 import type { MediaPlatform } from '../PlatformIntegration';
 import type { TTSVoice } from '../providers/types';
-import type { LexiconRule, ContentAnalysis, BookMetadata, GenAIPort, BookContentPort, SessionStore } from './EngineContext';
+import type { CompiledLexicon, ContentAnalysis, BookMetadata, GenAIPort, BookContentPort, SessionStore } from './EngineContext';
 import type { MediaSessionMetadata } from '../MediaSessionManager';
 import type { BackgroundAudioMode } from '../BackgroundAudio';
 
@@ -62,7 +62,7 @@ export interface EngineHost {
     platformStop(): Promise<void>;
 
     // Lexicon reads (the main thread owns the yjs-backed lexicon store).
-    lexiconGetRules(bookId: string | undefined, language: string): Promise<LexiconRule[]>;
+    lexiconGetCompiled(bookId: string | undefined, language: string): Promise<CompiledLexicon>;
     lexiconGetBiblePreference(bookId: string): Promise<'on' | 'off' | 'default'>;
 
     // Content-analysis + book-metadata reads (the main thread owns these yjs-backed stores;
@@ -102,7 +102,7 @@ export class WorkerTtsEngine {
             session: this.ports.session,
             post: (cmd) => host.applyHostCommand(cmd),
             platformName,
-            getRules: (bookId, language) => host.lexiconGetRules(bookId, language),
+            getCompiledLexicon: (bookId, language) => host.lexiconGetCompiled(bookId, language),
             getBibleLexiconPreference: (bookId) => host.lexiconGetBiblePreference(bookId),
             getContentAnalysis: (bookId, sectionId) => host.getContentAnalysis(bookId, sectionId),
             getBookMetadata: (bookId) => host.getBookMetadata(bookId),

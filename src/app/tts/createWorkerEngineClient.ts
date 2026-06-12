@@ -159,7 +159,7 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         platformSetBackgroundAudioMode: (mode, isPlaying) => platform.setBackgroundAudioMode(mode, isPlaying),
         platformSetBackgroundVolume: (volume) => platform.setBackgroundVolume(volume),
         platformStop: () => platform.stop(),
-        lexiconGetRules: (bookId, language) => LexiconService.getInstance().getRules(bookId, language),
+        lexiconGetCompiled: (bookId, language) => LexiconService.getInstance().getCompiled(bookId, language),
         lexiconGetBiblePreference: (bookId) => LexiconService.getInstance().getBibleLexiconPreference(bookId),
         getContentAnalysis: async (bookId, sectionId) =>
             contentAnalysisRepository.getContentAnalysis(bookId, sectionId),

@@ -6,10 +6,11 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { buildSectionQueue, generatePreroll } from './SectionQueueBuilder';
+import { beforeAll } from 'vitest';
 import { emptySectionMessage } from './emptySectionMessages';
 import { AbbreviationMerger } from './abbreviationMerge';
 import { resolveBiblePreference } from './biblePreference';
-import { BIBLE_ABBREVIATIONS } from './bible-lexicon';
+import { loadBibleLexicon } from './bible-lexicon';
 import { TextSegmenter } from './TextSegmenter';
 import { resolveSectionTitle } from './sectionTitle';
 import type { BookMetadata } from '~types/db';
@@ -114,44 +115,48 @@ describe('empty-section filler is deterministic and language-keyed (5c-PR2; i18n
 describe('regression: AudioContentPipeline_Bible', () => {
     // The deleted suite asserted which abbreviation set reached
     // TextSegmenter.refineSegments. That decision is now the composition of
-    // resolveBiblePreference (per-book pref vs global flag) and
-    // AbbreviationMerger; the builder hands settings.abbreviations through
-    // verbatim (pinned via a refineSegments spy).
+    // resolveBiblePreference (per-book pref vs global flag) and the async
+    // AbbreviationMerger (lazy Bible JSON since 5c-PR3); the builder hands
+    // settings.abbreviations through verbatim (pinned via a refineSegments spy).
+    let BIBLE_ABBREVIATIONS: string[] = [];
+    beforeAll(async () => {
+        BIBLE_ABBREVIATIONS = (await loadBibleLexicon()).abbreviations;
+    });
 
-    it('injects bible abbreviations when enabled globally (book pref = default)', () => {
+    it('injects bible abbreviations when enabled globally (book pref = default)', async () => {
         const merger = new AbbreviationMerger();
-        const merged = merger.merge(['Dr.'], resolveBiblePreference('default', true));
+        const merged = await merger.merge(['Dr.'], resolveBiblePreference('default', true));
         expect(merged).toEqual(expect.arrayContaining([...BIBLE_ABBREVIATIONS, 'Dr.']));
     });
 
-    it('does NOT inject bible abbreviations when disabled globally', () => {
+    it('does NOT inject bible abbreviations when disabled globally', async () => {
         const merger = new AbbreviationMerger();
-        const merged = merger.merge(['Dr.'], resolveBiblePreference('default', false));
+        const merged = await merger.merge(['Dr.'], resolveBiblePreference('default', false));
         expect(merged).toEqual(['Dr.']);
     });
 
-    it('injects bible abbreviations when disabled globally but enabled for the book', () => {
+    it('injects bible abbreviations when disabled globally but enabled for the book', async () => {
         const merger = new AbbreviationMerger();
-        const merged = merger.merge(['Dr.'], resolveBiblePreference('on', false));
+        const merged = await merger.merge(['Dr.'], resolveBiblePreference('on', false));
         expect(merged).toEqual(expect.arrayContaining([...BIBLE_ABBREVIATIONS, 'Dr.']));
     });
 
-    it('omits bible abbreviations when the book pref is off even with the global flag on', () => {
+    it('omits bible abbreviations when the book pref is off even with the global flag on', async () => {
         const merger = new AbbreviationMerger();
-        expect(merger.merge(['Dr.'], resolveBiblePreference('off', true))).toEqual(['Dr.']);
+        expect(await merger.merge(['Dr.'], resolveBiblePreference('off', true))).toEqual(['Dr.']);
     });
 
-    it('memoizes the merged array reference for identical inputs (segmenter cache stability)', () => {
+    it('memoizes the merged array reference for identical inputs (segmenter cache stability)', async () => {
         const merger = new AbbreviationMerger();
         const custom = ['Dr.'];
-        expect(merger.merge(custom, true)).toBe(merger.merge(custom, true));
+        expect(await merger.merge(custom, true)).toBe(await merger.merge(custom, true));
     });
 
-    it('the merged set reaches TextSegmenter.refineSegments through the builder', () => {
+    it('the merged set reaches TextSegmenter.refineSegments through the builder', async () => {
         const spy = vi.spyOn(TextSegmenter, 'refineSegments');
         try {
             const merger = new AbbreviationMerger();
-            const abbreviations = merger.merge(['Dr.'], true);
+            const abbreviations = await merger.merge(['Dr.'], true);
             buildSectionQueue([{ text: 'Test.', cfi: 'cfi' }], { ...SETTINGS, abbreviations }, OPTIONS);
 
             expect(spy).toHaveBeenCalledWith(

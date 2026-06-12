@@ -7,6 +7,7 @@ import { type LexiconRule } from '~types/db';
 vi.mock('@store/useLexiconStore', () => ({
   useLexiconStore: {
     getState: vi.fn(),
+    subscribe: vi.fn(() => () => {}),
   }
 }));
 

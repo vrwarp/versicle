@@ -26,6 +26,7 @@
  * runtime dependency, so the core stays worker-portable.
  */
 import type { bookContent } from '@data/repos/bookContent';
+import type { CompiledLexicon } from '../LexiconEngine';
 import type { TTSQueueItem } from '~types/tts';
 import type { useGenAIStore } from '@store/useGenAIStore';
 import type { useReadingStateStore } from '@store/useReadingStateStore';
@@ -37,7 +38,7 @@ import type { ContentType } from '~types/content-analysis';
 
 // Re-exported so the engine core and helpers (e.g. FakeEngineContext) get all
 // engine-boundary types from this one module without re-reaching into the stores.
-export type { SectionAnalysis, TableAdaptation, LexiconRule, ContentAnalysis, BookMetadata };
+export type { SectionAnalysis, TableAdaptation, LexiconRule, ContentAnalysis, BookMetadata, CompiledLexicon };
 
 // --- Snapshot / argument types ---
 
@@ -189,12 +190,20 @@ export interface ReaderUIPort {
 
 /**
  * Pronunciation-lexicon *reads*. The rules are stored in a yjs-backed store on the main thread;
- * this port lets the engine fetch them (async, so it works across the worker boundary) without
- * importing the store. Applying rules to text is done locally via the yjs-free LexiconApplier.
+ * this port lets the engine fetch the ASSEMBLED lexicon (async, so it works across the worker
+ * boundary) without importing the store. Applying rules to text is done locally via the
+ * yjs-free LexiconApplier.
+ *
+ * 5c-PR3: the port serves {@link CompiledLexicon} value objects (stable identity per
+ * (bookId, language, store version)) and exposes an invalidation stream so a mid-playback
+ * rule edit reaches the engine (S15) — the controller drops its handle and refetches on the
+ * next sentence.
  */
 export interface LexiconPort {
-    getRules(bookId: string | undefined, language: string): Promise<LexiconRule[]>;
+    getCompiled(bookId: string | undefined, language: string): Promise<CompiledLexicon>;
     getBibleLexiconPreference(bookId: string): Promise<'on' | 'off' | 'default'>;
+    /** Fires on any lexicon-affecting change (rule CRUD, bible flag). Returns unsubscribe. */
+    subscribe(listener: () => void): () => void;
 }
 
 /**

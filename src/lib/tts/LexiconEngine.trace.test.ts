@@ -1,32 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { LexiconService } from './LexiconService';
+import { lexiconApplier } from './LexiconApplier';
 
-// Mock dependencies
-vi.mock('@store/useLexiconStore', () => ({
-    useLexiconStore: {
-        getState: vi.fn().mockReturnValue({
-            rules: {},
-            addRule: vi.fn(),
-            updateRule: vi.fn(),
-            settings: {}
-        })
-    }
-}));
 
-vi.mock('@store/yjs-provider', async () => {
-    const Y = await import('yjs');
-    return {
-        waitForYjsSync: vi.fn().mockResolvedValue(undefined),
-        yDoc: new Y.Doc()
-    };
-});
 
-describe('LexiconService Trace', () => {
-    let service: LexiconService;
-
+describe('LexiconEngine trace companion', () => {
+    
     beforeEach(() => {
         vi.clearAllMocks();
-        service = LexiconService.getInstance();
     });
 
     it('should trace rule application', () => {
@@ -35,7 +15,7 @@ describe('LexiconService Trace', () => {
             { id: '2', original: 'World', replacement: 'Earth', created: 0 }
         ];
 
-        const result = service.applyLexiconWithTrace('Hello World', rules);
+        const result = lexiconApplier.applyLexiconWithTrace('Hello World', rules);
 
         expect(result.final).toBe('Hi Earth');
         expect(result.trace).toHaveLength(2);
@@ -55,7 +35,7 @@ describe('LexiconService Trace', () => {
             { id: '2', original: 'World', replacement: 'Earth', created: 0 }
         ];
 
-        const result = service.applyLexiconWithTrace('Hello World', rules);
+        const result = lexiconApplier.applyLexiconWithTrace('Hello World', rules);
 
         expect(result.final).toBe('Hello Earth');
         expect(result.trace).toHaveLength(1);

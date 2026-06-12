@@ -205,3 +205,66 @@ console.log(
   `PASS: ${scannedSources} original sources across ${allChunks.length} ` +
     'production chunk(s); no MockBackend / MockFireProvider in the prod bundle.',
 );
+
+// ── Check 3: lazy-lexicon purity (Phase 5c-PR3; phase5-tts-strangler.md §5c.3) ──
+// The Bible lexicon data (src/lib/tts/bible-lexicon.json, ~85 KB) must reach the
+// bundle ONLY through the dynamic import in src/lib/tts/bible-lexicon.ts: it has
+// to exist as its own async chunk, and it must NOT be inlined into the main entry
+// chunk or the TTS worker entry closure (the eager 2,899-line TS data file this
+// replaced sat in the entry graph of both threads).
+// JSON chunks carry no sourcemap `sources`, so detect by a DATA MARKER that
+// only the Bible lexicon contains (a zh book-name replacement string).
+const BIBLE_MARKER = '\u7d04\u7ff0\u4e09\u66f8'; // 約翰三書 (3 John)
+
+const chunksWithBible = [];
+for (const chunk of allChunks) {
+  const code = readFileSync(join(assetsDir, chunk), 'utf8');
+  if (code.includes(BIBLE_MARKER)) {
+    chunksWithBible.push(chunk);
+  }
+}
+
+if (chunksWithBible.length === 0) {
+  console.error(
+    '\nFAIL: no emitted chunk contains bible-lexicon.json — the lazy loader ' +
+      '(src/lib/tts/bible-lexicon.ts) lost its dynamic import target.',
+  );
+  process.exit(1);
+}
+
+/** STATIC-only import closure (dynamic `import(...)` excluded — async chunks are fine). */
+function collectStaticClosure(entryFiles) {
+  const seen = new Set();
+  const queue = [...entryFiles];
+  const staticImportRe = /(?:^|[;}\s])(?:import|export)[^("']*?["']((?:\.{1,2}\/)[^"']+\.js)["']/g;
+  while (queue.length > 0) {
+    const file = queue.shift();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    // Neutralize dynamic imports so the regex only sees static edges.
+    const code = readFileSync(join(assetsDir, file), 'utf8').replace(/import\s*\(/g, 'DYNIMP(');
+    for (const match of code.matchAll(staticImportRe)) {
+      const resolved = match[1].replace(/^\.\//, '');
+      if (!resolved.includes('/') && !seen.has(resolved)) queue.push(resolved);
+    }
+  }
+  return [...seen];
+}
+
+const entryChunks = readdirSync(assetsDir).filter((f) => /^index-[\w-]+\.js$/.test(f));
+const eagerHomes = collectStaticClosure([...entryChunks, ...entries]);
+const bibleViolations = chunksWithBible.filter((c) => eagerHomes.includes(c));
+if (bibleViolations.length > 0) {
+  console.error(
+    `\nFAIL: bible-lexicon.json was inlined into an EAGER chunk: ${bibleViolations.join(', ')}.\n` +
+      'It must only be reachable via the dynamic import in src/lib/tts/bible-lexicon.ts ' +
+      '(loadBibleLexicon) so the entry chunk and the worker static closure stay lean. ' +
+      'Find the static import that re-eagered it (`ANALYZE=true vite build`).',
+  );
+  process.exit(1);
+}
+
+console.log(
+  `PASS: bible-lexicon.json is lazy — emitted only in async chunk(s) ` +
+    `${chunksWithBible.join(', ')}; absent from the entry/worker static closures.`,
+);

@@ -1,30 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { LexiconService } from './LexiconService';
+// LexiconEngine fuzz companion (absorption ledger row 18): drives the
+// yjs-free LexiconApplier directly — no store mocks needed since 5c-PR3.
+import { describe, it, expect } from 'vitest';
+import { lexiconApplier as service } from './LexiconApplier';
 import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '@test/fuzz-utils';
 import type { LexiconRule } from '~types/db';
 
-// Mock the store dependencies
-vi.mock('@store/useLexiconStore', () => ({
-    useLexiconStore: {
-        getState: () => ({
-            rules: [],
-            bibleLexiconPreferences: new Map()
-        })
-    }
-}));
-
-vi.mock('@store/yjs-provider', () => ({
-    waitForYjsSync: vi.fn().mockResolvedValue(undefined)
-}));
-
-describe('LexiconService.applyLexicon Fuzzing', () => {
+describe('LexiconEngine applier fuzzing', () => {
     const SEED = DEFAULT_FUZZ_SEED;
-    let service: LexiconService;
-
-    beforeEach(() => {
-        // Get fresh instance for each test
-        service = LexiconService.getInstance();
-    });
 
     /**
      * Creates a random lexicon rule.

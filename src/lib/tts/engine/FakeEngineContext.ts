@@ -10,6 +10,7 @@
  */
 import type {
     EngineContext,
+    CompiledLexicon,
     TTSSettingsData,
     GenAISettingsSnapshot,
     GenAILogEntry,
@@ -178,9 +179,20 @@ export class FakeEngineContext implements EngineContext {
 
     lexiconRules: LexiconRule[] = [];
     biblePreference: 'on' | 'off' | 'default' = 'default';
+    /** Bumped by emitLexiconChange (the CompiledLexicon version the fake serves). */
+    lexiconVersion = 0;
+    private lexiconListeners = new Set<() => void>();
     lexicon = {
-        getRules: async () => this.lexiconRules,
+        getCompiled: async (_bookId: string | undefined, language: string): Promise<CompiledLexicon> => ({
+            rules: this.lexiconRules,
+            version: this.lexiconVersion,
+            language,
+        }),
         getBibleLexiconPreference: async () => this.biblePreference,
+        subscribe: (listener: () => void) => {
+            this.lexiconListeners.add(listener);
+            return () => this.lexiconListeners.delete(listener);
+        },
     };
 
     platform = {
@@ -230,5 +242,10 @@ export class FakeEngineContext implements EngineContext {
     }
     emitBookChange() {
         this.bookListeners.forEach((l) => l());
+    }
+    /** Simulate a lexicon change (rule CRUD / bible flag): bump version + notify. */
+    emitLexiconChange() {
+        this.lexiconVersion++;
+        this.lexiconListeners.forEach((l) => l());
     }
 }

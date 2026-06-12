@@ -14,6 +14,7 @@
  * Main-thread module: it closes over the real Zustand stores. The worker never imports it.
  */
 import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
+import { useLexiconStore } from '@store/useLexiconStore';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
 import { useBookStore } from '@store/useBookStore';
@@ -137,6 +138,30 @@ const SLICE_BUILDERS: Record<
                     push({ kind: 'genAI', settings: plain(state) });
                 }
             });
+        },
+    }),
+
+    // Lexicon invalidation ping (5c-PR3): the worker PULLS assembled rules
+    // through the lexicon port (LexiconService.getCompiled on the host); this
+    // slice only tells it when its handle went stale — on any lexicon-store
+    // change (rule CRUD, per-book bible preference) or a global bible-flag
+    // flip in the settings store.
+    lexicon: () => ({
+        kind: 'lexicon',
+        replication: 'boot',
+        snapshot: () => [{ kind: 'lexicon', version: 0 }],
+        subscribe: (push) => {
+            let version = 0;
+            let lastFlag = useTTSSettingsStore.getState().isBibleLexiconEnabled;
+            const unsubStore = useLexiconStore.subscribe(() =>
+                push({ kind: 'lexicon', version: ++version }));
+            const unsubFlag = useTTSSettingsStore.subscribe((state) => {
+                if (state.isBibleLexiconEnabled !== lastFlag) {
+                    lastFlag = state.isBibleLexiconEnabled;
+                    push({ kind: 'lexicon', version: ++version });
+                }
+            });
+            return () => { unsubStore(); unsubFlag(); };
         },
     }),
 

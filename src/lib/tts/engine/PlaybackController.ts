@@ -2,7 +2,7 @@ import { isPlaybackInterruption, isProviderPlaybackError } from '../providers/ty
 import type { ITTSProvider, TTSVoice } from '../providers/types';
 import type { TTSQueueItem } from '~types/tts';
 import { lexiconApplier } from '../LexiconApplier';
-import type { SectionMetadata, LexiconRule } from '~types/db';
+import type { SectionMetadata } from '~types/db';
 import { TaskSequencer, type TaskContext } from '../TaskSequencer';
 import { SectionAnalysisDriver, type SectionContent } from '../SectionAnalysisDriver';
 import { buildSectionQueue } from '../SectionQueueBuilder';
@@ -23,7 +23,7 @@ import type {
 import type { MediaPlatform, MediaPlatformFactory } from '../PlatformIntegration';
 import type { BackgroundAudioMode } from '../BackgroundAudio';
 import { flightRecorder } from '../TTSFlightRecorder';
-import type { EngineContext } from './EngineContext';
+import type { EngineContext, CompiledLexicon } from './EngineContext';
 import { AnalysisApplier } from './AnalysisApplier';
 import { MediaMetadataPublisher, type BookPresentation } from './MediaMetadataPublisher';
 import { DragnetGesture } from './DragnetGesture';
@@ -85,7 +85,8 @@ export class PlaybackController implements TtsEngine {
     private lastPublishedQueueId: string | null = null;
     /** The queueId last handed to the session store (persistence dedupe). */
     private lastPersistedQueueId: string | null = null;
-    private activeLexiconRules: LexiconRule[] | null = null;
+    /** The assembled lexicon handle (5c-PR3): null → refetch on next sentence. */
+    private activeLexicon: CompiledLexicon | null = null;
     private speed: number = 1.0;
     private voiceId: string | null = null;
     /**
@@ -179,6 +180,12 @@ export class PlaybackController implements TtsEngine {
             getBookId: () => this.currentBookId,
         });
 
+        // Mid-playback lexicon edits (S15): any lexicon change drops the handle;
+        // the next sentence refetches the assembled rules.
+        this.ctx.lexicon.subscribe(() => {
+            this.activeLexicon = null;
+        });
+
         this.analysis = new AnalysisApplier({
             ctx: this.ctx,
             driver: this.analysisDriver,
@@ -236,7 +243,7 @@ export class PlaybackController implements TtsEngine {
                 this.ctx.config.setActiveLanguage(currentLang);
 
                 // Force lexicon reload for the new language
-                this.activeLexiconRules = null;
+                this.activeLexicon = null;
 
                 // If playing, restart to apply the new voice/language immediately.
                 // Sequenced (5b-PR3): a store subscription must not drive the FSM
@@ -342,7 +349,7 @@ export class PlaybackController implements TtsEngine {
         this.sessionRestored = false;
         this.analysis.reset();
         this.book = { title: '', author: '', coverUrl: undefined, palette: undefined, perceptualPalette: undefined };
-        this.activeLexiconRules = null;
+        this.activeLexicon = null;
         this.dragnet.clear('setBookId');
         this.lastPersistedQueueId = null;
 
@@ -723,12 +730,12 @@ export class PlaybackController implements TtsEngine {
         try {
             const voiceId = this.voiceId || '';
 
-            if (!this.activeLexiconRules) {
+            if (!this.activeLexicon) {
                 const bookLang = initialBookId ? this.ctx.book.getBookLanguage(initialBookId) : 'en';
-                this.activeLexiconRules = await this.ctx.lexicon.getRules(initialBookId || undefined, bookLang);
+                this.activeLexicon = await this.ctx.lexicon.getCompiled(initialBookId || undefined, bookLang);
                 if (this.currentBookId !== initialBookId) return;
             }
-            const rules = this.activeLexiconRules;
+            const rules = this.activeLexicon.rules;
 
             const processedText = lexiconApplier.applyLexicon(item.text, rules);
 
@@ -971,7 +978,7 @@ export class PlaybackController implements TtsEngine {
         this.status = status;
 
         if (status === 'stopped' || status === 'paused') {
-            this.activeLexiconRules = null;
+            this.activeLexicon = null;
         }
 
         this.platformIntegration.updatePlaybackState(status);
@@ -1113,7 +1120,7 @@ export class PlaybackController implements TtsEngine {
             const includeBible = resolveBiblePreference(biblePref, settings.isBibleLexiconEnabled);
 
             const built = buildSectionQueue(content.sentences, {
-                abbreviations: this.abbreviations.merge(settings.customAbbreviations, includeBible),
+                abbreviations: await this.abbreviations.merge(settings.customAbbreviations, includeBible),
                 alwaysMerge: settings.alwaysMerge,
                 sentenceStarters: settings.sentenceStarters,
                 minSentenceLength: settings.profiles[language]?.minSentenceLength

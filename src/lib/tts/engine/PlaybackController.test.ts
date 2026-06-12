@@ -240,13 +240,39 @@ describe('PlaybackController', () => {
 
             // Simulate previous playback state holding compiled rules.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (svc as any).activeLexiconRules = [{ target: 'test', replacement: 'replaced' }];
+            (svc as any).activeLexicon = { rules: [{ target: 'test', replacement: 'replaced' }], version: 0 };
 
             await svc.setBookId('book-zh');
 
             expect(ctx.activeLanguage).toBe('zh');
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            expect((svc as any).activeLexiconRules).toBeNull();
+            expect((svc as any).activeLexicon).toBeNull();
+        });
+
+        it('a mid-playback lexicon edit takes effect on the next sentence (5c-PR3, S15)', async () => {
+            const ctx = new FakeEngineContext();
+            ctx.sections['book1'] = [];
+            const { svc, backend } = makeEngine(ctx);
+            void svc.setBookId('book1');
+            await svc.setQueue([
+                { text: 'cat one.', cfi: '1' },
+                { text: 'cat two.', cfi: '2' },
+            ]);
+
+            // No rules yet: the first sentence plays verbatim.
+            await svc.play();
+            await vi.waitFor(() => expect(backend.played.length).toBe(1));
+            expect(backend.played[0].text).toBe('cat one.');
+
+            // User edits the lexicon mid-playback: the invalidation stream fires,
+            // the engine drops its CompiledLexicon handle, and the NEXT sentence
+            // is fetched with the new rules applied.
+            ctx.lexiconRules = [{ id: '1', original: 'cat', replacement: 'feline', created: 0 } as never];
+            ctx.emitLexiconChange();
+
+            backend.fireEnd(); // advance to the second sentence
+            await vi.waitFor(() => expect(backend.played.length).toBe(2));
+            expect(backend.played[1].text).toBe('feline two.');
         });
 
         it('re-syncs when the current book’s language changes after the fact (Yjs metadata edit)', async () => {

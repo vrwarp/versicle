@@ -107,9 +107,11 @@ export function createZustandEngineContext(): EngineContext {
         },
 
         lexicon: {
-            getRules: (bookId, language) => LexiconService.getInstance().getRules(bookId, language),
+            getCompiled: (bookId, language) => LexiconService.getInstance().getCompiled(bookId, language),
             getBibleLexiconPreference: (bookId) =>
                 LexiconService.getInstance().getBibleLexiconPreference(bookId),
+            // Invalidation stream: the assembler bumps on store CRUD + bible-flag changes.
+            subscribe: (listener) => LexiconService.getInstance().assembler.subscribe(listener),
         },
 
         platform: {

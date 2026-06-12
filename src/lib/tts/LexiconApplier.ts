@@ -41,9 +41,34 @@ export function processInitialisms(text: string): string {
     });
 }
 
+/**
+ * The VISIBLE system rule under which initialism processing appears in
+ * applyLexiconWithTrace (Phase 5c, content D12). It is not a real regex rule
+ * — processInitialisms runs as code — but giving it a rule identity makes the
+ * step traceable in the lexicon preview UI and toggleable per call. Default
+ * output stays byte-identical (the golden cache-key test pins it: audio cache
+ * keys are SHA-256 of processed text).
+ */
+export const INITIALISMS_SYSTEM_RULE: LexiconRule = Object.freeze({
+    id: 'system:initialisms',
+    original: 'Initialisms (system): strip periods / phonetic patches',
+    replacement: 'e.g. "A. W. Tozer" → "Eigh W Tozer"',
+    isRegex: false,
+    matchType: 'ignore_case',
+    applyBeforeGlobal: true,
+    created: 0,
+    order: Number.MIN_SAFE_INTEGER,
+});
+
+/** Per-call options for the appliers. */
+export interface ApplyLexiconOptions {
+    /** Run the initialisms system rule first (default true — legacy behavior). */
+    initialisms?: boolean;
+}
+
 export class LexiconApplier {
     // Fast path cache for stable rule arrays (O(1) lookup).
-    private compiledRulesCache = new WeakMap<LexiconRule[], CompiledLexiconRule[]>();
+    private compiledRulesCache = new WeakMap<ReadonlyArray<LexiconRule>, CompiledLexiconRule[]>();
     // Secondary cache for individual compiled rules, to avoid expensive regex re-compilation
     // when the rule array is regenerated but the rules themselves haven't changed.
     private compiledRegexCache = new Map<string, CompiledLexiconRule>();
@@ -67,7 +92,7 @@ export class LexiconApplier {
         return { originalRule: rule, regex, replacement: normalizedReplacement };
     }
 
-    private getCompiledRules(rules: LexiconRule[]): CompiledLexiconRule[] {
+    private getCompiledRules(rules: ReadonlyArray<LexiconRule>): CompiledLexiconRule[] {
         // Fast path: O(1) lookup if array reference hasn't changed.
         let compiled = this.compiledRulesCache.get(rules);
         if (compiled) return compiled;
@@ -118,11 +143,20 @@ export class LexiconApplier {
 
     applyLexiconWithTrace(
         text: string,
-        rules: LexiconRule[],
+        rules: ReadonlyArray<LexiconRule>,
+        options: ApplyLexiconOptions = {},
     ): { final: string; trace: { rule: LexiconRule; before: string; after: string }[] } {
-        let processedText = processInitialisms(text);
-        processedText = processedText.normalize('NFKD');
         const trace: { rule: LexiconRule; before: string; after: string }[] = [];
+        let processedText = text;
+        if (options.initialisms !== false) {
+            const after = processInitialisms(processedText);
+            if (after !== processedText) {
+                // The system rule is VISIBLE in the trace (content D12).
+                trace.push({ rule: INITIALISMS_SYSTEM_RULE, before: processedText, after });
+                processedText = after;
+            }
+        }
+        processedText = processedText.normalize('NFKD');
         const compiledRules = this.getCompiledRules(rules);
 
         for (const compiled of compiledRules) {
@@ -136,8 +170,8 @@ export class LexiconApplier {
         return { final: processedText, trace };
     }
 
-    applyLexicon(text: string, rules: LexiconRule[]): string {
-        let processedText = processInitialisms(text);
+    applyLexicon(text: string, rules: ReadonlyArray<LexiconRule>, options: ApplyLexiconOptions = {}): string {
+        let processedText = options.initialisms !== false ? processInitialisms(text) : text;
         processedText = processedText.normalize('NFKD');
         const compiledRules = this.getCompiledRules(rules);
 
