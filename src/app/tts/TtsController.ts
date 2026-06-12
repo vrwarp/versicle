@@ -27,6 +27,7 @@
  */
 import { getAudioPlayer } from './mainThreadAudioPlayer';
 import type { TtsEngine } from '@lib/tts/AudioPlayerService';
+import { isAudiblePlayback } from '@lib/tts/engine/TtsEngine';
 import type { TTSVoice } from '@lib/tts/providers/types';
 import { LexiconService } from '@lib/tts/LexiconService';
 import { useTTSStore } from '@store/useTTSStore';
@@ -69,23 +70,25 @@ export class TtsController {
         // and subscribed. UI gates on this.
         void this.engine.whenReady().then(() => useTTSStore.setState({ engineReady: true }));
 
-        // Engine → store mirror.
-        this.engine.subscribe((status, activeCfi, currentIndex, queue, error, downloadInfo) => {
+        // Engine → store mirror (the single PlaybackSnapshot channel, 5b-PR2).
+        // The handle delivers FULL snapshots (queue re-attached from its cache when
+        // a broadcast omitted it), so the queue spread below only guards against
+        // partial snapshots from injected test engines.
+        this.engine.subscribe((snap) => {
             useTTSStore.setState({
-                status,
-                // Treat 'loading' as playing to prevent UI flicker (play/pause button)
-                // during transitions between sentences or while buffering.
-                // Treat 'completed' as playing to keep background audio and UI active (immersive mode).
-                isPlaying: status === 'playing' || status === 'loading' || status === 'completed',
-                activeCfi,
-                currentIndex,
-                queue,
-                lastError: error,
-                ...(downloadInfo ? {
-                    downloadProgress: downloadInfo.percent,
-                    downloadStatus: downloadInfo.status,
-                    downloadingVoiceId: downloadInfo.voiceId,
-                    isDownloading: downloadInfo.percent < 100
+                status: snap.status,
+                // The tested flicker selector: 'loading'/'completed' count as playing
+                // (see isAudiblePlayback in @lib/tts/engine/TtsEngine).
+                isPlaying: isAudiblePlayback(snap.status),
+                activeCfi: snap.activeCfi,
+                currentIndex: snap.index,
+                ...(snap.queue ? { queue: snap.queue } : {}),
+                lastError: snap.error?.message ?? null,
+                ...(snap.download ? {
+                    downloadProgress: snap.download.percent,
+                    downloadStatus: snap.download.status,
+                    downloadingVoiceId: snap.download.voiceId,
+                    isDownloading: snap.download.percent < 100
                 } : {})
             });
         });

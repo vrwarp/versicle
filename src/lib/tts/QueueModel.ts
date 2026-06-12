@@ -1,10 +1,13 @@
-import type { TTSQueueItem, TTSStatus } from './AudioPlayerService';
+import type { TTSQueueItem } from '~types/tts';
+import type { TTSStatus } from './engine/TtsEngine';
 import { playbackCache } from '@data/repos/playbackCache';
 import { flightRecorder } from './TTSFlightRecorder';
 
 
 export type PlaybackStateSnapshot = {
     queue: ReadonlyArray<TTSQueueItem>;
+    /** Changes iff the queue's content identity changed (feeds PlaybackSnapshot.queueId). */
+    queueId: string;
     currentIndex: number;
     currentItem: TTSQueueItem | null;
     currentSectionIndex: number;
@@ -12,22 +15,52 @@ export type PlaybackStateSnapshot = {
 
 export type StateChangeListener = (state: PlaybackStateSnapshot) => void;
 
+let nextQueueId = 0;
+
 /**
- * Manages the state of the TTS playback session.
- * Tracks the current queue, current index, section index, and reading progress.
- * Handles state persistence to the database.
+ * QueueModel — the IMMUTABLE queue/position model of the TTS playback session
+ * (Phase 5b-PR2; the renamed PlaybackStateManager).
+ *
+ * Copy-on-write: every mutation replaces `_queue` with a fresh array (frozen in
+ * DEV) and stamps a new `queueId` when the queue's CONTENT identity changed —
+ * a published queue array is never mutated afterwards, so consumers (the
+ * snapshot channel, the store mirror, persistence) can rely on reference
+ * identity. The in-place `applySkippedMask` mutation (the S4 debt and the P14
+ * parity rider) died here. Persistence dedupe is keyed on `queueId`, not on
+ * array reference (the reference check was defeated by exactly that in-place
+ * mutation).
+ *
+ * Also tracks the current index, section index, and reading progress, and
+ * persists session state to the database (the persistence half moves behind
+ * the SessionStore port later in 5b).
  */
-export class PlaybackStateManager {
-    private _queue: TTSQueueItem[] = [];
+export class QueueModel {
+    private _queue: ReadonlyArray<TTSQueueItem> = QueueModel.seal([]);
+    private _queueId: string = QueueModel.newQueueId();
     private _currentIndex: number = 0;
     private _currentSectionIndex: number = -1;
     prefixSums: number[] = [0];
 
-    // Track last persisted queue to avoid redundant heavy writes
-    private lastPersistedQueue: TTSQueueItem[] | null = null;
+    // Persistence dedupe: the queueId last written to cache_session_state.
+    private lastPersistedQueueId: string | null = null;
     private currentBookId: string | null = null;
 
     private listeners: StateChangeListener[] = [];
+
+    /** Freeze in DEV/test so any in-place mutation attempt throws loudly. */
+    private static seal(items: TTSQueueItem[]): ReadonlyArray<TTSQueueItem> {
+        return import.meta.env.DEV ? Object.freeze(items) : items;
+    }
+
+    private static newQueueId(): string {
+        return `q${++nextQueueId}`;
+    }
+
+    /** Replace the queue array (copy-on-write) and stamp a fresh content identity. */
+    private replaceQueue(items: TTSQueueItem[]) {
+        this._queue = QueueModel.seal(items);
+        this._queueId = QueueModel.newQueueId();
+    }
 
     /**
      * Sets the active book ID and resets state if the book changes.
@@ -37,7 +70,7 @@ export class PlaybackStateManager {
     setBookId(bookId: string | null) {
         if (this.currentBookId !== bookId) {
             this.currentBookId = bookId;
-            this.lastPersistedQueue = null;
+            this.lastPersistedQueueId = null;
             if (!bookId) {
                 this.reset();
             }
@@ -49,11 +82,11 @@ export class PlaybackStateManager {
      */
     reset() {
         flightRecorder.record('PSM', 'reset');
-        this._queue = [];
+        this.replaceQueue([]);
         this._currentIndex = 0;
         this._currentSectionIndex = -1;
         this.prefixSums = [0];
-        this.lastPersistedQueue = null;
+        this.lastPersistedQueueId = null;
         this.notifyListeners();
     }
 
@@ -73,10 +106,10 @@ export class PlaybackStateManager {
             prevLen: this._queue.length,
             prevIndex: this._currentIndex
         });
-        this._queue = items;
+        // Copy-on-write: never adopt the caller's array (it could be mutated later).
+        this.replaceQueue([...items]);
         this._currentIndex = startIndex;
         this._currentSectionIndex = sectionIndex;
-        this.lastPersistedQueue = null; // Reset persisted tracker since queue changed
         this.calculatePrefixSums();
         this.persistQueue();
         this.notifyListeners();
@@ -84,40 +117,38 @@ export class PlaybackStateManager {
 
     /**
      * Applies a mask to mark specific raw indices as skipped.
-     * This updates the `isSkipped` flag on queue items and recalculates prefix sums.
+     * Copy-on-write: produces a NEW queue array with `isSkipped` recomputed; the
+     * previously published array is untouched (the P14 identity guarantee).
      *
      * @param {Set<number>} rawSkippedIndices A set of raw sentence indices to skip.
      * @param {string} sectionId The section ID for validation.
      */
     applySkippedMask(rawSkippedIndices: Set<number>, sectionId?: string) {
-        // Validation of sectionId can be added here if needed, currently implicitly handled by caller
-        if (sectionId && this.currentSectionIndex === -1) {
-            // Optional: validate section ID
-        }
         let changed = false;
 
-        // Iterate over the queue and update isSkipped status
-        for (let i = 0; i < this._queue.length; i++) {
-            const item = this._queue[i];
-
+        const newQueue = this._queue.map((item) => {
             // Only skip if ALL source indices are in the skipped set
             let shouldSkip = false;
             if (item.sourceIndices && item.sourceIndices.length > 0) {
                 shouldSkip = item.sourceIndices.every(idx => rawSkippedIndices.has(idx));
             }
 
+            // NOTE comparison is deliberately strict (no ?? normalization): an item
+            // with isSkipped UNDEFINED is normalized to an explicit false on the first
+            // mask application — the legacy behavior consumers/persistence pin.
             if (item.isSkipped !== shouldSkip) {
-                // Clone the item to maintain immutability of the previous state reference
-                this._queue[i] = { ...item, isSkipped: shouldSkip };
                 changed = true;
+                return { ...item, isSkipped: shouldSkip };
             }
-        }
+            return item;
+        });
 
         if (changed) {
             flightRecorder.record('PSM', 'applySkippedMask', {
                 count: rawSkippedIndices.size,
                 sectionId
             });
+            this.replaceQueue(newQueue);
             this.calculatePrefixSums();
             this.persistQueue();
             this.notifyListeners();
@@ -129,6 +160,8 @@ export class PlaybackStateManager {
      * 1. Finds all queue items whose source indices are fully contained in the adaptation's covered indices.
      * 2. Replaces the text of the *first* matching item with the adaptation.
      * 3. Marks all *other* matching items as skipped.
+     *
+     * Copy-on-write like every other mutation here.
      *
      * @param {Array<{ indices: number[], text: string }>} adaptations List of adaptations.
      */
@@ -188,7 +221,7 @@ export class PlaybackStateManager {
             flightRecorder.record('PSM', 'applyTableAdaptations', {
                 count: adaptations.length
             });
-            this._queue = newQueue;
+            this.replaceQueue(newQueue);
             this.calculatePrefixSums();
             this.persistQueue();
             this.notifyListeners();
@@ -197,6 +230,11 @@ export class PlaybackStateManager {
 
     get queue(): ReadonlyArray<TTSQueueItem> {
         return this._queue;
+    }
+
+    /** Content identity of the current queue — new value per queue change. */
+    get queueId(): string {
+        return this._queueId;
     }
 
     get currentIndex(): number {
@@ -429,20 +467,18 @@ export class PlaybackStateManager {
     }
 
     /**
-     * Persists the current queue and playback position to the database.
-     * Optimizes writes by checking if the queue structure has changed.
-     */
-    /**
      * Persists the current queue and playback position.
-     * Optimizes writes by checking if the queue structure has changed.
+     * Optimizes writes by keying on the queue's content identity (`queueId`) —
+     * NOT on array reference, which copy-on-write would defeat (and which the
+     * old in-place mask defeated in the opposite direction, S4).
      */
     persistQueue() {
         if (this.currentBookId) {
-            // Optimization: If queue has not changed since last persist,
-            // we don't need to save the full queue to cache_session_state.
-            if (this.lastPersistedQueue !== this._queue) {
-                playbackCache.saveQueue(this.currentBookId, this._queue);
-                this.lastPersistedQueue = this._queue;
+            if (this.lastPersistedQueueId !== this._queueId) {
+                // Copy: the repo takes a mutable array and the persisted record must
+                // not alias the (frozen) published queue.
+                playbackCache.saveQueue(this.currentBookId, [...this._queue]);
+                this.lastPersistedQueueId = this._queueId;
             }
         }
     }
@@ -478,6 +514,7 @@ export class PlaybackStateManager {
     private notifyListeners() {
         const snapshot: PlaybackStateSnapshot = {
             queue: this._queue,
+            queueId: this._queueId,
             currentIndex: this._currentIndex,
             currentItem: this.getCurrentItem(),
             currentSectionIndex: this._currentSectionIndex

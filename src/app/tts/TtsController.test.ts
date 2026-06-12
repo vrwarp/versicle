@@ -11,7 +11,7 @@
  *   3. the engine command sequences (loadVoices/downloadVoice/…).
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { PlaybackListener, TtsEngine } from '@lib/tts/AudioPlayerService';
+import type { PlaybackSnapshot, SnapshotListener, TtsEngine } from '@lib/tts/AudioPlayerService';
 import type { TTSVoice } from '@lib/tts/providers/types';
 import { useTTSStore } from '@store/useTTSStore';
 import { TtsController } from './TtsController';
@@ -23,7 +23,8 @@ vi.mock('@lib/tts/LexiconService', () => {
 });
 
 function makeFakeEngine() {
-    let listener: PlaybackListener | undefined;
+    let listener: SnapshotListener | undefined;
+    let seq = 0;
     const voices: TTSVoice[] = [];
     const engine = {
         engineName: 'FakeEngine',
@@ -40,7 +41,7 @@ function makeFakeEngine() {
         downloadVoice: vi.fn().mockResolvedValue(undefined),
         deleteVoice: vi.fn().mockResolvedValue(undefined),
         isVoiceDownloaded: vi.fn().mockResolvedValue(false),
-        subscribe: vi.fn((l: PlaybackListener) => { listener = l; return () => { listener = undefined; }; }),
+        subscribe: vi.fn((l: SnapshotListener) => { listener = l; return () => { listener = undefined; }; }),
         setBookId: vi.fn(),
         clearPauseGesture: vi.fn(),
         whenReady: vi.fn().mockResolvedValue(undefined),
@@ -54,10 +55,26 @@ function makeFakeEngine() {
         setBackgroundVolume: vi.fn(),
         setPrerollEnabled: vi.fn(),
     };
+    /** Fire a snapshot into the controller mirror (full snapshots, like the handle). */
+    const fire = (partial: Partial<PlaybackSnapshot>) => {
+        const snapshot: PlaybackSnapshot = {
+            seq: ++seq,
+            status: 'stopped',
+            queueId: `q${seq}`,
+            queue: [],
+            index: 0,
+            sectionIndex: -1,
+            activeCfi: null,
+            error: null,
+            download: null,
+            ...partial,
+        };
+        listener?.(snapshot);
+    };
     return {
         engine: engine as unknown as TtsEngine,
         raw: engine,
-        fire: (...args: Parameters<PlaybackListener>) => listener?.(...args),
+        fire,
         setVoices: (v: TTSVoice[]) => { voices.length = 0; voices.push(...v); },
     };
 }
@@ -134,25 +151,25 @@ describe('TtsController', () => {
             const { engine, fire } = makeFakeEngine();
             new TtsController(engine).initialize();
 
-            fire('playing', 'cfi-1', 2, [], null);
+            fire({ status: 'playing', activeCfi: 'cfi-1', index: 2 });
             expect(useTTSStore.getState().isPlaying).toBe(true);
             expect(useTTSStore.getState().status).toBe('playing');
             expect(useTTSStore.getState().activeCfi).toBe('cfi-1');
             expect(useTTSStore.getState().currentIndex).toBe(2);
 
-            fire('paused', null, 0, [], null);
+            fire({ status: 'paused' });
             expect(useTTSStore.getState().isPlaying).toBe(false);
             expect(useTTSStore.getState().status).toBe('paused');
 
             // 'loading' must read as playing (prevents play/pause button flicker).
-            fire('loading', null, 0, [], null);
+            fire({ status: 'loading' });
             expect(useTTSStore.getState().isPlaying).toBe(true);
 
             // 'completed' must read as playing (keeps background audio + UI active).
-            fire('completed', null, 0, [], null);
+            fire({ status: 'completed' });
             expect(useTTSStore.getState().isPlaying).toBe(true);
 
-            fire('stopped', null, 0, [], null);
+            fire({ status: 'stopped' });
             expect(useTTSStore.getState().isPlaying).toBe(false);
         });
 
@@ -160,17 +177,17 @@ describe('TtsController', () => {
             const { engine, fire } = makeFakeEngine();
             new TtsController(engine).initialize();
 
-            fire('stopped', null, 0, [], null, { voiceId: 'v1', percent: 40, status: 'Downloading' });
+            fire({ download: { voiceId: 'v1', percent: 40, status: 'Downloading' } });
             expect(useTTSStore.getState().downloadProgress).toBe(40);
             expect(useTTSStore.getState().isDownloading).toBe(true);
             expect(useTTSStore.getState().downloadingVoiceId).toBe('v1');
 
             // A broadcast WITHOUT download info must not clobber it.
-            fire('stopped', null, 0, [], 'boom');
+            fire({ error: { code: 'TTS_PLAYBACK_ERROR', message: 'boom' } });
             expect(useTTSStore.getState().downloadProgress).toBe(40);
             expect(useTTSStore.getState().lastError).toBe('boom');
 
-            fire('stopped', null, 0, [], null, { voiceId: 'v1', percent: 100, status: 'Ready' });
+            fire({ download: { voiceId: 'v1', percent: 100, status: 'Ready' } });
             expect(useTTSStore.getState().isDownloading).toBe(false);
         });
     });
@@ -277,8 +294,8 @@ describe('TtsController', () => {
             raw.setVoice.mockClear();
             raw.setProviderById.mockClear();
 
-            fire('playing', 'cfi-1', 1, [], null);
-            fire('paused', 'cfi-1', 1, [], null);
+            fire({ status: 'playing', activeCfi: 'cfi-1', index: 1 });
+            fire({ status: 'paused', activeCfi: 'cfi-1', index: 1 });
 
             expect(raw.setSpeed).not.toHaveBeenCalled();
             expect(raw.setVoice).not.toHaveBeenCalled();

@@ -13,17 +13,19 @@
  *
  * Scenarios P1–P11 are the original suite, kept verbatim. P12–P23 expand the contract to the
  * behaviors the 5a/5b/5c strangler touches: restore, skip masks, table adaptations, section
- * navigation, dragnet capture, provider fallback, analysis dedup, and queue identity. They pin
- * CURRENT behavior, not desired behavior — with one documented exception written as an
- * `it.fails` rider (the executable spec for the P5b fix; do NOT make it pass early):
+ * navigation, dragnet capture, provider fallback, analysis dedup, and queue identity.
  *
- *   - P14 identity rider (in-process): `applySkippedMask` mutates the queue array in place
- *     (PlaybackStateManager.ts applySkippedMask) — flips green at 5b-PR2 (immutable QueueModel).
- *
- * The P21 single-replay rider flipped green at 5a-PR2: providers signal a failure exactly
- * once (reject-only), the manager rethrows typed without self-swapping, and the engine
- * recovers through one sequenced `recoverWithLocalProvider` task — the S2 double-fire
- * (and its double replay) is structurally dead.
+ * Both documented `it.fails` riders have flipped green:
+ *   - P21 single-replay flipped at 5a-PR2: providers signal a failure exactly once
+ *     (reject-only), the manager rethrows typed without self-swapping, and the engine
+ *     recovers through one sequenced `recoverWithLocalProvider` task — the S2 double-fire
+ *     (and its double replay) is structurally dead.
+ *   - P14 identity flipped at 5b-PR2: the immutable QueueModel (copy-on-write, the renamed
+ *     PlaybackStateManager) makes every post-mask queue a FRESH array; the in-place
+ *     mutation the rider documented is gone. The same PR replaced the four positional
+ *     notification paths with the single PlaybackSnapshot{seq, queueId} channel, so P23's
+ *     worker leg now pins identity-PRESERVING broadcasts (queue attached only when the
+ *     queueId changes; consumers cache it otherwise).
  *
  * Absorption (README §4 rule 8): the named `describe('regression: …')` blocks below carry the
  * surviving assertions of per-bug suites deleted in the same commit. See
@@ -534,11 +536,11 @@ export function describeEngineParity(
                 }));
 
             if (kind === 'in-process') {
-                // DOCUMENTED it.fails RIDER (5b-PR2 executable spec): applySkippedMask mutates
-                // the live queue array in place (PlaybackStateManager.applySkippedMask), so the
-                // post-mask broadcast delivers the SAME array reference. The immutable
-                // QueueModel (copy-on-write) flips this rider green in 5b-PR2.
-                it.fails('identity rider: the post-mask queue is a fresh array (copy-on-write)', () =>
+                // Flipped green at 5b-PR2 (was the documented it.fails rider): the immutable
+                // QueueModel applies the mask copy-on-write, so the post-mask broadcast
+                // delivers a FRESH array — the previously published queue is never mutated
+                // in place (the S4 debt this rider was the executable spec for).
+                it('identity rider: the post-mask queue is a fresh array (copy-on-write)', () =>
                     withHarness(async (h) => {
                         const bookId = 'book-mask-identity';
                         await h.host.setGenAISettings(GENAI_DISABLED);
@@ -550,6 +552,9 @@ export function describeEngineParity(
                         const masked = await waitForQueue(h, (q) => q[1]?.isSkipped === true);
 
                         expect(masked).not.toBe(restored);
+                        // And the published pre-mask array kept its content: no in-place
+                        // mutation leaked into consumers holding the old reference.
+                        expect(restored.every((i) => !i.isSkipped)).toBe(true);
                     }));
             } else {
                 it('worker rider: the mask triggers a re-broadcast across the boundary', () =>
@@ -925,7 +930,7 @@ export function describeEngineParity(
                         }
                     }));
             } else {
-                it('every broadcast re-delivers a content-equal queue (fresh clone per broadcast — the 5b-PR1 broadcast-diet target)', () =>
+                it('repeated status broadcasts preserve queue identity across the boundary (PlaybackSnapshot{queueId} broadcast diet)', () =>
                     withHarness(async (h) => {
                         await driveStatusChurn(h);
 
@@ -935,12 +940,13 @@ export function describeEngineParity(
                             // Content parity holds on every broadcast …
                             expect(ref.map((i) => ({ text: i.text, cfi: i.cfi }))).toEqual(
                                 QUEUE.map((i) => ({ text: i.text, cfi: i.cfi })));
+                            // … and since 5b-PR2 the snapshot channel attaches the queue
+                            // only when its queueId changes: status churn re-uses the
+                            // consumer's cached array, so identity is STABLE between
+                            // queue changes even across structured clone (updated from
+                            // the gate-era fresh-clone-per-broadcast pin).
+                            expect(ref).toBe(refs[0]);
                         }
-                        // … but the worker transport structured-clones a FRESH array each
-                        // time (no cross-broadcast identity). PINS CURRENT BEHAVIOR: 5b-PR1's
-                        // PlaybackSnapshot{queueId} introduces identity-preserving broadcasts
-                        // and updates this pin.
-                        expect(refs[1]).not.toBe(refs[0]);
                     }));
             }
         });

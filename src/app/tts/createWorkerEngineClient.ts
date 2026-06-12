@@ -34,16 +34,7 @@ import { useReaderUIStore } from '@store/useReaderUIStore';
 import { createLogger } from '@lib/logger';
 import type { WorkerTtsEngine, EngineHost } from '@lib/tts/engine/WorkerTtsEngine';
 import type { EngineHostCommand } from '@lib/tts/engine/WorkerEngineContext';
-import type { TTSQueueItem, TTSStatus, DownloadInfo } from '@lib/tts/AudioPlayerService';
-
-type StatusListener = (
-    status: TTSStatus,
-    activeCfi: string | null,
-    currentIndex: number,
-    queue: ReadonlyArray<TTSQueueItem>,
-    error: string | null,
-    downloadInfo?: DownloadInfo,
-) => void;
+import type { SnapshotListener } from '@lib/tts/AudioPlayerService';
 
 const logger = createLogger('WorkerEngineClient');
 
@@ -88,8 +79,8 @@ export function applyHostCommand(command: EngineHostCommand): void {
 export interface WorkerEngineClient {
     /** Comlink proxy to the worker-resident engine. */
     engine: Comlink.Remote<WorkerTtsEngine>;
-    /** Subscribe to playback updates. Wraps the listener as a Comlink proxy automatically. */
-    subscribe(listener: StatusListener): Promise<() => void>;
+    /** Subscribe to playback snapshots. Wraps the listener as a Comlink proxy automatically. */
+    subscribe(listener: SnapshotListener): Promise<() => void>;
     /** Replicate the current language + progress for a book, then set it on the engine. */
     setBook(bookId: string | null): Promise<void>;
     /** Tear down the worker and store subscriptions. */
@@ -215,7 +206,7 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         engine.setBookId(bookId);
     };
 
-    const subscribe = async (listener: StatusListener): Promise<() => void> => {
+    const subscribe = async (listener: SnapshotListener): Promise<() => void> => {
         const remoteUnsub = await engine.subscribe(Comlink.proxy(listener));
         return () => { void remoteUnsub(); };
     };

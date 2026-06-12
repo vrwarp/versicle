@@ -7,8 +7,16 @@ import { playbackCache } from '@data/repos/playbackCache';
 import type { SectionMetadata, LexiconRule, PerceptualPalette } from '~types/db';
 import { TaskSequencer } from './TaskSequencer';
 import { AudioContentPipeline } from './AudioContentPipeline';
-import { PlaybackStateManager } from './PlaybackStateManager';
+import { QueueModel } from './QueueModel';
 import type { PlaybackBackend, PlaybackBackendFactory, TTSProviderEvents } from './engine/PlaybackBackend';
+import type {
+    TtsEngine,
+    TTSStatus,
+    DownloadInfo,
+    PlaybackError,
+    PlaybackSnapshot,
+    SnapshotListener,
+} from './engine/TtsEngine';
 import type { MediaPlatform, MediaPlatformFactory } from './PlatformIntegration';
 import { flightRecorder } from './TTSFlightRecorder';
 import type { SectionAnalysis, TableAdaptation, EngineContext } from './engine/EngineContext';
@@ -20,49 +28,32 @@ import { coverUrl } from '@data/covers';
 const logger = createLogger('AudioPlayerService');
 
 /**
- * Defines the possible states of the TTS playback.
- */
-export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'completed';
-
-/**
  * Canonical home of {@link TTSQueueItem} is src/types/tts.ts (Phase 1a type
  * split, layering-deps.md LD-1): types/db.ts (CacheSessionState.playbackQueue,
  * TTSState.queue) needs it and the types layer may not import lib/tts.
- * Re-exported here (type-only, zero runtime change) so existing consumers
- * keep compiling.
+ * Canonical home of the engine contract — {@link TtsEngine},
+ * {@link PlaybackSnapshot}, {@link TTSStatus}, {@link DownloadInfo} — is
+ * src/lib/tts/engine/TtsEngine.ts (5b-PR2: TtsEngine is a STANDALONE
+ * interface, no longer a Pick of this class; the positional PlaybackListener
+ * tuple is gone). Re-exported here (type-only, zero runtime change) so
+ * existing consumers keep compiling.
  */
 export type { TTSQueueItem } from '~types/tts';
-
-export interface DownloadInfo {
-    voiceId: string;
-    percent: number;
-    status: string;
-}
-
-export type PlaybackListener = (status: TTSStatus, activeCfi: string | null, currentIndex: number, queue: ReadonlyArray<TTSQueueItem>, error: string | null, downloadInfo?: DownloadInfo) => void;
-
-/**
- * The public engine surface the app (useTTSStore / useTTS / ReaderView) talks to. Both the
- * in-process {@link AudioPlayerService} and the worker-backed handle satisfy it, so the app can
- * be pointed at either via {@link getAudioPlayer} without changing call sites.
- */
-export type TtsEngine = Pick<AudioPlayerService,
-    | 'play' | 'pause' | 'stop' | 'preview'
-    | 'setSpeed' | 'setVoice' | 'setLanguage' | 'setProviderById' | 'init' | 'getVoices'
-    | 'downloadVoice' | 'deleteVoice' | 'isVoiceDownloaded'
-    | 'subscribe' | 'setBookId' | 'clearPauseGesture' | 'whenReady'
-    | 'loadSection' | 'loadSectionBySectionId' | 'jumpTo' | 'seek'
-    | 'skipToNextSection' | 'skipToPreviousSection'
-    | 'setBackgroundAudioMode' | 'setBackgroundVolume' | 'setPrerollEnabled'
-    | 'engineName'
->;
+export type {
+    TtsEngine,
+    TTSStatus,
+    DownloadInfo,
+    PlaybackError,
+    PlaybackSnapshot,
+    SnapshotListener,
+} from './engine/TtsEngine';
 
 /**
  * Singleton service that manages Text-to-Speech playback.
  * Handles queue management, provider switching (Local/Cloud), synchronization,
  * media session integration, and state persistence.
  */
-export class AudioPlayerService {
+export class AudioPlayerService implements TtsEngine {
     readonly engineName: string = 'AudioPlayerService';
     // Components
     // TaskSequencer ensures async operations are executed serially to prevent race conditions.
@@ -70,15 +61,19 @@ export class AudioPlayerService {
     // AudioContentPipeline handles loading content, GenAI filtering, and text refinement.
     // Assigned in the constructor so it shares the service's injected EngineContext.
     private contentPipeline: AudioContentPipeline;
-    // PlaybackStateManager manages the queue, current index, and position calculations.
-    private stateManager = new PlaybackStateManager();
+    // QueueModel manages the queue (immutably), current index, and position calculations.
+    private stateManager = new QueueModel();
 
     private readonly ctx: EngineContext;
     private providerManager: PlaybackBackend;
     private platformIntegration: MediaPlatform;
 
     private status: TTSStatus = 'stopped';
-    private listeners: PlaybackListener[] = [];
+    private listeners: SnapshotListener[] = [];
+    /** Monotonic snapshot sequence (5b-PR2 single channel). */
+    private seq = 0;
+    /** The queueId carried by the previously PUBLISHED snapshot (broadcast diet). */
+    private lastPublishedQueueId: string | null = null;
     private activeLexiconRules: LexiconRule[] | null = null;
     private speed: number = 1.0;
     private voiceId: string | null = null;
@@ -175,7 +170,7 @@ export class AudioPlayerService {
                 );
             }
             this.updateMediaSessionMetadata();
-            this.notifyListeners(snapshot.currentItem?.cfi || null);
+            this.publishSnapshot({ activeCfi: snapshot.currentItem?.cfi || null });
         });
 
         // Subscribe to book store changes for proactive language synchronization.
@@ -1043,26 +1038,72 @@ export class AudioPlayerService {
             ? this.stateManager.getCurrentItem()!.cfi
             : null;
 
-        this.notifyListeners(currentCfi);
+        this.publishSnapshot({ activeCfi: currentCfi });
     }
 
-    subscribe(listener: PlaybackListener) {
+    /**
+     * THE single emission point of the engine (5b-PR2; §5b.2): every outbound
+     * notification — queue changes, status transitions, errors, download
+     * progress — funnels through here and leaves as one immutable
+     * {@link PlaybackSnapshot} with a monotonic `seq`. The queue itself is
+     * attached only when its content identity (`queueId`) changed since the
+     * last publish (P23's broadcast diet); consumers keep their cached array
+     * otherwise.
+     */
+    private publishSnapshot(opts: {
+        activeCfi?: string | null;
+        error?: PlaybackError | null;
+        download?: DownloadInfo | null;
+    } = {}) {
+        const queueId = this.stateManager.queueId;
+        const includeQueue = queueId !== this.lastPublishedQueueId;
+        this.lastPublishedQueueId = queueId;
+
+        const snapshot: PlaybackSnapshot = {
+            seq: ++this.seq,
+            status: this.status,
+            queueId,
+            ...(includeQueue ? { queue: this.stateManager.queue } : {}),
+            index: this.stateManager.currentIndex,
+            sectionIndex: this.stateManager.currentSectionIndex,
+            activeCfi: opts.activeCfi !== undefined
+                ? opts.activeCfi
+                : (this.stateManager.getCurrentItem()?.cfi || null),
+            error: opts.error ?? null,
+            download: opts.download ?? null,
+        };
+        this.listeners.forEach(l => l(snapshot));
+    }
+
+    /** The latest playback state as a full snapshot (queue always attached). */
+    public snapshot(): PlaybackSnapshot {
+        return {
+            seq: this.seq,
+            status: this.status,
+            queueId: this.stateManager.queueId,
+            queue: this.stateManager.queue,
+            index: this.stateManager.currentIndex,
+            sectionIndex: this.stateManager.currentSectionIndex,
+            activeCfi: this.stateManager.getCurrentItem()?.cfi || null,
+            error: null,
+            download: null,
+        };
+    }
+
+    subscribe(listener: SnapshotListener): () => void {
         let isSubscribed = true;
         this.listeners.push(listener);
-        const currentCfi = this.stateManager.getCurrentItem()?.cfi || null;
+        // Replay the current state on the next tick (full snapshot incl. queue),
+        // mirroring the pre-snapshot subscribe semantics (state read at fire time).
         setTimeout(() => {
             if (isSubscribed) {
-                listener(this.status, currentCfi, this.stateManager.currentIndex, this.stateManager.queue, null);
+                listener(this.snapshot());
             }
         }, 0);
         return () => {
             isSubscribed = false;
             this.listeners = this.listeners.filter(l => l !== listener);
         };
-    }
-
-    private notifyListeners(activeCfi: string | null) {
-        this.listeners.forEach(l => l(this.status, activeCfi, this.stateManager.currentIndex, this.stateManager.queue, null));
     }
 
     private handleContentAnalysisUpdate(state: { sections: Record<string, SectionAnalysis> }) {
@@ -1128,12 +1169,12 @@ export class AudioPlayerService {
         }
     }
 
-    private notifyError(message: string) {
-        this.listeners.forEach(l => l(this.status, this.stateManager.getCurrentItem()?.cfi || null, this.stateManager.currentIndex, this.stateManager.queue, message));
+    private notifyError(message: string, code: string = 'TTS_PLAYBACK_ERROR') {
+        this.publishSnapshot({ error: { code, message } });
     }
 
     private notifyDownloadProgress(voiceId: string, percent: number, status: string) {
-        this.listeners.forEach(l => l(this.status, this.stateManager.getCurrentItem()?.cfi || null, this.stateManager.currentIndex, this.stateManager.queue, null, { voiceId, percent, status }));
+        this.publishSnapshot({ download: { voiceId, percent, status } });
     }
 
     public async checkBatteryOptimization() {

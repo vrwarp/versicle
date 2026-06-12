@@ -175,10 +175,29 @@ describeEngineParity('worker bridge (MessageChannel + Comlink)', async (): Promi
 
     const snapshots: ParitySnapshot[] = [];
     const queueRefs: Array<ReadonlyArray<TTSQueueItem>> = [];
-    await remote.subscribe(Comlink.proxy((status: string, _cfi: string | null, currentIndex: number, queue: ReadonlyArray<TTSQueueItem>, error: string | null) => {
-        snapshots.push({ status, index: currentIndex, queueLen: queue.length, error });
-        queueRefs.push(queue);
+    // Snapshot channel (5b-PR2): broadcasts omit `queue` when the queueId did not
+    // change; this consumer re-attaches its cached array exactly like the
+    // production WorkerEngineHandle — so queue identity is STABLE between queue
+    // changes even across the structured-clone boundary (P23's broadcast diet).
+    let lastQueue: ReadonlyArray<TTSQueueItem> = [];
+    await remote.subscribe(Comlink.proxy((snap: import('./TtsEngine').PlaybackSnapshot) => {
+        if (snap.queue) lastQueue = snap.queue;
+        snapshots.push({
+            status: snap.status,
+            index: snap.index,
+            queueLen: lastQueue.length,
+            error: snap.error?.message ?? null,
+        });
+        queueRefs.push(lastQueue);
     }));
+    // Drain the subscribe replay (a FULL snapshot incl. queue) before the scenario
+    // issues commands — exactly like the production handle, whose whenReady() resolves
+    // only after the subscription is live. Otherwise the replay can race the first
+    // setQueue and deliver a second (cloned) copy of the same queue, breaking the
+    // P23 identity pin.
+    await vi.waitFor(() => {
+        if (snapshots.length === 0) throw new Error('replay not delivered yet');
+    });
 
     return {
         transport: 'worker',

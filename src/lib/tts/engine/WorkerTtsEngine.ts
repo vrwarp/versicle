@@ -12,7 +12,7 @@
  * round-trip without spawning an OS thread.
  */
 import * as Comlink from 'comlink';
-import { AudioPlayerService, type TTSQueueItem, type TTSStatus, type DownloadInfo } from '../AudioPlayerService';
+import { AudioPlayerService, type TTSQueueItem, type TTSStatus, type SnapshotListener } from '../AudioPlayerService';
 import { WorkerEngineContext, type EngineStateUpdate, type EngineHostCommand } from './WorkerEngineContext';
 import type { PlaybackBackend, TTSProviderEvents } from './PlaybackBackend';
 import type { MediaPlatform } from '../PlatformIntegration';
@@ -76,15 +76,6 @@ export interface EngineHost {
     // Worker → main-thread store writes (the WorkerEngineContext.post channel).
     applyHostCommand(command: EngineHostCommand): void;
 }
-
-type StatusListener = (
-    status: TTSStatus,
-    activeCfi: string | null,
-    currentIndex: number,
-    queue: ReadonlyArray<TTSQueueItem>,
-    error: string | null,
-    downloadInfo?: DownloadInfo,
-) => void;
 
 export class WorkerTtsEngine {
     private engine: AudioPlayerService | null = null;
@@ -184,8 +175,10 @@ export class WorkerTtsEngine {
     }
 
     // --- Engine API (invoked by the main thread over Comlink) ---
-    // The unsubscribe function must cross the boundary as a Comlink proxy, not be serialized.
-    subscribe(listener: StatusListener): () => void {
+    // PlaybackSnapshots structured-clone across the boundary as-is (5b-PR2: the
+    // single snapshot channel). The unsubscribe function must cross the boundary
+    // as a Comlink proxy, not be serialized.
+    subscribe(listener: SnapshotListener): () => void {
         return Comlink.proxy(this.e.subscribe(listener));
     }
     init(): Promise<void> { return this.e.init(); }

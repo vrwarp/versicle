@@ -65,7 +65,7 @@ describe('AudioPlayerService driven entirely by injected fakes', () => {
         const svc = AudioPlayerService.createWithContext(ctx, backendRef.factory, platformFactory);
 
         const statuses: string[] = [];
-        svc.subscribe((status) => statuses.push(status));
+        svc.subscribe((snap) => statuses.push(snap.status));
 
         await svc.setQueue([{ text: 'Hello world.', cfi: 'cfi1', sourceIndices: [0] }], 0);
         await svc.play();

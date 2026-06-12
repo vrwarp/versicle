@@ -1,10 +1,11 @@
 /**
  * Unit tests for WorkerEngineHandle — the app-facing adapter over the async worker client.
- * Covers the boot-buffering contract, whenReady, subscribe replay/fan-out, command routing,
- * and the jsdom/SSR `disabled` no-op mode.
+ * Covers the boot-buffering contract, whenReady, snapshot replay/fan-out (5b-PR2: the single
+ * PlaybackSnapshot channel — seq ordering, queue re-attachment, TTS_COMMAND_FAILED), command
+ * routing, and the jsdom/SSR `disabled` no-op mode.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { PlaybackListener } from '@lib/tts/AudioPlayerService';
+import type { PlaybackSnapshot, SnapshotListener } from '@lib/tts/AudioPlayerService';
 
 const { clientState } = vi.hoisted(() => ({
     clientState: {
@@ -12,7 +13,7 @@ const { clientState } = vi.hoisted(() => ({
         resolve: undefined as undefined | ((c: unknown) => void),
         reject: undefined as undefined | ((e: unknown) => void),
         client: undefined as undefined | Record<string, unknown>,
-        subscribeListener: undefined as undefined | PlaybackListener,
+        subscribeListener: undefined as undefined | SnapshotListener,
     },
 }));
 
@@ -24,6 +25,20 @@ vi.mock('./createWorkerEngineClient', () => ({
 }));
 
 import { WorkerEngineHandle } from './WorkerEngineHandle';
+
+/** A worker-side snapshot as broadcast over the channel (queue optional). */
+function snap(partial: Partial<PlaybackSnapshot> & { seq: number }): PlaybackSnapshot {
+    return {
+        status: 'stopped',
+        queueId: 'q1',
+        index: 0,
+        sectionIndex: -1,
+        activeCfi: null,
+        error: null,
+        download: null,
+        ...partial,
+    };
+}
 
 function makeFakeClient() {
     const engine = {
@@ -38,7 +53,7 @@ function makeFakeClient() {
     };
     const client = {
         engine,
-        subscribe: vi.fn(async (listener: PlaybackListener) => {
+        subscribe: vi.fn(async (listener: SnapshotListener) => {
             clientState.subscribeListener = listener;
             return () => {};
         }),
@@ -104,24 +119,80 @@ describe('WorkerEngineHandle (Worker available)', () => {
         expect(client.subscribe).toHaveBeenCalled();
     });
 
-    it('fans status updates out to subscribers and replays the latest snapshot on subscribe', async () => {
+    it('fans snapshots out to subscribers and replays the latest snapshot on subscribe', async () => {
         const handle = new WorkerEngineHandle();
         const client = makeFakeClient();
         clientState.resolve!(client);
         await handle.whenReady();
 
         const seen: string[] = [];
-        handle.subscribe((status) => { seen.push(status); });
+        handle.subscribe((s) => { seen.push(s.status); });
 
         // The internal subscription delivers a live update → fan-out.
-        clientState.subscribeListener!('playing', 'cfi-1', 2, [], null, undefined);
+        clientState.subscribeListener!(snap({ seq: 1, status: 'playing', activeCfi: 'cfi-1', index: 2, queue: [] }));
         expect(seen).toContain('playing');
 
         // A NEW subscriber gets the cached snapshot replayed (async, mirroring the engine).
         const replayed: Array<{ status: string; index: number }> = [];
-        handle.subscribe((status, _cfi, index) => { replayed.push({ status, index }); });
+        handle.subscribe((s) => { replayed.push({ status: s.status, index: s.index }); });
         await vi.waitFor(() => expect(replayed).toHaveLength(1));
         expect(replayed[0]).toEqual({ status: 'playing', index: 2 });
+        // snapshot() serves the same state synchronously.
+        expect(handle.snapshot().status).toBe('playing');
+        expect(handle.snapshot().index).toBe(2);
+    });
+
+    it('drops out-of-order deliveries by seq (Comlink reordering guard)', async () => {
+        const handle = new WorkerEngineHandle();
+        const client = makeFakeClient();
+        clientState.resolve!(client);
+        await handle.whenReady();
+
+        const seen: number[] = [];
+        handle.subscribe((s) => { seen.push(s.seq); });
+
+        clientState.subscribeListener!(snap({ seq: 5, status: 'playing', queue: [] }));
+        clientState.subscribeListener!(snap({ seq: 3, status: 'stopped', queue: [] })); // stale — dropped
+        clientState.subscribeListener!(snap({ seq: 6, status: 'paused' }));
+
+        expect(seen).toEqual([5, 6]);
+        expect(handle.snapshot().status).toBe('paused');
+    });
+
+    it('re-attaches the cached queue when a broadcast omits it (unchanged queueId)', async () => {
+        const handle = new WorkerEngineHandle();
+        const client = makeFakeClient();
+        clientState.resolve!(client);
+        await handle.whenReady();
+
+        const queues: Array<ReadonlyArray<unknown> | undefined> = [];
+        handle.subscribe((s) => { queues.push(s.queue); });
+
+        const theQueue = [{ text: 'one', cfi: 'c1' }];
+        clientState.subscribeListener!(snap({ seq: 1, status: 'loading', queueId: 'q9', queue: theQueue }));
+        clientState.subscribeListener!(snap({ seq: 2, status: 'playing', queueId: 'q9' })); // queue omitted
+
+        expect(queues).toHaveLength(2);
+        // Identity-preserving: the omitted-queue broadcast re-delivers the SAME array.
+        expect(queues[1]).toBe(theQueue);
+        expect(handle.snapshot().queue).toBe(theQueue);
+    });
+
+    it('surfaces a rejected fire-and-forget command as a TTS_COMMAND_FAILED snapshot', async () => {
+        const handle = new WorkerEngineHandle();
+        const client = makeFakeClient();
+        client.engine.play.mockRejectedValueOnce(new Error('worker exploded'));
+        clientState.resolve!(client);
+        await handle.whenReady();
+
+        const errors: Array<PlaybackSnapshot['error']> = [];
+        handle.subscribe((s) => { errors.push(s.error); });
+
+        void handle.play();
+
+        await vi.waitFor(() => expect(errors.some((e) => e?.code === 'TTS_COMMAND_FAILED')).toBe(true));
+        const failed = errors.find((e) => e?.code === 'TTS_COMMAND_FAILED');
+        expect(failed?.message).toContain('worker exploded');
     });
 
     it('unsubscribe stops delivery', async () => {
@@ -131,11 +202,11 @@ describe('WorkerEngineHandle (Worker available)', () => {
         await handle.whenReady();
 
         const seen: string[] = [];
-        const unsub = handle.subscribe((status) => { seen.push(status); });
+        const unsub = handle.subscribe((s) => { seen.push(s.status); });
         await vi.waitFor(() => expect(seen.length).toBeGreaterThan(0)); // replay
         unsub();
 
-        clientState.subscribeListener!('playing', null, 0, [], null, undefined);
+        clientState.subscribeListener!(snap({ seq: 1, status: 'playing', queue: [] }));
         expect(seen).not.toContain('playing');
     });
 
@@ -177,7 +248,8 @@ describe('WorkerEngineHandle (no Worker: jsdom/SSR disabled mode)', () => {
 
         // subscribe delivers the cached 'stopped' snapshot.
         const seen: string[] = [];
-        handle.subscribe((status) => { seen.push(status); });
+        handle.subscribe((s) => { seen.push(s.status); });
         await vi.waitFor(() => expect(seen).toEqual(['stopped']));
+        expect(handle.snapshot().queue).toEqual([]);
     });
 });

@@ -169,9 +169,9 @@ describe('AudioPlayerService', () => {
 
     it('should notify listeners on subscribe', () => {
         return new Promise<void>((resolve) => {
-            service.subscribe((status, _activeCfi, _currentIndex, _queue, error) => {
-                expect(status).toBe('stopped');
-                expect(error).toBeNull();
+            service.subscribe((snap) => {
+                expect(snap.status).toBe('stopped');
+                expect(snap.error).toBeNull();
                 resolve();
             });
         });
@@ -242,9 +242,9 @@ describe('AudioPlayerService', () => {
         // Wait for play to finish calling provider.play
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        // Spy on notifyListeners to verify outcome
+        // Spy on the single snapshot emission point to verify outcome
         // @ts-expect-error Access private method
-        const notifySpy = vi.spyOn(service, 'notifyListeners');
+        const publishSpy = vi.spyOn(service, 'publishSnapshot');
 
         // Trigger 'end' event on the provider listener
         listener({ type: 'end' });
@@ -255,7 +255,7 @@ describe('AudioPlayerService', () => {
         // Check status transition
         // @ts-expect-error Access private property
         expect(service.status).toBe('completed');
-        expect(notifySpy).toHaveBeenCalledWith(null);
+        expect(publishSpy).toHaveBeenCalledWith({ activeCfi: null });
     });
 
     it('should handle fallback from cloud to local on error', async () => {
@@ -365,9 +365,9 @@ describe('AudioPlayerService', () => {
         expect(service.status).toBe('playing');
         expect(service.getQueue().length).toBe(1);
 
-        // Mock notifyListeners to verify cleared state is broadcasted
+        // Spy on the single snapshot emission point to verify the cleared state broadcast
         // @ts-expect-error Access private
-        const notifySpy = vi.spyOn(service, 'notifyListeners');
+        const publishSpy = vi.spyOn(service, 'publishSnapshot');
 
         // 2. Switch to Book 2
         service.setBookId('book2');
@@ -381,8 +381,8 @@ describe('AudioPlayerService', () => {
         // Queue should be empty immediately (before restoreQueue completes)
         expect(service.getQueue().length).toBe(0);
 
-        // Should have notified listeners with null CFI (cleared state)
-        expect(notifySpy).toHaveBeenCalledWith(null);
+        // Should have published a snapshot with null CFI (cleared state)
+        expect(publishSpy).toHaveBeenCalledWith({ activeCfi: null });
     });
 
     describe('Grouping Logic', () => {

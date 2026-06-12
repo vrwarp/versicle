@@ -94,7 +94,7 @@ describe('WorkerTtsEngine over a MessageChannel (live worker bridge)', () => {
 
         // Subscribe across the boundary (the callback is a Comlink proxy).
         const statuses: string[] = [];
-        await remote.subscribe(Comlink.proxy((status: string) => { statuses.push(status); }));
+        await remote.subscribe(Comlink.proxy((snap: import('./TtsEngine').PlaybackSnapshot) => { statuses.push(snap.status); }));
 
         // getVoices is a request/response round-trip into the host backend.
         const voices = await remote.getVoices();

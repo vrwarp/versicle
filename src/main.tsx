@@ -63,9 +63,9 @@ if (typeof window !== 'undefined') {
       }
     };
     try {
-      const unsub = await client.subscribe((status, _cfi, currentIndex) => {
-        lastStatus = status;
-        events.push({ status, index: currentIndex });
+      const unsub = await client.subscribe((snap) => {
+        lastStatus = snap.status;
+        events.push({ status: snap.status, index: snap.index });
       });
       await client.engine.setQueue(
         [

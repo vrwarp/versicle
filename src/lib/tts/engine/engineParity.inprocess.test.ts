@@ -106,9 +106,20 @@ describeEngineParity('in-process', async (): Promise<ParityHarness> => {
 
     const snapshots: ParitySnapshot[] = [];
     const queueRefs: Array<ReadonlyArray<TTSQueueItem>> = [];
-    svc.subscribe((status, _cfi, currentIndex, queue, error) => {
-        snapshots.push({ status, index: currentIndex, queueLen: queue.length, error });
-        queueRefs.push(queue);
+    // Snapshot channel (5b-PR2): `queue` is attached only when the queueId changed;
+    // the consumer keeps its cached array otherwise — exactly what the production
+    // handle does. queueRefs records the EFFECTIVE queue per broadcast, so the
+    // identity scenarios (P14/P23) assert on what consumers actually observe.
+    let lastQueue: ReadonlyArray<TTSQueueItem> = [];
+    svc.subscribe((snap) => {
+        if (snap.queue) lastQueue = snap.queue;
+        snapshots.push({
+            status: snap.status,
+            index: snap.index,
+            queueLen: lastQueue.length,
+            error: snap.error?.message ?? null,
+        });
+        queueRefs.push(lastQueue);
     });
 
     return {

@@ -31,7 +31,7 @@ Owning suites:
 | 11 | `AudioPlayerService_MediaSession.test.ts` | all handlers registered incl. seekto; position state during cloud playback | `MediaMetadataPublisher` unit suite | 5b-PR4 | ⏳ |
 | 12 | `AudioPlayerService_StateProtection.test.ts` | no reading-state writes when sectionIndex === −1 | `PlaybackController` unit suite + P12 rider | 5b-PR4 | ⏳ |
 | 13 | `engine/AudioPlayerService.isolated.test.ts` | fake-driven smoke incl. dragnet | superseded by P19/P20 (same fakes) | 5b-PR4 | ⏳ |
-| 14 | `PlaybackStateManager_Masking.test.ts` / `PlaybackStateManager_Adaptation.test.ts` | mask semantics, adaptation anchor/sibling rules | `QueueModel` unit suite (immutable snapshots) + P14/P15 | 5b-PR2 | ⏳ |
+| 14 | `PlaybackStateManager_Masking.test.ts` / `PlaybackStateManager_Adaptation.test.ts` | mask semantics, adaptation anchor/sibling rules | `QueueModel.test.ts` (the renamed PSM base suite) carries `describe('regression: PlaybackStateManager_Masking')` + `describe('regression: PlaybackStateManager_Adaptation')` verbatim, plus the new immutability/identity suite; behavior also pinned by P14/P15 | 5b-PR2 | ✅ 5b-PR2 |
 | 15 | `TaskSequencer_Predictability.test.ts`, `TaskSequencer.test.ts` | FIFO, error isolation | extended sequencer suite (cancellation added; merge, not delete-without-absorb) | 5b-PR3 | ⏳ |
 | 16 | `TTSProviderManager.test.ts` | event normalization, fallback observable outcome | `describeProviderContract` (×5 at 5a-PR2; piper joins at 5a-PR3) + the new manager suite, which carries `describe('regression: TTSProviderManager.test (pre-5a)')`; the fallback double-fire case is superseded by the single-path manager tests + engine-level P21 (both transports) | 5a-PR2 (rewritten in place — landed one PR earlier than the row predicted, together with the contract suite it absorbs into) | ✅ 5a-PR2 |
 | 17 | `AudioContentPipeline*.test.ts` ×7 | grouping, marker attribution, Bible, structural anomaly, table CFI, trigger analysis | `SectionQueueBuilder` / `ReferenceSectionDetector` / `CfiGrouper` suites | 5c-PR2/3 | ⏳ |
@@ -47,7 +47,7 @@ suites, and the `CapacitorTTSProvider.test.ts` Smart-Handoff suite — the cross
 
 | Rider | Where | Flips green in |
 |---|---|---|
-| P14 identity (post-mask queue is a fresh array) | `engineParityScenarios.ts`, in-process leg | 5b-PR2 (immutable `QueueModel`) |
+| P14 identity (post-mask queue is a fresh array) | `engineParityScenarios.ts`, in-process leg | ✅ FLIPPED at 5b-PR2 (immutable `QueueModel`: copy-on-write mask/adaptation, fresh `queueId` per content change, DEV-frozen arrays) — un-marked `it.fails` in the same commit. The same PR replaced the positional listener with the single `PlaybackSnapshot{seq, queueId}` channel, and the P23 worker pin was updated from fresh-clone-per-broadcast to identity-preserving broadcasts (queue attached only on queueId change) |
 | P21 single-replay (fallback replays the failed sentence exactly once) | both legs | ✅ FLIPPED at 5a-PR2 (single failure path: providers reject once, manager rethrows `ProviderPlaybackError` without self-swap, engine recovers via one sequenced task) — un-marked `it.fails` in the same commit |
 
 ## vi.mock allowlist (phase5 doc N3, rewritten post-P3)

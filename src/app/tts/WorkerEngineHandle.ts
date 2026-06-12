@@ -1,6 +1,6 @@
 /**
  * WorkerEngineHandle — adapts the async, worker-backed engine to the {@link TtsEngine}
- * interface the app (`useTTSStore`, `useTTS`, `ReaderView`) expects.
+ * interface the app (TtsController / useAudioCommands) expects.
  *
  * The worker client boots asynchronously and every call is async (Comlink), but the app issues
  * fire-and-forget calls synchronously. This handle bridges the gap:
@@ -9,15 +9,23 @@
  *  - it keeps an internal subscription so listener semantics match the in-process engine
  *    (subscribers receive the latest snapshot on subscribe, then live updates).
  *
+ * Snapshot semantics across the boundary (5b-PR2, the single PlaybackSnapshot channel):
+ *  - `seq` is monotonic on the worker side; a Comlink delivery arriving out of order is
+ *    DROPPED here, so consumers never observe time running backwards;
+ *  - worker snapshots omit `queue` when the `queueId` did not change — the handle caches the
+ *    last delivered queue and re-attaches it, so its subscribers always receive full
+ *    snapshots with a stable queue identity between queue changes (P23's broadcast diet);
+ *  - a rejected fire-and-forget command surfaces as a snapshot with
+ *    `error.code = 'TTS_COMMAND_FAILED'` instead of a swallowed log line (S8 fix).
+ *
  * Queue/playback *state* is not read from the handle: it flows through the subscription into
- * `useTTSStore` (status, queue, index, …), which the app reads reactively.
+ * `useTTSStore` via the TtsController mirror, which the app reads reactively.
  */
 import type {
     TtsEngine,
-    PlaybackListener,
+    PlaybackSnapshot,
+    SnapshotListener,
     TTSQueueItem,
-    TTSStatus,
-    DownloadInfo,
 } from '@lib/tts/AudioPlayerService';
 import type { TTSVoice } from '@lib/tts/providers/types';
 import { createLogger } from '@lib/logger';
@@ -25,20 +33,28 @@ import { createWorkerEngineClient, type WorkerEngineClient } from './createWorke
 
 const logger = createLogger('WorkerEngineHandle');
 
+const INITIAL_SNAPSHOT: PlaybackSnapshot = Object.freeze({
+    seq: 0,
+    status: 'stopped',
+    queueId: '',
+    queue: [] as ReadonlyArray<TTSQueueItem>,
+    index: 0,
+    sectionIndex: -1,
+    activeCfi: null,
+    error: null,
+    download: null,
+});
+
 export class WorkerEngineHandle implements TtsEngine {
     readonly engineName: string = 'WorkerEngineHandle';
-    /** Resolves once the worker is booted AND the status subscription is live. */
+    /** Resolves once the worker is booted AND the snapshot subscription is live. */
     private booted: Promise<WorkerEngineClient>;
-    private listeners = new Set<PlaybackListener>();
+    private listeners = new Set<SnapshotListener>();
 
-    // Latest playback snapshot, kept current by the internal subscription, so subscribe()
-    // can replay it to new listeners (mirroring AudioPlayerService.subscribe semantics).
-    private cachedStatus: TTSStatus = 'stopped';
-    private cachedCfi: string | null = null;
-    private cachedIndex = 0;
-    private cachedQueue: ReadonlyArray<TTSQueueItem> = [];
-    private cachedError: string | null = null;
-    private cachedDownload: DownloadInfo | undefined;
+    // Latest FULL playback snapshot (queue always attached), kept current by the internal
+    // subscription, so subscribe() can replay it to new listeners (mirroring
+    // AudioPlayerService.subscribe semantics) and snapshot() can serve it synchronously.
+    private cachedSnapshot: PlaybackSnapshot = INITIAL_SNAPSHOT;
 
     // No Web Worker in this environment (jsdom unit tests, SSR). The handle becomes a benign
     // no-op stub: subscribe() fires the cached 'stopped' snapshot, and commands/queries
@@ -53,14 +69,18 @@ export class WorkerEngineHandle implements TtsEngine {
             return;
         }
         this.booted = createWorkerEngineClient().then(async (client) => {
-            await client.subscribe((status, activeCfi, currentIndex, queue, error, downloadInfo) => {
-                this.cachedStatus = status;
-                this.cachedCfi = activeCfi;
-                this.cachedIndex = currentIndex;
-                this.cachedQueue = queue;
-                this.cachedError = error;
-                this.cachedDownload = downloadInfo;
-                this.listeners.forEach((l) => l(status, activeCfi, currentIndex, queue, error, downloadInfo));
+            await client.subscribe((snap) => {
+                // Comlink deliveries can reorder; seq is monotonic worker-side, so a
+                // stale snapshot is simply dropped.
+                if (snap.seq <= this.cachedSnapshot.seq) return;
+                // Re-attach the cached queue when the broadcast omitted it (unchanged
+                // queueId) — handle subscribers always see full snapshots, and the
+                // queue array identity is stable between queue changes.
+                const full: PlaybackSnapshot = snap.queue
+                    ? snap
+                    : { ...snap, queue: this.cachedSnapshot.queue };
+                this.cachedSnapshot = full;
+                this.listeners.forEach((l) => l(full));
             });
             return client;
         });
@@ -76,10 +96,24 @@ export class WorkerEngineHandle implements TtsEngine {
         return this.booted.then(() => undefined);
     }
 
-    /** Fire-and-forget: run once the worker is ready (errors logged, not surfaced). */
+    /**
+     * Fire-and-forget: run once the worker is ready. A rejected command is not swallowed
+     * into a log line — it surfaces on the snapshot channel as `TTS_COMMAND_FAILED`.
+     */
     private run(fn: (client: WorkerEngineClient) => unknown): void {
         if (this.disabled) return;
-        this.booted.then(fn).catch((e) => logger.error('worker engine call failed', e));
+        this.booted.then(fn).catch((e) => {
+            logger.error('worker engine call failed', e);
+            const failed: PlaybackSnapshot = {
+                ...this.cachedSnapshot,
+                error: {
+                    code: 'TTS_COMMAND_FAILED',
+                    message: e instanceof Error ? e.message : String(e),
+                },
+            };
+            this.cachedSnapshot = failed;
+            this.listeners.forEach((l) => l(failed));
+        });
     }
 
     /** Await the worker, then call and return its result (or `fallback` if there's no Worker). */
@@ -121,12 +155,18 @@ export class WorkerEngineHandle implements TtsEngine {
     async deleteVoice(voiceId: string): Promise<void> { await this.call((c) => c.engine.deleteVoice(voiceId), undefined); }
     isVoiceDownloaded(voiceId: string): Promise<boolean> { return this.call((c) => c.engine.isVoiceDownloaded(voiceId), false); }
 
-    subscribe(listener: PlaybackListener): () => void {
+    // --- The snapshot stream ---
+    /** The latest full snapshot, synchronously (handle cache). */
+    snapshot(): PlaybackSnapshot {
+        return this.cachedSnapshot;
+    }
+
+    subscribe(listener: SnapshotListener): () => void {
         this.listeners.add(listener);
         // Mirror AudioPlayerService.subscribe: deliver the current snapshot on the next tick.
         setTimeout(() => {
             if (this.listeners.has(listener)) {
-                listener(this.cachedStatus, this.cachedCfi, this.cachedIndex, this.cachedQueue, this.cachedError, this.cachedDownload);
+                listener(this.cachedSnapshot);
             }
         }, 0);
         return () => { this.listeners.delete(listener); };
