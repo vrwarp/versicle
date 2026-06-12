@@ -732,6 +732,12 @@ owners:
 6. **P9 deletions inherited from P3:** the `types/db.ts` re-export shim; the SW
    legacy-`books` fallback in `sw-contract.ts` (pre-v18 straggler covers); item
    5 above; item 2 if P4 declines.
+   **PARTIAL settlement (P9, p9-crdt-v9-and-shims): the `types/db.ts` shim is
+   DELETED** — all 109 importer files codemodded to the six domain modules by
+   `scripts/codemod-types-db.mjs` (committed); `types-imports-nothing` and
+   `kernel-imports-nothing` verified at 0. The SW legacy-`books` fallback and
+   the retention decisions (items 5 and 2) are RUNTIME data-straggler calls,
+   not import shims — they stay with the P9 deletion-audit item.
 7. **`storage.estimate()` surfacing in settings — P8.** `storage.persist()` is
    requested at first open (D2); the UI surface was always P8 scope.
    **DONE (P9):** `StorageUsageSummary` in the Data Management tab (the P8
