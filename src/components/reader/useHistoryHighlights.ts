@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
-import { createLogger } from '@lib/logger';
-
-const logger = createLogger('useHistoryHighlights');
+import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
 
 /**
  * Hook to manage reading history highlights.
  * Highlights ONLY the last sentence read by TTS (to avoid visual clutter).
  * Ensures highlights are not updated live during TTS playback,
  * but only on viewer updates (page turns) or when idle (initial load/sync).
+ *
+ * Phase 6: epub.js calls go through the HighlightLayerManager's 'history'
+ * layer (the registry carries the gray style verbatim); the update-gating
+ * state machine below is unchanged.
  */
 export const useHistoryHighlights = (
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rendition: any,
+    highlights: HighlightLayerManager | null,
     isRenditionReady: boolean,
     bookId: string | null,
     currentCfi: string | undefined,
@@ -68,41 +69,20 @@ export const useHistoryHighlights = (
     useEffect(() => {
         const addedRanges: string[] = [];
 
-        if (rendition && isRenditionReady && bookId && displayedRanges.length > 0) {
+        if (highlights && isRenditionReady && bookId && displayedRanges.length > 0) {
             displayedRanges.forEach(range => {
-                try {
-                    // Check if annotations API exists (it might not in limited mocks)
-                    if (rendition.annotations && typeof rendition.annotations.add === 'function') {
-                        // Apply highlight annotation
-                        // We use a custom style for "last read" highlight
-                        rendition.annotations.add(
-                            'highlight',
-                            range,
-                            {},
-                            null,
-                            'reading-history-highlight',
-                            { fill: 'gray', fillOpacity: '0.1', mixBlendMode: 'multiply' }
-                        );
-                        addedRanges.push(range);
-                    }
-                } catch (e) {
-                    logger.warn("Failed to add history highlight", e);
-                }
+                // "Last read" highlight — gray style from the layer registry.
+                highlights.add('history', range, { onClick: null });
+                addedRanges.push(range);
             });
         }
 
         return () => {
-            if (rendition && addedRanges.length > 0) {
+            if (highlights && addedRanges.length > 0) {
                 addedRanges.forEach(range => {
-                    try {
-                        if (rendition.annotations && typeof rendition.annotations.remove === 'function') {
-                            rendition.annotations.remove(range, 'highlight');
-                        }
-                    } catch (e) {
-                        logger.warn("Failed to remove history highlight", e);
-                    }
+                    highlights.remove('history', range);
                 });
             }
         };
-    }, [rendition, isRenditionReady, bookId, displayedRanges]);
+    }, [highlights, isRenditionReady, bookId, displayedRanges]);
 };

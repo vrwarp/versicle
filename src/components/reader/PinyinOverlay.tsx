@@ -1,7 +1,7 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useVocabularyStore } from '@store/useVocabularyStore';
+import { ReaderOverlay } from '@domains/reader/ui/ReaderOverlay';
 
 /**
  * Pinyin position entry.
@@ -53,11 +53,8 @@ export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({
     shadowColor = customTheme.bg || '#ffffff';
   }
 
-  const overlayContent = (
-    <div 
-      className="absolute inset-0 pointer-events-none z-[10] overflow-visible"
-      aria-hidden="true"
-    >
+  return (
+    <ReaderOverlay mode="decorative" containerNode={containerNode} className="z-[10]">
       {positions.filter(pos => !knownCharacters[pos.char]).map((pos, idx) => (
         <span
           key={`${pos.char}-${idx}`}
@@ -77,9 +74,7 @@ export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({
           {pos.pinyin}
         </span>
       ))}
-    </div>
+    </ReaderOverlay>
   );
-
-  return createPortal(overlayContent, containerNode);
 };
 

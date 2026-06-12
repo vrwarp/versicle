@@ -4,9 +4,12 @@ import type { Rendition } from 'epubjs';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
+import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
 
 interface ReaderTTSControllerProps {
   rendition: Rendition | null;
+  /** The shared highlight manager — the ONLY path to epub.js annotations. */
+  highlights: HighlightLayerManager | null;
   viewMode: string;
 }
 
@@ -36,6 +39,7 @@ const OPEN_OVERLAY_SELECTOR = [
  */
 export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   rendition,
+  highlights,
   viewMode
 }) => {
   // We subscribe to these changing values here, so ReaderView doesn't have to.
@@ -52,7 +56,7 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
 
   // --- TTS Highlighting & Sync ---
   useEffect(() => {
-    if (!rendition || !activeCfi || status === 'stopped') return;
+    if (!rendition || !highlights || !activeCfi || status === 'stopped') return;
 
     const syncVisuals = () => {
       // Non-blocking display call
@@ -61,65 +65,29 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
         console.warn("[TTS] Sync skipped", err);
       });
 
-      try {
-        // Manual DOM sweep to kill orphaned TTS highlights.
-        // epub.js occasionally orphans nested SVG annotations if inject() runs multiple times or visibilty races occur.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const views = (rendition as any).views();
-        if (views) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            views.forEach((view: any) => {
-                if (view.pane && view.pane.element) {
-                    const orphaned = view.pane.element.querySelectorAll('g.tts-highlight');
-                    orphaned.forEach((node: Element) => node.remove());
-                }
-            });
-        }
-      } catch (e) {
-        console.warn("[TTS] Manual DOM cleanup failed", e);
-      }
-
-      // Add highlight using 'highlight' type. We now rely on manual cleanup to prevent duplicates.
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (rendition as any).annotations.add('highlight', activeCfi, {}, () => {
+      // Add via the manager: it runs the (formerly triplicated) orphaned-SVG
+      // sweep first, then adds exactly one 'tts' highlight for the CFI.
+      highlights.add('tts', activeCfi, {
+        onClick: () => {
           // Click handler for TTS highlight
-        }, 'tts-highlight');
-      } catch (e) {
-        console.warn("[TTS] Highlight failed", e);
-      }
+        },
+      });
     };
 
     if (document.visibilityState === 'visible') {
       syncVisuals();
     }
 
-    // Remove highlight when activeCfi changes
+    // Remove highlight when activeCfi changes (manager re-sweeps).
     return () => {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (rendition as any).annotations.remove(activeCfi, 'highlight');
-
-        // Failsafe dom-sweep
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const views = (rendition as any).views();
-        if (views) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            views.forEach((view: any) => {
-                if (view.pane && view.pane.element) {
-                    const orphaned = view.pane.element.querySelectorAll('g.tts-highlight');
-                    orphaned.forEach((node: Element) => node.remove());
-                }
-            });
-        }
-      } catch { /* ignore removal errors */ }
+      highlights.remove('tts', activeCfi);
     };
-  }, [activeCfi, viewMode, rendition, status]);
+  }, [activeCfi, viewMode, rendition, highlights, status]);
 
   // --- Visibility Reconciliation ---
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && rendition) {
+      if (document.visibilityState === 'visible' && rendition && highlights) {
         // We just came back to foreground.
         // Fetch the latest state directly from the store to avoid stale closure issues.
         const { activeCfi: freshCfi, status: freshStatus } = useTTSPlaybackStore.getState();
@@ -130,33 +98,16 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (rendition as any).display(freshCfi).catch((err: unknown) => console.warn("Reconciliation failed", err));
 
-        // Ensure highlight is present
-        try {
-          // Remove any existing highlight first (just in case)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rendition as any).annotations.remove(freshCfi, 'highlight');
-
-          // Manual DOM sweep
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const views = (rendition as any).views();
-          if (views) {
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             views.forEach((v: any) => {
-                 if (v.pane && v.pane.element) {
-                     const orphans = v.pane.element.querySelectorAll('g.tts-highlight');
-                     orphans.forEach((n: Element) => n.remove());
-                 }
-             });
-          }
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rendition as any).annotations.add('highlight', freshCfi, {}, () => { }, 'tts-highlight');
-        } catch (e) { console.warn("Reconciliation highlight failed", e); }
+        // Ensure the highlight is present: remove-then-add through the
+        // manager (each side runs the orphan sweep) so a background queue
+        // advance always ends with exactly one live node.
+        highlights.remove('tts', freshCfi);
+        highlights.add('tts', freshCfi, { onClick: () => { } });
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, [rendition, viewMode]);
+  }, [rendition, highlights, viewMode]);
 
   // --- Keyboard Navigation ---
   // Use a ref to access the latest state in the event listener without re-binding it constantly.

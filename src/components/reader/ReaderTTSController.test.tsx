@@ -3,6 +3,7 @@ import { ReaderTTSController } from './ReaderTTSController';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { autoResetStores, makeTTSQueue, seedStore } from '@test/harness';
+import { HighlightLayerManager, type AnnotatingRendition } from '@domains/reader/engine/HighlightLayerManager';
 import type { Rendition } from 'epubjs';
 
 // Harness migration (Phase 0): seeds the REAL useTTSPlaybackStore (state via
@@ -61,6 +62,7 @@ describe('ReaderTTSController', () => {
         return render(
             <ReaderTTSController
                 rendition={mockRendition as unknown as Rendition}
+                highlights={new HighlightLayerManager(mockRendition as unknown as AnnotatingRendition)}
                 viewMode="paginated"
             />
         );
@@ -162,6 +164,7 @@ describe('ReaderTTSController', () => {
             return render(
                 <ReaderTTSController
                     rendition={rendition as unknown as Rendition}
+                    highlights={new HighlightLayerManager(rendition as unknown as AnnotatingRendition)}
                     viewMode="paginated"
                 />
             );

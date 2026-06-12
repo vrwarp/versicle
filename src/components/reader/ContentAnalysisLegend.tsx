@@ -12,12 +12,15 @@ import type { TableImage } from '~types/db';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { reprocessBook } from '@lib/ingestion';
 import { ContentAnalysisReport } from './ContentAnalysisReport';
+import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
 
 interface ContentAnalysisLegendProps {
     rendition?: Rendition | null;
+    /** The shared highlight manager — the ONLY path to epub.js annotations. */
+    highlights?: HighlightLayerManager | null;
 }
 
-export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ rendition }) => {
+export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ rendition, highlights }) => {
     const { isDebugModeEnabled, setDebugModeEnabled } = useGenAIStore(
         useShallow((state) => ({
             isDebugModeEnabled: state.isDebugModeEnabled,
@@ -235,31 +238,25 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
         setHighlightedCfi(cfi);
     };
 
-    // Manage highlight lifecycle
+    // Manage highlight lifecycle (manager 'debug' layer, temp class)
     useEffect(() => {
-        if (!rendition || !highlightedCfi) return;
+        if (!rendition || !highlights || !highlightedCfi) return;
 
-        try {
-            // @ts-expect-error annotations untyped
-            rendition.annotations.add('highlight', highlightedCfi, {}, null, 'temp-table-highlight', {
+        highlights.add('debug', highlightedCfi, {
+            className: 'temp-table-highlight',
+            onClick: null,
+            styles: {
                 fill: 'yellow',
                 backgroundColor: 'rgba(255, 255, 0, 0.3)',
                 fillOpacity: '0.3',
                 mixBlendMode: 'multiply'
-            });
-        } catch (e) {
-            console.warn("Failed to add highlight", e);
-        }
+            },
+        });
 
         return () => {
-            try {
-                // @ts-expect-error annotations untyped
-                rendition.annotations.remove(highlightedCfi, 'highlight');
-            } catch (e) {
-                console.warn("Failed to remove highlight", e);
-            }
+            highlights.remove('debug', highlightedCfi);
         };
-    }, [rendition, highlightedCfi]);
+    }, [rendition, highlights, highlightedCfi]);
 
     const handleReprocess = async () => {
         if (!currentBookId) return;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
+import { ReaderOverlay } from '@domains/reader/ui/ReaderOverlay';
 
 export interface MarkerPosition {
   id: string;
@@ -30,11 +30,11 @@ export const AnnotationMarkerOverlay: React.FC<AnnotationMarkerOverlayProps> = (
 }) => {
   if (markers.length === 0 || !containerNode) return null;
 
-  const overlayContent = (
-    <div
-      className="absolute inset-0 pointer-events-none z-10 overflow-visible"
-      aria-hidden="true"
-    >
+  // ReaderOverlay 'interactive' contract (Phase 6 §4): focusable marker
+  // buttons must NOT live inside an aria-hidden container (the app-shell
+  // a11y finding) — the overlay group carries an accessible name instead.
+  return (
+    <ReaderOverlay mode="interactive" label="Annotation notes" containerNode={containerNode} className="z-10">
       {markers.map(marker => (
         <button
           key={marker.id}
@@ -58,8 +58,6 @@ export const AnnotationMarkerOverlay: React.FC<AnnotationMarkerOverlayProps> = (
           <div className="absolute inset-x-[3px] top-[3px] h-[1px] bg-yellow-600 shadow-[0_3px_0_theme(colors.yellow.600),0_6px_0_theme(colors.yellow.600)]" />
         </button>
       ))}
-    </div>
+    </ReaderOverlay>
   );
-
-  return createPortal(overlayContent, containerNode);
 };

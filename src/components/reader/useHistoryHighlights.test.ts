@@ -1,5 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { useHistoryHighlights } from './useHistoryHighlights';
+import { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 // Mock logger
@@ -9,9 +10,14 @@ vi.mock('@lib/logger', () => ({
     })
 }));
 
+// Phase 6 §4: the hook now drives the HighlightLayerManager's 'history'
+// layer instead of touching rendition.annotations directly. The manager is
+// constructed over the same mock rendition, so every pre-manager assertion
+// on the epub.js call shapes below survives the cutover unchanged.
 describe('useHistoryHighlights', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mockRendition: any;
+    let manager: HighlightLayerManager;
 
     beforeEach(() => {
         mockRendition = {
@@ -20,12 +26,13 @@ describe('useHistoryHighlights', () => {
                 remove: vi.fn(),
             }
         };
+        manager = new HighlightLayerManager(mockRendition);
     });
 
     it('adds annotation for lastPlayedCfi', () => {
         const lastPlayedCfi = 'cfi1';
         renderHook(() => useHistoryHighlights(
-            mockRendition,
+            manager,
             true,
             'book1',
             'currentCfi',
@@ -46,7 +53,7 @@ describe('useHistoryHighlights', () => {
 
     it('does not add annotation if lastPlayedCfi is missing', () => {
         renderHook(() => useHistoryHighlights(
-            mockRendition,
+            manager,
             true,
             'book1',
             'currentCfi',
@@ -60,7 +67,7 @@ describe('useHistoryHighlights', () => {
     it('updates annotation when lastPlayedCfi changes', () => {
         const { rerender } = renderHook(
             ({ lastPlayedCfi }) => useHistoryHighlights(
-                mockRendition,
+                manager,
                 true,
                 'book1',
                 'currentCfi',
@@ -87,7 +94,7 @@ describe('useHistoryHighlights', () => {
     it('suppresses updates when isPlaying is true', () => {
         const { rerender } = renderHook(
             ({ lastPlayedCfi, isPlaying }) => useHistoryHighlights(
-                mockRendition,
+                manager,
                 true,
                 'book1',
                 'currentCfi',
@@ -132,7 +139,7 @@ describe('useHistoryHighlights', () => {
 
     it('removes annotations on unmount', () => {
         const { unmount } = renderHook(() => useHistoryHighlights(
-            mockRendition,
+            manager,
             true,
             'book1',
             'currentCfi',

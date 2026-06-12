@@ -1,14 +1,18 @@
 import React from 'react';
+import { parentHighlightCss } from '@domains/reader/engine/highlightStyles';
 
 interface ReaderHighlightsStylesProps {
     currentTheme: string;
 }
 
+/**
+ * Parent-document styling for the epub.js SVG highlight layers. The CSS
+ * itself comes from the ONE highlight styles registry (Phase 6 §4,
+ * src/domains/reader/engine/highlightStyles.ts) — these rules are the ones
+ * that actually win for SVG `fill`/`fill-opacity`/`mix-blend-mode`, since
+ * epub.js draws annotation SVGs in the parent document.
+ */
 export const ReaderHighlightsStyles: React.FC<ReaderHighlightsStylesProps> = ({ currentTheme }) => {
-    const isDark = currentTheme === 'dark';
-    const opacity = isDark ? 0.4 : 0.8;
-    const blendMode = isDark ? 'screen' : 'multiply';
-
     return (
         <>
             {/* Striped highlight pattern */}
@@ -31,34 +35,8 @@ export const ReaderHighlightsStyles: React.FC<ReaderHighlightsStylesProps> = ({ 
                 </defs>
             </svg>
 
-            {/* Highlights CSS styles */}
-            <style>{`
-                .highlight-red { 
-                    fill: #fca5a5;
-                    fill-opacity: ${opacity}; 
-                    mix-blend-mode: ${blendMode}; 
-                }
-                .highlight-green { 
-                    fill: #86efac;
-                    fill-opacity: ${opacity}; 
-                    mix-blend-mode: ${blendMode}; 
-                }
-                .highlight-blue { 
-                    fill: #93c5fd;
-                    fill-opacity: ${opacity}; 
-                    mix-blend-mode: ${blendMode}; 
-                }
-                .highlight-yellow { 
-                    fill: #fde047;
-                    fill-opacity: ${opacity}; 
-                    mix-blend-mode: ${blendMode}; 
-                }
-                .versicle-audio-bookmark-pending { 
-                    fill: url(#striped-highlight); 
-                    fill-opacity: ${opacity}; 
-                    mix-blend-mode: ${blendMode}; 
-                }
-            `}</style>
+            {/* Highlights CSS styles (single registry source) */}
+            <style>{parentHighlightCss(currentTheme)}</style>
         </>
     );
 };

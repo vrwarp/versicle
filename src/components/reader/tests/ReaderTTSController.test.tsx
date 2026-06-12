@@ -1,6 +1,7 @@
 import { render, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ReaderTTSController } from '../ReaderTTSController';
+import { HighlightLayerManager, type AnnotatingRendition } from '@domains/reader/engine/HighlightLayerManager';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 
 // Mock the store + the command facade (engine commands moved to
@@ -48,6 +49,7 @@ describe('ReaderTTSController', () => {
     render(
       <ReaderTTSController
         rendition={null}
+        highlights={null}
         viewMode="scrolled"
       />
     );
@@ -70,6 +72,7 @@ describe('ReaderTTSController', () => {
     render(
       <ReaderTTSController
         rendition={null}
+        highlights={null}
         viewMode="scrolled"
       />
     );
@@ -92,6 +95,7 @@ describe('ReaderTTSController', () => {
     render(
       <ReaderTTSController
         rendition={null}
+        highlights={null}
         viewMode="scrolled"
       />
     );
@@ -122,6 +126,7 @@ describe('ReaderTTSController', () => {
       <ReaderTTSController
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         rendition={mockRendition as any}
+        highlights={new HighlightLayerManager(mockRendition as unknown as AnnotatingRendition)}
         viewMode="paginated"
       />
     );

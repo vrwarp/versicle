@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContentAnalysisLegend } from '../ContentAnalysisLegend';
+import { HighlightLayerManager, type AnnotatingRendition } from '@domains/reader/engine/HighlightLayerManager';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { bookContent } from '@data/repos/bookContent';
@@ -73,20 +74,20 @@ describe('ContentAnalysisLegend', () => {
       );
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(<ContentAnalysisLegend rendition={mockRendition as any} />);
+    render(<ContentAnalysisLegend rendition={mockRendition as any} highlights={new HighlightLayerManager(mockRendition as unknown as AnnotatingRendition)} />);
     expect(screen.queryByText('Debug Panel')).toBeNull();
   });
 
   it('renders correctly when debug mode is enabled', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(<ContentAnalysisLegend rendition={mockRendition as any} />);
+    render(<ContentAnalysisLegend rendition={mockRendition as any} highlights={new HighlightLayerManager(mockRendition as unknown as AnnotatingRendition)} />);
     expect(screen.getByText('GenAI Debug Panel')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('epubcfi(...)')).toBeInTheDocument();
   });
 
   it('toggles expansion', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(<ContentAnalysisLegend rendition={mockRendition as any} />);
+    render(<ContentAnalysisLegend rendition={mockRendition as any} highlights={new HighlightLayerManager(mockRendition as unknown as AnnotatingRendition)} />);
 
     // Initially expanded
     expect(screen.getByText('Current CFI')).toBeInTheDocument();
@@ -104,7 +105,7 @@ describe('ContentAnalysisLegend', () => {
 
   it('updates CFI input on selection', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(<ContentAnalysisLegend rendition={mockRendition as any} />);
+    render(<ContentAnalysisLegend rendition={mockRendition as any} highlights={new HighlightLayerManager(mockRendition as unknown as AnnotatingRendition)} />);
 
     // Simulate selection event
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -123,7 +124,7 @@ describe('ContentAnalysisLegend', () => {
 
   it('updates rendition on manual CFI input', async () => {
      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-     render(<ContentAnalysisLegend rendition={mockRendition as any} />);
+     render(<ContentAnalysisLegend rendition={mockRendition as any} highlights={new HighlightLayerManager(mockRendition as unknown as AnnotatingRendition)} />);
      const input = screen.getByPlaceholderText('epubcfi(...)');
 
      mockRendition.display.mockResolvedValue(undefined);
@@ -155,7 +156,7 @@ describe('ContentAnalysisLegend', () => {
 
     // Render
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(<ContentAnalysisLegend rendition={mockRendition as any} />);
+    render(<ContentAnalysisLegend rendition={mockRendition as any} highlights={new HighlightLayerManager(mockRendition as unknown as AnnotatingRendition)} />);
 
     // Wait for images to load (wait for "Table Images" text)
     // The text is "Table Images (1)"

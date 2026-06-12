@@ -381,19 +381,22 @@ describe('characterization: reader overlay systems (P6 entry gate)', () => {
       });
     });
 
-    it('pins the CURRENT aria contract: interactive marker buttons inside an aria-hidden wrapper', async () => {
-      // Known a11y defect (app-shell finding: "focusable buttons inside
-      // aria-hidden overlay"). The Phase 6 ReaderOverlay interactive
-      // contract deliberately CHANGES this — that PR must update this pin
-      // and call the delta out (prep doc §4 / program rule 7).
+    it('ReaderOverlay interactive contract: marker buttons are NOT inside an aria-hidden wrapper', async () => {
+      // CHARACTERIZATION DELTA (deliberate, prep doc §4): the entry-gate pin
+      // recorded the old defect — focusable buttons inside an aria-hidden
+      // overlay (the app-shell a11y finding). The ReaderOverlay interactive
+      // contract fixed it: the overlay group is exposed to the a11y tree
+      // with an accessible name, and the buttons inside it are reachable.
       renderReader();
       await waitForReady();
 
       await waitFor(() => {
         const marker = containerEl.querySelector('[data-testid="note-marker"]') as HTMLElement;
         expect(marker).toBeTruthy();
-        const hiddenWrapper = marker.closest('[aria-hidden="true"]');
-        expect(hiddenWrapper).not.toBeNull();
+        expect(marker.closest('[aria-hidden="true"]')).toBeNull();
+        const group = marker.closest('[role="group"]');
+        expect(group).not.toBeNull();
+        expect(group!.getAttribute('aria-label')).toBe('Annotation notes');
       });
     });
   });

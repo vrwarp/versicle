@@ -47,6 +47,14 @@ import { useCfiCoordinates } from '@hooks/useCfiCoordinates';
 import { AnnotationMarkerOverlay } from './AnnotationMarkerOverlay';
 import { useReaderNavigation } from '@hooks/useReaderNavigation';
 import { ReaderHighlightsStyles } from './ReaderHighlightsStyles';
+import {
+    HighlightLayerManager,
+    type AnnotatingRendition,
+} from '@domains/reader/engine/HighlightLayerManager';
+import {
+    annotationClassName,
+    AUDIO_BOOKMARK_PENDING_CLASS,
+} from '@domains/reader/engine/highlightStyles';
 
 const logger = createLogger('ReaderView');
 
@@ -420,6 +428,14 @@ export const ReaderView: React.FC = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const containerNode = (rendition as any)?.manager?.container || null;
 
+    // The ONE epub.js annotations caller (Phase 6 §4): every highlight layer
+    // (annotation/tts/history/debug) goes through this manager. Becomes
+    // engine.highlights when the ReaderEngine port lands.
+    const highlights = useMemo(
+        () => (rendition ? new HighlightLayerManager(rendition as unknown as AnnotatingRendition) : null),
+        [rendition]
+    );
+
     useEffect(() => {
         metadataRef.current = bookMetadata;
 
@@ -644,18 +660,13 @@ export const ReaderView: React.FC = () => {
 
 
     useEffect(() => {
-        if (rendition && isRenditionReady) {
+        if (rendition && highlights && isRenditionReady) {
             const currentIds = new Set(annotationList.map(a => a.id));
 
             // 1. Remove deleted annotations (Highlights only - markers are now in React overlay)
             addedAnnotations.current.forEach((cfi, id) => {
                 if (!currentIds.has(id)) {
-                    try {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        (rendition as any).annotations.remove(cfi, 'highlight');
-                    } catch (e) {
-                        logger.warn("Failed to remove highlight", e);
-                    }
+                    highlights.remove('annotation', cfi);
                     addedAnnotations.current.delete(id);
                 }
             });
@@ -664,52 +675,43 @@ export const ReaderView: React.FC = () => {
             annotationList.forEach(annotation => {
                 // Add Highlight/Underline if missing
                 if (!addedAnnotations.current.has(annotation.id)) {
-                    try {
-                        if (annotation.type === 'audio-bookmark') {
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            (rendition as any).annotations.add(
-                                'highlight',
-                                annotation.cfiRange,
-                                {},
-                                (e: Event) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    // 1. Programmatically select the block using EPUB.js Selection API
-                                    rendition.display(annotation.cfiRange);
+                    if (annotation.type === 'audio-bookmark') {
+                        highlights.add('annotation', annotation.cfiRange, {
+                            className: AUDIO_BOOKMARK_PENDING_CLASS,
+                            onClick: (e: Event) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                // 1. Programmatically select the block using EPUB.js Selection API
+                                rendition.display(annotation.cfiRange);
 
-                                    setTimeout(() => {
-                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                        const range = (rendition as any).getRange(annotation.cfiRange);
-                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                        const win = (rendition as any).manager?.getContents()?.[0]?.window;
-                                        if (win && range) {
-                                            win.getSelection()?.removeAllRanges();
-                                            win.getSelection()?.addRange(range);
-                                        }
+                                setTimeout(() => {
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    const range = (rendition as any).getRange(annotation.cfiRange);
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    const win = (rendition as any).manager?.getContents()?.[0]?.window;
+                                    if (win && range) {
+                                        win.getSelection()?.removeAllRanges();
+                                        win.getSelection()?.addRange(range);
+                                    }
 
-                                        // 2. Dispatch state to Reader UI Store to morph the CompassPill
-                                        useReaderUIStore.getState().setCompassState({
-                                            variant: 'audio-triage',
-                                            targetAnnotation: annotation
-                                        });
-                                    }, 50);
-                                },
-                                'versicle-audio-bookmark-pending'
-                            );
-                            addedAnnotations.current.set(annotation.id, annotation.cfiRange);
-                        }
-                        else {
-                            const className = annotation.color === 'yellow' ? 'highlight-yellow' :
-                                annotation.color === 'green' ? 'highlight-green' :
-                                    annotation.color === 'blue' ? 'highlight-blue' :
-                                        annotation.color === 'red' ? 'highlight-red' : 'highlight-yellow';
-
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            (rendition as any).annotations.add('highlight', annotation.cfiRange, {}, (e: MouseEvent) => {
+                                    // 2. Dispatch state to Reader UI Store to morph the CompassPill
+                                    useReaderUIStore.getState().setCompassState({
+                                        variant: 'audio-triage',
+                                        targetAnnotation: annotation
+                                    });
+                                }, 50);
+                            },
+                        });
+                    }
+                    else {
+                        highlights.add('annotation', annotation.cfiRange, {
+                            className: annotationClassName(annotation.color),
+                            onClick: (e: Event) => {
+                                const me = e as MouseEvent;
                                 // Handle click on highlight to show actions (delete/edit)
                                 const iframe = viewerRef.current?.querySelector('iframe');
-                                let x = e.clientX;
-                                let y = e.clientY;
+                                let x = me.clientX;
+                                let y = me.clientY;
 
                                 if (iframe) {
                                     const iframeRect = iframe.getBoundingClientRect();
@@ -723,11 +725,14 @@ export const ReaderView: React.FC = () => {
                                     variant: 'annotation',
                                     targetAnnotation: annotation
                                 });
-                            }, className);
-                            addedAnnotations.current.set(annotation.id, annotation.cfiRange);
-                        }
-                    } catch (e) {
-                        logger.warn(`Failed to add annotation ${annotation.id}`, e);
+                            },
+                        });
+                    }
+                    // The manager logs-and-swallows epub.js failures; only
+                    // track ids whose highlight actually attached (parity
+                    // with the pre-manager try/catch placement).
+                    if (highlights.has('annotation', annotation.cfiRange)) {
+                        addedAnnotations.current.set(annotation.id, annotation.cfiRange);
                     }
                 }
             });
@@ -736,7 +741,7 @@ export const ReaderView: React.FC = () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (window as any).__reader_added_annotations_count = addedAnnotations.current.size;
         }
-    }, [annotationList, isRenditionReady, rendition, showPopover, bookId]);
+    }, [annotationList, isRenditionReady, rendition, highlights, showPopover, bookId]);
 
     // Handle TTS Errors
     const showToast = useToastStore(state => state.showToast);
@@ -748,23 +753,14 @@ export const ReaderView: React.FC = () => {
         }
     }, [lastError, showToast, clearError]);
 
-    // Apply content analysis debug highlights
-    const addedDebugHighlights = useRef<Set<string>>(new Set());
-
+    // Apply content analysis debug highlights (the manager's 'debug' layer
+    // carries the bookkeeping the old addedDebugHighlights ref duplicated).
     useEffect(() => {
-        if (!rendition || !isRenditionReady) return;
+        if (!rendition || !highlights || !isRenditionReady) return;
 
         if (!isDebugModeEnabled) {
             // Clear if disabled
-            addedDebugHighlights.current.forEach(cfi => {
-                try {
-                    // @ts-expect-error annotations is not typed fully
-                    rendition.annotations.remove(cfi, 'highlight');
-                } catch (e) {
-                    logger.warn("Failed to remove debug highlight", e);
-                }
-            });
-            addedDebugHighlights.current.clear();
+            highlights.clear('debug');
             return;
         }
 
@@ -784,21 +780,18 @@ export const ReaderView: React.FC = () => {
                 if (analysis.referenceStartCfi) {
                     const highlightCfi = analysis.referenceStartCfi;
 
-                    if (!addedDebugHighlights.current.has(highlightCfi)) {
+                    if (!highlights.has('debug', highlightCfi)) {
                         const color = TYPE_COLORS['reference'];
                         if (color) {
-                            try {
-                                // @ts-expect-error annotations is not typed fully
-                                rendition.annotations.add('highlight', highlightCfi, {}, null, 'debug-analysis-highlight', {
+                            highlights.add('debug', highlightCfi, {
+                                onClick: null,
+                                styles: {
                                     fill: color,
                                     backgroundColor: color,
                                     fillOpacity: '1',
                                     mixBlendMode: currentTheme === 'dark' ? 'screen' : 'multiply'
-                                });
-                                addedDebugHighlights.current.add(highlightCfi);
-                            } catch (e) {
-                                logger.warn("Failed to add debug highlight", e);
-                            }
+                                },
+                            });
                         }
                     }
                 }
@@ -810,7 +803,7 @@ export const ReaderView: React.FC = () => {
         applyHighlights();
 
         // Re-apply on section change or debug toggle
-    }, [rendition, isRenditionReady, isDebugModeEnabled, bookId, currentSectionId, book, currentTheme]);
+    }, [rendition, highlights, isRenditionReady, isDebugModeEnabled, bookId, currentSectionId, book, currentTheme]);
 
     const [useSyntheticToc, setUseSyntheticToc] = useState(false);
     const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);
@@ -1115,6 +1108,7 @@ export const ReaderView: React.FC = () => {
 
             <ReaderTTSController
                 rendition={rendition}
+                highlights={highlights}
                 viewMode={readerViewMode}
             />
 
@@ -1378,7 +1372,7 @@ export const ReaderView: React.FC = () => {
             </div>
 
             {/* Content Analysis Debug Legend */}
-            <ContentAnalysisLegend rendition={rendition} />
+            <ContentAnalysisLegend rendition={rendition} highlights={highlights} />
 
             <SyncStatusPanel
                 open={syncPanelOpen}
@@ -1389,7 +1383,7 @@ export const ReaderView: React.FC = () => {
                 }}
             />
             <HistoryHighlighter
-                rendition={rendition}
+                highlights={highlights}
                 isRenditionReady={isRenditionReady}
                 bookId={bookId || null}
                 isPlaying={isPlaying}

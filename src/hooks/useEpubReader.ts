@@ -12,6 +12,7 @@ import { createLogger } from '@lib/logger';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useBookStore } from '@store/useBookStore';
 import { findTocItem } from '@lib/reader/titleResolver';
+import { iframeHighlightThemeCss } from '@domains/reader/engine/highlightStyles';
 import {
   toTraditional,
   getPinyin,
@@ -804,23 +805,8 @@ export function useEpubReader(
       'a': { 'color': `${options.customTheme?.fg || '#0000e'} !important` }
     });
 
-    const isDark = options.currentTheme === 'dark';
-    const highlightBlendMode = isDark ? 'screen' : 'multiply';
-    const highlightOpacity = isDark ? 0.4 : 0.3;
-
-    // TTS Highlight Theme
-    themes.default({
-      '.tts-highlight': {
-        'fill': '#fde047',
-        'background-color': isDark ? 'rgba(253, 224, 71, 0.4)' : 'rgba(253, 224, 71, 0.3)',
-        'fill-opacity': highlightOpacity,
-        'mix-blend-mode': highlightBlendMode
-      },
-      '.highlight-yellow': { 'fill': '#fde047', 'background-color': isDark ? 'rgba(253, 224, 71, 0.4)' : 'rgba(253, 224, 71, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
-      '.highlight-green': { 'fill': '#86efac', 'background-color': isDark ? 'rgba(134, 239, 172, 0.4)' : 'rgba(134, 239, 172, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
-      '.highlight-blue': { 'fill': '#93c5fd', 'background-color': isDark ? 'rgba(147, 197, 253, 0.4)' : 'rgba(147, 197, 253, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
-      '.highlight-red': { 'fill': '#fca5a5', 'background-color': isDark ? 'rgba(252, 165, 165, 0.4)' : 'rgba(252, 165, 165, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode }
-    });
+    // Highlight theme rules from the ONE styles registry (Phase 6 §4).
+    themes.default(iframeHighlightThemeCss(options.currentTheme));
 
     themes.select(options.currentTheme);
 
