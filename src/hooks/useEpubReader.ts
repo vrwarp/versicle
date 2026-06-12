@@ -467,9 +467,14 @@ export function useEpubReader(
   }, [isReady, forceTraditionalChinese, showPinyin, pinyinSize]);
 
   // Presentation (epubTheming module): apply the whole spec on any input
-  // change. flowModeChanged: true preserves the legacy always-reflow
-  // behavior in this extraction commit; the D5 mode-change tracking is its
-  // own commit.
+  // change. D5: flow()/display() runs only when the view mode actually
+  // changed — a colors/typography tweak no longer reflows (the legacy
+  // always-reflow fired a spurious relocation event per settings change,
+  // which fed the session recorder).
+  const prevViewModeRef = useRef<'paginated' | 'scrolled' | null>(null);
+  useEffect(() => {
+    prevViewModeRef.current = null; // new book: rendition rendered with the current mode
+  }, [bookId]);
   useEffect(() => {
     if (!renditionRef.current || !isReady) return;
 
@@ -487,7 +492,14 @@ export function useEpubReader(
       baseLineHeight: metadata?.baseLineHeight,
     };
 
-    applyStylesRef.current = applyReaderTheme(r, spec, { flowModeChanged: true });
+    // First run after a (re)load is never a mode change: renderTo received
+    // the current mode, so a flow() call would be a same-mode no-op plus a
+    // redundant display(currentLoc) round-trip.
+    const flowModeChanged =
+      prevViewModeRef.current !== null && prevViewModeRef.current !== options.viewMode;
+    prevViewModeRef.current = options.viewMode;
+
+    applyStylesRef.current = applyReaderTheme(r, spec, { flowModeChanged });
   }, [
     isReady,
     options.currentTheme,
