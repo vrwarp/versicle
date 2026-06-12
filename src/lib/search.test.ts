@@ -143,4 +143,22 @@ describe('SearchClient', () => {
         await searchClient.indexBook(mockBook as any, 'book-idempotent');
         expect(mockEngine.initIndex).toHaveBeenCalledTimes(1); // Should NOT be called again
     });
+
+    describe('regression: concurrent searches map to their own results (absorbed from search.repro.test.ts)', () => {
+        it('handles concurrent searches correctly', async () => {
+            mockEngine.search.mockImplementation(async (_bookId: string, query: string) => {
+                // Simulate worker round-trip latency.
+                await new Promise((resolve) => setTimeout(resolve, 50));
+                return [{ href: 'result', excerpt: `Result for ${query}` }];
+            });
+
+            const p1 = searchClient.search('query1', 'book1');
+            const p2 = searchClient.search('query2', 'book1');
+
+            const [r1, r2] = await Promise.all([p1, p2]);
+
+            expect(r1[0].excerpt).toBe('Result for query1');
+            expect(r2[0].excerpt).toBe('Result for query2');
+        });
+    });
 });

@@ -149,32 +149,82 @@ describe('SearchEngine', () => {
         expect(results[1].href).toBe('chap2.html');
     });
 
-    it('should prevent infinite loops on zero-width matches', () => {
-        engine.indexBook('testBook', [{ id: '1', href: 'chap1.html', text: 'hello world' }]);
+    // The old "zero-width RegExp match" test was deleted in the Phase 7
+    // search consolidation (PR-0c): the engine scans with String#indexOf, so
+    // the test mocked a global the engine never touches and asserted nothing
+    // (`toBeDefined` on an array) — a vacuous pin (search.md Debt list;
+    // phase7-library-google.md PR-0c).
 
-        // Mock RegExp to return zero-width match at start, if code doesn't advance lastIndex, it will loop
-        const originalRegExp = global.RegExp;
-        vi.spyOn(global, 'RegExp').mockImplementation(function(...args) {
-            const r = new originalRegExp(...args);
-            r.exec = function (this: RegExp & { _count?: number }, str: string) {
-                this._count = (this._count || 0) + 1;
-                if (this._count > 100) {
-                    throw new Error("Infinite loop detected!");
-                }
+    describe('regression: edge placement and unicode (absorbed from search-engine.comprehensive.test.ts)', () => {
+        it('handles bracketed/braced literals as plain text', () => {
+            const text = 'This has a (parenthesis) and a [bracket] and a {brace}.';
+            engine.indexBook('test-book', [{ id: '1', href: 'chap1.html', text }]);
 
-                // Return a zero-width match at the current lastIndex.
-                const matchIndex = this.lastIndex;
-                if (matchIndex < str.length) {
-                    const match = Object.assign([''], { index: matchIndex, input: str });
-                    return match as RegExpExecArray;
-                }
-                return null;
-            };
-            return r;
+            expect(engine.search('test-book', '(parenthesis)')).toHaveLength(1);
+            expect(engine.search('test-book', '[bracket]')).toHaveLength(1);
+            expect(engine.search('test-book', '{brace}')).toHaveLength(1);
+            expect(engine.search('test-book', '(parenthesis)')[0].excerpt).toContain('(parenthesis)');
         });
 
-        // The safeguard should prevent the infinite loop and not throw an error.
-        const results = engine.search('testBook', 'hello');
-        expect(results).toBeDefined();
+        it('correctly handles matches at the very beginning', () => {
+            engine.indexBook('start', [{ id: '1', href: 'start.html', text: 'Start of the text.' }]);
+            const results = engine.search('start', 'Start');
+            expect(results[0].excerpt.trim()).toMatch(/^Start/);
+        });
+
+        it('correctly handles matches at the very end', () => {
+            engine.indexBook('end', [{ id: '1', href: 'end.html', text: 'End of the text' }]);
+            const results = engine.search('end', 'text');
+            expect(results[0].excerpt).toContain('text');
+            expect(results[0].excerpt.endsWith('text')).toBe(true);
+        });
+
+        it('finds matches after length-changing lowercase mappings when context absorbs the drift', () => {
+            // "İ" (U+0130) lowercases to "i̇" (2 code units) — small drifts stay
+            // inside the ±40-char excerpt window.
+            engine.indexBook('unicode', [{ id: '1', href: 'unicode.html', text: 'AİB matching text' }]);
+            const results = engine.search('unicode', 'matching');
+            expect(results).toHaveLength(1);
+            expect(results[0].excerpt).toContain('matching');
+        });
+    });
+
+    describe('documented current behavior: case-fold excerpt misalignment (phase7 PR-0c pin; fixed by PR-S2)', () => {
+        it('loses the match from the excerpt when enough length-changing characters precede it', () => {
+            // 45 × "İ" lowercase to 90 code units, so the match index found in
+            // the lowercased haystack is shifted +45 relative to the ORIGINAL
+            // string the excerpt is sliced from — the excerpt window no longer
+            // contains the match. PR-S2 (original-string matching) flips this
+            // assertion to `toContain('target')` deliberately.
+            const text = 'İ'.repeat(45) + 'target';
+            engine.indexBook('turkish', [{ id: '1', href: 'i.html', text }]);
+
+            const results = engine.search('turkish', 'target');
+            expect(results).toHaveLength(1);
+            expect(results[0].excerpt).not.toContain('target');
+        });
+    });
+
+    describe('regression: linear-scan throughput budget (absorbed from search-engine.perf.test.ts)', () => {
+        it('scans a 2M-char no-match corpus within budget', () => {
+            // No matches: early returns would hide the full-scan cost.
+            const sections = Array.from({ length: 200 }, (_, i) => ({
+                id: `sec-${i}`,
+                href: `sec-${i}.xhtml`,
+                text: 'abcdefghi '.repeat(1000),
+            }));
+            engine.initIndex('perf-book');
+            engine.addDocuments('perf-book', sections);
+
+            const start = performance.now();
+            const results = engine.search('perf-book', 'APPLE');
+            const duration = performance.now() - start;
+
+            expect(results).toHaveLength(0);
+            // Generous CI budget — the old file logged the number and asserted
+            // nothing. An indexOf scan of 2M chars sits well under 100ms; a
+            // 3s breach means the scan went accidentally quadratic.
+            expect(duration).toBeLessThan(3000);
+        });
     });
 });
