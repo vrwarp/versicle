@@ -2,18 +2,14 @@ import React from 'react';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useVocabularyStore } from '@store/useVocabularyStore';
 import { ReaderOverlay } from '@domains/reader/ui/ReaderOverlay';
+import type { PinyinPosition } from '@domains/chinese/types';
 
 /**
- * Pinyin position entry.
+ * Pinyin position entry — canonical definition lives with the chinese
+ * feature module (Phase 6 §7 types.ts); re-exported here for the legacy
+ * import path.
  */
-export interface PinyinPosition {
-  char: string;
-  pinyin: string;
-  top: number;
-  left: number;
-  width: number;
-  height: number;
-}
+export type { PinyinPosition };
 
 interface PinyinOverlayProps {
   positions: PinyinPosition[];
