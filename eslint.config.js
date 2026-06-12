@@ -653,4 +653,26 @@ export default tseslint.config(
       ],
     },
   },
+  // Phase 8 close (PR-10; ADR 0001 §5 / README rule 3 per-directory model):
+  // jsx-a11y recommended flips warn→ERROR for every directory this phase
+  // rewrote — the ui/ design system, the settings shell + registry, the
+  // shortcut service, and the pill feature homes (reader pills, sync alert,
+  // chinese vocab triage). All were at ZERO warnings at the flip (the
+  // ratchet may only tighten). Test files keep the global warn baseline:
+  // harness fixtures simulate interactions on bare elements by design.
+  // Remaining directories flip with P9 (prep §Hand-offs).
+  {
+    files: [
+      'src/components/ui/**/*.{ts,tsx}',
+      'src/app/settings/**/*.{ts,tsx}',
+      'src/app/shortcuts/**/*.{ts,tsx}',
+      'src/components/reader/pills/**/*.{ts,tsx}',
+      'src/components/sync/**/*.{ts,tsx}',
+      'src/components/chinese/**/*.{ts,tsx}',
+    ],
+    ignores: ['src/**/*.test.{ts,tsx}'],
+    rules: {
+      ...jsxA11y.flatConfigs.recommended.rules,
+    },
+  },
 );

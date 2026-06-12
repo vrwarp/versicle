@@ -1,5 +1,10 @@
 # Phase 8 design — shell, settings, a11y/i18n choke points, PWA/build finishers
 
+> **Phase 8 status (2026-06-12): DONE** — see plan/overhaul/README.md for the banner and
+> this doc's §Follow-ups for the per-item landing records (p8-routes-and-settings,
+> p8-interaction-choke-points, p8-pwa-and-close) including every deviation from the design
+> below and the items that need the Docker/nightly Playwright lane.
+
 **Read at HEAD:** `2de2c597c22c131c5c47f9f6817d334ec0dd1a2b` (branch `claude/amazing-davinci-d7336e`,
 2026-06-12 — `feat(net): TTS providers route through egress()`).
 **Geography warning for the implementing agent:** this doc was prepared while TWO chains
@@ -845,3 +850,112 @@ and decisions (design-doc-vs-reality, README §Program rules):
   directory flips ride the phase-close item (PR-10); ~75 legacy
   showToast(prose) call sites migrate opportunistically (ADR §2);
   the locale picker UI (writes UI_LOCALE_STORAGE_KEY) is post-overhaul.
+
+### p8-pwa-and-close — LANDED (2026-06-12) — PHASE 8 DONE
+
+PR-8 + PR-9 + PR-10 + phase close, as three commits + the close commit.
+Recorded deviations and decisions (design-doc-vs-reality, README §Program
+rules):
+
+- **PR-8 (PWA finishers, §G):** `registerType: 'prompt'`; sw.ts trades the
+  unconditional `self.skipWaiting()` for the SKIP_WAITING message handler
+  (workbox-window's handshake); `SWUpdatePrompt` (components/) registers
+  via `virtual:pwa-register/react` and surfaces ONE persistent keyed toast
+  ('app.updateReady') whose Reload action calls `updateServiceWorker(true)`
+  — mounted in App.tsx ABOVE the router gate beside ToastHost, so a
+  boot-blocked client can still take the fix (risk #1). The toast store
+  gained an optional ACTION button (resolved through the catalog) for this.
+  Handoff: fielded autoUpdate SWs skipWaiting THEMSELVES onto the first
+  prompt build; from then on updates prompt. The update-flow SOURCE
+  CONTRACT is pinned (SWUpdatePrompt.test.tsx: exactly one skipWaiting,
+  inside the handler; registerType stays 'prompt'; every sw.ts cacheName
+  wipe-enumerated by prefix). Vitest resolves the virtual module to
+  src/test/harness/pwaRegisterStub.ts via a vitest.config alias.
+- **Runtime caching deviations:** the dict cache KEPT its fielded name
+  `versicle-dict-assets` (§G sketched 'versicle-dict-v1'; renaming would
+  orphan fielded user caches) — fonts/piper got the sketched names
+  (`versicle-fonts-v1`, `versicle-piper-runtime-v1`); ExpirationPlugin
+  maxEntries on all three (risk #10); wipe.ts APP_CACHE_PREFIXES extended.
+  All routes same-origin-only; PiperRuntime's cross-origin
+  `piper-voices-v1` untouched.
+- **Manifest reality (RC-11):** `favico.ico` typo renamed → favicon.ico;
+  apple-touch-icon.png generated (180px from pwa-512) + linked in
+  index.html; **mask-icon.svg TRIMMED from includeAssets** (deviation from
+  "generate": no such asset ever existed and a Safari pinned-tab
+  monochrome SVG is not mechanically derivable from the raster logo —
+  revisit only if pinned-tab support is wanted). Manifest gained
+  id/start_url/scope/display/lang/dir/background_color. **Check 5 (PWA
+  shell)** in scripts/check-worker-chunk.mjs = the locally-verifiable
+  Lighthouse-installability half: ONE manifest link in built index.html,
+  installability fields, 192/512 icons, sw.js emitted.
+- **Honest soft gate (RC-13):** `swError` + App's unreachable "Critical
+  Error" screen DELETED; `useServiceWorkerGate` returns `{swInitialized}`
+  only; degraded mode (wait settled without a controller) = ONE keyed
+  toast ('app.swDegraded') — **prod builds only** (deviation made
+  explicit: DEV/VITE_E2E lanes block service workers by design — Playwright
+  `serviceWorkers:'block'` — so the notice would pollute every journey).
+  App_SW_Wait.test.tsx REWRITTEN in place (soft-gate + degraded-once
+  describes + the wipe regression block); folding it into App_Boot remains
+  a P9 absorption candidate.
+- **PR-9 (font rename, §I):** `Versicle Sans Narrow` via the COMMITTED
+  scripts/build-pinyin-font.py — name-table-only rewrite (trademark record
+  deleted; ParaType copyright + full OFL text retained as required
+  notices) with **glyf/cmap byte-equality asserted**, which is a STRONGER
+  local guarantee than the §I raster golden (an on-device pinyin overlay
+  visual check stays a nightly/manual item). Input (= the previously
+  shipped glyph-injected binaries, the canonical source artifacts; the
+  injection script predates the repo) hashes recorded in script +
+  inventory. src/test/pinyin-font.test.ts pins the compliance contract
+  against the binaries (pure-Node name/cmap parse). RC-16 confirmed: NO
+  persisted migration; read-time normalizeFontFamily() at the epubTheming
+  consumption points; the rule-4 slot RELEASED (README rule 4 amended).
+- **PR-10 (CSP strict flip, §H):** the §H precondition turned out FALSE at
+  entry — the P6/P7 sanitizer work had NOT landed remote-resource blocking
+  (sanitizer.ts only removed external <link> CSS). Implemented here as the
+  functional replacement for `img-src https:`: remote (http/https/
+  protocol-relative) refs stripped from img/source/video/audio/track/
+  svg-image at sanitize-at-serialize (tracking-pixel fixture pins it;
+  `<a href>` stays navigable). connect-src + img-src dropped `https:`;
+  nginx.conf regenerated; csp.test.ts extended (bare scheme wildcard in NO
+  directive; img-src/connect-src exact). npm scripts `generate:csp` /
+  `generate:csp:check` added (the prep referenced a script name that did
+  not exist). **Local verification beyond unit level:** the production
+  build served under the enforced preview headers boots clean (zero
+  console violations), the SW registers AND takes controller, /fonts/*
+  lands in versicle-fonts-v1, /settings/diagnostics deep-link renders.
+- **§J (activeContext):** verified already landed with
+  p8-routes-and-settings — absent from syncedKeys, two-client
+  non-propagation regression in store/__tests__/crdt-contract/
+  store-flips.test.ts, v9 kill-list note at app/migrations.ts:268.
+- **Phase close:** jsx-a11y recommended at ERROR for src/components/ui/,
+  src/app/settings/, src/app/shortcuts/, src/components/reader/pills/,
+  src/components/sync/, src/components/chinese/ (all at zero violations at
+  the flip; test files keep the global warn baseline — harness fixtures
+  interact with bare elements by design); remaining directories ride P9.
+  Depcruise baseline re-locked (no count changes). README: Phase 8 DONE
+  banner + a Phase 7 banner (it was missing — P7 closed via prep-doc
+  records only) + rule-4 ledger amended to the authoritative numbering
+  (v7 vocab/P6, v8 reading-list FK/P7, v9 husk-clears/P9; P8 slot
+  released).
+- **Needs the Docker/nightly Playwright lane** (not runnable locally):
+  full journey suite under enforced preview CSP; the offline smoke journey
+  (cold offline boot → book opens, pinyin font renders, dict lookup,
+  piper runtime loads); the TWO-BUILD update-prompt journey (build A →
+  build B → toast → reload activates — needs a server that swaps dist
+  mid-session; harness work); BYO-Firebase sign-in (popup + redirect)
+  against emulator + a real config under enforced headers; the on-device
+  pinyin visual golden.
+- **Pre-existing flake surfaced (NOT P8 fallout):** the fork contract test
+  "two-doc concurrent merges … converge identically" intermittently
+  (~1/5 full runs) throws an UNHANDLED scopedDiff-tripwire error from a
+  post-test microtask flush (packages/zustand-middleware-yjs/src/index.ts
+  :359/:384 → patching.ts:448) and fails `vitest run` with exit 1. File
+  untouched since P2; reproduced in isolation. Spun off as its own task —
+  determine test-race vs real inbound-merge scoped-diff gap.
+- **Hand-offs to P9:** v9 husk-clear (preferences husks +
+  `library.__schemaVersion` dual-write retirement + activeContext Y.Map
+  prune); window.useTTSStore/store-handle retirement; Modal/Dialog merge;
+  remaining jsx-a11y warn→error directories; App_SW_Wait → App_Boot
+  fold-in; lazy Drive facades if entry pressure appears; ~75 legacy
+  showToast(prose) call sites (opportunistic); locale picker UI
+  (post-overhaul).
