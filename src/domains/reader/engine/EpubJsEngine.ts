@@ -11,13 +11,15 @@
  * chinese content processor, locations cache) dissolve into engine modules
  * in their own Phase 6 items (PR-4/PR-10 of the prep doc).
  *
- * Every `(x as any)` here is inherited verbatim from the pre-port call
- * sites: the ambient epubjs stub (src/types/epubjs.d.ts) does not type these
- * internals; its retirement is the separate §8 stub-refactor item.
+ * Typing (§8 stub retirement): imports resolve to the REAL upstream
+ * `epubjs/types/*` declarations (the ambient shadow is deleted); the
+ * remaining untyped internals come from `./epubjsInternals` — see its
+ * header for the §8.5 decision record.
  */
-import ePub, { type Book, type Rendition, type Location } from 'epubjs';
+import ePub, { type Book, type Contents, type Rendition, type Location } from 'epubjs';
 import { createLogger } from '@lib/logger';
 import type { NavigationItem } from '~types/db';
+import { bookInternals, internals } from './epubjsInternals';
 import { HighlightLayerManager, type AnnotatingRendition } from './HighlightLayerManager';
 import type {
   ContentView,
@@ -37,8 +39,9 @@ const logger = createLogger('EpubJsEngine');
  * hook calls this instead of importing `epubjs` itself.
  */
 export function createEpubJsBook(data: ArrayBuffer | Blob | File): Book {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ePub(data as any);
+  // Upstream types ePub() as (string | ArrayBuffer) but the runtime openEpub
+  // path accepts Blob/File equally — one documented widening.
+  return ePub(data as ArrayBuffer);
 }
 
 export interface EpubJsEngineDeps {
@@ -79,8 +82,7 @@ export class EpubJsEngine implements ReaderEngine {
       whenReady: () => whenReady,
       length: () => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          return (this.deps.book.locations as any)?.length() ?? 0;
+          return this.deps.book.locations.length() ?? 0;
         } catch {
           return 0;
         }
@@ -139,8 +141,9 @@ export class EpubJsEngine implements ReaderEngine {
   }
 
   currentLocation(): EngineLocation | null {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const location = (this.deps.rendition as any).location as Location | undefined;
+    // Upstream types `location` non-optional, but it is undefined until the
+    // first display() resolves — the runtime guard stays.
+    const location = this.deps.rendition.location as Location | undefined;
     if (!location || !location.start) return null;
     return this.toEngineLocation(location);
   }
@@ -159,9 +162,9 @@ export class EpubJsEngine implements ReaderEngine {
   /** Async, book-backed resolver (kernel CfiRangeResolver — snapping). */
   async getRange(cfi: string): Promise<Range | null> {
     try {
-      // Lifecycle guard: the book may be destroyed during teardown.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (this.destroyed || !this.deps.book || !(this.deps.book as any).spine) return null;
+      // Lifecycle guard: the book may be destroyed during teardown (epub.js
+      // deletes `spine` at destroy, so the truthiness check is load-bearing).
+      if (this.destroyed || !this.deps.book || !this.deps.book.spine) return null;
       const range = await this.deps.book.getRange(cfi);
       return range ?? null;
     } catch {
@@ -172,8 +175,7 @@ export class EpubJsEngine implements ReaderEngine {
   /** Sync, rendition-backed range — only resolves on-screen content. */
   getRenderedRange(cfiRange: string): Range | null {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return ((this.deps.rendition as any).getRange(cfiRange) as Range) ?? null;
+      return this.deps.rendition.getRange(cfiRange) ?? null;
     } catch {
       return null;
     }
@@ -192,14 +194,12 @@ export class EpubJsEngine implements ReaderEngine {
   }
 
   getOverlayContainer(): Element | null {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (this.deps.rendition as any)?.manager?.container || null;
+    return internals(this.deps.rendition).manager?.container || null;
   }
 
   getContentViews(): ContentView[] {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const contents = ((this.deps.rendition as any).getContents() as any[]) || [];
+      const contents = internals(this.deps.rendition).getContents() || [];
       return contents
         .filter((c) => c && c.document)
         .map((c) => this.toContentView(c));
@@ -211,19 +211,19 @@ export class EpubJsEngine implements ReaderEngine {
   // --- structure ------------------------------------------------------------
 
   getToc(): NavigationItem[] {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return ((this.deps.book as any).navigation?.toc as NavigationItem[]) || [];
+    // `navigation` is undefined until book.loaded.navigation resolves —
+    // upstream types it non-optional, so the runtime guard keeps the `?.`.
+    return this.deps.book.navigation?.toc || [];
   }
 
   resolveSection(cfiOrHref: string): ResolvedSection | null {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const item = this.deps.book.spine.get(cfiOrHref) as any;
+      const spine = bookInternals(this.deps.book).spine;
+      const item = spine.get(cfiOrHref);
       if (!item) return null;
       return {
         href: item.href ?? '',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        index: item.index ?? (this.deps.book.spine as any).items?.indexOf(item) ?? -1,
+        index: item.index ?? spine.items?.indexOf(item) ?? -1,
         label: item.label,
       };
     } catch {
@@ -237,8 +237,7 @@ export class EpubJsEngine implements ReaderEngine {
    * the spine index scan).
    */
   getNavLabel(cfiOrHref: string): string | null {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const book = this.deps.book as any;
+    const book = bookInternals(this.deps.book);
     let section;
     try {
       section = book.spine.get(cfiOrHref);
@@ -254,13 +253,18 @@ export class EpubJsEngine implements ReaderEngine {
       }
     }
 
-    const spinePos = section.index ?? book.spine.items?.indexOf(section);
+    const spinePos = section.index ?? book.spine.items?.indexOf(section) ?? -1;
 
     // Try to find nav item by checking all nav items for matching spine index
     // This handles cases where href lookup fails or is mismatched
     if (spinePos >= 0 && book.navigation) {
       let foundLabel: string | null = null;
-      book.navigation.forEach((item: { href?: string; label?: string }) => {
+      // Upstream annotates forEach's callback as `(item) => {}` (an object
+      // return type), so a void callback is not assignable — one local cast.
+      const forEach = book.navigation.forEach.bind(book.navigation) as unknown as (
+        fn: (item: { href?: string; label?: string }) => void,
+      ) => void;
+      forEach((item) => {
         // Check if nav item's href points to our spine item
         const itemHref = item.href ? item.href.split('#')[0] : null;
         const itemSection = itemHref ? book.spine.get(itemHref) : null;
@@ -281,8 +285,7 @@ export class EpubJsEngine implements ReaderEngine {
    * collectSectionData internals, verbatim; P7 reuses it for indexing).
    */
   async loadSectionText(href: string): Promise<string> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const contentOrDoc = await (this.deps.book as any).load(href.split('#')[0]);
+    const contentOrDoc: unknown = await this.deps.book.load(href.split('#')[0]);
     let doc: Document | null = null;
 
     if (typeof contentOrDoc === 'string') {
@@ -296,10 +299,8 @@ export class EpubJsEngine implements ReaderEngine {
     // textContent fallback was always the documented intent of this logic
     // (and is what jsdom exercises; browsers resolve innerText first).
     const content =
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (doc.body as any)?.innerText ||
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (doc.documentElement as any)?.innerText ||
+      doc.body?.innerText ||
+      doc.documentElement?.innerText ||
       doc.body?.textContent ||
       '';
     return typeof content === 'string' ? content : '';
@@ -308,8 +309,8 @@ export class EpubJsEngine implements ReaderEngine {
   // --- metadata ------------------------------------------------------------
 
   getLanguage(): string | undefined {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const lang = (this.deps.book as any)?.packaging?.metadata?.language;
+    // `packaging` is undefined until the book opens — runtime guard stays.
+    const lang = this.deps.book?.packaging?.metadata?.language;
     return lang && typeof lang === 'string' ? lang : undefined;
   }
 
@@ -319,8 +320,7 @@ export class EpubJsEngine implements ReaderEngine {
   selectRange(cfiRange: string): void {
     try {
       const range = this.getRenderedRange(cfiRange);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const win = (this.deps.rendition as any).manager?.getContents()?.[0]?.window;
+      const win = internals(this.deps.rendition).manager?.getContents()?.[0]?.window;
       if (win && range) {
         win.getSelection()?.removeAllRanges();
         win.getSelection()?.addRange(range);
@@ -358,14 +358,12 @@ export class EpubJsEngine implements ReaderEngine {
     return { top: iframe?.offsetTop || 0, left: iframe?.offsetLeft || 0 };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private toContentView(contents: any): ContentView {
+  private toContentView(contents: Contents): ContentView {
     const iframe = contents?.window?.frameElement as HTMLIFrameElement | null;
     const sectionIndex = contents?.sectionIndex;
     let sectionHref = '';
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const item = (this.deps.book.spine as any)?.get?.(sectionIndex);
+      const item = bookInternals(this.deps.book).spine?.get?.(sectionIndex);
       sectionHref = item?.href ?? '';
     } catch {
       /* best effort */
@@ -401,8 +399,7 @@ export class EpubJsEngine implements ReaderEngine {
   }
 
   private wireRenditionEvents(): void {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rendition = this.deps.rendition as any;
+    const rendition = this.deps.rendition;
 
     const on = (event: string, handler: (...args: unknown[]) => void) => {
       try {
@@ -420,12 +417,12 @@ export class EpubJsEngine implements ReaderEngine {
     on('selected', (cfiRange, contents) => {
       const range = this.getRenderedRange(cfiRange as string);
       if (!range) return; // legacy guard: epub.js 'selected' with no live range is dropped
+      const view = contents as Contents | undefined;
       this.emit({
         type: 'selected',
         cfiRange: cfiRange as string,
         range,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        view: contents && (contents as any).document ? this.toContentView(contents) : null,
+        view: view && view.document ? this.toContentView(view) : null,
       });
     });
 
@@ -446,21 +443,18 @@ export class EpubJsEngine implements ReaderEngine {
     // accessible iframe title (the C7 SR contract: every reader iframe is
     // named for screen readers at content render).
     try {
-      rendition.hooks?.content?.register?.((contents: unknown) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const c = contents as any;
-        if (!c?.document) return;
+      rendition.hooks?.content?.register?.((contents: Contents) => {
+        if (!contents?.document) return;
         try {
-          const iframe = c.window?.frameElement as HTMLIFrameElement | null;
+          const iframe = contents.window?.frameElement as HTMLIFrameElement | null;
           if (iframe && !iframe.getAttribute('title')) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const title = (this.deps.book as any)?.packaging?.metadata?.title;
+            const title = this.deps.book?.packaging?.metadata?.title;
             iframe.setAttribute('title', typeof title === 'string' && title ? title : 'Book content');
           }
         } catch {
           /* best effort */
         }
-        this.emit({ type: 'contentRendered', view: this.toContentView(c) });
+        this.emit({ type: 'contentRendered', view: this.toContentView(contents) });
       });
     } catch (e) {
       logger.warn('failed to register content hook', e);
