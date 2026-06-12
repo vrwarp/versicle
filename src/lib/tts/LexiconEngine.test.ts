@@ -11,7 +11,7 @@ import { LexiconAssembler, type LexiconStateView } from './LexiconEngine';
 import { bibleLexiconProvider, type SystemLexiconProvider } from './systemLexicon';
 import { lexiconApplier, processInitialisms, INITIALISMS_SYSTEM_RULE } from './LexiconApplier';
 import { loadBibleLexicon } from './bible-lexicon';
-import type { LexiconRule } from '~types/db';
+import type { LexiconRule } from '~types/user-data';
 
 /** Assembler over a mutable in-memory state with manual change events. */
 function makeAssembler(opts: {

@@ -30,7 +30,7 @@ import type { ITTSProvider, TTSEvent } from './types';
 import { TTSCache } from '../TTSCache';
 import type { FakeAudioSink } from '../engine/FakeAudioSink';
 import type { Timepoint } from '~types/tts';
-import type { CacheAudioBlob } from '~types/db';
+import type { CacheAudioBlob } from '~types/cache';
 
 /**
  * In-memory TTSCache for provider tests: real SHA-256 key generation (the golden

@@ -19,7 +19,8 @@
  * mutation runs inside the shared KeyedMutex, so reprocess overlap (D6) and
  * restore-vs-delete races are impossible by construction.
  */
-import type { UserInventoryItem, BookMetadata, StaticBookManifest } from '~types/db';
+import type { BookMetadata, StaticBookManifest } from '~types/book';
+import type { UserInventoryItem } from '~types/user-data';
 import type { StaticManifestRow } from '@data/rows/static';
 import { AppError, StorageFullError } from '~types/errors';
 import { createLogger } from '@lib/logger';

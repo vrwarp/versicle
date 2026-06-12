@@ -11,7 +11,8 @@
 import { bookContent, type ManifestBundle } from '@data/repos/bookContent';
 import { useBookStore } from '@store/useBookStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
-import type { BookMetadata, UserInventoryItem } from '~types/db';
+import type { BookMetadata } from '~types/book';
+import type { UserInventoryItem } from '~types/user-data';
 
 function toBookMetadata(bundle: ManifestBundle, inventory: UserInventoryItem | undefined): BookMetadata {
     const { manifest, structure, hasResource } = bundle;

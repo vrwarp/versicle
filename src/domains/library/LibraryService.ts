@@ -18,7 +18,7 @@
  * at the PR-L4 cutover with its assertions unchanged.
  */
 import { createLogger } from '@lib/logger';
-import type { UserInventoryItem } from '~types/db';
+import type { UserInventoryItem } from '~types/user-data';
 import type { KeyedMutex } from './mutex';
 import type { InventoryPort, LibraryProjectionPort, LibraryPersistence } from './ports';
 import type { ImportOrchestrator } from './import/ImportOrchestrator';

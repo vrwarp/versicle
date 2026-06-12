@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { exportReadingListToCSV, parseReadingListCSV } from './csv';
-import type { ReadingListEntry } from '~types/db';
+import type { ReadingListEntry } from '~types/user-data';
 
 describe('CSV Util', () => {
     const entries: ReadingListEntry[] = [

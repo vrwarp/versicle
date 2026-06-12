@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
-import type { UserAnnotation } from '~types/db';
+import type { UserAnnotation } from '~types/user-data';
 import { createLogger } from '@lib/logger';
 import { generateSecureId } from '@lib/crypto';
 

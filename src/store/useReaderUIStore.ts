@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import type { NavigationItem } from '~types/db';
+import type { NavigationItem } from '~types/book';
 
-import type { Annotation } from '~types/db';
+import type { Annotation } from '~types/user-data';
 
 export interface CompassState {
     variant?: 'active' | 'summary' | 'compact' | 'annotation' | 'sync-alert' | 'audio-triage' | 'vocab-triage';

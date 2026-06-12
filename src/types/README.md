@@ -33,9 +33,9 @@ split (plan/overhaul/README.md §Roadmap P1):
     `FlightEventSource`, `FlightSnapshot`.
 *   **`sync.ts`**: Sync wire/recovery shapes — `SyncManifest`,
     `SyncCheckpoint`, `SyncLogEntry`.
-*   **`db.ts`**: **Deprecated** re-export shim over the six modules above so
-    existing importers compile unchanged. Do not add new imports of it;
-    it is deleted in Phase 9.
+*   `db.ts` (the Phase 1a re-export shim over the six modules above) met
+    its named deletion deadline in Phase 9 and is GONE — import from the
+    owning domain module (`scripts/codemod-types-db.mjs` was the migration).
 *   **`content-analysis.ts`**: Content-analysis status/result primitives
     (`AnalysisStatus`, `ContentTypeResult`).
 *   **`errors.ts`**: The application error taxonomy.

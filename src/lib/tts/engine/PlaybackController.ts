@@ -2,7 +2,7 @@ import { isPlaybackInterruption, isProviderPlaybackError } from '../providers/ty
 import type { ITTSProvider, TTSVoice } from '../providers/types';
 import type { TTSQueueItem } from '~types/tts';
 import { lexiconApplier } from '../LexiconApplier';
-import type { SectionMetadata } from '~types/db';
+import type { SectionMetadata } from '~types/book';
 import { TaskSequencer, type TaskContext } from '../TaskSequencer';
 import { SectionAnalysisDriver, type SectionContent } from '../SectionAnalysisDriver';
 import { buildSectionQueue } from '../SectionQueueBuilder';

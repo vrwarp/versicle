@@ -71,7 +71,7 @@ export interface CacheSessionState {
 
 // The canonical CitationMarker moved to ./tts-content (Phase 5c §5c.1 — the
 // extraction/engine consumption types live together); re-exported here so the
-// cache-row surface (and the ~types/db shim) keeps serving it.
+// cache-row surface keeps serving it.
 export type { CitationMarker } from './tts-content';
 import type { CitationMarker } from './tts-content';
 

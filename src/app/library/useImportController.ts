@@ -11,7 +11,7 @@
  */
 import { DuplicateBookError } from '~types/errors';
 import type { BatchImportSummary, ImportJobResult } from '@domains/library';
-import type { UserInventoryItem } from '~types/db';
+import type { UserInventoryItem } from '~types/user-data';
 import { getLibrary } from './createLibrary';
 
 async function unwrap(result: ImportJobResult, filename: string): Promise<ImportJobResult> {

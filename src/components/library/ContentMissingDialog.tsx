@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { CloudOff, Loader2, Download, Cloud } from 'lucide-react';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 import { useDriveStore } from '@store/useDriveStore';
 import { getDriveLibrarySync } from '@domains/google';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';

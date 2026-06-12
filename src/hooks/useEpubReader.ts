@@ -23,7 +23,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Book, Rendition } from 'epubjs';
 import { bookContent } from '@data/repos/bookContent';
-import type { BookMetadata, NavigationItem } from '~types/db';
+import type { BookMetadata, NavigationItem } from '~types/book';
 import { EpubJsEngine, createEpubJsBook } from '@domains/reader/engine/EpubJsEngine';
 import type { ReaderEngine, EngineLocation } from '@domains/reader/engine/ReaderEngine';
 import { setActiveReaderEngine } from '@domains/reader/engine/activeEngineRegistry';

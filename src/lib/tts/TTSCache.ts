@@ -1,5 +1,5 @@
 import { audioCache } from '@data/repos/audioCache';
-import type { CacheAudioBlob } from '~types/db';
+import type { CacheAudioBlob } from '~types/cache';
 import type { Timepoint } from './providers/types';
 
 /**

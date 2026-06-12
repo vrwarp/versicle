@@ -16,7 +16,7 @@
  * (via TtsController — a direct lib→store read here would regress the
  * lib-not-to-store ratchet); tests hand in plain objects.
  */
-import type { LexiconRule } from '~types/db';
+import type { LexiconRule } from '~types/user-data';
 import type { BiblePreference } from './biblePreference';
 import type { SystemLexiconProvider } from './systemLexicon';
 import { bibleLexiconProvider } from './systemLexicon';

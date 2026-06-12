@@ -2,7 +2,7 @@ import { useState, useRef, useMemo } from 'react';
 import { LexiconService } from '@lib/tts/LexiconService';
 import { useLexiconStore } from '@store/useLexiconStore';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
-import type { LexiconRule } from '~types/db';
+import type { LexiconRule } from '~types/user-data';
 import { Plus, Trash2, Save, X, Download, Upload, ArrowUp, ArrowDown, Play, RefreshCw, CornerDownRight } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Dialog as UiDialog } from '../ui/Dialog';

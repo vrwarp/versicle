@@ -10,7 +10,7 @@
  * the synthetic `epubcfi(/6/{2*(i+1)}!/4/2/{n}:0)` shape; every sentence
  * occupies one 20px line of 200px width.
  */
-import type { NavigationItem } from '~types/db';
+import type { NavigationItem } from '~types/book';
 import { HighlightLayerManager, type AnnotatingRendition } from './HighlightLayerManager';
 import type {
   ContentView,

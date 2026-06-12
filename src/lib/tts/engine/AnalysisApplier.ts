@@ -23,7 +23,7 @@ import type {
     SectionAnalysis,
     TableAdaptation,
 } from './EngineContext';
-import type { SectionMetadata } from '~types/db';
+import type { SectionMetadata } from '~types/book';
 
 export interface AnalysisApplierDeps {
     ctx: EngineContext;

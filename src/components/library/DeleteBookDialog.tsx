@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useToastStore } from '@store/useToastStore';
 import { useImportController } from '@app/library/useImportController';
-import { type BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';

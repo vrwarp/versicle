@@ -1,5 +1,5 @@
 import React from 'react';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 import { BookOpen, Cloud, MoreVertical, CloudDownload } from 'lucide-react';
 import { useToastStore } from '@store/useToastStore';
 import { cn } from '@lib/utils';

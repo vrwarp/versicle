@@ -10,7 +10,7 @@
  * Extracted from LexiconService so importing the engine no longer drags `useLexiconStore`
  * (and its Y.Doc + IndexedDB connection) into the worker bundle.
  */
-import type { LexiconRule } from '~types/db';
+import type { LexiconRule } from '~types/user-data';
 
 interface CompiledLexiconRule {
     originalRule: LexiconRule;

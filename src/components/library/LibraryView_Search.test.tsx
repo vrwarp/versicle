@@ -3,7 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { LibraryView } from './LibraryView';
 import { useLibraryStore, useBookStore } from '@store/useLibraryStore';
 import { MemoryRouter } from 'react-router-dom';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 
 // Mock zustand persistence
 vi.mock('zustand/middleware', async (importOriginal) => {

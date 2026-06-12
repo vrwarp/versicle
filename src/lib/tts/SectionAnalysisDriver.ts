@@ -16,7 +16,8 @@
  * only the prewarm path carried them) is unrepresentable.
  */
 import type { EngineContext } from './engine/EngineContext';
-import type { CitationMarker, SectionMetadata } from '~types/db';
+import type { SectionMetadata } from '~types/book';
+import type { CitationMarker } from '~types/cache';
 import type { ContentType } from '~types/content-analysis';
 import type { SentenceNode } from '~types/tts-content';
 import { preprocessBlockRoots, groupSegmentsByRoot, type CfiGroup } from '@kernel/cfi';

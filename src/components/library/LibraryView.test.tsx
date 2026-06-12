@@ -6,7 +6,8 @@ import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useLibraryStore, useBookStore } from '@store/useLibraryStore';
 import { useToastStore } from '@store/useToastStore';
 import { MemoryRouter } from 'react-router-dom';
-import type { UserProgress, BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
+import type { UserProgress } from '~types/user-data';
 
 // Mock zustand/middleware to disable persistence
 vi.mock('zustand/middleware', () => ({

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
-import type { UserInventoryItem } from '~types/db';
+import type { UserInventoryItem } from '~types/user-data';
 
 /**
  * Replication declaration (aggregated by src/store/registry.ts).

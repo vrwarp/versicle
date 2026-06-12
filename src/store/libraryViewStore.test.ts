@@ -12,7 +12,7 @@ import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
 import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
-import type { UserInventoryItem, UserProgress, ReadingListEntry } from '~types/db';
+import type { UserInventoryItem, UserProgress, ReadingListEntry } from '~types/user-data';
 import { makeBookMetadata, makeInventoryItem } from '@test/harness';
 import { getDeviceId } from '@lib/device-id';
 

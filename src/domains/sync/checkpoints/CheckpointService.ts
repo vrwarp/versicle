@@ -1,7 +1,7 @@
 import { checkpoints } from '@data/repos/checkpoints';
 import * as Y from 'yjs';
 import { getYDoc, getYjsPersistence, disconnectYjs } from '@store/yjs-provider';
-import type { SyncCheckpoint } from '~types/db';
+import type { SyncCheckpoint } from '~types/sync';
 import {
   captureDoc,
   validateSnapshot,

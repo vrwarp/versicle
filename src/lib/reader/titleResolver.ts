@@ -1,4 +1,5 @@
-import type { NavigationItem, UserInventoryItem } from '~types/db';
+import type { NavigationItem } from '~types/book';
+import type { UserInventoryItem } from '~types/user-data';
 
 /**
  * Compares two path strings resiliently:

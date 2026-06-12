@@ -28,19 +28,9 @@
 // scripts/check-worker-chunk.mjs asserts the emitted artifact).
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
-import type {
-  NavigationItem,
-  SectionMetadata,
-  CacheTtsPreparation,
-  StaticBookManifest,
-  StaticResource,
-  UserInventoryItem,
-  UserProgress,
-  UserOverrides,
-  ReadingListEntry,
-  TableImage,
-  PerceptualPalette,
-} from '~types/db';
+import type { NavigationItem, SectionMetadata, StaticBookManifest, StaticResource, PerceptualPalette } from '~types/book';
+import type { UserInventoryItem, UserProgress, UserOverrides, ReadingListEntry } from '~types/user-data';
+import type { CacheTtsPreparation, TableImage } from '~types/cache';
 import { TTS_EXTRACTION_VERSION, type ExtractionOptions } from '@lib/ingestion/sentence-extraction';
 import type { ProcessedChapter } from '@domains/reader/engine/offscreen/offscreen-renderer';
 import { CancellationError } from '@lib/cancellable-task-runner';

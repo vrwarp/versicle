@@ -1,13 +1,13 @@
 import ePub from 'epubjs';
 import { snapdom } from '@zumer/snapdom';
 import { extractSentencesFromNode, type ExtractionOptions, type SentenceNode } from '@lib/ingestion/sentence-extraction';
-import type { CitationMarker } from '~types/db';
+import type { CitationMarker } from '~types/cache';
 import {
   registerSanitizeHook,
   observeAndPatchSandbox,
   type EpubJsBookLike,
 } from '../epubSecurity';
-import type { TableImage } from '~types/db';
+import type { TableImage } from '~types/cache';
 import { CancellationError } from '@lib/cancellable-task-runner';
 import { createLogger } from '@lib/logger';
 

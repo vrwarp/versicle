@@ -10,7 +10,7 @@
  * takes the language so the per-language filter can be memoized here —
  * intent (lazy JSON, frozen CompiledRules, single compile) unchanged.
  */
-import type { LexiconRule } from '~types/db';
+import type { LexiconRule } from '~types/user-data';
 import { loadBibleLexicon } from './bible-lexicon';
 import { resolveBiblePreference, type BiblePreference } from './biblePreference';
 

@@ -4,7 +4,7 @@ import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Checkbox } from './ui/Checkbox';
 import { useReadingListStore } from '@store/useReadingListStore';
-import type { ReadingListEntry } from '~types/db';
+import type { ReadingListEntry } from '~types/user-data';
 import { ArrowUpDown, Trash2, Edit2, Download, ArrowUp, ArrowDown, BookOpen, Wand2 } from 'lucide-react';
 import { EditReadingListEntryDialog } from './EditReadingListEntryDialog';
 import { exportFile } from '@lib/export';

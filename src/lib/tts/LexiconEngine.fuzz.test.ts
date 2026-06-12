@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import { lexiconApplier as service } from './LexiconApplier';
 import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '@test/fuzz-utils';
-import type { LexiconRule } from '~types/db';
+import type { LexiconRule } from '~types/user-data';
 
 describe('LexiconEngine applier fuzzing', () => {
     const SEED = DEFAULT_FUZZ_SEED;

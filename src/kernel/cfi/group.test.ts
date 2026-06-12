@@ -17,7 +17,7 @@ import { groupSegmentsByRoot, attributeMarkersToGroups } from './group';
 import { preprocessBlockRoots, parseCfiRange } from './parse';
 import { generateCfiRange } from './merge';
 import { extractSentencesFromNode } from '@lib/ingestion/sentence-extraction';
-import type { CitationMarker } from '~types/db';
+import type { CitationMarker } from '~types/cache';
 
 describe('regression: AudioContentPipeline_Grouping', () => {
     it('should consistently group regardless of order (P1, Div, P2 vs Div, P1, P2)', () => {

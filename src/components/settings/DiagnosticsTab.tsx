@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
-import type { FlightSnapshot } from '~types/db';
+import type { FlightSnapshot } from '~types/flight-recorder';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { ScrollArea } from '../ui/ScrollArea';

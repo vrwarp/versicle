@@ -7,7 +7,7 @@
  * hook.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { NavigationItem, BookMetadata } from '~types/db';
+import type { NavigationItem, BookMetadata } from '~types/book';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useBookStore } from '@store/useBookStore';

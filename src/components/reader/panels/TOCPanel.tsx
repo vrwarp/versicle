@@ -1,5 +1,5 @@
 import React from 'react';
-import type { NavigationItem } from '~types/db';
+import type { NavigationItem } from '~types/book';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/Tabs';
 import { Switch } from '../../ui/Switch';
 import { Label } from '../../ui/Label';

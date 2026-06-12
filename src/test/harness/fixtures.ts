@@ -4,7 +4,8 @@
  * is a complete, valid object, with overrides typechecked against the real
  * domain types.
  */
-import type { BookMetadata, UserInventoryItem } from '~types/db';
+import type { BookMetadata } from '~types/book';
+import type { UserInventoryItem } from '~types/user-data';
 import type { TTSQueueItem } from '~types/tts';
 
 export function makeInventoryItem(

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { extractSentencesFromNode, TTS_EXTRACTION_VERSION } from './sentence-extraction';
 import { TextSegmenter, DEFAULT_SENTENCE_STARTERS } from '@lib/tts/TextSegmenter';
-import type { CacheTtsPreparation } from '~types/db';
+import type { CacheTtsPreparation } from '~types/cache';
 
 describe('extractSentencesFromNode', () => {
   const mockCfiGenerator = (range: Range) => `cfi(${range.startOffset})`;

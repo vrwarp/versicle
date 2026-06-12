@@ -12,7 +12,7 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 import { useReadingStateStore } from '@store/useReadingStateStore';
 import { useToastStore } from '@store/useToastStore';
 import { Dialog } from '../../ui/Dialog';

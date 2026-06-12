@@ -8,7 +8,7 @@
  * host implementation calls this repository.
  */
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
-import type { ContentAnalysis } from '~types/db';
+import type { ContentAnalysis } from '~types/book';
 
 class ContentAnalysisRepository {
     getContentAnalysis(bookId: string, sectionId: string): ContentAnalysis | undefined {

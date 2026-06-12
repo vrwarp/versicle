@@ -8,7 +8,7 @@
  * label (synthetic or real) → the spine-provided title.
  */
 import { findTocItem, resolveSyntheticPreference } from '../reader/titleResolver';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 import type { ContentAnalysisPort, BookContentPort } from './engine/EngineContext';
 
 export interface SectionTitlePorts {

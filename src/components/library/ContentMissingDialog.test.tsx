@@ -4,7 +4,7 @@ import { describe, it, expect, vi, type Mock } from 'vitest';
 import { ContentMissingDialog } from './ContentMissingDialog';
 import { useDriveStore } from '@store/useDriveStore';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
-import { type BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 
 // Mock the store
 vi.mock('@store/useDriveStore', () => ({

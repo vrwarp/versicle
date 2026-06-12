@@ -27,7 +27,7 @@ import type { ReaderCommands } from '@domains/reader/ui/ReaderCommands';
 import { SearchSession, createWorkerSearchEngineFactory } from '@domains/search';
 import { registerChineseReading, getBookBaseLanguage } from '@domains/chinese';
 import type { PinyinPosition } from '@domains/chinese/types';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 import type { DetailedSearchResult } from '~types/search';
 import { searchTextRepo } from '@data/repos/searchText';
 import { useReadingStateStore } from '@store/useReadingStateStore';

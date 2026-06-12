@@ -1,6 +1,6 @@
 import React, { forwardRef, useImperativeHandle } from 'react';
 import { Trash2, CloudOff, RefreshCw } from 'lucide-react';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 import {
     DropdownMenu,
     DropdownMenuContent,

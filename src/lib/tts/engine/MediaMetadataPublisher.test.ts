@@ -10,7 +10,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { MediaMetadataPublisher, POSITION_DEADBAND_S } from './MediaMetadataPublisher';
 import { QueueModel } from '../QueueModel';
 import type { MediaPlatform } from '../PlatformIntegration';
-import type { SectionMetadata } from '~types/db';
+import type { SectionMetadata } from '~types/book';
 
 function makePublisher(opts: { playlist?: SectionMetadata[]; speed?: number } = {}) {
     const platform = {

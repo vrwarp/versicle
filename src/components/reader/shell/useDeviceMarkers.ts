@@ -26,7 +26,7 @@ export function useDeviceMarkers(
     const bookProgress = state.progress?.[bookId];
     if (!bookProgress) return {};
 
-    const result: Record<string, import('~types/db').UserProgress> = {};
+    const result: Record<string, import('~types/user-data').UserProgress> = {};
     for (const [deviceId, prog] of Object.entries(bookProgress)) {
       if (deviceId !== currentDeviceId) {
         result[deviceId] = prog;

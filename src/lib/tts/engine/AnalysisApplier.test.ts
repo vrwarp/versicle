@@ -14,7 +14,7 @@ import { QueueModel } from '../QueueModel';
 import { TaskSequencer } from '../TaskSequencer';
 import type { SectionAnalysisDriver } from '../SectionAnalysisDriver';
 import type { SectionAnalysis } from './EngineContext';
-import type { SectionMetadata } from '~types/db';
+import type { SectionMetadata } from '~types/book';
 
 function makeApplier() {
     const ctx = new FakeEngineContext();

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useAnnotationStore } from '@store/useAnnotationStore';
 import { Trash2, StickyNote, PenLine } from 'lucide-react';
-import type { Annotation } from '~types/db';
+import type { Annotation } from '~types/user-data';
 import { Button } from '../ui/Button';
 import { useConfirm } from '../ui/ConfirmDialog';
 import { formatDate } from '@kernel/locale/format';

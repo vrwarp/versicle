@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
-import type { LexiconRule } from '~types/db';
+import type { LexiconRule } from '~types/user-data';
 import { v4 as uuidv4 } from 'uuid';
 
 /**

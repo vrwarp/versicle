@@ -8,7 +8,7 @@ import React from 'react';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { useReaderCommands } from '@domains/reader/ui/ReaderCommands';
 import type { SearchSession } from '@domains/search';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 import type { DetailedSearchResult } from '~types/search';
 import { useSidebarState } from '@hooks/useSidebarState';
 import { TOCPanel, SearchPanel } from '../panels';

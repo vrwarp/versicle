@@ -3,7 +3,7 @@ import { useBookProgress } from '@store/useReadingStateStore';
 import { parseCfiRange } from '@kernel/cfi';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { BookOpen, Headphones, ScrollText } from 'lucide-react';
-import type { ReadingEventType, ReadingSession } from '~types/db';
+import type { ReadingEventType, ReadingSession } from '~types/user-data';
 import { formatDate, formatTime } from '@kernel/locale/format';
 
 interface Props {

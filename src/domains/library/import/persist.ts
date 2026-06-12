@@ -16,7 +16,7 @@
 import { bookContent } from '@data/repos/bookContent';
 import { searchTextRepo } from '@data/repos/searchText';
 import { createLogger } from '@lib/logger';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 import type { LibraryPersistence } from '../ports';
 import type { FullBookExtraction } from './extract';
 import { reprocessBookContent } from './reprocess';

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { lexiconApplier } from './LexiconApplier';
-import type { LexiconRule } from '~types/db';
+import type { LexiconRule } from '~types/user-data';
 
 describe('LexiconEngine perf companion', () => {
     it('should be faster with cached compilation', () => {

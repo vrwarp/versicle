@@ -11,7 +11,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SectionAnalysisDriver } from './SectionAnalysisDriver';
 import { FakeEngineContext } from './engine/FakeEngineContext';
-import type { CitationMarker } from '~types/db';
+import type { CitationMarker } from '~types/cache';
 
 const GENAI_ALL_ON = {
     isEnabled: true,

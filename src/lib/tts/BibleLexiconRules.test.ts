@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { loadBibleLexicon } from './bible-lexicon';
 import { lexiconApplier } from './LexiconApplier';
-import type { LexiconRule } from '~types/db';
+import type { LexiconRule } from '~types/user-data';
 
 describe('Bible Lexicon Rules', () => {
     // Prepared as the assembler compiles them (lazy JSON since 5c-PR3)

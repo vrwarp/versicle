@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { exportReadingListToCSV, parseReadingListCSV } from './csv';
 import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '@test/fuzz-utils';
-import type { ReadingListEntry } from '~types/db';
+import type { ReadingListEntry } from '~types/user-data';
 
 describe('CSV Parsing Fuzzing', () => {
     const SEED = DEFAULT_FUZZ_SEED;

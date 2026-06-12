@@ -7,7 +7,7 @@
  * effect). The data is byte-identical to the legacy module (round-trip
  * verified at conversion).
  */
-import type { LexiconRule } from '~types/db';
+import type { LexiconRule } from '~types/user-data';
 
 /** The raw shape of one Bible rule as stored in bible-lexicon.json. */
 export interface RawBibleRule {

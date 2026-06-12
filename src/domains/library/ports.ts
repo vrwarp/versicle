@@ -4,7 +4,8 @@
  * is the composition root that wires these to the zustand stores, the
  * EngineContext pattern generalized).
  */
-import type { UserInventoryItem, ReadingListEntry, BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
+import type { UserInventoryItem, ReadingListEntry } from '~types/user-data';
 import type { StaticManifestRow } from '@data/rows/static';
 import type { ExtractionOptions } from '@lib/ingestion/sentence-extraction';
 import type { FullBookExtraction } from './import/extract';

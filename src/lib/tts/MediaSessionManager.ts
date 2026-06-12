@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
 import { isPaletteBright, rgbToL, unpackColorToRGB } from '../cover-palette';
-import type { PerceptualPalette } from '~types/db';
+import type { PerceptualPalette } from '~types/book';
 
 /**
  * Metadata for the Media Session API.

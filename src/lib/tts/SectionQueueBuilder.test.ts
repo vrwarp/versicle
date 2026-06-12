@@ -13,7 +13,7 @@ import { resolveBiblePreference } from './biblePreference';
 import { loadBibleLexicon } from './bible-lexicon';
 import { TextSegmenter } from './TextSegmenter';
 import { resolveSectionTitle } from './sectionTitle';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 
 const SETTINGS = {
     abbreviations: [] as string[],

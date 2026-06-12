@@ -21,7 +21,7 @@
  */
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { getConnection as getDB } from './connection';
-import type { StaticBookManifest } from '~types/db';
+import type { StaticBookManifest } from '~types/book';
 
 interface WriteGateModule {
   runExclusiveIdbWrite<T>(work: () => Promise<T>): Promise<T>;

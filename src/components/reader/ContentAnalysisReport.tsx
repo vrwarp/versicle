@@ -6,7 +6,7 @@ import { Button } from '../ui/Button';
 import { TYPE_COLORS, type ContentType } from '~types/content-analysis';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { ChevronRight, ChevronDown } from 'lucide-react';
-import type { NavigationItem } from '~types/db';
+import type { NavigationItem } from '~types/book';
 
 interface ContentAnalysisReportProps {
     isOpen: boolean;

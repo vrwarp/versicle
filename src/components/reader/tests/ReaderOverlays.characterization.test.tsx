@@ -38,7 +38,7 @@ import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { TYPE_COLORS } from '~types/content-analysis';
 import { getActiveReaderEngine } from '@domains/reader/engine/activeEngineRegistry';
-import type { UserAnnotation } from '~types/db';
+import type { UserAnnotation } from '~types/user-data';
 import ePub from 'epubjs';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';

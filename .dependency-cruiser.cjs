@@ -21,7 +21,8 @@ module.exports = {
       severity: 'warn',
       comment:
         'Circular dependencies (full graph, type imports included). ' +
-        'Most chains route through types/db.ts importing lib/tts ' +
+        'The LD-1 hub (types/db.ts importing lib/tts) died in P1; the ' +
+        'shim itself met its P9 deletion deadline ' +
         '(see plan/overhaul/analysis/layering-deps.md LD-1/LD-2).',
       from: {},
       to: { circular: true },
@@ -50,7 +51,7 @@ module.exports = {
       comment:
         'types/ is the L0 layer: it may not import any other internal ' +
         'module (master plan §2 rule 1 — kernel imports nothing). ' +
-        'Today types/db.ts imports lib/tts (LD-1).',
+        'At ZERO since P1 dissolved the LD-1 hub; the db.ts shim is gone (P9).',
       from: { path: '^src/types' },
       to: { path: '^src', pathNot: '^src/types' },
     },

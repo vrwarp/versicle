@@ -18,7 +18,7 @@
  */
 import ePub, { type Book, type Contents, type Rendition, type Location } from 'epubjs';
 import { createLogger } from '@lib/logger';
-import type { NavigationItem } from '~types/db';
+import type { NavigationItem } from '~types/book';
 import { bookInternals, internals } from './epubjsInternals';
 import { HighlightLayerManager, type AnnotatingRendition } from './HighlightLayerManager';
 import type {

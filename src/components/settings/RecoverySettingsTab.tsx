@@ -6,7 +6,7 @@ import { CheckpointInspector, type DiffResult } from '@domains/sync/checkpoints/
 import { stopSyncConnections } from '@app/sync/createSync';
 import { CheckpointDiffView } from './CheckpointDiffView';
 import { backupService } from '@lib/BackupService';
-import type { SyncCheckpoint } from '~types/db';
+import type { SyncCheckpoint } from '~types/sync';
 import { DataRecoveryView } from './DataRecoveryView';
 import { Modal, ModalContent, ModalHeader, ModalTitle } from '../ui/Modal';
 import { formatDateTime } from '@kernel/locale/format';

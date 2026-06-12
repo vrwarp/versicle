@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 import type { BatchImportSummary } from '@domains/library/ports';
 import { useBookStore } from './useBookStore';
 

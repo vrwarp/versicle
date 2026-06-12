@@ -6,7 +6,7 @@ import { useReaderUIStore } from './store/useReaderUIStore';
 import { useReadingStateStore } from './store/useReadingStateStore';
 import { libraryController } from './app/library/useImportController';
 import { makeFullExtraction } from './test/harness/library';
-import type { StaticBookManifest } from './types/db';
+import type { StaticBookManifest } from '~types/book';
 
 // Mock zustand persistence
 vi.mock('zustand/middleware', async (importOriginal) => {

@@ -4,7 +4,7 @@ import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { BookCard } from './BookCard';
 import { coverUrl } from '@data/covers';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 
 // Remove obsolete mock for BookActionMenu which is no longer used in BookCard
 

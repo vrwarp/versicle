@@ -17,8 +17,9 @@ const OPT_OUT_REGISTRY = [
 describe('Sync Schema Exhaustion', () => {
   it('should ensure all sync-eligible fields in BookMetadata are present in SyncManifest', () => {
     const project = new Project();
-    // Phase 1a type split: types/db.ts is a re-export shim; the declarations
-    // live in the domain modules (types/book.ts, types/sync.ts, ...).
+    // Phase 1a type split: the declarations live in the domain modules
+    // (types/book.ts, types/sync.ts, ...). The types/db.ts re-export shim
+    // met its named P9 deletion deadline and is gone.
     const bookFile = project.addSourceFileAtPath(
       path.resolve(__dirname, '../../types/book.ts')
     );

@@ -15,7 +15,7 @@
  * unit feeds it, it does not replace it.
  */
 import type { TTSQueueItem } from '~types/tts';
-import type { SectionMetadata, PerceptualPalette } from '~types/db';
+import type { SectionMetadata, PerceptualPalette } from '~types/book';
 import type { MediaPlatform } from '../PlatformIntegration';
 import type { QueueModel } from '../QueueModel';
 import { createLogger } from '../../logger';

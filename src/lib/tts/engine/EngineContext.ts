@@ -33,7 +33,8 @@ import type { useReadingStateStore } from '@store/useReadingStateStore';
 import type { SectionAnalysis, TableAdaptation } from '@store/useContentAnalysisStore';
 import type { useAnnotationStore } from '@store/useAnnotationStore';
 import type { useToastStore } from '@store/useToastStore';
-import type { LexiconRule, ContentAnalysis, BookMetadata } from '~types/db';
+import type { ContentAnalysis, BookMetadata } from '~types/book';
+import type { LexiconRule } from '~types/user-data';
 import type { ContentType } from '~types/content-analysis';
 
 // Re-exported so the engine core and helpers (e.g. FakeEngineContext) get all

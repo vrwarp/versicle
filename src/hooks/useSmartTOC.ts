@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
-import type { NavigationItem } from '~types/db';
+import type { NavigationItem } from '~types/book';
 import { getGenAIClient } from '@domains/google';
 import { bookContent } from '@data/repos/bookContent';
 import { bookRepository } from '@app/repositories/BookRepository';

@@ -26,7 +26,7 @@
  *    adapter needs them; the doc's union predates the adapter design).
  */
 import type { CfiRangeResolver } from '@kernel/cfi';
-import type { NavigationItem } from '~types/db';
+import type { NavigationItem } from '~types/book';
 import type { HighlightLayerManager } from './HighlightLayerManager';
 
 export type EngineStatus = 'idle' | 'loading' | 'ready' | 'error';

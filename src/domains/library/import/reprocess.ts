@@ -17,7 +17,7 @@ import { bookContent } from '@data/repos/bookContent';
 import type { CacheTtsPreparationRow } from '@data/rows/cache';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import type { ExtractionOptions } from '@lib/ingestion/sentence-extraction';
-import type { PerceptualPalette } from '~types/db';
+import type { PerceptualPalette } from '~types/book';
 import { AppError } from '~types/errors';
 import { TTS_EXTRACTION_VERSION } from '@lib/ingestion/sentence-extraction';
 import { extractPreamble, mapChapters, type BookSearchText, type ChapterMapping } from './extract';

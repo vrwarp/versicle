@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { LexiconService } from './LexiconService';
 import { TextSegmenter } from './TextSegmenter';
-import { type LexiconRule } from '~types/db';
+import type { LexiconRule } from '~types/user-data';
 
 // Mock store and sync
 vi.mock('@store/useLexiconStore', () => ({

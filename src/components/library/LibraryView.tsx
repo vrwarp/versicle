@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useShallow } from 'zustand/react/shallow';
 import { DeleteBookDialog } from './DeleteBookDialog';
 import { OffloadBookDialog } from './OffloadBookDialog';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 import { ReprocessingInterstitial } from './ReprocessingInterstitial';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import { useNavigate, useLocation } from 'react-router-dom';

@@ -7,7 +7,7 @@
  * strictly lib → domains so the unified extractor never reaches back into
  * `lib/ingestion` (no cycle).
  */
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 import { sanitizeMetadata } from '@lib/sanitizer';
 
 /**

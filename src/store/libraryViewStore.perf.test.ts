@@ -5,7 +5,7 @@ import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
 import { useLibraryStore } from './useLibraryStore';
 import * as deviceIdModule from '@lib/device-id';
-import type { UserInventoryItem, UserProgress } from '~types/db';
+import type { UserInventoryItem, UserProgress } from '~types/user-data';
 
 // Mock getDeviceId to track calls
 vi.mock('@lib/device-id', () => ({

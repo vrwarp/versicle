@@ -29,7 +29,7 @@ import * as Y from 'yjs';
 import { backupService, type BackupManifestV3 } from './BackupService';
 import { getYDoc } from '@store/yjs-provider';
 import { getConnection as getDB } from '@data/connection';
-import type { StaticBookManifest } from '~types/db';
+import type { StaticBookManifest } from '~types/book';
 
 vi.mock('@domains/sync/checkpoints/CheckpointService', () => ({
   CheckpointService: {

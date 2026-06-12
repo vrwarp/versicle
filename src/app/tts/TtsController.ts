@@ -36,7 +36,7 @@
  */
 import { getAudioPlayer } from './mainThreadAudioPlayer';
 import { diagnostics } from '@data/repos/diagnostics';
-import type { FlightSnapshot } from '~types/db';
+import type { FlightSnapshot } from '~types/flight-recorder';
 import type { TtsEngine, FlightRecorderExport } from '@lib/tts/engine/TtsEngine';
 import { isAudiblePlayback } from '@lib/tts/engine/TtsEngine';
 import type { TTSVoice } from '@lib/tts/providers/types';

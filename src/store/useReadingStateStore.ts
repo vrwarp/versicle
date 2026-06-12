@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
-import type { UserProgress, ReadingEventType, ReadingSession } from '~types/db';
+import type { UserProgress, ReadingEventType, ReadingSession } from '~types/user-data';
 import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';

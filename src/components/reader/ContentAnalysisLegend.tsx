@@ -8,7 +8,7 @@ import type { ContentType } from '~types/content-analysis';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { useToastStore } from '@store/useToastStore';
 import { bookContent } from '@data/repos/bookContent';
-import type { TableImage } from '~types/db';
+import type { TableImage } from '~types/cache';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useImportController } from '@app/library/useImportController';
 import { ContentAnalysisReport } from './ContentAnalysisReport';

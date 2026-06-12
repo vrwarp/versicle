@@ -7,7 +7,7 @@ import { Cloud, CloudDownload, MoreVertical } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { BookActionMenu } from './BookActionMenu';
 import { coverUrl } from '@data/covers';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 
 function unpackColor(packed: number): string {
     const { r, g, b } = unpackColorToRGB(packed);

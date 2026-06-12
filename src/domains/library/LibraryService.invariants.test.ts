@@ -41,7 +41,7 @@ import {
   makeInventoryItem,
 } from '@test/harness';
 import type { LibraryPersistence } from '@domains/library';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata } from '~types/book';
 
 /**
  * The workflow surface the invariants run against — satisfied by the real

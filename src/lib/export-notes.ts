@@ -1,4 +1,4 @@
-import type { UserAnnotation } from '~types/db';
+import type { UserAnnotation } from '~types/user-data';
 import { formatDate, formatDateTime } from '@kernel/locale/format';
 
 export const exportNotesToMarkdown = (bookTitle: string, annotations: UserAnnotation[]) => {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { UserAnnotation } from '~types/db';
+import type { UserAnnotation } from '~types/user-data';
 import { StickyNote, PenLine, Trash2, Copy, Check } from 'lucide-react';
 import { useAnnotationStore } from '@store/useAnnotationStore';
 import { copyAnnotationAsMarkdown } from '@lib/export-notes';
