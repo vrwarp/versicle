@@ -4,6 +4,7 @@ import type { StateCreator, StoreMutatorIdentifier } from 'zustand';
 import yjs from 'zustand-middleware-yjs';
 import { isStorageSupported } from '@lib/sync/support';
 import { runExclusiveIdbWrite } from '@data/write-gate';
+import { getSyncEventBus } from '@domains/sync/events';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('YjsProvider');
@@ -80,8 +81,17 @@ export function getYjsPersistence(): IndexeddbPersistence | null {
 
 // ─── Client Quarantine ──────────────────────────────────────────────────────
 /**
- * Fires when FirestoreSyncManager pulls a document with a newer schema version.
- * Severs the cloud connection and locks the UI to prevent data corruption.
+ * Fires when any quarantine layer sees a document from a newer schema
+ * version: the middleware poison pill (defense in depth, maps carrying
+ * `__schemaVersion`) and the P4 §D5 doc-level layers (pre-attach metadata
+ * probe, pre-apply scratch check, live `meta` observer).
+ *
+ * This function owns the UI-LOCK half and ANNOUNCES the quarantine on the
+ * typed SyncEvent bus; severing is delegated to the subscribers
+ * (src/app/sync/wireSyncEvents.ts destroys the live provider connection via
+ * the sync manager and stops the device heartbeat — pre-P4 the heartbeat
+ * kept writing from behind the lock screen and the provider was never
+ * destroyed; the old dynamic-import status flip only changed a label).
  */
 export function handleObsoleteClient(incomingVersion: number): void {
     logger.error(
@@ -89,10 +99,9 @@ export function handleObsoleteClient(incomingVersion: number): void {
         `but cloud has v${incomingVersion}. Entering safe mode.`
     );
 
-    // 1. Sever cloud connection (lazy import to avoid circular deps)
-    import('./useSyncStore').then(({ useSyncStore }) => {
-        useSyncStore.getState().setFirestoreStatus('disconnected');
-    }).catch(err => logger.error('Failed to import useSyncStore:', err));
+    // 1. Announce: the app-side subscriber severs the provider connection
+    //    and stops the device heartbeat (zero outbound writes after lock).
+    getSyncEventBus().emit({ type: 'obsolete', incomingVersion });
 
     // 2. Lock UI — requires useUIStore (imported lazily to avoid circular deps at module init)
     import('./useUIStore').then(({ useUIStore }) => {

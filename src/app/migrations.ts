@@ -42,6 +42,7 @@
 import * as Y from 'yjs';
 import { getYDoc, CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
 import { CheckpointService } from '@lib/sync/CheckpointService';
+import { readDocSchemaVersion } from '@domains/sync/core/quarantine';
 import { AppError } from '~types/errors';
 import { createLogger } from '@lib/logger';
 
@@ -82,21 +83,9 @@ export class MigrationError extends AppError {
 
 // ─── Version read ────────────────────────────────────────────────────────────
 
-/**
- * Doc schema version: `max(meta.schemaVersion, library.__schemaVersion) || 1`.
- * The max tolerates partial dual-writes (N+1 staging, program rule 5); a doc
- * carrying neither key reads as v1 (the pre-versioning era).
- */
-export function readDocSchemaVersion(doc: Y.Doc): number {
-  const metaVersion = doc.getMap('meta').get('schemaVersion');
-  const libraryVersion = doc.getMap('library').get('__schemaVersion');
-  return (
-    Math.max(
-      typeof metaVersion === 'number' ? metaVersion : 0,
-      typeof libraryVersion === 'number' ? libraryVersion : 0,
-    ) || 1
-  );
-}
+// Relocated to the sync domain with P4-4 (quarantine layers reuse the
+// coordinator's EXACT read — risk R4); re-exported for existing importers.
+export { readDocSchemaVersion };
 
 /**
  * A doc with no content at all (fresh install / post-wipe boot). Version

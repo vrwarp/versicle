@@ -19,6 +19,8 @@
  */
 import { getSyncEventBus } from '@domains/sync/events';
 import { RULES_OUT_OF_DATE_MESSAGE } from '@domains/sync/backend/permissionDenied';
+import { getFirestoreSyncManager } from '@lib/sync/FirestoreSyncManager';
+import { stopDeviceHeartbeat } from '@app/boot/backgroundTasks';
 import { useSyncStore } from '@store/useSyncStore';
 import { useToastStore } from '@store/useToastStore';
 import type { FirestoreSyncStatus } from '~types/sync';
@@ -119,9 +121,17 @@ export function wireSyncEvents(): () => void {
         toast('Offline sync unavailable (persistence failed)', 'error');
         break;
 
+      case 'obsolete':
+        // Quarantine (§D5): sever the provider connection (a destroy, not a
+        // status label) and stop the device heartbeat — zero outbound
+        // writes after the lock. The UI lock itself is set by
+        // handleObsoleteClient (store/yjs-provider), which emitted this.
+        getFirestoreSyncManager().severObsoleteConnection();
+        stopDeviceHeartbeat();
+        break;
+
       default:
-        // 'workspace-purged' (P4-6) and 'obsolete' (P4-4 wires the
-        // heartbeat stop here) have no presentation yet.
+        // 'workspace-purged' (P4-6) has no presentation yet.
         break;
     }
   });

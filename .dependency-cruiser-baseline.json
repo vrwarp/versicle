@@ -8,7 +8,7 @@
     "lib-not-to-components": 0,
     "data-no-upward": 0,
     "components-not-to-db": 0,
-    "worker-no-state-typegraph": 20
+    "worker-no-state-typegraph": 19
   },
-  "total": 93
+  "total": 92
 }

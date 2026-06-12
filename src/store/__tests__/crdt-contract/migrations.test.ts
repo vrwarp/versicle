@@ -442,9 +442,15 @@ describe('F.2 two-client quarantine — v5 stack vs migrated v6 doc', () => {
     expect(updatesAfterQuarantine).toBe(0);
     expect((docB.getMap('library').get('books') as Y.Map<unknown>).size).toBe(2);
 
-    // PINNED RESIDUAL (D5, fixed by Phase 4's synchronous pre-merge `meta`
-    // check): the Y-level merge has already happened — the local doc (and
-    // therefore y-idb) now carries v6 data…
+    // PINNED RESIDUAL (D5; P4-4 LANDED the doc-level enforcement): at THIS
+    // layer the Y-level merge has already happened — the local doc (and
+    // therefore y-idb) carries v6 data. That stays true by design: the
+    // middleware pill cannot undo a CRDT merge. What P4-4 added on top is
+    // doc-level: the live `meta` observer destroys the provider (zero
+    // further outbound), the heartbeat stops, and the pre-attach/pre-apply
+    // gates lock BEFORE remote bytes reach the live doc on the
+    // clean-sync/switch/reconnect paths — pinned in
+    // src/lib/sync/FirestoreSyncManager.quarantine.test.ts…
     expect(docB.getMap('library').get('__schemaVersion')).toBe(6);
     expect(docB.getMap('meta').get('schemaVersion')).toBe(6);
     expect(docB.getMap('annotations').has('popover')).toBe(false);

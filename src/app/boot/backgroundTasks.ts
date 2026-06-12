@@ -19,13 +19,39 @@ const logger = createLogger('Boot');
 
 const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
 
+let heartbeatIntervalId: ReturnType<typeof setInterval> | null = null;
+
+/** Idempotent; the boot task owns the start moment. */
+export function startDeviceHeartbeat(): void {
+  if (heartbeatIntervalId !== null) return;
+  heartbeatIntervalId = setInterval(() => {
+    useDeviceStore.getState().touchDevice(getDeviceId());
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+/**
+ * Stop the heartbeat. Called by boot cleanup AND by wireSyncEvents on the
+ * `obsolete` quarantine event (phase4-sync-strangler.md §D5 layer 3): an
+ * obsolete client must stop announcing itself — pre-P4 it kept writing the
+ * device doc from behind the lock screen.
+ */
+export function stopDeviceHeartbeat(): void {
+  if (heartbeatIntervalId !== null) {
+    clearInterval(heartbeatIntervalId);
+    heartbeatIntervalId = null;
+  }
+}
+
+/** Test seam: observable heartbeat state for the quarantine suites. */
+export function isDeviceHeartbeatRunning(): boolean {
+  return heartbeatIntervalId !== null;
+}
+
 export const deviceHeartbeatTask: BootTask = {
   name: 'device/heartbeat',
   run: (ctx) => {
-    const intervalId = setInterval(() => {
-      useDeviceStore.getState().touchDevice(getDeviceId());
-    }, HEARTBEAT_INTERVAL_MS);
-    ctx.addCleanup(() => clearInterval(intervalId));
+    startDeviceHeartbeat();
+    ctx.addCleanup(stopDeviceHeartbeat);
   },
 };
 

@@ -11,7 +11,7 @@
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
-import { getYDoc, CURRENT_SCHEMA_VERSION, waitForYjsSync } from '@store/yjs-provider';
+import { getYDoc, CURRENT_SCHEMA_VERSION, waitForYjsSync, handleObsoleteClient } from '@store/yjs-provider';
 import { CheckpointService } from './CheckpointService';
 import { MigrationStateService } from './MigrationStateService';
 import * as Y from 'yjs';
@@ -25,6 +25,7 @@ import type {
 } from '@domains/sync/backend/SyncBackend';
 import { FirestoreBackend } from '@domains/sync/backend/FirestoreBackend';
 import { downloadWorkspaceState } from '@domains/sync/core/downloadWorkspaceState';
+import { readDocSchemaVersion, readUpdateSchemaVersion } from '@domains/sync/core/quarantine';
 import { getSyncEventBus } from '@domains/sync/events';
 import { isPermissionDeniedEvent, RULES_OUT_OF_DATE_MESSAGE } from '@domains/sync/backend/permissionDenied';
 
@@ -103,6 +104,8 @@ class FirestoreSyncManager {
         factory: (uid) => new FirestoreBackend(uid),
     };
     private backend: SyncBackend | null = null;
+    /** Detach handle for the live `meta` quarantine observer (§D5.2). */
+    private metaQuarantineCleanup: (() => void) | null = null;
     private config: Required<FirestoreSyncConfig>;
     private currentUser: User | null = null;
     private status: FirestoreSyncStatus = 'disconnected';
@@ -283,6 +286,20 @@ class FirestoreSyncManager {
             throw new WorkspaceDeletedError();
         }
 
+        // Quarantine layer 1 — cheap pre-attach probe (§D5.1): a client
+        // that was offline during a fleet migration is locked BEFORE any
+        // remote bytes can reach the live doc. Maintained by layer 3 below.
+        const workspaceMeta = (await backend.listWorkspaces()).find(
+            ws => ws.workspaceId === workspaceId
+        );
+        if (workspaceMeta && workspaceMeta.schemaVersion > CURRENT_SCHEMA_VERSION) {
+            logger.warn(
+                `Pre-attach quarantine: workspace metadata declares schema v${workspaceMeta.schemaVersion} > supported v${CURRENT_SCHEMA_VERSION}.`
+            );
+            handleObsoleteClient(workspaceMeta.schemaVersion);
+            return;
+        }
+
         if (this.connection) {
             const currentApp = getFirebaseApp();
             if (currentApp !== this.currentApp) {
@@ -312,6 +329,26 @@ class FirestoreSyncManager {
         const maxWaitTime = getFirestoreDebounceOverrideMs() || this.config.maxWaitFirestoreTime;
 
         await waitForYjsSync();
+
+        // Quarantine layer 3 — metadata maintenance (§D5.3): after a local
+        // migration the doc's version is ahead of the creation-time stamp;
+        // keep the workspace directory tracking it so layer 1 (and the
+        // workspace-list version gate) stay honest. Non-blocking: an
+        // offline stamp failure just retries on a later connect.
+        const docVersion = readDocSchemaVersion(getYDoc());
+        if (workspaceMeta && docVersion > workspaceMeta.schemaVersion) {
+            backend
+                .updateWorkspaceMetadata(workspaceId, { schemaVersion: docVersion })
+                .then(() => {
+                    logger.info(
+                        `Stamped workspace ${workspaceId} metadata: schema v${workspaceMeta.schemaVersion} → v${docVersion}`
+                    );
+                })
+                .catch(error => {
+                    logger.warn('Failed to stamp workspace metadata schemaVersion', error);
+                });
+        }
+
         // merge-defaults hydration guarantees `books` is always present
         // (flip wave 4) — the old `|| {}` fallback canary is gone.
         const isCleanClient = Object.keys(useBookStore.getState().books).length === 0;
@@ -350,6 +387,19 @@ class FirestoreSyncManager {
                 timeoutMs: 15000,
                 onAttachError: 'resolve',
             });
+
+            // Quarantine layer 1 — synchronous pre-apply check (§D5.1):
+            // prove the downloaded state's version on a scratch doc BEFORE
+            // any byte touches the live doc (closes the analysis item-4
+            // window: pre-P4 this applied blindly).
+            const incomingVersion = readUpdateSchemaVersion(downloaded);
+            if (incomingVersion > CURRENT_SCHEMA_VERSION) {
+                logger.warn(
+                    `Clean-sync quarantine: cloud data is schema v${incomingVersion} > supported v${CURRENT_SCHEMA_VERSION}. Nothing was applied.`
+                );
+                handleObsoleteClient(incomingVersion);
+                return;
+            }
 
             logger.info('Applying downloaded cloud data to main Y.Doc...');
             Y.applyUpdate(getYDoc(), downloaded);
@@ -415,6 +465,32 @@ class FirestoreSyncManager {
                 events.emit({ type: 'flushed', at });
             });
 
+            // Quarantine layer 2 — live observer (§D5.2): y-cinder applies
+            // remote updates to the doc internally, so the guard sits on the
+            // `meta` map and fires synchronously on transaction commit. The
+            // local Y-merge of that one transaction has happened (accepted
+            // residual, pinned by the F.2 contract test); enforcement
+            // destroys the provider so nothing further flows either way.
+            const metaMap = getYDoc().getMap('meta');
+            const checkMetaVersion = (): void => {
+                const incoming = metaMap.get('schemaVersion');
+                if (typeof incoming === 'number' && incoming > CURRENT_SCHEMA_VERSION) {
+                    logger.warn(
+                        `Live quarantine: meta.schemaVersion v${incoming} > supported v${CURRENT_SCHEMA_VERSION}.`
+                    );
+                    handleObsoleteClient(incoming);
+                }
+            };
+            metaMap.observe(checkMetaVersion);
+            this.metaQuarantineCleanup = () => metaMap.unobserve(checkMetaVersion);
+            // A doc already past CURRENT must not attach at all.
+            checkMetaVersion();
+            if (!this.connection) {
+                // checkMetaVersion → handleObsoleteClient → severObsoleteConnection
+                // already tore the connection down; do not report connected.
+                return;
+            }
+
             // The provider connects automatically in the background
             logger.info(`Connected to workspace: ${workspaceId}`);
             this.setStatus('connected');
@@ -429,6 +505,10 @@ class FirestoreSyncManager {
      * Disconnect the backend connection
      */
     private disconnectFireProvider(): void {
+        if (this.metaQuarantineCleanup) {
+            this.metaQuarantineCleanup();
+            this.metaQuarantineCleanup = null;
+        }
         if (this.connection) {
             try {
                 this.connection.destroy();
@@ -439,6 +519,18 @@ class FirestoreSyncManager {
             this.connection = null;
         }
         this.setStatus('disconnected');
+    }
+
+    /**
+     * Quarantine severing (§D5): called by wireSyncEvents on the `obsolete`
+     * SyncEvent. A real provider destroy — zero outbound writes afterwards —
+     * not the pre-P4 status-label flip. Idempotent.
+     */
+    severObsoleteConnection(): void {
+        if (this.connection) {
+            logger.warn('Obsolete client: destroying provider connection.');
+        }
+        this.disconnectFireProvider();
     }
 
     /**
@@ -591,6 +683,19 @@ class FirestoreSyncManager {
                 timeoutMs: 15000,
                 onAttachError: 'reject',
             });
+
+            // Step 4b: Verify — quarantine layer 1 for the switch path
+            // (§D4 step 4 / §D5.1): scratch-check the downloaded state's
+            // version BEFORE the destructive apply. The throw routes to the
+            // non-destructive catch below (state machine cleared, id
+            // reverted — the download is a pure read).
+            const incomingVersion = readUpdateSchemaVersion(remoteBlob);
+            if (incomingVersion > CURRENT_SCHEMA_VERSION) {
+                handleObsoleteClient(incomingVersion);
+                throw new Error(
+                    `Workspace ${targetWorkspaceId} requires schema v${incomingVersion}; this app supports v${CURRENT_SCHEMA_VERSION}`
+                );
+            }
 
             // Step 5: Apply & Reload
             logger.info('Applying remote state and reloading...');
