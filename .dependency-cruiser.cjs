@@ -88,6 +88,26 @@ module.exports = {
       to: { path: '^src/(store|hooks|components|layouts|app|lib/sync)' },
     },
     {
+      name: 'domains-no-store',
+      severity: 'error',
+      comment:
+        'src/domains is the L3 vertical-module layer (Phase 4; master plan ' +
+        '§2 rule 3): domain services never import state/ or UI — they ' +
+        'declare ports and app/ injects store-backed adapters (the ' +
+        'EngineContext pattern; see src/app/sync/createSync.ts and ' +
+        'src/domains/sync/core/ports.ts). Born at error with baseline 0 ' +
+        '(P4-3). ONE named carve-out: store/yjs-provider.ts — the live ' +
+        'Y.Doc/persistence handles used by the relocated CheckpointService/' +
+        'Inspector (a pure move per phase4-sync-strangler.md §D7); the ' +
+        'staged-swap item reshapes those paths onto injected handles, after ' +
+        'which the carve-out should be deleted.',
+      from: { path: '^src/domains' },
+      to: {
+        path: '^src/(store|hooks|components|layouts|app)',
+        pathNot: '^src/store/yjs-provider\\.ts$',
+      },
+    },
+    {
       name: 'components-not-to-db',
       severity: 'warn',
       comment:
