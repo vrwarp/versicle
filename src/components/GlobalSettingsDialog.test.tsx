@@ -94,7 +94,7 @@ vi.mock('@store/useSyncStore', () => ({
     })
 }));
 
-vi.mock('@lib/sync/CheckpointService', () => ({
+vi.mock('@domains/sync/checkpoints/CheckpointService', () => ({
     CheckpointService: {
         listCheckpoints: vi.fn().mockResolvedValue([]),
         restoreCheckpoint: vi.fn()

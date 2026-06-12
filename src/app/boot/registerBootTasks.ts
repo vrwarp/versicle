@@ -38,10 +38,10 @@ export function registerAppBootTasks(): void {
     name: 'sync/stop',
     // Dynamic import: keeps the firebase dependency tree out of this
     // module's static graph (same posture the wipe itself had pre-D9).
-    // resetInstance is a no-op when no manager was ever constructed.
+    // stopSyncForWipe is a no-op when no orchestrator was ever constructed.
     stop: async () => {
-      const { FirestoreSyncManager } = await import('@lib/sync/FirestoreSyncManager');
-      FirestoreSyncManager.resetInstance();
+      const { stopSyncForWipe } = await import('../sync/createSync');
+      stopSyncForWipe();
     },
   });
   registerWipeHook({

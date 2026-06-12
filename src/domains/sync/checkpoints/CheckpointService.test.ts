@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CheckpointService } from './CheckpointService';
-import { MigrationStateService } from './MigrationStateService';
+import { MigrationStateService } from '../workspaces/MigrationStateService';
 import * as Y from 'yjs';
 
 // Define mocks using vi.hoisted to ensure availability in vi.mock factory
@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => {
     const get = vi.fn();
     const getAll = vi.fn();
     const del = vi.fn();
+    // The injected §D7 pauseSync handle (was a vi.mock of the deleted
+    // FirestoreSyncManager's destroy) — restore/apply sever sync through it.
     const firestoreDestroy = vi.fn();
     const disconnectYjs = vi.fn(async () => undefined);
 
@@ -59,12 +61,6 @@ vi.mock('@store/yjs-provider', async () => {
 import { getYDoc } from '@store/yjs-provider';
 
 const yDoc = getYDoc();
-
-vi.mock('./FirestoreSyncManager', () => ({
-    getFirestoreSyncManager: () => ({
-        destroy: mocks.firestoreDestroy
-    })
-}));
 
 let tempDocCounter = 0;
 
@@ -159,7 +155,7 @@ describe('CheckpointService', () => {
         // Setup current state
         yDoc.getMap('library').set('current', true);
 
-        await CheckpointService.restoreCheckpoint(1);
+        await CheckpointService.restoreCheckpoint(1, { pauseSync: mocks.firestoreDestroy });
 
         // Verify firestore is disconnected
         expect(mocks.firestoreDestroy).toHaveBeenCalledTimes(1);
@@ -186,7 +182,7 @@ describe('CheckpointService', () => {
         lexiconArr.push(['rule1']);
         yDoc.getMap('preferences').set('theme', 'dark');
 
-        await CheckpointService.restoreCheckpoint(1);
+        await CheckpointService.restoreCheckpoint(1, { pauseSync: mocks.firestoreDestroy });
 
         // Verify everything is cleared/replaced
         const lib = yDoc.getMap('library');
@@ -390,7 +386,7 @@ describe('CheckpointService', () => {
             tempDoc.getMap('library').set('restored', true);
             mocks.get.mockResolvedValue({ blob: Y.encodeStateAsUpdate(tempDoc) });
 
-            await CheckpointService.restoreCheckpoint(1);
+            await CheckpointService.restoreCheckpoint(1, { pauseSync: mocks.firestoreDestroy });
 
             expect(MigrationStateService.getState()).toBeNull();
         });
@@ -404,7 +400,9 @@ describe('CheckpointService', () => {
 
             mocks.get.mockResolvedValue(undefined); // Pruned/corrupted checkpoint
 
-            await expect(CheckpointService.restoreCheckpoint(99)).rejects.toThrow('Checkpoint corrupted');
+            await expect(
+                CheckpointService.restoreCheckpoint(99, { pauseSync: mocks.firestoreDestroy })
+            ).rejects.toThrow('Checkpoint corrupted');
 
             // State survives, so the boot interceptor handles the failure
             // explicitly instead of silently booting into the target workspace.
@@ -472,7 +470,7 @@ describe('CheckpointService', () => {
                 backupCheckpointId: 1
             });
 
-            await CheckpointService.restoreCheckpoint(1);
+            await CheckpointService.restoreCheckpoint(1, { pauseSync: mocks.firestoreDestroy });
 
             // Destructive sequence ran: sync severed, persistence wiped and
             // disconnected (clearData before disconnectYjs).
@@ -507,7 +505,9 @@ describe('CheckpointService', () => {
                 backupCheckpointId: 1
             });
 
-            await expect(CheckpointService.restoreCheckpoint(1)).rejects.toMatchObject({
+            await expect(
+                CheckpointService.restoreCheckpoint(1, { pauseSync: mocks.firestoreDestroy })
+            ).rejects.toMatchObject({
                 code: 'BACKUP_SNAPSHOT_INVALID'
             });
 
@@ -526,7 +526,7 @@ describe('CheckpointService', () => {
             const remoteBlob = Y.encodeStateAsUpdate(remoteDoc);
             remoteDoc.destroy();
 
-            await CheckpointService.applyRemoteState(remoteBlob);
+            await CheckpointService.applyRemoteState(remoteBlob, { pauseSync: mocks.firestoreDestroy });
 
             expect(mocks.firestoreDestroy).toHaveBeenCalledTimes(1);
             expect(clearData).toHaveBeenCalledTimes(1);
@@ -539,7 +539,7 @@ describe('CheckpointService', () => {
 
         it('applyRemoteState rejects a corrupted blob before anything destructive runs', async () => {
             await expect(
-                CheckpointService.applyRemoteState(new Uint8Array(0))
+                CheckpointService.applyRemoteState(new Uint8Array(0), { pauseSync: mocks.firestoreDestroy })
             ).rejects.toMatchObject({ code: 'BACKUP_SNAPSHOT_INVALID' });
 
             expect(mocks.firestoreDestroy).not.toHaveBeenCalled();

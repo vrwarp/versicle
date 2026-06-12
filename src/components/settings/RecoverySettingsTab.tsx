@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { FileSearch } from 'lucide-react';
-import { CheckpointService } from '@lib/sync/CheckpointService';
-import { CheckpointInspector, type DiffResult } from '@lib/sync/CheckpointInspector';
+import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
+import { CheckpointInspector, type DiffResult } from '@domains/sync/checkpoints/CheckpointInspector';
+import { stopSyncConnections } from '@app/sync/createSync';
 import { CheckpointDiffView } from './CheckpointDiffView';
 import { backupService } from '@lib/BackupService';
 import type { SyncCheckpoint } from '~types/db';
@@ -46,7 +47,10 @@ export const RecoverySettingsTab: React.FC<RecoverySettingsTabProps> = ({
         setIsRestoring(true);
         setStatus("Restoring...");
         try {
-            await CheckpointService.restoreCheckpoint(inspectingCheckpoint.id);
+            // pauseSync (§D7 inversion): sever live cloud sync before the wipe.
+            await CheckpointService.restoreCheckpoint(inspectingCheckpoint.id, {
+                pauseSync: stopSyncConnections,
+            });
             setStatus("Restore complete. Reloading...");
             setTimeout(() => {
                 window.location.reload();

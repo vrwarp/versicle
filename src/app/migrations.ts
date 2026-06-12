@@ -41,7 +41,7 @@
  */
 import * as Y from 'yjs';
 import { getYDoc, CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
-import { CheckpointService } from '@lib/sync/CheckpointService';
+import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
 import { readDocSchemaVersion } from '@domains/sync/core/quarantine';
 import { AppError } from '~types/errors';
 import { createLogger } from '@lib/logger';

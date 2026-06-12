@@ -31,7 +31,7 @@ import { getYDoc } from '@store/yjs-provider';
 import { getConnection as getDB } from '@data/connection';
 import type { StaticBookManifest } from '~types/db';
 
-vi.mock('./sync/CheckpointService', () => ({
+vi.mock('@domains/sync/checkpoints/CheckpointService', () => ({
   CheckpointService: {
     createCheckpoint: vi.fn(async () => 1),
   },

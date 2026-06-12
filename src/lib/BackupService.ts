@@ -309,7 +309,7 @@ export class BackupService {
     onProgress?.(5, 'Creating pre-restore checkpoint...');
     // Dynamic import to keep CheckpointService (and its sync deps) out of this
     // module's eager import graph, mirroring the semantic-tree import above.
-    const { CheckpointService } = await import('./sync/CheckpointService');
+    const { CheckpointService } = await import('@domains/sync/checkpoints/CheckpointService');
     try {
       const checkpointId = await CheckpointService.createCheckpoint('pre-restore');
       logger.info(`Created pre-restore checkpoint #${checkpointId}`);

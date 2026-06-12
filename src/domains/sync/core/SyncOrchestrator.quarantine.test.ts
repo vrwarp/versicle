@@ -6,8 +6,10 @@
  * Client A is simulated through the mock backend's storage (a v7-stamped
  * workspace doc synthesized from the committed v5 fixture via the migration
  * coordinator — never hand-rolled, per the prep doc's fixture rule). Client
- * B is the real manager + MockBackend + wireSyncEvents stack at
- * CURRENT_SCHEMA_VERSION. Asserted, per layer:
+ * B is the real orchestrator + MockBackend + wireSyncEvents stack at
+ * CURRENT_SCHEMA_VERSION (written against FirestoreSyncManager; retargeted
+ * when P4-3 decomposed and deleted it — assertions unchanged). Asserted,
+ * per layer:
  *
  *  1. PRE-ATTACH metadata probe: B locks before any download.
  *  1b. PRE-APPLY scratch check: downloaded v7 state never touches the live
@@ -26,10 +28,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as Y from 'yjs';
-import { FirestoreSyncManager, getFirestoreSyncManager } from './FirestoreSyncManager';
-import { MockFireProvider } from '@domains/sync/backend/MockFireProvider';
-import { getSyncEventBus, type SyncEvent } from '@domains/sync/events';
-import { configureSyncBackendSelection } from '@app/sync/createSync';
+import { MockFireProvider } from '../backend/MockFireProvider';
+import { getSyncEventBus, type SyncEvent } from '../events';
+import {
+  configureSyncBackendSelection,
+  getSyncOrchestrator,
+  stopSyncForWipe,
+} from '@app/sync/createSync';
 import { wireSyncEvents } from '@app/sync/wireSyncEvents';
 import {
   startDeviceHeartbeat,
@@ -37,8 +42,8 @@ import {
   isDeviceHeartbeatRunning,
 } from '@app/boot/backgroundTasks';
 import { runCrdtMigrationsOnDoc, __resetCrdtMigrationsForTests } from '@app/migrations';
-import { CheckpointService } from './CheckpointService';
-import { MigrationStateService } from './MigrationStateService';
+import { CheckpointService } from '../checkpoints/CheckpointService';
+import { MigrationStateService } from '../workspaces/MigrationStateService';
 import { useSyncStore } from '@store/useSyncStore';
 import { useUIStore } from '@store/useUIStore';
 import { getYDoc, CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
@@ -106,7 +111,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     localStorage.removeItem(WORKSPACES_KEY);
     MigrationStateService.clear();
 
-    FirestoreSyncManager.resetInstance();
+    stopSyncForWipe();
     await configureSyncBackendSelection();
     unwireSyncEvents = wireSyncEvents();
 
@@ -124,7 +129,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     unsubscribeBusProbe();
     unwireSyncEvents();
     stopDeviceHeartbeat();
-    FirestoreSyncManager.resetInstance();
+    stopSyncForWipe();
     MigrationStateService.clear();
     MockFireProvider.clearMockStorage();
     localStorage.removeItem(WORKSPACES_KEY);
@@ -141,7 +146,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
       timeout: 5000,
     });
     expect(busEvents).toContainEqual({ type: 'obsolete', incomingVersion });
-    expect(getFirestoreSyncManager().getStatus()).toBe('disconnected');
+    expect(getSyncOrchestrator().getStatus()).toBe('disconnected');
     expect(isDeviceHeartbeatRunning()).toBe(false);
   };
 
@@ -150,7 +155,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     injectCloudUpdate('ws_fleet', await buildFutureVersionUpdate());
     useSyncStore.getState().setActiveWorkspaceId('ws_fleet');
 
-    await getFirestoreSyncManager().initialize();
+    await getSyncOrchestrator().start();
     await expectLocked(FUTURE_VERSION);
 
     // No remote byte reached the live doc (the gate fired pre-download).
@@ -170,7 +175,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     injectCloudUpdate('ws_v7doc', await buildFutureVersionUpdate());
     useSyncStore.getState().setActiveWorkspaceId('ws_v7doc');
 
-    await getFirestoreSyncManager().initialize();
+    await getSyncOrchestrator().start();
     await expectLocked(FUTURE_VERSION);
 
     expect(JSON.stringify(getYDoc().getMap('library').toJSON())).not.toContain(
@@ -189,7 +194,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
       .spyOn(CheckpointService, 'applyRemoteState')
       .mockResolvedValue(undefined);
 
-    await expect(getFirestoreSyncManager().switchWorkspace('ws_b')).rejects.toThrow(
+    await expect(getSyncOrchestrator().switchWorkspace('ws_b')).rejects.toThrow(
       /requires schema/
     );
     await expectLocked(FUTURE_VERSION);
@@ -206,8 +211,8 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     // The local doc was migrated to CURRENT (the coordinator's dual-write).
     getYDoc().getMap('meta').set('schemaVersion', CURRENT_SCHEMA_VERSION);
 
-    const manager = getFirestoreSyncManager();
-    await manager.initialize();
+    const manager = getSyncOrchestrator();
+    await manager.start();
     await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), { timeout: 5000 });
 
     await vi.waitFor(() => {
@@ -226,8 +231,8 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     seedWorkspace('ws_live');
     useSyncStore.getState().setActiveWorkspaceId('ws_live');
 
-    const manager = getFirestoreSyncManager();
-    await manager.initialize();
+    const manager = getSyncOrchestrator();
+    await manager.start();
     await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), { timeout: 5000 });
 
     // The fleet moves on: a v7 update lands on the live doc (this is what

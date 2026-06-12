@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { DiffResult } from '@lib/sync/CheckpointInspector';
+import type { DiffResult } from '@domains/sync/checkpoints/CheckpointInspector';
 import { ChevronDown, ChevronRight, Plus, Minus, RefreshCw, Maximize2, Download } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from '../ui/Modal';

@@ -2,7 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Button } from './ui/Button';
 import { createLogger } from '@lib/logger';
 import { DataRecoveryView } from './settings/DataRecoveryView';
-import { MigrationStateService } from '@lib/sync/MigrationStateService';
+import { MigrationStateService } from '@domains/sync/workspaces/MigrationStateService';
 import { CriticalMigrationFailureView } from './sync/CriticalMigrationFailureView';
 
 const logger = createLogger('ErrorBoundary');

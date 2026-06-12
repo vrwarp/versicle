@@ -17,7 +17,7 @@ export interface FirebaseConfig {
 
 import { googleIntegrationManager } from '@lib/google/GoogleIntegrationManager';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
-import type { FirebaseAuthStatus } from '@lib/sync/FirestoreSyncManager';
+import type { FirebaseAuthStatus } from '~types/sync';
 
 export interface SyncSettingsTabProps {
     // Device
@@ -42,7 +42,7 @@ import { DriveFolderPicker } from '../drive/DriveFolderPicker';
 import { useDriveStore } from '@store/useDriveStore';
 import { DriveScannerService } from '@lib/drive/DriveScannerService';
 import { useToastStore } from '@store/useToastStore';
-import { getFirestoreSyncManager } from '@lib/sync/FirestoreSyncManager';
+import { getSyncOrchestrator } from '@app/sync/createSync';
 import { useSyncStore } from '@store/useSyncStore';
 import { CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
 import type { WorkspaceMetadata } from '~types/workspace';
@@ -125,7 +125,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     React.useEffect(() => {
         if (firebaseAuthStatus === 'signed-in') {
             setIsLoadingWorkspaces(true);
-            getFirestoreSyncManager().listWorkspaces()
+            getSyncOrchestrator().listWorkspaces()
                 .then(setWorkspaces)
                 .catch(err => console.error('Failed to load workspaces:', err))
                 .finally(() => setIsLoadingWorkspaces(false));
@@ -136,11 +136,11 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
         if (!newWorkspaceName.trim()) return;
         setIsCreatingWorkspace(true);
         try {
-            await getFirestoreSyncManager().createWorkspace(newWorkspaceName.trim());
+            await getSyncOrchestrator().createWorkspace(newWorkspaceName.trim());
             showToast(`Workspace "${newWorkspaceName.trim()}" created!`, 'success');
             setNewWorkspaceName('');
             // Refresh workspace list
-            const updated = await getFirestoreSyncManager().listWorkspaces();
+            const updated = await getSyncOrchestrator().listWorkspaces();
             setWorkspaces(updated);
         } catch (err) {
             console.error('Failed to create workspace:', err);
@@ -153,7 +153,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     const handleSwitchWorkspace = async (workspaceId: string) => {
         setIsSwitchingWorkspace(workspaceId);
         try {
-            await getFirestoreSyncManager().switchWorkspace(workspaceId);
+            await getSyncOrchestrator().switchWorkspace(workspaceId);
             // switchWorkspace triggers reload, so this won't typically reach here
         } catch (err) {
             console.error('Failed to switch workspace:', err);
@@ -168,10 +168,10 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
 
         setIsDeletingWorkspace(workspaceId);
         try {
-            await getFirestoreSyncManager().deleteWorkspace(workspaceId);
+            await getSyncOrchestrator().deleteWorkspace(workspaceId);
             showToast(`Workspace "${name}" deleted.`, 'success');
             // Refresh workspace list
-            const updated = await getFirestoreSyncManager().listWorkspaces();
+            const updated = await getSyncOrchestrator().listWorkspaces();
             setWorkspaces(updated);
         } catch (err) {
             console.error('Failed to delete workspace:', err);

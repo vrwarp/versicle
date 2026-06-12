@@ -119,10 +119,11 @@ export interface SyncLogEntry {
  *
  * Canonical home of this union (and {@link FirebaseAuthStatus}) so that
  * useSyncStore — which persists/serves these values — does not need a
- * type edge into lib/sync/FirestoreSyncManager (that edge dragged the
+ * type edge into the sync service modules (such an edge dragged the
  * whole sync service web, and through it several stores, into the TTS
  * worker's type-level import closure; see layering-deps.md LD-7).
- * FirestoreSyncManager re-exports both for its existing consumers.
+ * Consumers (the sync orchestrator, UI status components) import from
+ * here directly.
  */
 export type FirestoreSyncStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 

@@ -1,5 +1,23 @@
+/**
+ * SyncOrchestrator unit suite — ABSORBS FirestoreSyncManager.test.ts
+ * (deleted with the manager in P4-3; test-absorption ledger, program rule
+ * 8): the getters/subscription semantics, the real-path event wiring over a
+ * mocked y-cinder FireProvider, the permission-denied surfacing regression,
+ * and the workspace-switch checkpoint-pinning regression all land here with
+ * their assertions unchanged.
+ *
+ * Unlike the legacy suite (which exercised the manager singleton over the
+ * real stores), this constructs the orchestrator directly over injected
+ * ports — the per-module shape §D2's decomposition exists for. The
+ * composition-root singleton (getSyncOrchestrator) keeps its own pin below.
+ */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { FirestoreSyncManager, getFirestoreSyncManager } from './FirestoreSyncManager';
+import * as Y from 'yjs';
+import { createSyncOrchestrator, type SyncOrchestrator } from './SyncOrchestrator';
+import type { SyncOrchestratorConfig, SyncOrchestratorDeps, SyncStatePort } from './ports';
+import { FirestoreBackend } from '../backend/FirestoreBackend';
+import { MigrationStateService } from '../workspaces/MigrationStateService';
+import { getSyncEventBus } from '../events';
 import { wireSyncEvents } from '@app/sync/wireSyncEvents';
 
 // Mock firebase/auth
@@ -46,8 +64,8 @@ vi.mock('y-cinder', () => ({
     })
 }));
 
-// Mock firebase-config
-vi.mock('./firebase-config', () => ({
+// Mock firebase-config (intercepts the alias and relative specifiers alike)
+vi.mock('@lib/sync/firebase-config', () => ({
     isFirebaseConfigured: vi.fn(() => true),
     initializeFirebase: vi.fn(() => true),
     getFirebaseApp: vi.fn(() => ({})),
@@ -56,23 +74,7 @@ vi.mock('./firebase-config', () => ({
     getFirestoreDb: vi.fn(() => ({}))
 }));
 
-// Mock yjs-provider
-vi.mock('@store/yjs-provider', async (importOriginal) => {
-    const Y = await import('yjs');
-    const actual = await importOriginal();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const actualOptions = (actual as any).getYjsOptions || ((o: unknown) => o);
-    return {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ...actual as any,
-        yDoc: new Y.Doc(),
-        getYjsOptions: actualOptions,
-        CURRENT_SCHEMA_VERSION: 3,
-        waitForYjsSync: vi.fn().mockResolvedValue(undefined)
-    };
-});
-
-// Mock firebase/firestore
+// Mock firebase/firestore (FirestoreBackend's transport)
 vi.mock('firebase/firestore', () => ({
     doc: vi.fn(() => ({})),
     getDoc: vi.fn(() => Promise.resolve({ exists: () => false })),
@@ -88,15 +90,61 @@ vi.mock('firebase/firestore', () => ({
     }))
 }));
 
-describe('FirestoreSyncManager', () => {
+describe('SyncOrchestrator', () => {
     let unwireSyncEvents: () => void;
+    let testDoc: Y.Doc;
+    let activeWorkspaceId: string | null;
+    let syncState: SyncStatePort;
+    let checkpointsPort: {
+        createCheckpoint: ReturnType<typeof vi.fn<(trigger: string, options?: { protected?: boolean }) => Promise<number>>>;
+        createAutomaticCheckpoint: ReturnType<typeof vi.fn<(trigger: string, intervalMs: number) => Promise<number | null>>>;
+        applyRemoteState: ReturnType<typeof vi.fn<(blob: Uint8Array) => Promise<void>>>;
+    };
 
-    beforeEach(() => {
+    const makeOrchestrator = (
+        config?: SyncOrchestratorConfig,
+        overrides?: Partial<SyncOrchestratorDeps>
+    ): SyncOrchestrator => {
+        return createSyncOrchestrator({
+            backendSelection: { factory: (uid) => new FirestoreBackend(uid) },
+            // The process-wide bus: wireSyncEvents (registered below) pins
+            // the SYSTEM behavior — transport emits SyncEvents, the app-side
+            // subscriber maps them to user-facing copy.
+            events: getSyncEventBus(),
+            doc: () => testDoc,
+            whenLocalSynced: () => Promise.resolve(),
+            onObsolete: vi.fn(),
+            currentSchemaVersion: 6,
+            isCleanClient: () => true,
+            isEnabled: () => true,
+            debounceOverrideMs: () => 0,
+            syncState,
+            checkpoints: checkpointsPort,
+            migrationState: MigrationStateService,
+            config,
+            ...overrides,
+        });
+    };
+
+    beforeEach(async () => {
         vi.spyOn(console, 'info').mockImplementation(() => { });
         vi.spyOn(console, 'warn').mockImplementation(() => { });
         vi.spyOn(console, 'error').mockImplementation(() => { });
-        // Reset singleton
-        FirestoreSyncManager.resetInstance();
+
+        testDoc = new Y.Doc();
+        activeWorkspaceId = null;
+        syncState = {
+            getActiveWorkspaceId: () => activeWorkspaceId,
+            setActiveWorkspaceId: (id) => { activeWorkspaceId = id; },
+            setFirebaseEnabled: vi.fn(),
+        };
+        checkpointsPort = {
+            createCheckpoint: vi.fn(async () => 1),
+            createAutomaticCheckpoint: vi.fn(async () => null),
+            applyRemoteState: vi.fn(async () => undefined),
+        };
+        MigrationStateService.clear();
+
         // The toast assertions below pin the SYSTEM behavior: transport
         // emits SyncEvents, the app-side subscriber (registered by the
         // syncInit boot task in production) maps them to user-facing copy.
@@ -105,78 +153,75 @@ describe('FirestoreSyncManager', () => {
 
     afterEach(() => {
         unwireSyncEvents();
+        MigrationStateService.clear();
+        testDoc.destroy();
         vi.clearAllMocks();
         vi.restoreAllMocks();
     });
 
-    describe('getInstance', () => {
-        it('should return a singleton instance', () => {
-            const instance1 = getFirestoreSyncManager();
-            const instance2 = getFirestoreSyncManager();
+    describe('regression: composition-root accessor is a singleton (was getInstance)', () => {
+        it('should return a singleton instance until reset', async () => {
+            const { getSyncOrchestrator, stopSyncForWipe } = await import('@app/sync/createSync');
+            stopSyncForWipe();
+            const instance1 = getSyncOrchestrator();
+            const instance2 = getSyncOrchestrator();
             expect(instance1).toBe(instance2);
+            stopSyncForWipe();
+            expect(getSyncOrchestrator()).not.toBe(instance1);
+            stopSyncForWipe();
         });
+    });
 
+    describe('construction', () => {
         it('should accept configuration', () => {
-            const instance = getFirestoreSyncManager({
+            const orchestrator = makeOrchestrator({
                 maxWaitFirestoreTime: 3000,
                 maxUpdatesThreshold: 100
             });
-            expect(instance).toBeDefined();
+            expect(orchestrator).toBeDefined();
         });
     });
 
     describe('getStatus', () => {
         it('should return disconnected initially', () => {
-            const manager = getFirestoreSyncManager();
-            expect(manager.getStatus()).toBe('disconnected');
+            expect(makeOrchestrator().getStatus()).toBe('disconnected');
         });
     });
 
     describe('getAuthStatus', () => {
         it('should return loading initially', () => {
-            const manager = getFirestoreSyncManager();
-            expect(manager.getAuthStatus()).toBe('loading');
+            expect(makeOrchestrator().getAuthStatus()).toBe('loading');
         });
     });
 
     describe('isSignedIn', () => {
         it('should return false when not signed in', () => {
-            const manager = getFirestoreSyncManager();
-            expect(manager.isSignedIn()).toBe(false);
+            expect(makeOrchestrator().isSignedIn()).toBe(false);
         });
     });
 
     describe('isConnected', () => {
         it('should return false when not connected', () => {
-            const manager = getFirestoreSyncManager();
-            expect(manager.isConnected()).toBe(false);
+            expect(makeOrchestrator().isConnected()).toBe(false);
         });
     });
 
     describe('getCurrentUser', () => {
         it('should return null when not signed in', () => {
-            const manager = getFirestoreSyncManager();
-            expect(manager.getCurrentUser()).toBeNull();
+            expect(makeOrchestrator().getCurrentUser()).toBeNull();
         });
     });
 
     describe('onStatusChange', () => {
         it('should immediately call callback with current status', () => {
-            const manager = getFirestoreSyncManager();
             const callback = vi.fn();
-
-            manager.onStatusChange(callback);
-
+            makeOrchestrator().onStatusChange(callback);
             expect(callback).toHaveBeenCalledWith('disconnected');
         });
 
         it('should return unsubscribe function', () => {
-            const manager = getFirestoreSyncManager();
-            const callback = vi.fn();
-
-            const unsubscribe = manager.onStatusChange(callback);
+            const unsubscribe = makeOrchestrator().onStatusChange(vi.fn());
             expect(typeof unsubscribe).toBe('function');
-
             // Should not throw
             unsubscribe();
         });
@@ -184,53 +229,41 @@ describe('FirestoreSyncManager', () => {
 
     describe('onAuthChange', () => {
         it('should immediately call callback with current auth status', () => {
-            const manager = getFirestoreSyncManager();
             const callback = vi.fn();
-
-            manager.onAuthChange(callback);
-
+            makeOrchestrator().onAuthChange(callback);
             expect(callback).toHaveBeenCalledWith('loading', null);
         });
 
         it('should return unsubscribe function', () => {
-            const manager = getFirestoreSyncManager();
-            const callback = vi.fn();
-
-            const unsubscribe = manager.onAuthChange(callback);
+            const unsubscribe = makeOrchestrator().onAuthChange(vi.fn());
             expect(typeof unsubscribe).toBe('function');
-
             unsubscribe();
         });
     });
 
-    describe('destroy', () => {
+    describe('stop', () => {
         it('should not throw when called', () => {
-            const manager = getFirestoreSyncManager();
-            expect(() => manager.destroy()).not.toThrow();
-        });
-
-        it('should clear callbacks', () => {
-            const manager = getFirestoreSyncManager();
-            const callback = vi.fn();
-
-            manager.onStatusChange(callback);
-            callback.mockClear();
-
-            manager.destroy();
-
-            // After destroy, the callback should not be in the set
-            // We can verify this indirectly - a new getInstance would have no callbacks
+            expect(() => makeOrchestrator().stop()).not.toThrow();
         });
     });
 
-    describe('initialization', () => {
-        it('should check for redirect result on initialization', async () => {
+    describe('start (was initialization)', () => {
+        it('should check for redirect result on start', async () => {
             const { getRedirectResult } = await import('firebase/auth');
 
-            const manager = getFirestoreSyncManager();
-            await manager.initialize();
+            await makeOrchestrator().start();
 
             expect(getRedirectResult).toHaveBeenCalled();
+        });
+
+        it('should skip the auth session entirely when the enablement gate is off (§D2)', async () => {
+            const { getRedirectResult } = await import('firebase/auth');
+
+            const orchestrator = makeOrchestrator(undefined, { isEnabled: () => false });
+            await orchestrator.start();
+
+            expect(getRedirectResult).not.toHaveBeenCalled();
+            expect(orchestrator.getAuthStatus()).toBe('signed-out');
         });
 
         it('should initialize FireProvider with mapped maxWaitTime', async () => {
@@ -244,8 +277,9 @@ describe('FirestoreSyncManager', () => {
                 return () => { };
             });
 
-            const manager = getFirestoreSyncManager({ maxWaitFirestoreTime: 5000 });
-            await manager.initialize();
+            activeWorkspaceId = 'ws_test';
+            const orchestrator = makeOrchestrator({ maxWaitFirestoreTime: 5000 });
+            await orchestrator.start();
 
             await vi.waitFor(() => {
                 expect(FireProvider).toHaveBeenCalledWith(expect.objectContaining({
@@ -256,16 +290,12 @@ describe('FirestoreSyncManager', () => {
     });
 
     describe('error events', () => {
-        let manager: ReturnType<typeof getFirestoreSyncManager>;
+        let orchestrator: SyncOrchestrator;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let mockFireProviderInstance: any;
 
         beforeEach(async () => {
-            vi.spyOn(console, 'error').mockImplementation(() => { });
-            vi.spyOn(console, 'warn').mockImplementation(() => { });
             const { onAuthStateChanged } = await import('firebase/auth');
-
-            manager = getFirestoreSyncManager();
 
             // Mock auth state change to trigger connection
             vi.mocked(onAuthStateChanged).mockImplementation((_auth, callback) => {
@@ -274,11 +304,13 @@ describe('FirestoreSyncManager', () => {
                 return () => { };
             });
 
-            await manager.initialize();
+            activeWorkspaceId = 'ws_test';
+            orchestrator = makeOrchestrator();
+            await orchestrator.start();
 
             // Wait for internal connections to resolve
             await vi.waitFor(() => {
-                expect(manager.getStatus()).toBe('connected');
+                expect(orchestrator.getStatus()).toBe('connected');
             });
 
             // Retrieve instance created during initialization
@@ -286,9 +318,9 @@ describe('FirestoreSyncManager', () => {
         });
 
         it('should handle connection-error by setting status to error', async () => {
-            expect(manager.getStatus()).toBe('connected');
+            expect(orchestrator.getStatus()).toBe('connected');
             mockFireProviderInstance.emit('connection-error', { code: 'some-error', message: 'Test message', error: new Error('Test error') });
-            expect(manager.getStatus()).toBe('error');
+            expect(orchestrator.getStatus()).toBe('error');
         });
 
         it('should handle sync-failure by setting status and showing toast', async () => {
@@ -297,7 +329,7 @@ describe('FirestoreSyncManager', () => {
 
             mockFireProviderInstance.emit('sync-failure', new Error('Test failure'));
 
-            expect(manager.getStatus()).toBe('error');
+            expect(orchestrator.getStatus()).toBe('error');
             expect(showToastMock).toHaveBeenCalledWith(
                 'Sync failed after multiple attempts. Please check your connection.',
                 'error',
@@ -315,7 +347,7 @@ describe('FirestoreSyncManager', () => {
                 error: new Error('Too large')
             });
 
-            expect(manager.getStatus()).toBe('error');
+            expect(orchestrator.getStatus()).toBe('error');
             expect(showToastMock).toHaveBeenCalledWith(
                 'Sync disabled: Document too large (2000000 bytes). Please export and clear data.',
                 'error',
@@ -332,7 +364,7 @@ describe('FirestoreSyncManager', () => {
                 error: new Error('Timeout')
             });
 
-            expect(manager.getStatus()).toBe('error');
+            expect(orchestrator.getStatus()).toBe('error');
             expect(showToastMock).toHaveBeenCalledWith(
                 'Sync save failed: Max retries exceeded. Check connection.',
                 'error',
@@ -347,7 +379,7 @@ describe('FirestoreSyncManager', () => {
                 });
 
             it('should show the rules hint when save-rejected wraps a permission-denied error', async () => {
-                const { RULES_OUT_OF_DATE_MESSAGE } = await import('./FirestoreSyncManager');
+                const { RULES_OUT_OF_DATE_MESSAGE } = await import('../backend/permissionDenied');
                 const { useToastStore } = await import('@store/useToastStore');
                 const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
 
@@ -357,23 +389,23 @@ describe('FirestoreSyncManager', () => {
                     error: permissionDeniedError()
                 });
 
-                expect(manager.getStatus()).toBe('error');
+                expect(orchestrator.getStatus()).toBe('error');
                 expect(showToastMock).toHaveBeenCalledWith(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
             });
 
             it('should show the rules hint when sync-failure wraps a permission-denied error', async () => {
-                const { RULES_OUT_OF_DATE_MESSAGE } = await import('./FirestoreSyncManager');
+                const { RULES_OUT_OF_DATE_MESSAGE } = await import('../backend/permissionDenied');
                 const { useToastStore } = await import('@store/useToastStore');
                 const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
 
                 mockFireProviderInstance.emit('sync-failure', permissionDeniedError());
 
-                expect(manager.getStatus()).toBe('error');
+                expect(orchestrator.getStatus()).toBe('error');
                 expect(showToastMock).toHaveBeenCalledWith(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
             });
 
             it('should show the rules hint when connection-error wraps a permission-denied error', async () => {
-                const { RULES_OUT_OF_DATE_MESSAGE } = await import('./FirestoreSyncManager');
+                const { RULES_OUT_OF_DATE_MESSAGE } = await import('../backend/permissionDenied');
                 const { useToastStore } = await import('@store/useToastStore');
                 const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
 
@@ -383,7 +415,7 @@ describe('FirestoreSyncManager', () => {
                     error: permissionDeniedError()
                 });
 
-                expect(manager.getStatus()).toBe('error');
+                expect(orchestrator.getStatus()).toBe('error');
                 expect(showToastMock).toHaveBeenCalledWith(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
             });
 
@@ -403,18 +435,12 @@ describe('FirestoreSyncManager', () => {
     });
 
     describe('regression: workspace switch pins the pre-migration checkpoint', () => {
-        let manager: ReturnType<typeof getFirestoreSyncManager>;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let createCheckpointSpy: any;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let applyRemoteStateSpy: any;
+        let orchestrator: SyncOrchestrator;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let mainProvider: any;
 
         beforeEach(async () => {
             const { onAuthStateChanged } = await import('firebase/auth');
-            const { CheckpointService } = await import('./CheckpointService');
-            const { useSyncStore } = await import('@store/useSyncStore');
 
             // Mock auth state change to trigger connection
             vi.mocked(onAuthStateChanged).mockImplementation((_auth, callback) => {
@@ -423,25 +449,20 @@ describe('FirestoreSyncManager', () => {
                 return () => { };
             });
 
-            createCheckpointSpy = vi.spyOn(CheckpointService, 'createCheckpoint').mockResolvedValue(7);
-            vi.spyOn(CheckpointService, 'createAutomaticCheckpoint').mockResolvedValue(null);
-            applyRemoteStateSpy = vi.spyOn(CheckpointService, 'applyRemoteState').mockResolvedValue(undefined);
+            checkpointsPort.createCheckpoint.mockResolvedValue(7);
 
-            useSyncStore.getState().setActiveWorkspaceId('ws_current');
-            manager = getFirestoreSyncManager();
-            await manager.initialize();
+            activeWorkspaceId = 'ws_current';
+            orchestrator = makeOrchestrator();
+            await orchestrator.start();
 
             await vi.waitFor(() => {
-                expect(manager.getStatus()).toBe('connected');
+                expect(orchestrator.getStatus()).toBe('connected');
             });
             mainProvider = latestFireProviderInstance;
         });
 
-        afterEach(async () => {
-            const { MigrationStateService } = await import('./MigrationStateService');
-            const { useSyncStore } = await import('@store/useSyncStore');
+        afterEach(() => {
             MigrationStateService.clear();
-            useSyncStore.getState().setActiveWorkspaceId(null);
         });
 
         // Drives the temp workspace-download provider to completion.
@@ -453,14 +474,12 @@ describe('FirestoreSyncManager', () => {
         };
 
         it('creates the pre-migration checkpoint with protected: true', async () => {
-            const { MigrationStateService } = await import('./MigrationStateService');
-
-            const switchPromise = manager.switchWorkspace('ws_target');
+            const switchPromise = orchestrator.switchWorkspace('ws_target');
             await completeRemoteDownload();
             await switchPromise;
 
-            expect(createCheckpointSpy).toHaveBeenCalledWith('pre-migration', { protected: true });
-            expect(applyRemoteStateSpy).toHaveBeenCalled();
+            expect(checkpointsPort.createCheckpoint).toHaveBeenCalledWith('pre-migration', { protected: true });
+            expect(checkpointsPort.applyRemoteState).toHaveBeenCalled();
             // The state machine references the pinned backup across the reload
             expect(MigrationStateService.getState()).toEqual({
                 status: 'AWAITING_CONFIRMATION',
@@ -470,13 +489,10 @@ describe('FirestoreSyncManager', () => {
         });
 
         it('rolls back to the pinned backup instead of clearing state when applying remote state fails', async () => {
-            const { MigrationStateService } = await import('./MigrationStateService');
-            const { useSyncStore } = await import('@store/useSyncStore');
-
             // The destructive apply step fails after it may have wiped IDB
-            applyRemoteStateSpy.mockRejectedValue(new Error('IDB write failed'));
+            checkpointsPort.applyRemoteState.mockRejectedValue(new Error('IDB write failed'));
 
-            const switchPromise = manager.switchWorkspace('ws_target');
+            const switchPromise = orchestrator.switchWorkspace('ws_target');
             await completeRemoteDownload();
             await switchPromise; // Resolves: failure is routed to the rollback path
 
@@ -487,7 +503,7 @@ describe('FirestoreSyncManager', () => {
                 targetWorkspaceId: 'ws_target',
                 backupCheckpointId: 7
             });
-            expect(useSyncStore.getState().activeWorkspaceId).toBe('ws_current');
+            expect(activeWorkspaceId).toBe('ws_current');
         });
     });
 });

@@ -6,7 +6,7 @@
  * sequence from initializing sync while a migration is in-flight.
  */
 import type { SyncMigrationState } from '~types/workspace';
-import { createLogger } from '../logger';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('MigrationState');
 

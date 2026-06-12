@@ -3,15 +3,34 @@ import * as Y from 'yjs';
 import { getYDoc, getYjsPersistence, disconnectYjs } from '@store/yjs-provider';
 import type { SyncCheckpoint } from '~types/db';
 import { captureDoc, validateSnapshot, applySnapshot } from '@data/snapshot/YjsSnapshotService';
-import { createLogger } from '../logger';
-import { getFirestoreSyncManager } from './FirestoreSyncManager';
-import { MigrationStateService } from './MigrationStateService';
+import { createLogger } from '@lib/logger';
+import { MigrationStateService } from '../workspaces/MigrationStateService';
 
 const logger = createLogger('CheckpointService');
 
 /**
+ * The shutdown handle the destructive operations take (§D7 inversion): the
+ * legacy module imported FirestoreSyncManager only to `destroy()` it before
+ * wiping persistence — a circular import (the manager imported this module
+ * for its pre-sync/pre-migration checkpoints). Callers that have the
+ * orchestrator pass the handle instead: the boot interceptor and
+ * RecoverySettingsTab via `stopSyncConnections` (app/sync/createSync.ts),
+ * WorkspaceService via its injected checkpoints port.
+ */
+export interface DestructiveRestoreOptions {
+  /** Sever cloud sync before the local wipe; failures are non-blocking. */
+  pauseSync?: () => void | Promise<void>;
+}
+
+/**
  * Service to manage synchronization checkpoints.
  * Handles creation, restoration, and pruning of checkpoints.
+ *
+ * NOTE on the `@store/yjs-provider` import: domains/ is store-free by rule
+ * (depcruise `domains-no-store`), but the live doc/persistence handles are
+ * that rule's one named carve-out — this module relocated as a PURE MOVE
+ * (phase4-sync-strangler.md §D7); the staged-swap item (§D4) reshapes the
+ * destructive paths into `stagedSwap.ts`, where the handles become injected.
  */
 export class CheckpointService {
   /**
@@ -57,6 +76,20 @@ export class CheckpointService {
     return this.createCheckpoint(trigger);
   }
 
+  /** Run the injected sync-shutdown handle; never blocks the restore. */
+  private static async pauseSync(
+    opts: DestructiveRestoreOptions | undefined,
+    why: string
+  ): Promise<void> {
+    if (!opts?.pauseSync) return;
+    try {
+      await opts.pauseSync();
+      logger.info(`Sync disconnected for ${why}`);
+    } catch (e) {
+      logger.warn(`Failed to disconnect sync during ${why}`, e);
+    }
+  }
+
   /**
    * Destructive Restore: Clears current Yjs types and applies snapshot.
    *
@@ -69,20 +102,16 @@ export class CheckpointService {
    * interrupted rollback silently boot into the target workspace; keeping
    * it set means a crash mid-restore retries the rollback on next boot.
    */
-  static async restoreCheckpoint(id: number): Promise<void> {
+  static async restoreCheckpoint(id: number, opts?: DestructiveRestoreOptions): Promise<void> {
     const checkpoint = await checkpoints.get(id);
     if (!checkpoint || !checkpoint.blob) throw new Error('Checkpoint corrupted');
 
     // 0a. Prove the blob applies cleanly BEFORE any destructive step.
     validateSnapshot(checkpoint.blob);
 
-    // 0b. Disconnect cloud sync to prevent concurrent modifications during restore
-    try {
-      getFirestoreSyncManager().destroy();
-      logger.info('Firestore disconnected for restore');
-    } catch (e) {
-      logger.warn('Failed to disconnect Firestore during restore', e);
-    }
+    // 0b. Disconnect cloud sync to prevent concurrent modifications during
+    // restore (injected handle — §D7 inversion).
+    await this.pauseSync(opts, 'restore');
 
     const persistence = getYjsPersistence();
     if (persistence) {
@@ -140,17 +169,16 @@ export class CheckpointService {
    * Validates the blob, destroys existing data, writes the new state
    * durably, and triggers a reload. Used during workspace context switching.
    */
-  static async applyRemoteState(remoteBlob: Uint8Array): Promise<void> {
+  static async applyRemoteState(
+    remoteBlob: Uint8Array,
+    opts?: DestructiveRestoreOptions
+  ): Promise<void> {
     // 0a. Prove the blob applies cleanly BEFORE any destructive step.
     validateSnapshot(remoteBlob);
 
     // 0b. Disconnect cloud sync to prevent concurrent modifications
-    try {
-      getFirestoreSyncManager().destroy();
-      logger.info('Firestore disconnected for remote state application');
-    } catch (e) {
-      logger.warn('Failed to disconnect Firestore during remote state apply', e);
-    }
+    // (injected handle — §D7 inversion).
+    await this.pauseSync(opts, 'remote state application');
 
     const persistence = getYjsPersistence();
     if (persistence) {

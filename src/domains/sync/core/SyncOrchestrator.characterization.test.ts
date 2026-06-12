@@ -1,16 +1,15 @@
 /**
- * P4-0 ENTRY GATE — characterization of FirestoreSyncManager's mock-path
- * workspace lifecycle AT CURRENT BEHAVIOR (phase4-sync-strangler.md
- * §Execution order P4-0; program rule 7: characterization before change).
+ * P4-0 ENTRY GATE — characterization of the mock-path workspace lifecycle
+ * AT LEGACY BEHAVIOR (phase4-sync-strangler.md §Execution order P4-0;
+ * program rule 7: characterization before change). Written against
+ * FirestoreSyncManager; retargeted to the SyncOrchestrator when P4-3
+ * decomposed and deleted the manager — every ASSERTION is unchanged (the
+ * suite pins observable behavior: stores, localStorage, status, toasts),
+ * only the construction plumbing moved to the composition root.
  *
- * Unlike FirestoreSyncManager.test.ts (which vi.mocks y-cinder/firebase and
- * pins the REAL-path event wiring), this suite runs the manager's
- * `__VERSICLE_MOCK_FIRESTORE__` branches end-to-end against the real
- * MockFireProvider and the real localStorage workspace directory — the
- * exact seams P4-2 extracts into `MockBackend`. Every assertion here is
- * about observable behavior (stores, localStorage, status, toasts), not
- * implementation lines, so the suite must stay green unchanged through the
- * SyncBackend extraction and the manager decomposition.
+ * Runs the mock stack end-to-end against the real MockFireProvider and the
+ * real localStorage workspace directory (MockBackend, selected by
+ * configureSyncBackendSelection exactly like the syncInit boot task does).
  *
  * The only spied collaborators are CheckpointService statics (IDB-touching
  * infrastructure that is NOT under test here, and applyRemoteState would
@@ -18,12 +17,15 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
-import { FirestoreSyncManager, getFirestoreSyncManager } from './FirestoreSyncManager';
-import { MockFireProvider } from '@domains/sync/backend/MockFireProvider';
-import { configureSyncBackendSelection } from '@app/sync/createSync';
+import { MockFireProvider } from '../backend/MockFireProvider';
+import {
+  configureSyncBackendSelection,
+  getSyncOrchestrator,
+  stopSyncForWipe,
+} from '@app/sync/createSync';
 import { wireSyncEvents } from '@app/sync/wireSyncEvents';
-import { CheckpointService } from './CheckpointService';
-import { MigrationStateService } from './MigrationStateService';
+import { CheckpointService } from '../checkpoints/CheckpointService';
+import { MigrationStateService } from '../workspaces/MigrationStateService';
 import { useSyncStore } from '@store/useSyncStore';
 import { useToastStore } from '@store/useToastStore';
 import { CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
@@ -75,11 +77,11 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
     localStorage.removeItem(WORKSPACES_KEY);
     MigrationStateService.clear();
 
-    FirestoreSyncManager.resetInstance();
-    // Since P4-2/P4-3a, backend selection and the single presentation
-    // subscriber are the composition root's job — the manager no longer
-    // reads `__VERSICLE_MOCK_FIRESTORE__` or shows toasts itself. These are
-    // the same calls the `syncInit` boot task makes before initialize().
+    stopSyncForWipe();
+    // Backend selection and the single presentation subscriber are the
+    // composition root's job — the orchestrator never reads
+    // `__VERSICLE_MOCK_FIRESTORE__` or shows toasts itself. These are
+    // the same calls the `syncInit` boot task makes before start().
     await configureSyncBackendSelection();
     unwireSyncEvents = wireSyncEvents();
     useSyncStore.getState().setActiveWorkspaceId(null);
@@ -97,7 +99,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
 
   afterEach(() => {
     unwireSyncEvents();
-    FirestoreSyncManager.resetInstance();
+    stopSyncForWipe();
     MigrationStateService.clear();
     MockFireProvider.clearMockStorage();
     localStorage.removeItem(WORKSPACES_KEY);
@@ -107,10 +109,10 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
     vi.restoreAllMocks();
   });
 
-  describe('initialize() — mock auth synthesis and smart routing', () => {
+  describe('start() — mock auth synthesis and smart routing', () => {
     it('auto-provisions "My Library" and connects when zero remote workspaces exist', async () => {
-      const manager = getFirestoreSyncManager();
-      await manager.initialize();
+      const manager = getSyncOrchestrator();
+      await manager.start();
 
       await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), {
         timeout: 5000,
@@ -136,8 +138,8 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
     it('halts (disconnected, no workspace assigned) when remote workspaces exist but none is selected', async () => {
       seedWorkspace('ws_existing');
 
-      const manager = getFirestoreSyncManager();
-      await manager.initialize();
+      const manager = getSyncOrchestrator();
+      await manager.start();
 
       // Routing decision is async — wait until auth lands, then assert halt.
       await vi.waitFor(
@@ -157,8 +159,8 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       window.__VERSICLE_MOCK_USER_ID__ = 'custom-user';
       // The id flag is read at composition time — re-run the root.
       await configureSyncBackendSelection();
-      const manager = getFirestoreSyncManager();
-      await manager.initialize();
+      const manager = getSyncOrchestrator();
+      await manager.start();
 
       await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), {
         timeout: 5000,
@@ -173,8 +175,8 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_fresh');
       useSyncStore.getState().setActiveWorkspaceId('ws_fresh');
 
-      const manager = getFirestoreSyncManager();
-      await manager.initialize();
+      const manager = getSyncOrchestrator();
+      await manager.start();
 
       await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), {
         timeout: 5000,
@@ -183,17 +185,17 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       expect(useSyncStore.getState().activeWorkspaceId).toBe('ws_fresh');
     });
 
-    it('destroy() disconnects the provider and reports disconnected', async () => {
+    it('stop() disconnects the provider and reports disconnected', async () => {
       seedWorkspace('ws_fresh');
       useSyncStore.getState().setActiveWorkspaceId('ws_fresh');
 
-      const manager = getFirestoreSyncManager();
-      await manager.initialize();
+      const manager = getSyncOrchestrator();
+      await manager.start();
       await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), {
         timeout: 5000,
       });
 
-      manager.destroy();
+      manager.stop();
       expect(manager.getStatus()).toBe('disconnected');
       expect(useSyncStore.getState().firestoreStatus).toBe('disconnected');
     });
@@ -202,14 +204,11 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_dead', { deletedAt: Date.now() });
       useSyncStore.getState().setActiveWorkspaceId('ws_dead');
 
-      const manager = getFirestoreSyncManager();
+      const manager = getSyncOrchestrator();
       // Call the connect path directly (handleAuthStateChange fires it
       // without awaiting — pinned debt, phase4-sync-strangler.md item 17 —
-      // so going through initialize() would leave an unhandled rejection).
-      await expect(
-        (manager as unknown as { connectFireProvider(uid: string): Promise<void> })
-          .connectFireProvider(UID)
-      ).rejects.toThrow(WorkspaceDeletedError);
+      // so going through start() would leave an unhandled rejection).
+      await expect(manager.connect(UID)).rejects.toThrow(WorkspaceDeletedError);
 
       expect(useSyncStore.getState().activeWorkspaceId).toBeNull();
       expect(manager.getStatus()).toBe('disconnected');
@@ -227,8 +226,8 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
         doc.getMap('library').set('characterization-probe', 'cloud-data');
       });
 
-      const manager = getFirestoreSyncManager();
-      await manager.initialize();
+      const manager = getSyncOrchestrator();
+      await manager.start();
 
       await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), {
         timeout: 10000,
@@ -264,7 +263,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
         doc.getMap('library').set('characterization-probe', 'workspace-b-data');
       });
 
-      const manager = getFirestoreSyncManager();
+      const manager = getSyncOrchestrator();
       await manager.switchWorkspace('ws_b');
 
       // Protected pre-migration checkpoint (P0 pinning semantics).
@@ -292,7 +291,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_a');
       useSyncStore.getState().setActiveWorkspaceId('ws_a');
 
-      const manager = getFirestoreSyncManager();
+      const manager = getSyncOrchestrator();
       await manager.switchWorkspace('ws_a');
 
       expect(createCheckpointSpy).not.toHaveBeenCalled();
@@ -305,7 +304,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_dead', { deletedAt: Date.now() });
       useSyncStore.getState().setActiveWorkspaceId('ws_a');
 
-      const manager = getFirestoreSyncManager();
+      const manager = getSyncOrchestrator();
       await expect(manager.switchWorkspace('ws_dead')).rejects.toThrow(WorkspaceDeletedError);
 
       expect(showToast).toHaveBeenCalledWith(
@@ -323,7 +322,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
     it('tombstones the workspace in both the directory and the snapshot store', async () => {
       seedWorkspace('ws_doomed');
 
-      const manager = getFirestoreSyncManager();
+      const manager = getSyncOrchestrator();
       await manager.deleteWorkspace('ws_doomed');
 
       const ws = readWorkspaces().find((w) => w.workspaceId === 'ws_doomed');
@@ -339,7 +338,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_other');
       useSyncStore.getState().setActiveWorkspaceId('ws_active');
 
-      const manager = getFirestoreSyncManager();
+      const manager = getSyncOrchestrator();
 
       // Deleting a NON-active workspace keeps the active tie.
       await manager.deleteWorkspace('ws_other');
@@ -354,7 +353,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_alive');
       seedWorkspace('ws_dead', { deletedAt: Date.now() });
 
-      const manager = getFirestoreSyncManager();
+      const manager = getSyncOrchestrator();
       const listed = await manager.listWorkspaces();
       expect(listed.map((w) => w.workspaceId)).toEqual(['ws_alive']);
     });

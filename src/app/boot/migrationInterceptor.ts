@@ -10,8 +10,9 @@
  * - otherwise (standard boot) → prune zombie pre-migration backups.
  */
 import type { BootTask } from '../bootstrap';
-import { MigrationStateService } from '@lib/sync/MigrationStateService';
-import { CheckpointService } from '@lib/sync/CheckpointService';
+import { MigrationStateService } from '@domains/sync/workspaces/MigrationStateService';
+import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
+import { stopSyncConnections } from '../sync/createSync';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
@@ -30,7 +31,12 @@ export const migrationInterceptorTask: BootTask = {
         // or interrupted rollback silently boot into the target workspace.
         logger.info('Boot interceptor: RESTORING_BACKUP detected, rolling back...');
         if (migrationState.backupCheckpointId != null) {
-          CheckpointService.restoreCheckpoint(migrationState.backupCheckpointId)
+          // pauseSync (§D7 inversion): sync never started on this boot path
+          // (ctx.syncAllowed gates syncInit), so this is belt-and-braces —
+          // it severs anything a future boot reordering might have started.
+          CheckpointService.restoreCheckpoint(migrationState.backupCheckpointId, {
+            pauseSync: stopSyncConnections,
+          })
             .catch(err => {
               logger.error('Rollback failed:', err);
               // Clear state and reload as last resort (avoids a reload loop)

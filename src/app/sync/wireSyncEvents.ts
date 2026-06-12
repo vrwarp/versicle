@@ -19,7 +19,7 @@
  */
 import { getSyncEventBus } from '@domains/sync/events';
 import { RULES_OUT_OF_DATE_MESSAGE } from '@domains/sync/backend/permissionDenied';
-import { getFirestoreSyncManager } from '@lib/sync/FirestoreSyncManager';
+import { getSyncOrchestrator } from './createSync';
 import { stopDeviceHeartbeat } from '@app/boot/backgroundTasks';
 import { useSyncStore } from '@store/useSyncStore';
 import { useToastStore } from '@store/useToastStore';
@@ -126,7 +126,7 @@ export function wireSyncEvents(): () => void {
         // status label) and stop the device heartbeat — zero outbound
         // writes after the lock. The UI lock itself is set by
         // handleObsoleteClient (store/yjs-provider), which emitted this.
-        getFirestoreSyncManager().severObsoleteConnection();
+        getSyncOrchestrator().severObsoleteConnection();
         stopDeviceHeartbeat();
         break;
 

@@ -73,11 +73,16 @@ vi.mock('./lib/MaintenanceService', () => ({
   },
 }));
 
-vi.mock('./lib/sync/FirestoreSyncManager', () => ({
-  getFirestoreSyncManager: vi.fn(() => ({ initialize: h.syncInitialize })),
+// The sync composition root (P4-3: the orchestrator replaced
+// FirestoreSyncManager; boot drives it through these exports).
+vi.mock('./app/sync/createSync', () => ({
+  getSyncOrchestrator: vi.fn(() => ({ start: h.syncInitialize })),
+  configureSyncBackendSelection: vi.fn(async () => undefined),
+  stopSyncConnections: vi.fn(),
+  stopSyncForWipe: vi.fn(),
 }));
 
-vi.mock('./lib/sync/CheckpointService', () => ({
+vi.mock('./domains/sync/checkpoints/CheckpointService', () => ({
   CheckpointService: {
     restoreCheckpoint: h.restoreCheckpoint,
     listCheckpoints: h.listCheckpoints,
@@ -325,7 +330,11 @@ describe('boot: migration interceptor — RESTORING_BACKUP', () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(h.restoreCheckpoint).toHaveBeenCalledWith(42);
+      // The second arg is the §D7 pauseSync shutdown handle.
+      expect(h.restoreCheckpoint).toHaveBeenCalledWith(
+        42,
+        expect.objectContaining({ pauseSync: expect.any(Function) }),
+      );
     });
 
     expect(h.syncInitialize).not.toHaveBeenCalled();

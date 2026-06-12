@@ -1,9 +1,9 @@
 import React from 'react';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
-import { MigrationStateService } from '@lib/sync/MigrationStateService';
-import { CheckpointService } from '@lib/sync/CheckpointService';
-import { getFirestoreSyncManager } from '@lib/sync/FirestoreSyncManager';
+import { MigrationStateService } from '@domains/sync/workspaces/MigrationStateService';
+import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
+import { getSyncOrchestrator } from '@app/sync/createSync';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('WorkspaceMigrationConfirm');
@@ -39,9 +39,8 @@ export const WorkspaceMigrationConfirmModal: React.FC<WorkspaceMigrationConfirmM
                 logger.warn('Failed to delete backup checkpoint:', e);
             }
 
-            // Initialize sync with the new workspace
-            const manager = getFirestoreSyncManager();
-            manager.initialize();
+            // Start sync with the new workspace
+            void getSyncOrchestrator().start();
 
             onResolved();
         } catch (e) {

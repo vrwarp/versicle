@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 // Mock CheckpointService (dynamically imported by processManifest)
-vi.mock('./sync/CheckpointService', () => ({
+vi.mock('@domains/sync/checkpoints/CheckpointService', () => ({
   CheckpointService: {
     createCheckpoint: (trigger: string) => mocks.checkpointMock.createCheckpoint(trigger),
   },

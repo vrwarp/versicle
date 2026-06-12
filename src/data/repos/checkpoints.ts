@@ -2,8 +2,8 @@
  * `checkpoints` repository — local Yjs recovery checkpoints (Phase 3, D5.5
  * in plan/overhaul/prep/phase3-storage-gateway.md; carved LAST, after the
  * Phase 2 checkpoint work settled). Only the IDB access moved here:
- * CheckpointService itself stays in lib/sync (its decomposition, and its
- * FirestoreSyncManager import cycle, are P4's named work).
+ * CheckpointService itself lives in domains/sync/checkpoints (P4-3; its
+ * legacy FirestoreSyncManager import cycle was cut by the §D7 inversion).
  */
 import { getConnection } from '../connection';
 import { runExclusiveIdbWrite, write } from '../write-gate';

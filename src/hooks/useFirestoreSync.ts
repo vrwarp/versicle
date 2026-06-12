@@ -1,21 +1,23 @@
 /**
- * React hook for Firebase/Firestore sync integration.
+ * React hook for Firebase/Firestore sync integration (relocated from
+ * src/lib/sync/hooks/ when FirestoreSyncManager was decomposed into the
+ * sync orchestrator — P4-3; src/hooks is the established hook home).
  *
- * Since the P4 SyncEvent bus landed, this hook no longer mirrors manager
+ * Since the P4 SyncEvent bus landed, this hook no longer mirrors transport
  * state into useSyncStore — `src/app/sync/wireSyncEvents.ts` is the single
  * subscriber that owns those writes (including `lastSyncTime`, which is
  * driven by `flushed` events instead of the old connected-transition stamp
  * this hook used to fake it with). What remains:
  *
- *  - the settings-driven (re)initialization effect: boot's `syncInit` task
- *    handles the configured-at-boot case, but enabling/configuring Firebase
- *    from the settings UI must initialize without a reload;
+ *  - the settings-driven (re)start effect: boot's `syncInit` task handles
+ *    the configured-at-boot case, but enabling/configuring Firebase from
+ *    the settings UI must start sync without a reload;
  *  - the signIn/signOut commands and the isConfigured derivation.
  */
 import { useEffect, useCallback, useMemo } from 'react';
-import { getFirestoreSyncManager } from '../FirestoreSyncManager';
+import { getSyncOrchestrator } from '@app/sync/createSync';
 import { useSyncStore } from '@store/useSyncStore';
-import { isMockFirestoreEnabled } from '../../../test-flags';
+import { isMockFirestoreEnabled } from '../test-flags';
 
 export const useFirestoreSync = () => {
     const firebaseEnabled = useSyncStore(state => state.firebaseEnabled);
@@ -34,7 +36,7 @@ export const useFirestoreSync = () => {
         );
     }, [firebaseConfig]);
 
-    // Initialize sync manager when Firebase is enabled AND configured
+    // Start the orchestrator when Firebase is enabled AND configured
     useEffect(() => {
         const isMock = isMockFirestoreEnabled();
 
@@ -42,25 +44,23 @@ export const useFirestoreSync = () => {
             return;
         }
 
-        // Idempotent for the already-initialized boot case; picks up
+        // Idempotent for the already-started boot case; picks up
         // settings-time enablement without a reload.
-        void getFirestoreSyncManager().initialize();
+        void getSyncOrchestrator().start();
     }, [firebaseEnabled, isConfigured]);
 
     /**
      * Sign in with Google
      */
     const signIn = useCallback(async () => {
-        const manager = getFirestoreSyncManager();
-        await manager.signIn();
+        await getSyncOrchestrator().signIn();
     }, []);
 
     /**
      * Sign out
      */
     const signOut = useCallback(async () => {
-        const manager = getFirestoreSyncManager();
-        await manager.signOut();
+        await getSyncOrchestrator().signOut();
     }, []);
 
     return {

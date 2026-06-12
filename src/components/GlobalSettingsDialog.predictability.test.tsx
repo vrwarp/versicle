@@ -3,7 +3,7 @@ import { act } from 'react';
 import { GlobalSettingsDialog } from './GlobalSettingsDialog';
 import { useUIStore } from '@store/useUIStore';
 import { useTTSStore } from '@store/useTTSStore';
-import { CheckpointService } from '@lib/sync/CheckpointService';
+import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
 import { renderWithStores, storeSeed, makeTTSVoice } from '@test/harness';
 
 // Harness migration (Phase 0): this file used to vi.mock NINE store modules
