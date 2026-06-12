@@ -316,26 +316,22 @@ export function useEpubReader(
 
         yield newBook.ready;
 
-        // Event Listeners — ONE engine subscription replaces the three
-        // direct rendition.on registrations (relocated/selected/click).
+        // Event Listeners. Selection is deliberately NOT consumed from the
+        // engine's 'selected' event: the selectionBridge mouseup pipeline
+        // below is the SINGLE selection source (D3 — epub.js 'selected' and
+        // the mouseup pipeline both reported one gesture in the legacy
+        // hook; the WebKit-reliable pipeline won, pinned by
+        // useEpubReader_Selection.test.tsx).
         newEngine.subscribe((event) => {
           if (event.type === 'relocated') {
             reportLocation(event.location);
-          } else if (event.type === 'selected') {
-            if (optionsRef.current.onSelection) {
-              optionsRef.current.onSelection(event.cfiRange, event.range, event.view);
-            }
           } else if (event.type === 'click') {
             if (optionsRef.current.onClick) optionsRef.current.onClick(event.event);
           }
         });
 
         // Per-content-load pipeline (all three hooks preserved in legacy
-        // registration order: extras → chinese → selection). NOTE: the
-        // selectionBridge mouseup pipeline AND the engine 'selected' event
-        // above both report selections — the legacy double-fire (D3) is
-        // preserved by this extraction commit; the single-pipeline fix is
-        // its own commit.
+        // registration order: extras → chinese → selection).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const injectExtras = (contents: any) => {
           injectContentExtras(contents, {
