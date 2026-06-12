@@ -3,16 +3,26 @@
  * from the shell's inline onLocationChange/panic-save logic (Phase 6 §6,
  * prep/phase6-reader-engine.md PR-6).
  *
- * EXTRACTION COMMIT: write behavior is byte-identical to the legacy inline
- * code (ReaderView's onLocationChange `prepareUpdates` + the unmount panic
- * save), including the D6 bug this extraction deliberately PRESERVES:
- * per-relocation async `recordSession` calls run concurrently (two
- * `snapCfiToSentence` awaits then a store write), so in-flight calls can
- * commit out of order. The per-book FIFO serialization is the next commit,
- * with its interleaving unit test — never silently here.
+ * SERIALIZED (the D6 fix, its own commit after the verbatim extraction):
+ * recordings run on a per-book FIFO — one in flight, the rest queued as
+ * plain data — with a monotonic sequence number. The legacy code launched
+ * one async pass per relocation (two `snapCfiToSentence` awaits, then the
+ * store write), so a slow snap for relocation N could commit AFTER N+1 and
+ * leave `currentCfi` pointing backwards. Now:
  *
- * What IS single-sourced already (per §6): the `'Chapter'` placeholder
- * filter, previously string-matched in two places.
+ *  - commits happen strictly in event order (FIFO pump),
+ *  - `flushSync()` drains everything still queued/in flight synchronously
+ *    WITHOUT snapping (raw ranges — the book may be tearing down) before
+ *    the final panic segment, and
+ *  - a write whose seq is already covered when its async pass completes is
+ *    DROPPED (it was committed by flushSync; the late duplicate dies).
+ *
+ * Dwell durations and the previous-range label are captured AT EVENT TIME
+ * (the legacy async body read them synchronously before its first await),
+ * so queueing never inflates a dwell or mislabels a range.
+ *
+ * Single-sourced per §6: the `'Chapter'` placeholder filter and the ONE
+ * `buildUpdates({snap})` pass both the live path and flushSync use.
  *
  * Store access is injected (deps.store) so this module satisfies the
  * domains-no-store boundary; the shell wires the real
@@ -91,9 +101,32 @@ function isPlaceholderLabel(label: string | undefined): boolean {
   return label === 'Chapter';
 }
 
+/** One queued recording, captured as plain data at event time. */
+interface QueuedRecording {
+  seq: number;
+  e: SessionEvent;
+  /** Previous segment snapshot (before the tracker advanced). */
+  previous: { start: string; end: string } | null;
+  /** Dwell on the previous segment, measured AT EVENT TIME. */
+  previousDurationMs: number;
+  /** Title for the previous range, captured AT EVENT TIME (legacy timing). */
+  previousTitle: string | null;
+  /** Resolver captured at event time (legacy read engineRef synchronously). */
+  resolver: SessionResolver | null;
+}
+
 export class ReadingSessionRecorder {
   private previous: { start: string; end: string; timestamp: number } | null = null;
   private disposed = false;
+
+  /** FIFO of recordings not yet started. */
+  private pending: QueuedRecording[] = [];
+  /** The recording whose async snap pass is currently running. */
+  private inFlight: QueuedRecording | null = null;
+  private pumping = false;
+  private seqCounter = 0;
+  /** Highest seq whose write has been committed (stale completions drop). */
+  private committedSeq = 0;
 
   constructor(private readonly deps: ReadingSessionRecorderDeps) {}
 
@@ -135,15 +168,22 @@ export class ReadingSessionRecorder {
     // usually, but double check)
     if (e.location.startCfi === (this.deps.store.getCurrentCfi() || '')) return false;
 
-    // Snapshot the previous segment for the async pass BEFORE advancing it.
-    const previous = this.previous;
-
-    // EXTRACTION COMMIT (D6 preserved): fire-and-forget — concurrent
-    // in-flight recordings can commit out of order, exactly like the
-    // legacy inline prepareUpdates. Serialization is the next commit.
-    this.recordSession(e, previous).catch((err) => {
-      logger.error('Failed to update reading session', err);
+    // Capture everything the recording needs AT EVENT TIME (the legacy
+    // async body read all of this synchronously before its first await):
+    // previous segment, its dwell, its label, the live resolver.
+    const previous = this.previous
+      ? { start: this.previous.start, end: this.previous.end }
+      : null;
+    const previousDurationMs = this.previous ? now() - this.previous.timestamp : 0;
+    this.pending.push({
+      seq: ++this.seqCounter,
+      e,
+      previous,
+      previousDurationMs,
+      previousTitle: this.deps.getContext().title,
+      resolver: this.deps.getResolver(),
     });
+    void this.pump();
 
     // Update refs immediately (independent of store storage)
     this.previous = {
@@ -154,12 +194,71 @@ export class ReadingSessionRecorder {
     return true;
   }
 
+  /** The per-book FIFO: exactly one recording's snap pass in flight. */
+  private async pump(): Promise<void> {
+    if (this.pumping) return;
+    this.pumping = true;
+    try {
+      while (this.pending.length > 0) {
+        const item = this.pending.shift()!;
+        this.inFlight = item;
+        try {
+          const { updates, historyAppended } = await this.buildUpdates(item, { snap: true });
+          this.commit(item, updates, historyAppended);
+        } catch (err) {
+          logger.error('Failed to update reading session', err);
+        } finally {
+          this.inFlight = null;
+        }
+      }
+    } finally {
+      this.pumping = false;
+    }
+  }
+
   /**
-   * Unmount panic save (legacy semantics, verbatim): synchronous, raw
-   * capture of the last segment — no snapping, because the book/resolver
-   * may already be torn down mid-unmount.
+   * Commits one recording — strictly once per seq: a completion whose seq
+   * was already covered (flushSync drained it synchronously) drops.
+   */
+  private commit(item: QueuedRecording, updates: SessionUpdateEntry[], historyAppended: boolean): void {
+    if (item.seq <= this.committedSeq) return; // stale: already committed
+    this.committedSeq = item.seq;
+    if (historyAppended) {
+      this.deps.onHistoryRecorded?.();
+    }
+    this.deps.store.updateReadingSession(
+      this.deps.bookId,
+      item.e.location.startCfi,
+      item.e.percentage,
+      updates,
+    );
+  }
+
+  /**
+   * Unmount panic save: drains every recording still queued or in flight
+   * SYNCHRONOUSLY without snapping (raw ranges — the book may already be
+   * torn down mid-unmount; the late async completion of the in-flight item
+   * is dropped by the seq guard), then writes the legacy final segment.
    */
   flushSync(): void {
+    // 1. Drain the queue (snap=false). The in-flight recording (if any)
+    //    has not committed yet — commit it here; its async completion will
+    //    be stale and drop.
+    const toDrain: QueuedRecording[] = [];
+    if (this.inFlight && this.inFlight.seq > this.committedSeq) {
+      toDrain.push(this.inFlight);
+    }
+    toDrain.push(...this.pending.splice(0));
+    for (const item of toDrain) {
+      try {
+        const { updates, historyAppended } = this.buildUpdatesSync(item);
+        this.commit(item, updates, historyAppended);
+      } catch (err) {
+        logger.error('Session flush failed', err);
+      }
+    }
+
+    // 2. Legacy final-segment panic save (verbatim semantics).
     if (!this.previous) return;
     const now = this.deps.now ?? Date.now;
 
@@ -186,73 +285,100 @@ export class ReadingSessionRecorder {
 
   dispose(): void {
     this.disposed = true;
+    // Anything still queued or in flight must not write post-dispose
+    // (flushSync, called first by the shell, already drained it).
+    this.pending = [];
+    this.committedSeq = this.seqCounter;
+  }
+
+  /** Does the previous segment qualify for a history entry? (verbatim) */
+  private previousQualifies(item: QueuedRecording): boolean {
+    if (!item.previous) return false;
+    const isScroll = item.e.viewMode === 'scrolled';
+    const shouldSave = isScroll ? item.previousDurationMs > 2000 : true;
+    return Boolean(
+      item.previous.start &&
+        item.previous.end &&
+        item.previous.start !== item.e.location.startCfi &&
+        shouldSave,
+    );
+  }
+
+  /** The previous-range entry from already-resolved CFIs. */
+  private previousEntry(
+    item: QueuedRecording,
+    start: string,
+    end: string,
+  ): SessionUpdateEntry | null {
+    const type: ReadingEventType = item.e.viewMode === 'scrolled' ? 'scroll' : 'page';
+    const label = item.previousTitle || undefined;
+    // Ignore generic "Chapter" placeholder
+    if (isPlaceholderLabel(label)) return null;
+    return { range: generateCfiRange(start, end), type, label };
+  }
+
+  /** The current-range entry (always appended; legacy keeps its raw label). */
+  private currentEntry(item: QueuedRecording): SessionUpdateEntry {
+    const currentRange = generateCfiRange(item.e.location.startCfi, item.e.location.endCfi);
+    const currentType: ReadingEventType = item.e.viewMode === 'scrolled' ? 'scroll' : 'page';
+    return { range: currentRange, type: currentType, label: item.e.title ?? undefined };
   }
 
   /**
-   * One recording pass ({snap} unified per §6): snap + append the previous
-   * range (when it qualifies), always append the current range, commit as
-   * ONE atomic store update.
+   * ONE recording pass (§6 `recordSession({snap})`): previous range when it
+   * qualifies (sentence-snapped on the live path), then the current range.
    */
-  private async recordSession(
-    e: SessionEvent,
-    previous: { start: string; end: string; timestamp: number } | null,
-  ): Promise<void> {
-    const now = this.deps.now ?? Date.now;
+  private async buildUpdates(
+    item: QueuedRecording,
+    opts: { snap: boolean },
+  ): Promise<{ updates: SessionUpdateEntry[]; historyAppended: boolean }> {
+    if (!opts.snap) return this.buildUpdatesSync(item);
+
     const updates: SessionUpdateEntry[] = [];
+    let historyAppended = false;
 
-    // 1. Calculate Previous Range (Async)
-    if (previous) {
-      const prevStart = previous.start;
-      const prevEnd = previous.end;
-      const duration = now() - previous.timestamp;
-      const isScroll = e.viewMode === 'scrolled';
-      const shouldSave = isScroll ? duration > 2000 : true;
-
-      if (prevStart && prevEnd && prevStart !== e.location.startCfi && shouldSave) {
-        const resolver = this.deps.getResolver();
-        // Capture title synchronously before async op to avoid race
-        // condition with the shell's section update.
-        const previousSectionTitle = this.deps.getContext().title;
-
-        if (resolver) {
-          try {
-            // Resolver = kernel CfiRangeResolver; the OPF language keeps
-            // snapping locale-aware.
-            const language = resolver.getLanguage();
-            const [snappedStart, snappedEnd] = await Promise.all([
-              snapCfiToSentence(resolver, prevStart, language),
-              snapCfiToSentence(resolver, prevEnd, language),
-            ]);
-
-            const range = generateCfiRange(snappedStart, snappedEnd);
-            const type: ReadingEventType = isScroll ? 'scroll' : 'page';
-            const label = previousSectionTitle || undefined;
-
-            // Ignore generic "Chapter" placeholder
-            if (!isPlaceholderLabel(label)) {
-              updates.push({ range, type, label });
-              this.deps.onHistoryRecorded?.();
-            }
-          } catch (err) {
-            logger.error('History processing failed', err);
-            // Continue even if history fails, to save current location
-          }
+    if (this.previousQualifies(item) && item.resolver) {
+      const { start, end } = item.previous!;
+      try {
+        // Resolver = kernel CfiRangeResolver; the OPF language keeps
+        // snapping locale-aware.
+        const language = item.resolver.getLanguage();
+        const [snappedStart, snappedEnd] = await Promise.all([
+          snapCfiToSentence(item.resolver, start, language),
+          snapCfiToSentence(item.resolver, end, language),
+        ]);
+        const entry = this.previousEntry(item, snappedStart, snappedEnd);
+        if (entry) {
+          updates.push(entry);
+          historyAppended = true;
         }
+      } catch (err) {
+        logger.error('History processing failed', err);
+        // Continue even if history fails, to save current location
       }
     }
 
-    // 2. Calculate Current Range (Sync)
-    // Ensure current segment is in history so it appears at top of list
-    const currentRange = generateCfiRange(e.location.startCfi, e.location.endCfi);
-    const currentType: ReadingEventType = e.viewMode === 'scrolled' ? 'scroll' : 'page';
-    updates.push({ range: currentRange, type: currentType, label: e.title ?? undefined });
+    updates.push(this.currentEntry(item));
+    return { updates, historyAppended };
+  }
 
-    // 3. Single Atomic Update
-    this.deps.store.updateReadingSession(
-      this.deps.bookId,
-      e.location.startCfi,
-      e.percentage,
-      updates,
-    );
+  /** The snap=false pass (flushSync drain): raw previous range, sync. */
+  private buildUpdatesSync(item: QueuedRecording): {
+    updates: SessionUpdateEntry[];
+    historyAppended: boolean;
+  } {
+    const updates: SessionUpdateEntry[] = [];
+    let historyAppended = false;
+
+    if (this.previousQualifies(item) && item.resolver) {
+      const entry = this.previousEntry(item, item.previous!.start, item.previous!.end);
+      if (entry) {
+        updates.push(entry);
+        historyAppended = true;
+      }
+    }
+
+    updates.push(this.currentEntry(item));
+    return { updates, historyAppended };
   }
 }

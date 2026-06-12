@@ -225,3 +225,118 @@ describe('ReadingSessionRecorder (extracted legacy write behavior)', () => {
     expect(store.updateReadingSession).not.toHaveBeenCalled();
   });
 });
+
+describe('regression: serialized per-book writes (D6 fix, §6)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  /** Resolver whose getRange resolution order is test-controlled. */
+  const makeDelayedResolver = () => {
+    const gates = new Map<string, (range: Range | null) => void>();
+    const resolver: SessionResolver = {
+      getRange: (cfi: string) =>
+        new Promise<Range | null>((resolve) => {
+          gates.set(cfi, resolve);
+        }),
+      getLanguage: () => 'en',
+    };
+    const release = (cfi: string) => {
+      gates.get(cfi)?.(null); // null → snap falls back to the raw CFI
+      gates.delete(cfi);
+    };
+    return { resolver, release, gates };
+  };
+
+  it('a delayed snap for N never commits after N+1 (FIFO; final currentCfi is N+1)', async () => {
+    const { resolver, release } = makeDelayedResolver();
+    const { recorder, store, advance } = makeRecorder({ getResolver: () => resolver });
+
+    recorder.onRelocated({ location: loc(1), percentage: 0.1, title: 'A', viewMode: 'paginated', at: 100_000 });
+    await flush(); // first event: no previous range → committed without snapping
+    expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
+
+    advance(5_000);
+    // N: its previous-range snap will hang on the resolver gate.
+    recorder.onRelocated({ location: loc(2), percentage: 0.2, title: 'B', viewMode: 'paginated', at: 105_000 });
+    advance(5_000);
+    // N+1 enqueued while N's snap is still pending.
+    recorder.onRelocated({ location: loc(3), percentage: 0.3, title: 'C', viewMode: 'paginated', at: 110_000 });
+    await flush();
+
+    // FIFO: N+1 must NOT have committed ahead of N.
+    expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
+
+    // Resolve N's snap (after N+1 was enqueued — the legacy out-of-order
+    // scenario), then N+1's.
+    release(loc(1).startCfi);
+    release(loc(1).endCfi);
+    await flush();
+    release(loc(2).startCfi);
+    release(loc(2).endCfi);
+    await flush();
+    await flush();
+
+    expect(store.updateReadingSession).toHaveBeenCalledTimes(3);
+    // Commit order is event order…
+    expect(store.updateReadingSession.mock.calls[1][1]).toBe(loc(2).startCfi);
+    expect(store.updateReadingSession.mock.calls[2][1]).toBe(loc(3).startCfi);
+    // …so the FINAL currentCfi is N+1's.
+    const last = store.updateReadingSession.mock.calls.at(-1)!;
+    expect(last[1]).toBe(loc(3).startCfi);
+    expect(last[2]).toBe(0.3);
+  });
+
+  it('flushSync drains queued + in-flight recordings unsnapped; the late async completion drops', async () => {
+    const { resolver, release, gates } = makeDelayedResolver();
+    const { recorder, store, advance } = makeRecorder({ getResolver: () => resolver });
+
+    recorder.onRelocated({ location: loc(1), percentage: 0.1, title: 'A', viewMode: 'paginated', at: 100_000 });
+    await flush();
+    store.updateReadingSession.mockClear();
+
+    advance(5_000);
+    recorder.onRelocated({ location: loc(2), percentage: 0.2, title: 'B', viewMode: 'paginated', at: 105_000 });
+    advance(5_000);
+    recorder.onRelocated({ location: loc(3), percentage: 0.3, title: 'C', viewMode: 'paginated', at: 110_000 });
+    await flush();
+    expect(store.updateReadingSession).not.toHaveBeenCalled(); // both pending on the gate
+
+    advance(5_000);
+    recorder.flushSync();
+
+    // Both recordings committed synchronously (raw, unsnapped ranges) in
+    // event order, plus the legacy final panic segment.
+    expect(store.updateReadingSession).toHaveBeenCalledTimes(2);
+    expect(store.updateReadingSession.mock.calls[0][1]).toBe(loc(2).startCfi);
+    expect(store.updateReadingSession.mock.calls[0][3][0].range).toBe(
+      generateCfiRange(loc(1).startCfi, loc(1).endCfi),
+    );
+    expect(store.updateReadingSession.mock.calls[1][1]).toBe(loc(3).startCfi);
+    expect(store.addCompletedRange).toHaveBeenCalledTimes(1);
+
+    // The in-flight snap resolving late must NOT produce a duplicate write.
+    for (const cfi of [...gates.keys()]) release(cfi);
+    await flush();
+    await flush();
+    expect(store.updateReadingSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('rapid flips: every write commits in event order (no interleaving)', async () => {
+    const { recorder, store, advance } = makeRecorder();
+
+    for (let n = 1; n <= 5; n++) {
+      recorder.onRelocated({
+        location: loc(n),
+        percentage: n / 10,
+        title: `T${n}`,
+        viewMode: 'paginated',
+        at: 100_000 + n * 3_000,
+      });
+      advance(3_000);
+    }
+    await flush();
+    await flush();
+
+    const cfis = store.updateReadingSession.mock.calls.map((c) => c[1]);
+    expect(cfis).toEqual([1, 2, 3, 4, 5].map((n) => loc(n).startCfi));
+  });
+});
