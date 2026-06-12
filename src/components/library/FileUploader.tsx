@@ -6,11 +6,12 @@ import { cn } from '@lib/utils';
 import { validateZipSignature } from '@lib/ingestion';
 import { DuplicateBookError } from '~types/errors';
 import { ImportProgressUI } from './ImportProgressUI';
-import { useShallow } from 'zustand/react/shallow';
 import { Loader2 } from 'lucide-react';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 import { getGoogleAuthClient } from '@domains/google';
+import { useImportController } from '@app/library/useImportController';
+import { presentError } from '@app/errors/presentError';
 import { Button } from '../ui/Button';
 import { DriveImportDialog } from '../drive/DriveImportDialog';
 import { createLogger } from '@lib/logger';
@@ -19,20 +20,14 @@ const logger = createLogger('FileUploader');
 
 /**
  * A component for uploading EPUB files, ZIP archives, or directories via drag-and-drop or file selection.
- * Handles user interactions and triggers the book import process.
+ * Handles user interactions and triggers the book import process (Phase 7:
+ * through the shared import controller — the store is a read-only projection).
  *
  * @returns A React component rendering the file upload area.
  */
 export const FileUploader: React.FC = () => {
-  const {
-    addBook,
-    addBooks,
-    isImporting
-  } = useLibraryStore(useShallow(state => ({
-    addBook: state.addBook,
-    addBooks: state.addBooks,
-    isImporting: state.isImporting
-  })));
+  const isImporting = useLibraryStore(state => state.isImporting);
+  const controller = useImportController();
 
   const { showToast } = useToastStore();
   const [dragActive, setDragActive] = useState(false);
@@ -48,7 +43,7 @@ export const FileUploader: React.FC = () => {
       const isValid = await validateZipSignature(file);
       if (isValid) {
         try {
-          await addBook(file);
+          await controller.importFile(file);
         } catch (error) {
           if (error instanceof DuplicateBookError) {
             setDuplicateQueue(prev => [...prev, file]);
@@ -60,14 +55,14 @@ export const FileUploader: React.FC = () => {
     } else if (lowerName.endsWith('.zip')) {
       const isValid = await validateZipSignature(file);
       if (isValid) {
-        await addBooks([file]);
+        await controller.importFiles([file]);
       } else {
         showToast(`Invalid ZIP file (header mismatch): ${file.name}`, 'error');
       }
     } else {
       showToast(`Unsupported file type: ${file.name}`, 'error');
     }
-  }, [addBook, addBooks, showToast]);
+  }, [controller, showToast]);
 
   /**
    * Processes a list of files (batch import).
@@ -104,10 +99,10 @@ export const FileUploader: React.FC = () => {
       }
 
       if (validFiles.length > 0) {
-        await addBooks(validFiles);
+        await controller.importFiles(validFiles);
       }
     }
-  }, [addBooks, processSingleFile, showToast]);
+  }, [controller, processSingleFile, showToast]);
 
   /**
    * Handles drag events.
@@ -279,10 +274,10 @@ export const FileUploader: React.FC = () => {
         onConfirm={async () => {
           if (!currentDuplicate) return;
           try {
-            await addBook(currentDuplicate, { overwrite: true });
+            await controller.replaceFile(currentDuplicate);
             showToast("Book replaced successfully", "success");
           } catch (error) {
-            showToast(`Replace failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+            showToast(`Replace failed: ${presentError(error)}`, 'error');
             throw error;
           }
         }}

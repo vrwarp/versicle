@@ -5,12 +5,12 @@
     "no-circular-runtime": 0,
     "types-imports-nothing": 0,
     "kernel-imports-nothing": 0,
-    "lib-not-to-store": 20,
+    "lib-not-to-store": 19,
     "lib-not-to-components": 0,
     "data-no-upward": 0,
     "domains-no-store": 0,
     "components-not-to-db": 0,
-    "worker-no-state-typegraph": 17
+    "worker-no-state-typegraph": 16
   },
-  "total": 38
+  "total": 36
 }

@@ -90,6 +90,7 @@ describe('Sync Schema Exhaustion', () => {
         'cache_session_state',
         'cache_tts_preparation',
         'cache_table_images',
+        'cache_search_text', // v26 (Phase 7 §F): local, rebuildable search corpus
 
         // App Level
         'checkpoints',      // Local recovery

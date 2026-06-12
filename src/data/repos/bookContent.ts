@@ -439,13 +439,15 @@ class BookContentRepo {
       await write([
         'static_manifests', 'static_resources', 'static_structure',
         'cache_render_metrics', 'cache_session_state', 'cache_tts_preparation',
-        'cache_table_images'
+        'cache_table_images', 'cache_search_text'
       ], (tx) => {
         tx.objectStore('static_manifests').delete(id);
         tx.objectStore('static_resources').delete(id);
         tx.objectStore('static_structure').delete(id);
         tx.objectStore('cache_render_metrics').delete(id);
         tx.objectStore('cache_session_state').delete(id);
+        // v26: the persisted search corpus dies with the book (Phase 7 §F).
+        tx.objectStore('cache_search_text').delete(id);
 
         const prepStore = tx.objectStore('cache_tts_preparation');
         for (const key of prepKeys) prepStore.delete(key);
@@ -577,6 +579,64 @@ class BookContentRepo {
         locations: orphanedLocations.length,
         tts_prep: orphanedPrep
       };
+    } catch (error) {
+      handleDbError(error);
+    }
+  }
+
+  /**
+   * Per-book MINIMUM `extractionVersion` across all `cache_tts_preparation`
+   * rows (missing stamp = implicit v1, reported as 1). The Phase 7 §E
+   * re-ingest wave's candidacy scan: a single readonly cursor pass.
+   */
+  async listTtsExtractionVersions(): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    try {
+      const db = await getConnection();
+      const prepStore = db.transaction('cache_tts_preparation').objectStore('cache_tts_preparation');
+      let cursor = await prepStore.openCursor();
+      while (cursor) {
+        const row = cursor.value;
+        const version = row.extractionVersion ?? 1;
+        const current = result.get(row.bookId);
+        if (current === undefined || version < current) {
+          result.set(row.bookId, version);
+        }
+        cursor = await cursor.continue();
+      }
+    } catch (error) {
+      handleDbError(error);
+    }
+    return result;
+  }
+
+  /** All TTS preparation rows for one book (re-ingest restamp/verification reads). */
+  async listTtsPrepForBook(bookId: string): Promise<CacheTtsPreparationRow[]> {
+    try {
+      const db = await getConnection();
+      return await db.getAllFromIndex('cache_tts_preparation', 'by_bookId', bookId);
+    } catch (error) {
+      handleDbError(error);
+    }
+    return [];
+  }
+
+  /**
+   * Restamp a book's TTS preparation rows to `extractionVersion` IN PLACE —
+   * the §E fast path for rows proven byte-equivalent to a newer extraction
+   * (no re-extraction). Rows are read OUTSIDE the gate; one synchronous
+   * gated transaction writes the stamps.
+   */
+  async restampTtsPrep(bookId: string, extractionVersion: number): Promise<void> {
+    try {
+      const rows = await this.listTtsPrepForBook(bookId);
+      if (rows.length === 0) return;
+      await write(['cache_tts_preparation'], (tx) => {
+        const store = tx.objectStore('cache_tts_preparation');
+        for (const row of rows) {
+          void store.put({ ...row, extractionVersion }).catch(() => {});
+        }
+      });
     } catch (error) {
       handleDbError(error);
     }

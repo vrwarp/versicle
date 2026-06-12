@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useLibraryStore } from '@store/useLibraryStore';
 import { useToastStore } from '@store/useToastStore';
+import { useImportController } from '@app/library/useImportController';
 import { type BookMetadata } from '~types/db';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
@@ -16,7 +16,7 @@ interface OffloadBookDialogProps {
 }
 
 export const OffloadBookDialog: React.FC<OffloadBookDialogProps> = ({ isOpen, onClose, book }) => {
-    const offloadBook = useLibraryStore(state => state.offloadBook);
+    const { offloadBook } = useImportController();
     const showToast = useToastStore(state => state.showToast);
     const [isOffloading, setIsOffloading] = useState(false);
 

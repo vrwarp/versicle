@@ -4,6 +4,7 @@ import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { useLibraryStore, useBookStore } from '@store/useLibraryStore';
+import { useImportController } from '@app/library/useImportController';
 import { useReadingListStore } from '@store/useReadingListStore';
 import { useReadingStateStore } from '@store/useReadingStateStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
@@ -79,13 +80,8 @@ export const GlobalSettingsDialog = () => {
     const [csvImportMessage, setCsvImportMessage] = useState('');
     const [csvImportComplete, setCsvImportComplete] = useState(false);
 
-    const {
-        addBooks,
-        isImporting
-    } = useLibraryStore(useShallow(state => ({
-        addBooks: state.addBooks,
-        isImporting: state.isImporting
-    })));
+    const isImporting = useLibraryStore(state => state.isImporting);
+    const { importFiles } = useImportController();
     const showToast = useToastStore(state => state.showToast);
     const { currentTheme, setTheme } = usePreferencesStore(useShallow(state => ({
         currentTheme: state.currentTheme,
@@ -552,7 +548,7 @@ export const GlobalSettingsDialog = () => {
                                 onThemeChange={setTheme}
                                 isImporting={isImporting}
                                 onBatchImport={(files) => {
-                                    addBooks(Array.from(files));
+                                    void importFiles(Array.from(files));
                                     setGlobalSettingsOpen(false);
                                 }}
                             />

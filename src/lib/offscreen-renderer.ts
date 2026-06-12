@@ -8,6 +8,7 @@ import {
   type EpubJsBookLike,
 } from '@domains/reader/engine/epubSecurity';
 import type { TableImage } from '~types/db';
+import { CancellationError } from './cancellable-task-runner';
 import { createLogger } from './logger';
 
 const logger = createLogger('OffscreenRenderer');
@@ -151,7 +152,8 @@ export function calculateDominantStyle(accumulator: StyleAccumulator): { fontSiz
 export async function extractContentOffscreen(
   file: File | Blob | ArrayBuffer,
   options: ExtractionOptions = {},
-  onProgress?: (progress: number, message: string) => void
+  onProgress?: (progress: number, message: string) => void,
+  signal?: AbortSignal
 ): Promise<OffscreenExtractionResult> {
   // 1. Create a hidden container
   const container = document.createElement('div');
@@ -216,6 +218,11 @@ export async function extractContentOffscreen(
     let lastYieldTime = performance.now();
 
     for (let i = 0; i < totalItems; i++) {
+      // Cancellation point between chapters (Phase 7: extractBook's
+      // `signal`). The finally block below releases the rendition/container.
+      if (signal?.aborted) {
+        throw new CancellationError('Extraction cancelled');
+      }
       const item = items[i];
       const progress = Math.round((i / totalItems) * 100);
       onProgress?.(progress, `Processing chapter ${i + 1} of ${totalItems}`);

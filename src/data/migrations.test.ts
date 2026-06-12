@@ -53,10 +53,11 @@ import {
   V18_REGENERABLE_STORE,
 } from './__fixtures__/schema-fixtures';
 
-const V25_STORE_SET = [
+const CURRENT_STORE_SET = [
   'app_metadata',
   'cache_audio_blobs',
   'cache_render_metrics',
+  'cache_search_text',
   'cache_session_state',
   'cache_table_images',
   'cache_tts_preparation',
@@ -114,8 +115,8 @@ describe('M.1 v24 fixture → v25 (zero data loss)', () => {
     await buildV24Fixture();
     const db = await getConnection();
 
-    expect(db.version).toBe(25);
-    expect(Array.from(db.objectStoreNames).sort()).toEqual(V25_STORE_SET);
+    expect(db.version).toBe(DB_VERSION);
+    expect(Array.from(db.objectStoreNames).sort()).toEqual(CURRENT_STORE_SET);
 
     const manifest = await db.get('static_manifests', 'bk-1');
     expect(manifest).toEqual(v24Rows.manifest);
@@ -152,7 +153,7 @@ describe('M.1 v24 fixture → v25 (zero data loss)', () => {
 
     const history = await getSchemaHistory(db as never);
     expect(history).toHaveLength(1);
-    expect(history[0]).toMatchObject({ from: 24, to: 25 });
+    expect(history[0]).toMatchObject({ from: 24, to: DB_VERSION });
     expect(history[0].at).toBeGreaterThanOrEqual(before);
 
     expect(await db.get('app_metadata', APP_METADATA_KEYS.legacyRecoveryV25)).toBeUndefined();
@@ -164,9 +165,9 @@ describe('M.2 v18 fixture → v25 (the straggler snapshot-before-delete guard)',
     await buildV18Fixture();
     const db = await getConnection();
 
-    expect(db.version).toBe(25);
+    expect(db.version).toBe(DB_VERSION);
     // The deletion loop ran: legacy stores are gone, the set converged.
-    expect(Array.from(db.objectStoreNames).sort()).toEqual(V25_STORE_SET);
+    expect(Array.from(db.objectStoreNames).sort()).toEqual(CURRENT_STORE_SET);
 
     const record = (await db.get(
       'app_metadata',
@@ -213,7 +214,7 @@ describe('M.2 v18 fixture → v25 (the straggler snapshot-before-delete guard)',
 
     const history = await getSchemaHistory(db as never);
     expect(history).toHaveLength(1);
-    expect(history[0]).toMatchObject({ from: 18, to: 25 });
+    expect(history[0]).toMatchObject({ from: 18, to: DB_VERSION });
   });
 });
 
@@ -227,8 +228,8 @@ describe('M.3 the recovery snapshot is size-capped', () => {
     const db = await getConnection();
 
     // The upgrade completed and the deletion loop still ran.
-    expect(db.version).toBe(25);
-    expect(Array.from(db.objectStoreNames).sort()).toEqual(V25_STORE_SET);
+    expect(db.version).toBe(DB_VERSION);
+    expect(Array.from(db.objectStoreNames).sort()).toEqual(CURRENT_STORE_SET);
 
     const record = (await db.get(
       'app_metadata',
@@ -247,10 +248,10 @@ describe('M.3 the recovery snapshot is size-capped', () => {
 describe('M.4 fresh create', () => {
   it('records schemaHistory from 0 on a brand-new profile', async () => {
     const db = await getConnection();
-    expect(db.version).toBe(25);
+    expect(db.version).toBe(DB_VERSION);
     const history = await getSchemaHistory(db as never);
     expect(history).toHaveLength(1);
-    expect(history[0]).toMatchObject({ from: 0, to: 25 });
+    expect(history[0]).toMatchObject({ from: 0, to: DB_VERSION });
   });
 });
 
@@ -272,12 +273,12 @@ describe('M.5 multi-tab v24 → v25 upgrade (the shipping two-tab scenario)', ()
     });
 
     const db = await getConnection();
-    expect(db.version).toBe(25);
+    expect(db.version).toBe(DB_VERSION);
     expect(holderSawBlocking).toBe(true);
 
     // The upgrade actually ran (not just an open): history was appended.
     const history = await getSchemaHistory(db as never);
-    expect(history[0]).toMatchObject({ from: 24, to: 25 });
+    expect(history[0]).toMatchObject({ from: 24, to: DB_VERSION });
   });
 });
 
@@ -301,5 +302,24 @@ describe('M.6 post-open idle size backfill (v25 step 3)', () => {
     // Completion flag set; a second run is a no-op.
     expect(await db.get('app_metadata', APP_METADATA_KEYS.audioSizeBackfillV25)).toBe(true);
     expect(await audioCache.backfillSizesOnce()).toBe(0);
+  });
+});
+
+describe('M.7 v26 search-text store (Phase 7 §F — additive, cache-domain)', () => {
+  it('creates an EMPTY cache_search_text store on upgrade from v24 without touching data', async () => {
+    await buildV24Fixture();
+    const db = await getConnection();
+
+    expect(Array.from(db.objectStoreNames)).toContain('cache_search_text');
+    expect(await db.count('cache_search_text')).toBe(0);
+    // Adjacent cache data is untouched by the additive step.
+    expect(await db.get('cache_tts_preparation', v24Rows.ttsPrep.id)).toEqual(v24Rows.ttsPrep);
+  });
+
+  it('creates the store on fresh installs and keys rows by bookId', async () => {
+    const db = await getConnection();
+    const tx = db.transaction('cache_search_text');
+    expect(tx.store.keyPath).toBe('bookId');
+    await tx.done;
   });
 });

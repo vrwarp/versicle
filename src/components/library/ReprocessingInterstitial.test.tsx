@@ -1,21 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import { ReprocessingInterstitial } from './ReprocessingInterstitial';
-import { reprocessBook } from '@lib/ingestion';
-import { useLibraryStore } from '@store/useLibraryStore';
+import { libraryController } from '@app/library/useImportController';
 
-// Mocks
-vi.mock('@lib/ingestion', () => ({
-    reprocessBook: vi.fn(),
-}));
-
-vi.mock('@store/useLibraryStore', () => ({
-    useLibraryStore: {
-        getState: vi.fn(() => ({
-            hydrateStaticMetadata: vi.fn().mockResolvedValue(undefined),
-        })),
-    },
-}));
+// Phase 7: reprocess routes through the orchestrator queue via the shared
+// controller (the job refreshes the projection itself — no manual hydrate).
+vi.mock('@app/library/useImportController', () => {
+    const controller = { reprocessBook: vi.fn() };
+    return { libraryController: controller, useImportController: () => controller };
+});
+const reprocessBook = libraryController.reprocessBook;
 
 describe('ReprocessingInterstitial', () => {
     const mockOnComplete = vi.fn();
@@ -29,13 +23,9 @@ describe('ReprocessingInterstitial', () => {
         vi.restoreAllMocks();
     });
 
-    it('calls reprocessBook and hydrates metadata on mount when open', async () => {
+    it('routes reprocessing through the controller on mount when open', async () => {
         const bookId = 'test-book-123';
         (reprocessBook as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
-        const mockHydrate = vi.fn().mockResolvedValue(undefined);
-        (useLibraryStore.getState as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
-            hydrateStaticMetadata: mockHydrate,
-        });
 
         render(
             <ReprocessingInterstitial
@@ -49,10 +39,8 @@ describe('ReprocessingInterstitial', () => {
         expect(reprocessBook).toHaveBeenCalledWith(bookId);
 
         await waitFor(() => {
-            expect(mockHydrate).toHaveBeenCalled();
+            expect(mockOnComplete).toHaveBeenCalled();
         });
-
-        expect(mockOnComplete).toHaveBeenCalled();
     });
 
     it('shows error message if reprocessing fails', async () => {
@@ -73,8 +61,6 @@ describe('ReprocessingInterstitial', () => {
             expect(getByText(/Failed to upgrade book: Reprocessing failed/)).toBeInTheDocument();
         });
 
-        const mockHydrate = useLibraryStore.getState().hydrateStaticMetadata;
-        expect(mockHydrate).not.toHaveBeenCalled();
         expect(mockOnComplete).not.toHaveBeenCalled();
     });
 });

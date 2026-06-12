@@ -260,11 +260,16 @@ export default tseslint.config(
   // (`allowTypeImports`): the remaining type users (useEpubReader's
   // Book/Rendition plumbing, lib/search.ts + SearchPanel's `Book` — the
   // library-track-owned indexing API, kernel/cfi/snap.ts) carry no runtime
-  // dependency. Named runtime exceptions with deletion deadline P7
-  // (carve-out blocks below): src/lib/ingestion.ts + src/lib/
-  // offscreen-renderer.ts (the offscreen ingestion path — its §3 relocation
-  // into engine/offscreen/ waits for the parallel P7 library track that owns
-  // its callers). The `epubjs/src/epubcfi` submodule is additionally banned
+  // dependency. Named runtime exceptions (carve-out blocks below):
+  // src/domains/library/import/extract.ts (the extractor preamble —
+  // ingestion-side epubjs, sanctioned by C8 + the P7 prep-doc banner) and
+  // src/lib/offscreen-renderer.ts (the offscreen ingestion render path —
+  // its §3 relocation into engine/offscreen/ rides the offscreen-renderer
+  // follow-up named in prep/phase6-reader-engine.md §Follow-ups; the P7
+  // ingestion rewrite has landed, so the move is the remaining half).
+  // src/lib/ingestion.ts left the list at the P7-library merge — the
+  // rewrite reduced it to a queue-routing delegate with no epubjs import.
+  // The `epubjs/src/epubcfi` submodule is additionally banned
   // EVERYWHERE except the kernel's quarantine shim
   // (src/kernel/cfi/epubcfiShim.ts — see cfi.kernel-boundary.test.ts).
   // Tests are exempt (production-boundary rule; fixtures mock epubjs).
@@ -343,11 +348,17 @@ export default tseslint.config(
       ],
     },
   },
-  // Carve-out 3: NAMED P7-DEADLINED EXCEPTIONS — the offscreen ingestion
-  // path. Dies when the P7 library track rewrites ingestion onto the
-  // engine's offscreen module (prep/phase6-reader-engine.md §3).
+  // Carve-out 3: NAMED EXCEPTIONS — the ingestion-side epubjs runtime.
+  // domains/library/import/extract.ts is the ONE extractor preamble
+  // (P7 prep-doc banner follow-up 6, sanctioned by C8);
+  // lib/offscreen-renderer.ts is its offscreen render dependency, still
+  // awaiting the §3 relocation into engine/offscreen/ (named follow-up in
+  // prep/phase6-reader-engine.md §Follow-ups).
   {
-    files: ['src/lib/ingestion.ts', 'src/lib/offscreen-renderer.ts'],
+    files: [
+      'src/domains/library/import/extract.ts',
+      'src/lib/offscreen-renderer.ts',
+    ],
     rules: {
       '@typescript-eslint/no-restricted-imports': [
         'error',

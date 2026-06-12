@@ -152,6 +152,29 @@ export type TableImageRow = {
   imageBlob: ArrayBuffer | Blob;
 };
 
+/**
+ * `cache_search_text` row (key: bookId) — the persisted per-book search
+ * corpus (Phase 7 §F): plain text per spine section, written at import (a
+ * free output of the unified extractor) and lazily on first search for
+ * pre-existing books. `extractionVersion` is the invalidation stamp:
+ * rows below the current extraction version are re-extracted.
+ */
+export const searchTextSectionSchema = z.looseObject({
+  href: z.string(),
+  title: z.string(),
+  text: z.string(),
+});
+export const cacheSearchTextRowSchema = z.looseObject({
+  bookId: z.string().min(1),
+  extractionVersion: z.number(),
+  sections: z.array(searchTextSectionSchema),
+});
+export type CacheSearchTextRow = {
+  bookId: string;
+  extractionVersion: number;
+  sections: { href: string; title: string; text: string }[];
+};
+
 // ── Compile-time drift guards (see rows/static.ts for the pattern) ────────
 type _MetricsSchemaMatches = z.infer<typeof cacheRenderMetricsRowSchema> extends CacheRenderMetricsRow ? true : never;
 type _AudioSchemaMatches = z.infer<typeof cacheAudioBlobRowSchema> extends CacheAudioBlobRow ? true : never;
@@ -159,6 +182,7 @@ type _SessionSchemaMatches = z.infer<typeof cacheSessionStateRowSchema> extends 
 type _PrepSchemaMatches = z.infer<typeof cacheTtsPreparationRowSchema> extends CacheTtsPreparationRow ? true : never;
 type _QueueSchemaMatches = z.infer<typeof ttsQueueItemSchema> extends TTSQueueItem ? true : never;
 type _TimepointSchemaMatches = z.infer<typeof timepointSchema> extends Timepoint ? true : never;
+type _SearchTextSchemaMatches = z.infer<typeof cacheSearchTextRowSchema> extends CacheSearchTextRow ? true : never;
 type _AudioRound = CacheAudioBlobRow extends CacheAudioBlob ? true : never;
 type _SessionRound = CacheSessionStateRow extends CacheSessionState ? true : never;
 type _PrepRound = CacheTtsPreparationRow extends CacheTtsPreparation ? true : never;
@@ -169,10 +193,11 @@ const _schemaChecks: [
   _PrepSchemaMatches,
   _QueueSchemaMatches,
   _TimepointSchemaMatches,
+  _SearchTextSchemaMatches,
   _AudioRound,
   _SessionRound,
   _PrepRound,
-] = [true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true];
 void _schemaChecks;
 
 function _rowTypeDriftGuard(

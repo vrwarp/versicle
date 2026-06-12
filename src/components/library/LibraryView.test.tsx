@@ -43,6 +43,25 @@ vi.mock('@store/useToastStore', () => ({
     useToastStore: vi.fn(),
 }));
 
+// Phase 7: workflows moved off the store — mock the shared controller.
+const { mockImportFile } = vi.hoisted(() => ({
+    mockImportFile: vi.fn().mockResolvedValue({ status: 'imported', bookId: 'x' }),
+}));
+vi.mock('@app/library/useImportController', () => {
+    const controller = {
+        importFile: mockImportFile,
+        replaceFile: vi.fn(),
+        importFiles: vi.fn(),
+        restoreBook: vi.fn(),
+        removeBook: vi.fn(),
+        offloadBook: vi.fn(),
+        reprocessBook: vi.fn(),
+        updateBook: vi.fn(),
+        hydrate: vi.fn(),
+    };
+    return { useImportController: () => controller, libraryController: controller };
+});
+
 // Mock Select components
 interface SelectItemProps {
     value: string;
@@ -238,11 +257,7 @@ describe('LibraryView', () => {
     });
 
     it('handles drag and drop import', async () => {
-        const mockAddBook = vi.fn().mockResolvedValue(undefined);
-        useLibraryStore.setState({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            addBook: mockAddBook as any
-        });
+        mockImportFile.mockResolvedValue({ status: 'imported', bookId: 'x' });
 
         render(
             <MemoryRouter>
@@ -260,18 +275,12 @@ describe('LibraryView', () => {
         });
 
         await waitFor(() => {
-            expect(mockAddBook).toHaveBeenCalledWith(file);
+            expect(mockImportFile).toHaveBeenCalledWith(file);
             expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('imported successfully'), 'success', 5000);
         });
     });
 
     it('handles drag and drop invalid file', async () => {
-        const mockAddBook = vi.fn();
-        useLibraryStore.setState({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            addBook: mockAddBook as any
-        });
-
         render(
             <MemoryRouter>
                 <LibraryView />
@@ -288,7 +297,7 @@ describe('LibraryView', () => {
         });
 
         await waitFor(() => {
-            expect(mockAddBook).not.toHaveBeenCalled();
+            expect(mockImportFile).not.toHaveBeenCalled();
             expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Only .epub files'), 'error');
         });
     });

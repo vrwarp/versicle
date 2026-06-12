@@ -38,6 +38,12 @@ describe('AppErrorCode union', () => {
       DRIVE_API_ERROR: 'DRIVE',
       INGEST_UNKNOWN: 'INGEST',
       INGEST_DUPLICATE_BOOK: 'INGEST',
+      INGEST_INVALID_FILE: 'INGEST',
+      INGEST_FILE_MISMATCH: 'INGEST',
+      INGEST_CANCELLED: 'INGEST',
+      INGEST_VERIFICATION_FAILED: 'INGEST',
+      SEARCH_UNKNOWN: 'SEARCH',
+      SEARCH_SESSION_DISPOSED: 'SEARCH',
       NET_UNKNOWN: 'NET',
       NET_UNKNOWN_DESTINATION: 'NET',
       NET_HOST_NOT_ALLOWED: 'NET',
@@ -52,7 +58,7 @@ describe('AppErrorCode union', () => {
     };
     for (const code of APP_ERROR_CODES) {
       expect(code.startsWith(`${namespaceOf[code]}_`)).toBe(true);
-      expect(code).toMatch(/^(APP|DB|SYNC|TTS|GENAI|DRIVE|INGEST|NET|BACKUP|GOOGLE)_[A-Z0-9_]+$/);
+      expect(code).toMatch(/^(APP|DB|SYNC|TTS|GENAI|DRIVE|INGEST|NET|BACKUP|GOOGLE|SEARCH)_[A-Z0-9_]+$/);
     }
   });
 

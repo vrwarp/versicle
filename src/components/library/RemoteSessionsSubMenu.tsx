@@ -13,7 +13,8 @@ import {
 
 interface RemoteSessionsSubMenuProps {
   bookId: string;
-  allProgress?: Record<string, { percentage: number; currentCfi: string; lastRead: number }>;
+  /** Per-device progress map (UserProgress-shaped: currentCfi optional). */
+  allProgress?: Record<string, { percentage: number; currentCfi?: string; lastRead: number }>;
   onResumeClick: (deviceId: string, cfi: string) => void;
 }
 

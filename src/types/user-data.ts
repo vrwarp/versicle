@@ -297,6 +297,17 @@ export interface ReadingHistoryEntry {
 export interface ReadingListEntry {
   /** The filename of the book (Primary Key). */
   filename: string;
+  /**
+   * FK to the library inventory (`UserInventoryItem.bookId`) — Phase 7 §D.
+   * ADDITIVE + OPTIONAL: written at import/registration time for new
+   * entries; existing entries are linked by the one-time linker
+   * (`src/app/migrations.linkReadingList.ts`), which is authored but NOT
+   * yet registered — the CRDT version bump that protects it from old
+   * clients (whole-entry rebuilds drop unknown fields,
+   * useReadingListStore.ts) lands post-merge as the next migration step.
+   * INTERNAL: excluded from CSV export (filename stays the portable key).
+   */
+  bookId?: string;
   /** The title of the book. */
   title: string;
   /** The author(s) of the book. */

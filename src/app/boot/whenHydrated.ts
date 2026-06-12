@@ -20,7 +20,7 @@ import type { BootTask } from '../bootstrap';
 import type { YjsStoreHandle } from 'zustand-middleware-yjs';
 import { getYDoc, waitForYjsSync } from '@store/yjs-provider';
 import { SYNCED_STORES, syncedDataMapIsEmpty, yjsHandleOf } from '@store/registry';
-import { useLibraryStore } from '@store/useLibraryStore';
+import { getLibrary } from '../library/createLibrary';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
@@ -68,6 +68,12 @@ export const whenHydratedTask: BootTask = {
 export const hydrateStaticMetadataTask: BootTask = {
   name: 'library/hydrate-static-metadata',
   run: async () => {
-    await useLibraryStore.getState().hydrateStaticMetadata();
+    // Phase 7 §D (D16 paid in full): ONE owner for static-metadata
+    // hydration. The service subscribes to inventory deltas — newly synced
+    // books hydrate without LibraryView's old prevBookCountRef heuristic —
+    // and this boot task performs the initial pass.
+    const { service } = getLibrary();
+    service.start();
+    await service.hydrate();
   },
 };

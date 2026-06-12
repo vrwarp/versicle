@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLibraryStore } from '@store/useLibraryStore';
 import { useToastStore } from '@store/useToastStore';
+import { useImportController } from '@app/library/useImportController';
 import { Button } from '../ui/Button';
 import { Loader2, Library, BookOpen, Upload } from 'lucide-react';
 import { FileUploader } from './FileUploader';
@@ -25,7 +26,8 @@ interface EmptyLibraryProps {
  * @returns A React component for the empty library state.
  */
 export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
-  const { addBook, isImporting } = useLibraryStore();
+  const isImporting = useLibraryStore((state) => state.isImporting);
+  const controller = useImportController();
   const showToast = useToastStore((state) => state.showToast);
 
   const handleLoadDemo = async () => {
@@ -34,7 +36,7 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
       if (!response.ok) throw new Error('Failed to load demo book');
       const blob = await response.blob();
       const file = new File([blob], 'Alice in Wonderland.epub', { type: 'application/epub+zip' });
-      await addBook(file);
+      await controller.importFile(file);
       showToast('Demo book loaded successfully', 'success');
     } catch (error) {
       logger.error('Error loading demo book:', error);

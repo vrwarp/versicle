@@ -63,6 +63,8 @@ export const staticManifestRowSchema = z.looseObject({
   description: z.string().optional(),
   isbn: z.string().optional(),
   fileHash: z.string(),
+  /** SHA-256 content identity (Phase 7); absent on pre-P7 manifests. */
+  contentHash: z.string().optional(),
   fileSize: z.number(),
   totalChars: z.number(),
   schemaVersion: z.number(),
@@ -86,6 +88,7 @@ export type StaticManifestRow = {
   description?: string;
   isbn?: string;
   fileHash: string;
+  contentHash?: string;
   fileSize: number;
   totalChars: number;
   schemaVersion: number;

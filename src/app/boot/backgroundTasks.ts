@@ -14,6 +14,9 @@ import { useDriveStore } from '@store/useDriveStore';
 import { DriveScannerService } from '@lib/drive/DriveScannerService';
 import { GoogleAuthRequiredError } from '@domains/google';
 import { audioCache } from '@data/repos/audioCache';
+import { bookContent } from '@data/repos/bookContent';
+import { runReingestWave, derivedContentSane } from '@domains/library/reingest';
+import { getLibrary } from '../library/createLibrary';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
@@ -102,6 +105,68 @@ export const driveAutoScanTask: BootTask = {
       } else {
         logger.warn('Background Drive Scan failed:', err);
       }
+    });
+  },
+};
+
+
+// ── Phase 7 §E: the NFKD/extraction re-ingest wave ─────────────────────────
+
+/** localStorage flag: the settings "defer re-ingestion" toggle (device-local). */
+const REINGEST_DEFER_KEY = 'versicle_reingest_defer';
+/** Idle delay before the wave starts scanning (stays off the boot path). */
+const REINGEST_START_DELAY_MS = 10_000;
+
+export function isReingestDeferred(): boolean {
+  try {
+    return localStorage.getItem(REINGEST_DEFER_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setReingestDeferred(deferred: boolean): void {
+  try {
+    if (deferred) localStorage.setItem(REINGEST_DEFER_KEY, '1');
+    else localStorage.removeItem(REINGEST_DEFER_KEY);
+  } catch {
+    // localStorage unavailable — the wave simply runs.
+  }
+}
+
+/**
+ * Fire-and-forget background re-ingestion (phase7-library-google.md §E):
+ * stamp-based candidacy, restamp fast path, idle-priority reingest jobs
+ * through the ImportOrchestrator queue (user imports always preempt),
+ * resumable via the per-book stamps. Honors the defer toggle between books.
+ */
+export const reingestWaveTask: BootTask = {
+  name: 'library/reingest-wave',
+  run: (ctx) => {
+    if (isReingestDeferred()) {
+      logger.info('Re-ingest wave deferred by settings toggle.');
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void runReingestWave({
+        listVersions: () => bookContent.listTtsExtractionVersions(),
+        listRows: (bookId) => bookContent.listTtsPrepForBook(bookId),
+        restamp: (bookId, version) => bookContent.restampTtsPrep(bookId, version),
+        hasLocalBinary: async (bookId) => {
+          const status = await bookContent.getOffloadedStatus([bookId]);
+          return status.get(bookId) === false;
+        },
+        reingest: (bookId) =>
+          getLibrary().orchestrator.reprocess(bookId, 'idle', { verifyDerived: derivedContentSane }),
+        shouldContinue: () => !cancelled && !isReingestDeferred(),
+      }).catch((err) => {
+        logger.warn('Re-ingest wave failed (will retry next boot):', err);
+      });
+    }, REINGEST_START_DELAY_MS);
+    ctx.addCleanup(() => {
+      cancelled = true;
+      clearTimeout(timer);
     });
   },
 };

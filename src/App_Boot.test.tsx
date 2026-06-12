@@ -131,6 +131,20 @@ vi.mock('./store/useDeviceStore', () => ({
   },
 }));
 
+// Phase 7: the boot task drives hydration through the library composition
+// (service.start() + service.hydrate()) — mock the composition root so the
+// existing hydrate-call pins keep their meaning.
+vi.mock('./app/library/createLibrary', () => ({
+  getLibrary: () => ({
+    service: {
+      start: vi.fn(),
+      hydrate: h.hydrateStaticMetadata,
+    },
+    orchestrator: {},
+    mutex: {},
+  }),
+}));
+
 vi.mock('./store/useLibraryStore', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const useLibraryStore = (selector: any) =>

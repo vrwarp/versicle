@@ -48,6 +48,7 @@ export const APP_ERROR_NAMESPACES = [
   'NET',
   'BACKUP',
   'GOOGLE',
+  'SEARCH',
 ] as const;
 
 /** Domain namespaces for {@link AppErrorCode}. Append-only. */
@@ -82,6 +83,13 @@ export const APP_ERROR_CODES = [
   // INGEST_* — book import / EPUB ingestion.
   'INGEST_UNKNOWN',
   'INGEST_DUPLICATE_BOOK',
+  'INGEST_INVALID_FILE',
+  'INGEST_FILE_MISMATCH',
+  'INGEST_CANCELLED',
+  'INGEST_VERIFICATION_FAILED',
+  // SEARCH_* — the in-book search engine/session (Phase 7).
+  'SEARCH_UNKNOWN',
+  'SEARCH_SESSION_DISPOSED',
   // NET_* — generic network/fetch failures + the kernel/net egress gateway (Phase 7).
   'NET_UNKNOWN',
   'NET_UNKNOWN_DESTINATION',

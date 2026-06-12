@@ -17,12 +17,14 @@
 export { runAxe } from './axe';
 export { resetStore, resetStores, seedStore, autoResetStores } from './stores';
 export type { HarnessStore } from './stores';
-export { makeBookContentDouble, makeLibraryDbDouble } from './doubles';
+export { makeBookContentDouble, makeLibraryPersistenceDouble } from './doubles';
 export type { BookContentShape, PublicOf } from './doubles';
 export { captureToasts } from './toastCapture';
 export type { CapturedToast, ToastCapture } from './toastCapture';
 export { FakeTTSProvider, makeTTSProviderDouble, makeTTSVoice } from './fakeTTSProvider';
 export type { FakeTTSProviderOptions } from './fakeTTSProvider';
 export { makeInventoryItem, makeBookMetadata, makeTTSQueueItem, makeTTSQueue } from './fixtures';
+export { makeTestLibrary, makeFullExtraction } from './library';
+export type { TestLibrary } from './library';
 export { renderWithStores, storeSeed } from './renderWithStores';
 export type { RenderWithStoresOptions, RenderWithStoresResult, StoreSeed } from './renderWithStores';

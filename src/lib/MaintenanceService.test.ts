@@ -29,6 +29,7 @@ const mockImportBookWithId = vi.fn();
 vi.mock('@data/repos/bookContent', () => ({
     bookContent: {
         getBookFile: (...args: unknown[]) => mockGetBookFile(...args),
+        ingest: vi.fn(),
         listManifests: vi.fn(),
         putManifests: vi.fn(),
         scanOrphans: vi.fn(),
@@ -36,10 +37,26 @@ vi.mock('@data/repos/bookContent', () => ({
     },
 }));
 
-vi.mock('./BookImportService', () => ({
-    bookImportService: {
-        importBookWithId: (...args: unknown[]) => mockImportBookWithId(...args),
+vi.mock('@data/repos/searchText', () => ({
+    searchTextRepo: { put: vi.fn() },
+}));
+
+// Phase 7: BookImportService died — regeneration runs extract → retarget →
+// overwrite ingest. The legacy mock seam is preserved by adapting its
+// {title, author, coverPalette} payloads into extraction shapes.
+vi.mock('@domains/library', () => ({
+    extractBook: async (...args: unknown[]) => {
+        const manifest = await mockImportBookWithId(...args);
+        return {
+            manifest,
+            resource: { bookId: 'pending', epubBlob: new Blob(['x']) },
+            structure: { bookId: 'pending', toc: [], spineItems: [] },
+            ttsContentBatches: [],
+            tableBatches: [],
+            searchText: { extractionVersion: 3, sections: [] },
+        };
     },
+    retargetExtraction: (extraction: unknown) => extraction,
 }));
 
 describe('MaintenanceService', () => {

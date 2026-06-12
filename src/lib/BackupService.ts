@@ -419,12 +419,13 @@ export class BackupService {
         await Promise.all(filePromises);
       }
 
-      // Clear offloaded status for restored books
+      // Clear offloaded status for restored books — per-key deltas only
+      // (Phase 7 I-5: wholesale replacement of the offloaded set is no
+      // longer expressible on the projection store).
       if (restoredBookIds.length > 0) {
         try {
-          const currentOffloaded = useLibraryStore.getState().offloadedBookIds || new Set();
-          const newOffloaded = new Set([...currentOffloaded].filter(id => !restoredBookIds.includes(id)));
-          useLibraryStore.setState({ offloadedBookIds: newOffloaded });
+          const { unmarkOffloaded } = useLibraryStore.getState();
+          for (const id of restoredBookIds) unmarkOffloaded(id);
         } catch {
           // Ignore store update errors during restore
         }

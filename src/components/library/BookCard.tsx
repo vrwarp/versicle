@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { MoreVertical, Play, Trash2, CloudOff, RotateCcw } from 'lucide-react';
 import type { BookMetadata } from '~types/db';
+import type { LibraryBook } from '@store/libraryViewStore';
 import { BookCover } from './BookCover';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/DropdownMenu';
 import { Button } from '../ui/Button';
@@ -12,7 +13,8 @@ import { RemoteSessionsSubMenu } from './RemoteSessionsSubMenu';
  */
 interface BookCardProps {
   /** The metadata of the book to display. */
-  book: BookMetadata;
+  /** Library view row — `allProgress` is the typed per-device map (Phase 7: the `as unknown` casts died). */
+  book: BookMetadata & Pick<Partial<LibraryBook>, 'allProgress'>;
   /** Whether this is a Ghost Book (synced metadata but no local file) */
   isGhostBook?: boolean;
   onOpen: (book: BookMetadata) => void;
@@ -127,7 +129,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
                   bookId={book.id}
 
 
-          allProgress={((book as unknown) as { allProgress?: Record<string, { percentage: number; currentCfi: string; lastRead: number }> }).allProgress}
+          allProgress={book.allProgress}
                   onResumeClick={handleResumeClick}
                 />
               )}
@@ -164,7 +166,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
       {onResume && (
         <ResumeBadge
           bookId={book.id}
-          allProgress={((book as unknown) as { allProgress?: Record<string, { percentage: number; currentCfi: string; lastRead: number }> }).allProgress}
+          allProgress={book.allProgress}
           onResumeClick={handleResumeClick}
         />
       )}

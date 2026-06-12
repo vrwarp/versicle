@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { getConnection as getDB } from './data/connection';
 import { useLibraryStore } from './store/useLibraryStore';
 import { useBookStore } from './store/useBookStore';
 import { useReaderUIStore } from './store/useReaderUIStore';
 import { useReadingStateStore } from './store/useReadingStateStore';
-import * as fs from 'fs';
-import * as path from 'path';
+import { libraryController } from './app/library/useImportController';
+import { makeFullExtraction } from './test/harness/library';
 import type { StaticBookManifest } from './types/db';
 
 // Mock zustand persistence
@@ -18,109 +18,39 @@ vi.mock('zustand/middleware', async (importOriginal) => {
   };
 });
 
-// Mock offscreen renderer
-vi.mock('./lib/offscreen-renderer', () => ({
-  extractContentOffscreen: vi.fn(async () => {
-    return {
-      chapters: [
-        {
-          href: 'chapter1.html',
-          sentences: [{ text: 'Mock Sentence', cfi: 'epubcfi(/6/2!/4/2/1:0)' }],
-          textContent: 'Mock Content',
-          title: 'Mock Chapter',
-          tables: []
-        }
-      ],
-      baseFontSize: 16,
-      baseLineHeight: 24
-    };
-  })
-}));
-
-// Mock ingestion extractBookData
-vi.mock('./lib/ingestion', () => ({
-  extractBookData: vi.fn(async (file: File) => {
-    const bookId = 'mock-book-id';
-    return {
-      bookId,
-      manifest: {
-        bookId,
-        title: "Alice's Adventures in Wonderland",
-        author: "Lewis Carroll",
-        description: "Mock description",
-        schemaVersion: 1,
-        fileHash: 'mock-hash',
-        fileSize: 0,
-        totalChars: 0,
-        coverBlob: new Blob(['mock-cover'], { type: 'image/jpeg' })
-      },
-      inventory: {
-        bookId,
-        addedAt: Date.now(),
-        status: 'unread',
-        tags: [],
-        lastInteraction: Date.now(),
-        sourceFilename: 'alice.epub'
-      },
-      progress: {
-        bookId,
-        percentage: 0,
-        lastRead: 0,
-        completedRanges: []
-      },
-      resource: { bookId, epubBlob: file.arrayBuffer ? await file.arrayBuffer() : new ArrayBuffer(0) },
-      structure: { bookId, toc: [], spineItems: [] },
-      overrides: { bookId, lexicon: [] },
-      readingListEntry: { filename: 'alice.epub', title: "Alice's Adventures in Wonderland", author: "Lewis Carroll", status: 'to-read', lastUpdated: Date.now(), percentage: 0 },
-      ttsContentBatches: [],
-      tableBatches: []
-    };
-  }),
-  extractBookMetadata: vi.fn(async () => {
-    return {
-      title: "Alice's Adventures in Wonderland",
-      author: "Lewis Carroll",
-      description: "Mock description",
-      fileHash: 'mock-hash',
-    };
-  })
-}));
-
-// Mock epub.js
-vi.mock('epubjs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('epubjs')>();
+// Mock the extractor (Phase 7: the orchestrator's only heavy pure stage) —
+// everything BELOW it (orchestrator → persistence → real IDB via
+// fake-indexeddb → zustand/yjs stores) runs for real.
+vi.mock('./domains/library/import/extract', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./domains/library/import/extract')>();
   return {
     ...actual,
-    default: vi.fn((data, options) => {
-      const book = actual.default(data, options);
-      book.renderTo = vi.fn().mockReturnValue({
-        display: vi.fn().mockResolvedValue(undefined),
-        getContents: vi.fn().mockReturnValue([{
-          document: {
-            body: {
-              textContent: 'Mock Content',
-              querySelectorAll: () => [],
-              querySelector: () => null,
-              childNodes: [],
-              nodeType: 1,
-              tagName: 'BODY',
-              ownerDocument: { createRange: () => ({ setStart: vi.fn(), setEnd: vi.fn() }) }
-            }
-          },
-          cfiFromRange: vi.fn().mockReturnValue('epubcfi(/6/2!/4/2/1:0)'),
-        }]),
-        themes: {
-          register: vi.fn(),
-          select: vi.fn(),
-          fontSize: vi.fn(),
-        },
-        on: vi.fn(),
-        next: vi.fn(),
-        prev: vi.fn(),
-        destroy: vi.fn(),
+    extractBook: vi.fn(async (file: File, opts: { depth: 'metadata' | 'full' }) => {
+      const { makeFullExtraction: make } = await import('./test/harness/library');
+      const full = make({
+        bookId: 'mock-book-id',
+        title: "Alice's Adventures in Wonderland",
+        author: 'Lewis Carroll',
       });
-      book.locations.generate = vi.fn().mockResolvedValue(['cfi1', 'cfi2']);
-      return book;
+      const adjusted = {
+        ...full,
+        resource: { bookId: 'mock-book-id', epubBlob: file },
+        inventory: { ...full.inventory, sourceFilename: file.name },
+        readingListEntry: { ...full.readingListEntry, filename: file.name },
+      };
+      if (opts.depth === 'metadata') {
+        return {
+          depth: 'metadata' as const,
+          title: adjusted.title,
+          author: adjusted.author,
+          description: '',
+          language: 'en',
+          contentHash: adjusted.contentHash,
+          legacyFingerprint: adjusted.legacyFingerprint,
+          toc: [],
+        };
+      }
+      return adjusted;
     }),
   };
 });
@@ -135,46 +65,19 @@ describe('Feature Integration Tests', () => {
     await db.clear('static_resources');
     await db.clear('static_structure');
     await db.clear('cache_tts_preparation');
+    await db.clear('cache_search_text');
 
     // Reset stores
     useLibraryStore.setState({ staticMetadata: {}, isLoading: false, isImporting: false, error: null });
     useBookStore.setState({ books: {} });
     useReaderUIStore.getState().reset();
     useReadingStateStore.setState({ progress: {} });
-
-    // Mock global fetch
-    global.fetch = vi.fn((url) => {
-      if (typeof url === 'string' && url.startsWith('blob:')) {
-        return Promise.resolve({
-          blob: () => Promise.resolve(new Blob(['mock-cover'], { type: 'image/jpeg' })),
-        } as Response);
-      }
-      return Promise.reject('Not mocked');
-    });
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   it('should add a book, list it, and delete it (Library Management)', async () => {
-    const store = useLibraryStore.getState();
-
-    // 1. Add Book
-    const fixturePath = path.resolve(__dirname, './test/fixtures/alice.epub');
-    const buffer = fs.readFileSync(fixturePath);
-    const file = new File([buffer], 'alice.epub', { type: 'application/epub+zip' });
-
-    if (!file.arrayBuffer) {
-      file.arrayBuffer = () => new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as ArrayBuffer);
-        reader.onerror = reject;
-        reader.readAsArrayBuffer(file);
-      });
-    }
-
-    await store.addBook(file);
+    // 1. Add Book — through the ONE orchestrator entry (Phase 7 §B).
+    const file = new File(['mock epub bytes'], 'alice.epub', { type: 'application/epub+zip' });
+    await libraryController.importFile(file);
 
     // Verify Yjs state
     const updatedStore = useBookStore.getState();
@@ -182,26 +85,28 @@ describe('Feature Integration Tests', () => {
     const book = Object.values(updatedStore.books)[0];
     expect(book.title).toContain("Alice's Adventures in Wonderland");
 
-    // Verify IDB Static Content
+    // Verify IDB Static Content (the real ingest transaction ran)
     const db = await getDB();
     const manifests = await db.getAll('static_manifests');
     expect(manifests).toHaveLength(1);
     const resources = await db.getAll('static_resources');
     expect(resources).toHaveLength(1);
+    // Phase 7 §F: the search corpus rides the ingest.
+    const corpus = await db.get('cache_search_text', book.bookId);
+    expect(corpus?.sections.length).toBeGreaterThan(0);
 
     // 2. Delete Book
     const bookId = book.bookId;
-    await store.removeBook(bookId);
+    await libraryController.removeBook(bookId);
 
     // Verify Yjs state
     const finalStore = useBookStore.getState();
     expect(Object.keys(finalStore.books)).toHaveLength(0);
 
-    // Verify IDB empty
-    const manifestsAfter = await db.getAll('static_manifests');
-    expect(manifestsAfter).toHaveLength(0);
-    const resourcesAfter = await db.getAll('static_resources');
-    expect(resourcesAfter).toHaveLength(0);
+    // Verify IDB empty (search corpus dies with the book)
+    expect(await db.getAll('static_manifests')).toHaveLength(0);
+    expect(await db.getAll('static_resources')).toHaveLength(0);
+    expect(await db.get('cache_search_text', bookId)).toBeUndefined();
   });
 
   it('should persist data across store reloads', async () => {
@@ -229,11 +134,17 @@ describe('Feature Integration Tests', () => {
       }
     });
 
-    const store = useLibraryStore.getState();
-    await store.hydrateStaticMetadata();
+    await libraryController.hydrate();
 
     const updatedStore = useBookStore.getState();
     expect(Object.keys(updatedStore.books)).toHaveLength(1);
     expect(updatedStore.books['test-id'].title).toBe('Persisted Book');
+    // The projection hydrated the manifest from IDB.
+    expect(useLibraryStore.getState().staticMetadata['test-id']?.title).toBe('Persisted Book');
+  });
+
+  it('keeps the fixture factory honest (sanity)', () => {
+    const extraction = makeFullExtraction({ bookId: 'sanity' });
+    expect(extraction.searchText.sections.length).toBeGreaterThan(0);
   });
 });

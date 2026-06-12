@@ -5,32 +5,13 @@ import { useReadingStateStore, isValidProgress, getMostRecentProgress } from './
 import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
 import type { AnnotationState } from './useAnnotationStore';
-import type { UserProgress, UserInventoryItem, UserAnnotation } from '~types/db';
+import type { UserProgress, UserAnnotation } from '~types/db';
 import { getDeviceId } from '@lib/device-id';
 import { generateMatchKey } from '@lib/entity-resolution';
 import { coverUrl as buildCoverUrl } from '@data/covers';
+import { useLibraryViewStore, ensureLibraryViewStarted } from './libraryViewStore';
 
-// Module-level caches for useAllBooks to avoid strict-mode ref mutation issues
-// Using a function cache prevents React ESLint from tracking mutations.
-const createModuleCache = () => ({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    baseBookCache: new WeakMap<UserInventoryItem, any>(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    baseBooks: [] as any[],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    lastDeps: { books: null, staticMetadata: null, offloadedBookIds: null } as { books: any, staticMetadata: any, offloadedBookIds: any },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    previousResultsCache: {} as Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }>,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    readingListMatchDeps: { readingListEntries: null } as { readingListEntries: any },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    readingListMatchMap: new Map<string, any>(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    lastPhase2Deps: { baseBooks: null, progressMap: null, readingListEntries: null, readingListMatchMap: null } as { baseBooks: any, progressMap: any, readingListEntries: any, readingListMatchMap: any },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    memoizedResult: { books: [], cache: {} } as { books: any[], cache: any }
-});
-const moduleCache = createModuleCache();
+export type { LibraryBook } from './libraryViewStore';
 
 /**
  * Resolves the progress for a book using the "Local Priority > Global Recent" strategy.
@@ -54,233 +35,19 @@ function resolveProgress(bookProgress: Record<string, UserProgress> | undefined,
 }
 
 /**
- * Returns all books with static metadata merged.
- * Static metadata (cover, full title/author) is used if available,
- * otherwise falls back to Ghost Book metadata from Yjs inventory.
+ * Returns all books with static metadata, progress and the reading-list
+ * entry merged.
+ *
+ * Phase 7 (PR-L5): the render-time module-cache machinery that lived here
+ * (`createModuleCache` + render-time fuzzy joins) is REPLACED by the derived
+ * `libraryViewStore`, recomputed off-render on input-store subscription
+ * deltas. This hook is now a plain subscription; reference stability and
+ * the per-book memoization survive in the store (selectors.test.ts /
+ * selectors.perf.test.ts pin both).
  */
 export const useAllBooks = () => {
-    // merge-defaults hydration guarantees `books` is always present (flip
-    // wave 4) — the old `|| {}` fallback canary is gone. The two fallbacks
-    // below guard the EPHEMERAL useLibraryStore (not yjs-backed) and stay.
-    const books = useBookStore(state => state.books);
-    const staticMetadataRaw = useLibraryStore(state => state.staticMetadata);
-    const offloadedBookIdsRaw = useLibraryStore(state => state.offloadedBookIds);
-
-    // Memoize the defaults to prevent reference changes on every render when nullish
-    const staticMetadata = useMemo(() => staticMetadataRaw || {}, [staticMetadataRaw]);
-    const offloadedBookIds = useMemo(() => offloadedBookIdsRaw || new Set(), [offloadedBookIdsRaw]);
-
-    // Subscribe to progress changes (per-device structure). merge-defaults
-    // hydration guarantees `progress` is always present (flip wave 5) — the
-    // old `|| {}` fallback memo is gone.
-    const progressMap = useReadingStateStore(state => state.progress);
-
-    // merge-defaults hydration guarantees `entries` is always present (flip
-    // wave 2) — the old `|| {}` fallback canary is gone.
-    const readingListEntries = useReadingListStore(state => state.entries);
-
-    // OPTIMIZATION: Phase 1 - Base Books
-    // Memoize the "static" transformation of books (merging inventory + library metadata).
-    // This depends only on 'books', 'staticMetadata', and 'offloadedBookIds', which change rarely.
-    // It does NOT depend on 'progressMap', which changes frequently (on every page turn).
-
-    // BOLT OPTIMIZATION / CONCURRENT SAFETY:
-    // We use module-level variables for caching instead of `useRef` inside the hook.
-    // Mutating `useRef.current` inside the render body violates React's pure render rules
-    // and causes issues in Concurrent Mode. We also cannot use `useMemo` because React
-    // makes no strict semantic guarantees about retaining `useMemo` caches; if React
-    // throws the cache away to save memory, it breaks referential equality of our output array,
-    // triggering massive cascading Yjs and UI re-renders.
-    // By keeping the caches at the module level, we guarantee strict referential equality
-    // for `baseBooks` without mutating hook refs during render.
-
-    const needsRebuildPhase1 = moduleCache.lastDeps.books !== books ||
-        moduleCache.lastDeps.staticMetadata !== staticMetadata ||
-        moduleCache.lastDeps.offloadedBookIds !== offloadedBookIds;
-
-    if (needsRebuildPhase1) {
-        if (
-            moduleCache.lastDeps.staticMetadata !== staticMetadata ||
-            moduleCache.lastDeps.offloadedBookIds !== offloadedBookIds
-        ) {
-            // eslint-disable-next-line react-hooks/immutability
-            moduleCache.baseBookCache = new WeakMap();
-        }
-
-        const booksObj = books;
-        const staticMetadataObj = staticMetadata || {};
-        const offloadedBookIdsSet = offloadedBookIds || new Set();
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result: any[] = [];
-        for (const key in booksObj) {
-            if (!Object.prototype.hasOwnProperty.call(booksObj, key)) continue;
-            const book = booksObj[key];
-            // Check cache
-            const cached = moduleCache.baseBookCache.get(book);
-            if (cached) {
-                result.push(cached);
-                continue;
-            }
-
-            if (!staticMetadataObj) {
-                console.error('staticMetadata is undefined in useAllBooks');
-            }
-            if (!book) {
-                console.error('book is undefined in useAllBooks iteration');
-            }
-
-            const hasCoverBlob = staticMetadataObj?.[book.bookId]?.coverBlob instanceof Blob;
-
-            const newBaseBook = {
-                ...book,
-                // Merge static metadata if available, otherwise use Ghost Book snapshots
-                id: book.bookId,  // Alias for backwards compatibility
-                // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
-                title: book.customTitle || staticMetadataObj[book.bookId]?.title || book.title,
-                author: book.customAuthor || staticMetadataObj[book.bookId]?.author || book.author,
-                coverBlob: staticMetadataObj[book.bookId]?.coverBlob || undefined,
-                version: staticMetadataObj[book.bookId]?.version || undefined,
-                // OPTIMIZATION: Use Service Worker route for covers instead of creating blob URLs.
-                // This prevents memory leaks from unrevoked createObjectURL calls and avoids sync overhead.
-                coverUrl: hasCoverBlob
-                    ? buildCoverUrl(book.bookId)
-                    : undefined,
-                // Add other static fields for compatibility
-                fileHash: staticMetadataObj[book.bookId]?.fileHash,
-                fileSize: staticMetadataObj[book.bookId]?.fileSize,
-                totalChars: staticMetadataObj[book.bookId]?.totalChars,
-                syntheticToc: staticMetadataObj[book.bookId]?.syntheticToc,
-
-                // Derive offloaded status from local set
-                isOffloaded: offloadedBookIdsSet.has(book.bookId),
-            };
-
-            moduleCache.baseBookCache.set(book, newBaseBook);
-            result.push(newBaseBook);
-        }
-
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.baseBooks = result.sort((a, b) => b.lastInteraction - a.lastInteraction);
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.lastDeps = { books, staticMetadata, offloadedBookIds };
-    }
-
-    const baseBooks = moduleCache.baseBooks;
-
-    const previousResultsCache = moduleCache.previousResultsCache;
-
-    // BOLT OPTIMIZATION: Pre-compute match keys for reading list entries to avoid O(N * M)
-    // string parsing (generateMatchKey) inside the baseBooks.map fallback loop.
-    // Memoized separately to prevent rebuilding the Map on every page turn (when progressMap updates).
-    // We iterate using for...in to avoid the array allocation overhead of Object.values().
-
-    const needsRebuildMatchMap = moduleCache.readingListMatchDeps.readingListEntries !== readingListEntries;
-    if (needsRebuildMatchMap) {
-        const map = new Map<string, typeof readingListEntries[string]>();
-        for (const key in readingListEntries) {
-            if (!Object.prototype.hasOwnProperty.call(readingListEntries, key)) continue;
-            const entry = readingListEntries[key];
-            const matchKey = generateMatchKey(entry.title, entry.author);
-            if (matchKey) {
-                map.set(matchKey, entry);
-            }
-        }
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.readingListMatchMap = map;
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.readingListMatchDeps = { readingListEntries };
-    }
-    const readingListMatchMap = moduleCache.readingListMatchMap;
-
-    // OPTIMIZATION: Phase 2 - Progress Merge
-    // This runs when 'progressMap' updates (frequently).
-    // We iterate over baseBooks and merge the latest progress.
-    // BOLT OPTIMIZATION: Use raw reference checks (rawBookProgress) BEFORE calculating derived progress.
-    // This skips calling resolveProgress() (which involves localStorage access via getDeviceId) for unchanged books.
-
-    const needsRebuildPhase2 = moduleCache.lastPhase2Deps.baseBooks !== baseBooks ||
-        moduleCache.lastPhase2Deps.progressMap !== progressMap ||
-        moduleCache.lastPhase2Deps.readingListEntries !== readingListEntries ||
-        moduleCache.lastPhase2Deps.readingListMatchMap !== readingListMatchMap;
-
-    if (needsRebuildPhase2) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const newCache: Record<string, { result: any, base: any, rawBookProgress: any, rawReadingListEntry: any }> = {};
-
-        const cache = previousResultsCache;
-
-        const currentDeviceId = getDeviceId();
-
-        const result = baseBooks.map(book => {
-            const rawBookProgress = progressMap[book.id];
-            // Lookup by exact filename first
-            let rawReadingListEntry = book.sourceFilename ? readingListEntries[book.sourceFilename] : undefined;
-
-            // Fallback: If missing, try matching by normalized title+author
-            if (!rawReadingListEntry && (book.title || book.author)) {
-                const bookKey = generateMatchKey(book.title || '', book.author || '');
-
-                if (bookKey) {
-                    rawReadingListEntry = readingListMatchMap.get(bookKey);
-                }
-            }
-
-            // Check cache for reuse
-            const prev = cache[book.id];
-
-            // Reuse if:
-            // 1. Previous entry exists
-            // 2. Base book object is referentially identical (Phase 1 didn't change it)
-            // 3. Raw input references are identical (avoiding expensive resolveProgress)
-            if (prev &&
-                prev.base === book &&
-                prev.rawBookProgress === rawBookProgress &&
-                prev.rawReadingListEntry === rawReadingListEntry
-            ) {
-                newCache[book.id] = prev;
-                return prev.result;
-            }
-
-            // Cache Miss: Calculate derived values
-            // This involves resolveProgress which calls getDeviceId -> localStorage.getItem (slow)
-            const bookProgress = resolveProgress(rawBookProgress, currentDeviceId);
-            const progress = bookProgress?.percentage || rawReadingListEntry?.percentage || 0;
-            const currentCfi = bookProgress?.currentCfi || undefined;
-            const lastRead = bookProgress?.lastRead || rawReadingListEntry?.lastUpdated || 0;
-
-            // Create new object
-            const newBook = {
-                ...book,
-                // Merge progress from reading state store (max across all devices)
-                // Fallback to reading list progress if no device progress is found
-                progress: progress,
-                currentCfi: currentCfi,
-                lastRead: lastRead,
-                allProgress: rawBookProgress
-            };
-
-            newCache[book.id] = {
-                result: newBook,
-                base: book,
-                rawBookProgress,
-                rawReadingListEntry
-            };
-
-            return newBook;
-        });
-
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.memoizedResult = { books: result, cache: newCache };
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.lastPhase2Deps = { baseBooks, progressMap, readingListEntries, readingListMatchMap };
-        // eslint-disable-next-line react-hooks/immutability
-        moduleCache.previousResultsCache = newCache;
-    }
-
-    const memoizedResult = moduleCache.memoizedResult;
-
-    return memoizedResult.books;
+    ensureLibraryViewStarted();
+    return useLibraryViewStore((state) => state.books);
 };
 
 /**
