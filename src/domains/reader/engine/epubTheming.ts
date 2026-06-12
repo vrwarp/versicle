@@ -300,7 +300,9 @@ export function applyReaderTheme(
   themes.register('custom', {
     'body': { 'background': `${spec.customTheme?.bg || '#ffffff'} !important`, 'color': `${spec.customTheme?.fg || '#000000'} !important` },
     'p, div, span, h1, h2, h3, h4, h5, h6': { 'color': 'inherit !important', 'background': 'transparent !important' },
-    'a': { 'color': `${spec.customTheme?.fg || '#0000e'} !important` }
+    // PR-14 typo audit: the fallback was the invalid hex '#0000e' (the
+    // browser dropped the declaration); fixed to the built-in link blue.
+    'a': { 'color': `${spec.customTheme?.fg || '#0000ee'} !important` }
   });
 
   // Highlight theme rules from the ONE styles registry (Phase 6 §4).

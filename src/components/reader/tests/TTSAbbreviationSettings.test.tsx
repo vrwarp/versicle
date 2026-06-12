@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { TTSAbbreviationSettings } from './TTSAbbreviationSettings';
+import { TTSAbbreviationSettings } from '../TTSAbbreviationSettings';
 import { vi } from 'vitest';
 
 // Mock Lucide icons

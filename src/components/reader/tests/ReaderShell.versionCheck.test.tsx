@@ -167,7 +167,7 @@ vi.mock('../ContentAnalysisLegend', () => ({ ContentAnalysisLegend: () => null }
 // Mock the HistoryHighlighter since it also uses the store
 vi.mock('../HistoryHighlighter', () => ({ HistoryHighlighter: () => null }));
 
-describe('ReaderView Version Check', () => {
+describe('ReaderShell version check (renamed from ReaderView_VersionCheck — D13 keeper: file-scoped vi.mock universe incompatible with ReaderShell.test.tsx; full consolidation is P9 territory)', () => {
     const mockNavigate = vi.fn();
 
     beforeEach(() => {

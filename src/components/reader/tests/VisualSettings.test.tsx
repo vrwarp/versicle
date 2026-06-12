@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { VisualSettings } from './VisualSettings';
+import { VisualSettings } from '../VisualSettings';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useBookStore } from '@store/useBookStore';
@@ -26,7 +26,7 @@ vi.mock('zustand/react/shallow', () => ({
 }));
 
 // Mock Popover components since they depend on Radix Context
-vi.mock('../ui/Popover', () => ({
+vi.mock('../../ui/Popover', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   PopoverContent: ({ children, className }: any) => <div className={className} data-testid="popover-content">{children}</div>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -34,7 +34,7 @@ vi.mock('../ui/Popover', () => ({
 }));
 
 // Mock Tabs since they depend on Radix Context
-vi.mock('../ui/Tabs', () => ({
+vi.mock('../../ui/Tabs', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Tabs: ({ value, onValueChange, children }: any) => (
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

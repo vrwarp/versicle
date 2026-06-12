@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { render, screen, fireEvent } from '@testing-library/react';
-import { ReadingHistoryPanel } from './ReadingHistoryPanel';
+import { ReadingHistoryPanel } from '../ReadingHistoryPanel';
 import { EpubJsEngine } from '@domains/reader/engine/EpubJsEngine';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { ReadingSession } from '~types/db';

@@ -1,5 +1,5 @@
 import { renderHook } from '@testing-library/react';
-import { useHistoryHighlights } from './useHistoryHighlights';
+import { useHistoryHighlights } from '../useHistoryHighlights';
 import { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 

@@ -830,3 +830,105 @@ Remaining Phase 6 items (other work packages): PR-1 CH-1 fix, PR-10–13
 (chinese engine/dictionary/cedict/vocab canonicalization — vocab is CRDT
 v7 per the program decision), PR-14 exit audit (incl. D13 test
 consolidation + the duplicate ReaderTTSController suites).
+
+---
+
+## Status — p6-chinese-and-close (2026-06-12): PHASE 6 DONE
+
+The third cluster (PR-1, PR-10–13, PR-14 of §Execution) is DONE on this
+branch; with it Phase 6 closes. Reconciliations against the doc, recorded
+per program rules:
+
+1. **CRDT v7 numbering (PROGRAM DECISION, supersedes §7.5's "not a
+   schemaVersion bump")**: the vocabulary simplified-key canonicalization
+   IS v7 — coordinator step `{from: 6, to: 7}` with the automatic
+   pre-migration checkpoint, deterministic min-timestamp merge of
+   duplicate keys, and the standing two-client rule (a v6 stack
+   quarantines against a v7 doc — new F.2 describe). The doc's
+   `whenHydrated()` sweep is therefore unnecessary and NOT shipped: v6
+   clients cannot write fresh traditional keys into a v7 workspace (the
+   quarantine severs + locks), and the write/read canonicalization layers
+   are permanent. Queue renumbering: v8 = reading-list bookId FK
+   (post-merge, library track), v9 = husk-clearing + dual-write
+   retirement (P9).
+2. **trad→simp table provenance**: §7.6 wanted the single-char table
+   emitted from the CC-CEDICT run. It is generated from opencc-js's
+   bundled dictionaries instead (scripts/generate-trad2simp.mjs,
+   committed at src/domains/chinese/vocabulary/trad2simp.json + meta
+   sidecar): the table must invert the EXACT cn→tw mapping the reader
+   displays with (TraditionalConverter), and must be code-versioned —
+   it feeds the deterministic v7 transform; cedict.json is a per-release
+   network artifact. Construction is normalized to a fixpoint
+   (value-chain resolution, display-class unification for many-to-one
+   cn→tw like 镢/䦆→钁, display closure) with generator self-checks and
+   a vitest invariant suite (single-code-point entries over the FULL
+   table = the §7.3 length-preservation check; display round-trip
+   against the live converter).
+3. **cedict pinning**: MDBG publishes no versioned export URLs, so the
+   "pinned release" is a lock file (scripts/cedict.lock.json: sha256 +
+   release date; `--update-lock` is the deliberate upgrade). CI caches
+   public/dict on the lock hash — a flaky download can only FAIL a
+   build. Dockerfile.verification/.android compile when the build
+   context lacks the artifact. History rewrite for the old 15 MB blob
+   remains out of scope (program-level decision).
+4. **§7 geography**: store-coupled chinese UI (VocabTriageCard) lands at
+   src/components/chinese/, not domains/chinese/ui — domains-no-store,
+   the same reconciliation as the reader shell (§Status 3 above).
+   useVocabularyStore stays at its registry address (src/store) with
+   write-path canonicalization; moving it is P8/P9 territory.
+5. **DictionaryService**: import parses the whole JSON once before the
+   chunked bulkPut (a transient parse spike; "streamed" chunking applies
+   to the IDB writes). The legacy in-memory map + any-CJK-selection
+   fetch trigger (useChineseDictionary) are deleted; import is gated on
+   triage open with an 'empty'|'importing'|'ready'|'error' surface
+   (CH-13). versicle-dict is wiped + connection-closed by wipeAllData;
+   the SW gains exactly ONE runtime route (CacheFirst /dict/*).
+6. **PR-14 D13 scope executed**: duplicate ReaderTTSController suites
+   deduped (3 unique gating cases absorbed as a named regression block;
+   redundant foreground-sync case covered by the visibilitychange pin);
+   TTSQueue_AutoScroll absorbed into TTSQueue.test.tsx; stray
+   reader/*.test.* moved into tests/; ReaderView*.test.tsx renamed to
+   ReaderShell*.test.tsx. KEEPER: ReaderShell.versionCheck.test.tsx —
+   its file-scoped vi.mock universe is incompatible with
+   ReaderShell.test.tsx's; full consolidation is P9's ≤~120-file audit.
+   Absorption ledger (this phase): useEpubReader_Pinyin.characterization
+   → domains/chinese suites (PR-10); tests/ReaderTTSController →
+   tests/ReaderTTSController regression block; TTSQueue_AutoScroll →
+   TTSQueue.test.tsx regression block.
+7. **Dead code/typos**: the '#0000e' invalid-hex fallback fixed
+   (epubTheming.ts custom-theme link color). STATIC_READER_STYLES is no
+   longer empty (it carries the post-decomposition static rules) — not
+   dead, kept. lexiconText/third LexiconManager died with ReaderView
+   (recorded in the previous cluster).
+
+### Follow-ups (deferred out of Phase 6, owners named)
+
+- **VocabularyVault** (§7 layout; CH-10 orphan-vocabulary hole): a
+  minimal list/search/remove/count surface. Not in the phase exit
+  criteria; belongs with P8's settings registry pass.
+- **ChineseReadingSettings extraction** (§7 layout, from
+  VisualSettings.tsx): P8 settings registry territory, same as above.
+- **offscreen-renderer relocation** (§3: lib/offscreen-renderer.ts →
+  domains/reader/engine/offscreen/): still at src/lib with a named lint
+  exception; its callers (ingestion) are P7 library-track surface — move
+  together with the P7 ingestion rewrite to avoid a double migration.
+- **lib/search.ts type-only epubjs Book**: P7 library/search track owns
+  the file (excluded from this item); the named lint exception stands
+  with its P7 deadline.
+- **Locale-aware sentence snapping for zh books** (§1): the kernel
+  honors the locale parameter and the engine exposes getLanguage(); the
+  recorder still passes 'en' pending the Chinese-fixture boundary
+  assertion (sentence boundaries at 。) — flip in its own commit when
+  the Docker lane runs the chinese journeys.
+- **Docker lane execution note** (carried from the previous cluster,
+  now incl. the chinese surfaces): `./run_verification.sh` must run the
+  chinese journeys + `test_characterization_pinyin.spec.ts` (the astral
+  spec is now plain `test`) + the offline-dictionary variant before the
+  next phase builds on them; the specs are typechecked (tsc -b e2e)
+  in this lane.
+- **Credits surfaces read cedict.meta.json** (§7.6): P8 settings pass
+  (the data ships in dist now).
+- **Entry-chunk weight**: trad2simp.json (~50 KB raw) rides the store
+  graph via canonicalizeChar. Acceptable now; if the P8 bundle budget
+  flags it, split read-path lookup to a lazy map while keeping the
+  migration import static.

@@ -15,7 +15,7 @@
  */
 import { render } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { PinyinOverlay, type PinyinPosition } from './PinyinOverlay';
+import { PinyinOverlay, type PinyinPosition } from '../PinyinOverlay';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useVocabularyStore } from '@store/useVocabularyStore';
 

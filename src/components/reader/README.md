@@ -1,29 +1,48 @@
 # Reader Components
 
-This directory contains components used to render the Reader view, the core of the application where users read and listen to books.
+Regenerated at Phase 6 exit (prep/phase6-reader-engine.md PR-14). The
+1,400-line `ReaderView.tsx` is gone: `ReaderShell.tsx` is pure composition
+over named modules, and every epub.js touch goes through the ReaderEngine
+port (`src/domains/reader/engine/` — contract C7; `EpubJsEngine` is the
+sole runtime epubjs importer, lint-enforced).
 
-## Directories
+## Layout
 
-*   **`tests/`**: Unit and integration tests for reader components.
+* **`ReaderShell.tsx`** — the reader route as composition (<200 lines, CI
+  gate): engine construction + commands ride
+  `src/app/reader/useReaderController`; everything else mounts from here.
+* **`shell/`** — the decomposed ReaderView concerns:
+  `ReaderChrome` (header/immersive), `ReaderSidebars` (+`useTocController`,
+  `useDeviceMarkers`), `ReaderViewport`, `AnnotationLayer` (highlights +
+  note markers on `engine.highlights`), `DebugHighlightLayer`,
+  `ImportJumpPrompt`.
+* **`panels/`** — `TOCPanel`, `SearchPanel` (engine-port consumers).
+* **`tests/`** — the owning suites for this directory (D13: stray sibling
+  test files merged here at Phase 6 exit).
 
 ## Components
 
-### Core Reader
-*   **`ReaderView.tsx`**: The primary component responsible for rendering the EPUB content using `epub.js`. It manages the reader lifecycle, navigation, layout reflows, and integrates with the TTS service.
+* **`ReaderTTSController.tsx`** — TTS sentence highlight + keyboard gating
+  (render-isolation keeper; rides the ReaderCommands context).
+* **`HistoryHighlighter.tsx`** / **`useHistoryHighlights.ts`** — reading
+  history highlight layer.
+* **`PinyinOverlay.tsx`** — decorative pinyin geometry portal; positions
+  come from `domains/chinese` via the app controller; known-character
+  suppression compares canonical (simplified) keys (CRDT v7).
+* **`AnnotationMarkerOverlay.tsx`**, **`ReaderHighlightsStyles.tsx`** —
+  geometry portal + the parent-document half of the ONE highlight styles
+  registry (`domains/reader/engine/highlightStyles`).
+* **`AnnotationList.tsx`**, **`ReadingHistoryPanel.tsx`**,
+  **`SyncStatusPanel.tsx`**, **`ContentAnalysisLegend.tsx`**,
+  **`ContentAnalysisReport.tsx`**, **`DeviceIcon.tsx`** — sidebars/panels.
+* **`UnifiedAudioPanel.tsx`**, **`TTSQueue.tsx`**, **`TTSQueueItem.tsx`**,
+  **`LexiconManager.tsx`**, **`TTSAbbreviationSettings.tsx`** — the
+  Listening Room surfaces.
+* **`VisualSettings.tsx`** — the Reading Room (visual + Chinese reading
+  preferences).
+* **`ReaderControlBar.tsx`** — the CompassPill host mounted from
+  `RootLayout` (talks to the reader via the ReaderCommands registry).
 
-### Sidebars & Panels
-*   **`AnnotationList.tsx`**: Displays a sidebar list of all user annotations (highlights and notes) for the current book, allowing navigation to them.
-*   **`UnifiedAudioPanel.tsx`**: The "Listening Room". A comprehensive sidebar panel containing the TTS Queue, Player controls, and Audio settings.
-*   **`VisualSettings.tsx`**: The "Reading Room". A popover menu for customizing visual preferences (font family, size, theme, line height).
-
-### Overlays & Popovers
-*   **`AnnotationPopover.tsx`**: A contextual popup that appears when selecting text, allowing users to create highlights or notes.
-*   **`GestureOverlay.tsx`**: An invisible layer overlaid on the reader to capture touch gestures (swipes, taps) for navigation and controls when "Gesture Mode" is active.
-
-### TTS & Dictionary
-*   **`LexiconManager.tsx`**: A UI for managing Pronunciation Lexicon rules (Text replacements and Regex patterns).
-*   **`TTSAbbreviationSettings.tsx`**: A settings component (typically embedded in Global Settings) to configure how TTS handles abbreviations.
-*   **`TTSQueue.tsx`**: Displays the active Text-to-Speech playback queue, highlighting the current sentence and allowing navigation within the audio stream.
-
-### Utilities
-*   **`index.ts`**: Re-exports public components.
+Related: the Chinese reading feature module lives at `src/domains/chinese/`
+(engine/dictionary/vocabulary); its store-coupled UI (`VocabTriageCard`)
+lives at `src/components/chinese/` per the domains-no-store boundary.

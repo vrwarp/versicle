@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { UnifiedAudioPanel } from './UnifiedAudioPanel';
-import { Sheet } from '../ui/Sheet';
+import { UnifiedAudioPanel } from '../UnifiedAudioPanel';
+import { Sheet } from '../../ui/Sheet';
 
 // Mock stores (one shared selector-fn backs both split stores)
 const mockUseTTSStore = vi.fn();
@@ -30,11 +30,11 @@ vi.mock('@app/tts/useAudioCommands', () => ({
 }));
 
 // Mock child components that are complex or not relevant
-vi.mock('./TTSQueue', () => ({
+vi.mock('../TTSQueue', () => ({
   TTSQueue: () => <div data-testid="tts-queue-mock">Queue</div>
 }));
 
-vi.mock('./LexiconManager', () => ({
+vi.mock('../LexiconManager', () => ({
   LexiconManager: () => <div data-testid="lexicon-manager-mock">LexiconManager</div>
 }));
 
