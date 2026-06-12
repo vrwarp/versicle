@@ -145,9 +145,11 @@ describe('regression: selection single-fire per gesture (D3)', () => {
     slot.contents = makeFakeContents();
     render(<TestHost />);
 
-    // Four content hooks: the engine's own (titled iframe/contentRendered)
-    // plus the lifecycle hook's three (extras → chinese → selection).
-    await waitFor(() => expect(slot.contentHooks.length).toBe(4));
+    // Three content hooks: the engine's own (titled iframe/contentRendered)
+    // plus the lifecycle hook's two (extras → selection). The chinese pass
+    // left the lifecycle with PR-10 — it rides the engine's contentRendered
+    // seam, registered from app/ (domains/chinese).
+    await waitFor(() => expect(slot.contentHooks.length).toBe(3));
 
     // Simulate epub.js firing the content pipeline for the rendered section.
     for (const hook of slot.contentHooks) {

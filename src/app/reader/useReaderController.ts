@@ -25,6 +25,7 @@ import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
 import { ReadingSessionRecorder } from '@domains/reader/session/ReadingSessionRecorder';
 import type { ReaderCommands } from '@domains/reader/ui/ReaderCommands';
+import { registerChineseReading, getBookBaseLanguage } from '@domains/chinese';
 import type { PinyinPosition } from '@domains/chinese/types';
 import type { BookMetadata } from '~types/db';
 import { useReadingStateStore } from '@store/useReadingStateStore';
@@ -233,9 +234,6 @@ export function useReaderController(
     onError: (msg) => {
       logger.error('Reader Error:', msg);
     },
-    onPinyinPositionsUpdate: (positions) => {
-      setPinyinPositions(positions);
-    },
   }), [
     readerViewMode,
     currentTheme,
@@ -266,6 +264,45 @@ export function useReaderController(
   useEffect(() => {
     engineRef.current = engine;
   }, [engine]);
+
+  // Chinese reading registration (Phase 6 §7, PR-10): the app layer wires
+  // the feature module to the engine's content seam — and ONLY for books
+  // whose BASE language is zh (getBookBaseLanguage is the CH-8 interim
+  // helper; the legacy exact-match check skipped 'zh-CN'/'zh-TW' books).
+  // Preference reads stay store-side here (domains-no-store): injected as a
+  // thunk, read at run time. Preference CHANGES drive an explicit refresh —
+  // the legacy React-deps re-run, made event-driven (CH-2).
+  const bookLanguage = bookMetadata?.language;
+  useEffect(() => {
+    if (!engine || getBookBaseLanguage(bookLanguage) !== 'zh') {
+      setPinyinPositions(prev => (prev.length === 0 ? prev : []));
+      return;
+    }
+    const registration = registerChineseReading(engine, {
+      getPrefs: () => {
+        const prefs = usePreferencesStore.getState();
+        return {
+          forceTraditionalChinese: prefs.forceTraditionalChinese,
+          showPinyin: prefs.showPinyin,
+        };
+      },
+      onPositions: (positions) => setPinyinPositions(positions),
+    });
+    const unsubscribePrefs = usePreferencesStore.subscribe((state, prev) => {
+      if (
+        state.forceTraditionalChinese !== prev.forceTraditionalChinese ||
+        state.showPinyin !== prev.showPinyin ||
+        state.pinyinSize !== prev.pinyinSize
+      ) {
+        registration.refresh();
+      }
+    });
+    return () => {
+      unsubscribePrefs();
+      registration.dispose();
+      setPinyinPositions(prev => (prev.length === 0 ? prev : []));
+    };
+  }, [engine, bookLanguage]);
 
   // Check version and redirect if outdated
   useEffect(() => {

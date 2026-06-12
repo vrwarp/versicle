@@ -10,12 +10,15 @@
  *  - presentation        → @domains/reader/engine/epubTheming
  *  - selection pipeline  → @domains/reader/engine/selectionBridge
  *  - locations cache     → @domains/reader/engine/locations (D7 guards)
- *  - Chinese content     → @domains/chinese/engine/chineseContentProcessor
- *                          (the §7 seam — store reads stay HERE, injected
- *                          per call, so the module is boundary-clean)
+ *  - Chinese content     → @domains/chinese (Phase 6 §7, PR-10): the
+ *                          dependency is INVERTED — this hook has zero
+ *                          chinese imports; the app controller registers
+ *                          `registerChineseReading(engine, …)` against the
+ *                          engine's contentRendered/contentDestroyed seam.
  *
- * Public API unchanged — every consumer and characterization suite
- * (Pinyin/Sanitization/Security) pins through this surface.
+ * Characterization suites (Sanitization/Security/Selection/Theming) pin
+ * through this surface; the pinyin suite moved with the feature to
+ * src/domains/chinese/engine/.
  */
 import { useState, useEffect, useRef } from 'react';
 import type { Book, Rendition } from 'epubjs';
@@ -38,12 +41,9 @@ import {
 import { attachSelectionBridge } from '@domains/reader/engine/selectionBridge';
 import { initializeLocations } from '@domains/reader/engine/locations';
 import { internals } from '@domains/reader/engine/epubjsInternals';
-import { processChineseContent } from '@domains/chinese/engine/chineseContentProcessor';
-import type { PinyinPosition } from '@domains/chinese/types';
 import { runCancellable, CancellationError } from '@lib/cancellable-task-runner';
 import { createLogger } from '@lib/logger';
 import { usePreferencesStore } from '@store/usePreferencesStore';
-import { useBookStore } from '@store/useBookStore';
 import { findTocItem } from '@lib/reader/titleResolver';
 
 const logger = createLogger('useEpubReader');
@@ -78,8 +78,6 @@ export interface EpubReaderOptions {
   onClick?: (event: MouseEvent) => void;
   /** Callback when an error occurs. */
   onError?: (error: string) => void;
-  /** Callback when pinyin positions are calculated. */
-  onPinyinPositionsUpdate?: (positions: PinyinPosition[]) => void;
   /** Optional: Initial CFI location to start reading at. Overrides metadata.currentCfi. */
   initialLocation?: string;
   /** Optional: Book metadata. If not provided, some features like initial location inference may be limited. */
@@ -144,7 +142,6 @@ export function useEpubReader(
   const prevSize = useRef({ width: 0, height: 0 });
   const resizeRaf = useRef<number | null>(null);
   const applyStylesRef = useRef<() => void>(() => { });
-  const processChineseContentRef = useRef<(contents: unknown) => Promise<void>>(async () => { });
   const { forceTraditionalChinese, showPinyin, pinyinSize } = usePreferencesStore();
   /** Disconnects the shared sandbox-patching observer (epubSecurity). */
   const sandboxObserverRef = useRef<(() => void) | null>(null);
@@ -330,8 +327,9 @@ export function useEpubReader(
           }
         });
 
-        // Per-content-load pipeline (all three hooks preserved in legacy
-        // registration order: extras → chinese → selection).
+        // Per-content-load pipeline (extras → selection, legacy order; the
+        // Chinese pass rides the ENGINE's contentRendered seam now and is
+        // registered by the app controller — Phase 6 §7, PR-10).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const injectExtras = (contents: any) => {
           injectContentExtras(contents, {
@@ -339,27 +337,6 @@ export function useEpubReader(
             reapplyForcedStyles: () => applyStylesRef.current(),
           });
         };
-
-        // Chinese content pass (the §7 seam): the store reads stay in this
-        // hook — read at call time, injected as plain values, exactly the
-        // getState() timing the legacy inline function had.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const runChineseContentPass = async (contents: any) => {
-          const prefs = usePreferencesStore.getState();
-          const bookLang = bookId ? useBookStore.getState().books[bookId]?.language || 'en' : 'en';
-          await processChineseContent(contents, {
-            bookLang,
-            forceTraditionalChinese: prefs.forceTraditionalChinese,
-            showPinyin: prefs.showPinyin,
-            onPinyinPositions: (positions) => {
-              if (optionsRef.current.onPinyinPositionsUpdate) {
-                optionsRef.current.onPinyinPositionsUpdate(positions);
-              }
-            },
-          });
-        };
-
-        processChineseContentRef.current = runChineseContentPass;
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const attachListeners = (contents: any) => {
@@ -371,14 +348,12 @@ export function useEpubReader(
         };
 
         newRendition.hooks.content.register(injectExtras);
-        newRendition.hooks.content.register(runChineseContentPass);
         newRendition.hooks.content.register(attachListeners);
 
         // Manually trigger extras for initially loaded content
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ((newRendition as any).getContents() as any[]).forEach((contents: any) => {
           injectExtras(contents);
-          runChineseContentPass(contents);
         });
 
       } catch (err) {
@@ -454,17 +429,6 @@ export function useEpubReader(
       if (resizeRaf.current) cancelAnimationFrame(resizeRaf.current);
     };
   }, [viewerRef]);
-
-  // Re-run the Chinese content pass when reading preferences change
-  useEffect(() => {
-    if (!renditionRef.current || !isReady) return;
-
-    // Trigger overlay re-injection on all currently loaded views
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ((renditionRef.current as any).getContents() as any[]).forEach((contents: any) => {
-      processChineseContentRef.current(contents);
-    });
-  }, [isReady, forceTraditionalChinese, showPinyin, pinyinSize]);
 
   // Presentation (epubTheming module): apply the whole spec on any input
   // change. D5: flow()/display() runs only when the view mode actually

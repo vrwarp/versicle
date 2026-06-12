@@ -1,6 +1,10 @@
-
+/**
+ * Performance benchmark (moved with the feature from src/lib/chinese/ —
+ * Phase 6 §7, PR-10). Informational: logs, no assertions.
+ */
 import { describe, it } from 'vitest';
-import { getPinyin, toTraditional, ensurePinyin, ensureOpenCC } from './ChineseTextProcessor';
+import { ensurePinyin, getPinyin } from './PinyinGeometryEngine';
+import { ensureOpenCC, toTraditional } from './TraditionalConverter';
 
 describe('Performance benchmark', () => {
   it('measures getPinyin and toTraditional performance', async () => {
