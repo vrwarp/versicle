@@ -1,6 +1,6 @@
-import { tryFastMergeCfi, mergeCfiSlow } from '../cfi-utils';
+import { tryFastMergeCfi, mergeCfiSlow } from '../../kernel/cfi';
 import type { SentenceNode } from './sentence-extraction';
-import { getCachedSegmenter } from './segmenter-cache';
+import { getCachedSegmenter } from '../../kernel/locale/segmenterCache';
 import { TextScanningTrie } from './TextScanningTrie';
 
 /**

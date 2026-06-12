@@ -119,4 +119,28 @@ describe('AudioContentPipeline Grouping Logic', () => {
             expect(parseCfiRange(groups[1].rootCfi)?.parent).toBe('/6/14!/4/12');
         });
     });
+
+    describe('characterization: kernel cfiContains separator fix (5c-PR1, content D9/S17)', () => {
+        // The inline isDescendant/isAncestor copies used ['/', '!', ':'] — missing
+        // '[' and ',' from THE canonical set. An assertion-bracket child parent
+        // (e.g. /4/10[note] under /4/10) therefore failed the boundary check and
+        // split the group. Strictly a fix: separator-free fixtures group exactly
+        // as before (the suites above), and the bracket fixture now coalesces.
+        it('groups assertion-bracket children with their unbracketed ancestor', () => {
+            const pipeline = new AudioContentPipeline(createZustandEngineContext());
+
+            const sentences = [
+                // Parent CFI of the first sentence: /4/10
+                { text: 'Block head', cfi: 'epubcfi(/6/14!/4/10/1:0)' },
+                // Parent CFI: /4/10[note] — same node, id-asserted (descendant by THE set's '[')
+                { text: 'Asserted child', cfi: 'epubcfi(/6/14!/4/10[note]/2/1:0)' },
+            ];
+
+            const groups = groupSentences(pipeline, sentences);
+
+            // Pre-fix behavior: 2 groups (the '[' boundary was rejected).
+            expect(groups).toHaveLength(1);
+            expect(groups[0].segments).toHaveLength(2);
+        });
+    });
 });

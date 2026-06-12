@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getParentCfi, parseCfiRange, generateCfiRange, mergeCfiRanges, generateEpubCfi, snapCfiToSentence, preprocessBlockRoots } from './cfi-utils';
+import { getParentCfi, parseCfiRange, generateCfiRange, mergeCfiRanges, generateEpubCfi, snapCfiToSentence, preprocessBlockRoots } from './index';
 
 // --- Mocks ---
 
@@ -95,7 +95,7 @@ const mockCreateRange = vi.fn(() => ({
 }));
 
 // Mock implementation for generateEpubCfi to avoid unused var errors in mock call
-vi.mock('./cfi-utils', async (importOriginal) => {
+vi.mock('./index', async (importOriginal) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const actual: any = await importOriginal();
     return {

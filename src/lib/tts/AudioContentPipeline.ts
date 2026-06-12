@@ -1,9 +1,12 @@
 import { TextSegmenter } from './TextSegmenter';
 import type { EngineContext } from './engine/EngineContext';
 import { generateSecureId } from '../crypto';
-import EpubCFI from 'epubjs/src/epubcfi';
 import type { CitationMarker } from '~types/db';
-import { getParentCfi, generateCfiRange, parseCfiRange, preprocessBlockRoots, type PreprocessedRoot } from '../cfi-utils';
+import {
+    getParentCfi, generateCfiRange, parseCfiRange, preprocessBlockRoots, cfiContains,
+    CfiComparator, tryParseCfiPoint,
+    type PreprocessedRoot, type ParsedCfiPoint,
+} from '../../kernel/cfi';
 import type { SectionMetadata } from '~types/db';
 import type { ContentType } from '~types/content-analysis';
 import type { TTSQueueItem } from '~types/tts';
@@ -631,7 +634,7 @@ export class AudioContentPipeline {
         markers: CitationMarker[]
     ): number[] {
         if (markers.length === 0) return [];
-        const comparer = new EpubCFI();
+        const comparer = new CfiComparator();
         // Pre-parse group bounds once.
         //
         // The upper bound MUST be the END of the last segment, not the last segment's range CFI
@@ -646,27 +649,20 @@ export class AudioContentPipeline {
             const first = g.segments[0]?.cfi;
             const last = g.segments[g.segments.length - 1]?.cfi;
             if (!first || !last) return null;
-            try {
-                const startPoint = parseCfiRange(first)?.fullStart || first;
-                const endPoint = parseCfiRange(last)?.fullEnd || last;
-                return { start: new EpubCFI(startPoint), end: new EpubCFI(endPoint) };
-            } catch {
-                return null;
-            }
+            const startPoint = parseCfiRange(first)?.fullStart || first;
+            const endPoint = parseCfiRange(last)?.fullEnd || last;
+            const start = tryParseCfiPoint(startPoint);
+            const end = tryParseCfiPoint(endPoint);
+            return start && end ? { start, end } : null;
         });
 
         return markers.map(mk => {
-            let parsed: EpubCFI;
-            try {
-                parsed = new EpubCFI(mk.cfi);
-            } catch {
-                return -1;
-            }
+            const parsed: ParsedCfiPoint | null = tryParseCfiPoint(mk.cfi);
+            if (!parsed) return -1;
             for (let i = 0; i < bounds.length; i++) {
                 const b = bounds[i];
                 if (!b) continue;
                 try {
-                    // @ts-expect-error epubjs compare accepts EpubCFI objects despite strict string types
                     if (comparer.compare(parsed, b.start) >= 0 && comparer.compare(parsed, b.end) <= 0) {
                         return i;
                     }
@@ -848,14 +844,15 @@ export class AudioContentPipeline {
 
             const newParentBase = parentCfi.endsWith(')') ? parentCfi.slice(0, -1) : parentCfi;
 
-            // Check if one path is a prefix of the other, confirming they belong to the same branch.
-            // We verify that the prefix match is followed by a separator or is the end of string
-            // to avoid false positives (e.g. "/1" matching "/10").
-            const isDescendant = currentGroup && currentParentBase && newParentBase.startsWith(currentParentBase) &&
-                (newParentBase.length === currentParentBase.length || ['/', '!', ':'].includes(newParentBase[currentParentBase.length]));
-
-            const isAncestor = currentGroup && currentParentBase && currentParentBase.startsWith(newParentBase) &&
-                (currentParentBase.length === newParentBase.length || ['/', '!', ':'].includes(currentParentBase[newParentBase.length]));
+            // Check if one path is a prefix of the other, confirming they belong to the
+            // same branch — via the kernel's canonical `cfiContains` (THE separator set,
+            // ['/', '!', '[', ',', ':']). The inline copies this replaces used
+            // ['/', '!', ':'] — missing '[' and ',' — which mis-split groups whose
+            // sibling parents differ by an assertion bracket (e.g. /4/10 vs
+            // /4/10[note]); cfi.equivalence.fuzz.test.ts and the grouping suite's
+            // assertion-bracket fixture pin the fix.
+            const isDescendant = currentGroup && currentParentBase && cfiContains(currentParentBase, newParentBase);
+            const isAncestor = currentGroup && currentParentBase && cfiContains(newParentBase, currentParentBase);
 
             const isInternalNode = isDescendant || isAncestor;
 

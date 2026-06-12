@@ -1,5 +1,7 @@
-import EpubCFI from 'epubjs/src/epubcfi';
-import { parseCfiRange } from '../cfi-utils';
+import {
+    parseCfiRange, stripCfiWrapper, cfiContains, CfiComparator, tryParseCfiPoint,
+    type ParsedCfiPoint,
+} from '../../kernel/cfi';
 import type { SentenceNode } from './sentence-extraction';
 import type { EngineContext } from './engine/EngineContext';
 
@@ -158,88 +160,66 @@ export class TableAdaptationProcessor {
         const parsedRoots = tableRoots.map(root => {
             const range = parseCfiRange(root);
             // If it's a range, use the parent (common ancestor) for prefix matching.
-            // If it's a point/path, use it directly.
-            // Strip epubcfi() wrapper for raw comparison if needed, but parseCfiRange handles format.
-            // We use the full string representation of the parent/path for comparison.
+            // If it's a point/path, use it directly (kernel stripCfiWrapper replaces
+            // the hand-rolled wrapper stripping — phase5 §5c.4).
             let cleanRoot = root;
-            let rangeStart: string | null = null;
-            let rangeEnd: string | null = null;
 
-            let parsedRangeStart: EpubCFI | null = null;
-            let parsedRangeEnd: EpubCFI | null = null;
+            let parsedRangeStart: ParsedCfiPoint | null = null;
+            let parsedRangeEnd: ParsedCfiPoint | null = null;
 
             if (range && range.parent) {
-                // Reconstruct parent CFI string: epubcfi(parent)
-                // But wait, parseCfiRange returns 'parent' as the path inside.
+                // parseCfiRange returns 'parent' as the path inside the wrapper.
                 cleanRoot = range.parent;
-                rangeStart = range.fullStart;
-                rangeEnd = range.fullEnd;
-                try {
-                    parsedRangeStart = new EpubCFI(rangeStart);
-                    parsedRangeEnd = new EpubCFI(rangeEnd);
-                } catch (e) {
-                    console.warn('Failed to parse range start/end for table adaptation', e);
+                parsedRangeStart = tryParseCfiPoint(range.fullStart);
+                parsedRangeEnd = tryParseCfiPoint(range.fullEnd);
+                if (!parsedRangeStart || !parsedRangeEnd) {
+                    console.warn('Failed to parse range start/end for table adaptation');
+                    parsedRangeStart = null;
+                    parsedRangeEnd = null;
                 }
             } else {
-                // Strip wrapper manually if not a range or simple path
-                if (cleanRoot.startsWith('epubcfi(')) {
-                    cleanRoot = cleanRoot.slice(8);
-                }
-                if (cleanRoot.endsWith(')')) {
-                    cleanRoot = cleanRoot.slice(0, -1);
-                }
-            }
-            // Normalize: remove trailing ')' if present from lazy regex or range structure
-            if (cleanRoot.endsWith(')')) {
-                cleanRoot = cleanRoot.slice(0, -1);
+                cleanRoot = stripCfiWrapper(cleanRoot);
             }
 
             return { original: root, clean: cleanRoot, parsedRangeStart, parsedRangeEnd };
         });
 
-        const cfiComparer = new EpubCFI();
+        const cfiComparer = new CfiComparator();
 
         // Iterate through all sentences and check if they belong to any known table root
         for (let i = 0; i < sentences.length; i++) {
             const sentence = sentences[i];
             if (!sentence.cfi) continue;
 
-            let cleanCfi = sentence.cfi;
-            if (cleanCfi.startsWith('epubcfi(')) {
-                cleanCfi = cleanCfi.slice(8);
-            }
-            if (cleanCfi.endsWith(')')) {
-                cleanCfi = cleanCfi.slice(0, -1);
-            }
+            const cleanCfi = stripCfiWrapper(sentence.cfi);
 
             // Lazy-parse the sentence CFI only if needed
-            let parsedSentenceCfi: EpubCFI | null = null;
+            let parsedSentenceCfi: ParsedCfiPoint | null = null;
 
             // Check if this sentence is a child of any known table adaptation root.
             const match = parsedRoots.find(({ clean, parsedRangeStart, parsedRangeEnd }) => {
-                // Check for prefix match with valid separator boundary
-                // Include ',' for range handling
-                const isPrefixMatch = cleanCfi.startsWith(clean) &&
-                    (cleanCfi.length === clean.length || ['/', '!', '[', ':', ','].includes(cleanCfi[clean.length]));
-
-                if (!isPrefixMatch) return false;
+                // Prefix match at a step boundary via the kernel's canonical
+                // cfiContains (THE separator set — this site already carried all
+                // five separators; it now shares the one implementation).
+                if (!cfiContains(clean, cleanCfi)) return false;
 
                 // If the table root is a range (e.g. encompasses multiple siblings), verify strictly within bounds.
                 // This prevents false positives where siblings of the table share the same parent prefix.
                 if (parsedRangeStart && parsedRangeEnd) {
+                    if (!parsedSentenceCfi) {
+                        parsedSentenceCfi = tryParseCfiPoint(sentence.cfi);
+                    }
+                    if (!parsedSentenceCfi) {
+                        // Unparseable sentence CFI: skip rather than risk swallowing whole chapters.
+                        return false;
+                    }
                     try {
-                        if (!parsedSentenceCfi) {
-                            parsedSentenceCfi = new EpubCFI(sentence.cfi);
-                        }
-                        // @ts-expect-error epubjs compare accepts EpubCFI objects despite strict types
                         const afterStart = cfiComparer.compare(parsedSentenceCfi, parsedRangeStart) >= 0;
-                        // @ts-expect-error epubjs compare accepts EpubCFI objects despite strict types
                         const beforeEnd = cfiComparer.compare(parsedSentenceCfi, parsedRangeEnd) <= 0;
                         return afterStart && beforeEnd;
                     } catch (e) {
                         console.warn('Failed to compare CFIs for table range check', e);
-                        // Fallback to prefix match if comparison fails (safer than skipping?)
-                        // Or safer to skip? Safer to skip to avoid swallowing whole chapters.
+                        // Safer to skip than to swallow whole chapters.
                         return false;
                     }
                 }

@@ -23,7 +23,7 @@ import type { TTSQueueItem } from '~types/tts';
 import type { QueueModel } from '../QueueModel';
 import type { AnnotationPort } from './EngineContext';
 import type { PlaybackBackend } from './PlaybackBackend';
-import { mergeCfiSlow } from '../../cfi-utils';
+import { mergeCfiSlow } from '../../../kernel/cfi';
 import { flightRecorder } from '../TTSFlightRecorder';
 import { createLogger } from '../../logger';
 

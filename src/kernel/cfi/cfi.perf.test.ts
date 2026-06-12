@@ -1,4 +1,4 @@
-import { mergeCfiRanges, generateCfiRange } from './cfi-utils';
+import { mergeCfiRanges, generateCfiRange } from './index';
 import { describe, it, expect } from 'vitest';
 
 describe('mergeCfiRanges Performance', () => {

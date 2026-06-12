@@ -55,6 +55,19 @@ module.exports = {
       to: { path: '^src', pathNot: '^src/types' },
     },
     {
+      name: 'kernel-imports-nothing',
+      severity: 'error',
+      comment:
+        'src/kernel is the L0 layer (master plan §2 rule 1): admission ' +
+        'requires zero internal deps and ≥2 consuming domains. Born at ' +
+        'error with baseline 0 when kernel/cfi + kernel/locale joined ' +
+        'kernel/diagnostics (Phase 5c). The kernel-boundary vitest suite ' +
+        '(src/kernel/cfi/cfi.kernel-boundary.test.ts) covers test files, ' +
+        'which this cruise excludes.',
+      from: { path: '^src/kernel' },
+      to: { path: '^src', pathNot: '^src/kernel' },
+    },
+    {
       name: 'lib-not-to-store',
       severity: 'warn',
       comment:
