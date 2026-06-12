@@ -282,15 +282,13 @@ export default tseslint.config(
   // `NetworkGateway.egress(destinationId, …)` and same-origin/blob fetches
   // through `localFetch` (both src/kernel/net) — raw fetch/XMLHttpRequest/
   // navigator.sendBeacon are banned everywhere else, at ERROR (the repo was
-  // migrated clean when this landed). Exemptions, each restating ONLY the
-  // selectors that still apply (flat-config same-named rules are last-wins):
-  //  - src/kernel/net/** (the gateway itself) — carve-out block below;
-  //  - src/lib/tts/engine/** and src/lib/tts/providers/** — their dedicated
-  //    no-restricted-syntax blocks below intentionally omit the fetch
-  //    selectors: the provider fetch sites (GoogleTTSProvider, PiperProvider,
-  //    PiperRuntime, BaseCloudProvider) are owned by the parallel Phase 5b/5c
-  //    chain and migrate onto egress() when it merges (their destinations
-  //    are already declared in kernel/net/destinations.ts).
+  // migrated clean when this landed). The ONE production exemption is
+  // src/kernel/net/** itself (carve-out block below). The temporary
+  // src/lib/tts/engine|providers exemption (provider fetch sites frozen for
+  // the parallel Phase 5b/5c chain) burned down at the P7 merge: the five
+  // sites (GoogleTTSProvider ×2, PiperProvider catalog, PiperRuntime
+  // fetchWithBackoff, BaseCloudProvider.fetchAudio) route through egress()
+  // and the engine/providers blocks below restate the full selector set.
   {
     files: ['src/**/*.{ts,tsx}'],
     ignores: ['src/data/**'],
@@ -375,11 +373,14 @@ export default tseslint.config(
   // parityHostDb port factories, WorkerTtsEngine constructor ports) and
   // every vi.mock/vi.doMock in the directory is a lint error.
   //
-  // Placement + the repeated readwrite selector are load-bearing: flat config
-  // resolves same-named rules last-wins (options replace, never merge), so
-  // this block must sit AFTER the Phase 3 readwrite-transaction ban above and
-  // restate that selector — otherwise one of the two rules would silently
-  // stop applying to src/lib/tts/engine/.
+  // Placement + the repeated readwrite/egress selectors are load-bearing:
+  // flat config resolves same-named rules last-wins (options replace, never
+  // merge), so this block must sit AFTER the Phase 3 readwrite-transaction +
+  // Phase 7 raw-egress ban above and restate those selectors — otherwise one
+  // of the rules would silently stop applying to src/lib/tts/engine/.
+  // The egress selectors apply to this directory's TEST files too (unlike the
+  // global test carve-out): no engine suite calls raw fetch — they stub it
+  // via vi.stubGlobal and drive providers through injected fakes.
   {
     files: ['src/lib/tts/engine/**/*.{ts,tsx}'],
     rules: {
@@ -392,6 +393,35 @@ export default tseslint.config(
             'readwrite transactions are banned outside src/data — route the ' +
             'write through a @data/repos/* method (every repo writer holds ' +
             'the cross-context IDB write gate).',
+        },
+        {
+          selector: "CallExpression[callee.name='fetch']",
+          message:
+            'Raw fetch is banned outside src/kernel/net (Phase 7 egress ' +
+            'boundary). Remote hosts: NetworkGateway.egress(destinationId, …) ' +
+            'with a kernel/net/destinations.ts registry entry (CSP is ' +
+            'generated from it). Same-origin/blob URLs: localFetch().',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='globalThis'][callee.property.name='fetch'], " +
+            "CallExpression[callee.object.name='window'][callee.property.name='fetch'], " +
+            "CallExpression[callee.object.name='self'][callee.property.name='fetch']",
+          message:
+            'Raw fetch (via globalThis/window/self) is banned outside ' +
+            'src/kernel/net — use NetworkGateway.egress() or localFetch().',
+        },
+        {
+          selector: "NewExpression[callee.name='XMLHttpRequest']",
+          message:
+            'XMLHttpRequest is banned (Phase 7 egress boundary) — use ' +
+            'NetworkGateway.egress() / localFetch() from src/kernel/net.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='sendBeacon']",
+          message:
+            'navigator.sendBeacon is banned (Phase 7 egress boundary) — use ' +
+            'NetworkGateway.egress() from src/kernel/net.',
         },
         {
           selector:
@@ -416,7 +446,11 @@ export default tseslint.config(
   // The './piper-utils' entry died at 5a-PR3 with the module itself (the
   // injectable PiperRuntime replaced it).
   // Same flat-config caveat as the engine block above: same-named rules are
-  // last-wins, so the readwrite selector is restated here.
+  // last-wins, so the readwrite + raw-egress selectors are restated here.
+  // The provider fetch sites migrated onto NetworkGateway.egress() at the P7
+  // merge (their destinations: google-tts/openai-tts/lemonfox-tts/
+  // hf-piper-catalog/hf-piper-models); like the engine block, the egress ban
+  // covers this directory's test files too (suites stub fetch, never call it).
   {
     files: ['src/lib/tts/providers/**/*.{ts,tsx}'],
     rules: {
@@ -429,6 +463,35 @@ export default tseslint.config(
             'readwrite transactions are banned outside src/data — route the ' +
             'write through a @data/repos/* method (every repo writer holds ' +
             'the cross-context IDB write gate).',
+        },
+        {
+          selector: "CallExpression[callee.name='fetch']",
+          message:
+            'Raw fetch is banned outside src/kernel/net (Phase 7 egress ' +
+            'boundary). Remote hosts: NetworkGateway.egress(destinationId, …) ' +
+            'with a kernel/net/destinations.ts registry entry (CSP is ' +
+            'generated from it). Same-origin/blob URLs: localFetch().',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='globalThis'][callee.property.name='fetch'], " +
+            "CallExpression[callee.object.name='window'][callee.property.name='fetch'], " +
+            "CallExpression[callee.object.name='self'][callee.property.name='fetch']",
+          message:
+            'Raw fetch (via globalThis/window/self) is banned outside ' +
+            'src/kernel/net — use NetworkGateway.egress() or localFetch().',
+        },
+        {
+          selector: "NewExpression[callee.name='XMLHttpRequest']",
+          message:
+            'XMLHttpRequest is banned (Phase 7 egress boundary) — use ' +
+            'NetworkGateway.egress() / localFetch() from src/kernel/net.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='sendBeacon']",
+          message:
+            'navigator.sendBeacon is banned (Phase 7 egress boundary) — use ' +
+            'NetworkGateway.egress() from src/kernel/net.',
         },
         {
           selector:

@@ -22,6 +22,7 @@
  *
  * Main-thread only (Worker construction + Cache API + XHR inside the worker).
  */
+import { egress } from '@kernel/net';
 
 /** Same-origin asset layout (mirrors the pre-vendoring /piper/** URLs). */
 const DEFAULT_ASSETS_BASE = '/piper/';
@@ -63,12 +64,15 @@ interface PendingRequest {
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Fetches a URL with exponential backoff retry logic.
+ * Fetches a voice-model URL with exponential backoff retry logic.
  * Useful for downloading large model files over unstable connections.
+ * Routes through `NetworkGateway.egress('hf-piper-models')` (Phase 7 §I):
+ * the destination is unbounded-but-abortable (timeoutMs null) so large
+ * downloads are never killed by a gateway timer.
  */
 export const fetchWithBackoff = async (url: string, retries = 3, delay = 1000): Promise<Blob> => {
     try {
-        const response = await fetch(url);
+        const response = await egress('hf-piper-models', url);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         return await response.blob();
     } catch (error) {

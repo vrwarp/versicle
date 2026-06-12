@@ -37,17 +37,22 @@ Inputs: `plan/overhaul/README.md` (master plan), `proposals/strangler-incrementa
 > `aiConsent` + gateway consent resolver (observe-mode default).
 >
 > **Sub-track follow-ups (owned by the 5b/5c chain merge / later PRs):**
-> 1. The TTS provider fetch sites (`GoogleTTSProvider`, `PiperProvider`, `PiperRuntime`,
->    `BaseCloudProvider`) still raw-fetch — frozen for the parallel chain; their registry
->    entries exist and the lint ban carries the documented `src/lib/tts/engine|providers`
->    exemption to burn down at merge.
-> 2. The two `mockGenAIResponse` reads in `AudioContentPipeline.ts` /
->    `TableAdaptationProcessor.ts` are inert (nothing sets the key) — delete with
->    `ensureGenAIReady()` unification when the chain merges.
+> 1. ~~The TTS provider fetch sites still raw-fetch~~ **DONE at the P7 merge** (`merge(p7)` +
+>    `feat(net)` follow-up): `GoogleTTSProvider` (voices + synthesize), `PiperProvider`
+>    (catalog, offline:'cache-fallback' caller contract), `PiperRuntime.fetchWithBackoff`
+>    (model downloads), `BaseCloudProvider.fetchAudio` (now takes the destination id;
+>    OpenAI/LemonFox name theirs) all route through `egress()`; the
+>    `src/lib/tts/engine|providers` lint exemption is gone — the raw-fetch ban has ZERO
+>    production exemptions outside `src/kernel/net`.
+> 2. ~~The two `mockGenAIResponse` reads are inert~~ **DONE at the P7 merge**: the 5c chain
+>    had already unified them into `genaiReady.ts` (AudioContentPipeline died at 5c-PR2);
+>    its DEV-gated `isMockGenAISeamActive()` localStorage read — the LAST `mockGenAIResponse`
+>    consumer — is deleted. Mocking is exclusively `__versicleTest.genai.setMock()`.
 > 3. Per-book consent is observe-mode: explicit `aiConsent[bookId] === false` denies at the
 >    gateway, but the "ask on first TTS play" prompt + bookId threading through the
->    EngineContext GenAI port are P5c/TTS-UI work; until then non-interactive calls without a
->    bookId are legacy-allowed (documented in app/google/aiConsent.ts).
+>    EngineContext GenAI port are TTS-UI work (5c shipped without it); until then
+>    non-interactive calls without a bookId are legacy-allowed (documented in
+>    app/google/aiConsent.ts).
 > 4. `aiConsent` lives in the device-scoped preferences map (the doc's "synced preferences");
 >    consent therefore syncs per device — grandfathering via synced contentAnalysis records
 >    covers cross-device continuity. Revisit if a user-global home appears.

@@ -55,7 +55,7 @@ export class OpenAIProvider extends BaseCloudProvider {
       // Speed policy: always synthesize at the provider default rate (1.0). The user's
       // playback speed is applied at the audio sink (see BaseCloudProvider.play), so
       // cached audio is speed-independent and never re-synthesized on a rate change.
-      const blob = await this.fetchAudio(url, {
+      const blob = await this.fetchAudio('openai-tts', url, {
           model: 'tts-1',
           input: text,
           voice: options.voiceId,

@@ -1,3 +1,4 @@
+import { egress, type DestinationId } from '@kernel/net';
 import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice, SpeechSegment, Unsubscribe } from './types';
 import { AudioElementPlayer } from '../AudioElementPlayer';
 import type { AudioSink } from '../engine/AudioSink';
@@ -224,10 +225,12 @@ export abstract class BaseCloudProvider implements ITTSProvider {
 
   /**
    * Helper method to perform a POST request and return the response as a Blob.
+   * Routes through `NetworkGateway.egress()` (Phase 7 §I): subclasses name the
+   * registry destination their synthesis endpoint belongs to.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  protected async fetchAudio(url: string, body: any, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<Blob> {
-    const response = await fetch(url, {
+  protected async fetchAudio(destinationId: DestinationId, url: string, body: any, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<Blob> {
+    const response = await egress(destinationId, url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

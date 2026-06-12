@@ -1,3 +1,4 @@
+import { egress } from '@kernel/net';
 import { BaseCloudProvider } from './BaseCloudProvider';
 import { toTTSErrorPayload } from './types';
 import type { TTSOptions, TTSVoice, SpeechSegment } from './types';
@@ -132,7 +133,9 @@ export class PiperProvider extends BaseCloudProvider {
   }
 
   private async refreshVoicesCatalog(): Promise<Record<string, PiperVoiceInfo>> {
-    const response = await fetch(VOICES_CATALOG_URL);
+    // 'hf-piper-catalog' is offline:'cache-fallback' — NET_OFFLINE rejects here
+    // and loadVoicesCatalog() serves the Cache API copy (the caller contract).
+    const response = await egress('hf-piper-catalog', VOICES_CATALOG_URL);
     if (!response.ok) throw new Error('Failed to fetch Piper voices list');
     const text = await response.text();
     await this.runtime.cachePut(VOICES_CATALOG_URL, new Response(text, {

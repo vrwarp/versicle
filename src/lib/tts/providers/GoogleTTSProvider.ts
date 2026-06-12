@@ -1,3 +1,4 @@
+import { egress } from '@kernel/net';
 import { BaseCloudProvider } from './BaseCloudProvider';
 import type { TTSOptions, SpeechSegment, Timepoint } from './types';
 import type { AudioSink } from '../engine/AudioSink';
@@ -55,7 +56,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
   private async fetchVoices() {
       if (!this.apiKey) return;
 
-      const response = await fetch(`https://texttospeech.googleapis.com/v1/voices`, {
+      const response = await egress('google-tts', `https://texttospeech.googleapis.com/v1/voices`, {
           headers: {
               'X-Goog-Api-Key': this.apiKey
           }
@@ -93,7 +94,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
       enableTimePointing: ["SSML_MARK"]
     };
 
-    const response = await fetch(url, {
+    const response = await egress('google-tts', url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

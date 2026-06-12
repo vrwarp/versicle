@@ -106,11 +106,10 @@ export interface EgressDestination {
  * worker assets (`/piper/**` is same-origin), so the report's
  * `cdnjs-onnxruntime` remote-code entry does NOT exist at HEAD.
  *
- * The TTS provider call sites (google-tts/openai-tts/lemonfox-tts/hf-*) live
- * in src/lib/tts/providers/** which is owned by the parallel Phase 5b/5c
- * chain — their entries are declared here (CSP + policy source of truth) and
- * their fetch sites migrate onto egress() when that chain merges (the lint
- * ban carries a documented exemption until then).
+ * The TTS provider call sites (google-tts/openai-tts/lemonfox-tts/hf-*) in
+ * src/lib/tts/providers/** route through egress() since the Phase 7 merge
+ * (the parallel-chain freeze that exempted them is over; the lint ban now
+ * carries zero production exemptions outside src/kernel/net).
  */
 export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
   {

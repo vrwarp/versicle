@@ -12,10 +12,10 @@
  *  - The three `localStorage.getItem('mockGenAIResponse')` production
  *    seams in THIS module are DELETED (GG-4/privacy D9): E2E mocks install
  *    a MockGenAIClient via `window.__versicleTest.genai.setMock(...)`
- *    (src/test-api.ts, DEV/VITE_E2E builds only). The two remaining
- *    `mockGenAIResponse` reads in AudioContentPipeline.ts:473 /
- *    TableAdaptationProcessor.ts:77 are owned by the parallel Phase 5b/5c
- *    chain and are inert now that nothing ever sets the key.
+ *    (src/test-api.ts, DEV/VITE_E2E builds only). The last remaining read
+ *    (the 5c chain's genaiReady.ts DEV-gated seam — AudioContentPipeline
+ *    itself died at 5c-PR2) was deleted at the Phase 7 merge: nothing sets
+ *    the key anywhere.
  *  - `configure()` is a NO-OP: the client reads config per call from the
  *    composition-root provider (useGenAIStore), so the TTS pipeline's
  *    hardcoded `configure(apiKey, 'gemini-1.5-flash')` clobber is

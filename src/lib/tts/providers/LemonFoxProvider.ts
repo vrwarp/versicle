@@ -83,7 +83,7 @@ export class LemonFoxProvider extends BaseCloudProvider {
       response_format: 'mp3'
     };
 
-    const blob = await this.fetchAudio(url, body, {
+    const blob = await this.fetchAudio('lemonfox-tts', url, body, {
       'Authorization': `Bearer ${this.apiKey}`
     }, signal);
 

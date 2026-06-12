@@ -998,10 +998,12 @@ Deferred work recorded at the phase boundary; owners are the named phases.
   guards in `playInternal`/`handleContentAnalysisUpdate` (5b deviation 7) are
   candidates for epoch-checkpoint conversion under their own riders.
 - **P7**: extraction-v3/NFKD background re-ingestion driver
-  (extractionVersion-keyed job queue); `GenAIClient` replaces the DEV-gated
-  `mockGenAIResponse` seam end-to-end (5c-PR2 gated it out of prod paths in
-  the pipeline; `GenAIService.isConfigured` still honors it internally);
-  `SentenceExtractor` rewrite at `domains/library/ingestion/`.
+  (extractionVersion-keyed job queue); ~~`GenAIClient` replaces the DEV-gated
+  `mockGenAIResponse` seam end-to-end~~ DONE at the P7 google/genai/egress
+  merge — `genaiReady.ts` lost `isMockGenAISeamActive()`, the last reader of
+  the key; mocking is exclusively `__versicleTest.genai.setMock()`. The TTS
+  provider fetch sites also migrated onto `NetworkGateway.egress()` there.
+  Still P7: `SentenceExtractor` rewrite at `domains/library/ingestion/`.
   `TableAdaptationProcessor` still carries its own inline TOC title lookup —
   fold into the shared `findTocItem` path when P7 touches it.
 - **P8**: piper-asset PWA runtime caching (recorded at 5a-PR3); settings

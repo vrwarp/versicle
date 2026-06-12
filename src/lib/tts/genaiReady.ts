@@ -4,21 +4,21 @@
  * the duplicated `canUseGenAI` + `'gemini-1.5-flash'` fallback blocks in
  * AudioContentPipeline and TableAdaptationProcessor.
  *
- * The `mockGenAIResponse` localStorage seam is gated behind
- * `import.meta.env.DEV || VITE_E2E` here (it was reachable in production
- * builds before — content debt D8). Full MockGenAIClient-at-composition-root
- * replacement is Phase 7 scope.
+ * The `mockGenAIResponse` localStorage seam this module used to honor died
+ * at the Phase 7 merge (GG-4/privacy D9): nothing sets the key anymore —
+ * E2E/dev mocks install a MockGenAIClient at the composition root via
+ * `window.__versicleTest.genai.setMock(...)` (src/test-api.ts), and the
+ * port's isConfigured() reflects it transparently.
+ *
+ * Post-P7 note: the production port's configure() is a documented no-op
+ * (config is read per call from the composition-root provider — GG-8), so
+ * the configure branch below only matters for injected fakes; it stays
+ * until the EngineContext GenAI port is narrowed (P7 follow-up).
  */
 import type { GenAIPort } from './engine/EngineContext';
 
 /** The model id used when a key exists but the client was never configured. */
 const FALLBACK_MODEL = 'gemini-1.5-flash';
-
-/** True when the E2E/DEV mock seam is active (never in production builds). */
-export function isMockGenAISeamActive(): boolean {
-    if (!(import.meta.env.DEV || import.meta.env.VITE_E2E)) return false;
-    return typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse');
-}
 
 /**
  * Returns true when the GenAI client is enabled and configured (configuring
@@ -30,7 +30,7 @@ export async function ensureGenAIReady(genAI: GenAIPort): Promise<boolean> {
     if (!settings.isEnabled) return false;
 
     const configured = await genAI.isConfigured();
-    if (!configured && !settings.apiKey && !isMockGenAISeamActive()) return false;
+    if (!configured && !settings.apiKey) return false;
 
     if (!configured && settings.apiKey) {
         genAI.configure(settings.apiKey, FALLBACK_MODEL);
