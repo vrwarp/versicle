@@ -26,12 +26,20 @@ export const DEVICE_B = 'fixture-device-b';
 export const BOOK_EN = 'fixture-book-alice';
 export const BOOK_CJK = 'fixture-book-hongloumeng';
 
+/* Era 6 (added for the v7 vocabulary canonicalization, Phase 6 PR-13):
+ * the TERMINAL v6 shape — meta map present, preferences folded WITH the
+ * legacy per-device husks retained (copy-without-clear), popover deleted —
+ * plus a vocabulary carrying TRADITIONAL keys and one trad/simp duplicate
+ * pair (紅 @T0 vs 红 @T1) to exercise the v7 min-timestamp merge. The
+ * duplicate's merged value (min = T0) equals the older eras' migrated 紅
+ * timestamp, so the cross-era canonical-equality invariant holds. */
+
 /** Era-plausible fixed timestamps (ms). */
 const T0 = 1740000000000; // base
 const T1 = 1740000600000;
 const T2 = 1740001200000;
 
-export type FixtureEra = 1 | 2 | 4 | 5;
+export type FixtureEra = 1 | 2 | 4 | 5 | 6;
 
 export interface EraSeed {
   /** Y.Map name → plain-JSON content to encode with the era's string mapping. */
@@ -185,6 +193,11 @@ const vocabulary = {
   knownCharacters: { 紅: T0, 樓: T1, 夢: T2 },
 };
 
+/** Era-6 vocabulary: traditional keys + the trad/simp duplicate pair. */
+const vocabularyV6 = {
+  knownCharacters: { 紅: T0, 红: T1, 樓: T1, 夢: T2 },
+};
+
 const lexicon = {
   rules: {
     'fixture-rule-1': {
@@ -251,16 +264,29 @@ export const seedFor = (era: FixtureEra): EraSeed => ({
     progress: { progress: progressFor(era) },
     annotations: {
       annotations,
-      ...(era >= 4 ? { popover: stalePopover } : {}),
+      // The stale popover key exists only in the pre-v6 eras (the v6
+      // migration deletes it; the era-6 fixture is the terminal v6 shape).
+      ...(era === 4 || era === 5 ? { popover: stalePopover } : {}),
     },
+    // The legacy per-device maps survive v6 as husks (copy-without-clear).
     [`preferences/${DEVICE_A}`]: preferencesFor(era, DEVICE_A),
     [`preferences/${DEVICE_B}`]: preferencesFor(era, DEVICE_B),
+    // v6+: the folded keyed map + the staged meta surface.
+    ...(era >= 6
+      ? {
+          preferences: {
+            [DEVICE_A]: preferencesFor(era, DEVICE_A),
+            [DEVICE_B]: preferencesFor(era, DEVICE_B),
+          },
+          meta: { schemaVersion: 6 },
+        }
+      : {}),
     'reading-list': { entries: readingList },
-    vocabulary,
+    vocabulary: era >= 6 ? vocabularyV6 : vocabulary,
     lexicon,
     contentAnalysis,
     devices,
   },
 });
 
-export const FIXTURE_ERAS: readonly FixtureEra[] = [1, 2, 4, 5];
+export const FIXTURE_ERAS: readonly FixtureEra[] = [1, 2, 4, 5, 6];

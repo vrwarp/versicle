@@ -106,10 +106,21 @@ describe('ydoc fixture manifest guard', () => {
       expect(sessions.every((s) => typeof s.startTime === 'number')).toBe(true);
     }
 
-    // Stale popover key: v4/v5 only (pre-hotfix annotations shape).
-    expect(doc.getMap('annotations').has('popover')).toBe(era >= 4);
+    // Stale popover key: v4/v5 only (pre-hotfix annotations shape; the v6
+    // migration deletes it, so the era-6 terminal-shape fixture lacks it).
+    expect(doc.getMap('annotations').has('popover')).toBe(era === 4 || era === 5);
 
     // fontProfiles exists from v5 on (the v4→v5 backfill).
     expect(doc.getMap(`preferences/${DEVICE_A}`).has('fontProfiles')).toBe(era >= 5);
+
+    // v6: terminal-v6 shape — folded preferences + staged meta surface +
+    // TRADITIONAL vocabulary keys incl. the 紅/红 duplicate pair (the
+    // v7 canonicalization input, Phase 6 PR-13).
+    if (era >= 6) {
+      expect(doc.getMap('meta').get('schemaVersion')).toBe(6);
+      expect((doc.getMap('preferences').get(DEVICE_A) as Y.Map<unknown>).has('fontProfiles')).toBe(true);
+      const vocab = (doc.getMap('vocabulary').get('knownCharacters') as Y.Map<unknown>).toJSON();
+      expect(Object.keys(vocab).sort()).toEqual(['樓', '紅', '红', '夢'].sort());
+    }
   });
 });

@@ -17,7 +17,11 @@ const logger = createLogger('YjsProvider');
 // v6: popover residual key deleted, `meta` map dual-write (N+1 staged),
 // preferences folded to one keyed map (copy-without-clear) — see
 // plan/overhaul/prep/phase2-fork-surgery.md §5.3.
-export const CURRENT_SCHEMA_VERSION = 6;
+// v7: vocabulary simplified-key canonicalization (Phase 6 §7.5, CH-6) —
+// traditional knownCharacters keys merge into their simplified form
+// (min-timestamp). Program numbering decision: v8 = reading-list bookId
+// FK (post-library-track), v9 = husk-clearing + dual-write retirement (P9).
+export const CURRENT_SCHEMA_VERSION = 7;
 
 // Singleton Y.Doc - Source of Truth for User Data. Constructed lazily on
 // first access instead of at module scope: importing this module (e.g. for

@@ -2,6 +2,7 @@ import React from 'react';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useVocabularyStore } from '@store/useVocabularyStore';
 import { ReaderOverlay } from '@domains/reader/ui/ReaderOverlay';
+import { canonicalizeChar } from '@domains/chinese/vocabulary/canonicalize';
 import type { PinyinPosition } from '@domains/chinese/types';
 
 /**
@@ -51,7 +52,10 @@ export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({
 
   return (
     <ReaderOverlay mode="decorative" containerNode={containerNode} className="z-[10]">
-      {positions.filter(pos => !knownCharacters[pos.char]).map((pos, idx) => (
+      {/* Known-character suppression compares the CANONICAL (simplified)
+          form of the DISPLAYED char (CH-6 read path, CRDT v7): suppression
+          works identically in Simplified and Traditional display modes. */}
+      {positions.filter(pos => !knownCharacters[canonicalizeChar(pos.char)]).map((pos, idx) => (
         <span
           key={`${pos.char}-${idx}`}
           className="absolute text-muted-foreground whitespace-nowrap transition-opacity duration-200 font-pinyin"

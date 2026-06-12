@@ -37,7 +37,7 @@ import { DEVICE_A, DEVICE_B, BOOK_EN, BOOK_CJK } from '@test/fixtures/ydoc/seed'
 // resolve from the repo root instead (vitest always runs from it).
 const fixtureDir = join(process.cwd(), 'src', 'test', 'fixtures', 'ydoc');
 
-const loadDoc = (era: 1 | 2 | 4 | 5): Y.Doc => {
+const loadDoc = (era: 1 | 2 | 4 | 5 | 6): Y.Doc => {
   const doc = new Y.Doc();
   Y.applyUpdate(doc, new Uint8Array(readFileSync(join(fixtureDir, `v${era}.update.bin`))));
   return doc;
@@ -68,8 +68,11 @@ const docJson = (doc: Y.Doc): Record<string, unknown> => {
   return json;
 };
 
-const migrate = (doc: Y.Doc, checkpointId = 1) =>
-  runCrdtMigrationsOnDoc(doc, { createCheckpoint: stubCheckpoint(checkpointId)(doc) });
+const migrate = (doc: Y.Doc, checkpointId = 1, options: { targetVersion?: number } = {}) =>
+  runCrdtMigrationsOnDoc(doc, {
+    createCheckpoint: stubCheckpoint(checkpointId)(doc),
+    ...options,
+  });
 
 afterEach(() => {
   __resetCrdtMigrationsForTests();
@@ -77,19 +80,19 @@ afterEach(() => {
 
 // ─── F.3: fixture migration matrix ───────────────────────────────────────────
 
-describe('F.3 migration matrix — committed era fixtures → v6', () => {
-  const eras = [1, 2, 4, 5] as const;
+describe('F.3 migration matrix — committed era fixtures → v7', () => {
+  const eras = [1, 2, 4, 5, 6] as const;
 
-  it.each(eras)('v%i → v6: post-migration invariants hold', async (era) => {
+  it.each(eras)('v%i → v7: post-migration invariants hold', async (era) => {
     const doc = loadDoc(era);
     const result = await migrate(doc, 7);
 
-    expect(result).toEqual({ status: 'migrated', from: era, to: 6, checkpointId: 7 });
+    expect(result).toEqual({ status: 'migrated', from: era, to: 7, checkpointId: 7 });
 
     // Atomic dual version bump (meta is the N+1-staged surface).
-    expect(doc.getMap('meta').get('schemaVersion')).toBe(6);
-    expect(doc.getMap('library').get('__schemaVersion')).toBe(6);
-    expect(readDocSchemaVersion(doc)).toBe(6);
+    expect(doc.getMap('meta').get('schemaVersion')).toBe(7);
+    expect(doc.getMap('library').get('__schemaVersion')).toBe(7);
+    expect(readDocSchemaVersion(doc)).toBe(7);
 
     // v6 scope 1: the residual popover key is gone; annotations intact.
     expect(doc.getMap('annotations').has('popover')).toBe(false);
@@ -136,6 +139,16 @@ describe('F.3 migration matrix — committed era fixtures → v6', () => {
     }).books;
     expect(books[BOOK_EN].title).toBe("Alice's Adventures in Wonderland");
     expect(books[BOOK_CJK].title).toBe('紅樓夢');
+
+    // v7 scope: vocabulary keys CANONICALIZED to simplified, timestamps
+    // preserved; the era-6 fixture's 紅(T0)/红(T1) duplicate pair merged
+    // with min-timestamp semantics (min = T0 — equal to the older eras'
+    // migrated 紅 timestamp, so all eras stay canonically equal). Book
+    // TITLES are untouched: only vocabulary keys canonicalize.
+    const vocab = (doc.getMap('vocabulary').toJSON() as {
+      knownCharacters: Record<string, number>;
+    }).knownCharacters;
+    expect(vocab).toEqual({ 红: 1740000000000, 楼: 1740000600000, 梦: 1740001200000 });
   });
 
   it('all eras terminate in canonically-equal doc JSON', async () => {
@@ -163,7 +176,7 @@ describe('F.3 migration matrix — committed era fixtures → v6', () => {
       },
     });
     expect(second.status).toBe('noop');
-    expect(second.from).toBe(6);
+    expect(second.from).toBe(7);
     expect(checkpointAgain).not.toHaveBeenCalled(); // no checkpoint on a no-op
     expect(docJson(doc)).toEqual(after);
   });
@@ -181,7 +194,11 @@ describe('F.3 migration matrix — committed era fixtures → v6', () => {
     expect(docJson(docA)).toEqual(docJson(docB));
     expect(docA.getMap('annotations').has('popover')).toBe(false);
     expect([...docA.getMap('preferences').keys()].sort()).toEqual([DEVICE_A, DEVICE_B]);
-    expect(readDocSchemaVersion(docA)).toBe(6);
+    // v7 ran in both clients concurrently: canonical keys, converged.
+    expect(
+      [...(docA.getMap('vocabulary').get('knownCharacters') as Y.Map<unknown>).keys()].sort(),
+    ).toEqual(['梦', '楼', '红'].sort());
+    expect(readDocSchemaVersion(docA)).toBe(7);
   });
 
   it('v1 + v5 clients: staggered-era migrations merge to the same terminal state', async () => {
@@ -315,7 +332,7 @@ describe('coordinator invariants', () => {
     // re-run (after the cause is fixed) picks up from the same version.
     expect(readDocSchemaVersion(doc)).toBe(5);
     const recovery = await migrate(doc);
-    expect(recovery).toMatchObject({ status: 'migrated', from: 5, to: 6 });
+    expect(recovery).toMatchObject({ status: 'migrated', from: 5, to: 7 });
   });
 
   it('a version gap fails loudly (no silent skip)', async () => {
@@ -344,8 +361,9 @@ describe('coordinator invariants', () => {
 
     await migrate(doc);
 
-    // The v5 fixture needs exactly one step (5→6) → exactly one transaction.
-    expect(origins).toEqual([MIGRATION_ORIGIN]);
+    // The v5 fixture needs two steps (5→6, 6→7) → exactly two transactions,
+    // each carrying its transform + dual bump atomically.
+    expect(origins).toEqual([MIGRATION_ORIGIN, MIGRATION_ORIGIN]);
     expect(popoverGoneWhenBumped).toBe(true);
   });
 
@@ -376,9 +394,11 @@ describe('F.2 two-client quarantine — v5 stack vs migrated v6 doc', () => {
   }
 
   it('onObsolete(6) fires before any store patch; outbound halts; D5 residual pinned', async () => {
-    // Client A: the current stack migrates a v5 doc to v6.
+    // Client A: the (then-)current stack migrates a v5 doc to v6. Pinned at
+    // targetVersion 6 — this case documents the v6-era quarantine; the v7
+    // pairing has its own describe below (program rule 6 is standing).
     const docA = loadDoc(5);
-    await migrate(docA);
+    await migrate(docA, 1, { targetVersion: 6 });
     const v6Update = Y.encodeStateAsUpdate(docA);
 
     // Client B: a v5-era stack — middleware configured schemaVersion: 5 —
@@ -470,4 +490,124 @@ describe('F.2 two-client quarantine — v5 stack vs migrated v6 doc', () => {
   it.todo(
     'Playwright journey (nightly lane): v5-overridden client locks (ObsoleteLockView) against a v6 workspace and stays locked across reload',
   );
+});
+
+// ─── F.2 (v7): two-client quarantine — v6 stack vs migrated v7 doc ──────────
+// Program rule 6 is STANDING: every schema bump ships its own two-client
+// upgrade test. v7 = the vocabulary simplified-key canonicalization
+// (Phase 6 §7.5, PR-13).
+
+describe('F.2 two-client quarantine — v6 stack vs migrated v7 doc', () => {
+  interface LibraryMirror {
+    __schemaVersion: number;
+    books: Record<string, { title: string }>;
+    setBooks: (books: Record<string, { title: string }>) => void;
+  }
+  interface VocabularyMirror {
+    knownCharacters: Record<string, number>;
+    mark: (char: string) => void;
+  }
+
+  it('onObsolete(7) fires before any store patch; outbound halts; Y-level vocab merge pinned', async () => {
+    // Client A: the current stack migrates a v6 doc (traditional keys +
+    // the 紅/红 duplicate pair) to v7.
+    const docA = loadDoc(6);
+    await migrate(docA);
+    const v7Update = Y.encodeStateAsUpdate(docA);
+
+    // Client B: a v6-era stack — middleware configured schemaVersion: 6.
+    const docB = loadDoc(6);
+    let versionInStateWhenObsoleteFired: number | undefined;
+    const onObsolete = vi.fn(() => {
+      versionInStateWhenObsoleteFired = libraryB.getState().__schemaVersion;
+    });
+    const libraryB = createStore<LibraryMirror>()(
+      yjsMiddleware(
+        docB,
+        'library',
+        (set) => ({
+          __schemaVersion: 1,
+          books: {},
+          setBooks: (books) => set({ books }),
+        }),
+        { disableYText: true, schemaVersion: 6, onObsolete },
+      ),
+    );
+    const vocabularyB = createStore<VocabularyMirror>()(
+      yjsMiddleware(
+        docB,
+        'vocabulary',
+        (set) => ({
+          knownCharacters: {},
+          mark: (char) =>
+            set((state) => ({ knownCharacters: { ...state.knownCharacters, [char]: 1 } })),
+        }),
+        { disableYText: true, schemaVersion: 6, onObsolete: vi.fn() },
+      ),
+    );
+    await drain();
+
+    // Pre-quarantine: B hydrated the v6 doc — traditional keys included.
+    expect(libraryB.getState().__schemaVersion).toBe(6);
+    expect(Object.keys(vocabularyB.getState().knownCharacters).sort()).toEqual(
+      ['樓', '紅', '红', '夢'].sort(),
+    );
+
+    // The v7 doc arrives (cloud merge / provider update).
+    Y.applyUpdate(docB, v7Update);
+
+    // Quarantine fired synchronously, with the incoming version, BEFORE any
+    // store patch (state still showed v6 inside the callback).
+    expect(onObsolete).toHaveBeenCalledTimes(1);
+    expect(onObsolete).toHaveBeenCalledWith(7);
+    expect(versionInStateWhenObsoleteFired).toBe(6);
+
+    await drain();
+
+    // The library store was never patched with v7 data…
+    expect(libraryB.getState().__schemaVersion).toBe(6);
+
+    // …and the GUARDED store's outbound is permanently halted: a library
+    // write reaches neither the doc nor the wire.
+    let libraryUpdatesAfterQuarantine = 0;
+    const countLibrary = () => {
+      libraryUpdatesAfterQuarantine += 1;
+    };
+    docB.on('update', countLibrary);
+    libraryB.getState().setBooks({});
+    await drain();
+    expect(libraryUpdatesAfterQuarantine).toBe(0);
+    docB.off('update', countLibrary);
+
+    // PINNED RESIDUAL (middleware tier, same shape as the v6 case): maps
+    // WITHOUT a __schemaVersion key never quarantine — a v6 client's fresh
+    // traditional-key write still lands in its LOCAL doc. What actually
+    // stops it fleet-wide is the bump itself: handleObsoleteClient locks the
+    // UI and the P4 doc-level layers sever the provider (zero outbound), so
+    // the local residual never reaches the v7 workspace — and if a stale
+    // local copy later merges, any v7 client's read path suppresses the
+    // traditional key (it canonicalizes the displayed char) even though the
+    // doc key itself stays until a future sweep.
+    vocabularyB.getState().mark('舊');
+    await drain();
+    expect(
+      (docB.getMap('vocabulary').get('knownCharacters') as Y.Map<unknown>).has('舊'),
+    ).toBe(true);
+
+    // The Y-level merge has already happened — the local doc carries the
+    // canonicalized v7 keys with the min-merged duplicate timestamp. The
+    // middleware pill cannot undo a CRDT merge; the P4 doc-level layers
+    // gate the live sync paths.
+    const mergedVocab = (
+      docB.getMap('vocabulary').get('knownCharacters') as Y.Map<unknown>
+    ).toJSON();
+    expect(mergedVocab).toEqual({
+      红: 1740000000000,
+      楼: 1740000600000,
+      梦: 1740001200000,
+      舊: 1, // the residual local write pinned above
+    });
+    expect(docB.getMap('library').get('__schemaVersion')).toBe(7);
+    expect(docB.getMap('meta').get('schemaVersion')).toBe(7);
+  });
 });

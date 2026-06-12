@@ -77,22 +77,25 @@ describe('characterization: PinyinOverlay (P6 entry gate)', () => {
     expect(spans[0].textContent).toBe('wén');
   });
 
-  it('CH-6 pin: a char known under its simplified key is NOT suppressed when displayed traditional', () => {
+  it('CH-6 fixed (rewritten pin): a char known under its simplified key IS suppressed when displayed traditional', () => {
     // 书 (simplified) is known; the displayed glyph is 書 (traditional).
-    // CURRENT behavior keys on the displayed char, so suppression misses —
-    // PR-13 (vocabulary canonicalization) changes this deliberately and
-    // must rewrite this pin in the same commit.
+    // PR-13 (vocabulary canonicalization, CRDT v7): the filter
+    // canonicalizes the DISPLAYED char before the lookup, so suppression
+    // works in both display scripts. Rewritten in the PR-13 commit — an
+    // enumerated characterization delta, per the pin's own instruction.
     useVocabularyStore.setState({ knownCharacters: { 书: 1 } });
 
     render(
       <PinyinOverlay
-        positions={[pos('書', 'shū', 55)]}
+        positions={[pos('書', 'shū', 55), pos('文', 'wén', 65)]}
         pinyinSize={100}
         containerNode={container}
       />,
     );
 
-    expect(container.querySelectorAll('span').length).toBe(1);
+    const spans = container.querySelectorAll('span');
+    expect(spans.length).toBe(1);
+    expect(spans[0].textContent).toBe('wén');
   });
 
   it('renders nothing without a container node or positions', () => {

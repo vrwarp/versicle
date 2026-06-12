@@ -76,6 +76,25 @@
         "reading-list.entries: 1; vocabulary.knownCharacters: 3; lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
         "strings are plain (disableYText era)"
       ]
+    },
+    "v6": {
+      "era": 6,
+      "file": "v6.update.bin",
+      "sha256": "b0b48f530bddc1e10e3f3510a93d3f431cf64f364b2f4286456ec408ad6d1ea7",
+      "method": "writer-current-mapping",
+      "fidelityNote": "Full fidelity: plain-JSON-into-Y-types via the vendored middleware mapping (v4+ encoding is exactly this).",
+      "generator": "scripts/capture-ydoc-fixture.ts",
+      "generatorSha": "175698e3ed163b55e1e05038393a4bbf6eb7534b",
+      "capturedAt": "2026-06-12T15:23:31.982Z",
+      "contentChecklist": [
+        "library.__schemaVersion === 6",
+        "library.books: 2 books (one CJK title)",
+        "progress: 2 devices, sessions valid",
+        "annotations: 2 annotations",
+        "preferences/<dev-a|dev-b>: scalar prefs + fontProfiles (v6 husks) + folded preferences map + meta.schemaVersion=6",
+        "reading-list.entries: 1; vocabulary.knownCharacters: 4 TRADITIONAL keys incl. the 紅/红 duplicate pair (v7 min-merge); lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
+        "strings are plain (disableYText era)"
+      ]
     }
   }
 }

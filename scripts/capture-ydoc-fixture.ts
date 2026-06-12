@@ -157,9 +157,11 @@ for (const era of eras) {
       `library.__schemaVersion === ${era}`,
       'library.books: 2 books (one CJK title)',
       `progress: 2 devices${era === 1 ? ', one INVALID session (startTime: "corrupt")' : ', sessions valid'}`,
-      `annotations: 2 annotations${era >= 4 ? ' + stale top-level popover key' : ''}`,
-      `preferences/<dev-a|dev-b>: scalar prefs${era >= 5 ? ' + fontProfiles' : ' WITHOUT fontProfiles'}`,
-      'reading-list.entries: 1; vocabulary.knownCharacters: 3; lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2',
+      `annotations: 2 annotations${era === 4 || era === 5 ? ' + stale top-level popover key' : ''}`,
+      `preferences/<dev-a|dev-b>: scalar prefs${era >= 5 ? ' + fontProfiles' : ' WITHOUT fontProfiles'}${era >= 6 ? ' (v6 husks) + folded preferences map + meta.schemaVersion=6' : ''}`,
+      era >= 6
+        ? 'reading-list.entries: 1; vocabulary.knownCharacters: 4 TRADITIONAL keys incl. the 紅/红 duplicate pair (v7 min-merge); lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2'
+        : 'reading-list.entries: 1; vocabulary.knownCharacters: 3; lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2',
       era >= 4 ? 'strings are plain (disableYText era)' : 'strings are Y.Text (pre-v4 era)',
     ],
   };

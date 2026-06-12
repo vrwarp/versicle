@@ -43,6 +43,7 @@ import * as Y from 'yjs';
 import { getYDoc, CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
 import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
 import { readDocSchemaVersion } from '@domains/sync/core/quarantine';
+import { canonicalizeChar, mergeCanonicalTimestamps } from '@domains/chinese/vocabulary/canonicalize';
 import { AppError } from '~types/errors';
 import { createLogger } from '@lib/logger';
 
@@ -221,6 +222,41 @@ const migrateV5toV6 = (doc: Y.Doc): void => {
 };
 
 /**
+ * v6 → v7 (Phase 6 §7.5, prep/phase6-reader-engine.md PR-13, CH-6 —
+ * program decision: the vocabulary canonicalization IS the v7 bump, so the
+ * standing quarantine machinery keeps any not-yet-upgraded client from
+ * writing fresh traditional keys into a canonicalized doc):
+ *
+ * Every `vocabulary.knownCharacters` key is rewritten to its SIMPLIFIED
+ * form via the COMMITTED single-char trad→simp table (the inverse of the
+ * exact OpenCC cn→tw mapping the reader displays with). Duplicate pairs
+ * (both 紅 and 红 present) merge with min-timestamp semantics — earliest
+ * knowledge wins. Deterministic (sorted iteration, code-versioned table)
+ * and idempotent (canonical keys map to themselves), so concurrent
+ * migrations by two clients converge per the coordinator's LWW core.
+ *
+ * Deliberately NOT here: husk-clearing + dual-write retirement (earmarked
+ * v9/P9 per the program numbering decision; v8 = reading-list bookId FK).
+ */
+const canonicalizeVocabularyKeys = (doc: Y.Doc): void => {
+  const knownCharacters = doc.getMap('vocabulary').get('knownCharacters');
+  if (!(knownCharacters instanceof Y.Map)) return;
+
+  for (const key of [...knownCharacters.keys()].sort()) {
+    const canonical = canonicalizeChar(key);
+    if (canonical === key) continue;
+    const merged = mergeCanonicalTimestamps(
+      knownCharacters.get(canonical),
+      knownCharacters.get(key),
+    );
+    if (merged !== undefined && knownCharacters.get(canonical) !== merged) {
+      knownCharacters.set(canonical, merged);
+    }
+    knownCharacters.delete(key);
+  }
+};
+
+/**
  * The ordered migration registry. `from: 3` exists because v3 was a pure
  * version bump (Firestore path change, no doc-shape change) — the legacy
  * runner folded v2/v3 into one branch.
@@ -231,6 +267,7 @@ export const CRDT_MIGRATIONS: readonly CrdtMigration[] = [
   { from: 3, to: 4, migrate: () => undefined }, // pure bump (v3 was itself a pure bump)
   { from: 4, to: 5, migrate: backfillFontProfiles },
   { from: 5, to: 6, migrate: migrateV5toV6 },
+  { from: 6, to: 7, migrate: canonicalizeVocabularyKeys },
 ];
 
 // ─── The runner ──────────────────────────────────────────────────────────────

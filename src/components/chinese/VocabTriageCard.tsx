@@ -21,6 +21,7 @@ import {
   type DictionaryStatus,
 } from '@domains/chinese/dictionary/DictionaryService';
 import type { CompoundHit } from '@domains/chinese/dictionary/compoundLookup';
+import { canonicalizeChar } from '@domains/chinese/vocabulary/canonicalize';
 import { HAN_RE } from '@domains/chinese';
 import { GraduationCap, X, Check } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -230,7 +231,10 @@ export const VocabTriageCard: React.FC<{ text: string }> = ({ text }) => {
             );
           }
 
-          const isKnown = !!knownCharacters[char];
+          // isKnown compares the CANONICAL (simplified) form (CH-6 read
+          // path, CRDT v7) — the tile shows known-state regardless of the
+          // display script; the store action canonicalizes the write.
+          const isKnown = !!knownCharacters[canonicalizeChar(char)];
           const tile = tiles.get(index);
 
           return (

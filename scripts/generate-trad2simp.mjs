@@ -64,15 +64,93 @@ for (const [start, end] of RANGES) {
     }
   }
 }
+// Characters pass 1 established as CANONICAL (simplified) forms must never
+// become keys: mutual variant preferences (cn prefers 镢, tw prefers 䦆 —
+// cn2tw(镢)=䦆 AND tw2cn(镢)=䦆) would otherwise create 2-cycles that flip
+// the table's direction for one of the pair.
+const canonical = new Set(Object.values(table));
 for (const [start, end] of RANGES) {
   for (let cp = start; cp <= end; cp++) {
     const trad = String.fromCodePoint(cp);
-    if (trad in table) continue;
+    if (trad in table || canonical.has(trad)) continue;
     const simp = tw2cn(trad);
     if (simp !== trad && Array.from(simp).length === 1) {
       table[trad] = simp;
       directCount++;
     }
+  }
+}
+
+// Normalization passes, iterated to a FIXPOINT (each can enable the next):
+//
+//  CHAIN RESOLUTION (idempotence invariant): pass 2 can emit values that
+//  are themselves keys (variant K → 喫 while 喫 → 吃) — resolve every
+//  value transitively; drop self-mappings; a cycle keeps the original.
+//
+//  DISPLAY CLOSURE (round-trip invariant): for every canonical value, the
+//  reader's cn→tw display form must canonicalize back. Values can live
+//  outside the iterated BMP ranges (tw2cn emits astral simplified forms),
+//  so display forms are added regardless of plane.
+//
+//  CLASS UNIFICATION (one representative per display class): cn2tw is
+//  many-to-one (cn2tw(镢) = cn2tw(䦆) = 钁) — two distinct "canonical"
+//  values sharing a display form would make suppression depend on which
+//  one the user stored. The display key's existing value becomes the class
+//  representative; the other value becomes a key onto it.
+let resolved = 0;
+let closure = 0;
+let unified = 0;
+for (let iteration = 0; iteration < 8; iteration++) {
+  let changed = false;
+
+  for (const key of Object.keys(table)) {
+    let value = table[key];
+    const seen = new Set([key]);
+    while (value in table && !seen.has(value)) {
+      seen.add(value);
+      value = table[value];
+    }
+    if (value !== table[key]) {
+      table[key] = value;
+      resolved++;
+      changed = true;
+    }
+    if (key === table[key]) {
+      delete table[key];
+      changed = true;
+    }
+  }
+
+  for (const value of new Set(Object.values(table))) {
+    const displayed = cn2tw(value);
+    if (displayed === value || Array.from(displayed).length !== 1) continue;
+    if (!(displayed in table)) {
+      table[displayed] = value;
+      closure++;
+      changed = true;
+    } else if (table[displayed] !== value && !(value in table)) {
+      // Same display form, different representative: unify the class.
+      table[value] = table[displayed];
+      unified++;
+      changed = true;
+    }
+  }
+
+  if (!changed) break;
+}
+
+// Self-check the two invariants the committed artifact guarantees
+// (src/domains/chinese/vocabulary/canonicalize.test.ts re-asserts them).
+for (const [key, value] of Object.entries(table)) {
+  if (value in table) throw new Error(`non-canonical value: ${key} → ${value}`);
+  if (Array.from(key).length !== 1 || Array.from(value).length !== 1) {
+    throw new Error(`multi-code-point entry: ${key} → ${value}`);
+  }
+}
+for (const value of new Set(Object.values(table))) {
+  const displayed = cn2tw(value);
+  if (Array.from(displayed).length === 1 && displayed !== value && table[displayed] !== value) {
+    throw new Error(`display round-trip broken: ${value} displays as ${displayed} → ${table[displayed]}`);
   }
 }
 
@@ -91,6 +169,9 @@ writeFileSync(
       entryCount: Object.keys(sorted).length,
       fromInverseOfDisplayMapping: inverseCount,
       fromDirectTw2Cn: directCount,
+      chainResolved: resolved,
+      displayClosureAdded: closure,
+      displayClassUnified: unified,
       rationale:
         'Must invert the EXACT cn→tw mapping the reader displays with ' +
         '(TraditionalConverter), and must be a committed code-versioned ' +
@@ -103,5 +184,6 @@ writeFileSync(
 
 console.log(
   `trad2simp.json: ${Object.keys(sorted).length} entries ` +
-    `(${inverseCount} inverse-of-display, ${directCount} direct tw2cn) — opencc-js@${openccVersion}`,
+    `(${inverseCount} inverse-of-display, ${directCount} direct tw2cn, ` +
+    `${resolved} chain-resolved, ${closure} display-closure, ${unified} class-unified) — opencc-js@${openccVersion}`,
 );
