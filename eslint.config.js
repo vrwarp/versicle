@@ -253,6 +253,118 @@ export default tseslint.config(
       ],
     },
   },
+  // Phase 6 epubjs boundary (master plan §2 rule 8, born at ERROR): only the
+  // reader engine imports the epub.js RUNTIME — `EpubJsEngine.ts` is the one
+  // construction entry (`createEpubJsBook`). Enforced via the TS flavor of
+  // no-restricted-imports so TYPE-ONLY epubjs imports stay legal everywhere
+  // (`allowTypeImports`): the remaining type users (useEpubReader's
+  // Book/Rendition plumbing, lib/search.ts + SearchPanel's `Book` — the
+  // library-track-owned indexing API, kernel/cfi/snap.ts) carry no runtime
+  // dependency. Named runtime exceptions with deletion deadline P7
+  // (carve-out blocks below): src/lib/ingestion.ts + src/lib/
+  // offscreen-renderer.ts (the offscreen ingestion path — its §3 relocation
+  // into engine/offscreen/ waits for the parallel P7 library track that owns
+  // its callers). The `epubjs/src/epubcfi` submodule is additionally banned
+  // EVERYWHERE except the kernel's quarantine shim
+  // (src/kernel/cfi/epubcfiShim.ts — see cfi.kernel-boundary.test.ts).
+  // Tests are exempt (production-boundary rule; fixtures mock epubjs).
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    // .d.ts: ambient declaration files (epubjs-epubcfi.d.ts maps the
+    // submodule's types) — declarations carry no runtime imports.
+    ignores: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/**/*.d.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'epubjs',
+              allowTypeImports: true,
+              message:
+                'Runtime epub.js is the reader engine\'s exclusive dependency ' +
+                '(Phase 6, master plan §2 rule 8). Consume the ReaderEngine ' +
+                'port (@domains/reader/engine/ReaderEngine) instead; the ' +
+                'engine constructs books via createEpubJsBook.',
+            },
+            {
+              name: 'epubjs/src/epubcfi',
+              allowTypeImports: true,
+              message:
+                'The epubcfi submodule is quarantined to the kernel shim ' +
+                '(src/kernel/cfi/epubcfiShim.ts). Use @kernel/cfi.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Carve-out 1: the reader engine directory — the sanctioned runtime
+  // importer. The submodule ban is restated (same-named rules replace).
+  {
+    files: ['src/domains/reader/engine/**/*.{ts,tsx}'],
+    ignores: ['src/**/*.test.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'epubjs/src/epubcfi',
+              allowTypeImports: true,
+              message:
+                'The epubcfi submodule is quarantined to the kernel shim ' +
+                '(src/kernel/cfi/epubcfiShim.ts). Use @kernel/cfi.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Carve-out 2: the kernel epubcfi quarantine shim (rule 8's second
+  // sanctioned specifier — worker-safe submodule only; full epubjs stays
+  // banned here).
+  {
+    files: ['src/kernel/cfi/epubcfiShim.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'epubjs',
+              allowTypeImports: true,
+              message:
+                'kernel/cfi may import ONLY the epubjs/src/epubcfi submodule ' +
+                '(worker-chunk safety) — never the full package.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Carve-out 3: NAMED P7-DEADLINED EXCEPTIONS — the offscreen ingestion
+  // path. Dies when the P7 library track rewrites ingestion onto the
+  // engine's offscreen module (prep/phase6-reader-engine.md §3).
+  {
+    files: ['src/lib/ingestion.ts', 'src/lib/offscreen-renderer.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'epubjs/src/epubcfi',
+              allowTypeImports: true,
+              message:
+                'The epubcfi submodule is quarantined to the kernel shim ' +
+                '(src/kernel/cfi/epubcfiShim.ts). Use @kernel/cfi.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // The `idb` ban extends to TEST files outside src/data (Phase 3 exit:
   // zero exceptions — seed through the repos, the connection module, or
   // one-shot db.get/put/clear helpers obtained from @data/connection).

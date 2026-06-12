@@ -4,9 +4,10 @@
  *
  * Kernel admission: zero internal imports (epubjs's CFI submodule is the one
  * external dependency, quarantined in ./epubcfiShim) and ≥2 consuming
- * domains — TTS (pipeline, segmenter, dragnet) consumes it now; the reader
- * adopts in P6. Until then `src/lib/cfi-utils.ts` is a re-export shim for
- * reader-side imports (named deletion deadline: Phase 6).
+ * domains — TTS (pipeline, segmenter, dragnet) and, since Phase 6, the
+ * reader (ReaderView, ReadingHistoryPanel, useReadingStateStore, the
+ * ReaderEngine as CfiRangeResolver). The `src/lib/cfi-utils.ts` re-export
+ * shim met its named deletion deadline in Phase 6 and is gone.
  *
  * The parsed-component model in ./parse is the REFERENCE: every string fast
  * path here survives only behind the seeded property-equivalence suite

@@ -26,7 +26,7 @@ import { SyncStatusPanel } from './SyncStatusPanel';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { ReaderTTSController } from './ReaderTTSController';
-import { generateCfiRange, snapCfiToSentence } from '@lib/cfi-utils';
+import { generateCfiRange, snapCfiToSentence } from '@kernel/cfi';
 import { TOCPanel, SearchPanel } from './panels';
 import { Button } from '../ui/Button';
 import { useSmartTOC } from '@hooks/useSmartTOC';

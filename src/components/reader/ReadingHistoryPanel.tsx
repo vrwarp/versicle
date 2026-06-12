@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useBookProgress } from '@store/useReadingStateStore';
-import { parseCfiRange } from '@lib/cfi-utils';
+import { parseCfiRange } from '@kernel/cfi';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { BookOpen, Headphones, ScrollText } from 'lucide-react';
 import type { ReadingEventType, ReadingSession } from '~types/db';

@@ -43,7 +43,7 @@ describe('TableAdaptationProcessor', () => {
 
     // preprocessTableRoots was deleted (it emitted a literal 'epubcfi(${range.parent})' via an
     // escaped template literal). Its behavior — and the regression tests — now live with the
-    // canonical preprocessBlockRoots in src/lib/cfi-utils.test.ts.
+    // canonical preprocessBlockRoots in the kernel suite (src/kernel/cfi/cfi.test.ts).
 
     describe('processTableAdaptations', () => {
         it('should process existing adaptations immediately', async () => {

@@ -442,13 +442,19 @@ export function useEpubReader(
           setAreLocationsReady(true);
           updateProgress();
         } else {
-          // Generate in background
+          // Generate in background. D7 (prep/phase6-reader-engine.md §2b):
+          // the generate promise used to write after destroy and had no
+          // rejection handler — guard on the live book + catch loudly.
           newBook.locations.generate(1000).then(async () => {
+            if (bookRef.current !== newBook) return; // cancelled/destroyed
             const locationStr = newBook.locations.save();
             await bookContent.saveLocations(currentBookId, locationStr);
+            if (bookRef.current !== newBook) return;
             resolveLocationsReady();
             setAreLocationsReady(true);
             updateProgress();
+          }).catch((e) => {
+            logger.warn('Location generation failed', e);
           });
         }
         yield newBook.ready;

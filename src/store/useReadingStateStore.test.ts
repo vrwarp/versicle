@@ -5,9 +5,13 @@ vi.mock('@lib/device-id', () => ({
     getDeviceId: vi.fn(() => 'test-device-id')
 }));
 
-// Mock cfi-utils to avoid real epub.js interactions
-vi.mock('@lib/cfi-utils', () => ({
-    mergeCfiRanges: vi.fn((ranges, newRange) => {
+// Mock the kernel's mergeCfiRanges to avoid real epub.js interactions
+// (P6: the store imports @kernel/cfi directly — the cfi-utils shim is gone).
+// importOriginal keeps the rest of the kernel surface real for any other
+// module loaded in this test graph.
+vi.mock('@kernel/cfi', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@kernel/cfi')>()),
+    mergeCfiRanges: vi.fn((ranges: string[], newRange: string) => {
         const last = ranges[ranges.length - 1];
         if (last === newRange) return [...ranges];
         return [...ranges, newRange];
