@@ -3,6 +3,7 @@ import { useAnnotationStore } from '@store/useAnnotationStore';
 import { Trash2, StickyNote, PenLine } from 'lucide-react';
 import type { Annotation } from '~types/db';
 import { Button } from '../ui/Button';
+import { useConfirm } from '../ui/ConfirmDialog';
 import { formatDate } from '@kernel/locale/format';
 import { useBook } from '@store/libraryViewStore';
 
@@ -22,12 +23,13 @@ interface Props {
  */
 export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
   const { annotations, remove, update } = useAnnotationStore();
+  const confirmDelete = useConfirm();
   // Content-language attribution for book excerpts (i18n ADR §3).
   const contentLang = useBook(bookId ?? null)?.language;
 
-  const handleDelete = (e: React.MouseEvent, id: string) => {
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (confirm('Delete this annotation?')) {
+    if (await confirmDelete({ titleKey: 'reader.annotation.delete.title', bodyKey: 'reader.annotation.delete.body', danger: true })) {
       remove(id);
     }
   };

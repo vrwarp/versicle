@@ -9,12 +9,14 @@ import { useToastStore } from '@store/useToastStore';
 import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
 import { exportFile } from '@lib/export';
 import { GenAISettingsTab } from '@components/settings';
+import { useConfirm } from '@components/ui/ConfirmDialog';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('GenAIPanel');
 
 const GenAIPanel: React.FC = () => {
   const showToast = useToastStore((state) => state.showToast);
+  const confirm = useConfirm();
   const {
     apiKey,
     setApiKey,
@@ -38,8 +40,8 @@ const GenAIPanel: React.FC = () => {
     setDebugModeEnabled
   } = useGenAIStore();
 
-  const handleClearContentAnalysis = () => {
-    if (confirm("Are you sure you want to clear the Content Analysis cache? This will force re-analysis of content.")) {
+  const handleClearContentAnalysis = async () => {
+    if (await confirm({ titleKey: 'genai.clearCache.title', bodyKey: 'genai.clearCache.body', danger: true })) {
       try {
         contentAnalysisRepository.clearAll();
         showToast("Content Analysis cache cleared.", "success");

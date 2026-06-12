@@ -19,6 +19,8 @@ import { exportFile } from '@lib/export';
 import { Button } from '@components/ui/Button';
 import { ReadingListDialog } from '@components/ReadingListDialog';
 import { DataManagementTab } from '@components/settings';
+import { useConfirm } from '@components/ui/ConfirmDialog';
+import { useToastStore } from '@store/useToastStore';
 import { useNavigationGuard } from '@hooks/useNavigationGuard';
 import { BackButtonPriority } from '@store/useBackNavigationStore';
 import { createLogger } from '@lib/logger';
@@ -27,6 +29,8 @@ const logger = createLogger('DataPanel');
 
 const DataPanel: React.FC = () => {
   const navigate = useNavigate();
+  const confirm = useConfirm();
+  const showToast = useToastStore((state) => state.showToast);
 
   const readingListEntries = useReadingListStore(state => state.entries);
   const readingListCount = readingListEntries ? Object.keys(readingListEntries).length : 0;
@@ -54,7 +58,7 @@ const DataPanel: React.FC = () => {
     try {
       const list = Object.values(useReadingListStore.getState().entries);
       if (!list || list.length === 0) {
-        alert('Reading list is empty.');
+        showToast('data.exportReadingList.empty', 'info');
         return;
       }
       const csv = exportReadingListToCSV(list);
@@ -67,7 +71,7 @@ const DataPanel: React.FC = () => {
       });
     } catch (e) {
       logger.error('Export reading list failed', e);
-      alert('Failed to export reading list.');
+      showToast('data.exportReadingList.failed', 'error');
     }
   };
 
@@ -131,7 +135,7 @@ const DataPanel: React.FC = () => {
   };
 
   const handleClearAllData = async () => {
-    if (confirm("Are you sure you want to delete ALL data? This includes books, annotations, and settings.")) {
+    if (await confirm({ titleKey: 'data.clearAll.title', bodyKey: 'data.clearAll.body', confirmKey: 'data.clearAll.confirm', danger: true })) {
       setIsClearing(true);
       try {
         // Single owner of the wipe: stops sync + Yjs persistence, deletes
@@ -141,7 +145,7 @@ const DataPanel: React.FC = () => {
       } catch (e) {
         logger.error('Failed to clear data', e);
         setIsClearing(false);
-        alert('Failed to clear data. Please check console.');
+        showToast('data.clearAll.failed', 'error');
       }
     }
   };
@@ -153,7 +157,13 @@ const DataPanel: React.FC = () => {
       const report = await maintenanceService.scanForOrphans();
       const total = report.files + report.locations + report.tts_prep;
       if (total > 0) {
-        if (confirm(`Found orphans: \n - Files: ${report.files} \n - Locations: ${report.locations} \n - TTS Prep: ${report.tts_prep} \n\nDelete them?`)) {
+        const proceed = await confirm({
+          titleKey: 'data.orphans.title',
+          bodyKey: 'data.orphans.body',
+          params: { files: report.files, locations: report.locations, ttsPrep: report.tts_prep },
+          danger: true,
+        });
+        if (proceed) {
           await maintenanceService.pruneOrphans();
           setOrphanScanResult('Repair complete. Orphans removed.');
         } else {
@@ -171,7 +181,7 @@ const DataPanel: React.FC = () => {
   };
 
   const handleRegenerateMetadata = async () => {
-    if (!confirm("This will regenerate all book metadata and content structure from the stored files. This may take a while. Continue?")) {
+    if (!(await confirm({ titleKey: 'data.regenerate.title', bodyKey: 'data.regenerate.body', confirmKey: 'common.continue' }))) {
       return;
     }
 
@@ -222,7 +232,7 @@ const DataPanel: React.FC = () => {
   };
 
   const handleRestoreBackupFile = async (file: File) => {
-    if (!confirm('Restoring a backup will merge data into your library. Existing books will be updated. Continue?')) {
+    if (!(await confirm({ titleKey: 'data.restoreBackup.title', bodyKey: 'data.restoreBackup.body', confirmKey: 'common.continue' }))) {
       return;
     }
 

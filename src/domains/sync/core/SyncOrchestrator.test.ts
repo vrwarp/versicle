@@ -19,6 +19,19 @@ import { FirestoreBackend } from '../backend/FirestoreBackend';
 import { MigrationStateService } from '../workspaces/MigrationStateService';
 import { getSyncEventBus } from '../events';
 import { wireSyncEvents } from '@app/sync/wireSyncEvents';
+import { formatMessage, resolveMessage, type MessageInput } from '@kernel/locale/messages';
+
+/**
+ * Phase 8 §D: wireSyncEvents passes catalog keys; these suites keep
+ * pinning the RESOLVED user-visible copy verbatim.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function expectToastShown(showToastMock: { mock: { calls: any[][] } }, message: string, type: string, duration?: number) {
+    const matched = showToastMock.mock.calls.some(
+        ([content, t, d]) => resolveMessage(content as MessageInput | string) === message && t === type && d === duration,
+    );
+    expect(matched, `expected toast "${message}" (${type})`).toBe(true);
+}
 
 // Mock firebase/auth
 vi.mock('firebase/auth', () => ({
@@ -328,11 +341,7 @@ describe('SyncOrchestrator', () => {
             mockFireProviderInstance.emit('sync-failure', new Error('Test failure'));
 
             expect(orchestrator.getStatus()).toBe('error');
-            expect(showToastMock).toHaveBeenCalledWith(
-                'Sync failed after multiple attempts. Please check your connection.',
-                'error',
-                5000
-            );
+            expectToastShown(showToastMock, 'Sync failed after multiple attempts. Please check your connection.', 'error', 5000);
         });
 
         it('should handle save-rejected with document-too-large', async () => {
@@ -346,11 +355,7 @@ describe('SyncOrchestrator', () => {
             });
 
             expect(orchestrator.getStatus()).toBe('error');
-            expect(showToastMock).toHaveBeenCalledWith(
-                'Sync disabled: Document too large (2000000 bytes). Please export and clear data.',
-                'error',
-                8000
-            );
+            expectToastShown(showToastMock, 'Sync disabled: Document too large (2000000 bytes). Please export and clear data.', 'error', 8000);
         });
 
         it('should handle save-rejected with max-retries-exceeded', async () => {
@@ -363,11 +368,7 @@ describe('SyncOrchestrator', () => {
             });
 
             expect(orchestrator.getStatus()).toBe('error');
-            expect(showToastMock).toHaveBeenCalledWith(
-                'Sync save failed: Max retries exceeded. Check connection.',
-                'error',
-                5000
-            );
+            expectToastShown(showToastMock, 'Sync save failed: Max retries exceeded. Check connection.', 'error', 5000);
         });
 
         describe('regression: permission-denied surfaces a "rules out of date" hint (BYO-Firebase lockout)', () => {
@@ -377,7 +378,7 @@ describe('SyncOrchestrator', () => {
                 });
 
             it('should show the rules hint when save-rejected wraps a permission-denied error', async () => {
-                const { RULES_OUT_OF_DATE_MESSAGE } = await import('../backend/permissionDenied');
+                const RULES_OUT_OF_DATE_MESSAGE = formatMessage('sync.rulesOutOfDate');
                 const { useToastStore } = await import('@store/useToastStore');
                 const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
 
@@ -388,22 +389,22 @@ describe('SyncOrchestrator', () => {
                 });
 
                 expect(orchestrator.getStatus()).toBe('error');
-                expect(showToastMock).toHaveBeenCalledWith(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+                expectToastShown(showToastMock, RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
             });
 
             it('should show the rules hint when sync-failure wraps a permission-denied error', async () => {
-                const { RULES_OUT_OF_DATE_MESSAGE } = await import('../backend/permissionDenied');
+                const RULES_OUT_OF_DATE_MESSAGE = formatMessage('sync.rulesOutOfDate');
                 const { useToastStore } = await import('@store/useToastStore');
                 const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
 
                 mockFireProviderInstance.emit('sync-failure', permissionDeniedError());
 
                 expect(orchestrator.getStatus()).toBe('error');
-                expect(showToastMock).toHaveBeenCalledWith(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+                expectToastShown(showToastMock, RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
             });
 
             it('should show the rules hint when connection-error wraps a permission-denied error', async () => {
-                const { RULES_OUT_OF_DATE_MESSAGE } = await import('../backend/permissionDenied');
+                const RULES_OUT_OF_DATE_MESSAGE = formatMessage('sync.rulesOutOfDate');
                 const { useToastStore } = await import('@store/useToastStore');
                 const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
 
@@ -414,7 +415,7 @@ describe('SyncOrchestrator', () => {
                 });
 
                 expect(orchestrator.getStatus()).toBe('error');
-                expect(showToastMock).toHaveBeenCalledWith(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+                expectToastShown(showToastMock, RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
             });
 
             it('should keep the generic message for non-permission failures', async () => {
@@ -423,11 +424,7 @@ describe('SyncOrchestrator', () => {
 
                 mockFireProviderInstance.emit('sync-failure', new Error('Network flake'));
 
-                expect(showToastMock).toHaveBeenCalledWith(
-                    'Sync failed after multiple attempts. Please check your connection.',
-                    'error',
-                    5000
-                );
+                expectToastShown(showToastMock, 'Sync failed after multiple attempts. Please check your connection.', 'error', 5000);
             });
         });
     });

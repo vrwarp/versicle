@@ -46,6 +46,7 @@ import { getSyncOrchestratorAsync } from '@app/sync/createSync';
 import { useSyncStore } from '@store/useSyncStore';
 import { CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
 import type { WorkspaceMetadata } from '~types/workspace';
+import { useConfirm } from '../ui/ConfirmDialog';
 
 export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     currentDeviceId,
@@ -111,6 +112,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     const { linkedFolderName, setLinkedFolder } = useDriveStore();
     const [isScanning, setIsScanning] = React.useState(false);
     const { showToast } = useToastStore();
+    const confirm = useConfirm();
 
     // Workspace State
     const [workspaces, setWorkspaces] = React.useState<WorkspaceMetadata[]>([]);
@@ -181,7 +183,13 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     };
 
     const handleDeleteWorkspace = async (workspaceId: string, name: string) => {
-        if (!confirm(`Are you sure you want to delete workspace "${name}"?\n\nThis will permanently reclaim cloud storage for this workspace. Your local data will be preserved but sync will be disabled for this workspace ID.`)) {
+        const proceed = await confirm({
+            titleKey: 'syncSettings.deleteWorkspace.title',
+            bodyKey: 'syncSettings.deleteWorkspace.body',
+            params: { name },
+            danger: true,
+        });
+        if (!proceed) {
             return;
         }
 

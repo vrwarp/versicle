@@ -1,5 +1,6 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { TTSAbbreviationSettings } from '../TTSAbbreviationSettings';
+import { ConfirmHost } from '@components/ui/ConfirmDialog';
 import { vi } from 'vitest';
 
 // Mock Lucide icons
@@ -31,8 +32,6 @@ vi.mock('@store/useTTSSettingsStore', () => ({
 describe('TTSAbbreviationSettings', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        window.alert = vi.fn();
-        window.confirm = vi.fn(() => true);
 
         // Mock URL.createObjectURL
         global.URL.createObjectURL = vi.fn(() => 'blob:url');
@@ -71,7 +70,8 @@ describe('TTSAbbreviationSettings', () => {
     });
 
     it('handles upload for abbreviations', async () => {
-        render(<TTSAbbreviationSettings />);
+        // Phase 8 §D: the import flow confirms through the ConfirmDialog.
+        render(<><ConfirmHost /><TTSAbbreviationSettings /></>);
 
         const file = new File(['Abbreviation\nNew1.\nNew2.'], 'test.csv', { type: 'text/csv' });
         const input = screen.getByTestId('csv-upload-abbreviations');
@@ -98,18 +98,20 @@ describe('TTSAbbreviationSettings', () => {
         const readerInstance = (global as any).__mockFileReader;
         expect(mockReadAsText).toHaveBeenCalledWith(file);
 
-        // Simulate onload
+        // Simulate onload (async since Phase 8 §D — it awaits the dialog)
         readerInstance.result = 'Abbreviation\nNew1.\nNew2.';
         readerInstance.onload({ target: { result: readerInstance.result } });
 
-        expect(window.confirm).toHaveBeenCalled();
-        expect(mockSetCustomAbbreviations).toHaveBeenCalledWith(['New1.', 'New2.']);
+        fireEvent.click(await screen.findByTestId('confirm-dialog-confirm'));
+        await waitFor(() => {
+            expect(mockSetCustomAbbreviations).toHaveBeenCalledWith(['New1.', 'New2.']);
+        });
 
         vi.unstubAllGlobals();
     });
 
      it('handles upload for sentence starters without header', async () => {
-        render(<TTSAbbreviationSettings />);
+        render(<><ConfirmHost /><TTSAbbreviationSettings /></>);
 
         const file = new File(['NewStarter'], 'test.csv', { type: 'text/csv' });
         // Sentence Starters is the 3rd section
@@ -138,8 +140,10 @@ describe('TTSAbbreviationSettings', () => {
         readerInstance.result = 'NewStarter';
         readerInstance.onload({ target: { result: readerInstance.result } });
 
-        expect(window.confirm).toHaveBeenCalled();
-        expect(mockSetSentenceStarters).toHaveBeenCalledWith(['NewStarter']);
+        fireEvent.click(await screen.findByTestId('confirm-dialog-confirm'));
+        await waitFor(() => {
+            expect(mockSetSentenceStarters).toHaveBeenCalledWith(['NewStarter']);
+        });
 
         vi.unstubAllGlobals();
     });

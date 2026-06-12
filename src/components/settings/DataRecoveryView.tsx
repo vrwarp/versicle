@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { createLogger } from '@lib/logger';
 import { Download, RefreshCw, AlertCircle } from 'lucide-react';
 import { exportFile } from '@lib/export';
+import { useToastStore } from '@store/useToastStore';
 
 const logger = createLogger('DataRecoveryView');
 
@@ -79,7 +80,7 @@ export const DataRecoveryView: React.FC = () => {
             });
         } catch (e) {
             logger.error('Failed to download raw data', e);
-            alert('Failed to download data.');
+            useToastStore.getState().showToast('data.downloadRecovery.failed', 'error');
         }
     };
 

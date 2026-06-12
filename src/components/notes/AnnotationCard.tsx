@@ -5,6 +5,7 @@ import { useAnnotationStore } from '@store/useAnnotationStore';
 import { copyAnnotationAsMarkdown } from '@lib/export-notes';
 import { useToastStore } from '@store/useToastStore';
 import { Button } from '../ui/Button';
+import { useConfirm } from '../ui/ConfirmDialog';
 import { formatDate } from '@kernel/locale/format';
 
 interface AnnotationCardProps {
@@ -17,13 +18,14 @@ interface AnnotationCardProps {
 export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNavigate, contentLang }) => {
     const { remove, update } = useAnnotationStore();
     const showToast = useToastStore(state => state.showToast);
+    const confirmDelete = useConfirm();
     const [isEditing, setIsEditing] = useState(false);
     const [editNoteText, setEditNoteText] = useState(annotation.note || '');
     const [isCopied, setIsCopied] = useState(false);
 
-    const handleDelete = (e: React.MouseEvent) => {
+    const handleDelete = async (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (confirm('Delete this annotation?')) {
+        if (await confirmDelete({ titleKey: 'reader.annotation.delete.title', bodyKey: 'reader.annotation.delete.body', danger: true })) {
             remove(annotation.id);
         }
     };

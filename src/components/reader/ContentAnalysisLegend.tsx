@@ -13,6 +13,7 @@ import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useImportController } from '@app/library/useImportController';
 import { ContentAnalysisReport } from './ContentAnalysisReport';
 import { formatBytes } from '@kernel/locale/format';
+import { useConfirm } from '../ui/ConfirmDialog';
 
 interface ContentAnalysisLegendProps {
     engine?: ReaderEngine | null;
@@ -32,6 +33,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ en
     const [isReportOpen, setIsReportOpen] = useState(false);
     const showToast = useToastStore(state => state.showToast);
     const importController = useImportController();
+    const confirm = useConfirm();
     const [isReprocessing, setIsReprocessing] = useState(false);
 
     // Table Images Carousel State
@@ -240,7 +242,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ en
 
     const handleReprocess = async () => {
         if (!currentBookId) return;
-        if (!window.confirm("Reprocess this book? This will re-extract all text and images. The page will reload.")) {
+        if (!(await confirm({ titleKey: 'reader.reprocess.title', bodyKey: 'reader.reprocess.body', confirmKey: 'common.continue' }))) {
             return;
         }
 

@@ -5,11 +5,11 @@
  * Moved here from FirestoreSyncManager (P4-3a) so presentation
  * (wireSyncEvents) and transports can share it without importing the
  * manager module.
+ *
+ * Phase 8 §D: the user-facing COPY left this module for the typed catalog
+ * (kernel/locale/messages.ts key 'sync.rulesOutOfDate') — the transport
+ * keeps only the detection predicate below.
  */
-
-/** User-facing hint for the rules-lockout case. */
-export const RULES_OUT_OF_DATE_MESSAGE =
-    'Cloud sync was rejected by your Firebase project\'s security rules. Your deployed rules are likely out of date — redeploy firestore.rules and storage.rules from the Versicle repository (firebase deploy --only firestore:rules,storage).';
 
 /**
  * Detects a Firebase permission-denied error anywhere in a provider event

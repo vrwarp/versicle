@@ -142,14 +142,13 @@ module.exports = {
         '~types, lib/utils + external (Radix/lucide/cva) only — no store/, ' +
         'domains/, hooks/, app/, layouts/, data/, or components outside ' +
         'ui/. Born at error when CompassPill dissolved into its feature ' +
-        'homes (P8 §C; PillShell is the dumb primitive left behind). TWO ' +
-        'named carve-outs ride the P8 toast-queue item (prep §D): ' +
-        'ToastContainer.tsx (store value import; the container moves above ' +
-        'the router gate) and Toast.tsx (type-only ToastType import). ' +
-        'Delete the pathNot when that item lands.',
+        'homes (P8 §C; PillShell is the dumb primitive left behind). The ' +
+        'two Toast carve-outs died with the §D toast-queue item: ' +
+        'ToastContainer became src/components/ToastHost.tsx (store ' +
+        'subscription out of ui/) and Toast.tsx is purely presentational. ' +
+        'ZERO exceptions.',
       from: {
         path: '^src/components/ui',
-        pathNot: '^src/components/ui/(ToastContainer|Toast)\\.tsx$',
       },
       to: {
         path: '^src/(store|domains|hooks|app|layouts|data|state|components(?!/ui))',

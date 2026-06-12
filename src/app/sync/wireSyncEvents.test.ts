@@ -1,6 +1,7 @@
 /**
  * Pins the §D3 presentation contract: wireSyncEvents is the single
- * subscriber mapping typed SyncEvents → useSyncStore writes + toast copy.
+ * subscriber mapping typed SyncEvents → useSyncStore writes + toast keys
+ * (resolved copy asserted verbatim — Phase 8 §D keyed the choke point).
  * In particular it pins the FLUSH-DRIVEN `lastSyncTime` semantics (P4-3
  * exit criterion): a `flushed` event stamps the store with the save
  * timestamp — the pulse tooltip reports actual sync activity, not
@@ -10,9 +11,13 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getSyncEventBus } from '@domains/sync/events';
-import { RULES_OUT_OF_DATE_MESSAGE } from '@domains/sync/backend/permissionDenied';
+import { formatMessage, resolveMessage } from '@kernel/locale/messages';
 import { wireSyncEvents } from './wireSyncEvents';
 import { useSyncStore } from '@store/useSyncStore';
+
+// The rules-lockout copy now lives in the catalog (Phase 8 §D); resolving
+// it here keeps this suite pinning the USER-VISIBLE string, not the key.
+const RULES_OUT_OF_DATE_MESSAGE = formatMessage('sync.rulesOutOfDate');
 
 // Module-mock the toast store: spying the live zustand state object is
 // unreliable here because showToast's own set() copies the spy into every
@@ -23,6 +28,23 @@ vi.mock('@store/useToastStore', () => ({
     getState: () => ({ showToast }),
   },
 }));
+
+/**
+ * Assert a toast whose RESOLVED display text matches — wireSyncEvents
+ * passes catalog keys/`{key, params}` since Phase 8 §D, and this suite
+ * keeps pinning the rendered copy verbatim (the §D3 presentation
+ * contract is about what the user reads).
+ */
+function expectToastShown(message: string, type: string, duration?: number) {
+  const matched = showToast.mock.calls.some(
+    ([content, t, d]) => resolveMessage(content) === message && t === type && d === duration,
+  );
+  expect(
+    matched,
+    `expected toast "${message}" (${type}${duration !== undefined ? `, ${duration}ms` : ''}); ` +
+      `got: ${showToast.mock.calls.map(([c, t]) => `"${resolveMessage(c)}" (${String(t)})`).join(' | ')}`,
+  ).toBe(true);
+}
 
 describe('wireSyncEvents (single SyncEvent subscriber)', () => {
   let unwire: () => void;
@@ -83,7 +105,7 @@ describe('wireSyncEvents (single SyncEvent subscriber)', () => {
       '%s with permissionDenied shows the rules hint',
       (type) => {
         getSyncEventBus().emit({ type, permissionDenied: true });
-        expect(showToast).toHaveBeenCalledWith(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+        expectToastShown(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
       }
     );
 
@@ -93,7 +115,7 @@ describe('wireSyncEvents (single SyncEvent subscriber)', () => {
         code: 'permission-denied',
         permissionDenied: true,
       });
-      expect(showToast).toHaveBeenCalledWith(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+      expectToastShown(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
     });
   });
 
@@ -101,11 +123,7 @@ describe('wireSyncEvents (single SyncEvent subscriber)', () => {
     const bus = getSyncEventBus();
 
     bus.emit({ type: 'sync-failure', permissionDenied: false });
-    expect(showToast).toHaveBeenCalledWith(
-      'Sync failed after multiple attempts. Please check your connection.',
-      'error',
-      5000
-    );
+    expectToastShown('Sync failed after multiple attempts. Please check your connection.', 'error', 5000);
 
     bus.emit({
       type: 'save-rejected',
@@ -113,43 +131,29 @@ describe('wireSyncEvents (single SyncEvent subscriber)', () => {
       sizeBytes: 2000000,
       permissionDenied: false,
     });
-    expect(showToast).toHaveBeenCalledWith(
-      'Sync disabled: Document too large (2000000 bytes). Please export and clear data.',
-      'error',
-      8000
-    );
+    expectToastShown('Sync disabled: Document too large (2000000 bytes). Please export and clear data.', 'error', 8000);
 
     bus.emit({ type: 'clean-sync', phase: 'started' });
-    expect(showToast).toHaveBeenCalledWith('Syncing library from cloud...', 'info');
+    expectToastShown('Syncing library from cloud...', 'info');
     bus.emit({ type: 'clean-sync', phase: 'applied' });
-    expect(showToast).toHaveBeenCalledWith('Sync complete!', 'success');
+    expectToastShown('Sync complete!', 'success');
     bus.emit({ type: 'clean-sync', phase: 'failed' });
-    expect(showToast).toHaveBeenCalledWith('Failed to sync. Please try again.', 'error');
+    expectToastShown('Failed to sync. Please try again.', 'error');
 
     bus.emit({ type: 'switch', phase: 'downloading' });
-    expect(showToast).toHaveBeenCalledWith('Downloading workspace data...', 'info');
+    expectToastShown('Downloading workspace data...', 'info');
     bus.emit({ type: 'switch', phase: 'failed-rolling-back' });
-    expect(showToast).toHaveBeenCalledWith(
-      'Workspace switch failed. Restoring your previous data...',
-      'error'
-    );
+    expectToastShown('Workspace switch failed. Restoring your previous data...', 'error');
     bus.emit({ type: 'switch', phase: 'failed-aborted' });
-    expect(showToast).toHaveBeenCalledWith('Workspace switch failed. Please try again.', 'error');
+    expectToastShown('Workspace switch failed. Please try again.', 'error');
 
     bus.emit({ type: 'workspace-tombstoned', workspaceId: 'ws_x', context: 'connect' });
-    expect(showToast).toHaveBeenCalledWith(
-      'Sync disconnected: Remote workspace was deleted. Operating offline.',
-      'error',
-      8000
-    );
+    expectToastShown('Sync disconnected: Remote workspace was deleted. Operating offline.', 'error', 8000);
     bus.emit({ type: 'workspace-tombstoned', workspaceId: 'ws_x', context: 'switch' });
-    expect(showToast).toHaveBeenCalledWith(
-      'Cannot switch: This workspace has been deleted.',
-      'error'
-    );
+    expectToastShown('Cannot switch: This workspace has been deleted.', 'error');
 
     bus.emit({ type: 'local-persistence-unavailable' });
-    expect(showToast).toHaveBeenCalledWith('Offline sync unavailable (persistence failed)', 'error');
+    expectToastShown('Offline sync unavailable (persistence failed)', 'error');
   });
 
   it('unsubscribing stops all presentation', () => {

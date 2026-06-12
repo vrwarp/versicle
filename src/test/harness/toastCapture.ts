@@ -2,15 +2,20 @@
  * Toast capture: record every `showToast` call through the REAL
  * `useToastStore` instead of `vi.mock`ing the store module.
  *
- * The store is single-slot (a second toast overwrites the first), so
- * asserting on the store state alone loses messages; the capture keeps the
- * full sequence.
+ * Phase 8 §D: the store is queue-based now (the single-slot overwrite is
+ * dead), but the capture stays useful — it records the RESOLVED display
+ * message for every call in order, so suites keep pinning user-visible
+ * copy even when call sites pass catalog keys.
  */
 import { useToastStore } from '@store/useToastStore';
 import type { ToastType } from '@store/useToastStore';
+import { resolveMessage, isMessageKey } from '@kernel/locale/messages';
 
 export interface CapturedToast {
+  /** Resolved display string (keys resolve through the catalog). */
   message: string;
+  /** The catalog key, when the call site passed one. */
+  key?: string;
   type: ToastType;
   duration: number;
 }
@@ -33,9 +38,18 @@ export function captureToasts(): ToastCapture {
   const toasts: CapturedToast[] = [];
   const original = useToastStore.getState().showToast;
   useToastStore.setState({
-    showToast: (message, type = 'info', duration = 3000) => {
-      toasts.push({ message, type, duration });
-      original(message, type, duration);
+    showToast: (content, type = 'info', duration) => {
+      const key =
+        typeof content === 'object' ? content.key
+        : isMessageKey(content) ? content
+        : undefined;
+      toasts.push({
+        message: resolveMessage(content),
+        key,
+        type,
+        duration: duration ?? (type === 'error' ? 5000 : 3000),
+      });
+      original(content, type, duration);
     },
   });
   return {

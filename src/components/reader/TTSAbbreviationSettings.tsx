@@ -5,6 +5,8 @@ import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '@lib/tts/TextSe
 import { X, Plus, RotateCcw, Download, Upload } from 'lucide-react';
 import { SimpleListCSV } from '@lib/tts/CsvUtils';
 import { Button } from '../ui/Button';
+import { useConfirm } from '../ui/ConfirmDialog';
+import { useToastStore } from '@store/useToastStore';
 
 interface StringListManagerProps {
     /** Title of the list section. */
@@ -36,6 +38,8 @@ const StringListManager: React.FC<StringListManagerProps> = ({
     const [newItem, setNewItem] = useState('');
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const confirm = useConfirm();
+    const showToast = useToastStore((state) => state.showToast);
 
     const handleAdd = () => {
         setError(null);
@@ -93,25 +97,29 @@ const StringListManager: React.FC<StringListManagerProps> = ({
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             const text = e.target?.result as string;
             if (!text) return;
 
             const lines = SimpleListCSV.parse(text, importHeader);
 
             if (lines.length === 0) {
-                alert('No items found in file.');
+                showToast('abbrev.import.empty', 'info');
                 return;
             }
 
             if (validateItem) {
                 const invalidItems = lines.filter(item => validateItem(item) !== null);
                 if (invalidItems.length > 0) {
-                    alert(`Skipping ${invalidItems.length} invalid items (e.g. too long).`);
+                    showToast({ key: 'abbrev.import.skippedInvalid', params: { count: invalidItems.length } }, 'info');
                     // Optionally filter them out or stop
                     // Let's filter them out for better UX
                     const validLines = lines.filter(item => validateItem(item) === null);
-                     if (window.confirm(`This will replace your current list with ${validLines.length} valid entries from the file (${invalidItems.length} invalid skipped). Are you sure?`)) {
+                    if (await confirm({
+                        titleKey: 'abbrev.import.replaceValid.title',
+                        bodyKey: 'abbrev.import.replaceValid.body',
+                        params: { validCount: validLines.length, invalidCount: invalidItems.length },
+                    })) {
                         onItemsChange(validLines);
                     }
                     if (fileInputRef.current) {
@@ -121,7 +129,11 @@ const StringListManager: React.FC<StringListManagerProps> = ({
                 }
             }
 
-            if (window.confirm(`This will replace your current list with ${lines.length} entries from the file. Are you sure?`)) {
+            if (await confirm({
+                titleKey: 'abbrev.import.replace.title',
+                bodyKey: 'abbrev.import.replace.body',
+                params: { count: lines.length },
+            })) {
                 onItemsChange(lines);
             }
 

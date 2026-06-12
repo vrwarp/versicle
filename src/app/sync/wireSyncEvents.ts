@@ -3,10 +3,11 @@
  * presentation and store mirroring for the sync domain live HERE, nowhere
  * else.
  *
- * Ownership rule (risk R6): app/ owns intervals + presentation (toast copy,
- * useSyncStore writes); domains/sync owns transport + events. The toast
- * strings below moved verbatim from FirestoreSyncManager/firebase-config —
- * editing copy is now a one-file change that cannot touch the transport.
+ * Ownership rule (risk R6): app/ owns intervals + presentation (toast keys,
+ * useSyncStore writes); domains/sync owns transport + events. Since Phase 8
+ * §D the copy itself lives in the typed catalog (kernel/locale/messages.ts,
+ * `sync.*` namespace) — this file maps events to keys+params, and editing
+ * copy cannot touch the transport OR this mapping.
  *
  * `lastSyncTime` semantics: driven by `flushed` (a committed save). Until
  * the y-cinder `saved` fork delta lands, real-Firestore sessions only emit
@@ -18,7 +19,6 @@
  * Registered by the `syncInit` boot task with ctx.addCleanup.
  */
 import { getSyncEventBus } from '@domains/sync/events';
-import { RULES_OUT_OF_DATE_MESSAGE } from '@domains/sync/backend/permissionDenied';
 import { peekSyncOrchestrator } from './createSync';
 import { stopDeviceHeartbeat } from '@app/boot/backgroundTasks';
 import { useSyncStore } from '@store/useSyncStore';
@@ -50,7 +50,7 @@ export function wireSyncEvents(): () => void {
         break;
 
       case 'signed-in-via-redirect':
-        toast(`Signed in as ${event.email}`, 'success');
+        toast({ key: 'sync.signedInViaRedirect', params: { email: String(event.email) } }, 'success');
         break;
 
       case 'flushed':
@@ -59,75 +59,73 @@ export function wireSyncEvents(): () => void {
 
       case 'clean-sync':
         if (event.phase === 'started') {
-          toast('Syncing library from cloud...', 'info');
+          toast('sync.cleanSync.started', 'info');
         } else if (event.phase === 'applied') {
-          toast('Sync complete!', 'success');
+          toast('sync.cleanSync.applied', 'success');
         } else {
-          toast('Failed to sync. Please try again.', 'error');
+          toast('sync.cleanSync.failed', 'error');
         }
         break;
 
       case 'switch':
         if (event.phase === 'downloading') {
-          toast('Downloading workspace data...', 'info');
+          toast('sync.switch.downloading', 'info');
         } else if (event.phase === 'failed-rolling-back') {
-          toast('Workspace switch failed. Restoring your previous data...', 'error');
+          toast('sync.switch.failedRollingBack', 'error');
         } else if (event.phase === 'failed-aborted') {
-          toast('Workspace switch failed. Please try again.', 'error');
+          toast('sync.switch.failedAborted', 'error');
         }
         break;
 
       case 'workspace-tombstoned':
         if (event.context === 'connect') {
-          toast(
-            'Sync disconnected: Remote workspace was deleted. Operating offline.',
-            'error',
-            8000
-          );
+          toast('sync.tombstoned.connect', 'error', 8000);
         } else {
-          toast('Cannot switch: This workspace has been deleted.', 'error');
+          toast('sync.tombstoned.switch', 'error');
         }
         break;
 
       case 'connection-error':
         if (event.permissionDenied) {
-          toast(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+          toast('sync.rulesOutOfDate', 'error', 10000);
         }
         break;
 
       case 'sync-failure':
         if (event.permissionDenied) {
-          toast(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+          toast('sync.rulesOutOfDate', 'error', 10000);
         } else {
-          toast('Sync failed after multiple attempts. Please check your connection.', 'error', 5000);
+          toast('sync.failure.maxAttempts', 'error', 5000);
         }
         break;
 
       case 'save-rejected':
         if (event.permissionDenied) {
-          toast(RULES_OUT_OF_DATE_MESSAGE, 'error', 10000);
+          toast('sync.rulesOutOfDate', 'error', 10000);
         } else if (event.code === 'document-too-large') {
-          toast(
-            `Sync disabled: Document too large (${event.sizeBytes} bytes). Please export and clear data.`,
-            'error',
-            8000
-          );
+          toast({ key: 'sync.saveRejected.tooLarge', params: { sizeBytes: String(event.sizeBytes) } }, 'error', 8000);
         } else if (event.code === 'max-retries-exceeded') {
-          toast('Sync save failed: Max retries exceeded. Check connection.', 'error', 5000);
+          toast('sync.saveRejected.maxRetries', 'error', 5000);
         }
         break;
 
       case 'local-persistence-unavailable':
-        toast('Offline sync unavailable (persistence failed)', 'error');
+        toast('sync.persistenceUnavailable', 'error');
         break;
 
       case 'workspace-purged':
         // The honest delete / purge maintenance action (P4-6): tell the
-        // user what actually got removed remotely.
+        // user what actually got removed remotely. Params arrive
+        // pre-pluralized (the catalog carries no ICU plural support yet —
+        // recorded ADR §2 limitation).
         toast(
-          `Remote workspace data purged (${event.report.docsDeleted} document` +
-            `${event.report.docsDeleted === 1 ? '' : 's'}, ${event.report.blobsDeleted} blob` +
-            `${event.report.blobsDeleted === 1 ? '' : 's'}).`,
+          {
+            key: 'sync.workspacePurged',
+            params: {
+              docs: `${event.report.docsDeleted} document${event.report.docsDeleted === 1 ? '' : 's'}`,
+              blobs: `${event.report.blobsDeleted} blob${event.report.blobsDeleted === 1 ? '' : 's'}`,
+            },
+          },
           'info'
         );
         break;

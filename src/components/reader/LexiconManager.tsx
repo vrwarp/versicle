@@ -11,6 +11,7 @@ import { useBookStore } from '@store/useBookStore';
 import { LEXICON_SAMPLE_CSV } from '@lib/tts/lexiconSample';
 import { LexiconCSV } from '@lib/tts/CsvUtils';
 import { exportFile } from '@lib/export';
+import { useConfirm } from '../ui/ConfirmDialog';
 
 interface LexiconManagerProps {
     /** Whether the dialog is open. */
@@ -44,6 +45,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     const [testOutput, setTestOutput] = useState('');
     const [testTrace, setTestTrace] = useState<{ rule: LexiconRule, before: string, after: string }[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const confirm = useConfirm();
 
     // Subscribe to store
     const rulesMap = useLexiconStore(state => state.rules);
@@ -243,7 +245,13 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                     rulesToDelete = all.filter(r => r.bookId === currentBookId);
                 }
 
-                if (!window.confirm(`${rulesToDelete.length} entries will be replaced with ${newRules.length} new entries. Continue?`)) {
+                const proceed = await confirm({
+                    titleKey: 'lexicon.import.replace.title',
+                    bodyKey: 'lexicon.import.replace.body',
+                    params: { oldCount: rulesToDelete.length, newCount: newRules.length },
+                    confirmKey: 'common.continue',
+                });
+                if (!proceed) {
                     if (fileInputRef.current) fileInputRef.current.value = '';
                     return;
                 }

@@ -196,9 +196,10 @@ describe('regression: wipe-all-data — SafeMode reset must route through wipeAl
     vi.restoreAllMocks();
   });
 
+  // Phase 8 §D: the native confirm() died — the reset flows through the
+  // accessible ConfirmDialog (ConfirmHost mounts above the boot gate, so
+  // even SafeMode gets it).
   it('calls wipeAllData when the user confirms the destructive reset', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-
     render(<App />);
 
     await waitFor(() => {
@@ -206,6 +207,9 @@ describe('regression: wipe-all-data — SafeMode reset must route through wipeAl
     });
 
     fireEvent.click(screen.getByText('Reset Database'));
+
+    const confirmButton = await screen.findByTestId('confirm-dialog-confirm');
+    fireEvent.click(confirmButton);
 
     await waitFor(() => {
       expect(wipeAllData).toHaveBeenCalledTimes(1);
@@ -213,8 +217,6 @@ describe('regression: wipe-all-data — SafeMode reset must route through wipeAl
   });
 
   it('does not wipe when the confirmation is declined', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-
     render(<App />);
 
     await waitFor(() => {
@@ -223,8 +225,11 @@ describe('regression: wipe-all-data — SafeMode reset must route through wipeAl
 
     fireEvent.click(screen.getByText('Reset Database'));
 
+    const cancelButton = await screen.findByTestId('confirm-dialog-cancel');
+    fireEvent.click(cancelButton);
+
     await waitFor(() => {
-      expect(confirmSpy).toHaveBeenCalled();
+      expect(screen.queryByTestId('confirm-dialog')).toBeNull();
     });
     expect(wipeAllData).not.toHaveBeenCalled();
   });

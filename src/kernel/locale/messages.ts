@@ -107,8 +107,10 @@ export const messages = {
   'sync.switch.failedAborted': 'Workspace switch failed. Please try again.',
   'sync.tombstoned.connect': 'Sync disconnected: Remote workspace was deleted. Operating offline.',
   'sync.tombstoned.switch': 'Cannot switch: This workspace has been deleted.',
+  // Moved verbatim from domains/sync/backend/permissionDenied.ts (the
+  // transport keeps DETECTION, the catalog owns the COPY — P4 §D3 completed).
   'sync.rulesOutOfDate':
-    'Sync error: Your Firebase security rules are out of date. Open Sync settings and follow "Redeploy your rules" to restore sync.',
+    "Cloud sync was rejected by your Firebase project's security rules. Your deployed rules are likely out of date — redeploy firestore.rules and storage.rules from the Versicle repository (firebase deploy --only firestore:rules,storage).",
   'sync.failure.maxAttempts': 'Sync failed after multiple attempts. Please check your connection.',
   'sync.saveRejected.tooLarge':
     'Sync disabled: Document too large ({sizeBytes} bytes). Please export and clear data.',

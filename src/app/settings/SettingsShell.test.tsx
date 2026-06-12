@@ -17,6 +17,7 @@ import { SETTINGS_PANELS, resolveSettingsTab } from './registry';
 import TTSPanel from './panels/TTSPanel';
 import RecoveryPanel from './panels/RecoveryPanel';
 import DataPanel from './panels/DataPanel';
+import { ConfirmHost } from '@components/ui/ConfirmDialog';
 import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
@@ -247,18 +248,22 @@ describe('regression: wipe-all-data — Clear All Data must route through wipeAl
   // "Clear All Data" used to hand-enumerate IDB stores and call
   // localStorage.clear(), silently leaving the entire versicle-yjs database
   // (all user data) behind. The data panel must delegate to wipeAllData().
+  // Phase 8 §D: confirmation flows through the accessible ConfirmDialog —
+  // the ConfirmHost is rendered beside the panel exactly as App.tsx mounts
+  // it above the router gate.
   const renderDataPanel = () =>
     renderWithStores(
       <MemoryRouter>
+        <ConfirmHost />
         <DataPanel />
       </MemoryRouter>,
     );
 
   it('calls wipeAllData when the user confirms', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderDataPanel();
 
     fireEvent.click(screen.getByText('Clear All Data'));
+    fireEvent.click(await screen.findByTestId('confirm-dialog-confirm'));
 
     await waitFor(() => {
       expect(wipeAllData).toHaveBeenCalledTimes(1);
@@ -266,13 +271,13 @@ describe('regression: wipe-all-data — Clear All Data must route through wipeAl
   });
 
   it('does not wipe when the confirmation is declined', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderDataPanel();
 
     fireEvent.click(screen.getByText('Clear All Data'));
+    fireEvent.click(await screen.findByTestId('confirm-dialog-cancel'));
 
     await waitFor(() => {
-      expect(confirmSpy).toHaveBeenCalled();
+      expect(screen.queryByTestId('confirm-dialog')).toBeNull();
     });
     expect(wipeAllData).not.toHaveBeenCalled();
   });

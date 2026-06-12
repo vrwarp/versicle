@@ -7,15 +7,17 @@ import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useToastStore } from '@store/useToastStore';
+import { useConfirm } from '../ui/ConfirmDialog';
 
 export const DeviceManager = () => {
     const { devices, renameDevice, deleteDevice } = useDeviceStore();
     const currentDeviceId = getDeviceId();
     const deviceList = Object.values(devices);
     const showToast = useToastStore(state => state.showToast);
+    const confirm = useConfirm();
 
-    const handleClone = (profile: DeviceProfile) => {
-        if (!confirm("This will overwrite your current Theme and TTS settings. Continue?")) return;
+    const handleClone = async (profile: DeviceProfile) => {
+        if (!(await confirm({ titleKey: 'devices.applySettings.title', bodyKey: 'devices.applySettings.body', confirmKey: 'common.continue' }))) return;
 
         // Apply Theme
         usePreferencesStore.setState({
@@ -42,8 +44,8 @@ export const DeviceManager = () => {
         showToast("Settings cloned successfully!", 'success');
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm("Are you sure you want to remove this device? It will just stop appearing here.")) {
+    const handleDelete = async (id: string) => {
+        if (await confirm({ titleKey: 'devices.remove.title', bodyKey: 'devices.remove.body', danger: true })) {
             deleteDevice(id);
         }
     };

@@ -13,6 +13,7 @@ import { useToastStore } from '@store/useToastStore';
 import { useFirestoreSync } from '@hooks/useFirestoreSync';
 import { getDeviceId } from '@lib/device-id';
 import { SyncSettingsTab } from '@components/settings';
+import { useConfirm } from '@components/ui/ConfirmDialog';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('SyncPanel');
@@ -28,9 +29,10 @@ const SyncPanel: React.FC = () => {
 
   const { devices, renameDevice } = useDeviceStore();
   const currentDeviceId = getDeviceId();
+  const confirm = useConfirm();
 
-  const handleClearConfig = () => {
-    if (confirm("Are you sure you want to clear the Firebase configuration?")) {
+  const handleClearConfig = async () => {
+    if (await confirm({ titleKey: 'syncSettings.clearConfig.title', bodyKey: 'syncSettings.clearConfig.body', danger: true })) {
       setFirebaseConfig({
         apiKey: '',
         authDomain: '',

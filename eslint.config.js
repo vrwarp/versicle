@@ -195,6 +195,35 @@ export default tseslint.config(
       // Warn until the cycles are broken in Phase 1+; the depcruise baseline
       // (.dependency-cruiser-baseline.json) is the authoritative ratchet.
       'import/no-cycle': 'warn',
+      // Phase 8 §D exit criterion (born at ERROR, zero exceptions): native
+      // dialogs are gone — useConfirm()/confirmDialog
+      // (src/components/ui/ConfirmDialog.tsx) replace confirm(), keyed
+      // toasts (useToastStore.showToast) replace alert(). Both rules:
+      // no-alert catches calls, no-restricted-globals catches bare global
+      // references (callbacks, aliasing).
+      'no-alert': 'error',
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'confirm',
+          message:
+            'Native confirm() is banned (Phase 8 §D) — use useConfirm() / ' +
+            'confirmDialog from @components/ui/ConfirmDialog (keyed, ' +
+            'accessible, promise-based).',
+        },
+        {
+          name: 'alert',
+          message:
+            'Native alert() is banned (Phase 8 §D) — show a keyed toast ' +
+            'via useToastStore.showToast.',
+        },
+        {
+          name: 'prompt',
+          message:
+            'Native prompt() is banned (Phase 8 §D) — build a real dialog ' +
+            'on @components/ui/Modal.',
+        },
+      ],
       // One canonical import path per module (Phase 1 path-alias codemod,
       // scripts/codemod-aliases.mjs): a relative specifier that climbs out
       // with `../` and re-enters one of the aliased src/ roots must use the

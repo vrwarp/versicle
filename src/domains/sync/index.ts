@@ -46,7 +46,7 @@ export { downloadWorkspaceState } from './core/downloadWorkspaceState';
 export type { DownloadWorkspaceStateOptions } from './core/downloadWorkspaceState';
 export { getSyncEventBus } from './events';
 export type { SyncEvent, SyncEventBus } from './events';
-export {
-  isPermissionDeniedEvent,
-  RULES_OUT_OF_DATE_MESSAGE,
-} from './backend/permissionDenied';
+// Phase 8 §D: the rules-lockout COPY moved into the typed catalog
+// (kernel/locale/messages.ts, 'sync.rulesOutOfDate') — the transport keeps
+// only the DETECTION predicate.
+export { isPermissionDeniedEvent } from './backend/permissionDenied';

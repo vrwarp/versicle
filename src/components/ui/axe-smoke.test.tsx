@@ -22,9 +22,9 @@ describe('axe smoke: ui primitives', () => {
     expect(await view.axe()).toHaveNoViolations();
   });
 
-  it('Toast (visible, success) has no violations', async () => {
+  it('Toast (success) has no violations', async () => {
     const view = renderWithStores(
-      <Toast message="Library imported" isVisible type="success" onClose={vi.fn()} duration={0} />,
+      <Toast message="Library imported" type="success" onClose={vi.fn()} duration={0} />,
     );
     expect(await view.axe()).toHaveNoViolations();
   });

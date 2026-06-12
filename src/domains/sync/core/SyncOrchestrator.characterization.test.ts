@@ -16,6 +16,7 @@
  * reload the page).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { resolveMessage, type MessageInput } from '@kernel/locale/messages';
 import * as Y from 'yjs';
 import { MockFireProvider } from '../backend/MockFireProvider';
 import {
@@ -64,6 +65,20 @@ const injectCloudSnapshot = (workspaceId: string, build: (doc: Y.Doc) => void): 
   for (let i = 0; i < update.byteLength; i++) b64 += String.fromCharCode(update[i]);
   MockFireProvider.injectSnapshot(pathFor(workspaceId), btoa(b64));
 };
+
+/**
+ * Phase 8 §D: wireSyncEvents passes catalog keys; assertions pin the
+ * RESOLVED user-visible copy verbatim.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function expectToastShown(spy: { mock: { calls: any[][] } }, message: string | RegExp, type: string, duration?: number) {
+  const matched = spy.mock.calls.some(([content, t, d]) => {
+    const text = resolveMessage(content as MessageInput | string);
+    const textMatches = typeof message === 'string' ? text === message : message.test(text);
+    return textMatches && t === type && d === duration;
+  });
+  expect(matched, `expected toast ${String(message)} (${type})`).toBe(true);
+}
 
 describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () => {
   let showToast: ReturnType<typeof vi.spyOn>;
@@ -217,11 +232,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
 
       expect(useSyncStore.getState().activeWorkspaceId).toBeNull();
       expect(manager.getStatus()).toBe('disconnected');
-      expect(showToast).toHaveBeenCalledWith(
-        'Sync disconnected: Remote workspace was deleted. Operating offline.',
-        'error',
-        8000
-      );
+      expectToastShown(showToast, 'Sync disconnected: Remote workspace was deleted. Operating offline.', 'error', 8000);
     });
 
     it('clean-sync downloads existing cloud data into the live doc, then connects', async () => {
@@ -242,8 +253,8 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       // provider connected.
       const { getYDoc } = await import('@store/yjs-provider');
       expect(getYDoc().getMap('library').get('characterization-probe')).toBe('cloud-data');
-      expect(showToast).toHaveBeenCalledWith('Syncing library from cloud...', 'info');
-      expect(showToast).toHaveBeenCalledWith('Sync complete!', 'success');
+      expectToastShown(showToast, 'Syncing library from cloud...', 'info');
+      expectToastShown(showToast, 'Sync complete!', 'success');
     });
   });
 
@@ -284,7 +295,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       // The id flips only at the commit point (legacy flipped it BEFORE the
       // download — a crash mid-download left a dangling state).
       expect(useSyncStore.getState().activeWorkspaceId).toBe('ws_b');
-      expect(showToast).toHaveBeenCalledWith('Downloading workspace data...', 'info');
+      expectToastShown(showToast, 'Downloading workspace data...', 'info');
 
       // The downloaded ws_b state is durably in the staging database.
       const staged = await readSnapshot({ dbName: YJS_STAGING_DB_NAME });
@@ -315,10 +326,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       const manager = await getSyncOrchestratorAsync();
       await expect(manager.switchWorkspace('ws_dead')).rejects.toThrow(WorkspaceDeletedError);
 
-      expect(showToast).toHaveBeenCalledWith(
-        'Cannot switch: This workspace has been deleted.',
-        'error'
-      );
+      expectToastShown(showToast, 'Cannot switch: This workspace has been deleted.', 'error');
       // Nothing destructive ran: no checkpoint, no state machine, no id
       // flip, nothing staged.
       expect(createCheckpointSpy).not.toHaveBeenCalled();
@@ -393,10 +401,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       // …and the delete was honest: tombstone everywhere + purge toast.
       const ws = readWorkspaces().find((w) => w.workspaceId === 'ws_other');
       expect(ws?.deletedAt).toBeGreaterThan(0);
-      expect(showToast).toHaveBeenCalledWith(
-        expect.stringMatching(/^Remote workspace data purged/),
-        'info'
-      );
+      expectToastShown(showToast, /^Remote workspace data purged/, 'info');
     });
 
     it('the purge maintenance action sweeps residuals of every tombstoned workspace', async () => {

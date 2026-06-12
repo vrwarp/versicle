@@ -46,11 +46,10 @@ describe('store seeding and reset', () => {
   autoResetStores(useToastStore);
 
   it('seedStore applies overrides on top of the pristine initial state', () => {
-    seedStore(useToastStore, { message: 'seeded', isVisible: true });
-    expect(useToastStore.getState().message).toBe('seeded');
-    expect(useToastStore.getState().isVisible).toBe(true);
-    // untouched field keeps its initial value
-    expect(useToastStore.getState().type).toBe('info');
+    seedStore(useToastStore, {
+      toasts: [{ id: 1, message: 'seeded', type: 'info', duration: 3000 }],
+    });
+    expect(useToastStore.getState().toasts[0]?.message).toBe('seeded');
   });
 
   it('resetStore restores state AND replaced actions', () => {
@@ -59,20 +58,31 @@ describe('store seeding and reset', () => {
     expect(useToastStore.getState().showToast).not.toBe(original);
     resetStore(useToastStore);
     expect(useToastStore.getState().showToast).toBe(original);
-    expect(useToastStore.getState().message).toBe('');
+    expect(useToastStore.getState().toasts).toEqual([]);
   });
 });
 
 describe('captureToasts', () => {
-  it('records every showToast call in order (single-slot store loses them)', () => {
+  it('records every showToast call in order, resolving catalog keys to display copy', () => {
     const capture = captureToasts();
     try {
       useToastStore.getState().showToast('first', 'success');
       useToastStore.getState().showToast('second', 'error', 5000);
-      expect(capture.messages()).toEqual(['first', 'second']);
-      expect(capture.toasts[1]).toEqual({ message: 'second', type: 'error', duration: 5000 });
-      // the real store still received the calls (last one wins)
-      expect(useToastStore.getState().message).toBe('second');
+      useToastStore.getState().showToast('sync.cleanSync.applied', 'success');
+      expect(capture.messages()).toEqual(['first', 'second', 'Sync complete!']);
+      expect(capture.toasts[1]).toEqual({
+        message: 'second',
+        key: undefined,
+        type: 'error',
+        duration: 5000,
+      });
+      expect(capture.toasts[2]?.key).toBe('sync.cleanSync.applied');
+      // the real store still received the calls (queued, Phase 8 §D)
+      expect(useToastStore.getState().toasts.map((t) => t.message)).toEqual([
+        'first',
+        'second',
+        'Sync complete!',
+      ]);
     } finally {
       capture.restore();
       resetStore(useToastStore);
@@ -112,18 +122,21 @@ describe('renderWithStores', () => {
   // seeds, the second observes pristine state.
   it('seeds the real store for the rendered component', () => {
     const { getByTestId } = renderWithStores(<ToastProbe />, {
-      seeds: [storeSeed(useToastStore, { message: 'from-seed', isVisible: true })],
+      seeds: [
+        storeSeed(useToastStore, {
+          toasts: [{ id: 1, message: 'from-seed', type: 'info' as const, duration: 3000 }],
+        }),
+      ],
     });
     expect(getByTestId('probe').textContent).toBe('from-seed');
   });
 
   it('auto-resets seeded stores after the previous test finished', () => {
-    expect(useToastStore.getState().message).toBe('');
-    expect(useToastStore.getState().isVisible).toBe(false);
+    expect(useToastStore.getState().toasts).toEqual([]);
   });
 });
 
 function ToastProbe() {
-  const message = useToastStore((s) => s.message);
+  const message = useToastStore((s) => s.toasts[0]?.message ?? '');
   return <div data-testid="probe">{message}</div>;
 }

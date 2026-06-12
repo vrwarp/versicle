@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { ScrollArea } from '../ui/ScrollArea';
 import { formatBytes, formatDateTime, formatTime } from '@kernel/locale/format';
+import { useConfirm } from '../ui/ConfirmDialog';
 import {
     Activity, 
     Download, 
@@ -25,6 +26,7 @@ export const DiagnosticsTab: React.FC = () => {
     // singleton showed an empty buffer. Persisted snapshots are shared
     // IndexedDB rows, listed through the same command facade.
     const audio = useAudioCommands();
+    const confirm = useConfirm();
     const [snapshots, setSnapshots] = useState<Omit<FlightSnapshot, 'eventsJSON'>[]>([]);
     const [stats, setStats] = useState<{ eventCount: number; capacity: number; oldestWall: number | null }>(
         { eventCount: 0, capacity: 0, oldestWall: null });
@@ -61,7 +63,7 @@ export const DiagnosticsTab: React.FC = () => {
     };
 
     const handleClearAll = async () => {
-        if (confirm('Are you sure you want to delete all diagnostic snapshots?')) {
+        if (await confirm({ titleKey: 'diagnostics.deleteSnapshots.title', bodyKey: 'diagnostics.deleteSnapshots.body', danger: true })) {
             await audio.clearDiagnosticSnapshots();
             await loadSnapshots();
         }
