@@ -27,12 +27,16 @@ import {
   setGenAIClient,
   setGoogleAuthClient,
 } from '@domains/google';
+import { setConsentResolver } from '@kernel/net';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 import { useSyncStore } from '@store/useSyncStore';
 import { useDriveStore } from '@store/useDriveStore';
 import { useLibraryStore } from '@store/useLibraryStore';
 import { useBookStore } from '@store/useBookStore';
 import { useGenAIStore } from '@store/useGenAIStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
+import { makeAiConsentResolver } from './aiConsent';
 import { createLogger } from '@lib/logger';
 
 let wired = false;
@@ -91,6 +95,18 @@ export function wireGoogleDomain(): void {
         };
       },
       onLog: (entry) => useGenAIStore.getState().addLog(entry),
+    }),
+  );
+
+  // Per-book AI consent gate (Phase 7 §H / PR-N3, privacy D2): the gateway
+  // consults this for non-interactive 'per-book' destinations (gemini).
+  setConsentResolver(
+    makeAiConsentResolver({
+      getConsent: (bookId) => usePreferencesStore.getState().aiConsent[bookId],
+      hasAnalysisRecords: (bookId) =>
+        Object.keys(useContentAnalysisStore.getState().sections).some((key) =>
+          key.startsWith(`${bookId}/`),
+        ),
     }),
   );
 }

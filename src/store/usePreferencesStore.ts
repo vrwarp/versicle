@@ -35,6 +35,18 @@ interface PreferencesState {
     showPinyin: boolean;
     pinyinSize: number;
 
+    // === PER-BOOK AI CONSENT (Phase 7 §H, privacy D2) ===
+    /**
+     * bookId → whether book content/derived data may be sent to GenAI by
+     * NON-interactive flows (the NetworkGateway consent gate consults this
+     * through the resolver wired in src/app/google/wireGoogle.ts).
+     * Additive optional field — safe post-P2 merge-defaults. Absent entries
+     * fall back to grandfathering (books with existing contentAnalysis
+     * records) and then to the global feature flags (observe mode until the
+     * per-book consent prompt ships with the TTS UI work).
+     */
+    aiConsent: Record<string, boolean>;
+
     // === ACTIONS (not synced to Yjs) ===
     setTheme: (theme: 'light' | 'dark' | 'sepia') => void;
     setCustomTheme: (theme: { bg: string; fg: string }) => void;
@@ -53,6 +65,8 @@ interface PreferencesState {
     setPinyinSize: (size: number) => void;
 
     setFontProfile: (lang: string, profile: Partial<FontProfile>) => void;
+
+    setAiConsent: (bookId: string, granted: boolean) => void;
 }
 
 const defaultPreferences = {
@@ -75,7 +89,9 @@ const defaultPreferences = {
     fontProfiles: {
         en: { fontSize: 100, lineHeight: 1.5 },
         zh: { fontSize: 120, lineHeight: 1.8 }
-    }
+    },
+
+    aiConsent: {} as Record<string, boolean>
 };
 
 /**
@@ -108,6 +124,7 @@ export const PREFERENCES_STORE_DEF: SyncedStoreDef<keyof typeof defaultPreferenc
         'forceTraditionalChinese',
         'showPinyin',
         'pinyinSize',
+        'aiConsent',
     ],
     hydration: 'merge-defaults',
     scopedDiff: true,
@@ -150,6 +167,10 @@ export const usePreferencesStore = create<PreferencesState>()(
                     }
                 };
             }),
+
+            setAiConsent: (bookId, granted) => set((state) => ({
+                aiConsent: { ...state.aiConsent, [bookId]: granted }
+            })),
         })
     )
 );

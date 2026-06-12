@@ -83,6 +83,8 @@ const prefsDefaults = {
     en: { fontSize: 100, lineHeight: 1.5 },
     zh: { fontSize: 120, lineHeight: 1.8 },
   } as Record<string, { fontSize: number; lineHeight: number }>,
+  // Phase 7 §H (privacy D2): per-book AI consent map (additive synced key).
+  aiConsent: {} as Record<string, boolean>,
 };
 interface PrefsState extends Record<string, unknown> {
   setTheme: (theme: string) => void;
