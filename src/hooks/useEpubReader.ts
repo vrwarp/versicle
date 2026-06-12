@@ -93,12 +93,6 @@ export interface EpubReaderResult {
    * panels consume. Non-null once the book is rendered.
    */
   engine: ReaderEngine | null;
-  /**
-   * The raw epub.js Book — TYPE-ONLY epubjs surface retained for the two
-   * named P7-deadlined exceptions (lib/search indexing via SearchPanel).
-   * No component may touch Book/Rendition APIs beyond passing this through.
-   */
-  book: Book | null;
   /** Whether the book is fully ready for interaction. */
   isReady: boolean;
   /** Whether the book's location registry (CFI <-> Percentage) is fully generated */
@@ -127,7 +121,9 @@ export function useEpubReader(
   viewerRef: React.RefObject<HTMLElement>,
   options: EpubReaderOptions
 ): EpubReaderResult {
-  const [book, setBook] = useState<Book | null>(null);
+  // No raw `Book` leaves this hook: the ReaderEngine port is the only public
+  // surface (the SearchPanel Book passthrough died with the SearchSession
+  // adoption; `bookRef` below is hook-internal lifecycle plumbing).
   const [engine, setEngine] = useState<ReaderEngine | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [areLocationsReady, setAreLocationsReady] = useState(false);
@@ -197,7 +193,6 @@ export function useEpubReader(
         registerSanitizeHook(newBook as unknown as EpubJsBookLike, { allowTestBypass: true });
 
         bookRef.current = newBook;
-        setBook(newBook);
 
         if (optionsRef.current.onBookLoaded) {
           optionsRef.current.onBookLoaded(newBook);
@@ -480,5 +475,5 @@ export function useEpubReader(
     pinyinSize
   ]);
 
-  return { engine, book, isReady, areLocationsReady, isLoading, metadata, toc, error };
+  return { engine, isReady, areLocationsReady, isLoading, metadata, toc, error };
 }

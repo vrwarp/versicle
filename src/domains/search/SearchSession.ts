@@ -1,17 +1,12 @@
 /**
  * SearchSession — reader-session-scoped search (Phase 7 §F, PR-S1).
  *
- * Replaces the module singleton `searchClient` (`src/lib/search.ts:204`) for
- * everything OUTSIDE the frozen reader components: created per reading
- * session, owns its engine lifecycle (`index()` / `search()` / `dispose()`),
- * and is constructor-injected with an `engineFactory` so tests run the REAL
- * engine in-process while production wires the Comlink worker
- * (`createWorkerSearchEngineFactory`).
- *
- * NOTE (sub-track boundary): the reader still uses `searchClient` — the P6
- * chain owns `ReaderView`/`SearchPanel`, so reader adoption (providing a
- * session via context, deleting the singleton + `scrollToText`) is the named
- * post-merge follow-up. Nothing here imports reader files.
+ * Replaced the module singleton `searchClient` (`src/lib/search.ts`, DELETED
+ * with the post-merge reader adoption): created per reading session (the
+ * reader controller owns one), owns its engine lifecycle (`index()` /
+ * `search()` / `dispose()`), and is constructor-injected with an
+ * `engineFactory` so tests run the REAL engine in-process while production
+ * wires the Comlink worker (`createWorkerSearchEngineFactory`).
  *
  * Failure semantics (search.md #6 — dead worker left `isIndexed:true` and
  * promises that never settled):

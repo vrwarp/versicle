@@ -1,4 +1,4 @@
-import type { SearchResult, SearchSection, DetailedSearchResult, SearchBatchResult } from '~types/search';
+import type { SearchSection, DetailedSearchResult, SearchBatchResult } from '~types/search';
 
 /**
  * In-memory full-text scan over a book's plain text (one entry per spine
@@ -119,16 +119,6 @@ export class SearchEngine {
         }
 
         return { results, truncated };
-    }
-
-    /**
-     * Legacy result shape ({@link SearchResult}); delegates to
-     * {@link searchDetailed}. Kept for the reader-side SearchClient until the
-     * post-merge reader adoption (its 50-cap silent truncation included).
-     */
-    search(bookId: string, query: string): SearchResult[] {
-        const { results } = this.searchDetailed(bookId, query);
-        return results.map(({ href, excerpt }) => ({ href, excerpt }));
     }
 
     /**

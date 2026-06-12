@@ -76,7 +76,6 @@ function registerFakeCommands() {
         nextChapter: vi.fn(),
         prevChapter: vi.fn(),
         playFromSelection: vi.fn(),
-        scrollToText: vi.fn(),
         refineSelection: vi.fn(() => null),
     };
     const unregister = registerReaderCommands(commands);

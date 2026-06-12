@@ -4,4 +4,4 @@ This directory contains the entry point scripts for Web Workers. These scripts r
 
 ## Files
 
-*   **`search.worker.ts`**: The dedicated worker for full-text search. It initializes the `SearchEngine` (wrapping FlexSearch), indexes book content, and processes search queries sent from the main thread.
+*   **`search.worker.ts`**: The dedicated worker for full-text search. It Comlink-exposes the `SearchEngine` (an escaped-literal linear scan — no index library); `SearchSession` (`src/domains/search/`) owns the worker lifecycle and feeds it sections from the persisted `cache_search_text` corpus.

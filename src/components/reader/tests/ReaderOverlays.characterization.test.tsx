@@ -78,15 +78,6 @@ vi.mock('@data/connection', () => ({
   ),
 }));
 
-vi.mock('@lib/search', () => ({
-  searchClient: {
-    indexBook: vi.fn().mockResolvedValue(undefined),
-    search: vi.fn().mockResolvedValue([]),
-    isIndexed: vi.fn().mockReturnValue(true),
-    terminate: vi.fn(),
-  },
-}));
-
 const BOOK_ID = 'test-book-id';
 
 const makeAnnotation = (over: Partial<UserAnnotation>): UserAnnotation => ({

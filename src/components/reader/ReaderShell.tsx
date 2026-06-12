@@ -113,9 +113,12 @@ export const ReaderShell: React.FC = () => {
                     <ReaderSidebars
                         bookId={bookId}
                         engine={controller.engine}
-                        book={controller.book}
                         bookMetadata={controller.bookMetadata}
                         historyTick={controller.historyTick}
+                        searchSession={controller.searchSession}
+                        onSearchNavigate={(result) => {
+                            void controller.navigateToSearchResult(result);
+                        }}
                     />
 
                     {/* Pinyin Overlay (Ephemeral UI) */}

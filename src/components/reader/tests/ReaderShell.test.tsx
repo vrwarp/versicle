@@ -59,15 +59,6 @@ vi.mock('@data/connection', () => ({
   })),
 }));
 
-// Mock searchClient
-vi.mock('@lib/search', () => ({
-  searchClient: {
-    indexBook: vi.fn().mockResolvedValue(undefined),
-    search: vi.fn().mockResolvedValue([]),
-    terminate: vi.fn(),
-  }
-}));
-
 describe('ReaderView', () => {
   const mockRenderTo = vi.fn();
   const mockDisplay = vi.fn();

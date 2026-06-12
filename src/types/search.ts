@@ -1,28 +1,10 @@
 /**
- * Represents the result of a search query within a book.
- * Used by both the SearchEngine (to return results) and the UI (to display them).
- *
- * @example
- * ```ts
- * const result: SearchResult = {
- *   href: "chapter1.html",
- *   excerpt: "...found this text..."
- * };
- * ```
- */
-export interface SearchResult {
-    /** The reference (href) to the location in the book (e.g., 'chapter1.html'). */
-    href: string;
-    /** A snippet of text containing the search term, with surrounding context. */
-    excerpt: string;
-}
-
-/**
- * A per-occurrence search hit (Phase 7 §F, PR-S2). Unlike {@link SearchResult}
- * it carries enough position data to navigate to the EXACT occurrence:
- * `charOffset` into the section's indexed plain text, the per-section
- * `occurrence` ordinal, and an optional `cfi` resolved lazily at click time
- * (the engine/worker never see the DOM).
+ * A per-occurrence search hit (Phase 7 §F, PR-S2) — THE search result shape
+ * (the legacy `{href, excerpt}` SearchResult died with the reader-side
+ * SearchSession adoption). It carries enough position data to navigate to
+ * the EXACT occurrence: `charOffset` into the section's indexed plain text,
+ * the per-section `occurrence` ordinal, and an optional `cfi` resolved
+ * lazily at click time (the engine/worker never see the DOM).
  */
 export interface DetailedSearchResult {
     /** The reference (href) to the section containing the match. */

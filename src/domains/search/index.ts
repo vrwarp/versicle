@@ -1,9 +1,10 @@
 /**
  * domains/search — public surface (Phase 7 §F).
  *
- * Reader adoption (providing a SearchSession via context to SearchPanel,
- * deleting the `searchClient` singleton + `scrollToText`) is the named
- * post-merge follow-up; until then the frozen reader keeps `lib/search.ts`.
+ * Consumed by the reader controller (one SearchSession per open reader,
+ * SearchPanel fed through props) since the post-merge reader adoption — the
+ * `searchClient` singleton, `scrollToText` and the legacy result shape died
+ * with it.
  */
 export {
   SearchSession,

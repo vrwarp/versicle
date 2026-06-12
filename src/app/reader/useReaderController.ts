@@ -19,15 +19,17 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
-import type { Book } from 'epubjs';
 import { useEpubReader, type EpubReaderOptions } from '@hooks/useEpubReader';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
 import { ReadingSessionRecorder } from '@domains/reader/session/ReadingSessionRecorder';
 import type { ReaderCommands } from '@domains/reader/ui/ReaderCommands';
+import { SearchSession, createWorkerSearchEngineFactory } from '@domains/search';
 import { registerChineseReading, getBookBaseLanguage } from '@domains/chinese';
 import type { PinyinPosition } from '@domains/chinese/types';
 import type { BookMetadata } from '~types/db';
+import type { DetailedSearchResult } from '~types/search';
+import { searchTextRepo } from '@data/repos/searchText';
 import { useReadingStateStore } from '@store/useReadingStateStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
@@ -35,7 +37,7 @@ import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useToastStore } from '@store/useToastStore';
 import { useBook } from '@store/selectors';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
-import { searchClient } from '@lib/search';
+import { createSearchNavigator, type SearchNavigator } from '@app/reader/searchNavigation';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import { createLogger } from '@lib/logger';
 
@@ -45,8 +47,6 @@ const DEFAULT_CUSTOM_THEME = { bg: '#ffffff', fg: '#000000' };
 
 export interface ReaderController {
   engine: ReaderEngine | null;
-  /** TYPE-ONLY epubjs surface for the P7-deadlined SearchPanel exception. */
-  book: Book | null;
   isReady: boolean;
   areLocationsReady: boolean;
   bookMetadata: (BookMetadata & { coverBlob?: Blob }) | null;
@@ -59,6 +59,14 @@ export interface ReaderController {
   viewerRef: React.RefObject<HTMLDivElement | null>;
   scrollWrapperRef: React.RefObject<HTMLDivElement | null>;
   readerViewMode: 'paginated' | 'scrolled';
+  /**
+   * The reader-session search surface (Phase 7 §F): one SearchSession per
+   * open reader, worker-backed, fed by the persisted corpus. Replaces the
+   * `searchClient` module singleton the controller used to terminate.
+   */
+  searchSession: SearchSession;
+  /** Land on the EXACT occurrence with a temporary highlight (PR-S4). */
+  navigateToSearchResult: (result: DetailedSearchResult) => Promise<void>;
 }
 
 export interface ReaderControllerDeps {
@@ -253,7 +261,6 @@ export function useReaderController(
 
   const {
     engine,
-    book,
     isReady,
     areLocationsReady,
     isLoading: hookLoading,
@@ -264,6 +271,36 @@ export function useReaderController(
   useEffect(() => {
     engineRef.current = engine;
   }, [engine]);
+
+  // Reader-session search (Phase 7 §F, the post-merge reader adoption): ONE
+  // SearchSession per open reader — worker lifecycle owned here (created
+  // lazily on first index/search), corpus from the searchText repo, engine
+  // crashes reset the session and surface a toast (search.md #6).
+  const searchSessionRef = useRef<SearchSession | null>(null);
+  if (!searchSessionRef.current) {
+    searchSessionRef.current = new SearchSession({
+      engineFactory: createWorkerSearchEngineFactory(),
+      textSource: searchTextRepo,
+      onError: (error) => {
+        logger.error('Search engine failed; session reset', error);
+        useToastStore.getState().showToast('Search failed', 'error');
+      },
+    });
+  }
+  const searchSession = searchSessionRef.current;
+
+  const searchNavigatorRef = useRef<SearchNavigator | null>(null);
+  if (!searchNavigatorRef.current) {
+    searchNavigatorRef.current = createSearchNavigator(() => engineRef.current);
+  }
+
+  const navigateToSearchResult = useCallback(async (result: DetailedSearchResult) => {
+    try {
+      await searchNavigatorRef.current?.navigate(result);
+    } catch (e) {
+      logger.error('Search navigation failed', e);
+    }
+  }, []);
 
   // Chinese reading registration (Phase 6 §7, PR-10): the app layer wires
   // the feature module to the engine's content seam — and ONLY for books
@@ -379,7 +416,8 @@ export function useReaderController(
   }, [resetUI]);
   useEffect(() => {
     return () => {
-      searchClient.terminate();
+      searchNavigatorRef.current?.dispose();
+      searchSessionRef.current?.dispose();
       setCurrentBookId(null);
       reset();
       hidePopover();
@@ -448,65 +486,6 @@ export function useReaderController(
     }
   }, [audio]);
 
-  const scrollToText = useCallback((text: string) => {
-    const iframe = viewerRef.current?.querySelector('iframe');
-    if (iframe && iframe.contentWindow) {
-      const doc = iframe.contentDocument;
-      if (!doc) return;
-
-      // Method 1: window.find
-      iframe.contentWindow.getSelection()?.removeAllRanges();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const found = (iframe.contentWindow as any).find(text, false, false, true, false, false, false);
-
-      let element: HTMLElement | null = null;
-      let range: Range | null = null;
-
-      if (found) {
-        const selection = iframe.contentWindow.getSelection();
-        if (selection && selection.rangeCount > 0) {
-          range = selection.getRangeAt(0);
-          element = range.startContainer.parentElement;
-        }
-      } else {
-        // Method 2: TreeWalker (Fallback)
-        const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null);
-        let node;
-        while ((node = walker.nextNode())) {
-          if (node.textContent?.toLowerCase().includes(text.toLowerCase())) {
-            range = doc.createRange();
-            range.selectNodeContents(node);
-            element = node.parentElement;
-
-            // Highlight selection
-            const selection = iframe.contentWindow.getSelection();
-            selection?.removeAllRanges();
-            selection?.addRange(range);
-            break;
-          }
-        }
-      }
-
-      if (element) {
-        if (panicSaveState.current.readerViewMode === 'scrolled') {
-          const wrapper = viewerRef.current?.firstElementChild as HTMLElement;
-          if (wrapper && wrapper.scrollHeight > wrapper.clientHeight) {
-            const rect = element.getBoundingClientRect();
-            // rect.top is relative to the iframe document top (which is full height)
-            // Center the element in the wrapper
-            const targetTop = rect.top - (wrapper.clientHeight / 2) + (rect.height / 2);
-            wrapper.scrollTo({ top: Math.max(0, targetTop), behavior: 'auto' });
-          } else {
-            element.scrollIntoView({ behavior: 'auto', block: 'center' });
-          }
-        } else {
-          element.scrollIntoView({ behavior: 'auto', block: 'center' });
-        }
-        return;
-      }
-    }
-  }, []);
-
   const commands = useMemo<ReaderCommands>(() => ({
     jumpTo: (cfi) => {
       try {
@@ -535,7 +514,6 @@ export function useReaderController(
       }
     },
     playFromSelection: (cfiRange) => handlePlayFromSelection(cfiRange),
-    scrollToText: (text) => scrollToText(text),
     refineSelection: () => {
       // D11: the audio-triage selection refinement, reachable again (it
       // rode a rendition prop that was never supplied). Reads the current
@@ -556,11 +534,10 @@ export function useReaderController(
       }
       return null;
     },
-  }), [audio, handlePlayFromSelection, scrollToText]);
+  }), [audio, handlePlayFromSelection]);
 
   return {
     engine,
-    book,
     isReady,
     areLocationsReady,
     bookMetadata,
@@ -574,5 +551,7 @@ export function useReaderController(
     viewerRef,
     scrollWrapperRef,
     readerViewMode,
+    searchSession,
+    navigateToSearchResult,
   };
 }

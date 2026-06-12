@@ -47,8 +47,6 @@ export interface ReaderCommands {
   prevChapter(): void;
   /** Start playback at the queue item covering the selection. */
   playFromSelection(cfiRange: string): void;
-  /** Interim search-result scroll; dies with the P7 SearchSession. */
-  scrollToText(text: string): void;
   /**
    * Current iframe selection as a refined annotation target (the
    * audio-triage path, D11) — null when nothing is selected.

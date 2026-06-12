@@ -5,8 +5,8 @@
  * The search corpus is the concatenation of a section's text nodes in
  * document order (`textContent`), so walking text nodes while accumulating
  * lengths reproduces the offset space exactly. CFI GENERATION IS INJECTED:
- * this module never imports epubjs — the reader passes its rendition's
- * `cfiFromRange` at the call site (post-merge follow-up wires SearchPanel).
+ * this module never imports epubjs — the reader passes its content view's
+ * `cfiFromRange` at the call site (app/reader/searchNavigation).
  */
 import type { DetailedSearchResult } from '~types/search';
 

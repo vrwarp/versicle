@@ -3,6 +3,10 @@ import { SearchEngine } from './search-engine';
 import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '@test/fuzz-utils';
 import type { SearchSection } from '~types/search';
 
+/** Legacy `search()` died with the SearchSession adoption; scan via searchDetailed. */
+const search = (engine: SearchEngine, bookId: string, query: string) =>
+    engine.searchDetailed(bookId, query).results;
+
 describe('SearchEngine Fuzzing', () => {
     const SEED = DEFAULT_FUZZ_SEED;
 
@@ -33,7 +37,7 @@ describe('SearchEngine Fuzzing', () => {
                 }
 
                 try {
-                    const results = engine.search('test-book', query);
+                    const results = search(engine, 'test-book', query);
                     expect(Array.isArray(results)).toBe(true);
                 } catch (e) {
                     console.error(`Crashed on query (seed=${SEED}, iteration=${i}): ${query}`);
@@ -55,7 +59,7 @@ describe('SearchEngine Fuzzing', () => {
                 const query = rng.nextUnicodeString(rng.nextInt(0, 30));
 
                 try {
-                    const results = engine.search('unicode-book', query);
+                    const results = search(engine, 'unicode-book', query);
                     expect(Array.isArray(results)).toBe(true);
                 } catch (e) {
                     console.error(`Crashed on Unicode query (seed=${SEED}, iteration=${i}): ${query}`);
@@ -71,9 +75,9 @@ describe('SearchEngine Fuzzing', () => {
                 { id: 'section-1', href: 'ch1.xhtml', text: 'Some content here.' },
             ]);
 
-            expect(engine.search('test-book', '')).toEqual([]);
-            expect(engine.search('test-book', '   ')).toEqual([]);
-            expect(engine.search('test-book', '\t\n')).toEqual([]);
+            expect(search(engine, 'test-book', '')).toEqual([]);
+            expect(search(engine, 'test-book', '   ')).toEqual([]);
+            expect(search(engine, 'test-book', '\t\n')).toEqual([]);
         });
     });
 
@@ -131,7 +135,7 @@ describe('SearchEngine Fuzzing', () => {
 
             for (const query of testQueries) {
                 try {
-                    const results = engine.search('excerpt-test', query);
+                    const results = search(engine, 'excerpt-test', query);
                     expect(Array.isArray(results)).toBe(true);
 
                     for (const result of results) {
@@ -149,7 +153,7 @@ describe('SearchEngine Fuzzing', () => {
         it('handles search on non-existent book', () => {
             const engine = new SearchEngine();
 
-            const results = engine.search('non-existent', 'test');
+            const results = search(engine, 'non-existent', 'test');
             expect(results).toEqual([]);
         });
 
@@ -165,7 +169,7 @@ describe('SearchEngine Fuzzing', () => {
             const longQuery = rng.nextString(1000);
 
             try {
-                const results = engine.search('long-query-test', longQuery);
+                const results = search(engine, 'long-query-test', longQuery);
                 expect(Array.isArray(results)).toBe(true);
             } catch (e) {
                 console.error('Crashed on very long query');
@@ -194,7 +198,7 @@ describe('SearchEngine Fuzzing', () => {
 
             for (const query of dangerousQueries) {
                 try {
-                    const results = engine.search('regex-test', query);
+                    const results = search(engine, 'regex-test', query);
                     expect(Array.isArray(results)).toBe(true);
                 } catch (e) {
                     console.error(`Crashed on dangerous regex query: ${query}`);

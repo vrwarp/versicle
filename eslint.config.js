@@ -258,9 +258,10 @@ export default tseslint.config(
   // construction entry (`createEpubJsBook`). Enforced via the TS flavor of
   // no-restricted-imports so TYPE-ONLY epubjs imports stay legal everywhere
   // (`allowTypeImports`): the remaining type users (useEpubReader's
-  // Book/Rendition plumbing, lib/search.ts + SearchPanel's `Book` — the
-  // library-track-owned indexing API, kernel/cfi/snap.ts) carry no runtime
-  // dependency. Named runtime exceptions (carve-out blocks below):
+  // hook-internal Book/Rendition plumbing, kernel/cfi/snap.ts) carry no
+  // runtime dependency — the lib/search.ts + SearchPanel `Book` passthrough
+  // died with the SearchSession reader adoption.
+  // Named runtime exceptions (carve-out blocks below):
   // src/domains/library/import/extract.ts (the extractor preamble —
   // ingestion-side epubjs, sanctioned by C8 + the P7 prep-doc banner) and
   // src/lib/offscreen-renderer.ts (the offscreen ingestion render path —

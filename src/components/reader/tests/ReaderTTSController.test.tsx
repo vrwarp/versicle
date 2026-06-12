@@ -23,7 +23,7 @@ const makeEngineStub = (rendition: any): ReaderEngine =>
 const noopCommands: ReaderCommands = {
     jumpTo: () => { }, nextPage: () => { }, prevPage: () => { },
     nextChapter: () => { }, prevChapter: () => { },
-    playFromSelection: () => { }, scrollToText: () => { },
+    playFromSelection: () => { },
     refineSelection: () => null,
 };
 const withEngine = (engine: ReaderEngine | null, ui: ReactElement) => (

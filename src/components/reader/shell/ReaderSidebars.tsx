@@ -5,10 +5,11 @@
  * panel. Extracted verbatim from the legacy ReaderView body.
  */
 import React from 'react';
-import type { Book } from 'epubjs';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { useReaderCommands } from '@domains/reader/ui/ReaderCommands';
+import type { SearchSession } from '@domains/search';
 import type { BookMetadata } from '~types/db';
+import type { DetailedSearchResult } from '~types/search';
 import { useSidebarState } from '@hooks/useSidebarState';
 import { TOCPanel, SearchPanel } from '../panels';
 import { AnnotationList } from '../AnnotationList';
@@ -18,18 +19,21 @@ import { useDeviceMarkers } from './useDeviceMarkers';
 export interface ReaderSidebarsProps {
   bookId: string | undefined;
   engine: ReaderEngine | null;
-  /** TYPE-ONLY epubjs surface (the P7-deadlined SearchPanel exception). */
-  book: Book | null;
   bookMetadata: BookMetadata | null;
   historyTick: number;
+  /** The controller's reader-session search surface (Phase 7 §F). */
+  searchSession: SearchSession;
+  /** Exact-occurrence navigation (app/reader/searchNavigation via the controller). */
+  onSearchNavigate: (result: DetailedSearchResult) => void;
 }
 
 export const ReaderSidebars: React.FC<ReaderSidebarsProps> = ({
   bookId,
   engine,
-  book,
   bookMetadata,
   historyTick,
+  searchSession,
+  onSearchNavigate,
 }) => {
   const { activeSidebar, setSidebar } = useSidebarState();
   const commands = useReaderCommands();
@@ -85,19 +89,14 @@ export const ReaderSidebars: React.FC<ReaderSidebarsProps> = ({
         </div>
       )}
 
-      {/* Search Sidebar */}
+      {/* Search Sidebar — exact-occurrence navigation (Phase 7 §F, PR-S4):
+          the scrollToText + 500ms-timer path died with the SearchSession
+          adoption; results carry charOffset/occurrence and land by CFI. */}
       {activeSidebar === 'search' && (
         <SearchPanel
           bookId={bookId}
-          book={book}
-          onNavigate={async (href, query) => {
-            if (engine) {
-              await engine.display(href);
-              setTimeout(() => {
-                commands.scrollToText(query);
-              }, 500);
-            }
-          }}
+          session={searchSession}
+          onNavigate={onSearchNavigate}
         />
       )}
     </>
