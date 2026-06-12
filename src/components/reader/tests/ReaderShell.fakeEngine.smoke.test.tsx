@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import { ReaderView } from '../ReaderView';
+import { ReaderShell } from '../ReaderShell';
 import { FakeReaderEngine } from '@domains/reader/engine/FakeReaderEngine';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useReadingStateStore } from '@store/useReadingStateStore';
@@ -68,7 +68,7 @@ describe('renderer-swap smoke: ReaderView boots on FakeReaderEngine', () => {
     render(
       <MemoryRouter initialEntries={['/read/fake-book']}>
         <Routes>
-          <Route path="/read/:id" element={<ReaderView />} />
+          <Route path="/read/:id" element={<ReaderShell />} />
         </Routes>
       </MemoryRouter>,
     );

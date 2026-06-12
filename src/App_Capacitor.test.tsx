@@ -13,8 +13,8 @@ vi.mock('./data/connection', async (importOriginal) => ({
 vi.mock('./components/library/LibraryView', () => ({
   LibraryView: () => <div>LibraryView</div>,
 }));
-vi.mock('./components/reader/ReaderView', () => ({
-  ReaderView: () => <div>ReaderView</div>,
+vi.mock('./components/reader/ReaderShell', () => ({
+  ReaderShell: () => <div>ReaderView</div>,
 }));
 vi.mock('./components/ThemeSynchronizer', () => ({
   ThemeSynchronizer: () => null,

@@ -3,10 +3,9 @@ import { useEffect, useRef } from 'react';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
-import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
+import { useReaderEngine } from '@domains/reader/ui/ReaderCommands';
 
 interface ReaderTTSControllerProps {
-  engine: ReaderEngine | null;
   viewMode: string;
 }
 
@@ -35,10 +34,12 @@ const OPEN_OVERLAY_SELECTOR = [
  * 3. Visibility reconciliation (syncing visual state when returning to foreground)
  */
 export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
-  engine,
   viewMode
 }) => {
-  // We subscribe to these changing values here, so ReaderView doesn't have to.
+  // The live engine rides the ReaderCommands context (Phase 6 §5a) —
+  // null while the book loads, exactly like the prop it replaced.
+  const engine = useReaderEngine();
+  // We subscribe to these changing values here, so the shell doesn't have to.
   // Use shallow comparison for primitive values to avoid unnecessary re-renders
   const { activeCfi, currentIndex, status, queue } = useTTSPlaybackStore(useShallow(state => ({
     activeCfi: state.activeCfi,

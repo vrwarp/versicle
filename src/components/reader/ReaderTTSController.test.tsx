@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 import { render, fireEvent, act } from '@testing-library/react';
 import { ReaderTTSController } from './ReaderTTSController';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -5,6 +6,7 @@ import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { autoResetStores, makeTTSQueue, seedStore } from '@test/harness';
 import { HighlightLayerManager, type AnnotatingRendition } from '@domains/reader/engine/HighlightLayerManager';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
+import { ReaderCommandsProvider, type ReaderCommands } from '@domains/reader/ui/ReaderCommands';
 
 // Engine-port stub over a fake rendition: the controller consumes only
 // display() + highlights, and the pins below keep asserting the underlying
@@ -15,6 +17,18 @@ const makeEngineStub = (rendition: any): ReaderEngine =>
         display: rendition.display,
         highlights: new HighlightLayerManager(rendition as AnnotatingRendition),
     }) as unknown as ReaderEngine;
+
+// The controller rides the ReaderCommands context for the engine (Phase 6
+// §5a) — the provider stands in for the shell.
+const noopCommands: ReaderCommands = {
+    jumpTo: () => { }, nextPage: () => { }, prevPage: () => { },
+    nextChapter: () => { }, prevChapter: () => { },
+    playFromSelection: () => { }, scrollToText: () => { },
+    refineSelection: () => null,
+};
+const withEngine = (engine: ReaderEngine | null, ui: ReactElement) => (
+    <ReaderCommandsProvider commands={noopCommands} engine={engine}>{ui}</ReaderCommandsProvider>
+);
 
 // Harness migration (Phase 0): seeds the REAL useTTSPlaybackStore (state via
 // setState) instead of vi.mock'ing the store module, so the test compiles
@@ -70,10 +84,10 @@ describe('ReaderTTSController', () => {
         });
 
         return render(
-            <ReaderTTSController
-                engine={makeEngineStub(mockRendition)}
-                viewMode="paginated"
-            />
+            withEngine(
+                makeEngineStub(mockRendition),
+                <ReaderTTSController viewMode="paginated" />,
+            )
         );
     };
 
@@ -171,10 +185,10 @@ describe('ReaderTTSController', () => {
                 queue: makeTTSQueue(3)
             });
             return render(
-                <ReaderTTSController
-                    engine={makeEngineStub(rendition)}
-                    viewMode="paginated"
-                />
+                withEngine(
+                    makeEngineStub(rendition),
+                    <ReaderTTSController viewMode="paginated" />,
+                )
             );
         };
 

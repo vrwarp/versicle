@@ -163,8 +163,8 @@ vi.mock('./store/useLibraryStore', () => {
 vi.mock('./components/library/LibraryView', () => ({
   LibraryView: () => <div data-testid="library-view">Library View</div>,
 }));
-vi.mock('./components/reader/ReaderView', () => ({
-  ReaderView: () => <div data-testid="reader-view">Reader View</div>,
+vi.mock('./components/reader/ReaderShell', () => ({
+  ReaderShell: () => <div data-testid="reader-view">Reader View</div>,
 }));
 vi.mock('./components/SafeModeView', () => ({
   SafeModeView: () => <div data-testid="safe-mode">SafeMode</div>,

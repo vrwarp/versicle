@@ -28,7 +28,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor, act } from '@testing-library/react';
-import { ReaderView } from '../ReaderView';
+import { ReaderShell } from '../ReaderShell';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useReadingStateStore } from '@store/useReadingStateStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
@@ -198,7 +198,7 @@ describe('characterization: reader overlay systems (P6 entry gate)', () => {
     render(
       <MemoryRouter initialEntries={[`/read/${BOOK_ID}`]}>
         <Routes>
-          <Route path="/read/:id" element={<ReaderView />} />
+          <Route path="/read/:id" element={<ReaderShell />} />
         </Routes>
       </MemoryRouter>,
     );

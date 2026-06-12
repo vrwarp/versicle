@@ -8,8 +8,8 @@
  * reflow happens ONLY when the view mode actually changed. This suite pins
  * the hook-level behavior; epubTheming.test.ts pins the module parameter.
  */
-import React, { useRef, useState } from 'react';
-import { render, waitFor, act } from '@testing-library/react';
+import React, { useRef } from 'react';
+import { render, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { useEpubReader, type EpubReaderOptions } from './useEpubReader';
 import { usePreferencesStore } from '@store/usePreferencesStore';
@@ -71,15 +71,11 @@ vi.mock('epubjs', () => ({
   })),
 }));
 
-let setTheme: (t: string) => void;
-let setViewMode: (m: 'paginated' | 'scrolled') => void;
-
-const TestHost: React.FC = () => {
+const TestHost: React.FC<{ theme?: string; viewMode?: 'paginated' | 'scrolled' }> = ({
+  theme = 'light',
+  viewMode = 'paginated',
+}) => {
   const viewerRef = useRef<HTMLDivElement>(null);
-  const [theme, _setTheme] = useState('light');
-  const [viewMode, _setViewMode] = useState<'paginated' | 'scrolled'>('paginated');
-  setTheme = _setTheme;
-  setViewMode = _setViewMode;
   const options: EpubReaderOptions = {
     viewMode,
     currentTheme: theme,
@@ -106,9 +102,10 @@ describe('regression: theme change does not reflow (D5)', () => {
   });
 
   const boot = async () => {
-    render(<TestHost />);
+    const view = render(<TestHost />);
     // The settings effect ran at least once post-ready.
     await waitFor(() => expect(slot.select).toHaveBeenCalled());
+    return view;
   };
 
   it('initial application never reflows (renderTo already has the mode)', async () => {
@@ -117,10 +114,10 @@ describe('regression: theme change does not reflow (D5)', () => {
   });
 
   it('a theme-only change re-themes without flow()/display()', async () => {
-    await boot();
+    const view = await boot();
     slot.display!.mockClear();
 
-    act(() => setTheme('dark'));
+    view.rerender(<TestHost theme="dark" />);
 
     await waitFor(() => expect(slot.select).toHaveBeenCalledWith('dark'));
     expect(slot.flow).not.toHaveBeenCalled();
@@ -128,10 +125,10 @@ describe('regression: theme change does not reflow (D5)', () => {
   });
 
   it('a view-mode change reflows and restores the location', async () => {
-    await boot();
+    const view = await boot();
     slot.display!.mockClear();
 
-    act(() => setViewMode('scrolled'));
+    view.rerender(<TestHost viewMode="scrolled" />);
 
     await waitFor(() => expect(slot.flow).toHaveBeenCalledWith('scrolled-doc'));
     expect(slot.display).toHaveBeenCalledWith('epubcfi(/6/4!/4/2)');

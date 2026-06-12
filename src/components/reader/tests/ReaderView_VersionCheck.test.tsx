@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
-import { ReaderView } from '../ReaderView';
+import { ReaderShell } from '../ReaderShell';
 import { useEpubReader } from '@hooks/useEpubReader';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
 
@@ -207,7 +207,7 @@ describe('ReaderView Version Check', () => {
 
         render(
             <MemoryRouter>
-                <ReaderView />
+                <ReaderShell />
             </MemoryRouter>
         );
 
@@ -249,7 +249,7 @@ describe('ReaderView Version Check', () => {
 
         render(
             <MemoryRouter>
-                <ReaderView />
+                <ReaderShell />
             </MemoryRouter>
         );
 
@@ -290,7 +290,7 @@ describe('ReaderView Version Check', () => {
 
         render(
             <MemoryRouter>
-                <ReaderView />
+                <ReaderShell />
             </MemoryRouter>
         );
 

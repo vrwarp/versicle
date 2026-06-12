@@ -1,9 +1,23 @@
+import type { ReactElement } from 'react';
 import { render, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ReaderTTSController } from '../ReaderTTSController';
 import { HighlightLayerManager, type AnnotatingRendition } from '@domains/reader/engine/HighlightLayerManager';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
+import { ReaderCommandsProvider, type ReaderCommands } from '@domains/reader/ui/ReaderCommands';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
+
+// The controller rides the ReaderCommands context for the engine (Phase 6
+// §5a) — the provider stands in for the shell.
+const noopCommands: ReaderCommands = {
+  jumpTo: () => { }, nextPage: () => { }, prevPage: () => { },
+  nextChapter: () => { }, prevChapter: () => { },
+  playFromSelection: () => { }, scrollToText: () => { },
+  refineSelection: () => null,
+};
+const withEngine = (engine: ReaderEngine | null, ui: ReactElement) => (
+  <ReaderCommandsProvider commands={noopCommands} engine={engine}>{ui}</ReaderCommandsProvider>
+);
 
 // Mock the store + the command facade (engine commands moved to
 // useAudioCommands at Phase 5b-PR1).
@@ -47,12 +61,7 @@ describe('ReaderTTSController', () => {
   });
 
   it('ignores arrow keys when an input is focused', () => {
-    render(
-      <ReaderTTSController
-        engine={null}
-        viewMode="scrolled"
-      />
-    );
+    render(withEngine(null, <ReaderTTSController viewMode="scrolled" />));
 
     const input = document.createElement('input');
     document.body.appendChild(input);
@@ -69,12 +78,7 @@ describe('ReaderTTSController', () => {
   });
 
     it('ignores arrow keys when a textarea is focused', () => {
-    render(
-      <ReaderTTSController
-        engine={null}
-        viewMode="scrolled"
-      />
-    );
+    render(withEngine(null, <ReaderTTSController viewMode="scrolled" />));
 
     const textarea = document.createElement('textarea');
     document.body.appendChild(textarea);
@@ -91,12 +95,7 @@ describe('ReaderTTSController', () => {
   });
 
     it('responds to arrow keys when no input is focused', () => {
-    render(
-      <ReaderTTSController
-        engine={null}
-        viewMode="scrolled"
-      />
-    );
+    render(withEngine(null, <ReaderTTSController viewMode="scrolled" />));
 
     // Make sure body is focused or nothing specific
     document.body.focus();
@@ -121,13 +120,13 @@ describe('ReaderTTSController', () => {
     };
 
     render(
-      <ReaderTTSController
-        engine={{
+      withEngine(
+        {
           display: mockRendition.display,
           highlights: new HighlightLayerManager(mockRendition as unknown as AnnotatingRendition),
-        } as unknown as ReaderEngine}
-        viewMode="paginated"
-      />
+        } as unknown as ReaderEngine,
+        <ReaderTTSController viewMode="paginated" />,
+      )
     );
 
     // Mock store state update (simulating background update)

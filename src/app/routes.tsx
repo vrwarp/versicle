@@ -5,7 +5,7 @@
 import { createBrowserRouter } from 'react-router-dom';
 import { RootLayout } from '../layouts/RootLayout';
 import { LibraryView } from '@components/library/LibraryView';
-import { ReaderView } from '@components/reader/ReaderView';
+import { ReaderShell } from '@components/reader/ReaderShell';
 import { ErrorBoundary } from '@components/ErrorBoundary';
 
 // Note: We use ErrorBoundary components within routes to isolate failures.
@@ -39,7 +39,7 @@ export const router = createBrowserRouter([
         path: "read/:id",
         element: (
           <ErrorBoundary>
-            <ReaderView />
+            <ReaderShell />
           </ErrorBoundary>
         ),
       },
