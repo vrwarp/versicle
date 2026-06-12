@@ -4,20 +4,23 @@
  * `onAuthStateChanged` listener, redirect-result handling, signIn/signOut,
  * and the auth-status fan-out (callbacks + the typed `auth` SyncEvent).
  *
- * Known containments, both documented in the prep doc:
- *  - the `getRedirectResult` block is the legacy dead web-redirect flow —
- *    it is DELETED in the phase's deletion/ratchet item after one manual
- *    web-sign-in verification (SocialLogin via auth-helper is the live
- *    path); until then it moves verbatim.
- *  - auth-helper's bidirectional coupling with googleIntegrationManager is
- *    P7's cut; P4 keeps it contained behind this module.
+ * The legacy `getRedirectResult` block was DELETED in P9 (the P4
+ * §Follow-ups item 2 decision). Evidence of deadness: no module in the
+ * production graph ever calls `signInWithRedirect` /`linkWithRedirect`/
+ * `reauthenticateWithRedirect` (the only `signInWithRedirect` token in the
+ * repo was this suite's firebase/auth MOCK), and per Firebase SDK
+ * semantics `getRedirectResult` resolves null unless THIS app initiated a
+ * redirect operation — the live sign-in path is SocialLogin →
+ * `signInWithCredential` (auth-helper via GoogleAuthClient.connect
+ * ('identity'), all platforms). The `signed-in-via-redirect` SyncEvent
+ * died with it.
  *
  * Mock sessions: the composition root installs `mockSession` with the mock
  * backend; this module synthesizes the user instead of touching Firebase
  * (the legacy `initialize()` / `getCurrentUser()` mock branches).
  */
 import type { User } from 'firebase/auth';
-import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import {
   getFirebaseAuth,
   isFirebaseConfigured,
@@ -36,8 +39,6 @@ export interface AuthSessionDeps {
   events: SyncEventBus;
   /** Live read — the selection can be swapped by the composition root. */
   getMockSession: () => { uid: string; email: string } | undefined;
-  /** Legacy parity: a redirect-result failure sets the SYNC status to error. */
-  onRedirectError: () => void;
 }
 
 export class AuthSession {
@@ -84,23 +85,6 @@ export class AuthSession {
       logger.error('Firebase Auth not available.');
       this.setAuthStatus('signed-out');
       return;
-    }
-
-    // Check if we just returned from a Redirect (legacy dead flow — see
-    // module docs; deleted in the deletion/ratchet item).
-    try {
-      const result = await getRedirectResult(auth);
-      if (result && result.user) {
-        logger.info('Auth', 'Successfully returned from redirect flow', result.user.uid);
-        this.deps.events.emit({
-          type: 'signed-in-via-redirect',
-          email: result.user.email ?? null,
-        });
-        // Note: onAuthStateChanged will deliver the user to onUser.
-      }
-    } catch (error) {
-      logger.error('Redirect login failed', error);
-      this.deps.onRedirectError();
     }
 
     // Set up auth state listener

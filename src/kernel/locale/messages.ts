@@ -98,7 +98,6 @@ export const messages = {
   'settings.tab.data': 'Data Management',
 
   // --- toasts: sync domain (the wireSyncEvents choke point, P4 §D3) ----
-  'sync.signedInViaRedirect': 'Signed in as {email}',
   'sync.cleanSync.started': 'Syncing library from cloud...',
   'sync.cleanSync.applied': 'Sync complete!',
   'sync.cleanSync.failed': 'Failed to sync. Please try again.',

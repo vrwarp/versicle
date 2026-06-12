@@ -37,8 +37,6 @@ function expectToastShown(showToastMock: { mock: { calls: any[][] } }, message: 
 vi.mock('firebase/auth', () => ({
     onAuthStateChanged: vi.fn(),
     signInWithPopup: vi.fn(),
-    signInWithRedirect: vi.fn(),
-    getRedirectResult: vi.fn(() => Promise.resolve(null)),
     signOut: vi.fn()
 }));
 
@@ -259,21 +257,24 @@ describe('SyncOrchestrator', () => {
     });
 
     describe('start (was initialization)', () => {
-        it('should check for redirect result on start', async () => {
-            const { getRedirectResult } = await import('firebase/auth');
+        // The legacy getRedirectResult check died in P9 (the P4 §Follow-ups
+        // item 2 deletion — see AuthSession's module docs); the auth-session
+        // liveness proxy in these cases is the onAuthStateChanged listener.
+        it('should attach the auth state listener on start', async () => {
+            const { onAuthStateChanged } = await import('firebase/auth');
 
             await makeOrchestrator().start();
 
-            expect(getRedirectResult).toHaveBeenCalled();
+            expect(onAuthStateChanged).toHaveBeenCalled();
         });
 
         it('should skip the auth session entirely when the enablement gate is off (§D2)', async () => {
-            const { getRedirectResult } = await import('firebase/auth');
+            const { onAuthStateChanged } = await import('firebase/auth');
 
             const orchestrator = makeOrchestrator(undefined, { isEnabled: () => false });
             await orchestrator.start();
 
-            expect(getRedirectResult).not.toHaveBeenCalled();
+            expect(onAuthStateChanged).not.toHaveBeenCalled();
             expect(orchestrator.getAuthStatus()).toBe('signed-out');
         });
 

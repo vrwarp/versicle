@@ -104,18 +104,22 @@ describe('kernel/locale UI-locale resolution', () => {
 
 describe('kernel/locale message catalog (i18n ADR §2)', () => {
   it('formatMessage substitutes {param} placeholders', () => {
-    expect(formatMessage('sync.signedInViaRedirect', { email: 'a@b.c' })).toBe('Signed in as a@b.c');
+    expect(formatMessage('sync.workspacePurged', { docs: '2 documents', blobs: '1 blob' })).toBe(
+      'Remote workspace data purged (2 documents, 1 blob).',
+    );
   });
 
   it('leaves unknown placeholders verbatim', () => {
-    expect(formatMessage('sync.signedInViaRedirect', {})).toBe('Signed in as {email}');
+    expect(formatMessage('sync.workspacePurged', {})).toBe(
+      'Remote workspace data purged ({docs}, {blobs}).',
+    );
   });
 
   it('resolveMessage: key | {key, params} | raw prose (the transitional overload)', () => {
     expect(resolveMessage('sync.cleanSync.applied')).toBe('Sync complete!');
-    expect(resolveMessage({ key: 'sync.signedInViaRedirect', params: { email: 'x@y.z' } })).toBe(
-      'Signed in as x@y.z',
-    );
+    expect(
+      resolveMessage({ key: 'sync.workspacePurged', params: { docs: '1 document', blobs: '0 blobs' } }),
+    ).toBe('Remote workspace data purged (1 document, 0 blobs).');
     expect(resolveMessage('Free-form prose stays as-is')).toBe('Free-form prose stays as-is');
     expect(isMessageKey('sync.cleanSync.applied')).toBe(true);
     expect(isMessageKey('Free-form prose stays as-is')).toBe(false);

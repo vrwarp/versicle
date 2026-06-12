@@ -39,10 +39,6 @@ export function wireSyncEvents(): () => void {
         sync.setFirebaseUserEmail(event.email);
         break;
 
-      case 'signed-in-via-redirect':
-        toast({ key: 'sync.signedInViaRedirect', params: { email: String(event.email) } }, 'success');
-        break;
-
       case 'flushed':
         sync.setLastSyncTime(event.at);
         break;

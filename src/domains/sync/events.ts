@@ -16,9 +16,9 @@
  *    toast copy was keyed on (permissionDenied / connect-vs-switch);
  *  - `switch` gains 'failed-aborted' (the NON-destructive pre-apply failure
  *    path, distinct from 'failed-rolling-back');
- *  - `signed-in-via-redirect` (the legacy getRedirectResult toast; the
- *    whole flow is deleted in P4-7) and `local-persistence-unavailable`
- *    (firebase-config's one toast).
+ *  - `local-persistence-unavailable` (firebase-config's one toast).
+ *    (`signed-in-via-redirect` existed here until P9 deleted the dead
+ *    getRedirectResult flow with it — see AuthSession's module docs.)
  */
 import type { FirestoreSyncStatus, FirebaseAuthStatus } from '~types/sync';
 import { createLogger } from '@lib/logger';
@@ -28,8 +28,7 @@ const logger = createLogger('SyncEvents');
 export type SyncEvent =
   | { type: 'status'; status: FirestoreSyncStatus }
   | { type: 'auth'; status: FirebaseAuthStatus; email: string | null }
-  | { type: 'signed-in-via-redirect'; email: string | null }
-  /** A committed save (mock today; real Firestore once the y-cinder `saved` fork delta lands). */
+  /** A committed save (both transports — the y-cinder `saved` fork delta landed in P9). */
   | { type: 'flushed'; at: number }
   | { type: 'clean-sync'; phase: 'started' | 'applied' | 'failed' }
   | {

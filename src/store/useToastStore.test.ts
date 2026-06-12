@@ -23,13 +23,16 @@ describe('useToastStore (queue, Phase 8 §D)', () => {
     useToastStore.getState().showToast('sync.cleanSync.applied', 'success');
     useToastStore
       .getState()
-      .showToast({ key: 'sync.signedInViaRedirect', params: { email: 'a@b.c' } }, 'info');
+      .showToast(
+        { key: 'sync.workspacePurged', params: { docs: '2 documents', blobs: '1 blob' } },
+        'info',
+      );
 
     const [first, second] = useToastStore.getState().toasts;
     expect(first.message).toBe('Sync complete!');
     expect(first.key).toBe('sync.cleanSync.applied');
-    expect(second.message).toBe('Signed in as a@b.c');
-    expect(second.key).toBe('sync.signedInViaRedirect');
+    expect(second.message).toBe('Remote workspace data purged (2 documents, 1 blob).');
+    expect(second.key).toBe('sync.workspacePurged');
   });
 
   it('defaults: 3000ms, errors get the longer 5000ms default', () => {

@@ -62,7 +62,6 @@ export class SyncOrchestrator {
     this.auth = new AuthSession({
       events: deps.events,
       getMockSession: () => this.backendSelection.mockSession,
-      onRedirectError: () => this.setStatus('error'),
     });
 
     this.provider = new ProviderConnection({
