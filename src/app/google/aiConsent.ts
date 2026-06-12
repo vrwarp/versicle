@@ -8,15 +8,15 @@
  *     egress is blocked with NET_CONSENT_REQUIRED before any bytes leave),
  *  2. grandfathering: books with existing contentAnalysis records keep
  *     working without new prompts (the prep doc's derivation rule),
- *  3. observe-mode allow: the global isEnabled/feature flags remain the
- *     effective gate. Two reasons this is not yet a default-deny:
- *     - the consent PROMPT ("ask on first TTS play") lives in the TTS UI
- *       owned by the parallel 5b/5c chain — denying without an affordance
- *       to grant would silently kill analysis for every new book;
- *     - the TTS pipeline's EngineContext port does not thread bookId yet
- *       (P5c narrows it), so most non-interactive calls arrive without a
- *       bookId anyway (step 0 below).
- *  0. calls without a bookId are allowed (legacy posture, documented).
+ *  3. default-DENY (P9 — observe-mode exited for bookId-carrying calls):
+ *     the "ask on first TTS play" prompt now exists
+ *     (app/google/aiConsentPrompt.ts, wired into TtsController.play), and
+ *     the EngineContext GenAI port threads bookId from both TTS analysis
+ *     callers — so an unknown un-consented book is a book whose prompt was
+ *     bypassed, and the egress boundary refuses it.
+ *  0. calls without a bookId are allowed (legacy posture for the surfaces
+ *     that still don't thread one — smart TOC / smart link, which are
+ *     user-initiated anyway).
  */
 import type { ConsentResolver } from '@kernel/net';
 
@@ -36,6 +36,7 @@ export function makeAiConsentResolver(deps: AiConsentDeps): ConsentResolver {
     const explicit = deps.getConsent(bookId);
     if (explicit !== undefined) return explicit;
     if (deps.hasAnalysisRecords(bookId)) return true;
-    return true;
+    // Default-deny (P9): the consent prompt is the affordance to grant.
+    return false;
   };
 }

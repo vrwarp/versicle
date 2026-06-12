@@ -47,6 +47,7 @@ import {
     selectActiveVoiceId,
 } from '@store/useTTSSettingsStore';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
+import { ensureAiConsentForBook } from '@app/google/aiConsentPrompt';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('TtsController');
@@ -54,6 +55,8 @@ const logger = createLogger('TtsController');
 export class TtsController {
     private readonly engine: TtsEngine;
     private initialized = false;
+    /** Mirror of the last setBookId — the consent prompt's subject. */
+    private currentBookId: string | null = null;
 
     constructor(engine: TtsEngine = getAudioPlayer()) {
         this.engine = engine;
@@ -197,8 +200,21 @@ export class TtsController {
     // --- Playback commands (bound: components destructure them from useAudioCommands) ---
 
     play = (): void => {
-        void this.engine.play();
+        // Ask-on-first-TTS-play per-book AI consent (P9; the gate is at the
+        // egress boundary — playback itself NEVER blocks on the answer, the
+        // dialog just resolves before the pipeline can reach the model).
+        void this.withAiConsent(() => void this.engine.play());
     };
+
+    /** Resolve the per-book AI consent prompt, then run; failures never block. */
+    private async withAiConsent(run: () => void): Promise<void> {
+        try {
+            await ensureAiConsentForBook(this.currentBookId);
+        } catch (e) {
+            logger.warn('AI consent prompt failed; continuing without an answer', e);
+        }
+        run();
+    }
 
     pause = (): void => {
         void this.engine.pause();
@@ -223,10 +239,17 @@ export class TtsController {
     // --- Book / section navigation ---
 
     setBookId = (bookId: string | null): void => {
+        this.currentBookId = bookId;
         this.engine.setBookId(bookId);
     };
 
     loadSectionBySectionId = (sectionId: string, autoPlay = true, title?: string): void => {
+        if (autoPlay) {
+            // Autoplay is a play: same consent pre-flight as play().
+            void this.withAiConsent(() =>
+                void this.engine.loadSectionBySectionId(sectionId, autoPlay, title));
+            return;
+        }
         void this.engine.loadSectionBySectionId(sectionId, autoPlay, title);
     };
 

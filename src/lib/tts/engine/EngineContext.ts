@@ -117,17 +117,22 @@ export interface GenAIPort {
     isConfigured(): Promise<boolean> | boolean;
     /** Configure the underlying GenAI client (no-op if the host rejects the key). */
     configure(apiKey: string, model: string): void;
-    /** Classify content groups (main text vs references/footnotes…) via the model. */
+    /**
+     * Classify content groups (main text vs references/footnotes…) via the
+     * model. `context.bookId` flows to the NetworkGateway's per-book consent
+     * gate (P9 threading — phase7 §Follow-ups item 3); callers MUST pass it
+     * so un-consented books are denied at the egress boundary.
+     */
     detectContentTypes(
         nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
         hints: { enumeratorCandidate: number },
-        context?: { bookTitle?: string; sectionTitle?: string },
+        context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
     ): Promise<ContentTypeDetectionResult>;
-    /** Generate TTS-friendly narrative adaptations for table images via the model. */
+    /** Generate TTS-friendly narrative adaptations for table images via the model (bookId: see detectContentTypes). */
     generateTableAdaptations(
         nodes: { rootCfi: string; imageBlob: Blob }[],
         thinkingBudget: number,
-        context?: { bookTitle?: string; sectionTitle?: string },
+        context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
     ): Promise<{ cfi: string; adaptation: string }[]>;
 }
 

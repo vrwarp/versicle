@@ -34,11 +34,11 @@ describe('makeAiConsentResolver', () => {
     expect(makeResolver({}, ['b2'])(gemini, { bookId: 'b2' })).toBe(true);
   });
 
-  it('observe mode: unknown books without records are allowed (prompt UI is later work)', () => {
-    expect(makeResolver({})(gemini, { bookId: 'new-book' })).toBe(true);
+  it('default-deny (P9, observe-mode exited): unknown books without records are DENIED — the prompt is the affordance', () => {
+    expect(makeResolver({})(gemini, { bookId: 'new-book' })).toBe(false);
   });
 
-  it('legacy posture: calls without a bookId are allowed (port does not thread it yet)', () => {
+  it('legacy posture: calls without a bookId are allowed (smart TOC/link surfaces)', () => {
     expect(makeResolver({ b1: false })(gemini, {})).toBe(true);
   });
 

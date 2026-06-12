@@ -230,12 +230,12 @@ export class WorkerEngineContext implements EngineContext {
         detectContentTypes: (
             nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
             hints: { enumeratorCandidate: number },
-            context?: { bookTitle?: string; sectionTitle?: string },
+            context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
         ) => this.genAIDetectFn(nodes, hints, context),
         generateTableAdaptations: (
             nodes: { rootCfi: string; imageBlob: Blob }[],
             thinkingBudget: number,
-            context?: { bookTitle?: string; sectionTitle?: string },
+            context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
         ) => this.genAIAdaptFn(nodes, thinkingBudget, context),
     };
 

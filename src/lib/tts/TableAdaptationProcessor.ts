@@ -99,7 +99,8 @@ export class TableAdaptationProcessor {
                 if (structure && structure.toc) findSectionTitle(structure.toc);
                 const sectionTitle = sectionMap.get(sectionId) || 'Unknown Section';
 
-                const results = await this.ctx.genAI.generateTableAdaptations(nodes, 512, { bookTitle, sectionTitle });
+                // bookId rides to the egress consent gate (P9 threading).
+                const results = await this.ctx.genAI.generateTableAdaptations(nodes, 512, { bookId, bookTitle, sectionTitle });
 
                 // 5. Update DB
                 await this.ctx.contentAnalysis.saveTableAdaptations(bookId, sectionId, results.map(r => ({

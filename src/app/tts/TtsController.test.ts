@@ -20,6 +20,14 @@ import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { TtsController } from './TtsController';
 import { LexiconService } from '@lib/tts/LexiconService';
+import { ensureAiConsentForBook } from '@app/google/aiConsentPrompt';
+
+// P9: play()/autoplay-loads run the per-book AI consent pre-flight before
+// forwarding to the engine; resolve it instantly here (its own behavior is
+// pinned in app/google/aiConsentPrompt.test.ts).
+vi.mock('@app/google/aiConsentPrompt', () => ({
+    ensureAiConsentForBook: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('@lib/tts/LexiconService', () => {
     const instance = { setGlobalBibleLexiconEnabled: vi.fn() };
@@ -455,11 +463,14 @@ describe('TtsController', () => {
     });
 
     describe('playback + navigation commands route to the engine', () => {
-        it('forwards the simple commands', () => {
+        it('forwards the simple commands', async () => {
             const { engine, raw } = makeFakeEngine();
             const c = new TtsController(engine);
 
-            c.play(); expect(raw.play).toHaveBeenCalled();
+            // play() resolves the per-book AI consent pre-flight first (one
+            // microtask with the prompt mocked); the engine call follows.
+            c.play();
+            await vi.waitFor(() => expect(raw.play).toHaveBeenCalled());
             c.pause(); expect(raw.pause).toHaveBeenCalled();
             c.stop(); expect(raw.stop).toHaveBeenCalled();
             c.jumpTo(3); expect(raw.jumpTo).toHaveBeenCalledWith(3);
@@ -470,13 +481,37 @@ describe('TtsController', () => {
             expect(raw.loadSectionBySectionId).toHaveBeenCalledWith('sec-1', false, 'Title');
         });
 
+        it('play() runs the per-book AI consent pre-flight with the current book (P9)', async () => {
+            const { engine, raw } = makeFakeEngine();
+            const c = new TtsController(engine);
+
+            c.setBookId('book-42');
+            c.play();
+            await vi.waitFor(() => expect(raw.play).toHaveBeenCalled());
+            expect(ensureAiConsentForBook).toHaveBeenCalledWith('book-42');
+
+            // Autoplay loads are plays too.
+            c.loadSectionBySectionId('sec-1', true, 'Title');
+            await vi.waitFor(() =>
+                expect(raw.loadSectionBySectionId).toHaveBeenCalledWith('sec-1', true, 'Title'));
+        });
+
+        it('a failing consent prompt never blocks playback (P9)', async () => {
+            const { engine, raw } = makeFakeEngine();
+            const c = new TtsController(engine);
+            vi.mocked(ensureAiConsentForBook).mockRejectedValueOnce(new Error('dialog torn down'));
+
+            c.play();
+            await vi.waitFor(() => expect(raw.play).toHaveBeenCalled());
+        });
+
         it('commands stay bound when destructured (useAudioCommands contract)', async () => {
             const { engine, raw } = makeFakeEngine();
             const { play, skipToNextSection } = new TtsController(engine);
 
             play();
             await expect(skipToNextSection()).resolves.toBe(true);
-            expect(raw.play).toHaveBeenCalled();
+            await vi.waitFor(() => expect(raw.play).toHaveBeenCalled());
             expect(raw.skipToNextSection).toHaveBeenCalled();
         });
     });

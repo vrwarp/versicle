@@ -147,6 +147,14 @@ export const messages = {
   'data.downloadRecovery.failed': 'Failed to download data.',
 
   // --- confirms/alerts: settings panels --------------------------------
+  // Per-book AI consent prompt (P9; app/google/aiConsentPrompt.ts —
+  // asked once per book on first TTS play when GenAI is enabled).
+  'genai.consent.title': 'Allow AI analysis for this book?',
+  'genai.consent.body':
+    'Versicle can send short excerpts of this book to your configured AI provider to improve audio narration (skipping footnotes, describing tables). ' +
+    "Choosing “Don’t allow” keeps this book's text on your device; playback works either way.",
+  'genai.consent.allow': 'Allow',
+  'genai.consent.deny': 'Don’t allow',
   'genai.clearCache.title': 'Clear analysis cache?',
   'genai.clearCache.body':
     'Are you sure you want to clear the Content Analysis cache? This will force re-analysis of content.',

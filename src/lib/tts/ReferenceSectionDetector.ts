@@ -167,7 +167,8 @@ export class ReferenceSectionDetector {
             const { classifications: results, justification, agreedWithHeuristic } = await genAI.detectContentTypes(
                 nodesToDetect,
                 { enumeratorCandidate: enumeratorCandidateIndex },
-                { bookTitle, sectionTitle }
+                // bookId rides to the egress consent gate (P9 threading).
+                { bookId, bookTitle, sectionTitle }
             );
 
             // Find the first result marked as reference
