@@ -14,14 +14,16 @@
  * Scenarios P1–P11 are the original suite, kept verbatim. P12–P23 expand the contract to the
  * behaviors the 5a/5b/5c strangler touches: restore, skip masks, table adaptations, section
  * navigation, dragnet capture, provider fallback, analysis dedup, and queue identity. They pin
- * CURRENT behavior, not desired behavior — with two documented exceptions written as `it.fails`
- * riders (the executable spec for the P5b/P5a fixes; do NOT make them pass in the gate PR):
+ * CURRENT behavior, not desired behavior — with one documented exception written as an
+ * `it.fails` rider (the executable spec for the P5b fix; do NOT make it pass early):
  *
  *   - P14 identity rider (in-process): `applySkippedMask` mutates the queue array in place
  *     (PlaybackStateManager.ts applySkippedMask) — flips green at 5b-PR2 (immutable QueueModel).
- *   - P21 single-replay rider (both transports): the cloud→local fallback double-fires
- *     (TTSProviderManager.ts event path + play-catch path both emit {type:'fallback'}) so the
- *     failed sentence is replayed twice — flips green at 5a-PR2/5a-PR3 (single failure path).
+ *
+ * The P21 single-replay rider flipped green at 5a-PR2: providers signal a failure exactly
+ * once (reject-only), the manager rethrows typed without self-swapping, and the engine
+ * recovers through one sequenced `recoverWithLocalProvider` task — the S2 double-fire
+ * (and its double replay) is structurally dead.
  *
  * Absorption (README §4 rule 8): the named `describe('regression: …')` blocks below carry the
  * surviving assertions of per-bug suites deleted in the same commit. See
@@ -114,10 +116,10 @@ export interface ParityHarness {
         setVoices(voices: TTSVoice[]): void;
         // --- Phase 5 gate extensions (§0.1) ---
         /**
-         * Arm the backend so the next play() on a non-'local' provider fails, simulating the
-         * CURRENT TTSProviderManager fallback: the provider error event AND the play-catch
-         * path both emit {type:'fallback'} and swap to the local provider (the S2 double-fire
-         * that 5a-PR2 collapses into a single rejection path).
+         * Arm the backend so the next play() on a non-'local' provider REJECTS once with a
+         * `ProviderPlaybackError`-named error — TTSProviderManager's single failure path
+         * (5a-PR2): no self-swap, no synthetic 'fallback' event; the engine recovers via
+         * one sequenced task and swaps through setProviderById.
          */
         failNextPlay(error: { message: string }): void;
         /** Provider id the backend reports after a fallback swap ('local' initially). */
@@ -849,12 +851,12 @@ export function describeEngineParity(
                     expect(h.snapshots().some((s) => s.error !== null)).toBe(false);
                 }));
 
-            // DOCUMENTED it.fails RIDER (5a-PR2/5a-PR3 executable spec): the backend's
-            // fallback currently double-fires (provider error event + play-catch path both
-            // emit {type:'fallback'} — TTSProviderManager S2), so the engine replays the
-            // failed sentence TWICE (3 synthesis calls total). The single failure path
-            // (providers reject only; one sequenced recovery task) flips this green.
-            it.fails('single-replay rider: the failed sentence is replayed exactly once', () =>
+            // Flipped green at 5a-PR2 (was the documented it.fails rider for the S2
+            // double-fire): providers reject exactly once, the manager rethrows typed
+            // without self-swapping, and the engine recovers through ONE sequenced
+            // recoverWithLocalProvider task — so the failed sentence replays exactly
+            // once (2 synthesis calls total, not the legacy 3).
+            it('single-replay rider: the failed sentence is replayed exactly once', () =>
                 withHarness(async (h) => {
                     await driveFallback(h);
 

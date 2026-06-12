@@ -35,7 +35,7 @@ export interface PlaybackBackend {
     /**
      * Swap the active provider by id. The id is plain data, so the call behaves identically
      * in-process and across the worker boundary; the main-thread implementation constructs
-     * the live provider via the shared provider factory (`buildProviderById`).
+     * the live provider from the registry descriptor with an injected ProviderBuildContext.
      */
     setProviderById(providerId: string): void;
     /**

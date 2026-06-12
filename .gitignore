@@ -35,7 +35,6 @@ verification/screenshots/
 # Android SDK
 android-sdk/
 cmdline-tools.zip
-public/piper/
 venv/
 
 # Test output

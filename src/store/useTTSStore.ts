@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { TTSVoice } from '@lib/tts/providers/types';
+import type { TTSProviderId, TTSApiKeyProviderId } from '@lib/tts/providers/registry';
 import { getAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
 import type { TTSStatus, TTSQueueItem } from '@lib/tts/AudioPlayerService';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '@lib/tts/TextSegmenter';
@@ -55,13 +56,9 @@ interface TTSState {
     downloadingVoiceId: string | null;
     isDownloading: boolean;
 
-    /** Provider configuration */
-    providerId: 'local' | 'google' | 'openai' | 'lemonfox' | 'piper';
-    apiKeys: {
-        google: string;
-        openai: string;
-        lemonfox: string;
-    };
+    /** Provider configuration (id union derives from the provider registry). */
+    providerId: TTSProviderId;
+    apiKeys: Record<TTSApiKeyProviderId, string>;
 
     /** Custom abbreviations for sentence segmentation */
     customAbbreviations: string[];
@@ -97,8 +94,8 @@ interface TTSState {
     setRate: (rate: number, lang?: string) => void;
     setPitch: (pitch: number, lang?: string) => void;
     setVoice: (voice: TTSVoice | null, lang?: string) => void;
-    setProviderId: (id: 'local' | 'google' | 'openai' | 'lemonfox' | 'piper') => void;
-    setApiKey: (provider: 'google' | 'openai' | 'lemonfox', key: string) => void;
+    setProviderId: (id: TTSProviderId) => void;
+    setApiKey: (provider: TTSApiKeyProviderId, key: string) => void;
     setCustomAbbreviations: (abbrevs: string[]) => void;
     setAlwaysMerge: (words: string[]) => void;
     setSentenceStarters: (words: string[]) => void;

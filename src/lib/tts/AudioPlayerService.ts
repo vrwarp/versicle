@@ -1,3 +1,4 @@
+import { isPlaybackInterruption, isProviderPlaybackError } from './providers/types';
 import type { ITTSProvider, TTSVoice } from './providers/types';
 import type { TTSQueueItem } from '~types/tts';
 import { lexiconApplier } from './LexiconApplier';
@@ -81,6 +82,13 @@ export class AudioPlayerService {
     private activeLexiconRules: LexiconRule[] | null = null;
     private speed: number = 1.0;
     private voiceId: string | null = null;
+    /**
+     * The provider id this engine last routed the backend to ('local' initially,
+     * like the manager). Owns the fallback DECISION (5a-PR2): recovery applies only
+     * while a non-'local' provider is active, and flips this back to 'local' so the
+     * failed sentence is replayed exactly once.
+     */
+    private currentProviderId: string = 'local';
     private currentBookId: string | null = null;
     private playlist: SectionMetadata[] = [];
     private playlistPromise: Promise<void> | null = null;
@@ -132,9 +140,14 @@ export class AudioPlayerService {
                 this.playNext();
             },
             onError: (error) => {
-                if (error?.type === 'fallback') {
-                    logger.warn("Falling back to local provider due to cloud error");
-                    this.playInternal(true);
+                // Mid-playback failure on a non-local provider: recover through the
+                // ONE sequenced fallback task (the doc's 5-line bridge — the legacy
+                // un-enqueued `playInternal(true)` S1 escape hatch is gone). The
+                // manager no longer self-swaps or emits synthetic 'fallback' events,
+                // so this is the only fallback trigger on the event channel.
+                if (this.currentProviderId !== 'local') {
+                    logger.warn("Cloud provider error during playback; falling back to local provider", error);
+                    void this.enqueue(() => this.recoverWithLocalProvider());
                     return;
                 }
 
@@ -490,6 +503,7 @@ export class AudioPlayerService {
         return this.enqueue(async () => {
             await this.stopInternal();
             this.providerManager.setProviderById(providerId);
+            this.currentProviderId = providerId;
         });
     }
 
@@ -501,7 +515,25 @@ export class AudioPlayerService {
         return this.enqueue(async () => {
             await this.stopInternal();
             this.providerManager.setProvider?.(provider);
+            this.currentProviderId = provider.id;
         });
+    }
+
+    /**
+     * The single fallback path (5a-PR2, phase5-tts-strangler.md §5a.1): swap the
+     * backend to the platform's local provider and replay the current sentence ONCE.
+     * Always runs as a sequenced task — both triggers (`playInternal`'s rejection
+     * handler and the mid-playback error event) enqueue it, and the id guard makes a
+     * doubly-triggered recovery a no-op, so a provider failure can never double-fire
+     * the replay again. 5b-PR3 re-homes this into the sequencer-epoch rework
+     * unchanged in behavior.
+     */
+    private async recoverWithLocalProvider(): Promise<void> {
+        if (this.currentProviderId === 'local') return; // already recovered
+        logger.warn('Falling back to local provider...');
+        this.currentProviderId = 'local';
+        this.providerManager.setProviderById('local');
+        await this.playInternal(true);
     }
 
     /**
@@ -773,6 +805,21 @@ export class AudioPlayerService {
             }
 
         } catch (e) {
+            if (isPlaybackInterruption(e)) {
+                // Deliberate stop/swap aborted the synthesis mid-flight — the stop
+                // path already owns the status; surfacing it would toast the user
+                // for their own action.
+                logger.debug("Playback start interrupted", e);
+                return;
+            }
+            if (isProviderPlaybackError(e) && this.currentProviderId !== 'local') {
+                // The single failure path: providers reject exactly once; the manager
+                // rethrows typed and does NOT self-swap. Recovery is one sequenced
+                // task (the doc's 5-line bridge) — the failed sentence replays once.
+                logger.warn("Cloud provider failed to start playback; falling back to local provider", e);
+                void this.enqueue(() => this.recoverWithLocalProvider());
+                return;
+            }
             logger.error("Play error", e);
             this.setStatus('stopped');
             this.notifyError(e instanceof Error ? e.message : "Playback error");

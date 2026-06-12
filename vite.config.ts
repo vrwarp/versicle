@@ -1,9 +1,74 @@
 import { fileURLToPath, URL } from 'node:url'
-import { defineConfig, loadEnv } from 'vite'
+import { createReadStream, existsSync, statSync, mkdirSync, readdirSync, copyFileSync } from 'node:fs'
+import path from 'node:path'
+import { defineConfig, loadEnv, type Plugin, type Connect } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import mkcert from 'vite-plugin-mkcert'
 import { visualizer } from 'rollup-plugin-visualizer'
+
+/**
+ * Serve + ship the vendored Piper runtime (Phase 5a-PR3,
+ * plan/overhaul/prep/phase5-tts-strangler.md §5a.2).
+ *
+ * `third-party/piper/` is checked into git (patched worker as committed source,
+ * local onnxruntime build, PROVENANCE.md) and replaces the install-time
+ * `prepare-piper` postinstall that copied gitignored blobs into `public/piper/`.
+ * The runtime URL layout is UNCHANGED (`/piper/piper_worker.js`,
+ * `/piper/onnxruntime/…`), so existing user caches and download state survive:
+ *  - dev/preview: a middleware serves `/piper/**` straight from the vendor dir;
+ *  - build: the directory is copied into `dist/piper/` (PROVENANCE.md included —
+ *    it is the GPL §6 provenance record for the shipped blobs).
+ */
+function piperVendorPlugin(): Plugin {
+  const vendorRoot = fileURLToPath(new URL('./third-party/piper', import.meta.url))
+  const contentTypes: Record<string, string> = {
+    '.js': 'text/javascript',
+    '.wasm': 'application/wasm',
+    '.data': 'application/octet-stream',
+    '.json': 'application/json',
+    '.md': 'text/markdown',
+  }
+  const middleware: Connect.NextHandleFunction = (req, res, next) => {
+    const url = req.url?.split('?')[0] ?? ''
+    if (!url.startsWith('/piper/')) return next()
+    const file = path.join(vendorRoot, url.slice('/piper/'.length))
+    // path.join normalizes '..' — keep lookups inside the vendor dir.
+    if (!file.startsWith(vendorRoot + path.sep) || !existsSync(file) || !statSync(file).isFile()) {
+      return next()
+    }
+    res.setHeader('Content-Type', contentTypes[path.extname(file)] ?? 'application/octet-stream')
+    createReadStream(file).pipe(res)
+  }
+  const copyDir = (from: string, to: string) => {
+    mkdirSync(to, { recursive: true })
+    for (const entry of readdirSync(from, { withFileTypes: true })) {
+      const src = path.join(from, entry.name)
+      const dest = path.join(to, entry.name)
+      if (entry.isDirectory()) copyDir(src, dest)
+      else copyFileSync(src, dest)
+    }
+  }
+  let outDir = 'dist'
+  return {
+    name: 'versicle:piper-vendor',
+    configResolved(config) {
+      outDir = path.isAbsolute(config.build.outDir)
+        ? config.build.outDir
+        : path.resolve(config.root, config.build.outDir)
+    },
+    configureServer(server) {
+      server.middlewares.use(middleware)
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware)
+    },
+    closeBundle() {
+      // Runs once per rollup build (main + worker); the copy is idempotent.
+      copyDir(vendorRoot, path.join(outDir, 'piper'))
+    },
+  }
+}
 
 // Path aliases (Phase 1 path-alias codemod): one alias per top-level src/
 // root. MUST stay in sync with the `paths` map in tsconfig.app.json and the
@@ -66,6 +131,7 @@ export default defineConfig(({ mode }) => {
       }
     },
     plugins: [
+      piperVendorPlugin(),
       ...(useHttps ? [mkcert()] : []),
       ...(analyze ? [visualizer({ filename: 'stats.html', gzipSize: true, brotliSize: true })] : []),
       react(),
@@ -79,7 +145,12 @@ export default defineConfig(({ mode }) => {
         filename: 'sw.ts',
         registerType: 'autoUpdate',
         injectManifest: {
-          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024 // 4MB
+          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4MB
+          // The vendored onnxruntime wasm builds (dist/piper/onnxruntime/, ~10MB
+          // each — see piperVendorPlugin) are far beyond any sane precache budget;
+          // they load on demand when Piper synthesizes. Same effective behavior as
+          // before the vendoring, when onnxruntime came from a CDN.
+          globIgnores: ['**/piper/onnxruntime/*.wasm'],
         },
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
         manifest: {

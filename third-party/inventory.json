@@ -10,8 +10,8 @@
       "version": "UNKNOWN — needs investigation (exact espeak-ng commit not recorded by upstream piper-wasm build)",
       "source": "https://github.com/espeak-ng/espeak-ng",
       "license": "GPL-3.0-or-later",
-      "provenance": "Compiled into piper_phonemize.wasm and packed into piper_phonemize.data (Emscripten FS image of espeak-ng-data) by the upstream DavidCks/piper-wasm build, which states it followed the wide-video/piper-wasm recipe; the exact espeak-ng and piper-phonemize commits are recorded nowhere. GPLv3 §6 corresponding source is therefore currently unidentifiable — long-term fix is rebuilding the WASM from pinned commits in CI (gap report D3).",
-      "path": "public/piper/piper_phonemize.wasm, public/piper/piper_phonemize.data (gitignored; copied from node_modules/piper-wasm at postinstall and shipped in dist/piper/)",
+      "provenance": "Compiled into piper_phonemize.wasm and packed into piper_phonemize.data (Emscripten FS image of espeak-ng-data) by the upstream DavidCks/piper-wasm build, which states it followed the wide-video/piper-wasm recipe; the exact espeak-ng and piper-phonemize commits are recorded nowhere. GPLv3 §6 corresponding source is therefore currently unidentifiable — long-term fix is rebuilding the WASM from pinned commits in CI (gap report D3). Vendored into git at Phase 5a-PR3 (verbatim blobs from piper-wasm@0.1.4; SHA-256 hashes in third-party/piper/PROVENANCE.md).",
+      "path": "third-party/piper/piper_phonemize.wasm, third-party/piper/piper_phonemize.data (git-tracked; copied to dist/piper/ at build by the vite piper-vendor plugin)",
       "distribution": ["web", "android"],
       "notes": "piper-wasm's blanket 'MIT' package.json claim does not cover these blobs — the binary links GPL-3 espeak-ng, so the artifact is GPL-governed."
     },
@@ -20,18 +20,18 @@
       "version": "UNKNOWN — needs investigation (exact commit not recorded by upstream piper-wasm build)",
       "source": "https://github.com/rhasspy/piper-phonemize",
       "license": "MIT",
-      "provenance": "Compiled to WASM by the upstream DavidCks/piper-wasm build; exact source commit unrecorded (same build chain as the espeak-ng entry).",
-      "path": "public/piper/piper_phonemize.wasm (gitignored; ships in dist/piper/)",
+      "provenance": "Compiled to WASM by the upstream DavidCks/piper-wasm build; exact source commit unrecorded (same build chain as the espeak-ng entry). Vendored into git at Phase 5a-PR3.",
+      "path": "third-party/piper/piper_phonemize.wasm (git-tracked; ships in dist/piper/)",
       "distribution": ["web", "android"]
     },
     {
       "name": "piper-wasm build artifacts (piper_phonemize.js loader + piper_worker.js)",
-      "version": "0.1.4 (piper-wasm npm package)",
+      "version": "0.1.4 (piper-wasm npm package, vendored — the npm dependency was removed at Phase 5a-PR3)",
       "source": "https://github.com/DavidCks/piper-wasm",
       "license": "MIT (wrapper/loader code; embedded espeak-ng payload is GPL-3.0 — see espeak-ng entry)",
-      "provenance": "Copied verbatim from node_modules/piper-wasm/build/ into public/piper/ by the prepare-piper postinstall script (package.json); piper_worker.js is then string-patched in place.",
-      "path": "public/piper/piper_phonemize.js, public/piper/piper_worker.js (gitignored; ship in dist/piper/)",
-      "modifications": "scripts/patch_piper_worker.js applies 6 string-replacement patches to piper_worker.js at install time (config injection, phoneme-ID clamping, error handling).",
+      "provenance": "Vendored into git at Phase 5a-PR3 from piper-wasm@0.1.4 build/ output (upstream hashes in third-party/piper/PROVENANCE.md). piper_worker.js is COMMITTED PATCHED SOURCE: the 6 string patches formerly applied at install time by the deleted scripts/patch_piper_worker.js are baked in, plus a Versicle-authored request-id envelope (patch 7) for PiperRuntime's stale-reply protocol.",
+      "path": "third-party/piper/piper_phonemize.js, third-party/piper/piper_worker.js (git-tracked; ship in dist/piper/)",
+      "modifications": "piper_worker.js: config injection, phoneme-ID clamping, error handling (the former install-time patch set), and the request-id envelope — full patch list in third-party/piper/PROVENANCE.md. CI smoke: src/lib/tts/providers/piperVendoredAssets.test.ts asserts the patch anchors are present.",
       "distribution": ["web", "android"]
     },
     {
@@ -153,13 +153,13 @@
       "distribution": ["runtime-fetch"]
     },
     {
-      "name": "onnxruntime-web (runtime-fetched from CDN)",
+      "name": "onnxruntime-web (vendored local runtime for Piper synthesis)",
       "version": "1.17.1",
       "source": "https://github.com/microsoft/onnxruntime",
       "license": "MIT",
-      "provenance": "Loaded at runtime from cdnjs (src/lib/tts/providers/piper-utils.ts); not bundled or redistributed today. If/when vendored into public/piper/ (tts-providers target design), it must gain a redistributed-artifact entry here and in THIRD-PARTY-NOTICES.",
-      "path": "(runtime fetch only)",
-      "distribution": ["runtime-fetch"]
+      "provenance": "Vendored into git at Phase 5a-PR3: ort.min.js + ort-wasm{,-simd,-threaded,-simd-threaded}.wasm extracted verbatim from the npm registry tarball onnxruntime-web-1.17.1.tgz (SHA-256 d48e46a437bc11d6b3a30e587fbae8aaa5061b567230e9aeecb5bc5059fcbd02; recorded in third-party/piper/PROVENANCE.md). Replaces the former cdnjs runtime fetch (deleted with piper-utils.ts) so Piper synthesis performs zero third-party egress.",
+      "path": "third-party/piper/onnxruntime/ (git-tracked; ships in dist/piper/onnxruntime/)",
+      "distribution": ["web", "android"]
     }
   ]
 }

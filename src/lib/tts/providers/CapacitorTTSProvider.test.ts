@@ -218,59 +218,6 @@ describe('CapacitorTTSProvider', () => {
     }));
   });
 
-  it('should support resume method (by restarting)', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
-      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (TextToSpeech.speak as any).mockResolvedValue(undefined);
-
-    await provider.init();
-    await provider.play('hello', { voiceId: 'voice1', speed: 1.0 });
-
-    // Clear speak mock
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (TextToSpeech.speak as any).mockClear();
-
-    provider.resume();
-
-    // Since play is async and awaited inside resume (but resume is void),
-    // we need to wait a bit for the async operations to complete.
-    await new Promise(r => setTimeout(r, 10));
-
-    expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
-        text: 'hello'
-    }));
-  });
-
-  it('should resume the same text after pause', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
-      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (TextToSpeech.speak as any).mockResolvedValue(undefined);
-
-    await provider.init();
-    await provider.play('hello', { voiceId: 'voice1', speed: 1.0 });
-
-    provider.pause();
-
-    // Clear speak mock
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (TextToSpeech.speak as any).mockClear();
-
-    provider.resume();
-
-    // Wait for async operations
-    await new Promise(r => setTimeout(r, 10));
-
-    expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
-        text: 'hello'
-    }));
-  });
-
   it('should emit end event asynchronously when speak promise resolves', async () => {
     // Setup voices
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

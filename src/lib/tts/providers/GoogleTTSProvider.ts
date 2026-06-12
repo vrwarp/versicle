@@ -1,6 +1,7 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
 import type { TTSOptions, SpeechSegment, Timepoint } from './types';
 import type { AudioSink } from '../engine/AudioSink';
+import type { TTSCache } from '../TTSCache';
 
 /**
  * TTS Provider for Google Cloud Text-to-Speech API.
@@ -10,8 +11,8 @@ export class GoogleTTSProvider extends BaseCloudProvider {
   id = 'google';
   private apiKey: string | null = null;
 
-  constructor(apiKey?: string, audioSink?: AudioSink) {
-    super(audioSink);
+  constructor(apiKey?: string, audioSink?: AudioSink, cache?: TTSCache) {
+    super(audioSink, cache);
     if (apiKey) {
       this.apiKey = apiKey;
     }
@@ -73,7 +74,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
       }));
   }
 
-  protected async fetchAudioData(text: string, options: TTSOptions): Promise<SpeechSegment> {
+  protected async fetchAudioData(text: string, options: TTSOptions, signal?: AbortSignal): Promise<SpeechSegment> {
     if (!this.apiKey) {
       throw new Error('Google Cloud API Key is missing');
     }
@@ -98,7 +99,8 @@ export class GoogleTTSProvider extends BaseCloudProvider {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': this.apiKey
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      signal
     });
 
     if (!response.ok) {
@@ -131,8 +133,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
 
     return {
       audio: blob,
-      alignment,
-      isNative: false
+      alignment
     };
   }
 }

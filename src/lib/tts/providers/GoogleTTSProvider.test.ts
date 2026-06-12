@@ -3,8 +3,8 @@ import { GoogleTTSProvider } from './GoogleTTSProvider';
 import type { TTSOptions } from './types';
 
 // Mock base dependencies to avoid instantiation issues if any
-vi.mock('../AudioElementPlayer');
-vi.mock('../TTSCache');
+// No module mocks (vi.mock is banned in providers/ since 5a-PR2): these tests only
+// exercise init/getVoices/fetchAudioData, which never touch the sink or the cache.
 
 describe('GoogleTTSProvider', () => {
   let provider: GoogleTTSProvider;

@@ -1,6 +1,7 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
 import type { TTSOptions, SpeechSegment } from './types';
 import type { AudioSink } from '../engine/AudioSink';
+import type { TTSCache } from '../TTSCache';
 
 /**
  * TTS Provider for LemonFox.ai API.
@@ -10,8 +11,8 @@ export class LemonFoxProvider extends BaseCloudProvider {
   id = 'lemonfox';
   private apiKey: string | null = null;
 
-  constructor(apiKey?: string, audioSink?: AudioSink) {
-    super(audioSink);
+  constructor(apiKey?: string, audioSink?: AudioSink, cache?: TTSCache) {
+    super(audioSink, cache);
     if (apiKey) this.apiKey = apiKey;
     this.voices = [
       // English (US)
@@ -67,7 +68,7 @@ export class LemonFoxProvider extends BaseCloudProvider {
   /**
    * Synthesizes text using LemonFox API.
    */
-  protected async fetchAudioData(text: string, options: TTSOptions): Promise<SpeechSegment> {
+  protected async fetchAudioData(text: string, options: TTSOptions, signal?: AbortSignal): Promise<SpeechSegment> {
     if (!this.apiKey) {
       throw new Error("LemonFox API Key missing");
     }
@@ -84,11 +85,10 @@ export class LemonFoxProvider extends BaseCloudProvider {
 
     const blob = await this.fetchAudio(url, body, {
       'Authorization': `Bearer ${this.apiKey}`
-    });
+    }, signal);
 
     return {
       audio: blob,
-      isNative: false,
       alignment: undefined
     };
   }

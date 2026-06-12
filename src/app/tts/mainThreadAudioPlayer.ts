@@ -15,6 +15,7 @@
 import { AudioPlayerService, type TtsEngine } from '@lib/tts/AudioPlayerService';
 import { createZustandEngineContext } from './createZustandEngineContext';
 import { TTSProviderManager } from '@lib/tts/TTSProviderManager';
+import { storeProviderBuildContext } from './providerBuildContext';
 import { PlatformIntegration } from '@lib/tts/PlatformIntegration';
 import { WorkerEngineHandle } from '@lib/tts/engine/WorkerEngineHandle';
 
@@ -43,7 +44,7 @@ export function getInProcessAudioPlayer(): AudioPlayerService {
     if (!inProcessInstance) {
         inProcessInstance = AudioPlayerService.createWithContext(
             createZustandEngineContext(),
-            (events) => new TTSProviderManager(events),
+            (events) => new TTSProviderManager(events, undefined, storeProviderBuildContext),
             (events) => new PlatformIntegration(events),
         );
     }

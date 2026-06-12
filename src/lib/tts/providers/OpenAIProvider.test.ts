@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vite
 import { OpenAIProvider } from './OpenAIProvider';
 import type { TTSOptions } from './types';
 
-vi.mock('../AudioElementPlayer');
-vi.mock('../TTSCache');
+// No module mocks (vi.mock is banned in providers/ since 5a-PR2): these tests only
+// exercise init/getVoices/fetchAudioData, which never touch the sink or the cache.
 
 describe('OpenAIProvider', () => {
   let provider: OpenAIProvider;
@@ -92,7 +92,6 @@ describe('OpenAIProvider', () => {
 
       expect(result).toEqual({
         audio: mockBlob,
-        isNative: false,
         alignment: undefined
       });
     });

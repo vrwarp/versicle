@@ -1,4 +1,4 @@
-import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice } from './types';
+import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice, Unsubscribe } from './types';
 import { playEarconOscillators } from '../earcons';
 
 /**
@@ -10,9 +10,8 @@ export class WebSpeechProvider implements ITTSProvider {
   private voices: SpeechSynthesisVoice[] = [];
   private eventListeners: ((event: TTSEvent) => void)[] = [];
   private voicesLoaded = false;
-  private lastText: string | null = null;
-  private lastOptions: TTSOptions | null = null;
   private audioContext: AudioContext | null = null;
+  private disposed = false;
 
   constructor() {
     this.synth = window.speechSynthesis;
@@ -95,9 +94,6 @@ export class WebSpeechProvider implements ITTSProvider {
   async play(text: string, options: TTSOptions): Promise<void> {
     if (!this.synth) throw new Error("SpeechSynthesis API not available");
 
-    this.lastText = text;
-    this.lastOptions = options;
-
     this.cancel();
 
     if (this.voices.length === 0) await this.init();
@@ -110,13 +106,24 @@ export class WebSpeechProvider implements ITTSProvider {
         // cache), so the engine legitimately speaks live at the requested rate here.
         utterance.rate = options.speed;
 
+        let started = false;
         utterance.onstart = () => {
+            started = true;
             this.emit({ type: 'start' });
             resolve();
         };
         utterance.onend = () => this.emit({ type: 'end' });
         utterance.onerror = (e) => {
             const errorMsg = `SpeechSynthesisError: ${e.error}`;
+            if (!started) {
+                // Single-shot contract: a failure to START surfaces through the
+                // rejection ONLY — never additionally as an 'error' event (the
+                // pre-5a emit+reject double-signal fed the S2 fallback double-fire).
+                reject(new Error(errorMsg));
+                return;
+            }
+            // Mid-playback failure (after play() resolved): the event channel is
+            // the only one left; the engine normalizes interruptions upstream.
             this.emit({
                 type: 'error',
                 error: {
@@ -125,7 +132,6 @@ export class WebSpeechProvider implements ITTSProvider {
                     type: e.type,
                 }
             });
-            reject(new Error(errorMsg));
         };
         utterance.onboundary = (e) => this.emit({ type: 'boundary', charIndex: e.charIndex });
 
@@ -149,14 +155,23 @@ export class WebSpeechProvider implements ITTSProvider {
     }
   }
 
-  resume(): void {
-    if (this.lastText && this.lastOptions) {
-        this.play(this.lastText, this.lastOptions);
-    }
+  on(callback: (event: TTSEvent) => void): Unsubscribe {
+      this.eventListeners.push(callback);
+      return () => {
+          this.eventListeners = this.eventListeners.filter(l => l !== callback);
+      };
   }
 
-  on(callback: (event: TTSEvent) => void): void {
-      this.eventListeners.push(callback);
+  /** Cancel speech, detach all listeners, release the earcon AudioContext. */
+  dispose(): void {
+      if (this.disposed) return;
+      this.disposed = true;
+      this.cancel();
+      this.eventListeners = [];
+      if (this.audioContext) {
+          void this.audioContext.close().catch(() => {});
+          this.audioContext = null;
+      }
   }
 
   playEarcon(type: 'bookmark_captured' | 'bookmark_failed'): void {
@@ -176,6 +191,7 @@ export class WebSpeechProvider implements ITTSProvider {
   }
 
   private emit(event: TTSEvent) {
+      if (this.disposed) return;
       this.eventListeners.forEach(l => l(event));
   }
 
