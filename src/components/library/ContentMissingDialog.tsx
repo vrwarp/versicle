@@ -6,7 +6,7 @@ import type { BookMetadata } from '~types/db';
 import { useDriveStore } from '@store/useDriveStore';
 import { DriveScannerService } from '@lib/drive/DriveScannerService';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
-import { googleIntegrationManager } from '@lib/google/GoogleIntegrationManager';
+import { getGoogleAuthClient } from '@domains/google';
 import { AlertCircle } from 'lucide-react';
 
 interface ContentMissingDialogProps {
@@ -56,7 +56,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
         setIsReconnecting(true);
         setReconnectError(null);
         try {
-            await googleIntegrationManager.connectService('drive');
+            await getGoogleAuthClient().connect('drive');
         } catch (error) {
             console.error('Failed to reconnect Drive:', error);
             setReconnectError('Failed to reconnect. Please try again.');

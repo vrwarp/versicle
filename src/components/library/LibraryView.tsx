@@ -15,8 +15,7 @@ import { GlobalNotesView } from '../notes/GlobalNotesView';
 import { ImportSourceDialog } from './ImportSourceDialog';
 import { ContentMissingDialog } from './ContentMissingDialog';
 import { DriveImportDialog } from '../drive/DriveImportDialog';
-import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
-import { googleIntegrationManager } from '@lib/google/GoogleIntegrationManager';
+import { getGoogleAuthClient } from '@domains/google';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { useShallow } from 'zustand/react/shallow';
 import { DeleteBookDialog } from './DeleteBookDialog';
@@ -148,19 +147,11 @@ export const LibraryView: React.FC = () => {
   const [isImportSourceOpen, setIsImportSourceOpen] = useState(false);
   const [isContentMissingOpen, setIsContentMissingOpen] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
-  const { isServiceConnected } = useGoogleServicesStore();
-  const isDriveConnected = isServiceConnected('drive');
 
   const handleBrowseDrive = async () => {
     try {
-      if (!isDriveConnected) {
-        // Try to connect/get token which triggers flow if needed? 
-        // actually GoogleIntegrationManager.connectService('drive') is better if we want to force connect.
-        // But let's check token.
-        await googleIntegrationManager.getValidToken('drive');
-      } else {
-        await googleIntegrationManager.getValidToken('drive');
-      }
+      // User gesture: silent token when cached, interactive connect otherwise.
+      await getGoogleAuthClient().getTokenInteractive('drive');
       setIsDriveImportOpen(true);
     } catch (error) {
       console.error("Failed to access Drive", error);

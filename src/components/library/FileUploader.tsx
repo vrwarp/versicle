@@ -10,7 +10,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { Loader2 } from 'lucide-react';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
-import { googleIntegrationManager } from '@lib/google/GoogleIntegrationManager';
+import { getGoogleAuthClient } from '@domains/google';
 import { Button } from '../ui/Button';
 import { DriveImportDialog } from '../drive/DriveImportDialog';
 import { createLogger } from '@lib/logger';
@@ -159,7 +159,7 @@ export const FileUploader: React.FC = () => {
   const handleDriveConnect = async () => {
     setIsDriveConnecting(true);
     try {
-      await googleIntegrationManager.connectService('drive');
+      await getGoogleAuthClient().connect('drive');
     } catch (error) {
       logger.error("Failed to connect Drive", error);
       showToast("Failed to connect Google Drive", 'error');
@@ -172,8 +172,8 @@ export const FileUploader: React.FC = () => {
 
   const handleBrowseDrive = async () => {
     try {
-      const token = await googleIntegrationManager.getValidToken('drive');
-      logger.debug("Drive Token Valid, opening picker", token);
+      await getGoogleAuthClient().getTokenInteractive('drive');
+      logger.debug("Drive token valid, opening picker");
       setIsDriveImportOpen(true);
     } catch (error) {
       logger.error("Failed to access Drive", error);

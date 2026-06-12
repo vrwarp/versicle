@@ -27,12 +27,18 @@ import { syncInitTask } from './syncInit';
 import { ttsInitializeTask, deviceRegistrationTask } from './deviceRegistration';
 import { deviceHeartbeatTask, driveAutoScanTask, audioCacheEvictionTask } from './backgroundTasks';
 import { socialLoginTask } from './socialLogin';
+import { wireGoogleDomain } from '../google/wireGoogle';
 
 let registered = false;
 
 export function registerAppBootTasks(): void {
   if (registered) return;
   registered = true;
+
+  // Composition wiring (not a boot task — synchronous, side-effect-free):
+  // installs the GoogleAuthClient/DriveClient/DriveLibrarySync singletons
+  // with store-backed adapters before any boot task or component runs.
+  wireGoogleDomain();
 
   registerWipeHook({
     name: 'sync/stop',

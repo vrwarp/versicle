@@ -12,6 +12,7 @@ import { getDeviceId } from '@lib/device-id';
 import { useDeviceStore } from '@store/useDeviceStore';
 import { useDriveStore } from '@store/useDriveStore';
 import { DriveScannerService } from '@lib/drive/DriveScannerService';
+import { GoogleAuthRequiredError } from '@domains/google';
 import { audioCache } from '@data/repos/audioCache';
 import { createLogger } from '@lib/logger';
 
@@ -94,8 +95,10 @@ export const driveAutoScanTask: BootTask = {
 
     logger.info('Background Drive Scan: Heuristic triggered, refreshing index...');
     DriveScannerService.scanAndIndex().catch(err => {
-      if (err instanceof Error && err.message.includes('is not connected')) {
-        logger.info(`Background Drive Scan failed: ${err.message}`);
+      if (err instanceof GoogleAuthRequiredError) {
+        // Silent path: no cached token. Never pops UI, never disconnects —
+        // the user reconnects from settings (GG-2 reversal).
+        logger.info(`Background Drive Scan skipped: ${err.message}`);
       } else {
         logger.warn('Background Drive Scan failed:', err);
       }

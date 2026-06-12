@@ -53,3 +53,48 @@ describe('useDriveBrowser race condition', () => {
         expect(result.current.items).toEqual([{ id: '2', name: 'File 2', mimeType: 'application/vnd.google-apps.folder' }]);
     });
 });
+
+// Absorbed from the deleted DriveLogic.test.ts §useDriveBrowser (Phase 7
+// test-absorption ledger): basic navigation semantics over the mocked
+// DriveService façade.
+describe('regression: useDriveBrowser navigation (ex-DriveLogic.test.ts)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('fetches folders on mount', async () => {
+        vi.mocked(DriveService.listFolders).mockResolvedValue([
+            { id: '1', name: 'Folder 1', mimeType: 'application/vnd.google-apps.folder' },
+        ]);
+
+        const { result } = renderHook(() => useDriveBrowser());
+
+        expect(result.current.isLoading).toBe(true);
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        expect(result.current.items).toHaveLength(1);
+        expect(result.current.items[0].name).toBe('Folder 1');
+    });
+
+    it('navigates to a folder and back up', async () => {
+        vi.mocked(DriveService.listFolders).mockResolvedValue([]);
+
+        const { result } = renderHook(() => useDriveBrowser());
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        act(() => {
+            result.current.openFolder('folder-2', 'Folder 2');
+        });
+        expect(result.current.currentFolderId).toBe('folder-2');
+        expect(result.current.breadcrumbs).toHaveLength(2);
+        expect(result.current.breadcrumbs[1].name).toBe('Folder 2');
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        act(() => {
+            result.current.navigateUp();
+        });
+        expect(result.current.currentFolderId).toBe('root');
+        expect(result.current.breadcrumbs).toHaveLength(1);
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+    });
+});
