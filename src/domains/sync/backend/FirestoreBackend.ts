@@ -287,7 +287,10 @@ export class FirestoreBackend implements SyncBackend {
       destroy: () => {
         if (destroyed) return;
         destroyed = true;
-        provider.destroy();
+        // y-cinder's destroy() drains the pending update cache (one final
+        // committed save) before resolving — returned so durability-needing
+        // callers can await it (C3 additive evolution, P9).
+        return provider.destroy();
       },
     };
   }

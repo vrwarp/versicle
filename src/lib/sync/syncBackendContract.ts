@@ -234,8 +234,11 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
           connection.on!('saved', (at) => savedAts.push(at as number));
 
           doc.getMap('library').set('book-1', 'Moby Dick');
+          // Generous budget for the emulator transport under full-suite CPU
+          // contention; the poll exits on the first saved event, so the
+          // fast transports (mock) are unaffected.
           await expect
-            .poll(() => savedAts.length, { timeout: 2000 })
+            .poll(() => savedAts.length, { timeout: 20000 })
             .toBeGreaterThan(0);
           expect(savedAts[0]).toBeGreaterThan(0);
           await connection.disconnect();

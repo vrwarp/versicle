@@ -87,3 +87,18 @@ comparison); the deltas the app depends on:
   `lastSyncTime` floor (the P4 §Follow-ups canary). Contract: F.6 in
   `test/contract/provider.test.ts` (the same cases that pinned the pre-delta
   gap), plus the C3 `savedEvent` capability on the emulator runner.
+- **Surgery 2 — `sync` handshake event** (recorded DEVIATION beyond the §D6
+  delta list, justified by the §D8 emulator collapse): `sync(true)` emitted
+  once `performInitialSync` completes and the realtime listeners are
+  attached. Evidence for the gap: every consumer already listened for the
+  y-fire-era `sync(isSynced)` event — `FirestoreBackend.connect` forwards it
+  as the C3 `synced` event, `downloadWorkspaceState` resolves the staged
+  swap's download on it, and `MockFireProvider` emits it — but the vendored
+  SHA never emitted it anywhere (`grep emit src/*.ts`), so on the real
+  transport `synced` never fired and every clean-sync/switch download waited
+  out its full 15 s timeout. The C3 contract suite could not run its connect
+  cases against the real backend without the handshake (the §D8
+  `capabilities.connect = true` flip), and mock-vs-real drift on a declared
+  C3 event is exactly what the event cases exist to outlaw. Contract: F.7
+  (handshake after completed initial sync; nothing on a stalled sync), plus
+  the shared C3 connect cases on the emulator runner.

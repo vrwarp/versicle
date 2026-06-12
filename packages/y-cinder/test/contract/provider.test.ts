@@ -16,7 +16,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
 
-const { addDocMock, MockBytes } = vi.hoisted(() => {
+const { addDocMock, getDocsMock, MockBytes } = vi.hoisted(() => {
   class MockBytes {
     constructor(readonly _u8: Uint8Array) {}
     static fromUint8Array(u8: Uint8Array): MockBytes {
@@ -26,7 +26,7 @@ const { addDocMock, MockBytes } = vi.hoisted(() => {
       return this._u8;
     }
   }
-  return { addDocMock: vi.fn(), MockBytes };
+  return { addDocMock: vi.fn(), getDocsMock: vi.fn(), MockBytes };
 });
 
 vi.mock('@firebase/firestore', () => ({
@@ -43,19 +43,20 @@ vi.mock('@firebase/firestore', () => ({
   addDoc: addDocMock,
   Bytes: MockBytes,
   serverTimestamp: vi.fn(() => ({ __serverTimestamp: true })),
-  // Initial-sync surface: STALL the constructor's background sync() at its
-  // first fetch (a never-resolving getDocs). The initial sync has its own
-  // local-state push (sync.ts:353/:363) that would pollute the addDoc
-  // counts; the debounced save path under test here is fully independent of
-  // sync completion. Live initial-sync behavior is the emulator runner's
-  // job, not this suite's.
+  // Initial-sync surface: by default, STALL the constructor's background
+  // sync() at its first fetch (a never-resolving getDocs — set per-suite in
+  // beforeEach). The initial sync has its own local-state push
+  // (sync.ts:353/:363) that would pollute the addDoc counts; the debounced
+  // save path under test here is fully independent of sync completion. The
+  // F.7 handshake suite overrides getDocs to resolve empty instead. Live
+  // initial-sync behavior is the emulator runner's job, not this suite's.
   onSnapshot: vi.fn(() => () => {}),
   query: vi.fn((target: unknown) => target),
   orderBy: vi.fn(),
   limit: vi.fn(),
   limitToLast: vi.fn(),
   startAfter: vi.fn(),
-  getDocs: vi.fn(() => new Promise(() => {})),
+  getDocs: getDocsMock,
   getDoc: vi.fn(async () => ({
     exists: () => false,
     data: () => undefined,
@@ -104,6 +105,8 @@ describe('y-cinder fork contract (F.1–F.6)', () => {
     vi.useFakeTimers();
     addDocMock.mockReset();
     addDocMock.mockResolvedValue({ id: 'doc-id' });
+    getDocsMock.mockReset();
+    getDocsMock.mockImplementation(() => new Promise(() => {}));
   });
 
   afterEach(() => {
@@ -362,6 +365,37 @@ describe('y-cinder fork contract (F.1–F.6)', () => {
 
       expect(addDocMock).toHaveBeenCalledTimes(1);
       expect(savedAts).toHaveLength(1);
+    });
+  });
+
+  describe("F.7 initial-sync handshake — the 'sync' fork delta (surgery 2)", () => {
+    it("emits sync(true) once the initial sync completes and the realtime listeners are attached", async () => {
+      // Unlike the rest of this suite, let the initial sync COMPLETE: an
+      // empty remote (empty getDocs pages) and an empty local doc.
+      getDocsMock.mockResolvedValue({ empty: true, docs: [], size: 0 });
+
+      const ydoc = new Y.Doc();
+      const provider = makeProvider(ydoc);
+      const handshakes: boolean[] = [];
+      provider.on('sync', (isSynced: boolean) => handshakes.push(isSynced));
+
+      await vi.advanceTimersByTimeAsync(MAX_WAIT * 10);
+
+      expect(handshakes).toEqual([true]);
+      // The handshake means listeners are live, not that anything was saved.
+      expect(addDocMock).not.toHaveBeenCalled();
+      await provider.destroy();
+    });
+
+    it('a sync that cannot complete emits NO handshake (the stalled-fetch default)', async () => {
+      const ydoc = new Y.Doc();
+      const provider = makeProvider(ydoc);
+      const handshakes: boolean[] = [];
+      provider.on('sync', (isSynced: boolean) => handshakes.push(isSynced));
+
+      await vi.advanceTimersByTimeAsync(MAX_WAIT * 10);
+      expect(handshakes).toEqual([]);
+      await provider.destroy();
     });
   });
 });

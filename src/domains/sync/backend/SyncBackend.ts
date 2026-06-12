@@ -57,10 +57,14 @@ export interface SyncConnection {
   on<E extends keyof SyncConnectionEvents>(event: E, cb: SyncConnectionEvents[E]): void;
   off<E extends keyof SyncConnectionEvents>(event: E, cb: SyncConnectionEvents[E]): void;
   /**
-   * Detach the provider (flushing where the transport supports it); the
-   * workspace doc must be durable afterwards.
+   * Detach the provider, flushing pending writes where the transport
+   * supports it. Returns the flush promise when the transport's teardown is
+   * asynchronous (FirestoreBackend: y-cinder's destroy() commits the final
+   * batch) so callers that NEED durability-before-proceeding can await it;
+   * fire-and-forget call sites (detach on switch) are unchanged. Additive
+   * C3 evolution, P9 — pinned by the emulator runner's round-trip cases.
    */
-  destroy(): void;
+  destroy(): void | Promise<void>;
 }
 
 export interface ConnectOptions {

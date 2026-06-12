@@ -422,6 +422,15 @@ export class FireProvider extends ObservableV2<any> {
       this._lastHistoryDoc = result.lastHistoryDoc;
       this._unsubscribeHistory = createHistoryListener(syncCtx, result.lastHistoryDoc);
 
+      // FORK SURGERY 2 (Versicle P9; recorded deviation — see PROVENANCE.md):
+      // announce the completed initial-sync handshake. Every consumer was
+      // already listening for the y-fire-era `sync(isSynced)` event
+      // (FirestoreBackend forwards it as the C3 `synced` event; the staged
+      // swap's downloadWorkspaceState resolves on it instead of waiting out
+      // its full timeout), and the mock transport emits it — only the real
+      // provider was silent.
+      this.emit('sync', [true]);
+
     } catch (err) {
       console.error("Sync failed", err);
 
