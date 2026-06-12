@@ -317,7 +317,15 @@ export const ReaderControlBar: React.FC = () => {
 
     return (
         <>
-            <div className="fixed bottom-8 left-0 right-0 z-40 px-4 pointer-events-none flex justify-center">
+            {/* role="region": the pill is the one piece of shell content
+                outside the route's landmarks — naming it a landmark closes
+                the last P0 'region' finding on the reader surface (the axe
+                spec asserts the rule as fixed; Phase 8 §C/§K ratchet). */}
+            <div
+                role="region"
+                aria-label="Quick actions"
+                className="fixed bottom-8 left-0 right-0 z-40 px-4 pointer-events-none flex justify-center"
+            >
                 <div
                     className="pointer-events-auto w-full max-w-md"
                     ref={pillRegionRef}

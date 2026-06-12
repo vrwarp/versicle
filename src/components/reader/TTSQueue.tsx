@@ -5,6 +5,7 @@ import { TTSQueueItem } from './TTSQueueItem';
 import { useShallow } from 'zustand/react/shallow';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useBook } from '@store/libraryViewStore';
+import { useReducedMotion } from '@hooks/useReducedMotion';
 
 /**
  * Displays the current TTS playback queue.
@@ -22,6 +23,9 @@ export const TTSQueue: React.FC = () => {
     const contentLang = useBook(currentBookId)?.language;
     // Engine commands come from the TtsController facade (stable identity).
     const { jumpTo } = useAudioCommands();
+    // Reduced motion (Phase 8 §K): the follow-scroll is JS-driven motion —
+    // CSS cannot reach scrollIntoView's behavior option.
+    const reducedMotion = useReducedMotion();
     const activeRef = useRef<HTMLButtonElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const prevIndexRef = useRef<number | null>(null);
@@ -84,14 +88,15 @@ export const TTSQueue: React.FC = () => {
 
         if (shouldScroll) {
             currentEl.scrollIntoView({
-                behavior: 'smooth',
+                behavior: reducedMotion ? 'auto' : 'smooth',
                 block: 'center',
             });
         }
 
         prevIndexRef.current = currentIndex;
 
-    }, [currentIndex]); // Scroll when index changes
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentIndex]); // Scroll when index changes (reducedMotion read live)
 
     if (queue.length === 0) {
         return <div data-testid="tts-queue" className="p-4 text-center text-muted-foreground text-sm">No text available.</div>;

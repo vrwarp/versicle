@@ -1,4 +1,10 @@
 @import "tailwindcss";
+/* Phase 8 §K (RC-18 decision: INSTALL): the animate-in/fade-in/slide-in-*
+   entrance classes authored across Modal/Sheet/Popover/Toast/pills were
+   silent no-ops since the Tailwind v4 migration dropped tailwindcss-animate.
+   tw-animate-css is the TW4-native replacement — the classes run again,
+   under the global reduced-motion override at the end of this file. */
+@import "tw-animate-css";
 @font-face {
   font-family: 'PT Sans Narrow';
   font-style: normal;
@@ -280,4 +286,20 @@ input[type="search"]::-webkit-search-results-decoration {
 
 .font-pinyin {
   font-family: 'PT Sans Narrow', sans-serif;
+}
+
+/* Phase 8 §K: ONE global reduced-motion policy. CSS animations/transitions
+   collapse to imperceptible durations (not 0s — animationend/transitionend
+   listeners still fire) and smooth scrolling turns instant. JS-driven
+   motion consumes the matching useReducedMotion() hook (src/hooks/). */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

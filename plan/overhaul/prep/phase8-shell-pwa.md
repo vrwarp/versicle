@@ -773,3 +773,75 @@ deviations and decisions (design-doc-vs-reality, README §Program rules):
 - **Hand-off to the toast item:** ToastContainer/Toast ui/ carve-outs
   (above) + the boot-time-toast gap (ToastContainer still mounts in
   RootLayout, below the router gate).
+
+### p8-interaction-choke-points — LANDED (2026-06-12)
+
+PR-1 + PR-2 + PR-3 + §K of this doc, as four commits. Recorded deviations
+and decisions (design-doc-vs-reality, README §Program rules):
+
+- **PR-1 (kernel/locale):** `messages.ts` (MessageKey union, formatMessage/
+  resolveMessage, errors.* mapped 1:1 over APP_ERROR_CODES at compile
+  time), `uiLocale.ts` (override → navigator.language → en;
+  applyDocumentLanguage wired as composition wiring in
+  registerAppBootTasks — BEFORE the boot phases, not a C11 task: SafeMode/
+  loading screens must already carry the right lang, and adding a 'locale'
+  boot phase would have churned the C11 phase contract for a synchronous
+  one-liner), `format.ts` (cached Intl; formatRelativeTime narrow-en output
+  matches the hand-rolled "5m ago" strings exactly). All 16 toLocale*
+  sites migrated; 3 relative-time + 5 byte/duration copies deleted; bare
+  localeCompare title sorts → compareTitles. `lang={book.language}` landed
+  on BookCard/BookListItem, TOC labels (TOCPanel contentLang prop), TTS
+  queue sentences, annotation excerpts (reader panel + notes), VocabTile
+  grid (lang="zh"). Settings registry `labelKey: MessageKey` swap done
+  (the routes item's hand-off). eslint: no-restricted-syntax selectors
+  hoisted into shared constants; toLocale* ban at ERROR (tests exempt via
+  the kernel/net+tests carve-out).
+- **PR-2 (toast/announcer/confirm):** queue store (dedupe + cap 5, error
+  default 5000ms, `MessageInput | string` deprecated prose overload);
+  ToastHost ABOVE the router gate in App.tsx with PERSISTENT polite/
+  assertive regions (boot-time toast regression test); ui/ToastContainer
+  deleted and the §L carve-outs removed (ui-imports-kernel-only at zero
+  exceptions). LiveAnnouncer (ui/) + kernel/locale/announcer.ts pub/sub +
+  TtsAnnouncements adapter in RootLayout (status transitions + debounced
+  section changes; never per-sentence — pinned). DEVIATION from §D's
+  "toasts share the pipe": toasts are announced by their OWN persistent
+  visible live regions (ToastHost), not via announce() — one channel per
+  message, no double-speak; the announcer pipe is for non-toast
+  announcements. useConfirm/confirmDialog = module-level request queue +
+  ConfirmHost (no React context; works pre-router for the SafeMode reset;
+  queued requests wait for a host like boot toasts). All 12+7 native
+  sites codemodded; no-alert + no-restricted-globals[confirm,alert,prompt]
+  born at ERROR, zero exceptions. RULES_OUT_OF_DATE_MESSAGE deleted from
+  domains/sync (copy → catalog 'sync.rulesOutOfDate'; transport keeps
+  detection only); sync suites assert RESOLVED copy via resolveMessage.
+- **PR-3 (shortcuts):** service + useShortcut + KeyboardShortcutHost (the
+  ONE window listener + generated `?` help sheet) in RootLayout;
+  registrants in app/shortcuts/readerShortcuts.ts (page turns scope
+  'reader'; TTS keys scope 'tts-active' with `when: playing|paused` —
+  registered while the controller is mounted rather than mount/unmount on
+  status change: same observable behavior, fewer registration churns);
+  the iframe bridge feeds engine keydown into the same dispatch. Escape
+  ordering implemented as a built-in policy (open-overlay selector moved
+  verbatim) — the 'overlay' scope exists for future registrations but
+  Radix keeps closing its own overlays. Both legacy registries + the P0
+  interim predicates DELETED; useReaderNavigation kept (wheel/touch only).
+  useReaderNavigation.test.ts absorbed into
+  app/shortcuts/readerShortcuts.test.tsx (named regression describe, §E
+  acceptance matrix: one-action-per-keypress × every TTS state × window+
+  iframe streams); ReaderTTSController.test keyboard assertions unchanged,
+  now running through the real service (host mounted in its harness).
+  keydown lint ban at ERROR (carve-out: src/app/shortcuts/).
+- **§K (reduced motion) + axe ratchet:** global prefers-reduced-motion
+  block in index.css; useReducedMotion() hook (matchMedia,
+  useSyncExternalStore); TTSQueue follow-scroll behavior flips to 'auto'.
+  RC-18 decision: INSTALLED tw-animate-css@1.4.0 (MIT, devDependency like
+  tailwind itself; license gate green) — the authored animate-in/out
+  classes run again under the global override. Axe ratchet: the pill
+  mount (ReaderControlBar) is a named region landmark and the reader
+  surface's 'region' rule flipped to expectAbsent in
+  verification/test_a11y_axe.spec.ts; vitest-axe added on
+  Toast/ConfirmDialog.
+- **Hand-offs to later P8 items / P9:** remaining jsx-a11y warn→error
+  directory flips ride the phase-close item (PR-10); ~75 legacy
+  showToast(prose) call sites migrate opportunistically (ADR §2);
+  the locale picker UI (writes UI_LOCALE_STORAGE_KEY) is post-overhaul.

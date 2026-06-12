@@ -20,9 +20,9 @@
  *     'interactive' contract (focusable buttons never inside an
  *     aria-hidden container),
  *   - region (landmark): the reader body is a real <main> landmark
- *     (ReaderShell); the header is the <header> banner. NOT asserted yet:
- *     the RootLayout CompassPill mount is still outside any landmark — it
- *     dissolves in P8, which owns flipping 'region' to expectAbsent.
+ *     (ReaderShell); the header is the <header> banner; since Phase 8 the
+ *     pill mount (ReaderControlBar) is a named region landmark — 'region'
+ *     asserts as fixed on the reader surface.
  * A regression in these named rules fails the nightly lane outright.
  *
  * Runs in the existing Docker flow (nightly lane), e.g.:
@@ -122,9 +122,12 @@ test('a11y scan: reader surface', { tag: '@a11y' }, async ({ page }, testInfo) =
     .toBe(true);
 
   // Phase 6 fixed findings (see header): titled iframe + interactive
-  // note-marker overlay. 'region' joins when P8 dissolves the CompassPill.
+  // note-marker overlay. 'region' joined with Phase 8: the CompassPill
+  // dissolved (§C) and the pill mount is a named region landmark
+  // (ReaderControlBar) — every reader-surface node now lives inside a
+  // landmark.
   await scanSurface(page, testInfo, 'reader', {
-    expectAbsentRules: ['frame-title', 'aria-hidden-focus'],
+    expectAbsentRules: ['frame-title', 'aria-hidden-focus', 'region'],
   });
 });
 
