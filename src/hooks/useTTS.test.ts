@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useTTS } from './useTTS';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 
 // Hoist mocks
@@ -22,7 +22,7 @@ vi.mock('@app/tts/useAudioCommands', () => ({
     useAudioCommands: vi.fn(() => mockCommands),
 }));
 
-vi.mock('@store/useTTSStore', () => {
+vi.mock('@store/useTTSPlaybackStore', () => {
     const mockGetState = vi.fn(() => ({
         prerollEnabled: false,
         rate: 1.0,
@@ -31,15 +31,15 @@ vi.mock('@store/useTTSStore', () => {
 
     // The hook function
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const useTTSStore = vi.fn((selector?: any) => {
+    const useTTSPlaybackStore = vi.fn((selector?: any) => {
         const state = mockGetState();
         return selector ? selector(state) : state;
     });
     // Attach static methods
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useTTSStore as any).getState = mockGetState;
+    (useTTSPlaybackStore as any).getState = mockGetState;
 
-    return { useTTSStore };
+    return { useTTSPlaybackStore };
 });
 
 vi.mock('@store/useReaderUIStore', () => {
@@ -64,7 +64,7 @@ describe('useTTS', () => {
 
         // Reset store mock defaults
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (useTTSStore.getState as any).mockReturnValue({
+        (useTTSPlaybackStore.getState as any).mockReturnValue({
             prerollEnabled: false,
             rate: 1.0,
             status: 'stopped'
@@ -103,7 +103,7 @@ describe('useTTS', () => {
 
     it('should NOT request player to load section if playing', async () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (useTTSStore.getState as any).mockReturnValue({
+        (useTTSPlaybackStore.getState as any).mockReturnValue({
             status: 'playing',
             isPlaying: true,
             rate: 1.0,
@@ -112,7 +112,7 @@ describe('useTTS', () => {
 
         // Mock useTTSStore call too to ensure the hook gets the playing status
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (useTTSStore as any).mockImplementation((selector: any) => {
+        (useTTSPlaybackStore as any).mockImplementation((selector: any) => {
             const state = {
                 status: 'playing',
                 isPlaying: true,

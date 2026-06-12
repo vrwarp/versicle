@@ -60,7 +60,7 @@ describe('provider registry', () => {
         }
     });
 
-    describe("the 'local' alias (id split deferred to 5b — zero format change in 5a)", () => {
+    describe("the 'local' alias (legacy engine-path acceptance after the 5b id split)", () => {
         it("resolves 'local' to webspeech on web and capacitor on native", () => {
             expect(resolveDescriptor('local', 'web').id).toBe('webspeech');
             expect(resolveDescriptor('local', 'native').id).toBe('capacitor');
@@ -78,21 +78,20 @@ describe('provider registry', () => {
     });
 
     describe('selectableProviders (settings UI source)', () => {
-        it("offers the device provider under the persisted 'local' id, in stable order", () => {
+        it('offers the device provider under its REAL post-split id, in stable order (5b-PR3)', () => {
             const web = selectableProviders('web');
-            expect(web.map((o) => o.id)).toEqual(['local', 'piper', 'google', 'openai', 'lemonfox']);
+            expect(web.map((o) => o.id)).toEqual(['webspeech', 'piper', 'google', 'openai', 'lemonfox']);
             expect(web[0].displayName).toBe('Web Speech (Local)');
 
             const native = selectableProviders('native');
-            expect(native.map((o) => o.id)).toEqual(['local', 'piper', 'google', 'openai', 'lemonfox']);
+            expect(native.map((o) => o.id)).toEqual(['capacitor', 'piper', 'google', 'openai', 'lemonfox']);
             expect(native[0].displayName).toBe('System Speech (Local)');
         });
 
-        it('never offers webspeech/capacitor as separate ids before the 5b split', () => {
+        it("never offers the legacy 'local' alias after the 5b split", () => {
             for (const platform of ['web', 'native'] as const) {
                 const ids = selectableProviders(platform).map((o) => o.id) as string[];
-                expect(ids).not.toContain('webspeech');
-                expect(ids).not.toContain('capacitor');
+                expect(ids).not.toContain('local');
             }
         });
     });

@@ -4,7 +4,7 @@ import { bookRepository } from '@app/repositories/BookRepository';
 import { bookImportService } from '@lib/BookImportService';
 import type { UserInventoryItem, BookMetadata, StaticBookManifest } from '~types/db';
 import { StorageFullError, DuplicateBookError } from '~types/errors';
-import { useTTSStore } from './useTTSStore';
+import { useTTSSettingsStore } from './useTTSSettingsStore';
 import { useReadingListStore } from './useReadingListStore';
 import { processBatchImport } from '@lib/batch-ingestion';
 import type { BatchImportFailure } from '@lib/batch-ingestion';
@@ -322,7 +322,7 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
             const existingBook = userStore.books[existingId];
 
             // 2. Overwrite content in DB using importBookWithId (keeps ID, updates static data)
-            const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+            const { sentenceStarters, sanitizationEnabled } = useTTSSettingsStore.getState();
             // Note: importBookWithId returns the NEW manifest from the file
             const manifest = await injectedDB.importBookWithId(existingId, file, {
               abbreviations: [],
@@ -444,7 +444,7 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
             logger.info(`Found Ghost Book match by metadata for file "${file.name}": "${ghostMatch.title}" (${ghostMatch.bookId}). Linking binary file to existing Yjs record...`);
             set({ importStatus: `Linking to existing entry: ${ghostMatch.title}...` });
 
-            const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+            const { sentenceStarters, sanitizationEnabled } = useTTSSettingsStore.getState();
 
             // Import using the EXISTING ID
             const manifest = await injectedDB.importBookWithId(ghostMatch.bookId, file, {
@@ -491,7 +491,7 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
           logger.warn("Smart matching check failed, proceeding with standard import", e);
         }
 
-        const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+        const { sentenceStarters, sanitizationEnabled } = useTTSSettingsStore.getState();
 
         // 1. Pure ingestion: Write to static_* stores only
         const manifest = await injectedDB.addBook(file, {
@@ -600,7 +600,7 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
         error: null
       });
       try {
-        const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+        const { sentenceStarters, sanitizationEnabled } = useTTSSettingsStore.getState();
 
         // Process files and get returns manifests
         const { successful, skipped, failed } = await processBatchImport(
@@ -774,7 +774,7 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
           // Synced book download: no local manifest, need to fully import with existing ID
           logger.info(`Book ${id} has no local manifest. Importing with existing ID for synced book.`);
 
-          const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+          const { sentenceStarters, sanitizationEnabled } = useTTSSettingsStore.getState();
 
           // Preserve existing inventory data before import
           const existingBook = useBookStore.getState().books[id];

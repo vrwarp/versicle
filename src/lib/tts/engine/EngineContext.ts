@@ -23,7 +23,6 @@
  * type queries on type-only imports. These imports are erased at runtime and create no
  * runtime dependency, so the core stays worker-portable.
  */
-import type { useTTSStore } from '@store/useTTSStore';
 import type { useGenAIStore } from '@store/useGenAIStore';
 import type { useReadingStateStore } from '@store/useReadingStateStore';
 import type { SectionAnalysis, TableAdaptation } from '@store/useContentAnalysisStore';
@@ -36,10 +35,27 @@ import type { ContentType } from '~types/content-analysis';
 // engine-boundary types from this one module without re-reaching into the stores.
 export type { SectionAnalysis, TableAdaptation, LexiconRule, ContentAnalysis, BookMetadata };
 
-// --- Snapshot / argument types reused verbatim from the existing store signatures ---
+// --- Snapshot / argument types ---
 
-/** Full TTS settings snapshot (voice, speed, language, segmentation, lexicon flags). */
-export type TTSSettingsSnapshot = ReturnType<typeof useTTSStore.getState>;
+/**
+ * The EXPLICIT data-only TTS settings payload the engine consumes (Phase 5b
+ * store split; phase5-tts-strangler.md §5b.5, engine D14 second half). This
+ * replaced `ReturnType<typeof useTTSStore.getState>` — the engine no longer
+ * type-depends on the store shape, and the replication slice pushes exactly
+ * these fields instead of `plain(getState())`'s everything-including-the-queue.
+ * The field list is the grep audit of `ctx.config.getSettings()` accesses
+ * (AudioContentPipeline: segmentation lists, Bible flag, per-language profile
+ * minSentenceLength) plus the sanitization flag the extraction options accept.
+ */
+export interface TTSSettingsData {
+    /** Per-language profiles; the pipeline reads `profiles[lang]?.minSentenceLength`. */
+    profiles: Record<string, { voiceId: string | null; rate: number; minSentenceLength?: number }>;
+    customAbbreviations: string[];
+    alwaysMerge: string[];
+    sentenceStarters: string[];
+    sanitizationEnabled: boolean;
+    isBibleLexiconEnabled: boolean;
+}
 
 /** Full GenAI settings snapshot (enabled flags, skip types, api key, logging). */
 export type GenAISettingsSnapshot = ReturnType<typeof useGenAIStore.getState>;
@@ -68,7 +84,7 @@ export interface TTSConfigPort {
     /** Update the active language (e.g. when the book's language changes). */
     setActiveLanguage(lang: string): void;
     /** A snapshot of the full TTS settings used by the content pipeline. */
-    getSettings(): TTSSettingsSnapshot;
+    getSettings(): TTSSettingsData;
     /** Locale-aware default for minimum sentence length during segmentation. */
     getDefaultMinSentenceLength(lang: string): number;
 }

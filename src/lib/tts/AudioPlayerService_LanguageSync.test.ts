@@ -3,7 +3,7 @@ import type { AudioPlayerService } from './AudioPlayerService';
 import { getInProcessAudioPlayer, resetInProcessAudioPlayerForTests } from '@app/tts/mainThreadAudioPlayer';
 import { useBookStore } from '@store/useBookStore';
 import type { UserInventoryItem } from '~types/db';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 
 // Mock dependencies to prevent external calls during tests
 vi.mock('@data/repos/bookContent', () => ({
@@ -46,7 +46,7 @@ describe('AudioPlayerService - Language Sync', () => {
             }
         });
 
-        useTTSStore.setState({ activeLanguage: 'en' });
+        useTTSSettingsStore.setState({ activeLanguage: 'en' });
 
         // Use a fresh instance (wired to the real stores) for isolation.
         resetInProcessAudioPlayerForTests();
@@ -55,10 +55,10 @@ describe('AudioPlayerService - Language Sync', () => {
 
     it('should proactively sync TTS language and clear lexicon when setBookId is called with a new book', async () => {
         // Spy on the TTS store method
-        const setActiveLanguageSpy = vi.spyOn(useTTSStore.getState(), 'setActiveLanguage');
+        const setActiveLanguageSpy = vi.spyOn(useTTSSettingsStore.getState(), 'setActiveLanguage');
 
         // Initial setup check
-        expect(useTTSStore.getState().activeLanguage).toBe('en');
+        expect(useTTSSettingsStore.getState().activeLanguage).toBe('en');
 
         // Set an active lexicon rule to simulate previous playback state
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,7 +72,7 @@ describe('AudioPlayerService - Language Sync', () => {
 
         // Verify the language was proactively updated
         expect(setActiveLanguageSpy).toHaveBeenCalledWith('zh');
-        expect(useTTSStore.getState().activeLanguage).toBe('zh');
+        expect(useTTSSettingsStore.getState().activeLanguage).toBe('zh');
 
         // Verify the lexicon rules were cleared to force a reload for the new language
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -83,10 +83,10 @@ describe('AudioPlayerService - Language Sync', () => {
         // Initial setup
         service.setBookId('book-en');
         await new Promise(process.nextTick);
-        expect(useTTSStore.getState().activeLanguage).toBe('en');
+        expect(useTTSSettingsStore.getState().activeLanguage).toBe('en');
 
         // Spy
-        const setActiveLanguageSpy = vi.spyOn(useTTSStore.getState(), 'setActiveLanguage');
+        const setActiveLanguageSpy = vi.spyOn(useTTSSettingsStore.getState(), 'setActiveLanguage');
 
         // Simulate a YJS sync or metadata edit that updates the current book's language
         useBookStore.setState({
@@ -99,6 +99,6 @@ describe('AudioPlayerService - Language Sync', () => {
         await new Promise(process.nextTick);
 
         expect(setActiveLanguageSpy).toHaveBeenCalledWith('fr');
-        expect(useTTSStore.getState().activeLanguage).toBe('fr');
+        expect(useTTSSettingsStore.getState().activeLanguage).toBe('fr');
     });
 });

@@ -87,7 +87,7 @@ describe('store registry', () => {
     // check (adding a persisted store must touch registry AND this list).
     const persistedImports: Record<string, () => Promise<Record<string, unknown>>> = {
       useSyncStore: () => import('@store/useSyncStore'),
-      useTTSStore: () => import('@store/useTTSStore'),
+      useTTSSettingsStore: () => import('@store/useTTSSettingsStore'),
       useDriveStore: () => import('@store/useDriveStore'),
       useGoogleServicesStore: () => import('@store/useGoogleServicesStore'),
       useGenAIStore: () => import('@store/useGenAIStore'),

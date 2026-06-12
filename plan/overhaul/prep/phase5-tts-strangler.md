@@ -354,6 +354,40 @@ export class PiperRuntime {
 
 ### 5b — Engine
 
+> **STATUS: 5b FIRST HALF LANDED** (implementation chain `feat(tts): TtsController
+> command facade…`, `…PlaybackSnapshot{seq} channel + immutable QueueModel…`,
+> `…tts-settings split + v1 migration…`). The P14 identity rider flipped green at the
+> QueueModel commit. Deviations from this design, recorded per the README header rule:
+>
+> 1. **PR regrouping**: landed as three commits cutting across the doc's PR map —
+>    (i) the command facade (`TtsController` + `useAudioCommands` + the
+>    `mainThreadAudioPlayer` import ban, from 5b-PR5) together with the N1
+>    `WorkerEngineHandle` move (from 5b-PR1); (ii) the snapshot channel (5b-PR1) merged
+>    with the immutable `QueueModel` (5b-PR2); (iii) the store split + migration
+>    (5b-PR5), sequenced BEFORE the sequencer-epochs/decomposition work (5b-PR3/PR4),
+>    which remains open.
+> 2. **QueueModel address + scope**: landed at `src/lib/tts/QueueModel.ts` (the renamed
+>    PlaybackStateManager, in the legacy home per the 5a geography deviation); its
+>    persistence methods are RETAINED — the `SessionStore` port carve-out rides the
+>    open decomposition half, so the engine-dir `vi.mock` allowlist is still the
+>    4-module core (see the ledger note).
+> 3. **`'local'` id split**: persisted ids + settings-UI option values split to
+>    webspeech/capacitor ('local' migration-mapped per platform and still accepted as
+>    an alias on the engine command path / `recoverWithLocalProvider`); the device
+>    provider INSTANCE ids still report `'local'` — the instance-id rename rides the
+>    decomposition half.
+> 4. **Dropped fields**: profile `pitch`/`volume` and `enableCostWarning` dropped per
+>    the design decision (recorded in the migration acceptance suite). The SYNCED
+>    `DeviceProfile.ttsPitch` field is kept at the neutral 1.0 (changing the device-mesh
+>    CRDT shape is not a Phase 5 format change).
+> 5. **`TTSSettingsData` only**: the GenAI/Progress/Annotation sibling snapshot types in
+>    `EngineContext.ts` stay store-derived for now — the parallel P7 track owns the
+>    genAI store surface; the genAI replication slice received the engine-view equality
+>    guard (the second echo path) without a type change.
+> 6. **Verification-spec shim**: `window.useTTSStore` survives as a typed shim in
+>    `main.tsx` (playback reads + play/pause commands) because the Playwright
+>    verification specs drive it; P9 retires it with their migration.
+
 #### 5b.1 Decomposition map (current APS responsibilities → new units, all inside the worker)
 
 `AudioPlayerService.ts` at HEAD = 1,218 lines. Target: APS becomes a façade (≤~150 lines)

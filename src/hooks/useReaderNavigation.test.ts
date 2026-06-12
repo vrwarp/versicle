@@ -7,8 +7,8 @@ import type { TTSStatus } from '@lib/tts/AudioPlayerService';
 // Mock the TTS store: the hook only reads getState().status
 const mockGetState = vi.fn();
 
-vi.mock('@store/useTTSStore', () => ({
-    useTTSStore: Object.assign(vi.fn(), {
+vi.mock('@store/useTTSPlaybackStore', () => ({
+    useTTSPlaybackStore: Object.assign(vi.fn(), {
         getState: () => mockGetState(),
     }),
 }));

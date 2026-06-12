@@ -10,7 +10,7 @@
  */
 import type {
     EngineContext,
-    TTSSettingsSnapshot,
+    TTSSettingsData,
     GenAISettingsSnapshot,
     GenAILogEntry,
     AnnotationInput,
@@ -28,7 +28,7 @@ type AnalysisListener = (state: { sections: Record<string, SectionAnalysis> }) =
 export class FakeEngineContext implements EngineContext {
     // --- Configurable inputs ---
     activeLanguage = 'en';
-    ttsSettings: Partial<TTSSettingsSnapshot> = {};
+    ttsSettings: Partial<TTSSettingsData> = {};
     genAISettings: Partial<GenAISettingsSnapshot> = {};
     /** keyed by `${bookId}` → raw book language. */
     bookLanguages: Record<string, string> = {};
@@ -68,7 +68,7 @@ export class FakeEngineContext implements EngineContext {
         setActiveLanguage: (lang: string) => {
             this.activeLanguage = lang;
         },
-        getSettings: () => this.ttsSettings as TTSSettingsSnapshot,
+        getSettings: () => this.ttsSettings as TTSSettingsData,
         getDefaultMinSentenceLength: (lang: string) => this.minSentenceLengthByLang(lang),
     };
 

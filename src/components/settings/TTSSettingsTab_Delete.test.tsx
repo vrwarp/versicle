@@ -49,7 +49,7 @@ vi.mock('../ui/Dialog', () => ({
 describe('TTSSettingsTab Delete Flow', () => {
     const defaultProps: TTSSettingsTabProps = {
         activeLanguage: 'en',
-        profiles: { en: { voiceId: 'voice1', rate: 1.0, pitch: 1.0, volume: 1.0 } },
+        profiles: { en: { voiceId: 'voice1', rate: 1.0, minSentenceLength: 36 } },
         providerId: 'piper',
         onProviderChange: vi.fn(),
         apiKeys: {},

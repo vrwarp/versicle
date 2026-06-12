@@ -1,19 +1,23 @@
 /**
- * TtsController unit tests (Phase 5b-PR1) — the command facade between the UI,
- * the pure `useTTSStore`, and the engine.
+ * TtsController unit tests (Phase 5b) — the command facade between the UI, the
+ * split stores (persisted useTTSSettingsStore / ephemeral useTTSPlaybackStore)
+ * and the engine.
  *
  * The engine is INJECTED as a fake (no module mock of the composition root):
  * the controller is the only production `getAudioPlayer()` consumer, and these
- * tests pin the three responsibilities it absorbed from the store:
- *   1. the engine→store playback mirror (incl. the loading/completed-as-playing
- *      flicker derivation, regression: useTTSStore initialize),
- *   2. the store→engine settings sync that used to live inside store setters,
- *   3. the engine command sequences (loadVoices/downloadVoice/…).
+ * tests pin the responsibilities it absorbed from the legacy store:
+ *   1. the engine→store playback mirror into the EPHEMERAL store (incl. the
+ *      loading/completed-as-playing flicker derivation, regression:
+ *      useTTSStore initialize),
+ *   2. the settings→engine sync that used to live inside store setters,
+ *   3. the engine command sequences (loadVoices/downloadVoice/…),
+ *   4. the voice-fallback algorithm (regression: useTTSStore_voice_recall).
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { PlaybackSnapshot, SnapshotListener, TtsEngine } from '@lib/tts/AudioPlayerService';
 import type { TTSVoice } from '@lib/tts/providers/types';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { TtsController } from './TtsController';
 import { LexiconService } from '@lib/tts/LexiconService';
 
@@ -82,41 +86,46 @@ function makeFakeEngine() {
 const VOICE_EN = { id: 'v-en', name: 'English Voice', lang: 'en-US', provider: 'local' } as TTSVoice;
 const VOICE_ZH = { id: 'v-zh', name: 'Chinese Voice', lang: 'zh-CN', provider: 'local' } as TTSVoice;
 
+const settings = () => useTTSSettingsStore.getState();
+const playback = () => useTTSPlaybackStore.getState();
+
 describe('TtsController', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        useTTSStore.setState({
-            isPlaying: false,
-            engineReady: false,
-            status: 'stopped',
+        useTTSSettingsStore.setState({
             activeLanguage: 'en',
-            profiles: { en: { voiceId: null, rate: 1, pitch: 1, volume: 1 } },
-            rate: 1,
-            pitch: 1,
-            voice: null,
-            voices: [],
-            providerId: 'local',
+            profiles: { en: { voiceId: null, rate: 1, minSentenceLength: 36 } },
+            providerId: 'webspeech',
             apiKeys: { google: '', openai: '', lemonfox: '' },
             prerollEnabled: false,
             backgroundAudioMode: 'silence',
             whiteNoiseVolume: 0.1,
             isBibleLexiconEnabled: true,
+        });
+        useTTSPlaybackStore.setState({
+            status: 'stopped',
+            isPlaying: false,
+            activeCfi: null,
+            currentIndex: 0,
+            queue: [],
+            lastError: null,
+            engineReady: false,
+            voices: [],
+            voice: null,
             isDownloading: false,
             downloadProgress: 0,
             downloadStatus: null,
             downloadingVoiceId: null,
-            lastError: null,
         });
     });
 
     describe('initialize: rehydrated-settings replay (the old onRehydrateStorage side effects)', () => {
         it('pushes persisted background/preroll/speed/voice settings and syncs the lexicon flag', () => {
-            useTTSStore.setState({
+            useTTSSettingsStore.setState({
                 backgroundAudioMode: 'noise',
                 whiteNoiseVolume: 0.4,
                 prerollEnabled: true,
-                rate: 1.5,
-                voice: VOICE_EN,
+                profiles: { en: { voiceId: 'v-en', rate: 1.5, minSentenceLength: 36 } },
                 isBibleLexiconEnabled: false,
             });
             const { engine, raw } = makeFakeEngine();
@@ -133,7 +142,7 @@ describe('TtsController', () => {
         it('marks engineReady once the engine reports ready', async () => {
             const { engine } = makeFakeEngine();
             new TtsController(engine).initialize();
-            await vi.waitFor(() => expect(useTTSStore.getState().engineReady).toBe(true));
+            await vi.waitFor(() => expect(playback().engineReady).toBe(true));
         });
 
         it('is idempotent: a second initialize() does not double-subscribe', () => {
@@ -145,32 +154,33 @@ describe('TtsController', () => {
         });
     });
 
-    // Regression: the engine→store mirror previously wired by useTTSStore.initialize().
-    describe('regression: useTTSStore initialize (engine→store mirror)', () => {
+    // Regression: the engine→store mirror previously wired by useTTSStore.initialize(),
+    // now writing into the ephemeral useTTSPlaybackStore (5b split).
+    describe('regression: useTTSStore initialize (engine→playback-store mirror)', () => {
         it('mirrors engine broadcasts, deriving isPlaying for loading/completed (flicker guard)', () => {
             const { engine, fire } = makeFakeEngine();
             new TtsController(engine).initialize();
 
             fire({ status: 'playing', activeCfi: 'cfi-1', index: 2 });
-            expect(useTTSStore.getState().isPlaying).toBe(true);
-            expect(useTTSStore.getState().status).toBe('playing');
-            expect(useTTSStore.getState().activeCfi).toBe('cfi-1');
-            expect(useTTSStore.getState().currentIndex).toBe(2);
+            expect(playback().isPlaying).toBe(true);
+            expect(playback().status).toBe('playing');
+            expect(playback().activeCfi).toBe('cfi-1');
+            expect(playback().currentIndex).toBe(2);
 
             fire({ status: 'paused' });
-            expect(useTTSStore.getState().isPlaying).toBe(false);
-            expect(useTTSStore.getState().status).toBe('paused');
+            expect(playback().isPlaying).toBe(false);
+            expect(playback().status).toBe('paused');
 
             // 'loading' must read as playing (prevents play/pause button flicker).
             fire({ status: 'loading' });
-            expect(useTTSStore.getState().isPlaying).toBe(true);
+            expect(playback().isPlaying).toBe(true);
 
             // 'completed' must read as playing (keeps background audio + UI active).
             fire({ status: 'completed' });
-            expect(useTTSStore.getState().isPlaying).toBe(true);
+            expect(playback().isPlaying).toBe(true);
 
             fire({ status: 'stopped' });
-            expect(useTTSStore.getState().isPlaying).toBe(false);
+            expect(playback().isPlaying).toBe(false);
         });
 
         it('merges download info only when present (error broadcasts keep download state)', () => {
@@ -178,74 +188,90 @@ describe('TtsController', () => {
             new TtsController(engine).initialize();
 
             fire({ download: { voiceId: 'v1', percent: 40, status: 'Downloading' } });
-            expect(useTTSStore.getState().downloadProgress).toBe(40);
-            expect(useTTSStore.getState().isDownloading).toBe(true);
-            expect(useTTSStore.getState().downloadingVoiceId).toBe('v1');
+            expect(playback().downloadProgress).toBe(40);
+            expect(playback().isDownloading).toBe(true);
+            expect(playback().downloadingVoiceId).toBe('v1');
 
             // A broadcast WITHOUT download info must not clobber it.
             fire({ error: { code: 'TTS_PLAYBACK_ERROR', message: 'boom' } });
-            expect(useTTSStore.getState().downloadProgress).toBe(40);
-            expect(useTTSStore.getState().lastError).toBe('boom');
+            expect(playback().downloadProgress).toBe(40);
+            expect(playback().lastError).toBe('boom');
 
             fire({ download: { voiceId: 'v1', percent: 100, status: 'Ready' } });
-            expect(useTTSStore.getState().isDownloading).toBe(false);
+            expect(playback().isDownloading).toBe(false);
+        });
+
+        it('the mirror never touches the persisted settings store (echo-loop guard)', () => {
+            const { engine, fire } = makeFakeEngine();
+            new TtsController(engine).initialize();
+            const settingsSpy = vi.fn();
+            const unsub = useTTSSettingsStore.subscribe(settingsSpy);
+
+            fire({ status: 'playing', index: 1, queue: [{ text: 'x', cfi: 'c' }] });
+            fire({ status: 'paused', index: 1 });
+
+            expect(settingsSpy).not.toHaveBeenCalled();
+            unsub();
         });
     });
 
-    describe('store→engine settings sync (the engine calls that used to live in store setters)', () => {
+    describe('settings→engine sync (the engine calls that used to live in store setters)', () => {
         it('pushes rate changes as setSpeed (active language only)', () => {
             const { engine, raw } = makeFakeEngine();
             new TtsController(engine).initialize();
             raw.setSpeed.mockClear();
 
-            useTTSStore.getState().setRate(1.5);
+            settings().setRate(1.5);
             expect(raw.setSpeed).toHaveBeenCalledWith(1.5);
 
             raw.setSpeed.mockClear();
-            useTTSStore.getState().setRate(2.0, 'zh'); // inactive language: profile-only write
+            settings().setRate(2.0, 'zh'); // inactive language: profile-only write
             expect(raw.setSpeed).not.toHaveBeenCalled();
         });
 
-        it('pushes voice changes as setVoice', () => {
+        it('pushes voice changes as setVoice and resolves the playback-store voice object', () => {
+            useTTSPlaybackStore.setState({ voices: [VOICE_EN, VOICE_ZH] });
             const { engine, raw } = makeFakeEngine();
             new TtsController(engine).initialize();
             raw.setVoice.mockClear();
 
-            useTTSStore.getState().setVoice(VOICE_EN);
+            settings().setVoiceId('v-en');
             expect(raw.setVoice).toHaveBeenCalledWith('v-en');
+            expect(playback().voice).toEqual(VOICE_EN);
         });
 
         it('pushes language + profile rate/voice when the active language switches', () => {
-            useTTSStore.setState({
+            useTTSSettingsStore.setState({
                 profiles: {
-                    en: { voiceId: 'v-en', rate: 1, pitch: 1, volume: 1 },
-                    zh: { voiceId: 'v-zh', rate: 1.5, pitch: 1, volume: 1 },
+                    en: { voiceId: 'v-en', rate: 1, minSentenceLength: 36 },
+                    zh: { voiceId: 'v-zh', rate: 1.5, minSentenceLength: 6 },
                 },
-                voices: [VOICE_EN, VOICE_ZH],
             });
+            useTTSPlaybackStore.setState({ voices: [VOICE_EN, VOICE_ZH] });
             const { engine, raw } = makeFakeEngine();
             new TtsController(engine).initialize();
             raw.setSpeed.mockClear();
             raw.setVoice.mockClear();
 
-            useTTSStore.getState().setActiveLanguage('zh');
+            settings().setActiveLanguage('zh');
 
             expect(raw.setLanguage).toHaveBeenCalledWith('zh');
             expect(raw.setSpeed).toHaveBeenCalledWith(1.5);
             expect(raw.setVoice).toHaveBeenCalledWith('v-zh');
+            expect(playback().voice).toEqual(VOICE_ZH);
         });
 
         it('pushes preroll/background-audio/volume toggles', () => {
             const { engine, raw } = makeFakeEngine();
             new TtsController(engine).initialize();
 
-            useTTSStore.getState().setPrerollEnabled(true);
+            settings().setPrerollEnabled(true);
             expect(raw.setPrerollEnabled).toHaveBeenLastCalledWith(true);
 
-            useTTSStore.getState().setBackgroundAudioMode('off');
+            settings().setBackgroundAudioMode('off');
             expect(raw.setBackgroundAudioMode).toHaveBeenLastCalledWith('off');
 
-            useTTSStore.getState().setWhiteNoiseVolume(0.7);
+            settings().setWhiteNoiseVolume(0.7);
             expect(raw.setBackgroundVolume).toHaveBeenLastCalledWith(0.7);
         });
 
@@ -254,7 +280,7 @@ describe('TtsController', () => {
             new TtsController(engine).initialize();
             vi.mocked(LexiconService.getInstance().setGlobalBibleLexiconEnabled).mockClear();
 
-            useTTSStore.getState().setBibleLexiconEnabled(false);
+            settings().setBibleLexiconEnabled(false);
             expect(LexiconService.getInstance().setGlobalBibleLexiconEnabled).toHaveBeenCalledWith(false);
         });
 
@@ -263,7 +289,7 @@ describe('TtsController', () => {
             const { engine, raw } = makeFakeEngine();
             new TtsController(engine).initialize();
 
-            useTTSStore.getState().setProviderId('google');
+            settings().setProviderId('google');
 
             await vi.waitFor(() => {
                 expect(raw.setProviderById).toHaveBeenCalledWith('google');
@@ -274,16 +300,16 @@ describe('TtsController', () => {
 
         // Regression: the legacy setApiKey → setProviderId(providerId) re-init chain.
         it('an API-key commit for the ACTIVE provider re-initializes it; other keys do not', async () => {
-            useTTSStore.setState({ providerId: 'google' });
+            useTTSSettingsStore.setState({ providerId: 'google' });
             const { engine, raw } = makeFakeEngine();
             new TtsController(engine).initialize();
             raw.setProviderById.mockClear();
 
-            useTTSStore.getState().setApiKey('openai', 'irrelevant-key');
+            settings().setApiKey('openai', 'irrelevant-key');
             await new Promise((r) => setTimeout(r, 0));
             expect(raw.setProviderById).not.toHaveBeenCalled();
 
-            useTTSStore.getState().setApiKey('google', 'fresh-key');
+            settings().setApiKey('google', 'fresh-key');
             await vi.waitFor(() => expect(raw.setProviderById).toHaveBeenCalledWith('google'));
         });
 
@@ -303,6 +329,61 @@ describe('TtsController', () => {
         });
     });
 
+    // Regression: useTTSStore_voice_recall — the saved profile voice must survive
+    // language re-application while the runtime voice list is empty, and resolve
+    // once voices exist. The algorithm moved from the store to the controller in
+    // the 5b split (it needs both stores).
+    describe('regression: useTTSStore_voice_recall', () => {
+        it('does NOT wipe the profile voiceId when voices are not loaded yet', () => {
+            useTTSSettingsStore.setState({
+                activeLanguage: 'zh',
+                profiles: { zh: { voiceId: 'saved-voice-id', rate: 1, minSentenceLength: 6 } },
+            });
+            useTTSPlaybackStore.setState({ voices: [] });
+            const { engine } = makeFakeEngine();
+            new TtsController(engine).initialize();
+
+            // Language re-application (e.g. the book-language sync host command).
+            settings().setActiveLanguage('zh');
+
+            expect(settings().profiles['zh'].voiceId).toBe('saved-voice-id');
+        });
+
+        it('picks a default voice when the saved id is not in the loaded list', () => {
+            useTTSSettingsStore.setState({
+                profiles: { en: { voiceId: 'non-existent-voice', rate: 1, minSentenceLength: 36 } },
+            });
+            useTTSPlaybackStore.setState({ voices: [VOICE_EN] });
+            const { engine } = makeFakeEngine();
+            new TtsController(engine).initialize();
+
+            settings().setActiveLanguage('zh'); // away …
+            settings().setActiveLanguage('en'); // … and back, with voices loaded
+
+            expect(settings().profiles['en'].voiceId).toBe('v-en');
+            expect(playback().voice).toEqual(VOICE_EN);
+        });
+
+        it('keeps the saved voiceId when it IS in the loaded list', () => {
+            const saved = { id: 'saved-voice-id', name: 'Saved Voice', lang: 'en-US', provider: 'local' } as TTSVoice;
+            useTTSSettingsStore.setState({
+                activeLanguage: 'zh',
+                profiles: {
+                    zh: { voiceId: null, rate: 1, minSentenceLength: 6 },
+                    en: { voiceId: 'saved-voice-id', rate: 1, minSentenceLength: 36 },
+                },
+            });
+            useTTSPlaybackStore.setState({ voices: [saved, VOICE_EN] });
+            const { engine } = makeFakeEngine();
+            new TtsController(engine).initialize();
+
+            settings().setActiveLanguage('en');
+
+            expect(settings().profiles['en'].voiceId).toBe('saved-voice-id');
+            expect(playback().voice).toEqual(saved);
+        });
+    });
+
     describe('voice management commands', () => {
         // Regression: useTTSStore_platform 'loadVoices re-applies the current providerId'.
         it('loadVoices re-applies the current providerId, inits, and stores the voice list', async () => {
@@ -312,9 +393,9 @@ describe('TtsController', () => {
 
             await controller.loadVoices();
 
-            expect(raw.setProviderById).toHaveBeenCalledWith('local');
+            expect(raw.setProviderById).toHaveBeenCalledWith('webspeech');
             expect(raw.init).toHaveBeenCalled();
-            expect(useTTSStore.getState().voices).toEqual([VOICE_EN, VOICE_ZH]);
+            expect(playback().voices).toEqual([VOICE_EN, VOICE_ZH]);
         });
 
         it('loadVoices picks the active-language voice and records it in the profile', async () => {
@@ -324,14 +405,14 @@ describe('TtsController', () => {
 
             await controller.loadVoices();
 
-            expect(useTTSStore.getState().voice).toEqual(VOICE_EN);
-            expect(useTTSStore.getState().profiles['en'].voiceId).toBe('v-en');
+            expect(playback().voice).toEqual(VOICE_EN);
+            expect(settings().profiles['en'].voiceId).toBe('v-en');
             expect(raw.setVoice).toHaveBeenCalledWith('v-en');
         });
 
         it('loadVoices prefers the saved profile voice when it exists in the list', async () => {
-            useTTSStore.setState({
-                profiles: { en: { voiceId: 'v-en', rate: 1, pitch: 1, volume: 1 } },
+            useTTSSettingsStore.setState({
+                profiles: { en: { voiceId: 'v-en', rate: 1, minSentenceLength: 36 } },
             });
             const second = { id: 'v-en-2', name: 'Other English', lang: 'en-GB', provider: 'local' } as TTSVoice;
             const { engine, setVoices } = makeFakeEngine();
@@ -339,7 +420,7 @@ describe('TtsController', () => {
 
             await new TtsController(engine).loadVoices();
 
-            expect(useTTSStore.getState().voice?.id).toBe('v-en');
+            expect(playback().voice?.id).toBe('v-en');
         });
 
         it('downloadVoice tracks progress state and surfaces failures', async () => {
@@ -348,24 +429,24 @@ describe('TtsController', () => {
 
             await controller.downloadVoice('v-piper');
             expect(raw.downloadVoice).toHaveBeenCalledWith('v-piper');
-            expect(useTTSStore.getState().downloadStatus).toBe('Ready');
-            expect(useTTSStore.getState().downloadProgress).toBe(100);
+            expect(playback().downloadStatus).toBe('Ready');
+            expect(playback().downloadProgress).toBe(100);
 
             raw.downloadVoice.mockRejectedValueOnce(new Error('offline'));
             await controller.downloadVoice('v-piper');
-            expect(useTTSStore.getState().downloadStatus).toBe('Failed');
-            expect(useTTSStore.getState().lastError).toBe('offline');
-            expect(useTTSStore.getState().isDownloading).toBe(false);
+            expect(playback().downloadStatus).toBe('Failed');
+            expect(playback().lastError).toBe('offline');
+            expect(playback().isDownloading).toBe(false);
         });
 
         it('deleteVoice resets the download state', async () => {
-            useTTSStore.setState({ isDownloading: true, downloadProgress: 80, downloadStatus: 'Downloading', downloadingVoiceId: 'v-piper' });
+            useTTSPlaybackStore.setState({ isDownloading: true, downloadProgress: 80, downloadStatus: 'Downloading', downloadingVoiceId: 'v-piper' });
             const { engine, raw } = makeFakeEngine();
 
             await new TtsController(engine).deleteVoice('v-piper');
 
             expect(raw.deleteVoice).toHaveBeenCalledWith('v-piper');
-            expect(useTTSStore.getState()).toMatchObject({
+            expect(playback()).toMatchObject({
                 isDownloading: false,
                 downloadProgress: 0,
                 downloadStatus: 'Not Downloaded',

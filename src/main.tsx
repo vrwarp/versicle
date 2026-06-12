@@ -4,13 +4,30 @@ import App from './App'
 import './index.css'
 
 import { useGoogleServicesStore } from './store/useGoogleServicesStore';
-import { useTTSStore } from './store/useTTSStore';
+import { useTTSSettingsStore } from './store/useTTSSettingsStore';
+import { useTTSPlaybackStore } from './store/useTTSPlaybackStore';
+import { getTtsController } from './app/tts/TtsController';
 import { useAnnotationStore } from './store/useAnnotationStore';
 import { useReaderUIStore } from './store/useReaderUIStore';
 
+/**
+ * Legacy verification-spec surface: playback reads (status/queue/index) plus the
+ * play/pause commands the Playwright verification specs drive. The 5b store
+ * split moved those off the deleted useTTSStore; this shim keeps the spec
+ * contract stable (P9 retires it together with the specs' migration).
+ */
+interface LegacyTTSStoreWindowShim {
+  getState: () => ReturnType<typeof useTTSPlaybackStore.getState> & {
+    play: () => void;
+    pause: () => void;
+  };
+}
+
 declare global {
   interface Window {
-    useTTSStore: typeof useTTSStore;
+    useTTSStore: LegacyTTSStoreWindowShim;
+    useTTSSettingsStore: typeof useTTSSettingsStore;
+    useTTSPlaybackStore: typeof useTTSPlaybackStore;
     useAnnotationStore: typeof useAnnotationStore;
     useGoogleServicesStore: typeof useGoogleServicesStore;
     useReaderUIStore: typeof useReaderUIStore;
@@ -39,7 +56,15 @@ if (import.meta.env.DEV || import.meta.env.VITE_E2E === 'true') {
 
 // Expose stores to window for verification tests
 if (typeof window !== 'undefined') {
-  window.useTTSStore = useTTSStore;
+  window.useTTSSettingsStore = useTTSSettingsStore;
+  window.useTTSPlaybackStore = useTTSPlaybackStore;
+  window.useTTSStore = {
+    getState: () => ({
+      ...useTTSPlaybackStore.getState(),
+      play: getTtsController().play,
+      pause: getTtsController().pause,
+    }),
+  };
   window.useAnnotationStore = useAnnotationStore;
   window.useGoogleServicesStore = useGoogleServicesStore;
   window.useReaderUIStore = useReaderUIStore;

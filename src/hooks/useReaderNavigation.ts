@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 
 interface UseReaderNavigationProps {
     rendition: unknown;
@@ -93,7 +93,7 @@ export function useReaderNavigation({
             // owns ArrowLeft/ArrowRight (sentence jumps). Both registries listen globally,
             // so acting here too would fire a page turn on top of the sentence jump.
             // Interim mitigation until the Phase 8 KeyboardShortcutService replaces both.
-            const ttsStatus = useTTSStore.getState().status;
+            const ttsStatus = useTTSPlaybackStore.getState().status;
             if (ttsStatus === 'playing' || ttsStatus === 'paused') {
                 return;
             }

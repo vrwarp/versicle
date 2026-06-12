@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { CompassPill } from './CompassPill';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useSectionDuration } from '@hooks/useSectionDuration';
 
 // Mock the stores and hooks
-vi.mock('@store/useTTSStore');
+vi.mock('@store/useTTSPlaybackStore');
 vi.mock('@store/useReaderUIStore');
 vi.mock('@hooks/useSectionDuration');
 
@@ -15,7 +15,7 @@ describe('CompassPill Accessibility', () => {
     vi.clearAllMocks();
 
     // Default mocks
-    (useTTSStore as unknown as Mock).mockReturnValue({
+    (useTTSPlaybackStore as unknown as Mock).mockReturnValue({
       isPlaying: false,
       status: 'ready',
       queue: [],
@@ -66,7 +66,7 @@ describe('CompassPill Accessibility', () => {
   });
 
   it('Active Mode: aria-label changes on loading', () => {
-    (useTTSStore as unknown as Mock).mockReturnValue({
+    (useTTSPlaybackStore as unknown as Mock).mockReturnValue({
       isPlaying: false,
       status: 'loading',
       queue: [],

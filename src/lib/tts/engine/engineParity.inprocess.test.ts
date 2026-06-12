@@ -67,7 +67,7 @@ import {
     type ParitySnapshot,
 } from './engineParityScenarios';
 import type {
-    TTSSettingsSnapshot,
+    TTSSettingsData,
     GenAISettingsSnapshot,
     Progress,
     BookMetadata,
@@ -92,7 +92,7 @@ const PARITY_TTS_SETTINGS = {
     sentenceStarters: [],
     isBibleLexiconEnabled: false,
     profiles: { en: { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0, minSentenceLength: 0 } },
-} as Partial<TTSSettingsSnapshot>;
+} as Partial<TTSSettingsData>;
 
 describeEngineParity('in-process', async (): Promise<ParityHarness> => {
     resetParityHostDb(hostDb);

@@ -13,12 +13,13 @@
  *
  * Main-thread module: it closes over the real Zustand stores. The worker never imports it.
  */
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
 import { useBookStore } from '@store/useBookStore';
 import { useReadingStateStore } from '@store/useReadingStateStore';
 import type { EngineStateUpdate } from '@lib/tts/engine/WorkerEngineContext';
+import type { TTSSettingsData } from '@lib/tts/engine/EngineContext';
 
 /**
  * Strip non-structured-cloneable values before crossing the worker boundary. Zustand
@@ -27,6 +28,43 @@ import type { EngineStateUpdate } from '@lib/tts/engine/WorkerEngineContext';
  */
 export function plain<T>(value: T): T {
     return JSON.parse(JSON.stringify(value));
+}
+
+type TTSSettingsStoreState = ReturnType<typeof useTTSSettingsStore.getState>;
+
+/**
+ * Build the EXPLICIT data-only settings payload the engine consumes (5b-PR3,
+ * phase5-tts-strangler.md §5b.5): exactly the fields of {@link TTSSettingsData},
+ * hand-picked from the settings store — replacing the old `plain(getState())`
+ * full-store push (which shipped the playback mirror, the queue, and every
+ * action-shaped key along with it; the per-sentence replication echo rode on
+ * that). The return type makes the compiler enforce the contract: a field the
+ * engine starts reading must be added HERE and to the interface, loudly.
+ */
+export function toTTSSettingsData(s: Pick<TTSSettingsStoreState,
+    | 'profiles' | 'customAbbreviations' | 'alwaysMerge' | 'sentenceStarters'
+    | 'sanitizationEnabled' | 'isBibleLexiconEnabled'
+>): TTSSettingsData {
+    return {
+        profiles: s.profiles,
+        customAbbreviations: s.customAbbreviations,
+        alwaysMerge: s.alwaysMerge,
+        sentenceStarters: s.sentenceStarters,
+        sanitizationEnabled: s.sanitizationEnabled,
+        isBibleLexiconEnabled: s.isBibleLexiconEnabled,
+    };
+}
+
+/** The genAI fields the ENGINE actually reads — the echo guard's comparison set. */
+function genAIEngineView(s: ReturnType<typeof useGenAIStore.getState>) {
+    return {
+        isEnabled: s.isEnabled,
+        isContentAnalysisEnabled: s.isContentAnalysisEnabled,
+        isTableAdaptationEnabled: s.isTableAdaptationEnabled,
+        contentFilterSkipTypes: s.contentFilterSkipTypes,
+        apiKey: s.apiKey,
+        referenceDetectionStrategy: s.referenceDetectionStrategy,
+    };
 }
 
 export interface ReplicatedSliceSpec {
@@ -52,21 +90,27 @@ const SLICE_BUILDERS: Record<
     EngineStateUpdate['kind'],
     (deps: ReplicationDeps) => ReplicatedSliceSpec
 > = {
+    // The settings slice targets the PERSISTED settings store and pushes the
+    // explicit TTSSettingsData payload (5b-PR3). The playback mirror lives in
+    // useTTSPlaybackStore, which is never replicated — an engine broadcast can
+    // no longer re-enter this slice, so the per-sentence echo loop (S6) is
+    // dead by construction (pinned in replication.test.ts).
     settings: () => ({
         kind: 'settings',
         replication: 'boot',
-        snapshot: () => [{ kind: 'settings', settings: plain(useTTSStore.getState()) }],
+        snapshot: () => [{ kind: 'settings', settings: plain(toTTSSettingsData(useTTSSettingsStore.getState())) }],
         subscribe: (push) =>
-            useTTSStore.subscribe((state) => push({ kind: 'settings', settings: plain(state) })),
+            useTTSSettingsStore.subscribe((state) =>
+                push({ kind: 'settings', settings: plain(toTTSSettingsData(state)) })),
     }),
 
     activeLanguage: () => ({
         kind: 'activeLanguage',
         replication: 'boot',
-        snapshot: () => [{ kind: 'activeLanguage', lang: useTTSStore.getState().activeLanguage }],
+        snapshot: () => [{ kind: 'activeLanguage', lang: useTTSSettingsStore.getState().activeLanguage }],
         subscribe: (push) => {
-            let last = useTTSStore.getState().activeLanguage;
-            return useTTSStore.subscribe((state) => {
+            let last = useTTSSettingsStore.getState().activeLanguage;
+            return useTTSSettingsStore.subscribe((state) => {
                 if (state.activeLanguage !== last) {
                     last = state.activeLanguage;
                     push({ kind: 'activeLanguage', lang: state.activeLanguage });
@@ -79,8 +123,21 @@ const SLICE_BUILDERS: Record<
         kind: 'genAI',
         replication: 'boot',
         snapshot: () => [{ kind: 'genAI', settings: plain(useGenAIStore.getState()) }],
-        subscribe: (push) =>
-            useGenAIStore.subscribe((state) => push({ kind: 'genAI', settings: plain(state) })),
+        // Equality guard on the fields the ENGINE reads (5b-PR3): the addGenAILog
+        // host command writes log entries back into this store, which used to
+        // round-trip every log line as a fresh genAI push (the second echo path).
+        // Logs are not engine inputs, so pushes fire only when the engine view
+        // actually changed.
+        subscribe: (push) => {
+            let last = JSON.stringify(genAIEngineView(useGenAIStore.getState()));
+            return useGenAIStore.subscribe((state) => {
+                const view = JSON.stringify(genAIEngineView(state));
+                if (view !== last) {
+                    last = view;
+                    push({ kind: 'genAI', settings: plain(state) });
+                }
+            });
+        },
     }),
 
     analysis: () => ({

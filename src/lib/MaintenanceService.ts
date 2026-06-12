@@ -1,7 +1,7 @@
 import { useBookStore } from '@store/useBookStore';
 import { bookContent } from '@data/repos/bookContent';
 import { bookImportService } from './BookImportService';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { createLogger } from './logger';
 
 const logger = createLogger('MaintenanceService');
@@ -133,7 +133,7 @@ export class MaintenanceService {
           const file = new File([fileBlob], knownFilename || 'book.epub', { type: 'application/epub+zip' });
 
           // Get current settings for extraction
-          const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+          const { sentenceStarters, sanitizationEnabled } = useTTSSettingsStore.getState();
 
           onProgress(current, total, `Regenerating ${books[bookId].title}...`);
 

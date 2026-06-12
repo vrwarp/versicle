@@ -19,10 +19,12 @@
  * playback rate applied at the audio sink, speed-free cache key) is the law of the tree —
  * no `synthesisSpeed` capability exists because no provider may opt out of it.
  *
- * The `'local'` id: both device providers still claim `id = 'local'` and the persisted
- * `providerId` keeps the `'local'` value — the webspeech/capacitor id split is DEFERRED to
- * the 5b settings-store migration (one-format-in-flight rule). Until then `'local'` is a
- * registry-level alias resolved per platform ({@link resolveDescriptor}).
+ * The `'local'` id: the PERSISTED id split landed with the 5b settings-store migration —
+ * `tts-settings` carries 'webspeech'/'capacitor' and the settings UI surfaces the device
+ * entry under its real id. `'local'` survives only as an accepted legacy alias on the
+ * engine command path (the manager's fallback key and any pre-split id still in flight),
+ * resolved per platform by {@link resolveDescriptor}; both device provider INSTANCES still
+ * claim `id = 'local'` (instance-id rename rides the 5b-PR4 decomposition).
  *
  * Main-thread only (provider classes wrap speechSynthesis / Capacitor / cloud fetch +
  * audio). The worker engine never imports this module — provider ids cross the boundary
@@ -137,11 +139,18 @@ export const PROVIDERS = [
 export type RegisteredProviderId = (typeof PROVIDERS)[number]['id'];
 
 /**
- * The PERSISTED provider-id union (`useTTSStore.providerId`, settings UI values).
- * `'local'` is the platform-resolved alias for the device pair; the split to
- * 'webspeech'/'capacitor' lands with the 5b `tts-settings` migration.
+ * The PERSISTED provider-id union (`useTTSSettingsStore.providerId`, settings UI
+ * values). Since the 5b `tts-settings` migration this is the full registered id
+ * space — the device pair persists as 'webspeech'/'capacitor'. The legacy
+ * `'local'` value is mapped per platform by the migration and remains accepted
+ * (alias) by {@link resolveDescriptor}.
  */
-export type TTSProviderId = Exclude<RegisteredProviderId, 'webspeech' | 'capacitor'> | 'local';
+export type TTSProviderId = RegisteredProviderId;
+
+/** Whether a persisted id names a device (on-device synthesis) provider. */
+export function isDeviceProviderId(id: string): boolean {
+    return id === 'webspeech' || id === 'capacitor' || id === 'local';
+}
 
 /** Descriptor ids that require an API key (drives `apiKeys` map + settings fields). */
 export type TTSApiKeyProviderId = Extract<(typeof PROVIDERS)[number], { requiresApiKey: true }>['id'];
@@ -191,8 +200,8 @@ export interface ProviderOption {
 
 /**
  * The provider choices for the settings UI on the given platform, in stable UI order:
- * the platform's device provider (as `'local'`), then every non-device descriptor
- * available on that platform.
+ * the platform's device provider (under its REAL post-split id), then every
+ * non-device descriptor available on that platform.
  */
 export function selectableProviders(platform: Platform = currentPlatform()): ProviderOption[] {
     const device = deviceDescriptor(platform);
@@ -200,7 +209,7 @@ export function selectableProviders(platform: Platform = currentPlatform()): Pro
         (d) => d.kind !== 'device' && (!('platforms' in d) || (d.platforms as readonly Platform[]).includes(platform)),
     );
     return [
-        { ...optionFields(device), id: 'local' as const },
+        { ...optionFields(device), id: device.id as TTSProviderId },
         ...rest.map((d) => ({ ...optionFields(d), id: d.id as TTSProviderId })),
     ];
 }

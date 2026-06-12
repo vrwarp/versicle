@@ -4,7 +4,7 @@ import { ReaderView } from '../ReaderView';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useReadingStateStore } from '@store/useReadingStateStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import ePub from 'epubjs';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
@@ -168,7 +168,7 @@ describe('ReaderView', () => {
       readerViewMode: 'paginated',
     });
 
-    useTTSStore.setState({
+    useTTSPlaybackStore.setState({
       isPlaying: false,
       activeCfi: null
     });

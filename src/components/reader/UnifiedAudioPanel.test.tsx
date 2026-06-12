@@ -4,12 +4,15 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { UnifiedAudioPanel } from './UnifiedAudioPanel';
 import { Sheet } from '../ui/Sheet';
 
-// Mock stores
+// Mock stores (one shared selector-fn backs both split stores)
 const mockUseTTSStore = vi.fn();
 
-vi.mock('@store/useTTSStore', () => ({
-    getDefaultMinSentenceLength: () => 36,
-  useTTSStore: (selector: unknown) => mockUseTTSStore(selector),
+vi.mock('@store/useTTSSettingsStore', async (importOriginal) => ({
+    ...(await importOriginal<object>()),
+    useTTSSettingsStore: (selector: unknown) => mockUseTTSStore(selector),
+}));
+vi.mock('@store/useTTSPlaybackStore', () => ({
+    useTTSPlaybackStore: (selector: unknown) => mockUseTTSStore(selector),
 }));
 
 vi.mock('zustand/react/shallow', () => ({
@@ -42,16 +45,14 @@ describe('UnifiedAudioPanel Accessibility', () => {
     // Default mock state for TTS Store
     mockUseTTSStore.mockImplementation((selector: any) => selector({
       isPlaying: false,
-      play: vi.fn(),
-      pause: vi.fn(),
-      rate: 1.5,
+      engineReady: true,
+      activeLanguage: 'en',
+      profiles: { en: { voiceId: null, rate: 1.5, minSentenceLength: 36 } },
       setRate: vi.fn(),
       voice: null,
-      setVoice: vi.fn(),
+      setVoiceId: vi.fn(),
       voices: [],
-      loadVoices: vi.fn(),
-      seek: vi.fn(),
-      providerId: 'local',
+      providerId: 'webspeech',
       sanitizationEnabled: false,
       setSanitizationEnabled: vi.fn(),
       prerollEnabled: false,

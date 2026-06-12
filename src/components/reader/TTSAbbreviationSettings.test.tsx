@@ -11,14 +11,14 @@ vi.mock('lucide-react', () => ({
     Upload: () => <span data-testid="icon-upload" />,
 }));
 
-// Mock useTTSStore
+// Mock useTTSSettingsStore
 const mockSetCustomAbbreviations = vi.fn();
 const mockSetAlwaysMerge = vi.fn();
 const mockSetSentenceStarters = vi.fn();
 
-vi.mock('@store/useTTSStore', () => ({
+vi.mock('@store/useTTSSettingsStore', () => ({
     getDefaultMinSentenceLength: () => 36,
-    useTTSStore: vi.fn(() => ({
+    useTTSSettingsStore: vi.fn(() => ({
         customAbbreviations: ['Mr.', 'Dr.'],
         setCustomAbbreviations: mockSetCustomAbbreviations,
         alwaysMerge: ['Mr.'],

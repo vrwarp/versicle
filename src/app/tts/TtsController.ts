@@ -1,36 +1,50 @@
 /**
- * TtsController — the app-layer command facade over the TTS engine (Phase 5b-PR1;
+ * TtsController — the app-layer command facade over the TTS engine (Phase 5b;
  * plan/overhaul/prep/phase5-tts-strangler.md §5b.4).
  *
  * Engine commands used to live as `useTTSStore` actions that wrapped
  * `getAudioPlayer()` — engine plumbing inside a persisted settings store. This
- * controller absorbs all of them, so the store is pure state and the engine is
+ * controller absorbs all of them, so the stores are pure state and the engine is
  * reached from exactly one place:
  *
  *  - **Commands** (play/pause/stop/seek/jumpTo/preview/voice management/section
  *    navigation/dragnet invalidation): exposed as bound functions; UI components
  *    call them via the {@link useAudioCommands} hook.
- *  - **Engine → store mirror**: `initialize()` subscribes to the engine's playback
- *    broadcasts and writes status/queue/index/cfi/error/download state into
- *    `useTTSStore` (including the "treat loading/completed as playing" flicker
- *    derivation the UI depends on).
- *  - **Store → engine settings sync**: `initialize()` watches the settings the
- *    engine consumes (rate, voice, language, preroll, background audio, provider,
- *    API keys, Bible-lexicon flag) and pushes changes — replacing the engine calls
- *    that used to run inside store setters and `onRehydrateStorage` (R9 complete:
- *    rehydration is pure; this boot task performs the engine pushes instead).
+ *  - **Engine → store mirror**: `initialize()` subscribes to the engine's
+ *    PlaybackSnapshot stream and writes status/queue/index/cfi/error/download
+ *    state into the EPHEMERAL `useTTSPlaybackStore` (5b-PR3 split) — including
+ *    the tested `isAudiblePlayback` flicker derivation.
+ *  - **Store → engine settings sync**: `initialize()` watches the PERSISTED
+ *    `useTTSSettingsStore` (rate/voice via the active profile, language, preroll,
+ *    background audio, provider, API keys, Bible-lexicon flag) and pushes
+ *    changes — replacing the engine calls that used to run inside store setters
+ *    and `onRehydrateStorage` (R9 complete).
+ *  - **Voice resolution**: the active-voice fallback algorithm (saved profile
+ *    voice → language match → English → first available) moved here from the
+ *    legacy store's setActiveLanguage/loadVoices — it needs both the persisted
+ *    profile and the runtime voice list, which now live in different stores.
+ *
+ * Because the playback mirror lives in a store that is never persisted and never
+ * replicated, an engine broadcast cannot re-enter the settings replication slice:
+ * the S6 echo loop is structurally dead (replication.test.ts pins it).
  *
  * `initialize()` runs as the `tts/initialize` boot task (src/app/boot/
- * deviceRegistration.ts) — by then the persisted store has rehydrated, so the
- * initial push replays the persisted settings into the engine exactly like the
- * old `onRehydrateStorage` side effects did.
+ * deviceRegistration.ts) — by then the persisted store has rehydrated (including
+ * the tts-storage → tts-settings migration), so the initial push replays the
+ * persisted settings into the engine exactly like the old `onRehydrateStorage`
+ * side effects did.
  */
 import { getAudioPlayer } from './mainThreadAudioPlayer';
 import type { TtsEngine } from '@lib/tts/AudioPlayerService';
 import { isAudiblePlayback } from '@lib/tts/engine/TtsEngine';
 import type { TTSVoice } from '@lib/tts/providers/types';
 import { LexiconService } from '@lib/tts/LexiconService';
-import { useTTSStore } from '@store/useTTSStore';
+import {
+    useTTSSettingsStore,
+    selectActiveRate,
+    selectActiveVoiceId,
+} from '@store/useTTSSettingsStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('TtsController');
@@ -52,30 +66,33 @@ export class TtsController {
         if (this.initialized) return;
         this.initialized = true;
 
-        const state = useTTSStore.getState();
+        const settings = useTTSSettingsStore.getState();
 
         // Replay the persisted settings into the engine (moved verbatim from the
-        // store's onRehydrateStorage side effects).
-        this.engine.setBackgroundAudioMode(state.backgroundAudioMode);
-        this.engine.setBackgroundVolume(state.whiteNoiseVolume);
-        this.engine.setPrerollEnabled(state.prerollEnabled);
-        this.engine.setSpeed(state.rate);
-        if (state.voice) {
-            this.engine.setVoice(state.voice.id);
+        // legacy store's onRehydrateStorage side effects; actives derive from the
+        // active profile since the split).
+        this.engine.setBackgroundAudioMode(settings.backgroundAudioMode);
+        this.engine.setBackgroundVolume(settings.whiteNoiseVolume);
+        this.engine.setPrerollEnabled(settings.prerollEnabled);
+        void this.engine.setSpeed(selectActiveRate(settings));
+        const voiceId = selectActiveVoiceId(settings);
+        if (voiceId) {
+            void this.engine.setVoice(voiceId);
         }
         // Sync lexicon state (main-thread service).
-        LexiconService.getInstance().setGlobalBibleLexiconEnabled(state.isBibleLexiconEnabled);
+        LexiconService.getInstance().setGlobalBibleLexiconEnabled(settings.isBibleLexiconEnabled);
 
         // Engine readiness: the worker handle resolves once the worker has booted
         // and subscribed. UI gates on this.
-        void this.engine.whenReady().then(() => useTTSStore.setState({ engineReady: true }));
+        void this.engine.whenReady().then(() => useTTSPlaybackStore.setState({ engineReady: true }));
 
-        // Engine → store mirror (the single PlaybackSnapshot channel, 5b-PR2).
-        // The handle delivers FULL snapshots (queue re-attached from its cache when
-        // a broadcast omitted it), so the queue spread below only guards against
-        // partial snapshots from injected test engines.
+        // Engine → store mirror (the single PlaybackSnapshot channel, 5b-PR2),
+        // writing into the EPHEMERAL playback store (5b-PR3). The handle delivers
+        // FULL snapshots (queue re-attached from its cache when a broadcast
+        // omitted it), so the queue spread below only guards against partial
+        // snapshots from injected test engines.
         this.engine.subscribe((snap) => {
-            useTTSStore.setState({
+            useTTSPlaybackStore.setState({
                 status: snap.status,
                 // The tested flicker selector: 'loading'/'completed' count as playing
                 // (see isAudiblePlayback in @lib/tts/engine/TtsEngine).
@@ -94,18 +111,27 @@ export class TtsController {
         });
 
         // Store → engine settings sync (replaces the engine calls that lived in
-        // the store's setters). Each push fires only when its field actually
-        // changed, so engine-originated mirror writes cannot echo back as
-        // commands.
-        useTTSStore.subscribe((s, prev) => {
+        // the legacy store's setters). Each push fires only when its field
+        // actually changed. Engine-originated mirror writes land in the PLAYBACK
+        // store, which has no subscription here — they cannot echo back as
+        // commands (or as replication pushes).
+        useTTSSettingsStore.subscribe((s, prev) => {
             if (s.activeLanguage !== prev.activeLanguage) {
                 this.engine.setLanguage(s.activeLanguage);
+                // Re-resolve the active voice against the loaded voice list (the
+                // legacy setActiveLanguage fallback, now controller-owned).
+                this.resolveActiveVoice();
             }
-            if (s.rate !== prev.rate) {
-                void this.engine.setSpeed(s.rate);
+            const rate = selectActiveRate(s);
+            if (rate !== selectActiveRate(prev)) {
+                void this.engine.setSpeed(rate);
             }
-            if (s.voice?.id !== prev.voice?.id && s.voice) {
-                void this.engine.setVoice(s.voice.id);
+            const voiceId = selectActiveVoiceId(s);
+            if (voiceId !== selectActiveVoiceId(prev)) {
+                if (voiceId) void this.engine.setVoice(voiceId);
+                // Keep the resolved voice object in the playback store current.
+                const voices = useTTSPlaybackStore.getState().voices;
+                useTTSPlaybackStore.setState({ voice: voices.find((v) => v.id === voiceId) ?? null });
             }
             if (s.prerollEnabled !== prev.prerollEnabled) {
                 this.engine.setPrerollEnabled(s.prerollEnabled);
@@ -131,6 +157,39 @@ export class TtsController {
                 void this.loadVoices();
             }
         });
+    }
+
+    /**
+     * The voice-fallback algorithm of the legacy setActiveLanguage: prefer the
+     * profile's saved voice for the active language, else the first voice
+     * matching the language; RETAIN the saved id when the list is not loaded
+     * yet (the voice-recall regression). Warns when the loaded list has no
+     * voice for the language at all.
+     */
+    private resolveActiveVoice(): void {
+        const settings = useTTSSettingsStore.getState();
+        const lang = settings.activeLanguage;
+        const voices = useTTSPlaybackStore.getState().voices;
+        const profileVoiceId = selectActiveVoiceId(settings);
+
+        const languageVoices = voices.filter((v) => v.lang.startsWith(lang));
+        const selected = languageVoices.find((v) => v.id === profileVoiceId) ?? languageVoices[0] ?? null;
+
+        if (languageVoices.length === 0 && voices.length > 0) {
+            // Warn user if no voices for this language
+            import('@store/useToastStore').then(({ useToastStore }) => {
+                useToastStore.getState().showToast(`No voices found for ${lang}. Audio playback may not work.`, 'error');
+            });
+        }
+
+        useTTSPlaybackStore.setState({ voice: selected });
+        if (selected) {
+            // Record the resolution in the profile (triggers the voiceId watcher,
+            // which pushes setVoice to the engine). When no list is loaded the
+            // saved profile id is retained untouched.
+            settings.setVoiceId(selected.id, lang);
+            void this.engine.setVoice(selected.id);
+        }
     }
 
     // --- Playback commands (bound: components destructure them from useAudioCommands) ---
@@ -190,26 +249,26 @@ export class TtsController {
 
     /**
      * (Re-)apply the configured provider on the engine, load its voice list into
-     * the store, and re-select the best voice for the active language (saved
-     * profile voice → language match → English → first). Moved verbatim from the
-     * legacy `useTTSStore.loadVoices` action.
+     * the playback store, and re-select the best voice for the active language
+     * (saved profile voice → language match → English → first). Moved verbatim
+     * from the legacy `useTTSStore.loadVoices` action, with the resolved voice
+     * landing in the playback store and the id in the settings profile.
      */
     loadVoices = async (): Promise<void> => {
-        const store = useTTSStore;
         // Ensure provider is set on player (in case of fresh load). The id is plain
         // data on both engine paths; the main-thread backend constructs the live
         // provider (with API keys + active language) via the shared factory.
-        const { providerId } = store.getState();
+        const { providerId } = useTTSSettingsStore.getState();
         await this.engine.setProviderById(providerId);
 
         await this.engine.init();
         const voices = await this.engine.getVoices();
-        store.setState({ voices });
+        useTTSPlaybackStore.setState({ voices });
 
-        // If current voice is not in new list, pick default
-        const currentVoice = store.getState().voice;
-        const activeLang = store.getState().activeLanguage;
-        const profileVoiceId = store.getState().profiles[activeLang]?.voiceId;
+        const settings = useTTSSettingsStore.getState();
+        const currentVoice = useTTSPlaybackStore.getState().voice;
+        const activeLang = settings.activeLanguage;
+        const profileVoiceId = settings.profiles[activeLang]?.voiceId;
 
         let targetVoice: TTSVoice | null = null;
 
@@ -236,24 +295,25 @@ export class TtsController {
             // Re-set voice to ensure player knows about it (idempotent — the
             // engine guards on identity).
             void this.engine.setVoice(targetVoice.id);
-            store.getState().setVoice(targetVoice);
+            useTTSPlaybackStore.setState({ voice: targetVoice });
+            settings.setVoiceId(targetVoice.id, activeLang);
         }
     };
 
     downloadVoice = async (voiceId: string): Promise<void> => {
         try {
-            useTTSStore.setState({ isDownloading: true, downloadingVoiceId: voiceId, downloadStatus: 'Starting...' });
+            useTTSPlaybackStore.setState({ isDownloading: true, downloadingVoiceId: voiceId, downloadStatus: 'Starting...' });
             await this.engine.downloadVoice(voiceId);
-            useTTSStore.setState({ isDownloading: false, downloadStatus: 'Ready', downloadProgress: 100 });
+            useTTSPlaybackStore.setState({ isDownloading: false, downloadStatus: 'Ready', downloadProgress: 100 });
         } catch (e) {
             logger.warn('Voice download failed', e);
-            useTTSStore.setState({ isDownloading: false, downloadStatus: 'Failed', lastError: e instanceof Error ? e.message : 'Download failed' });
+            useTTSPlaybackStore.setState({ isDownloading: false, downloadStatus: 'Failed', lastError: e instanceof Error ? e.message : 'Download failed' });
         }
     };
 
     deleteVoice = async (voiceId: string): Promise<void> => {
         await this.engine.deleteVoice(voiceId);
-        useTTSStore.setState({ isDownloading: false, downloadProgress: 0, downloadStatus: 'Not Downloaded', downloadingVoiceId: null });
+        useTTSPlaybackStore.setState({ isDownloading: false, downloadProgress: 0, downloadStatus: 'Not Downloaded', downloadingVoiceId: null });
     };
 
     checkVoiceDownloaded = (voiceId: string): Promise<boolean> => {

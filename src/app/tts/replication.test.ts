@@ -31,13 +31,23 @@ const { fakeStores } = vi.hoisted(() => {
                 store.state = s;
                 listeners.forEach((l) => l(s));
             },
+            listenerCount: () => listeners.size,
         };
         return store;
     }
     return {
         fakeStores: {
-            tts: fakeStore({ activeLanguage: 'en', rate: 1 }),
-            genAI: fakeStore({ isEnabled: false }),
+            tts: fakeStore({
+                activeLanguage: 'en',
+                profiles: { en: { voiceId: null, rate: 1, minSentenceLength: 36 } },
+                customAbbreviations: [],
+                alwaysMerge: [],
+                sentenceStarters: [],
+                sanitizationEnabled: true,
+                isBibleLexiconEnabled: true,
+            }),
+            playback: fakeStore({ status: 'stopped', queue: [], currentIndex: 0 }),
+            genAI: fakeStore({ isEnabled: false, logs: [] }),
             analysis: fakeStore({ sections: {} }),
             book: fakeStore({ books: { b1: { bookId: 'b1', language: 'fr' } } }),
             reading: fakeStore({ getProgress: () => null }),
@@ -45,7 +55,8 @@ const { fakeStores } = vi.hoisted(() => {
     };
 });
 
-vi.mock('@store/useTTSStore', () => ({ useTTSStore: fakeStores.tts }));
+vi.mock('@store/useTTSSettingsStore', () => ({ useTTSSettingsStore: fakeStores.tts }));
+vi.mock('@store/useTTSPlaybackStore', () => ({ useTTSPlaybackStore: fakeStores.playback }));
 vi.mock('@store/useGenAIStore', () => ({ useGenAIStore: fakeStores.genAI }));
 vi.mock('@store/useContentAnalysisStore', () => ({ useContentAnalysisStore: fakeStores.analysis }));
 vi.mock('@store/useBookStore', () => ({ useBookStore: fakeStores.book }));
@@ -83,8 +94,8 @@ describe('replication spec completeness', () => {
 
             // Emit a change on every fake store (unique values so deduping slices still fire);
             // the slice should react to (at least) its own.
-            fakeStores.tts.emit({ activeLanguage: `lang-${i}`, rate: 2 });
-            fakeStores.genAI.emit({ isEnabled: true });
+            fakeStores.tts.emit({ activeLanguage: `lang-${i}`, profiles: {} });
+            fakeStores.genAI.emit({ isEnabled: true, contentFilterSkipTypes: [`t-${i}`] });
             fakeStores.analysis.emit({ sections: { 'b1/s1': { title: 'T' } } });
             fakeStores.book.emit({ books: { b1: { bookId: 'b1', language: 'fr' } } });
             fakeStores.reading.emit({ getProgress: () => ({ percentage: 10 }) });
@@ -102,6 +113,83 @@ describe('replication spec completeness', () => {
             .map((s) => s.kind)
             .sort();
         expect(kinds).toEqual(perBookKinds);
+    });
+
+    it('the settings slice pushes the EXPLICIT TTSSettingsData payload, nothing more (5b-PR3)', () => {
+        // Reset the fake store (earlier tests overwrite its state wholesale).
+        fakeStores.tts.state = {
+            activeLanguage: 'en',
+            profiles: { en: { voiceId: null, rate: 1, minSentenceLength: 36 } },
+            customAbbreviations: [],
+            alwaysMerge: [],
+            sentenceStarters: [],
+            sanitizationEnabled: true,
+            isBibleLexiconEnabled: true,
+            // Fields the engine does NOT read — must not cross the boundary:
+            providerId: 'webspeech',
+            apiKeys: { google: 'secret' },
+            whiteNoiseVolume: 0.1,
+        };
+        const slice = makeSlices().find((s) => s.kind === 'settings')!;
+        const [snapshot] = slice.snapshot();
+        expect(snapshot.kind).toBe('settings');
+        const settings = (snapshot as unknown as { settings: Record<string, unknown> }).settings;
+        // Exactly the engine-read field set — no playback mirror, no queue, no
+        // actions, no api keys (the old plain(getState()) shipped everything).
+        expect(Object.keys(settings).sort()).toEqual([
+            'alwaysMerge',
+            'customAbbreviations',
+            'isBibleLexiconEnabled',
+            'profiles',
+            'sanitizationEnabled',
+            'sentenceStarters',
+        ]);
+    });
+
+    it('NO-ECHO (S6): playback-store updates produce ZERO worker pushes; a settings change produces pushes', () => {
+        const slices = makeSlices();
+        const pushed: EngineStateUpdate[] = [];
+        const unsubs = slices.map((s) => s.subscribe((u) => pushed.push(u)));
+
+        // The engine broadcast path: the TtsController mirror writes the playback
+        // store. No replication slice subscribes to it — the per-sentence echo
+        // loop (engine broadcast → settings push → worker echo) is structurally dead.
+        expect(fakeStores.playback.listenerCount(), 'no slice may subscribe to the playback store').toBe(0);
+        fakeStores.playback.emit({ status: 'playing', queue: [{ text: 'x' }], currentIndex: 1 });
+        expect(pushed).toHaveLength(0);
+
+        // A real settings edit DOES reach the worker.
+        fakeStores.tts.emit({
+            activeLanguage: 'en',
+            profiles: { en: { voiceId: 'v', rate: 1.5 } },
+            customAbbreviations: [],
+            alwaysMerge: [],
+            sentenceStarters: [],
+            sanitizationEnabled: true,
+            isBibleLexiconEnabled: true,
+        });
+        expect(pushed.some((u) => u.kind === 'settings')).toBe(true);
+
+        unsubs.forEach((u) => u());
+    });
+
+    it('genAI echo guard: store changes outside the engine view (e.g. addGenAILog) do not push', () => {
+        const slice = makeSlices().find((s) => s.kind === 'genAI')!;
+        const pushed: EngineStateUpdate[] = [];
+        const unsub = slice.subscribe((u) => pushed.push(u));
+
+        // A log append (the addGenAILog host-command round trip) leaves the
+        // engine-read view unchanged — guarded, no push.
+        const base = fakeStores.genAI.state;
+        fakeStores.genAI.emit({ ...base, logs: [{ msg: 'entry' }] });
+        expect(pushed).toHaveLength(0);
+
+        // A field the engine reads changes — exactly one push.
+        fakeStores.genAI.emit({ ...base, logs: [{ msg: 'entry' }], isEnabled: !base.isEnabled });
+        expect(pushed).toHaveLength(1);
+        expect(pushed[0].kind).toBe('genAI');
+
+        unsub();
     });
 
     it('the progress slice pushes only for the current book', () => {

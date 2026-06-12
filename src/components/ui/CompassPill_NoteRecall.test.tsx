@@ -2,7 +2,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { CompassPill } from './CompassPill';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 
 // Mock Lucide icons
@@ -23,10 +23,10 @@ vi.mock('lucide-react', () => ({
     Smartphone: () => <span data-testid="icon-smartphone" />,
 }));
 
-// Mock useTTSStore
-vi.mock('@store/useTTSStore', () => ({
+// Mock useTTSPlaybackStore
+vi.mock('@store/useTTSPlaybackStore', () => ({
     getDefaultMinSentenceLength: () => 36,
-    useTTSStore: vi.fn()
+    useTTSPlaybackStore: vi.fn()
 }));
 
 // Mock useReaderUIStore
@@ -47,7 +47,7 @@ describe('CompassPill Note Recall', () => {
         vi.clearAllMocks();
         
         // Default TTS Store mock
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: false,
             status: 'stopped',
             queue: [],

@@ -1,14 +1,15 @@
 import { useMemo } from 'react';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
+import { useTTSSettingsStore, selectActiveRate } from '@store/useTTSSettingsStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useBookStore } from '@store/useBookStore';
 import { containsCJK, isCJKLanguageCode } from '@lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 
 export function useSectionDuration() {
-  const queue = useTTSStore(state => state.queue);
-  const index = useTTSStore(state => state.currentIndex);
-  const rate = useTTSStore(state => state.rate);
+  const queue = useTTSPlaybackStore(state => state.queue);
+  const index = useTTSPlaybackStore(state => state.currentIndex);
+  const rate = useTTSSettingsStore(selectActiveRate);
 
   const currentBookId = useReaderUIStore(state => state.currentBookId);
   // Only select language to prevent excessive re-renders

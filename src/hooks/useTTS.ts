@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 
@@ -37,7 +37,7 @@ export const useTTS = () => {
     if (!currentBookId || !currentSectionId) return;
 
     const syncQueue = async () => {
-      const isPlaying = useTTSStore.getState().isPlaying;
+      const isPlaying = useTTSPlaybackStore.getState().isPlaying;
       // If audio is active, we don't interrupt it just because the user is browsing.
       // Important note: We should not capture status changes.
       if (isPlaying) {

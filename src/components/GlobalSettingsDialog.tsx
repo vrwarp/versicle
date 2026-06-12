@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useUIStore } from '@store/useUIStore';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { useLibraryStore, useBookStore } from '@store/useLibraryStore';
 import { useReadingListStore } from '@store/useReadingListStore';
@@ -171,12 +172,11 @@ export const GlobalSettingsDialog = () => {
         apiKeys, setApiKey,
         backgroundAudioMode, setBackgroundAudioMode,
         whiteNoiseVolume, setWhiteNoiseVolume,
-        voice, voices, setVoice,
+        setVoiceId,
         activeLanguage,
-        downloadProgress, downloadStatus, isDownloading,
         setMinSentenceLength
-    } = useTTSStore(useShallow(state => ({
-        // Optimization: Use shallow selector to avoid re-renders on activeCfi/progress updates during playback
+    } = useTTSSettingsStore(useShallow(state => ({
+        // Optimization: Use shallow selector to avoid re-renders on unrelated settings churn
         activeLanguage: state.activeLanguage,
         profiles: state.profiles,
         providerId: state.providerId,
@@ -187,13 +187,18 @@ export const GlobalSettingsDialog = () => {
         setBackgroundAudioMode: state.setBackgroundAudioMode,
         whiteNoiseVolume: state.whiteNoiseVolume,
         setWhiteNoiseVolume: state.setWhiteNoiseVolume,
+        setVoiceId: state.setVoiceId,
+        setMinSentenceLength: state.setMinSentenceLength
+    })));
+
+    // Runtime engine state (voice list, resolved voice, download progress) lives
+    // in the ephemeral playback store since the 5b split.
+    const { voice, voices, downloadProgress, downloadStatus, isDownloading } = useTTSPlaybackStore(useShallow(state => ({
         voice: state.voice,
         voices: state.voices,
-        setVoice: state.setVoice,
         downloadProgress: state.downloadProgress,
         downloadStatus: state.downloadStatus,
-        isDownloading: state.isDownloading,
-        setMinSentenceLength: state.setMinSentenceLength
+        isDownloading: state.isDownloading
     })));
 
     // Engine commands come from the TtsController facade (stable identities).
@@ -568,7 +573,7 @@ export const GlobalSettingsDialog = () => {
                                 onWhiteNoiseVolumeChange={setWhiteNoiseVolume}
                                 voice={voice}
                                 voices={voices}
-                                onVoiceChange={setVoice}
+                                onVoiceChange={(v, lang) => setVoiceId(v?.id ?? null, lang)}
                                 isVoiceReady={isVoiceReady}
                                 isDownloading={isDownloading}
                                 downloadProgress={downloadProgress}
@@ -618,13 +623,15 @@ export const GlobalSettingsDialog = () => {
                                     } else {
                                         // Self-healing: Device not mesh-registered? Register it now with the new name.
                                         const prefs = usePreferencesStore.getState();
-                                        const tts = useTTSStore.getState();
+                                        const tts = useTTSSettingsStore.getState();
+                                        const activeProfile = tts.profiles[tts.activeLanguage];
                                         const profile = {
                                             theme: prefs.currentTheme,
                                             fontSize: prefs.fontSize,
-                                            ttsVoiceURI: tts.voice ? tts.voice.id : null,
-                                            ttsRate: tts.rate,
-                                            ttsPitch: tts.pitch
+                                            ttsVoiceURI: activeProfile?.voiceId ?? null,
+                                            ttsRate: activeProfile?.rate ?? 1.0,
+                                            // Profile pitch died in the 5b settings split.
+                                            ttsPitch: 1.0
                                         };
                                         useDeviceStore.getState().registerCurrentDevice(currentDeviceId, profile, name);
                                         showToast('Device registered to mesh', 'success');

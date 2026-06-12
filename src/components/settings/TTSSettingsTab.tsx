@@ -14,7 +14,7 @@ import {
     type TTSProviderId,
     type TTSApiKeyProviderId,
 } from '@lib/tts/providers/registry';
-import { getDefaultMinSentenceLength } from '@store/useTTSStore';
+import { getDefaultMinSentenceLength } from '@store/useTTSSettingsStore';
 
 // Re-export TTSVoice + the registry-derived id unions for consumers
 export type { TTSVoice };
@@ -27,7 +27,7 @@ export interface TTSSettingsTabProps {
     /** Currently active language profile (from store, driven by book context) */
     activeLanguage: string;
     /** All TTS profiles for language context */
-    profiles: Record<string, import('@store/useTTSStore').TTSProfile>;
+    profiles: Record<string, import('@store/useTTSSettingsStore').TTSProfile>;
     // Provider
     providerId: TTSProviderId;
     onProviderChange: (providerId: TTSProviderId) => void;

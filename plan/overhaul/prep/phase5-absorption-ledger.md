@@ -58,8 +58,10 @@ suites, and the `CapacitorTTSProvider.test.ts` Smart-Handoff suite — the cross
 (`@app/tts/createWorkerEngineClient`, the N1 inverted lib→app edge mocked only by
 `WorkerEngineHandle.test.ts`) **left the directory and the allowlist at 5b-PR1** —
 `WorkerEngineHandle` (+ its test) now lives in `src/app/tts/` and the engine dir no
-longer references `app/` at all. The four-module core shrinks to **∅ at the 5b
-store-split PR** when the `SessionStore`/lexicon ports land. `vi.mock` in
+longer references `app/` at all. The four-module core shrinks to **∅ when the
+`SessionStore`/lexicon ports land** — the doc scheduled that with the store-split PR,
+but the split (5b-PR3 as landed) shipped without the ports, so the shrink deadline
+rides the remaining 5b engine work (sequencer/decomposition half). `vi.mock` in
 `src/lib/tts/providers/**` is banned from 5a-PR2.
 
 **5a-PR2 note**: the providers-dir ban is live in `eslint.config.js` with exactly two

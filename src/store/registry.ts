@@ -218,11 +218,11 @@ export const STORE_REGISTRY: readonly StoreRegistryEntry[] = [
     summary: 'Firebase config, sync/auth status, onboarding flag.',
   },
   {
-    module: 'useTTSStore',
+    module: 'useTTSSettingsStore',
     tier: 'local-persisted',
-    persistence: 'tts-storage',
+    persistence: 'tts-settings',
     owner: 'audio',
-    summary: 'TTS provider/voice/playback settings and segmentation config.',
+    summary: 'TTS provider/voice profiles and segmentation config (5b split).',
   },
   {
     module: 'useDriveStore',
@@ -294,6 +294,13 @@ export const STORE_REGISTRY: readonly StoreRegistryEntry[] = [
     persistence: null,
     owner: 'reader',
     summary: 'Which reader side panel (TOC/search/annotations/audio) is open.',
+  },
+  {
+    module: 'useTTSPlaybackStore',
+    tier: 'ephemeral',
+    persistence: null,
+    owner: 'audio',
+    summary: 'Engine playback mirror + voice list/downloads (never persisted or replicated; 5b split).',
   },
 ];
 

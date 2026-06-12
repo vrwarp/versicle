@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useAnnotationStore } from '@store/useAnnotationStore';
@@ -179,7 +179,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     status,
     queue,
     currentIndex
-  } = useTTSStore(useShallow(state => ({
+  } = useTTSPlaybackStore(useShallow(state => ({
     isPlaying: state.isPlaying,
     status: state.status,
     queue: state.queue,

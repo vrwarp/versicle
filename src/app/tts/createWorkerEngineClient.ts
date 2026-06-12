@@ -11,7 +11,7 @@
  *
  * NOTE on adoption: this returns an *async* (Comlink) engine, whereas `getAudioPlayer()` is the
  * synchronous in-process engine. Swapping the app onto the worker means awaiting
- * `createWorkerEngineClient()` once at startup and routing `useTTSStore` through the returned
+ * `createWorkerEngineClient()` once at startup and routing the TtsController through the returned
  * proxy (fire-and-forget calls work unchanged; `subscribe` already returns a Comlink proxy
  * unsubscribe). See PORTING-TO-WORKER.md.
  */
@@ -25,7 +25,7 @@ import { bookRepository } from '../repositories/BookRepository';
 import { contentAnalysisRepository } from '../repositories/ContentAnalysisRepository';
 import { genAIService } from '@lib/genai/GenAIService';
 import { createReplicatedSlices, bookSnapshotUpdates } from './replicationSpec';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { useReadingStateStore } from '@store/useReadingStateStore';
 import { useAnnotationStore } from '@store/useAnnotationStore';
@@ -45,7 +45,7 @@ const logger = createLogger('WorkerEngineClient');
  */
 export function applyHostCommand(command: EngineHostCommand): void {
     switch (command.kind) {
-        case 'setActiveLanguage': useTTSStore.getState().setActiveLanguage(command.lang); break;
+        case 'setActiveLanguage': useTTSSettingsStore.getState().setActiveLanguage(command.lang); break;
         case 'updateTTSProgress':
             useReadingStateStore.getState().updateTTSProgress(command.bookId, command.queueIndex, command.sectionIndex);
             break;

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { WorkerEngineContext, type EngineHostCommand } from './WorkerEngineContext';
-import type { SectionAnalysis, TTSSettingsSnapshot, GenAISettingsSnapshot } from './EngineContext';
+import type { SectionAnalysis, TTSSettingsData, GenAISettingsSnapshot } from './EngineContext';
 
 function makeCtx() {
     const commands: EngineHostCommand[] = [];
@@ -12,7 +12,7 @@ describe('WorkerEngineContext (replicated-state context for the worker)', () => 
     it('serves synchronous getters from pushed snapshots', () => {
         const { ctx } = makeCtx();
 
-        ctx.applyUpdate({ kind: 'settings', settings: { customAbbreviations: ['Dr.'] } as TTSSettingsSnapshot });
+        ctx.applyUpdate({ kind: 'settings', settings: { customAbbreviations: ['Dr.'] } as TTSSettingsData });
         ctx.applyUpdate({ kind: 'genAI', settings: { isEnabled: true } as GenAISettingsSnapshot });
         ctx.applyUpdate({ kind: 'activeLanguage', lang: 'fr' });
         ctx.applyUpdate({ kind: 'bookLanguage', bookId: 'b1', lang: 'de' });

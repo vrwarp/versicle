@@ -1,5 +1,5 @@
 import React from 'react';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useCurrentDeviceProgress, useBookProgress } from '@store/useReadingStateStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useBook, useLastReadBook } from '@store/selectors';
@@ -34,8 +34,8 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
 
     // Optimization: We only need to know if the queue has items to determine variant,
     // and if queue is empty to set title/subtitle manually.
-    const hasQueueItems = useTTSStore(state => state.queue.length > 0);
-    const isPlaying = useTTSStore(state => state.isPlaying);
+    const hasQueueItems = useTTSPlaybackStore(state => state.queue.length > 0);
+    const isPlaying = useTTSPlaybackStore(state => state.isPlaying);
 
     // Popover state is ephemeral UI state (never synced via Yjs) — it lives in useReaderUIStore.
     const { immersiveMode, toc, currentSectionTitle, currentSectionId, currentBookId, jumpToLocation, resetCompassState, popover, hidePopover } = useReaderUIStore(useShallow(state => ({

@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { TTSQueue } from '../TTSQueue';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 
 // Mock the store
-vi.mock('@store/useTTSStore', () => ({
-  useTTSStore: vi.fn(),
+vi.mock('@store/useTTSPlaybackStore', () => ({
+  useTTSPlaybackStore: vi.fn(),
 }));
 
 // Mock scrollIntoView
@@ -14,7 +14,7 @@ window.HTMLElement.prototype.scrollIntoView = vi.fn();
 describe('TTSQueue', () => {
   it('renders "No text available" when queue is empty', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useTTSStore as any).mockReturnValue({
+    (useTTSPlaybackStore as any).mockReturnValue({
       queue: [],
       currentIndex: 0,
       jumpTo: vi.fn(),
@@ -26,7 +26,7 @@ describe('TTSQueue', () => {
 
   it('renders queue items correctly', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useTTSStore as any).mockReturnValue({
+    (useTTSPlaybackStore as any).mockReturnValue({
       queue: [
         { text: 'First sentence', cfi: 'cfi1' },
         { text: 'Second sentence', cfi: 'cfi2' },
@@ -42,7 +42,7 @@ describe('TTSQueue', () => {
 
   it('highlights active item', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useTTSStore as any).mockReturnValue({
+    (useTTSPlaybackStore as any).mockReturnValue({
       queue: [
         { text: 'First sentence', cfi: 'cfi1' },
         { text: 'Second sentence', cfi: 'cfi2' },

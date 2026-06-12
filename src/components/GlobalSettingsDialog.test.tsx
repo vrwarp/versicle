@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { GlobalSettingsDialog } from './GlobalSettingsDialog';
-import { useTTSStore } from '@store/useTTSStore';
+
 import { wipeAllData } from '@data/wipe';
 
 // Mock the data wipe module (the dialog must only route through it)
@@ -144,51 +144,45 @@ vi.mock('@store/useToastStore', () => ({
     useToastStore: (selector: any) => selector ? selector({ showToast: vi.fn() }) : { showToast: vi.fn() }
 }));
 
-vi.mock('@store/useTTSStore', () => ({
-    getDefaultMinSentenceLength: () => 36,
-    useTTSStore: Object.assign(
-        vi.fn((selector: (state: unknown) => unknown) => selector ? selector({
-            profiles: {
-                en: { voiceId: 'voice1', rate: 1.0, pitch: 1.0, volume: 1.0 },
-                zh: { voiceId: 'voice-zh', rate: 1.0, pitch: 1.0, volume: 1.0 }
-            },
-            activeLanguage: 'en',
-            providerId: 'local',
-            apiKeys: { google: '', openai: '', lemonfox: '' },
-            backgroundAudioMode: 'silence',
-            whiteNoiseVolume: 0.1,
-            voice: null,
-            voices: [],
-            isDownloading: false,
-            downloadProgress: 0,
-            downloadStatus: null
-        }) : {
-            profiles: {
-                en: { voiceId: 'voice1', rate: 1.0, pitch: 1.0, volume: 1.0 },
-                zh: { voiceId: 'voice-zh', rate: 1.0, pitch: 1.0, volume: 1.0 }
-            },
-            activeLanguage: 'en',
-            providerId: 'local',
-            apiKeys: { google: '', openai: '', lemonfox: '' },
-            backgroundAudioMode: 'silence',
-            whiteNoiseVolume: 0.1,
-            voice: null,
-            voices: [],
-            isDownloading: false,
-            downloadProgress: 0,
-            downloadStatus: null
-        }),
-        {
+// ONE shared mock backs both split stores: the dialog destructures settings
+// fields from useTTSSettingsStore(selector) and runtime fields from
+// useTTSPlaybackStore(selector); per-test mockReturnValue feeds both.
+const { ttsStoreMock } = vi.hoisted(() => {
+    const defaultState = {
+        profiles: {
+            en: { voiceId: 'voice1', rate: 1.0, minSentenceLength: 36 },
+            zh: { voiceId: 'voice-zh', rate: 1.0, minSentenceLength: 6 }
+        },
+        activeLanguage: 'en',
+        providerId: 'webspeech',
+        apiKeys: { google: '', openai: '', lemonfox: '' },
+        backgroundAudioMode: 'silence',
+        whiteNoiseVolume: 0.1,
+        voice: null,
+        voices: [],
+        isDownloading: false,
+        downloadProgress: 0,
+        downloadStatus: null
+    };
+    const fn = vi.fn((selector?: (state: unknown) => unknown) =>
+        selector ? selector(defaultState) : defaultState);
+    return {
+        ttsStoreMock: Object.assign(fn, {
             getState: () => ({
-                profiles: {
-                    en: { voiceId: 'voice1', rate: 1.0, pitch: 1.0, volume: 1.0 },
-                    zh: { voiceId: 'voice-zh', rate: 1.0, pitch: 1.0, volume: 1.0 }
-                },
+                profiles: defaultState.profiles,
                 activeLanguage: 'en',
-                providerId: 'local'
+                providerId: 'webspeech'
             })
-        }
-    )
+        }),
+    };
+});
+
+vi.mock('@store/useTTSSettingsStore', () => ({
+    getDefaultMinSentenceLength: () => 36,
+    useTTSSettingsStore: ttsStoreMock,
+}));
+vi.mock('@store/useTTSPlaybackStore', () => ({
+    useTTSPlaybackStore: ttsStoreMock,
 }));
 
 describe('GlobalSettingsDialog - Piper TTS', () => {
@@ -214,8 +208,7 @@ describe('GlobalSettingsDialog - Piper TTS', () => {
     };
 
     it('renders Piper settings when provider is Piper', () => {
-        // @ts-expect-error Mock implementation
-        useTTSStore.mockReturnValue({
+        ttsStoreMock.mockReturnValue({
             ...defaultStore,
             providerId: 'piper',
             activeLanguage: 'en',
@@ -237,8 +230,7 @@ describe('GlobalSettingsDialog - Piper TTS', () => {
     });
 
     it('shows download progress', () => {
-        // @ts-expect-error Mock implementation
-        useTTSStore.mockReturnValue({
+        ttsStoreMock.mockReturnValue({
             ...defaultStore,
             providerId: 'piper',
             activeLanguage: 'en',
@@ -258,8 +250,7 @@ describe('GlobalSettingsDialog - Piper TTS', () => {
     });
 
     it('triggers download on button click', () => {
-        // @ts-expect-error Mock implementation
-        useTTSStore.mockReturnValue({
+        ttsStoreMock.mockReturnValue({
             ...defaultStore,
             providerId: 'piper',
             activeLanguage: 'en',
@@ -310,8 +301,7 @@ describe('regression: wipe-all-data — Clear All Data must route through wipeAl
     });
 
     const openDataManagementTab = () => {
-        // @ts-expect-error Mock implementation
-        useTTSStore.mockReturnValue(ttsStore);
+        ttsStoreMock.mockReturnValue(ttsStore);
         render(<GlobalSettingsDialog />);
         fireEvent.click(screen.getByRole('button', { name: 'Data Management' }));
     };

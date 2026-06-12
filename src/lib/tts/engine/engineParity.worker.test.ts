@@ -53,7 +53,7 @@ import type {
     BookMetadata,
     ContentAnalysis,
     SectionAnalysis,
-    TTSSettingsSnapshot,
+    TTSSettingsData,
     GenAISettingsSnapshot,
     Progress,
 } from './EngineContext';
@@ -74,7 +74,7 @@ const PARITY_TTS_SETTINGS = {
     sentenceStarters: [],
     isBibleLexiconEnabled: false,
     profiles: { en: { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0, minSentenceLength: 0 } },
-} as Partial<TTSSettingsSnapshot> as TTSSettingsSnapshot;
+} as Partial<TTSSettingsData> as TTSSettingsData;
 
 describeEngineParity('worker bridge (MessageChannel + Comlink)', async (): Promise<ParityHarness> => {
     resetParityHostDb(hostDb);

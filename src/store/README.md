@@ -29,7 +29,7 @@ hydration modes, and the per-store flip ledger.
 | Store | Persistence | Owner | Purpose |
 |---|---|---|---|
 | `useSyncStore` | `sync-storage` | sync | Firebase config, sync/auth status, onboarding flag. |
-| `useTTSStore` | `tts-storage` | audio | TTS provider/voice/playback settings and segmentation config. |
+| `useTTSSettingsStore` | `tts-settings` | audio | TTS provider/voice profiles and segmentation config (5b split). |
 | `useDriveStore` | `drive-config-storage` | google | Linked Drive folder + scanned file index. |
 | `useGoogleServicesStore` | `google-services-storage` | google | Connected Google services + OAuth client ids. |
 | `useGenAIStore` | `genai-storage` | google | Gemini API key/model config, feature toggles, request logs. |
@@ -45,6 +45,7 @@ hydration modes, and the per-store flip ledger.
 | `useReaderUIStore` | — | reader | Reader session UI (menus, popover, compass, reader callbacks). |
 | `useBackNavigationStore` | — | shell | Priority-ordered back-button handler registry. |
 | `useSidebarStore` | — | reader | Which reader side panel (TOC/search/annotations/audio) is open. |
+| `useTTSPlaybackStore` | — | audio | Engine playback mirror + voice list/downloads (never persisted or replicated; 5b split). |
 
 ### Hydration notes
 

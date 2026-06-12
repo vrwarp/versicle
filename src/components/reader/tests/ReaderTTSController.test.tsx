@@ -1,15 +1,15 @@
 import { render, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ReaderTTSController } from '../ReaderTTSController';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 
 // Mock the store + the command facade (engine commands moved to
 // useAudioCommands at Phase 5b-PR1).
 const mockGetState = vi.fn();
 const { jumpToMock } = vi.hoisted(() => ({ jumpToMock: vi.fn() }));
 
-vi.mock('@store/useTTSStore', () => ({
-  useTTSStore: Object.assign(vi.fn(), {
+vi.mock('@store/useTTSPlaybackStore', () => ({
+  useTTSPlaybackStore: Object.assign(vi.fn(), {
     getState: () => mockGetState(),
   }),
 }));
@@ -33,7 +33,7 @@ describe('ReaderTTSController', () => {
 
     // Default store mock
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useTTSStore as any).mockImplementation((selector: any) => {
+    (useTTSPlaybackStore as any).mockImplementation((selector: any) => {
         const state = {
             activeCfi: 'cfi-1',
             currentIndex: 1,

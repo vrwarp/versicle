@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useEffect, useRef } from 'react';
 import type { Rendition } from 'epubjs';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 
@@ -40,7 +40,7 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
 }) => {
   // We subscribe to these changing values here, so ReaderView doesn't have to.
   // Use shallow comparison for primitive values to avoid unnecessary re-renders
-  const { activeCfi, currentIndex, status, queue } = useTTSStore(useShallow(state => ({
+  const { activeCfi, currentIndex, status, queue } = useTTSPlaybackStore(useShallow(state => ({
     activeCfi: state.activeCfi,
     currentIndex: state.currentIndex,
     status: state.status,
@@ -122,7 +122,7 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
       if (document.visibilityState === 'visible' && rendition) {
         // We just came back to foreground.
         // Fetch the latest state directly from the store to avoid stale closure issues.
-        const { activeCfi: freshCfi, status: freshStatus } = useTTSStore.getState();
+        const { activeCfi: freshCfi, status: freshStatus } = useTTSPlaybackStore.getState();
 
         if (!freshCfi || freshStatus === 'stopped') return;
 

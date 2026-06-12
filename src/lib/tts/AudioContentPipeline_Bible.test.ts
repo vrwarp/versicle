@@ -4,7 +4,7 @@ import { AudioContentPipeline } from './AudioContentPipeline';
 import { bookContent } from '@data/repos/bookContent';
 import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
 import { bookRepository } from '@app/repositories/BookRepository';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { TextSegmenter } from './TextSegmenter';
 import { LexiconService } from './LexiconService';
 import { BIBLE_ABBREVIATIONS } from './bible-lexicon';
@@ -65,10 +65,10 @@ vi.mock('./AudioPlayerService', () => ({
     }
 }));
 
-// Partially mock useTTSStore
-vi.mock('@store/useTTSStore', () => ({
+// Partially mock useTTSSettingsStore
+vi.mock('@store/useTTSSettingsStore', () => ({
     getDefaultMinSentenceLength: () => 0,
-    useTTSStore: {
+    useTTSSettingsStore: {
         getState: vi.fn(() => ({
                 profiles: { en: { minSentenceLength: 50 } },
             customAbbreviations: [],
@@ -95,14 +95,14 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
         vi.mocked(contentAnalysisRepository.getContentAnalysis).mockResolvedValue({} as ContentAnalysis);
 
         // Ensure getState returns fresh default values
-        vi.mocked(useTTSStore.getState).mockReturnValue({
+        vi.mocked(useTTSSettingsStore.getState).mockReturnValue({
             profiles: { en: { minSentenceLength: 50 } },
             customAbbreviations: ['Dr.'],
             alwaysMerge: ['Mr.'],
             sentenceStarters: ['The'],
             minSentenceLength: 50,
             isBibleLexiconEnabled: true,
-        } as unknown as ReturnType<typeof useTTSStore.getState>);
+        } as unknown as ReturnType<typeof useTTSSettingsStore.getState>);
 
         vi.mocked(LexiconService.getInstance).mockReturnValue({
             getBibleLexiconPreference: vi.fn().mockResolvedValue('default')
@@ -124,14 +124,14 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
     });
 
     it('should NOT inject bible abbreviations when disabled globally', async () => {
-        vi.mocked(useTTSStore.getState).mockReturnValue({
+        vi.mocked(useTTSSettingsStore.getState).mockReturnValue({
             profiles: { en: { minSentenceLength: 50 } },
             customAbbreviations: ['Dr.'],
             alwaysMerge: ['Mr.'],
             sentenceStarters: ['The'],
             minSentenceLength: 50,
             isBibleLexiconEnabled: false
-        } as unknown as ReturnType<typeof useTTSStore.getState>);
+        } as unknown as ReturnType<typeof useTTSSettingsStore.getState>);
 
         await pipeline.loadSection('book1', { sectionId: 's1', characterCount: 100 } as unknown as SectionMetadata, 0, false, 1.0);
 
@@ -146,14 +146,14 @@ describe('AudioContentPipeline - Bible Abbreviations', () => {
     });
 
     it('should inject bible abbreviations when disabled globally but enabled for book', async () => {
-        vi.mocked(useTTSStore.getState).mockReturnValue({
+        vi.mocked(useTTSSettingsStore.getState).mockReturnValue({
             profiles: { en: { minSentenceLength: 50 } },
             customAbbreviations: ['Dr.'],
             alwaysMerge: ['Mr.'],
             sentenceStarters: ['The'],
             minSentenceLength: 50,
             isBibleLexiconEnabled: false
-        } as unknown as ReturnType<typeof useTTSStore.getState>);
+        } as unknown as ReturnType<typeof useTTSSettingsStore.getState>);
 
         vi.mocked(LexiconService.getInstance).mockReturnValue({
             getBibleLexiconPreference: vi.fn().mockResolvedValue('on')

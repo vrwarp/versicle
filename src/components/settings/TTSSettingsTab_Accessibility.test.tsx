@@ -5,8 +5,8 @@ import { describe, it, expect, vi } from 'vitest';
 describe('TTSSettingsTab Accessibility', () => {
     const defaultProps: TTSSettingsTabProps = {
         activeLanguage: 'en',
-        profiles: { en: { voiceId: 'voice1', rate: 1.0, pitch: 1.0, volume: 1.0 } },
-        providerId: 'local',
+        profiles: { en: { voiceId: 'voice1', rate: 1.0, minSentenceLength: 36 } },
+        providerId: 'webspeech',
         onProviderChange: vi.fn(),
         apiKeys: {},
         onApiKeyChange: vi.fn(),

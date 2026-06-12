@@ -12,7 +12,7 @@
 import type { BootTask } from '../bootstrap';
 import { getDeviceId } from '@lib/device-id';
 import { useDeviceStore } from '@store/useDeviceStore';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSSettingsStore, selectActiveRate, selectActiveVoiceId } from '@store/useTTSSettingsStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { getTtsController } from '../tts/TtsController';
 import type { DeviceProfile } from '~types/device';
@@ -33,14 +33,16 @@ export const deviceRegistrationTask: BootTask = {
     const deviceId = getDeviceId();
     const deviceStore = useDeviceStore.getState();
     const prefs = usePreferencesStore.getState();
-    const tts = useTTSStore.getState();
+    const tts = useTTSSettingsStore.getState();
 
     const profile: DeviceProfile = {
       theme: prefs.currentTheme,
       fontSize: prefs.fontSize,
-      ttsVoiceURI: tts.voice ? tts.voice.id : null,
-      ttsRate: tts.rate,
-      ttsPitch: tts.pitch,
+      ttsVoiceURI: selectActiveVoiceId(tts),
+      ttsRate: selectActiveRate(tts),
+      // Profile pitch was dropped in the 5b settings split (nothing applied it);
+      // the synced DeviceProfile shape keeps the field at its neutral value.
+      ttsPitch: 1.0,
     };
 
     if (!deviceStore.devices[deviceId]) {

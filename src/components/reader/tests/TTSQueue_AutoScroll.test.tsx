@@ -1,11 +1,11 @@
 import { render } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TTSQueue } from '../TTSQueue';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 
 // Mock the store
-vi.mock('@store/useTTSStore', () => ({
-  useTTSStore: vi.fn(),
+vi.mock('@store/useTTSPlaybackStore', () => ({
+  useTTSPlaybackStore: vi.fn(),
 }));
 
 // Mock scrollIntoView
@@ -54,7 +54,7 @@ describe('TTSQueue Auto-Scroll', () => {
     mockRects['tts-queue-item-0'] = { top: 0, bottom: 10 };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useTTSStore as any).mockReturnValue({
+    (useTTSPlaybackStore as any).mockReturnValue({
       queue,
       currentIndex: 0,
       jumpTo: vi.fn(),
@@ -69,7 +69,7 @@ describe('TTSQueue Auto-Scroll', () => {
     mockRects['tts-queue-item-1'] = { top: 110, bottom: 120 };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mockStore = (useTTSStore as any);
+    const mockStore = (useTTSPlaybackStore as any);
     mockStore.mockReturnValue({
       queue,
       currentIndex: 0,
@@ -94,7 +94,7 @@ describe('TTSQueue Auto-Scroll', () => {
     mockRects['tts-queue-item-1'] = { top: -180, bottom: -170 };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mockStore = (useTTSStore as any);
+    const mockStore = (useTTSPlaybackStore as any);
     mockStore.mockReturnValue({
       queue,
       currentIndex: 0,
@@ -119,7 +119,7 @@ describe('TTSQueue Auto-Scroll', () => {
     mockRects['tts-queue-item-10'] = { top: 200, bottom: 210 };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mockStore = (useTTSStore as any);
+    const mockStore = (useTTSPlaybackStore as any);
     mockStore.mockReturnValue({
       queue, // Same ref
       currentIndex: 0,
@@ -143,7 +143,7 @@ describe('TTSQueue Auto-Scroll', () => {
     mockRects['tts-queue-item-0'] = { top: 0, bottom: 10 };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useTTSStore as any).mockReturnValue({
+    (useTTSPlaybackStore as any).mockReturnValue({
       queue,
       currentIndex: 0,
       jumpTo: vi.fn(),
@@ -155,7 +155,7 @@ describe('TTSQueue Auto-Scroll', () => {
 
   it('Always scrolls when index resets to 0 (new chapter)', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mockStore = (useTTSStore as any);
+    const mockStore = (useTTSPlaybackStore as any);
 
     // Start at end of previous queue
     mockStore.mockReturnValue({

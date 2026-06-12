@@ -27,7 +27,7 @@
  */
 import type {
     EngineContext,
-    TTSSettingsSnapshot,
+    TTSSettingsData,
     GenAISettingsSnapshot,
     GenAILogEntry,
     AnnotationInput,
@@ -44,7 +44,7 @@ import type {
 
 /** Main-thread → worker state replication messages. */
 export type EngineStateUpdate =
-    | { kind: 'settings'; settings: TTSSettingsSnapshot }
+    | { kind: 'settings'; settings: TTSSettingsData }
     | { kind: 'genAI'; settings: GenAISettingsSnapshot }
     | { kind: 'activeLanguage'; lang: string }
     | { kind: 'bookLanguage'; bookId: string; lang: string }
@@ -108,7 +108,7 @@ export class WorkerEngineContext implements EngineContext {
     // replicated" — and their getters THROW rather than serve a silent default, so a missing
     // pusher is a loud bug, not stale data. Per-book slices are keyed caches; the client
     // pre-pushes the active book's entries before setBookId.
-    private settings: TTSSettingsSnapshot | null = null;
+    private settings: TTSSettingsData | null = null;
     private genAISettings: GenAISettingsSnapshot | null = null;
     private activeLanguage: string | null = null;
     private bookLanguages: Record<string, string> = {};

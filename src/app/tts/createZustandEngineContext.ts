@@ -13,7 +13,7 @@
  */
 import { Capacitor } from '@capacitor/core';
 import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-optimization';
-import { useTTSStore, getDefaultMinSentenceLength } from '@store/useTTSStore';
+import { useTTSSettingsStore, getDefaultMinSentenceLength } from '@store/useTTSSettingsStore';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { useReadingStateStore } from '@store/useReadingStateStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
@@ -25,6 +25,7 @@ import { LexiconService } from '@lib/tts/LexiconService';
 import { bookRepository } from '../repositories/BookRepository';
 import { contentAnalysisRepository } from '../repositories/ContentAnalysisRepository';
 import { genAIService } from '@lib/genai/GenAIService';
+import { toTTSSettingsData } from './replicationSpec';
 import type { EngineContext } from '@lib/tts/engine/EngineContext';
 
 /**
@@ -33,9 +34,11 @@ import type { EngineContext } from '@lib/tts/engine/EngineContext';
 export function createZustandEngineContext(): EngineContext {
     return {
         config: {
-            getActiveLanguage: () => useTTSStore.getState().activeLanguage,
-            setActiveLanguage: (lang) => useTTSStore.getState().setActiveLanguage(lang),
-            getSettings: () => useTTSStore.getState(),
+            getActiveLanguage: () => useTTSSettingsStore.getState().activeLanguage,
+            setActiveLanguage: (lang) => useTTSSettingsStore.getState().setActiveLanguage(lang),
+            // The explicit data-only payload (TTSSettingsData) — same shape the
+            // replication slice pushes to the worker context.
+            getSettings: () => toTTSSettingsData(useTTSSettingsStore.getState()),
             getDefaultMinSentenceLength: (lang) => getDefaultMinSentenceLength(lang),
         },
 

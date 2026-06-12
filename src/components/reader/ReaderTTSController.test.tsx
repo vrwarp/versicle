@@ -1,11 +1,11 @@
 import { render, fireEvent } from '@testing-library/react';
 import { ReaderTTSController } from './ReaderTTSController';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { autoResetStores, makeTTSQueue, seedStore } from '@test/harness';
 import type { Rendition } from 'epubjs';
 
-// Harness migration (Phase 0): seeds the REAL useTTSStore (state via
+// Harness migration (Phase 0): seeds the REAL useTTSPlaybackStore (state via
 // setState) instead of vi.mock'ing the store module, so the test compiles
 // against the real TTSState shape. Engine commands moved to the
 // TtsController facade at Phase 5b-PR1, so the command spies mock the
@@ -38,7 +38,7 @@ const mockRendition = {
 };
 
 describe('ReaderTTSController', () => {
-    autoResetStores(useTTSStore);
+    autoResetStores(useTTSPlaybackStore);
 
     beforeEach(() => {
         vi.spyOn(console, 'error').mockImplementation(() => { });
@@ -50,7 +50,7 @@ describe('ReaderTTSController', () => {
     });
 
     const setup = (status: 'playing' | 'paused' | 'stopped' = 'stopped', queueLength = 5, currentIndex = 0) => {
-        seedStore(useTTSStore, {
+        seedStore(useTTSPlaybackStore, {
             activeCfi: 'epubcfi(/6/4!/4/2)',
             currentIndex,
             status,

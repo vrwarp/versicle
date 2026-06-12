@@ -30,8 +30,8 @@ vi.mock('../ui/Slider', () => ({
 describe('TTSSettingsTab', () => {
     const defaultProps: TTSSettingsTabProps = {
         activeLanguage: 'en',
-        profiles: { en: { voiceId: 'voice1', rate: 1.0, pitch: 1.0, volume: 1.0 } },
-        providerId: 'local',
+        profiles: { en: { voiceId: 'voice1', rate: 1.0, minSentenceLength: 36 } },
+        providerId: 'webspeech',
         onProviderChange: vi.fn(),
         apiKeys: {},
         onApiKeyChange: vi.fn(),
@@ -228,8 +228,9 @@ describe('TTSSettingsTab', () => {
     it('renders the provider choices from the registry (single source of truth)', () => {
         render(<TTSSettingsTab {...defaultProps} />);
 
-        // jsdom is the web platform: device provider surfaces under 'local'.
-        expect(screen.getByTestId('select-item-local')).toHaveTextContent('Web Speech (Local)');
+        // jsdom is the web platform: device provider surfaces under its real
+        // post-split id (5b-PR3 — 'local' is migration-mapped, never offered).
+        expect(screen.getByTestId('select-item-webspeech')).toHaveTextContent('Web Speech (Local)');
         expect(screen.getByTestId('select-item-piper')).toHaveTextContent('Piper (High Quality Local)');
         expect(screen.getByTestId('select-item-google')).toHaveTextContent('Google Cloud TTS');
         expect(screen.getByTestId('select-item-openai')).toHaveTextContent('OpenAI');

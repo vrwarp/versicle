@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { useShallow } from 'zustand/react/shallow';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '@lib/tts/TextSegmenter';
 import { X, Plus, RotateCcw, Download, Upload } from 'lucide-react';
@@ -245,7 +245,7 @@ export const TTSAbbreviationSettings: React.FC = () => {
         customAbbreviations, setCustomAbbreviations,
         alwaysMerge, setAlwaysMerge,
         sentenceStarters, setSentenceStarters
-    } = useTTSStore(useShallow(state => ({
+    } = useTTSSettingsStore(useShallow(state => ({
         // Optimization: Prevent re-renders on TTS playback ticks
         customAbbreviations: state.customAbbreviations,
         setCustomAbbreviations: state.setCustomAbbreviations,
@@ -255,7 +255,7 @@ export const TTSAbbreviationSettings: React.FC = () => {
         setSentenceStarters: state.setSentenceStarters
     })));
 
-    const { isBibleLexiconEnabled, setBibleLexiconEnabled } = useTTSStore(useShallow(state => ({
+    const { isBibleLexiconEnabled, setBibleLexiconEnabled } = useTTSSettingsStore(useShallow(state => ({
         isBibleLexiconEnabled: state.isBibleLexiconEnabled,
         setBibleLexiconEnabled: state.setBibleLexiconEnabled
     })));

@@ -64,6 +64,8 @@ vi.mock('../genai/GenAIService', () => ({
 
 // Mock TextSegmenter explicitly
 vi.mock('./TextSegmenter', () => ({
+    DEFAULT_ALWAYS_MERGE: [],
+    DEFAULT_SENTENCE_STARTERS: [],
     TextSegmenter: {
         refineSegments: vi.fn((segments) => segments)
     }

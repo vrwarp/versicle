@@ -9,12 +9,12 @@
  * (`createWorkerEngineClient` / `getInProcessAudioPlayer`), so `src/lib/tts`
  * carries no provider-path store import.
  */
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import type { ProviderBuildContext } from '@lib/tts/providers/registry';
 
 /** Build-context inputs for a provider id, read live from the settings store. */
 export function storeProviderBuildContext(providerId: string): Omit<ProviderBuildContext, 'sink'> {
-    const { apiKeys, activeLanguage } = useTTSStore.getState();
+    const { apiKeys, activeLanguage } = useTTSSettingsStore.getState();
     return {
         apiKey: (apiKeys as Record<string, string | undefined>)[providerId],
         language: activeLanguage || 'en',

@@ -2,7 +2,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { GlobalSettingsDialog } from './GlobalSettingsDialog';
 import { useUIStore } from '@store/useUIStore';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
 import { renderWithStores, storeSeed, makeTTSVoice } from '@test/harness';
 
@@ -46,8 +47,10 @@ describe('GlobalSettingsDialog Predictability', () => {
     const { unmount } = renderWithStores(<GlobalSettingsDialog />, {
       seeds: [
         storeSeed(useUIStore, { isGlobalSettingsOpen: true }),
-        storeSeed(useTTSStore, {
+        storeSeed(useTTSSettingsStore, {
           providerId: 'piper',
+        }),
+        storeSeed(useTTSPlaybackStore, {
           voice: makeTTSVoice({ id: 'voice1', provider: 'piper' }),
         }),
       ],

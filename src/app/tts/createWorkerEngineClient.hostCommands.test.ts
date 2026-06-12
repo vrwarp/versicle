@@ -21,8 +21,8 @@ const { stores } = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('@store/useTTSStore', () => ({
-    useTTSStore: { getState: () => stores.tts, subscribe: vi.fn(() => () => {}) },
+vi.mock('@store/useTTSSettingsStore', () => ({
+    useTTSSettingsStore: { getState: () => stores.tts, subscribe: vi.fn(() => () => {}) },
 }));
 vi.mock('@store/useReadingStateStore', () => ({
     useReadingStateStore: { getState: () => stores.reading, subscribe: vi.fn(() => () => {}) },

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { resolveDescriptor } from '@lib/tts/providers/registry';
 import { storeProviderBuildContext } from '@app/tts/providerBuildContext';
-import { useTTSStore } from './useTTSStore';
+import { useTTSSettingsStore } from './useTTSSettingsStore';
 import { Capacitor } from '@capacitor/core';
 
 /** The production composition: registry descriptor + store-backed build context. */
@@ -57,22 +57,17 @@ vi.mock('@lib/tts/providers/OpenAIProvider', () => ({
 describe('Provider selection (factory platform detection + store build context)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        // Reset store state
-        useTTSStore.setState({
+        // Reset store state (the persisted settings half of the 5b split)
+        useTTSSettingsStore.setState({
             activeLanguage: 'en',
             profiles: {
-                en: { voiceId: null, rate: 1, pitch: 1, volume: 1 }
+                en: { voiceId: null, rate: 1, minSentenceLength: 36 }
             },
-            providerId: 'local',
+            providerId: 'webspeech',
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             apiKeys: { google: 'g-key', openai: '' } as any,
             backgroundAudioMode: 'silence',
             whiteNoiseVolume: 0.1,
-            rate: 1,
-            pitch: 1,
-            voice: null,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            voices: [{ id: 'test-en', name: 'Test English', lang: 'en-US', provider: 'local' } as any]
         });
     });
 

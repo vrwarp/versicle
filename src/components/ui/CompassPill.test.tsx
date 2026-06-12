@@ -2,7 +2,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { CompassPill } from './CompassPill';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 
 // Mock Lucide icons
 vi.mock('lucide-react', () => ({
@@ -22,10 +22,9 @@ vi.mock('lucide-react', () => ({
     ArrowUpCircle: () => <span data-testid="icon-arrow-up-circle" />,
 }));
 
-// Mock useTTSStore
-vi.mock('@store/useTTSStore', () => ({
-    getDefaultMinSentenceLength: () => 36,
-    useTTSStore: vi.fn()
+// Mock the ephemeral playback store (the component's only TTS store read)
+vi.mock('@store/useTTSPlaybackStore', () => ({
+    useTTSPlaybackStore: vi.fn()
 }));
 
 // Mock the command facade (engine commands moved off the store at 5b-PR1)
@@ -69,7 +68,7 @@ describe('CompassPill', () => {
     });
 
     it('renders sync-alert mode correctly', () => {
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: false,
             queue: [],
             currentIndex: 0,
@@ -108,7 +107,7 @@ describe('CompassPill', () => {
 
     it('dispatches reader:chapter-nav event when "prev" button is clicked and not playing', () => {
         // Setup not playing
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: false,
             queue: [{ title: 'Item 1' }],
             currentIndex: 0,
@@ -132,7 +131,7 @@ describe('CompassPill', () => {
 
     it('dispatches reader:chapter-nav event when "next" button is clicked and not playing', () => {
         // Setup not playing
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: false,
             queue: [{ title: 'Item 1' }],
             currentIndex: 0,
@@ -156,7 +155,7 @@ describe('CompassPill', () => {
 
     it('dispatches reader:chapter-nav event when "next" button is clicked and playing', () => {
         // Setup playing
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: true,
             queue: [{ title: 'Item 1' }],
             currentIndex: 5,
@@ -185,7 +184,7 @@ describe('CompassPill', () => {
     });
 
     it('renders compact mode correctly', () => {
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: false,
             queue: [{ title: 'Item 1' }],
             currentIndex: 0,
@@ -201,7 +200,7 @@ describe('CompassPill', () => {
     });
 
     it('toggles play/pause in compact mode', () => {
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: false,
             queue: [{ title: 'Item 1' }],
             currentIndex: 0,
@@ -217,7 +216,7 @@ describe('CompassPill', () => {
     });
 
     it('pauses when playing in compact mode', () => {
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: true,
             queue: [{ title: 'Item 1' }],
             currentIndex: 0,
@@ -234,7 +233,7 @@ describe('CompassPill', () => {
 
     it('has consistent aria-labels in active mode', () => {
         // Setup not playing
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: false,
             queue: [{ title: 'Item 1' }],
             currentIndex: 0,
@@ -252,7 +251,7 @@ describe('CompassPill', () => {
         expect(nextButton).toHaveAttribute('aria-label', 'Next chapter');
 
         // Setup playing
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: true,
             queue: [{ title: 'Item 1' }],
             currentIndex: 0,
@@ -271,7 +270,7 @@ describe('CompassPill', () => {
     });
 
     it('renders summary mode correctly and handles interactions', () => {
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: false,
             queue: [],
             currentIndex: 0,
@@ -316,7 +315,7 @@ describe('CompassPill', () => {
 
     it('shows playback indicator in active mode', () => {
         // Paused state
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: false,
             queue: [{ title: 'Item 1' }],
             currentIndex: 0,
@@ -332,7 +331,7 @@ describe('CompassPill', () => {
         expect(screen.queryByTestId('active-pause-icon')).not.toBeInTheDocument();
 
         // Playing state
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: true,
             queue: [{ title: 'Item 1' }],
             currentIndex: 0,
@@ -349,7 +348,7 @@ describe('CompassPill', () => {
     });
 
     it('renders annotation mode with accessible color buttons', () => {
-        vi.mocked(useTTSStore).mockReturnValue({
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: false,
             queue: [],
             currentIndex: 0,

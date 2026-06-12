@@ -7,7 +7,7 @@ import { useBookStore } from '@store/useBookStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useBook } from '@store/selectors';
 import { useShallow } from 'zustand/react/shallow';
-import { useTTSStore } from '@store/useTTSStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useUIStore } from '@store/useUIStore';
 import { useTTS } from '@hooks/useTTS';
 import { useEpubReader, type EpubReaderOptions } from '@hooks/useEpubReader';
@@ -169,9 +169,9 @@ export const ReaderView: React.FC = () => {
     const audio = useAudioCommands();
 
     // Optimization: Select only necessary state to prevent re-renders on every activeCfi/currentIndex change
-    const isPlaying = useTTSStore(state => state.isPlaying);
-    const lastError = useTTSStore(state => state.lastError);
-    const clearError = useTTSStore(state => state.clearError);
+    const isPlaying = useTTSPlaybackStore(state => state.isPlaying);
+    const lastError = useTTSPlaybackStore(state => state.lastError);
+    const clearError = useTTSPlaybackStore(state => state.clearError);
     const isDebugModeEnabled = useGenAIStore(state => state.isDebugModeEnabled);
 
     const loadAnnotations = useAnnotationStore(state => state.loadAnnotations);
@@ -894,7 +894,7 @@ export const ReaderView: React.FC = () => {
     // Listen for custom chapter navigation events from CompassPill
     useEffect(() => {
         const handleChapterNav = (e: CustomEvent<{ direction: 'next' | 'prev' }>) => {
-            const { status } = useTTSStore.getState();
+            const { status } = useTTSPlaybackStore.getState();
             const isTTSActive = status !== 'stopped';
 
             if (isTTSActive) {
@@ -975,7 +975,7 @@ export const ReaderView: React.FC = () => {
 
     const handlePlayFromSelection = useCallback((cfiRange: string) => {
         // The queue is engine state replicated into the store via the engine subscription.
-        const queue = useTTSStore.getState().queue;
+        const queue = useTTSPlaybackStore.getState().queue;
         if (!queue || queue.length === 0 || !rendition) return;
 
         try {
