@@ -60,4 +60,27 @@ describe('registry==CSP invariant', () => {
   it('documents that no remote-code destination exists at HEAD (5a vendored onnxruntime)', () => {
     expect(EGRESS_DESTINATIONS.filter((d) => d.dataClass === 'remote-code')).toEqual([]);
   });
+
+  describe('regression: the strict flip holds (Phase 8 §H)', () => {
+    it('the bare https: scheme wildcard appears in NO directive', () => {
+      // The pre-P8 policy carried `https:` in connect-src AND img-src —
+      // it ENUMERATED the registry without enforcing it. From the strict
+      // flip on, every fetch destination must be a registry host; a
+      // reappearing scheme wildcard would silently undo the enforcement.
+      for (const [directive, sources] of parseCsp(renderCsp())) {
+        expect(sources, `bare https: wildcard in ${directive}`).not.toContain('https:');
+        expect(sources, `bare http: wildcard in ${directive}`).not.toContain('http:');
+      }
+    });
+
+    it('img-src stays covers-capable but remote-closed (self data: blob: only)', () => {
+      expect(parseCsp(renderCsp()).get('img-src')).toEqual(["'self'", 'data:', 'blob:']);
+    });
+
+    it('connect-src is exactly self + blob: + the registry hosts', () => {
+      const connect = parseCsp(renderCsp()).get('connect-src') ?? [];
+      const expected = ["'self'", 'blob:', ...allRegistryHosts().map((h) => `https://${h}`)];
+      expect([...connect].sort()).toEqual([...expected].sort());
+    });
+  });
 });

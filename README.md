@@ -130,6 +130,30 @@ npm run dev
 npm run build
 ```
 
+#### Self-hosting and the Content-Security-Policy
+
+The CSP is **strict** (no `https:` wildcard since Phase 8) and **generated**
+from the egress destination registry (`src/kernel/net/destinations.ts`). The
+committed `nginx.conf` carries the generated policy; the vite preview headers
+and the build-time `index.html` meta tag render it from the same source, and
+`src/kernel/net/csp.test.ts` fails CI if any copy drifts.
+
+If you self-host with your **own Firebase project**: the policy enumerates
+the standard `*.googleapis.com` / `*.firebaseio.com` endpoints, and Firebase
+auth is proxied same-origin via `/__/auth/` (see `nginx.conf`). A custom
+`authDomain` contacted *directly* (not through that proxy) is not in the
+generated policy — keep the proxy, or extend the registry and regenerate the
+committed copy:
+
+```bash
+npm run generate:csp   # rewrites nginx.conf from the registry
+```
+
+Remote images inside EPUBs are stripped at sanitize time (privacy: no
+tracking pixels) and additionally blocked by the strict `img-src` — book
+covers and embedded EPUB resources are unaffected (they are local
+blob/data URLs).
+
 ### Testing
 
 **`TESTING.md` is the canonical testing document** — all commands below and

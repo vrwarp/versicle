@@ -18,6 +18,8 @@
     "check:single-instance": "node scripts/assert-single-instance.cjs",
     "licenses:generate": "node scripts/generate-third-party-notices.mjs",
     "licenses:check": "node scripts/license-gate.mjs",
+    "generate:csp": "node scripts/generate-csp.mjs",
+    "generate:csp:check": "node scripts/generate-csp.mjs --check",
     "compile-dict": "node scripts/compile-dict.cjs",
     "generate-trad2simp": "node scripts/generate-trad2simp.mjs",
     "test": "vitest run",

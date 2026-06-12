@@ -15,13 +15,16 @@
  * the rendered connect-src AND the committed nginx.conf carries exactly the
  * rendered policy. Editing the registry without regenerating fails CI.
  *
- * STRICTNESS NOTE (deliberate, per the prep doc's PR-N1/P8 split): the
- * rendered connect-src still contains the legacy `https:` scheme wildcard,
- * so this policy ENUMERATES the registry without yet ENFORCING it. The
- * strict flip (dropping `https:` from connect-src and img-src) is Phase 8's
- * call, after Piper offline behavior is verified — flipping early would
- * break Drive/Firebase/HF for users mid-rollout (privacy report migration
- * note: "Do CSP last").
+ * STRICTNESS (Phase 8 §H — the strict flip is DONE): the legacy `https:`
+ * scheme wildcard is gone from connect-src AND img-src, so the policy now
+ * ENFORCES the registry: only enumerated hosts can be contacted. Flipped
+ * after (a) the §G runtime caching landed (Piper offline verified) and
+ * (b) the sanitizer strips remote EPUB resources (src/lib/sanitizer.ts —
+ * the functional replacement for `img-src https:`; tracking pixels die).
+ * Known limitation (documented in README §Self-hosting): a BYO-Firebase
+ * custom authDomain contacted DIRECTLY is not enumerable here — web
+ * deploys proxy it same-origin via /__/auth (nginx + vite server proxy);
+ * self-hosters changing the registry must run `npm run generate:csp`.
  *
  * MODULE CONSTRAINTS: imported by scripts/generate-csp.mjs under Node type
  * stripping — erasable syntax only, relative import WITH .ts extension, no
@@ -37,7 +40,9 @@ const STATIC_DIRECTIVES: readonly (readonly [string, string])[] = [
     "'self' 'unsafe-inline' 'unsafe-eval' blob: https://apis.google.com https://*.firebaseapp.com",
   ],
   ['style-src', "'self' 'unsafe-inline' blob:"],
-  ['img-src', "'self' data: blob: https:"],
+  // Strict since Phase 8 §H: covers are blob:/SW-served same-origin;
+  // remote EPUB images are stripped by the sanitizer (no tracking pixels).
+  ['img-src', "'self' data: blob:"],
   ['font-src', "'self' data:"],
 ];
 
@@ -45,8 +50,8 @@ const STATIC_DIRECTIVES: readonly (readonly [string, string])[] = [
 export function connectSrcSources(): string[] {
   return [
     "'self'",
-    // Legacy scheme wildcard — dropped at the P8 strict flip (see header).
-    'https:',
+    // The legacy `https:` scheme wildcard died at the P8 §H strict flip:
+    // from here, every fetch destination must be in the egress registry.
     'blob:',
     ...allRegistryHosts().map((h) => `https://${h}`),
   ];
