@@ -760,6 +760,13 @@ order; see the README status banner). Deliberately deferred work, with owners:
    on IDB-synced; they want hydrated state and migrate with the Phase 4
    decomposition (lib/ cannot import the app/boot composition today without
    regressing the lib→store/app boundary ratchets).
+   **P9 settlement note (p9-fork-and-deferred): deliberately NOT migrated.**
+   The FirestoreSyncManager site died with the manager (P4); the surviving
+   BackupService/LexiconService callers read the **Y.Doc itself** (export
+   state, lexicon maps), not store state — for doc reads, IDB-synced is the
+   semantically sufficient gate and `whenHydrated` would only add the
+   store-rebind wait. Revisit only if those readers move onto store
+   selectors.
 4. **Zod observe-mode schemas (C2, P2-6 scope-down).** The registry landed
    without the optional per-store `schema?: ZodType` observe-mode validation
    (log + flight recorder, never reject). The seam is unchanged — add the

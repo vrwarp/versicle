@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
 import { Progress } from '../ui/Progress';
+import { StorageUsageSummary } from './StorageUsageSummary';
 
 export interface DataManagementTabProps {
     // Reading List
@@ -140,6 +141,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                 <p className="text-sm text-muted-foreground">
                     Tools to keep the database healthy.
                 </p>
+                <StorageUsageSummary />
                 <div className="flex flex-col gap-2">
                     <Button onClick={onRepairDB} variant="outline" disabled={isScanning} className="gap-2">
                         {isScanning && (

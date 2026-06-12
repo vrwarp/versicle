@@ -48,16 +48,24 @@ Inputs: `plan/overhaul/README.md` (master plan), `proposals/strangler-incrementa
 >    had already unified them into `genaiReady.ts` (AudioContentPipeline died at 5c-PR2);
 >    its DEV-gated `isMockGenAISeamActive()` localStorage read — the LAST `mockGenAIResponse`
 >    consumer — is deleted. Mocking is exclusively `__versicleTest.genai.setMock()`.
-> 3. Per-book consent is observe-mode: explicit `aiConsent[bookId] === false` denies at the
->    gateway, but the "ask on first TTS play" prompt + bookId threading through the
->    EngineContext GenAI port are TTS-UI work (5c shipped without it); until then
->    non-interactive calls without a bookId are legacy-allowed (documented in
->    app/google/aiConsent.ts).
+> 3. ~~Per-book consent is observe-mode…~~ **DONE (P9, p9-fork-and-deferred):**
+>    the "ask on first TTS play" prompt landed (app/google/aiConsentPrompt.ts,
+>    wired into TtsController.play + autoplay loads; ask-once, persists both
+>    answers, grandfathers analyzed books) and the EngineContext GenAI port
+>    threads bookId from both TTS analysis callers through both transports —
+>    the resolver exited observe-mode (default-DENY for bookId-carrying
+>    calls). Calls WITHOUT a bookId (smart TOC/link, user-initiated) keep the
+>    legacy allow. Consent-management settings UI for stored bits remains a
+>    recorded follow-up.
 > 4. `aiConsent` lives in the device-scoped preferences map (the doc's "synced preferences");
 >    consent therefore syncs per device — grandfathering via synced contentAnalysis records
 >    covers cross-device continuity. Revisit if a user-global home appears.
-> 5. GenAIService façade + lib/drive façades carry deletion deadlines (phase exit) once
->    consumers adopt the domain clients directly.
+> 5. ~~GenAIService façade + lib/drive façades carry deletion deadlines…~~
+>    **DONE (P9, p9-fork-and-deferred):** all three façades DELETED; engine
+>    transports consume app/tts/genaiPort.ts (deep dynamic feature imports
+>    preserved), UI consumers call getGenAIClient()/the feature modules, and
+>    the drive call sites carry the interactive/silent policy explicitly via
+>    getDriveClient()/getDriveLibrarySync().
 > 6. Android device check (PR-A1): @capgo repeated-login-with-different-scopes remains
 >    unverified-on-device (not testable in this environment).
 > 7. T1 library and T2 search tracks of this doc are NOT part of this sub-track.

@@ -521,8 +521,27 @@ P2 prep).
 
 ## Follow-ups (appended at phase close, 2026-06-11)
 
-Phase 4 closed with P4-0/2/3a/3/4/5/6 landed (the manager is deleted; staged swap + honest
-delete are live). Deferred work and execution deltas, in priority order:
+> **P9 settlement (2026-06-12, p9-fork-and-deferred):** items 1–4 are PAID —
+> (1) y-cinder vendored to `packages/y-cinder` (pinned SHA 9c5c205e,
+> LICENSE/PROVENANCE, peers, F.1–F.7 contract suite + the fork's unit suite
+> ported; single-instance check extended to firebase) with the `saved`
+> fork delta (surgery 1) AND a recorded-deviation `sync` handshake emit
+> (surgery 2 — see PROVENANCE.md for the evidence; the C3 `synced` event
+> never fired on the real transport, and the §D8 emulator collapse needed
+> it); the transitional connected-transition lastSyncTime floor in
+> wireSyncEvents is DELETED (the named canary); the emulator contract
+> runner hosts `new FirestoreBackend(uid)` + the vendored provider against
+> the auth+firestore+storage trio with connect/savedEvent/purge
+> capabilities on — VERIFIED green against a locally running emulator trio,
+> including the Storage-blob purge half (item 7's storage note, paid).
+> (2) The dead `getRedirectResult` flow is DELETED with static evidence
+> (no `signInWithRedirect` caller exists; the SDK returns null without
+> one) — the `signed-in-via-redirect` event and catalog key died with it;
+> the SocialLogin web sign-in QA pass remains an out-of-environment item.
+> (3) DataRecoveryView reads via `readSnapshot` (the third temp-doc dance
+> is gone). (4) android-backup: ADR 0002 (delete, not wire) + the cluster
+> deleted. Item 5's `useSyncToasts` rewrite also landed in P9 (reference
+> diffing via zustand's (state, prevState); first behavior suite added).
 
 1. **P4-1 y-cinder vendoring + the `saved` fork delta (§D6) did NOT land.** `package.json`
    still pins `github:vrwarp/y-cinder#9c5c205e…`. Consequences, all explicitly designed for:

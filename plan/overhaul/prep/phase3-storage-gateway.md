@@ -719,7 +719,8 @@ owners:
    schema frozen in `rows/app.ts` (▲16). P4's SyncEvent design decides; P9
    deletes it otherwise.
 3. **android-backup keep-or-delete ADR — P4 (▲17).** Unwired at HEAD; passive
-   v3 format adapter; cost nothing during P3.
+   v3 format adapter; cost nothing during P3. **DONE (P9):** ADR 0002
+   decided delete-not-wire; the cluster is gone.
 4. **Eviction scan onto `by_lastAccessed` — next audioCache touch (any phase).**
    v25 added the index and the `size` backfill; the sweep still does the
    full-cursor total-bytes pass (it needs the total anyway). Re-pointing pass 2
@@ -733,6 +734,8 @@ owners:
    5 above; item 2 if P4 declines.
 7. **`storage.estimate()` surfacing in settings — P8.** `storage.persist()` is
    requested at first open (D2); the UI surface was always P8 scope.
+   **DONE (P9):** `StorageUsageSummary` in the Data Management tab (the P8
+   settings pass had left it open).
 8. **Full all-stores orphan coverage in MaintenanceService — stretch goal,
    unowned.** The orphan scan/prune migrated onto repo methods (P3-8); coverage
    of every store pairing was explicitly a non-exit-criterion stretch goal and
