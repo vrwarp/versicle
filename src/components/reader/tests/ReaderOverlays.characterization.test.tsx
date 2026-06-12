@@ -37,6 +37,7 @@ import { useAnnotationStore } from '@store/useAnnotationStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { TYPE_COLORS } from '~types/content-analysis';
+import { getActiveReaderEngine } from '@domains/reader/engine/activeEngineRegistry';
 import type { UserAnnotation } from '~types/db';
 import ePub from 'epubjs';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
@@ -118,8 +119,6 @@ describe('characterization: reader overlay systems (P6 entry gate)', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.clearAllMocks();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (window as any).__reader_added_annotations_count;
 
     containerEl = document.createElement('div');
 
@@ -236,9 +235,10 @@ describe('characterization: reader overlay systems (P6 entry gate)', () => {
         expect(c[0]).toBe('highlight');
         expect(typeof c[3]).toBe('function');
       }
-      // The E2E-polled counter reflects the tracked map size.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((window as any).__reader_added_annotations_count).toBe(4);
+      // CHARACTERIZATION DELTA (engine port): the E2E-polled counter moved
+      // from the raw `__reader_added_annotations_count` global to the
+      // engine's HighlightLayerManager (via __versicleTest.reader).
+      expect(getActiveReaderEngine()?.highlights.count('annotation')).toBe(4);
     });
 
     it('adds audio-bookmark annotations with the pending striped class', async () => {
@@ -279,8 +279,7 @@ describe('characterization: reader overlay systems (P6 entry gate)', () => {
       await waitFor(() =>
         expect(mockAnnotations.remove).toHaveBeenCalledWith('epubcfi(/6/4!/4/2,/1:0,/1:5)', 'highlight'),
       );
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((window as any).__reader_added_annotations_count).toBe(1);
+      expect(getActiveReaderEngine()?.highlights.count('annotation')).toBe(1);
     });
   });
 

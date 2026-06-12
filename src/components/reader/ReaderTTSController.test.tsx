@@ -4,7 +4,17 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { autoResetStores, makeTTSQueue, seedStore } from '@test/harness';
 import { HighlightLayerManager, type AnnotatingRendition } from '@domains/reader/engine/HighlightLayerManager';
-import type { Rendition } from 'epubjs';
+import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
+
+// Engine-port stub over a fake rendition: the controller consumes only
+// display() + highlights, and the pins below keep asserting the underlying
+// epub.js (fake rendition) call shapes — unchanged through the port cutover.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const makeEngineStub = (rendition: any): ReaderEngine =>
+    ({
+        display: rendition.display,
+        highlights: new HighlightLayerManager(rendition as AnnotatingRendition),
+    }) as unknown as ReaderEngine;
 
 // Harness migration (Phase 0): seeds the REAL useTTSPlaybackStore (state via
 // setState) instead of vi.mock'ing the store module, so the test compiles
@@ -61,8 +71,7 @@ describe('ReaderTTSController', () => {
 
         return render(
             <ReaderTTSController
-                rendition={mockRendition as unknown as Rendition}
-                highlights={new HighlightLayerManager(mockRendition as unknown as AnnotatingRendition)}
+                engine={makeEngineStub(mockRendition)}
                 viewMode="paginated"
             />
         );
@@ -163,8 +172,7 @@ describe('ReaderTTSController', () => {
             });
             return render(
                 <ReaderTTSController
-                    rendition={rendition as unknown as Rendition}
-                    highlights={new HighlightLayerManager(rendition as unknown as AnnotatingRendition)}
+                    engine={makeEngineStub(rendition)}
                     viewMode="paginated"
                 />
             );

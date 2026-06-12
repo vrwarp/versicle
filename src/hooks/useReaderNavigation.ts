@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
+import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 
 interface UseReaderNavigationProps {
-    rendition: unknown;
+    engine: ReaderEngine | null;
     readerViewMode: 'paginated' | 'scrolled';
     handlePrev: () => void;
     handleNext: () => void;
@@ -11,7 +12,7 @@ interface UseReaderNavigationProps {
 }
 
 export function useReaderNavigation({
-    rendition,
+    engine,
     readerViewMode,
     handlePrev,
     handleNext,
@@ -114,18 +115,20 @@ export function useReaderNavigation({
         // 1. Listen on the parent window (active when clicking menus, buttons, HUD)
         window.addEventListener('keydown', handleKeyDown);
 
-        // 2. Listen on the iframe via the epubjs rendition (active when clicking the book text)
-        if (rendition) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (rendition as any).on('keydown', handleKeyDown);
+        // 2. Listen on the forwarded iframe keydown stream via the engine port
+        //    (active when clicking the book text — the P0 hotfix path)
+        let unsubscribe: (() => void) | undefined;
+        if (engine) {
+            unsubscribe = engine.subscribe((event) => {
+                if (event.type === 'keydown') {
+                    handleKeyDown(event.event);
+                }
+            });
         }
 
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
-            if (rendition) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (rendition as any).off('keydown', handleKeyDown);
-            }
+            unsubscribe?.();
         };
-    }, [rendition, handlePrev, handleNext]);
+    }, [engine, handlePrev, handleNext]);
 }

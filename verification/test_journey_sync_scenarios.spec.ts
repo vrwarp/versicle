@@ -133,11 +133,11 @@ test("seamless handoff", async ({ browser, baseURL }) => {
     }
 
     await expect(pageA.getByTestId("reader-iframe-container")).toBeVisible();
-    await pageA.waitForFunction("window.rendition && window.rendition.location");
+    await pageA.waitForFunction("window.__versicleTest?.reader?.currentCfi()");
     // Wait for rendition manager and locations to be initialized (WebKit may need more time)
-    await pageA.waitForFunction("window.rendition && window.rendition.manager").catch(() => {});
+    await pageA.waitForFunction("window.__versicleTest?.reader?.hasManager()").catch(() => {});
     await pageA.waitForFunction(
-      "window.rendition && window.rendition.book && window.rendition.book.locations && window.rendition.book.locations.total() > 0",
+      "(window.__versicleTest?.reader?.locationsTotal() ?? 0) > 0",
       { timeout: 30000 }
     ).catch(() => {});
 
@@ -281,7 +281,7 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   await expect(pageB.getByTestId("reader-iframe-container")).toBeVisible({ timeout: 15000 });
 
   // Wait for rendition to load and calculate progress
-  await pageB.waitForFunction("window.rendition && window.rendition.location");
+  await pageB.waitForFunction("window.__versicleTest?.reader?.currentCfi()");
 
   // Go back to library
   await pageB.getByTestId("reader-back-button").click();
@@ -315,7 +315,7 @@ test("note marker affordance", async ({ browser, baseURL }) => {
   await expect(readerContainer).toBeVisible({ timeout: 10000 });
 
   // Wait for rendition to be ready
-  await page.waitForFunction("window.rendition && window.rendition.location");
+  await page.waitForFunction("window.__versicleTest?.reader?.currentCfi()");
   await page.waitForTimeout(1000);
 
   // Jump straight to a content chapter via the TOC. Turning pages with

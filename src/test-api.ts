@@ -27,6 +27,8 @@ import { wipeAllData } from './data/wipe';
 import { MockGenAIClient, setGenAIClient, type MockGenAIFixture } from './domains/google';
 import { useContentAnalysisStore } from './store/useContentAnalysisStore';
 import { useGenAIStore } from './store/useGenAIStore';
+import { getActiveReaderEngine } from './domains/reader/engine/activeEngineRegistry';
+import type { HighlightLayerId } from './domains/reader/engine/highlightStyles';
 import { createLogger } from './lib/logger';
 
 const logger = createLogger('TestApi');
@@ -97,6 +99,24 @@ export interface VersicleTestApi {
     sectionId: string,
     payload: { referenceStartCfi: string },
   ): void;
+
+  /**
+   * Typed reader predicates over the live ReaderEngine (Phase 6 §2b) —
+   * the named replacements for the exact `window.rendition` /
+   * `__reader_added_annotations_count` polls the E2E suite used to do.
+   * All methods are safe before a reader mounts (null/0/false).
+   */
+  reader: {
+    isReady(): boolean;
+    currentCfi(): string | null;
+    currentHref(): string | null;
+    locationsTotal(): number;
+    hasManager(): boolean;
+    highlightCount(layer: HighlightLayerId): number;
+    next(): Promise<void>;
+    prev(): Promise<void>;
+    display(target: string): Promise<void>;
+  };
 }
 
 declare global {
@@ -169,6 +189,17 @@ export function installTestApi(): void {
         .getState()
         .saveReferenceStartCfi(bookId, sectionId, payload.referenceStartCfi);
       logger.info(`Seeded content analysis for ${bookId}/${sectionId} (test API)`);
+    },
+    reader: {
+      isReady: () => getActiveReaderEngine()?.status === 'ready',
+      currentCfi: () => getActiveReaderEngine()?.currentLocation()?.startCfi ?? null,
+      currentHref: () => getActiveReaderEngine()?.currentLocation()?.sectionHref ?? null,
+      locationsTotal: () => getActiveReaderEngine()?.locations.length() ?? 0,
+      hasManager: () => getActiveReaderEngine()?.getOverlayContainer() != null,
+      highlightCount: (layer) => getActiveReaderEngine()?.highlights.count(layer) ?? 0,
+      next: () => getActiveReaderEngine()?.next() ?? Promise.resolve(),
+      prev: () => getActiveReaderEngine()?.prev() ?? Promise.resolve(),
+      display: (target) => getActiveReaderEngine()?.display(target) ?? Promise.resolve(),
     },
   };
   window.__versicleTest = api;

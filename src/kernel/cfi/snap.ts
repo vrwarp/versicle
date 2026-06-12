@@ -9,17 +9,37 @@ import type { Book } from 'epubjs';
 import { getCachedSegmenter } from '../locale/segmenterCache';
 import { cfiFromRange } from './epubcfiShim';
 
+/**
+ * Anything that can resolve a CFI to a live DOM Range — the P6 handoff
+ * contract (phase6-reader-engine.md §1): the ReaderEngine port implements
+ * this, so reader-side snapping no longer needs the raw epubjs Book. An
+ * epubjs Book satisfies it structurally (Book.getRange(cfi) → Promise<Range>).
+ */
+export interface CfiRangeResolver {
+    getRange(cfi: string): Promise<Range | null>;
+}
+
 /** Best-effort book language from the epubjs OPF metadata; undefined when absent. */
-function bookLanguage(book: Book): string | undefined {
-    const packaging = (book as unknown as { packaging?: { metadata?: { language?: string } } }).packaging;
+function bookLanguage(source: Book | CfiRangeResolver): string | undefined {
+    const packaging = (source as unknown as { packaging?: { metadata?: { language?: string } } }).packaging;
     const lang = packaging?.metadata?.language;
     return lang && typeof lang === 'string' ? lang : undefined;
 }
 
 /**
+ * Heuristic: a raw epubjs Book (vs an injected resolver). Books carry a
+ * spine; the legacy lifecycle guard below only applies to them.
+ */
+function looksLikeBook(source: Book | CfiRangeResolver): source is Book {
+    return typeof (source as { renderTo?: unknown }).renderTo === 'function' || 'spine' in (source as object);
+}
+
+/**
  * Snaps a CFI to the nearest sentence boundary.
  *
- * @param book - The epub.js Book instance.
+ * @param source - The epub.js Book instance OR any {@link CfiRangeResolver}
+ *   (P6: the ReaderEngine; resolvers own their lifecycle guards and return
+ *   null for unresolvable/destroyed states).
  * @param cfi - The CFI to snap.
  * @param language - BCP-47 language for sentence segmentation. Defaults to the
  *   book's OPF language, then 'en' (the pre-5c behavior was a hardcoded 'en').
@@ -28,19 +48,24 @@ function bookLanguage(book: Book): string | undefined {
  * @warning This function is asynchronous and relies on the Book instance being active.
  * Do NOT use this in component cleanup/unmount phases where the Book instance might be destroyed.
  */
-export async function snapCfiToSentence(book: Book, cfi: string, language?: string): Promise<string> {
+export async function snapCfiToSentence(
+    source: Book | CfiRangeResolver,
+    cfi: string,
+    language?: string,
+): Promise<string> {
     try {
-        // Lifecycle safety check: ensure book instance is valid
-        // Prevents crash during reader destruction if called late
+        // Lifecycle safety check for raw Books: ensure the instance is valid.
+        // Prevents crash during reader destruction if called late. Injected
+        // resolvers handle this themselves by resolving null.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (!book || !(book as any).spine) {
+        if (!source || (looksLikeBook(source) && !(source as any).spine)) {
             console.warn('snapCfiToSentence: Book instance is destroyed or invalid. Returning raw CFI.');
             return cfi;
         }
 
         if (!cfi || !cfi.includes('!')) return cfi;
 
-        const range = await book.getRange(cfi);
+        const range = await source.getRange(cfi);
         if (!range) return cfi;
 
         const startNode = range.startContainer;
@@ -53,7 +78,7 @@ export async function snapCfiToSentence(book: Book, cfi: string, language?: stri
         const text = startNode.textContent || '';
 
         // Use cached segmenter if available (locale-aware; kills the hardcoded 'en')
-        const segmenter = getCachedSegmenter(language || bookLanguage(book) || 'en');
+        const segmenter = getCachedSegmenter(language || bookLanguage(source) || 'en');
         if (segmenter) {
             const segments = segmenter.segment(text);
             let bestStart = 0;

@@ -52,11 +52,7 @@ const selectTextInFrame = async (frame: FrameLocator) =>
   });
 
 const annotationCount = (page: Page) =>
-  page.evaluate(
-    () =>
-      (window as unknown as { __reader_added_annotations_count?: number })
-        .__reader_added_annotations_count ?? 0,
-  );
+  page.evaluate(() => window.__versicleTest?.reader?.highlightCount('annotation') ?? 0);
 
 /** Count epub.js highlight SVG groups of a class in the PARENT document (where epub.js draws them). */
 const highlightNodeCount = (page: Page, className: string) =>
@@ -185,17 +181,12 @@ test('Characterization: content-analysis debug layer toggles with GenAI debug mo
   await openDemoBook(page);
   await utils.navigateToChapter(page);
 
-  // Seed an analysis row for the CURRENT section, keyed by its href.
+  // Seed an analysis row for the CURRENT section, keyed by its href
+  // (engine-port test handle predicates).
   const seeded = await page.evaluate(() => {
     const api = window.__versicleTest;
-    const rendition = (
-      window as unknown as {
-        rendition?: { location?: { start?: { href?: string; cfi?: string } } };
-      }
-    ).rendition;
-    const start = rendition?.location?.start;
-    const href = start?.href;
-    const cfi = start?.cfi;
+    const href = api?.reader?.currentHref();
+    const cfi = api?.reader?.currentCfi();
     const bookId = window.location.pathname.split('/read/')[1]?.split('?')[0];
     if (!api?.seedContentAnalysis || !href || !cfi || !bookId) return false;
     api.seedContentAnalysis(decodeURIComponent(bookId), href, { referenceStartCfi: cfi });

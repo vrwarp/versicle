@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import ePub, { type Book, type Rendition, type Location, type NavigationItem } from 'epubjs';
+import type { Book, Rendition } from 'epubjs';
 import { bookContent } from '@data/repos/bookContent';
-import type { BookMetadata } from '~types/db';
+import type { BookMetadata, NavigationItem } from '~types/db';
+import { EpubJsEngine, createEpubJsBook } from '@domains/reader/engine/EpubJsEngine';
+import type { ReaderEngine, EngineLocation } from '@domains/reader/engine/ReaderEngine';
+import { setActiveReaderEngine } from '@domains/reader/engine/activeEngineRegistry';
 import {
   registerSanitizeHook,
   observeAndPatchSandbox,
@@ -174,8 +177,8 @@ export interface EpubReaderOptions {
   lineHeight: number;
   /** Whether to force font settings and override book styles. */
   shouldForceFont: boolean;
-  /** Callback when location changes. */
-  onLocationChange?: (location: Location, percentage: number, chapterTitle: string, sectionId: string) => void;
+  /** Callback when location changes (ReaderEngine port location shape). */
+  onLocationChange?: (location: EngineLocation, percentage: number, chapterTitle: string, sectionId: string) => void;
   /** Callback when TOC is loaded. */
   onTocLoaded?: (toc: NavigationItem[]) => void;
   /** Callback when text is selected. */
@@ -199,10 +202,17 @@ export interface EpubReaderOptions {
  * Result returned by the EpubReader hook.
  */
 export interface EpubReaderResult {
-  /** The epub.js Book instance. */
+  /**
+   * The ReaderEngine port (contract C7) — the ONLY surface components and
+   * panels consume. Non-null once the book is rendered.
+   */
+  engine: ReaderEngine | null;
+  /**
+   * The raw epub.js Book — TYPE-ONLY epubjs surface retained for the two
+   * named P7-deadlined exceptions (lib/search indexing via SearchPanel).
+   * No component may touch Book/Rendition APIs beyond passing this through.
+   */
   book: Book | null;
-  /** The epub.js Rendition instance. */
-  rendition: Rendition | null;
   /** Whether the book is fully ready for interaction. */
   isReady: boolean;
   /** Whether the book's location registry (CFI <-> Percentage) is fully generated */
@@ -232,7 +242,7 @@ export function useEpubReader(
   options: EpubReaderOptions
 ): EpubReaderResult {
   const [book, setBook] = useState<Book | null>(null);
-  const [rendition, setRendition] = useState<Rendition | null>(null);
+  const [engine, setEngine] = useState<ReaderEngine | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [areLocationsReady, setAreLocationsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -242,6 +252,7 @@ export function useEpubReader(
 
   const bookRef = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | null>(null);
+  const engineRef = useRef<EpubJsEngine | null>(null);
   const prevSize = useRef({ width: 0, height: 0 });
   const resizeRaf = useRef<number | null>(null);
   const applyStylesRef = useRef<() => void>(() => { });
@@ -293,7 +304,7 @@ export function useEpubReader(
           bookRef.current.destroy();
         }
 
-        const newBook = ePub(fileData as ArrayBuffer);
+        const newBook = createEpubJsBook(fileData as ArrayBuffer);
 
         // SECURITY: sanitize-at-serialize via the shared epubSecurity module
         // (one implementation for the live reader AND offscreen ingestion).
@@ -329,7 +340,25 @@ export function useEpubReader(
         if (viewerRef.current) {
           sandboxObserverRef.current = observeAndPatchSandbox(viewerRef.current);
         }
-        setRendition(newRendition);
+
+        // The ReaderEngine port over the live book/rendition pair (Phase 6
+        // §2 "under-the-shell adapter"): constructed before display so its
+        // content hook (contentRendered + titled iframe) sees the first
+        // section. The deferred locationsReady resolves below when the
+        // registry is loaded or generated.
+        let resolveLocationsReady!: () => void;
+        const locationsReadyPromise = new Promise<void>((resolve) => {
+          resolveLocationsReady = resolve;
+        });
+        const newEngine = new EpubJsEngine({
+          book: newBook,
+          rendition: newRendition,
+          container: viewerRef.current!,
+          locationsReady: locationsReadyPromise,
+        });
+        engineRef.current = newEngine;
+        setEngine(newEngine);
+        setActiveReaderEngine(newEngine);
 
         // Disable spreads
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -371,46 +400,45 @@ export function useEpubReader(
 
         setIsReady(true);
 
+        // Location reporting through the engine port: identical title
+        // resolution to the legacy relocated handler (spine label →
+        // 'Chapter'/'Unknown' → findTocItem improvement), the percentage
+        // comes pre-computed on the EngineLocation.
+        const reportLocation = (location: EngineLocation) => {
+          const section = newEngine.resolveSection(location.sectionHref);
+          let title = section ? (section.label || 'Chapter') : 'Unknown';
+          const sectionId = section ? section.href : '';
+
+          // Improve title resolution
+          if (section) {
+            const useSynthetic = optionsRef.current.metadata?.useSyntheticToc;
+            const tocSource = (useSynthetic && optionsRef.current.metadata?.syntheticToc)
+              ? optionsRef.current.metadata.syntheticToc
+              : tocItems;
+            const betterItem = findTocItem(tocSource, section.href);
+            if (betterItem) {
+              title = betterItem.label;
+            }
+          }
+
+          if (optionsRef.current.onLocationChange) {
+            optionsRef.current.onLocationChange(location, location.percentage, title, sectionId);
+          }
+        };
+
         // Location Generation
         const updateProgress = () => {
           // Force a location check to sync progress
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const currentLocation = (newRendition as any).location;
-          if (currentLocation && currentLocation.start) {
-            const cfi = currentLocation.start.cfi;
-            let percentage = 0;
-            try {
-              percentage = newBook.locations.percentageFromCfi(cfi);
-            } catch {
-              // ignore
-            }
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const item = newBook.spine.get(currentLocation.start.href) as any;
-            let title = item ? (item.label || 'Chapter') : 'Unknown';
-            const sectionId = item ? item.href : '';
-
-            // Improve title resolution
-            if (item) {
-              const useSynthetic = optionsRef.current.metadata?.useSyntheticToc;
-              const tocSource = (useSynthetic && optionsRef.current.metadata?.syntheticToc)
-                ? optionsRef.current.metadata.syntheticToc
-                : tocItems;
-              const betterItem = findTocItem(tocSource, item.href);
-              if (betterItem) {
-                title = betterItem.label;
-              }
-            }
-
-            if (optionsRef.current.onLocationChange) {
-              optionsRef.current.onLocationChange(currentLocation, percentage, title, sectionId);
-            }
+          const currentLocation = newEngine.currentLocation();
+          if (currentLocation) {
+            reportLocation(currentLocation);
           }
         };
 
         const savedLocations = yield bookContent.getLocations(currentBookId);
         if (savedLocations) {
           newBook.locations.load(savedLocations.locations);
+          resolveLocationsReady();
           setAreLocationsReady(true);
           updateProgress();
         } else {
@@ -418,54 +446,25 @@ export function useEpubReader(
           newBook.locations.generate(1000).then(async () => {
             const locationStr = newBook.locations.save();
             await bookContent.saveLocations(currentBookId, locationStr);
+            resolveLocationsReady();
             setAreLocationsReady(true);
             updateProgress();
           });
         }
         yield newBook.ready;
 
-        // Event Listeners
-        newRendition.on('relocated', (location: Location) => {
-          const cfi = location.start.cfi;
-          let percentage = 0;
-          try {
-            percentage = newBook.locations.percentageFromCfi(cfi);
-          } catch {
-            // ignore
-          }
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const item = newBook.spine.get(location.start.href) as any;
-          let title = item ? (item.label || 'Chapter') : 'Unknown';
-          const sectionId = item ? item.href : '';
-
-          // Improve title resolution
-          if (item) {
-            const useSynthetic = optionsRef.current.metadata?.useSyntheticToc;
-            const tocSource = (useSynthetic && optionsRef.current.metadata?.syntheticToc)
-              ? optionsRef.current.metadata.syntheticToc
-              : tocItems;
-            const betterItem = findTocItem(tocSource, item.href);
-            if (betterItem) {
-              title = betterItem.label;
+        // Event Listeners — ONE engine subscription replaces the three
+        // direct rendition.on registrations (relocated/selected/click).
+        newEngine.subscribe((event) => {
+          if (event.type === 'relocated') {
+            reportLocation(event.location);
+          } else if (event.type === 'selected') {
+            if (optionsRef.current.onSelection) {
+              optionsRef.current.onSelection(event.cfiRange, event.range, event.view);
             }
+          } else if (event.type === 'click') {
+            if (optionsRef.current.onClick) optionsRef.current.onClick(event.event);
           }
-
-          if (optionsRef.current.onLocationChange) {
-            optionsRef.current.onLocationChange(location, percentage, title, sectionId);
-          }
-        });
-
-        newRendition.on('selected', (cfiRange: string, contents: unknown) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const range = (newRendition as any).getRange(cfiRange);
-          if (optionsRef.current.onSelection && range) {
-            optionsRef.current.onSelection(cfiRange, range, contents);
-          }
-        });
-
-        newRendition.on('click', (event: MouseEvent) => {
-          if (optionsRef.current.onClick) optionsRef.current.onClick(event);
         });
 
         // Inject styles and spacer
@@ -725,6 +724,11 @@ export function useEpubReader(
     const { cancel } = runCancellable(
       loadBookGenerator(bookId),
       () => {
+        if (engineRef.current) {
+          engineRef.current.destroy();
+          engineRef.current = null;
+          setActiveReaderEngine(null);
+        }
         if (bookRef.current) {
           bookRef.current.destroy();
           bookRef.current = null;
@@ -939,5 +943,5 @@ export function useEpubReader(
     pinyinSize
   ]);
 
-  return { book, rendition, isReady, areLocationsReady, isLoading, metadata, toc, error };
+  return { engine, book, isReady, areLocationsReady, isLoading, metadata, toc, error };
 }

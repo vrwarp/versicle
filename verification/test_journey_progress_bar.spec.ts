@@ -15,9 +15,10 @@ test("verify progress bar", async ({ page }) => {
   await navigateToChapter(page, 'toc-item-6');
 
   // Wait for rendition and locations to be ready
-  await page.waitForFunction("window.rendition && window.rendition.location").catch(() => {});
+  // Engine-port test handle (Phase 6): typed predicates replaced window.rendition.
+  await page.waitForFunction("window.__versicleTest?.reader?.currentCfi()").catch(() => {});
   await page.waitForFunction(
-    "window.rendition && window.rendition.book && window.rendition.book.locations && window.rendition.book.locations.total() > 0",
+    "(window.__versicleTest?.reader?.locationsTotal() ?? 0) > 0",
     { timeout: 30000 }
   ).catch(() => {});
   await page.waitForTimeout(1000);

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { NavigationItem } from 'epubjs';
+import type { NavigationItem } from '~types/db';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/Tabs';
 import { Switch } from '../../ui/Switch';
 import { Label } from '../../ui/Label';
@@ -8,7 +8,7 @@ import { Wand2 } from 'lucide-react';
 import { cn } from '@lib/utils';
 import { ReadingHistoryPanel } from '../ReadingHistoryPanel';
 import { DeviceIcon } from '../DeviceIcon';
-import type { Rendition } from 'epubjs';
+import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 
 export interface DeviceMarker {
     id: string;
@@ -30,7 +30,7 @@ export interface TOCPanelProps {
     onEnhanceTOC: () => void;
     // History tab
     bookId: string;
-    rendition?: Rendition;
+    engine?: ReaderEngine;
     historyTick: number;
     onHistoryNavigate: (cfi: string) => void;
 }
@@ -47,7 +47,7 @@ export const TOCPanel: React.FC<TOCPanelProps> = ({
     tocProgress,
     onEnhanceTOC,
     bookId,
-    rendition,
+    engine,
     historyTick,
     onHistoryNavigate
 }) => {
@@ -147,7 +147,7 @@ export const TOCPanel: React.FC<TOCPanelProps> = ({
                 <TabsContent value="history" className="flex-1 overflow-y-auto mt-0 min-h-0 data-[state=active]:flex data-[state=active]:flex-col">
                     <ReadingHistoryPanel
                         bookId={bookId}
-                        rendition={rendition ?? null}
+                        engine={engine ?? null}
                         trigger={historyTick}
                         onNavigate={onHistoryNavigate}
                     />

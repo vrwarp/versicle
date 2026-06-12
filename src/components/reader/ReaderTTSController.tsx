@@ -1,15 +1,12 @@
 import type React from 'react';
 import { useEffect, useRef } from 'react';
-import type { Rendition } from 'epubjs';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
-import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
+import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 
 interface ReaderTTSControllerProps {
-  rendition: Rendition | null;
-  /** The shared highlight manager — the ONLY path to epub.js annotations. */
-  highlights: HighlightLayerManager | null;
+  engine: ReaderEngine | null;
   viewMode: string;
 }
 
@@ -38,8 +35,7 @@ const OPEN_OVERLAY_SELECTOR = [
  * 3. Visibility reconciliation (syncing visual state when returning to foreground)
  */
 export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
-  rendition,
-  highlights,
+  engine,
   viewMode
 }) => {
   // We subscribe to these changing values here, so ReaderView doesn't have to.
@@ -56,12 +52,12 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
 
   // --- TTS Highlighting & Sync ---
   useEffect(() => {
-    if (!rendition || !highlights || !activeCfi || status === 'stopped') return;
+    if (!engine || !activeCfi || status === 'stopped') return;
+    const highlights = engine.highlights;
 
     const syncVisuals = () => {
       // Non-blocking display call
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (rendition as any).display(activeCfi).catch((err: unknown) => {
+      engine.display(activeCfi).catch((err: unknown) => {
         console.warn("[TTS] Sync skipped", err);
       });
 
@@ -82,12 +78,12 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
     return () => {
       highlights.remove('tts', activeCfi);
     };
-  }, [activeCfi, viewMode, rendition, highlights, status]);
+  }, [activeCfi, viewMode, engine, status]);
 
   // --- Visibility Reconciliation ---
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && rendition && highlights) {
+      if (document.visibilityState === 'visible' && engine) {
         // We just came back to foreground.
         // Fetch the latest state directly from the store to avoid stale closure issues.
         const { activeCfi: freshCfi, status: freshStatus } = useTTSPlaybackStore.getState();
@@ -95,19 +91,18 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
         if (!freshCfi || freshStatus === 'stopped') return;
 
         // Sync visual state regardless of view mode (paginated or scrolled)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (rendition as any).display(freshCfi).catch((err: unknown) => console.warn("Reconciliation failed", err));
+        engine.display(freshCfi).catch((err: unknown) => console.warn("Reconciliation failed", err));
 
         // Ensure the highlight is present: remove-then-add through the
         // manager (each side runs the orphan sweep) so a background queue
         // advance always ends with exactly one live node.
-        highlights.remove('tts', freshCfi);
-        highlights.add('tts', freshCfi, { onClick: () => { } });
+        engine.highlights.remove('tts', freshCfi);
+        engine.highlights.add('tts', freshCfi, { onClick: () => { } });
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, [rendition, highlights, viewMode]);
+  }, [engine, viewMode]);
 
   // --- Keyboard Navigation ---
   // Use a ref to access the latest state in the event listener without re-binding it constantly.

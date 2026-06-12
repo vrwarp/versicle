@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import type { Book } from 'epubjs';
+import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import type { NavigationItem } from '~types/db';
 import { genAIService } from '@lib/genai/GenAIService';
 import { bookContent } from '@data/repos/bookContent';
@@ -18,7 +18,7 @@ interface UseSmartTOCResult {
 }
 
 export function useSmartTOC(
-  book: Book | null,
+  engine: ReaderEngine | null,
   bookId: string | undefined,
   originalToc: NavigationItem[],
   setSyntheticToc: (toc: NavigationItem[]) => void
@@ -29,7 +29,7 @@ export function useSmartTOC(
   const showToast = useToastStore((state) => state.showToast);
 
   const enhanceTOC = useCallback(async () => {
-    if (!book || !bookId) {
+    if (!engine || !bookId) {
       showToast('Book not loaded', 'error');
       return;
     }
@@ -46,7 +46,7 @@ export function useSmartTOC(
     try {
       const sectionsToProcess: { id: string; text: string }[] = [];
 
-      await collectSectionData(originalToc, book, (count) => {
+      await collectSectionData(originalToc, engine, (count) => {
         setProgress((prev) => prev ? { ...prev, current: prev.current + count } : null);
       }, sectionsToProcess);
 
@@ -90,7 +90,7 @@ export function useSmartTOC(
       setIsEnhancing(false);
       setProgress(null);
     }
-  }, [book, bookId, originalToc, isAIEnabled, setSyntheticToc, showToast]);
+  }, [engine, bookId, originalToc, isAIEnabled, setSyntheticToc, showToast]);
 
   return { enhanceTOC, isEnhancing, progress };
 }
@@ -108,34 +108,19 @@ function countTocItems(items: NavigationItem[]): number {
 
 async function collectSectionData(
   items: NavigationItem[],
-  book: Book,
+  engine: ReaderEngine,
   onProgress: (count: number) => void,
   results: { id: string; text: string }[]
 ): Promise<void> {
   for (const item of items) {
     try {
-      // Strip hash to ensure we load the file correctly
-      const href = item.href.split('#')[0];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const contentOrDoc = await (book as any).load(href);
-      let doc: Document | null = null;
+      // Section text via the engine port (no re-unzip; href hash stripped inside)
+      const content = await engine.loadSectionText(item.href);
 
-      if (typeof contentOrDoc === 'string') {
-        doc = new DOMParser().parseFromString(contentOrDoc, 'text/html');
-      } else if (contentOrDoc && typeof contentOrDoc === 'object') {
-        doc = contentOrDoc as Document;
-      }
-
-      if (doc) {
-        // Try innerText first (browser), then textContent (standard)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const content = (doc.body as any)?.innerText || (doc.documentElement as any)?.innerText;
-
-        if (content) {
-          const text = content.trim().substring(0, 500);
-          if (text.length > 0) {
-            results.push({ id: item.id, text });
-          }
+      if (content) {
+        const text = content.trim().substring(0, 500);
+        if (text.length > 0) {
+          results.push({ id: item.id, text });
         }
       }
     } catch (e) {
@@ -145,7 +130,7 @@ async function collectSectionData(
     onProgress(1);
 
     if (item.subitems && item.subitems.length > 0) {
-      await collectSectionData(item.subitems, book, onProgress, results);
+      await collectSectionData(item.subitems, engine, onProgress, results);
     }
   }
 }

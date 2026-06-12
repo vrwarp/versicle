@@ -50,6 +50,23 @@ interface VersicleTestApi {
     sectionId: string,
     payload: { referenceStartCfi: string },
   ): void;
+  /**
+   * Typed reader predicates over the live ReaderEngine (Phase 6 §2b) — the
+   * named replacements for the exact `window.rendition` /
+   * `__reader_added_annotations_count` polls this suite used to do. All
+   * methods are safe before a reader mounts (null/0/false).
+   */
+  reader: {
+    isReady(): boolean;
+    currentCfi(): string | null;
+    currentHref(): string | null;
+    locationsTotal(): number;
+    hasManager(): boolean;
+    highlightCount(layer: 'annotation' | 'tts' | 'history' | 'debug' | 'search'): number;
+    next(): Promise<void>;
+    prev(): Promise<void>;
+    display(target: string): Promise<void>;
+  };
 }
 
 declare global {

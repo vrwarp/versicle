@@ -2,6 +2,8 @@ import { renderHook } from '@testing-library/react';
 import { fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useReaderNavigation } from './useReaderNavigation';
+import { FakeReaderEngine } from '@domains/reader/engine/FakeReaderEngine';
+import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import type { TTSStatus } from '@lib/tts/engine/TtsEngine';
 
 // Mock the TTS store: the hook only reads getState().status
@@ -21,10 +23,10 @@ describe('useReaderNavigation', () => {
         mockGetState.mockReturnValue({ status });
     };
 
-    const renderNav = (rendition: unknown = null) =>
+    const renderNav = (engine: ReaderEngine | null = null) =>
         renderHook(() =>
             useReaderNavigation({
-                rendition,
+                engine,
                 readerViewMode: 'paginated',
                 handlePrev,
                 handleNext,
@@ -110,21 +112,19 @@ describe('useReaderNavigation', () => {
             expect(handleNext).toHaveBeenCalledTimes(1);
         });
 
-        it('gates the rendition (iframe) keydown listener the same way', () => {
-            const rendition = { on: vi.fn(), off: vi.fn() };
-            renderNav(rendition);
+        it('gates the engine (iframe) keydown stream the same way', () => {
+            const engine = new FakeReaderEngine();
+            renderNav(engine);
 
-            expect(rendition.on).toHaveBeenCalledWith('keydown', expect.any(Function));
-            const renditionHandler = rendition.on.mock.calls[0][1] as (e: Event) => void;
             const makeEvent = () =>
-                ({ key: 'ArrowRight', repeat: false, cancelable: false, target: null }) as unknown as Event;
+                ({ key: 'ArrowRight', repeat: false, cancelable: false, target: null }) as unknown as KeyboardEvent;
 
             setStatus('playing');
-            renditionHandler(makeEvent());
+            engine.emit({ type: 'keydown', event: makeEvent() });
             expect(handleNext).not.toHaveBeenCalled();
 
             setStatus('stopped');
-            renditionHandler(makeEvent());
+            engine.emit({ type: 'keydown', event: makeEvent() });
             expect(handleNext).toHaveBeenCalledTimes(1);
         });
     });

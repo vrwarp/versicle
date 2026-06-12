@@ -5,22 +5,19 @@ import { useShallow } from 'zustand/react/shallow';
 import { X, Copy, ChevronRight, ChevronDown, RotateCcw, Loader2, FileText } from 'lucide-react';
 import { TYPE_COLORS } from '~types/content-analysis';
 import type { ContentType } from '~types/content-analysis';
-import type { Rendition } from 'epubjs';
+import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { useToastStore } from '@store/useToastStore';
 import { bookContent } from '@data/repos/bookContent';
 import type { TableImage } from '~types/db';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { reprocessBook } from '@lib/ingestion';
 import { ContentAnalysisReport } from './ContentAnalysisReport';
-import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
 
 interface ContentAnalysisLegendProps {
-    rendition?: Rendition | null;
-    /** The shared highlight manager — the ONLY path to epub.js annotations. */
-    highlights?: HighlightLayerManager | null;
+    engine?: ReaderEngine | null;
 }
 
-export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ rendition, highlights }) => {
+export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ engine }) => {
     const { isDebugModeEnabled, setDebugModeEnabled } = useGenAIStore(
         useShallow((state) => ({
             isDebugModeEnabled: state.isDebugModeEnabled,
@@ -132,48 +129,30 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
     }, []);
 
 
-    // Listen for selection changes in the reader
+    // Listen for selection changes in the reader (engine event bus)
     useEffect(() => {
-        if (!rendition || !isDebugModeEnabled) return;
+        if (!engine || !isDebugModeEnabled) return;
 
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const handleSelected = (cfiRange: string, _contents: unknown) => {
-            setCfiInput(cfiRange);
-
-            // Get text content
-            try {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const range = (rendition as any).getRange(cfiRange);
-                if (range) {
-                    setMergedContent(range.toString());
-                }
-            } catch (e) {
-                console.warn("Failed to get range for CFI", e);
-            }
-        };
-
-        rendition.on('selected', handleSelected);
-
-        return () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (rendition as any).off('selected', handleSelected);
-        };
-    }, [rendition, isDebugModeEnabled]);
+        return engine.subscribe((event) => {
+            if (event.type !== 'selected') return;
+            setCfiInput(event.cfiRange);
+            setMergedContent(event.range.toString());
+        });
+    }, [engine, isDebugModeEnabled]);
 
     const handleCfiChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const newCfi = e.target.value;
         setCfiInput(newCfi);
 
-        if (!rendition || !newCfi) return;
+        if (!engine || !newCfi) return;
 
         try {
             // Display the location
-            await rendition.display(newCfi);
+            await engine.display(newCfi);
 
             // Try to select it visually
             // getting range from cfi
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const range = (rendition as any).getRange(newCfi);
+            const range = engine.getRenderedRange(newCfi);
             if (range) {
                 setMergedContent(range.toString());
 
@@ -187,12 +166,10 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                 // This is the main window selection, but reader is in iframe
 
                 // We need to access the iframe's selection
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const contents = (rendition as any).getContents();
+                const contents = engine.getContentViews();
                 if (contents && contents.length > 0) {
                     // Iterate through contents to find where the range belongs (or just try all)
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    contents.forEach((content: any) => {
+                    contents.forEach((content) => {
                         const contentDoc = content.document;
                         const contentWin = content.window;
                         if (contentDoc && contentWin) {
@@ -203,8 +180,8 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                             // Let's try to add it to selection.
                             try {
                                 const sel = contentWin.getSelection();
-                                sel.removeAllRanges();
-                                sel.addRange(range);
+                                sel?.removeAllRanges();
+                                sel?.addRange(range);
                             } catch {
                                 // Ignore mismatch errors
                             }
@@ -233,14 +210,15 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
     };
 
     const jumpToTable = (cfi: string) => {
-        rendition?.display(cfi);
+        engine?.display(cfi);
         setCfiInput(cfi);
         setHighlightedCfi(cfi);
     };
 
     // Manage highlight lifecycle (manager 'debug' layer, temp class)
     useEffect(() => {
-        if (!rendition || !highlights || !highlightedCfi) return;
+        if (!engine || !highlightedCfi) return;
+        const highlights = engine.highlights;
 
         highlights.add('debug', highlightedCfi, {
             className: 'temp-table-highlight',
@@ -256,7 +234,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
         return () => {
             highlights.remove('debug', highlightedCfi);
         };
-    }, [rendition, highlights, highlightedCfi]);
+    }, [engine, highlightedCfi]);
 
     const handleReprocess = async () => {
         if (!currentBookId) return;
@@ -429,7 +407,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
             <ContentAnalysisReport
                 isOpen={isReportOpen}
                 onClose={() => setIsReportOpen(false)}
-                rendition={rendition}
+                engine={engine}
             />
         </div>
     );

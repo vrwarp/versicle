@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ReadingHistoryPanel } from './ReadingHistoryPanel';
+import { EpubJsEngine } from '@domains/reader/engine/EpubJsEngine';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { ReadingSession } from '~types/db';
 
@@ -26,22 +27,36 @@ describe('ReadingHistoryPanel', () => {
     }
   };
 
-  const mockRendition = {
-    book: mockBook,
-    display: vi.fn()
-  };
+  // Engine port over the same book double: the nav-label resolution the
+  // panel used to own moved verbatim into EpubJsEngine.getNavLabel, so the
+  // suite now pins it THROUGH the engine (same assertions as pre-port).
+  const makeEngine = () =>
+    new EpubJsEngine({
+      book: mockBook as any,
+      rendition: {
+        on: vi.fn(),
+        off: vi.fn(),
+        display: vi.fn(),
+        hooks: { content: { register: vi.fn() } },
+        annotations: { add: vi.fn(), remove: vi.fn() },
+      } as any,
+      container: document.createElement('div'),
+      locationsReady: Promise.resolve(),
+    });
+  let mockEngine = makeEngine();
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockBook.spine.get.mockReturnValue(undefined);
     mockBook.navigation.get.mockReturnValue(undefined);
     mockBook.locations.percentageFromCfi.mockReturnValue(0.5);
+    mockEngine = makeEngine();
   });
 
   it('renders "No reading history recorded yet." when completedRanges is empty', () => {
     (useBookProgress as any).mockReturnValue({ completedRanges: [], readingSessions: [] });
 
-    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
+    render(<ReadingHistoryPanel bookId="book1" engine={mockEngine} onNavigate={vi.fn()} />);
 
     expect(screen.getByText('No reading history recorded yet.')).toBeInTheDocument();
   });
@@ -49,7 +64,7 @@ describe('ReadingHistoryPanel', () => {
   it('renders "No reading history recorded yet." when progress is undefined', () => {
     (useBookProgress as any).mockReturnValue(undefined);
 
-    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
+    render(<ReadingHistoryPanel bookId="book1" engine={mockEngine} onNavigate={vi.fn()} />);
 
     expect(screen.getByText('No reading history recorded yet.')).toBeInTheDocument();
   });
@@ -67,7 +82,7 @@ describe('ReadingHistoryPanel', () => {
       readingSessions: sessions
     });
 
-    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
+    render(<ReadingHistoryPanel bookId="book1" engine={mockEngine} onNavigate={vi.fn()} />);
 
     expect(screen.getByText('Chapter One')).toBeInTheDocument();
   });
@@ -89,7 +104,7 @@ describe('ReadingHistoryPanel', () => {
     mockBook.navigation.get.mockReturnValue({ label: 'Chapter One' });
     mockBook.spine.items = [mockSection];
 
-    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
+    render(<ReadingHistoryPanel bookId="book1" engine={mockEngine} onNavigate={vi.fn()} />);
 
     expect(screen.getByText('Chapter One')).toBeInTheDocument();
   });
@@ -107,7 +122,7 @@ describe('ReadingHistoryPanel', () => {
       readingSessions: sessions
     });
 
-    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
+    render(<ReadingHistoryPanel bookId="book1" engine={mockEngine} onNavigate={vi.fn()} />);
 
     // Headphones icon should be present (lucide renders as svg)
     const buttons = screen.getAllByRole('button');
@@ -128,7 +143,7 @@ describe('ReadingHistoryPanel', () => {
       readingSessions: sessions
     });
 
-    render(<ReadingHistoryPanel bookId="book1" rendition={null} onNavigate={vi.fn()} />);
+    render(<ReadingHistoryPanel bookId="book1" engine={null} onNavigate={vi.fn()} />);
 
     // Should show 2 grouped items, not 4
     const buttons = screen.getAllByRole('button');
@@ -147,7 +162,7 @@ describe('ReadingHistoryPanel', () => {
       readingSessions: sessions
     });
 
-    render(<ReadingHistoryPanel bookId="book1" rendition={null} onNavigate={vi.fn()} />);
+    render(<ReadingHistoryPanel bookId="book1" engine={null} onNavigate={vi.fn()} />);
 
     // Non-consecutive: all 3 should show
     const buttons = screen.getAllByRole('button');
@@ -168,7 +183,7 @@ describe('ReadingHistoryPanel', () => {
     });
 
     const onNavigate = vi.fn();
-    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={onNavigate} />);
+    render(<ReadingHistoryPanel bookId="book1" engine={mockEngine} onNavigate={onNavigate} />);
 
     fireEvent.click(screen.getByText('Chapter One'));
     expect(onNavigate).toHaveBeenCalledWith('epubcfi(/6/14!/4/2/1:0)');
@@ -182,7 +197,7 @@ describe('ReadingHistoryPanel', () => {
     mockBook.spine.get.mockReturnValue(null);
     mockBook.locations.percentageFromCfi.mockReturnValue(0.5);
 
-    render(<ReadingHistoryPanel bookId="book1" rendition={mockRendition as any} onNavigate={vi.fn()} />);
+    render(<ReadingHistoryPanel bookId="book1" engine={mockEngine} onNavigate={vi.fn()} />);
 
     // Legacy mode: all ranges with same label ("Segment at 50.0%") should be merged
     const buttons = screen.getAllByRole('button');
@@ -205,7 +220,7 @@ describe('ReadingHistoryPanel', () => {
       render(
           <ReadingHistoryPanel
               bookId="test-book"
-              rendition={mockRendition as any}
+              engine={mockEngine}
               onNavigate={vi.fn()}
           />
       );
@@ -230,7 +245,7 @@ describe('ReadingHistoryPanel', () => {
       render(
           <ReadingHistoryPanel
               bookId="test-book"
-              rendition={mockRendition as any}
+              engine={mockEngine}
               onNavigate={vi.fn()}
           />
       );

@@ -32,7 +32,7 @@ describe('ReadingHistory Integration', () => {
         render(
             <ReadingHistoryPanel
                 bookId="book1"
-                rendition={null}
+                engine={null}
                 onNavigate={vi.fn()}
             />
         );
@@ -59,7 +59,7 @@ describe('ReadingHistory Integration', () => {
         const { rerender } = render(
             <ReadingHistoryPanel
                 bookId="book1"
-                rendition={null}
+                engine={null}
                 onNavigate={vi.fn()}
             />
         );
@@ -89,7 +89,7 @@ describe('ReadingHistory Integration', () => {
         rerender(
             <ReadingHistoryPanel
                 bookId="book1"
-                rendition={null}
+                engine={null}
                 onNavigate={vi.fn()}
             />
         );
@@ -107,7 +107,7 @@ describe('ReadingHistory Integration', () => {
         render(
             <ReadingHistoryPanel
                 bookId="book1"
-                rendition={null}
+                engine={null}
                 onNavigate={vi.fn()}
             />
         );
@@ -122,7 +122,7 @@ describe('ReadingHistory Integration', () => {
         render(
             <ReadingHistoryPanel
                 bookId="book1"
-                rendition={null}
+                engine={null}
                 onNavigate={vi.fn()}
             />
         );
@@ -146,7 +146,7 @@ describe('ReadingHistory Integration', () => {
         const { rerender } = render(
             <ReadingHistoryPanel
                 bookId="book1"
-                rendition={null}
+                engine={null}
                 onNavigate={vi.fn()}
             />
         );
@@ -156,7 +156,7 @@ describe('ReadingHistory Integration', () => {
         rerender(
             <ReadingHistoryPanel
                 bookId="book2"
-                rendition={null}
+                engine={null}
                 onNavigate={vi.fn()}
             />
         );

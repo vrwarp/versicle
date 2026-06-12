@@ -45,6 +45,7 @@ export { groupSegmentsByRoot, attributeMarkersToGroups } from './group';
 export type { CfiGroup, CfiSegment } from './group';
 
 export { snapCfiToSentence } from './snap';
+export type { CfiRangeResolver } from './snap';
 
 export { CfiComparator, parseCfiPoint, tryParseCfiPoint, cfiFromRange } from './epubcfiShim';
 export type { ParsedCfiPoint } from './epubcfiShim';

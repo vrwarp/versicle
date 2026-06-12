@@ -38,7 +38,7 @@ describe('TOCPanel', () => {
         tocProgress: null,
         onEnhanceTOC: vi.fn(),
         bookId: 'test-book',
-        rendition: undefined,
+        engine: undefined,
         historyTick: 0,
         onHistoryNavigate: vi.fn()
     };
