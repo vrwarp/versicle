@@ -14,6 +14,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { Rendition } from 'epubjs';
 import {
   normalizeAbsoluteToRem,
+  normalizeFontFamily,
   computeFontScale,
   buildForcedStylesCss,
   applyReaderTheme,
@@ -127,6 +128,31 @@ describe('buildForcedStylesCss (legacy CSS gate)', () => {
     );
     expect(css).toContain('background: #111111 !important');
     expect(css).toContain('color: #eeeeee !important');
+  });
+});
+
+describe('regression: legacy fontFamily read-time normalization (Phase 8 §I, RC-16)', () => {
+  // The pinyin font was renamed off the OFL Reserved Font Names. No
+  // shipped UI ever wrote the legacy family into the synced preference,
+  // so there is NO persisted migration — only this read-time mapping at
+  // the theming consumers (belt-and-braces; idempotent).
+  it('maps the legacy family to Versicle Sans Narrow', () => {
+    expect(normalizeFontFamily('PT Sans Narrow')).toBe('Versicle Sans Narrow');
+    expect(normalizeFontFamily("'PT Sans Narrow', sans-serif")).toBe(
+      "'Versicle Sans Narrow', sans-serif",
+    );
+    // Idempotent + pass-through for everything else.
+    expect(normalizeFontFamily('Versicle Sans Narrow')).toBe('Versicle Sans Narrow');
+    expect(normalizeFontFamily('serif')).toBe('serif');
+  });
+
+  it('buildForcedStylesCss never emits the reserved name', () => {
+    const css = buildForcedStylesCss(
+      { ...baseSpec, shouldForceFont: true, fontFamily: 'PT Sans Narrow' },
+      100,
+    );
+    expect(css).toContain('font-family: Versicle Sans Narrow !important');
+    expect(css).not.toContain('PT Sans');
   });
 });
 

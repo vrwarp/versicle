@@ -175,6 +175,20 @@ export function registerBaseThemes(rendition: Rendition): void {
   });
 }
 
+/**
+ * Read-time fontFamily normalization (Phase 8 §I, RC-16): the pinyin font
+ * was renamed off the OFL Reserved Font Names ('PT Sans Narrow' →
+ * 'Versicle Sans Narrow'). The synced `fontFamily` preference is free-form
+ * but no shipped UI ever wrote the legacy family (VisualSettings only
+ * offers serif/sans-serif/monospace), so this is deliberate
+ * belt-and-braces with NO persisted migration — the rule-4 ledger slot
+ * stays released (zero P8 user-data format changes). Applied at the two
+ * consumption points below; idempotent.
+ */
+export function normalizeFontFamily(fontFamily: string): string {
+  return fontFamily.replace(/PT Sans Narrow/g, 'Versicle Sans Narrow');
+}
+
 /** The full presentation input (the prep doc's `ReaderThemeSpec`). */
 export interface ReaderThemeSpec {
   viewMode: 'paginated' | 'scrolled';
@@ -253,7 +267,7 @@ export function buildForcedStylesCss(spec: ReaderThemeSpec, finalFSScalePct: num
     }
 
     const fontCss = spec.shouldForceFont ? `
-                font-family: ${spec.fontFamily} !important;
+                font-family: ${normalizeFontFamily(spec.fontFamily)} !important;
                 line-height: ${spec.lineHeight} !important;
                 text-align: left !important;
             ` : '';
@@ -312,7 +326,7 @@ export function applyReaderTheme(
 
   // Set the theme font options.
   themes.fontSize(`${spec.fontSize}%`);
-  themes.font(spec.fontFamily);
+  themes.font(normalizeFontFamily(spec.fontFamily));
 
   const { finalFSScalePct, finalLH } = computeFontScale(spec);
 

@@ -45,15 +45,15 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 - **Provenance:** Vendored into git at Phase 5a-PR3 from piper-wasm@0.1.4 build/ output (upstream hashes in third-party/piper/PROVENANCE.md). piper_worker.js is COMMITTED PATCHED SOURCE: the 6 string patches formerly applied at install time by the deleted scripts/patch_piper_worker.js are baked in, plus a Versicle-authored request-id envelope (patch 7) for PiperRuntime's stale-reply protocol.
 - **Modifications:** piper_worker.js: config injection, phoneme-ID clamping, error handling (the former install-time patch set), and the request-id envelope — full patch list in third-party/piper/PROVENANCE.md. CI smoke: src/lib/tts/providers/piperVendoredAssets.test.ts asserts the patch anchors are present.
 
-### PT Sans Narrow Web (modified: pinyin tone glyphs injected)
+### Versicle Sans Narrow (modified PT Sans Narrow Web: pinyin tone glyphs, renamed off OFL RFNs)
 
 - **Version:** 2.003W (embedded name table)
 - **License:** OFL-1.1
 - **Source:** https://company.paratype.com/pt-sans-pt-serif (ParaType; also distributed via Google Fonts)
-- **Path:** public/fonts/PT_Sans-Narrow-Web-Regular.ttf, public/fonts/PT_Sans-Narrow-Web-Bold.ttf
-- **Provenance:** ParaType PT Sans Narrow Web 2.003W; pinyin tone glyphs (ǎ ǐ ǒ ǔ ǚ) were programmatically injected into the TTF binaries using Python fonttools (per README.md Licenses & Attributions). The fonttools script that produced the modified binaries is NOT in the repo — the derivative is currently unreproducible (UNKNOWN — needs investigation).
-- **Modifications:** Glyph injection as above. KNOWN VIOLATION (gap report D2): these are Modified Versions under OFL-1.1 but retain the Reserved Font Names ('PT Sans' family, copyright reserves 'PT Sans'/'PT Serif'/'ParaType') in name table, filenames, and the src/index.css font-family. The rename off the RFNs (with persisted-preference migration) is scheduled for Phase 8 of the overhaul plan; this entry is inventory-only until then.
-- **Notes:** Mitigating: the full OFL-1.1 text and ParaType copyright ride inside the TTF name table, so license text accompanies copies.
+- **Path:** public/fonts/VersicleSansNarrow-Regular.ttf, public/fonts/VersicleSansNarrow-Bold.ttf
+- **Provenance:** ParaType PT Sans Narrow Web 2.003W; pinyin tone glyphs (ǎ ǐ ǒ ǔ ǚ) were programmatically injected into the TTF binaries using Python fonttools (script lost, pre-repo — the injected binaries are the canonical source artifacts: sha256 35a9cce169015258e452d8c55402865efc64bedb4c816ad8a721e01556d29955 Regular / 5e6e50f5ec2138a31ad97dfad8881d69ccc386fcbb3308c0a1f5377de743b543 Bold, retrievable from git history at the Phase 8 rename commit). The shipped files are derived from those binaries by the COMMITTED scripts/build-pinyin-font.py (fontTools): name-table-only rewrite, glyf/cmap byte-equality asserted, pinned by src/test/pinyin-font.test.ts.
+- **Modifications:** Glyph injection as above, then Phase 8 §I OFL-RFN rename (closes gap report D2): family/full/PostScript names and filenames renamed to Versicle Sans Narrow, the ParaType trademark record deleted, the description rewritten RFN-free. RETAINED per OFL-1.1: the ParaType copyright (nameID 0, with a modification note appended) and the full OFL license text incl. its Reserved Font Name declaration (nameID 13) — required notices; the RFN strings inside those records are provenance text, not naming use. No persisted user-preference migration: no shipped UI ever wrote the legacy family; the reader theming applies a read-time normalization (normalizeFontFamily in src/domains/reader/engine/epubTheming.ts).
+- **Notes:** OFL-1.1 compliant as a Modified Version: renamed off the Reserved Font Names, license text and copyright ride inside the TTF name table, so license text accompanies copies.
 
 ### CC-CEDICT (compiled Chinese-English dictionary)
 

@@ -5,18 +5,22 @@
    tw-animate-css is the TW4-native replacement — the classes run again,
    under the global reduced-motion override at the end of this file. */
 @import "tw-animate-css";
+/* Versicle Sans Narrow (Phase 8 §I): the pinyin-overlay derivative
+   renamed off the OFL Reserved Font Names. Rebuilt from the previously
+   shipped glyph-injected binaries by scripts/build-pinyin-font.py
+   (provenance + hashes in third-party/inventory.json). */
 @font-face {
-  font-family: 'PT Sans Narrow';
+  font-family: 'Versicle Sans Narrow';
   font-style: normal;
   font-weight: 400;
-  src: url('/fonts/PT_Sans-Narrow-Web-Regular.ttf') format('truetype');
+  src: url('/fonts/VersicleSansNarrow-Regular.ttf') format('truetype');
 }
 
 @font-face {
-  font-family: 'PT Sans Narrow';
+  font-family: 'Versicle Sans Narrow';
   font-style: normal;
   font-weight: 700;
-  src: url('/fonts/PT_Sans-Narrow-Web-Bold.ttf') format('truetype');
+  src: url('/fonts/VersicleSansNarrow-Bold.ttf') format('truetype');
 }
 
 @theme {
@@ -285,7 +289,7 @@ input[type="search"]::-webkit-search-results-decoration {
 }
 
 .font-pinyin {
-  font-family: 'PT Sans Narrow', sans-serif;
+  font-family: 'Versicle Sans Narrow', sans-serif;
 }
 
 /* Phase 8 §K: ONE global reduced-motion policy. CSS animations/transitions

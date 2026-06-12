@@ -44,18 +44,18 @@
       ]
     },
     {
-      "name": "PT Sans Narrow Web (modified: pinyin tone glyphs injected)",
+      "name": "Versicle Sans Narrow (modified PT Sans Narrow Web: pinyin tone glyphs, renamed off OFL RFNs)",
       "version": "2.003W (embedded name table)",
       "source": "https://company.paratype.com/pt-sans-pt-serif (ParaType; also distributed via Google Fonts)",
       "license": "OFL-1.1",
-      "provenance": "ParaType PT Sans Narrow Web 2.003W; pinyin tone glyphs (ǎ ǐ ǒ ǔ ǚ) were programmatically injected into the TTF binaries using Python fonttools (per README.md Licenses & Attributions). The fonttools script that produced the modified binaries is NOT in the repo — the derivative is currently unreproducible (UNKNOWN — needs investigation).",
-      "path": "public/fonts/PT_Sans-Narrow-Web-Regular.ttf, public/fonts/PT_Sans-Narrow-Web-Bold.ttf",
-      "modifications": "Glyph injection as above. KNOWN VIOLATION (gap report D2): these are Modified Versions under OFL-1.1 but retain the Reserved Font Names ('PT Sans' family, copyright reserves 'PT Sans'/'PT Serif'/'ParaType') in name table, filenames, and the src/index.css font-family. The rename off the RFNs (with persisted-preference migration) is scheduled for Phase 8 of the overhaul plan; this entry is inventory-only until then.",
+      "provenance": "ParaType PT Sans Narrow Web 2.003W; pinyin tone glyphs (ǎ ǐ ǒ ǔ ǚ) were programmatically injected into the TTF binaries using Python fonttools (script lost, pre-repo — the injected binaries are the canonical source artifacts: sha256 35a9cce169015258e452d8c55402865efc64bedb4c816ad8a721e01556d29955 Regular / 5e6e50f5ec2138a31ad97dfad8881d69ccc386fcbb3308c0a1f5377de743b543 Bold, retrievable from git history at the Phase 8 rename commit). The shipped files are derived from those binaries by the COMMITTED scripts/build-pinyin-font.py (fontTools): name-table-only rewrite, glyf/cmap byte-equality asserted, pinned by src/test/pinyin-font.test.ts.",
+      "path": "public/fonts/VersicleSansNarrow-Regular.ttf, public/fonts/VersicleSansNarrow-Bold.ttf",
+      "modifications": "Glyph injection as above, then Phase 8 §I OFL-RFN rename (closes gap report D2): family/full/PostScript names and filenames renamed to Versicle Sans Narrow, the ParaType trademark record deleted, the description rewritten RFN-free. RETAINED per OFL-1.1: the ParaType copyright (nameID 0, with a modification note appended) and the full OFL license text incl. its Reserved Font Name declaration (nameID 13) — required notices; the RFN strings inside those records are provenance text, not naming use. No persisted user-preference migration: no shipped UI ever wrote the legacy family; the reader theming applies a read-time normalization (normalizeFontFamily in src/domains/reader/engine/epubTheming.ts).",
       "distribution": [
         "web",
         "android"
       ],
-      "notes": "Mitigating: the full OFL-1.1 text and ParaType copyright ride inside the TTF name table, so license text accompanies copies."
+      "notes": "OFL-1.1 compliant as a Modified Version: renamed off the Reserved Font Names, license text and copyright ride inside the TTF name table, so license text accompanies copies."
     },
     {
       "name": "CC-CEDICT (compiled Chinese-English dictionary)",
