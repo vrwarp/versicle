@@ -38,7 +38,18 @@ interface VersicleTestApi {
    */
   genai: {
     setMock(fixture: { response?: unknown; error?: string; delayMs?: number }): void;
+    /** Toggles the GenAI content-analysis debug mode (P6 overlay characterization seam). */
+    setDebugMode(enabled: boolean): void;
   };
+  /**
+   * Seeds a content-analysis result for one section (P6 entry gate) so the
+   * debug-highlight layer renders without a real GenAI round-trip.
+   */
+  seedContentAnalysis(
+    bookId: string,
+    sectionId: string,
+    payload: { referenceStartCfi: string },
+  ): void;
 }
 
 declare global {
@@ -47,7 +58,15 @@ declare global {
   }
 }
 
-export const test = base.extend<Record<never, never>, { _suppressLogs: void }>({
+export const test = base.extend<{ sanitizationDisabled: boolean }, { _suppressLogs: void }>({
+  // Sanitization kill-switch injected before app boot. Historically forced ON
+  // for the whole suite (the documented honesty gap: CFIs are computed
+  // post-sanitize in both pipelines, but the suite measured them with
+  // sanitization off). The P6 characterization specs opt OUT via
+  // `test.use({ sanitizationDisabled: false })` so overlay/pinyin geometry is
+  // pinned against the REAL sanitize path; existing specs keep the legacy
+  // default until the Phase 6 engine work retires the flag.
+  sanitizationDisabled: [true, { option: true }],
   // Worker-scoped: runs once per worker process (not per test).
   // Patches console.log/info/debug to noop so spec-file log calls are
   // silent by default. Set DEBUG_PAGE_LOGS=1 to restore them.
@@ -74,7 +93,7 @@ export const test = base.extend<Record<never, never>, { _suppressLogs: void }>({
   // renderer ("Target crashed"). The shared per-worker browser avoids that churn.
   // Trace-on-first-retry is handled by playwright.config.ts (use.trace).
 
-  page: async ({ page }, use, testInfo) => {
+  page: async ({ page, sanitizationDisabled }, use, testInfo) => {
     page.setDefaultTimeout(10000);
     page.setDefaultNavigationTimeout(10000);
 
@@ -87,7 +106,9 @@ export const test = base.extend<Record<never, never>, { _suppressLogs: void }>({
       await page.addInitScript({ content: idbProbeContent });
     }
     await page.addInitScript({ content: ttsPolyfillContent });
-    await page.addInitScript({ content: 'window.__VERSICLE_SANITIZATION_DISABLED__ = true;' });
+    if (sanitizationDisabled) {
+      await page.addInitScript({ content: 'window.__VERSICLE_SANITIZATION_DISABLED__ = true;' });
+    }
 
     await use(page);
 

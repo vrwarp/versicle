@@ -1,4 +1,4 @@
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, act } from '@testing-library/react';
 import { ReaderTTSController } from './ReaderTTSController';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
@@ -129,6 +129,117 @@ describe('ReaderTTSController', () => {
         setup('stopped');
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(mockStop).not.toHaveBeenCalled();
+    });
+
+    describe('characterization: TTS highlight single-node invariant + orphan sweep (P6 entry gate)', () => {
+        // Pins the CURRENT epub.js call pattern of the TTS sentence highlight
+        // (prep/phase6-reader-engine.md §4 overlay #2) before the Phase 6
+        // HighlightLayerManager absorbs the three duplicated DOM sweeps
+        // (ReaderTTSController.tsx :69-81, :107-118, :143-154). The manager
+        // cutover must keep every assertion here green — it centralizes the
+        // sweep, it does not change the observable add/remove/sweep sequence.
+        const makePaneWithOrphan = () => {
+            const pane = document.createElement('div');
+            pane.innerHTML = '<svg><g class="tts-highlight"></g></svg>';
+            return pane;
+        };
+
+        const makeRendition = (panes: HTMLElement[]) => ({
+            display: vi.fn().mockResolvedValue(undefined),
+            annotations: { add: vi.fn(), remove: vi.fn() },
+            views: vi.fn().mockReturnValue(panes.map(element => ({ pane: { element } }))),
+        });
+
+        const renderWith = (rendition: ReturnType<typeof makeRendition>,
+            status: 'playing' | 'paused' | 'stopped', activeCfi = 'epubcfi(/6/4!/4/2)') => {
+            seedStore(useTTSPlaybackStore, {
+                activeCfi,
+                currentIndex: 0,
+                status,
+                isPlaying: status === 'playing',
+                queue: makeTTSQueue(3)
+            });
+            return render(
+                <ReaderTTSController
+                    rendition={rendition as unknown as Rendition}
+                    viewMode="paginated"
+                />
+            );
+        };
+
+        it('adds exactly ONE tts-highlight per active sentence and sweeps orphaned SVG nodes first', () => {
+            const pane = makePaneWithOrphan();
+            const rendition = makeRendition([pane]);
+
+            renderWith(rendition, 'playing');
+
+            // Orphan sweep ran against every view pane…
+            expect(pane.querySelectorAll('g.tts-highlight').length).toBe(0);
+            // …then exactly one highlight was added for the active CFI.
+            expect(rendition.annotations.add).toHaveBeenCalledTimes(1);
+            expect(rendition.annotations.add).toHaveBeenCalledWith(
+                'highlight', 'epubcfi(/6/4!/4/2)', {}, expect.any(Function), 'tts-highlight'
+            );
+            expect(rendition.display).toHaveBeenCalledWith('epubcfi(/6/4!/4/2)');
+        });
+
+        it('removes the previous highlight (and re-sweeps) when the active sentence advances', () => {
+            const rendition = makeRendition([makePaneWithOrphan()]);
+            renderWith(rendition, 'playing', 'cfi-A');
+            expect(rendition.annotations.add).toHaveBeenCalledTimes(1);
+
+            act(() => {
+                useTTSPlaybackStore.setState({ activeCfi: 'cfi-B' });
+            });
+
+            expect(rendition.annotations.remove).toHaveBeenCalledWith('cfi-A', 'highlight');
+            // One add per CFI — never two live highlights.
+            const addedCfis = rendition.annotations.add.mock.calls.map(c => c[1]);
+            expect(addedCfis).toEqual(['cfi-A', 'cfi-B']);
+        });
+
+        it('keeps a single highlight across pause/resume (status change re-applies, never duplicates)', () => {
+            const rendition = makeRendition([makePaneWithOrphan()]);
+            renderWith(rendition, 'playing', 'cfi-A');
+
+            act(() => { useTTSPlaybackStore.setState({ status: 'paused', isPlaying: false }); });
+            act(() => { useTTSPlaybackStore.setState({ status: 'playing', isPlaying: true }); });
+
+            const addedCfis = rendition.annotations.add.mock.calls.map(c => c[1]);
+            const removedCfis = rendition.annotations.remove.mock.calls.map(c => c[0]);
+            // Every add for cfi-A is preceded by a remove of cfi-A (add count
+            // never exceeds remove count + 1) — the single-node invariant.
+            expect(addedCfis.every(c => c === 'cfi-A')).toBe(true);
+            expect(addedCfis.length).toBeLessThanOrEqual(removedCfis.length + 1);
+        });
+
+        it('stops highlighting (no add) once status is stopped', () => {
+            const rendition = makeRendition([makePaneWithOrphan()]);
+            renderWith(rendition, 'stopped');
+            expect(rendition.annotations.add).not.toHaveBeenCalled();
+        });
+
+        it('reconciles on visibilitychange: display + remove + sweep + re-add for the fresh CFI', () => {
+            const pane = makePaneWithOrphan();
+            const rendition = makeRendition([pane]);
+            renderWith(rendition, 'playing', 'cfi-A');
+            rendition.annotations.add.mockClear();
+            rendition.annotations.remove.mockClear();
+            rendition.display.mockClear();
+
+            // Simulate a background queue advance, then return to foreground.
+            act(() => { useTTSPlaybackStore.setState({ activeCfi: 'cfi-FRESH' }); });
+            pane.innerHTML = '<svg><g class="tts-highlight"></g></svg>'; // orphan re-appears
+            Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true, configurable: true });
+            fireEvent(document, new Event('visibilitychange'));
+
+            expect(rendition.display).toHaveBeenCalledWith('cfi-FRESH');
+            expect(rendition.annotations.remove).toHaveBeenCalledWith('cfi-FRESH', 'highlight');
+            expect(pane.querySelectorAll('g.tts-highlight').length).toBe(0);
+            const lastAdd = rendition.annotations.add.mock.calls.at(-1);
+            expect(lastAdd?.[1]).toBe('cfi-FRESH');
+            expect(lastAdd?.[4]).toBe('tts-highlight');
+        });
     });
 
     describe('regression: overlapping global keyboard registries (keyboard-gating hotfix)', () => {

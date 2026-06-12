@@ -25,6 +25,8 @@ import { playbackCache } from './data/repos/playbackCache';
 import { closeConnection } from './data/connection';
 import { wipeAllData } from './data/wipe';
 import { MockGenAIClient, setGenAIClient, type MockGenAIFixture } from './domains/google';
+import { useContentAnalysisStore } from './store/useContentAnalysisStore';
+import { useGenAIStore } from './store/useGenAIStore';
 import { createLogger } from './lib/logger';
 
 const logger = createLogger('TestApi');
@@ -76,7 +78,25 @@ export interface VersicleTestApi {
    */
   genai: {
     setMock(fixture: MockGenAIFixture): void;
+    /**
+     * Toggles the GenAI content-analysis debug mode (the same switch the
+     * settings UI drives via useGenAIStore.setDebugModeEnabled). P6 overlay
+     * characterization seam: the debug-highlight layer keys on this flag.
+     */
+    setDebugMode(enabled: boolean): void;
   };
+
+  /**
+   * Seeds a content-analysis result for one section (P6 entry gate,
+   * prep/phase6-reader-engine.md §Test plan): writes through the
+   * useContentAnalysisStore action so the reader's debug-highlight layer
+   * picks it up exactly like real GenAI output.
+   */
+  seedContentAnalysis(
+    bookId: string,
+    sectionId: string,
+    payload: { referenceStartCfi: string },
+  ): void;
 }
 
 declare global {
@@ -139,6 +159,16 @@ export function installTestApi(): void {
         setGenAIClient(new MockGenAIClient(fixture));
         logger.info('GenAI mock client installed', fixture.error ? '(error mode)' : '');
       },
+      setDebugMode: (enabled) => {
+        useGenAIStore.getState().setDebugModeEnabled(enabled);
+        logger.info(`GenAI debug mode ${enabled ? 'enabled' : 'disabled'} (test API)`);
+      },
+    },
+    seedContentAnalysis: (bookId, sectionId, payload) => {
+      useContentAnalysisStore
+        .getState()
+        .saveReferenceStartCfi(bookId, sectionId, payload.referenceStartCfi);
+      logger.info(`Seeded content analysis for ${bookId}/${sectionId} (test API)`);
     },
   };
   window.__versicleTest = api;
