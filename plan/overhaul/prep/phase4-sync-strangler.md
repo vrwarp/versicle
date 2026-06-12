@@ -1,5 +1,8 @@
 # Phase 4 prep — sync strangler: implementation-ready design
 
+> **Phase 4 status (2026-06-11): DONE** — see plan/overhaul/README.md for the banner and
+> §Follow-ups at the end of this document for the deferred work and execution deltas.
+
 Status: READ-ONLY prep artifact, authored against HEAD **`fb3dcd3f09e5fb749abb42cf3359d11014cde590`**
 (branch `claude/amazing-davinci-d7336e`, 2026-06-10).
 
@@ -513,3 +516,70 @@ P2 prep).
   `WorkspaceService` directly; P9 — deletes the `library.__schemaVersion` dual-write (v7), the
   middleware per-map pill demotion, and any P4 transition shims; the one-time purge action's
   telemetry informs whether v7 also clears preference husks (P2 prep §5.3).
+
+---
+
+## Follow-ups (appended at phase close, 2026-06-11)
+
+Phase 4 closed with P4-0/2/3a/3/4/5/6 landed (the manager is deleted; staged swap + honest
+delete are live). Deferred work and execution deltas, in priority order:
+
+1. **P4-1 y-cinder vendoring + the `saved` fork delta (§D6) did NOT land.** `package.json`
+   still pins `github:vrwarp/y-cinder#9c5c205e…`. Consequences, all explicitly designed for:
+   - `lastSyncTime` keeps the transitional connected-transition floor in
+     `wireSyncEvents.ts` (its header documents the retirement condition); `flushed` events
+     flow only from the mock transport today.
+   - The emulator contract runner still mirrors FirestoreBackend over the compat SDK with
+     `capabilities.connect = false` / `savedEvent = false` (its header names the vendoring
+     item as the unlock); `FirestoreBackend.connect` forward-wires the `saved` listener so
+     the delta lights up without touching the adapter.
+   - MockFireProvider event-surface parity + the C3 event cases landed ahead (P4-0), so the
+     fork delta ships against a waiting contract. Vendor following `packages/y-idb`
+     (PROVENANCE, peers, src-direct, single-instance check extended to `firebase`).
+2. **`getRedirectResult` legacy flow still in `AuthSession` (:92).** Named legacy in its
+   header; deletion still gated on one manual web-sign-in verification of the SocialLogin
+   path (`auth-helper.ts`). The `signed-in-via-redirect` SyncEvent dies with it.
+3. **`DataRecoveryView` still hand-rolls the third temp-doc dance** (temp
+   `IndexeddbPersistence('versicle-yjs', …)` read). Retarget to a read primitive
+   (`readSnapshot` from `@data/snapshot/YjsSnapshotService` now exists and is the natural
+   fit — the P4-7 plan predates it).
+4. **android-backup keep-or-delete ADR** (strangler line 384) still not authored;
+   `src/lib/sync/android-backup.ts` + test remain.
+5. **`useSyncToasts` selector-based rewrite** (whole-map `JSON.stringify` subscription +
+   the aliased `useBookStore`-from-`useLibraryStore` import) untouched — it is app-side
+   presentation, not transport, so the §D3 exit greps pass regardless. P8 settles it with
+   the shell/settings work, alongside the `SyncSettingsTab` split (661 lines today, grew
+   the purge maintenance button).
+6. **Residual `src/lib/sync/` production modules**: `firebase-config.ts` (the backend's
+   private helper, per design), `auth-helper.ts` (P7 cuts the google coupling),
+   `semantic-tree.ts` (P7 backup work), `support.ts`, `android-backup.ts` (item 4), plus
+   the C3 contract suite files. `schema.test.ts`/`security-rules.test.ts` stay as the
+   rules pins.
+7. **Execution deltas vs this doc worth knowing** (all strictly safer than designed):
+   - The staged swap's staging write uses the P3 `YjsSnapshotService.applySnapshot`
+     (commit-awaited `writeSnapshot`) instead of §D4 step 5's temp-provider dance — the
+     doc predates the P3 primitives; a `readSnapshot` fork surgery (Y.11) was added for
+     the boot-time staging read.
+   - `SyncMigrationState` gained `previousWorkspaceId` (additive): the legacy
+     modal-rollback restored the data but left `activeWorkspaceId` on the switch TARGET
+     (verified at fb3dcd3f) — old data would have synced into the new workspace's cloud
+     doc on the next connect. The RESTORING_BACKUP boot arm now reverts the tie; legacy
+     states without the field keep legacy behavior.
+   - `CheckpointService.restoreCheckpoint`'s hard path now also runs at boot with no live
+     persistence binding (deleting the database directly). Pre-P4-5, a boot-time rollback
+     fell into the in-memory soft path — a P1b regression where nothing persisted, the
+     state machine cleared anyway, and the next reload silently booted the target
+     workspace. Pinned in CheckpointService.test.ts ("boot-time rollback" block).
+   - The kill-mid-switch pause hooks ride `window.__VERSICLE_SWAP_PAUSE__` through
+     `src/test-flags.ts` (the pre-boot input-flag channel) rather than a
+     `window.__versicleTest.pauseAt()` function — the apply runs at boot, before any test
+     API call could land.
+   - The Storage-blob half of the purge is pinned by `FirestoreBackend.purge.test.ts`
+     (mocked SDK: listAll recursion, ≤500 batching, R8 prefix scoping, no-bucket
+     degradation); the emulator lane runs Firestore-residual purge under the real rules
+     but has no Storage emulator wired. Wiring storage into the emulator lane rides the
+     y-cinder vendoring item (auth+firestore+storage trio).
+8. **Ratchets at close:** no-circular 29, no-circular-runtime 8, lib-not-to-store 28,
+   worker-no-state-typegraph 19, everything else 0 — baseline regenerated, no regressions.
+   The P4 items' decreases (P4-3's 34→28 lib→store drop, runtime cycles 9→8) were locked
+   when they landed.
