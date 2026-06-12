@@ -81,10 +81,31 @@ export interface SyncBackendContractHarness {
    * check / mock snapshot check.)
    */
   probeHasData(workspaceId: string): Promise<boolean>;
-  /** Tombstone deletion — the workspace must never be resurrectable. */
+  /**
+   * The PRODUCTION delete semantics (P4-6 honest delete): tombstone first,
+   * then purge every residual. The workspace must never be resurrectable.
+   */
   deleteWorkspace(workspaceId: string): Promise<void>;
   /** The pre-flight gate every connect runs (tombstone check). */
   isWorkspaceAlive(workspaceId: string): Promise<boolean>;
+  /**
+   * Seed residual replicated data into the workspace the way the transport
+   * would (subcollection docs / the mock snapshot blob) so the purge cases
+   * have something to delete. Required when capabilities.purge is on.
+   */
+  seedResiduals?(workspaceId: string): Promise<void>;
+  /**
+   * Count what an honest delete must remove: residual replicated docs (+
+   * Storage blobs where the environment has them). Required when
+   * capabilities.purge is on.
+   */
+  countResiduals?(workspaceId: string): Promise<number>;
+  /**
+   * Re-run the purge alone on an already-deleted workspace (the P4-6
+   * "Purge deleted workspaces" maintenance path). Required when
+   * capabilities.purge is on.
+   */
+  purgeWorkspace?(workspaceId: string): Promise<{ docsDeleted: number; blobsDeleted: number }>;
   /**
    * Attempt a residual data write into a tombstoned workspace; resolves
    * true when the BACKEND rejected it. Only rules-enforcing backends (the
@@ -125,6 +146,13 @@ export interface SyncBackendContractCapabilities {
   savedEvent: boolean;
   /** Transport failure events can be injected (mock test hooks). */
   eventInjection: boolean;
+  /**
+   * The honest-delete purge is exercisable here (seedResiduals/
+   * countResiduals/purgeWorkspace implemented). Both backends support it;
+   * the Storage-blob half runs only where a Storage emulator exists —
+   * countResiduals simply reports what the environment can see.
+   */
+  purge: boolean;
 }
 
 export interface SyncBackendContractOptions {
@@ -406,13 +434,52 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
         );
       }
 
-      // sync.md debt #2: the real deleteWorkspace purges only the `updates`
-      // subcollection; `history`, `maintenance` and Cloud Storage snapshot
-      // blobs survive. P4's honest deleteWorkspace turns this into a real
-      // case run through the production code path.
-      it.todo(
-        'deleteWorkspace purges residual updates/history/maintenance docs and Storage snapshots (P4)'
-      );
+      // sync.md debt #2, paid by P4-6: the legacy delete purged only the
+      // `updates` subcollection — `history`/`maintenance`/`metadata` docs
+      // and Cloud Storage blobs survived every deletion.
+      if (capabilities.purge) {
+        it('deleteWorkspace purges every residual while the tombstone survives (honest delete)', async () => {
+          const doomed = await harness.createWorkspace('Doomed');
+          await harness.seedResiduals!(doomed.workspaceId);
+          expect(await harness.countResiduals!(doomed.workspaceId)).toBeGreaterThan(0);
+
+          await harness.deleteWorkspace(doomed.workspaceId);
+
+          // Honest: nothing replicated remains…
+          expect(await harness.countResiduals!(doomed.workspaceId)).toBe(0);
+          // …but the tombstone does (no resurrection).
+          await expect(harness.isWorkspaceAlive(doomed.workspaceId)).resolves.toBe(false);
+        });
+
+        it('the purge is scoped to the deleted workspace — sibling residuals survive (risk R8)', async () => {
+          const doomed = await harness.createWorkspace('Doomed');
+          const sibling = await harness.createWorkspace('Sibling');
+          await harness.seedResiduals!(doomed.workspaceId);
+          await harness.seedResiduals!(sibling.workspaceId);
+
+          await harness.deleteWorkspace(doomed.workspaceId);
+
+          expect(await harness.countResiduals!(doomed.workspaceId)).toBe(0);
+          expect(await harness.countResiduals!(sibling.workspaceId)).toBeGreaterThan(0);
+          await expect(harness.isWorkspaceAlive(sibling.workspaceId)).resolves.toBe(true);
+        });
+
+        it('purgeWorkspace is idempotent on a tombstoned husk (the maintenance action)', async () => {
+          const doomed = await harness.createWorkspace('Doomed');
+          await harness.seedResiduals!(doomed.workspaceId);
+          await harness.deleteWorkspace(doomed.workspaceId);
+
+          // The maintenance re-run finds nothing left and must not throw.
+          const report = await harness.purgeWorkspace!(doomed.workspaceId);
+          expect(report.docsDeleted).toBe(0);
+          expect(report.blobsDeleted).toBe(0);
+          await expect(harness.isWorkspaceAlive(doomed.workspaceId)).resolves.toBe(false);
+        });
+      } else {
+        it.todo(
+          'deleteWorkspace purges residual updates/history/maintenance docs and Storage snapshots'
+        );
+      }
     });
   });
 }

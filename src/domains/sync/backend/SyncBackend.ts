@@ -73,26 +73,20 @@ export interface ConnectOptions {
 // ─── Backend ─────────────────────────────────────────────────────────────────
 
 /**
- * NAMED LEGACY DIVERGENCE (deleted by P4-6 "honest delete + purge"): the
- * pre-extraction real and mock deleteWorkspace flows disagreed on connection
- * and sever semantics (FirestoreSyncManager.ts @ fb3dcd3f — real branch
- * called full destroy() and severed `activeWorkspaceId` unconditionally;
- * the mock branch kept the connection and severed only when the deleted
- * workspace was active). The extraction must not change either behavior
- * (P4-0 characterization pins the mock branch), so the divergence is data
- * on the backend instead of `isMockFirestoreEnabled()` branches in the
- * orchestrator. P4-6 unifies both on the mock semantics + remote purge.
+ * What an honest delete actually removed (P4-6). Purges are idempotent and
+ * re-runnable — a husk left by a crash mid-purge reports smaller numbers on
+ * the retry, never an error.
  */
-export interface LegacyDeleteBehavior {
-  destroyConnectionFirst: boolean;
-  severActiveUnconditionally: boolean;
+export interface PurgeReport {
+  /** Residual Firestore docs removed (updates/history/maintenance/metadata). */
+  docsDeleted: number;
+  /** Cloud Storage blobs removed (snapshots, large_updates). */
+  blobsDeleted: number;
 }
 
 export interface SyncBackend {
   /** The authenticated user this backend is bound to (post-auth). */
   readonly uid: string;
-  /** See {@link LegacyDeleteBehavior}. */
-  readonly legacyDeleteBehavior: LegacyDeleteBehavior;
 
   /** Write a new workspace's metadata document. */
   createWorkspace(meta: WorkspaceMetadata): Promise<void>;
@@ -112,11 +106,25 @@ export interface SyncBackend {
   /** Clean-sync probe: does the replicated doc hold any data? */
   probeHasData(workspaceId: string): Promise<boolean>;
   /**
-   * Delete a workspace (tombstone pattern; never resurrectable). Current
-   * semantics absorbed verbatim from the manager's branches; P4-6 splits
-   * this into tombstoneWorkspace + purgeWorkspace(PurgeReport).
+   * Plant the tombstone (root `isDeleted` + metadata `deletedAt`): the
+   * workspace is never resurrectable, and server-side rules deny any new
+   * data write into it from this point. Idempotent — the rules explicitly
+   * allow re-asserting the tombstone (a retried delete).
+   *
+   * Always called BEFORE {@link purgeWorkspace} (the §D1 order): the
+   * tombstone first closes the workspace to writers, so a crash mid-purge
+   * leaves a re-runnable tombstoned husk, never a half-deleted live
+   * workspace.
    */
-  deleteWorkspace(workspaceId: string): Promise<void>;
+  tombstoneWorkspace(workspaceId: string): Promise<void>;
+  /**
+   * The honest delete (P4-6): remove every residual the tombstone leaves
+   * behind — the updates/history/maintenance/metadata subcollection docs
+   * and the Cloud Storage blobs under exactly
+   * `users/{uid}/versicle/{workspaceId}/` (risk R8: sibling workspaces'
+   * blobs must survive). Idempotent and re-runnable.
+   */
+  purgeWorkspace(workspaceId: string): Promise<PurgeReport>;
   /**
    * Attach a Y.Doc to the workspace's replicated document. Synchronous —
    * providers connect in the background and announce themselves via the

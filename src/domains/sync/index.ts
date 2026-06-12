@@ -31,13 +31,15 @@ export { CheckpointInspector } from './checkpoints/CheckpointInspector';
 export type { DiffResult } from './checkpoints/CheckpointInspector';
 export type {
   ConnectOptions,
-  LegacyDeleteBehavior,
+  PurgeReport,
   SaveRejectedEvent,
   SyncBackend,
   SyncBackendFactory,
   SyncConnection,
   SyncConnectionEvents,
 } from './backend/SyncBackend';
+export { stageWorkspaceState, applyStagedSwap, clearStagedState } from './workspaces/stagedSwap';
+export type { ApplyStagedSwapHooks } from './workspaces/stagedSwap';
 export { observeWorkspaceMetadata, workspaceMetadataSchema } from './backend/SyncBackend';
 export { FirestoreBackend } from './backend/FirestoreBackend';
 export { downloadWorkspaceState } from './core/downloadWorkspaceState';

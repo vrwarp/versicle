@@ -22,7 +22,7 @@ import { createLogger } from '@lib/logger';
 import type { WorkspaceMetadata } from '~types/workspace';
 import type {
   ConnectOptions,
-  LegacyDeleteBehavior,
+  PurgeReport,
   SyncBackend,
   SyncConnection,
 } from './SyncBackend';
@@ -41,19 +41,19 @@ const readWorkspaces = (): WorkspaceMetadata[] =>
 const writeWorkspaces = (workspaces: WorkspaceMetadata[]): void =>
   localStorage.setItem(WORKSPACES_KEY, JSON.stringify(workspaces));
 
-const readSnapshots = (): Record<
-  string,
-  { snapshotBase64?: string; isDeleted?: boolean; deletedAt?: number }
-> => JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || '{}');
+type MockSnapshotEntry = {
+  snapshotBase64?: string;
+  isDeleted?: boolean;
+  deletedAt?: number;
+};
+
+const readSnapshots = (): Record<string, MockSnapshotEntry> =>
+  JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || '{}');
+
+const writeSnapshots = (snapshots: Record<string, MockSnapshotEntry>): void =>
+  localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshots));
 
 export class MockBackend implements SyncBackend {
-  // The mock branch's delete semantics (conditional sever, connection kept)
-  // — the shape P4-6 unifies the real backend onto.
-  readonly legacyDeleteBehavior: LegacyDeleteBehavior = {
-    destroyConnectionFirst: false,
-    severActiveUnconditionally: false,
-  };
-
   constructor(readonly uid: string) {}
 
   private docPath(workspaceId: string): string {
@@ -93,18 +93,38 @@ export class MockBackend implements SyncBackend {
     return Boolean(readSnapshots()[this.docPath(workspaceId)]?.snapshotBase64);
   }
 
-  async deleteWorkspace(workspaceId: string): Promise<void> {
+  async tombstoneWorkspace(workspaceId: string): Promise<void> {
     // Tombstone the directory entry…
     writeWorkspaces(
       readWorkspaces().map((ws) =>
         ws.workspaceId === workspaceId ? { ...ws, deletedAt: Date.now() } : ws
       )
     );
-    // …and the snapshot store.
+    // …and the snapshot store. MERGE (not replace): the tombstone closes
+    // the workspace; removing the residual data is purgeWorkspace's job —
+    // the same split the real backend has (tombstone vs subcollection
+    // sweep).
     const snapshots = readSnapshots();
-    snapshots[this.docPath(workspaceId)] = { isDeleted: true, deletedAt: Date.now() };
-    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshots));
-    logger.info(`[Mock] Workspace deleted and tombstoned: ${workspaceId}`);
+    snapshots[this.docPath(workspaceId)] = {
+      ...snapshots[this.docPath(workspaceId)],
+      isDeleted: true,
+      deletedAt: Date.now(),
+    };
+    writeSnapshots(snapshots);
+    logger.info(`[Mock] Workspace tombstoned: ${workspaceId}`);
+  }
+
+  async purgeWorkspace(workspaceId: string): Promise<PurgeReport> {
+    const snapshots = readSnapshots();
+    const entry = snapshots[this.docPath(workspaceId)];
+    const hadData = Boolean(entry?.snapshotBase64);
+    if (hadData) {
+      delete entry.snapshotBase64;
+      writeSnapshots(snapshots);
+    }
+    logger.info(`[Mock] Workspace purged: ${workspaceId} (hadData=${hadData})`);
+    // The mock's "subcollections" are its one snapshot blob; no Storage.
+    return { docsDeleted: hadData ? 1 : 0, blobsDeleted: 0 };
   }
 
   connect(ydoc: Y.Doc, workspaceId: string, opts: ConnectOptions): SyncConnection {

@@ -25,7 +25,7 @@ import { createLogger } from '@lib/logger';
 import type { FirestoreSyncStatus } from '~types/sync';
 import type { WorkspaceMetadata } from '~types/workspace';
 import { WorkspaceDeletedError } from '~types/errors';
-import type { SyncBackend } from '../backend/SyncBackend';
+import type { PurgeReport, SyncBackend } from '../backend/SyncBackend';
 import { downloadWorkspaceState } from './downloadWorkspaceState';
 import { readDocSchemaVersion, readUpdateSchemaVersion } from './quarantine';
 import { AuthSession, type AuthChangeCallback } from './AuthSession';
@@ -84,7 +84,6 @@ export class SyncOrchestrator {
       maxUpdatesThreshold: () => this.config.maxUpdatesThreshold,
       disconnect: () => this.provider.detach(),
       reconnect: (uid) => this.connect(uid),
-      stopAll: () => this.stop(),
     });
   }
 
@@ -407,6 +406,13 @@ export class SyncOrchestrator {
     const user = this.getCurrentUser();
     if (!user) throw new Error('Must be authenticated to delete workspace');
     return this.workspaces.delete(this.getBackend(user.uid), workspaceId);
+  }
+
+  /** The "Purge deleted workspaces" maintenance action (P4-6). */
+  async purgeDeletedWorkspaces(): Promise<PurgeReport> {
+    const user = this.getCurrentUser();
+    if (!user) throw new Error('Must be authenticated to purge workspaces');
+    return this.workspaces.purgeDeleted(this.getBackend(user.uid));
   }
 
   // ── Status management ──────────────────────────────────────────────────────

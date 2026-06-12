@@ -121,6 +121,17 @@ export function wireSyncEvents(): () => void {
         toast('Offline sync unavailable (persistence failed)', 'error');
         break;
 
+      case 'workspace-purged':
+        // The honest delete / purge maintenance action (P4-6): tell the
+        // user what actually got removed remotely.
+        toast(
+          `Remote workspace data purged (${event.report.docsDeleted} document` +
+            `${event.report.docsDeleted === 1 ? '' : 's'}, ${event.report.blobsDeleted} blob` +
+            `${event.report.blobsDeleted === 1 ? '' : 's'}).`,
+          'info'
+        );
+        break;
+
       case 'obsolete':
         // Quarantine (§D5): sever the provider connection (a destroy, not a
         // status label) and stop the device heartbeat — zero outbound
@@ -131,7 +142,6 @@ export function wireSyncEvents(): () => void {
         break;
 
       default:
-        // 'workspace-purged' (P4-6) has no presentation yet.
         break;
     }
   });

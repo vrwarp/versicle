@@ -17,7 +17,7 @@ import type { WorkspaceMetadata } from '~types/workspace';
 import { WorkspaceDeletedError } from '~types/errors';
 import { createLogger } from '@lib/logger';
 import { generateSecureId } from '@lib/crypto';
-import type { SyncBackend } from '../backend/SyncBackend';
+import type { PurgeReport, SyncBackend } from '../backend/SyncBackend';
 import type { SyncEventBus } from '../events';
 import { downloadWorkspaceState } from '../core/downloadWorkspaceState';
 import { readUpdateSchemaVersion } from '../core/quarantine';
@@ -37,12 +37,15 @@ export interface WorkspaceServiceDeps {
   debounceOverrideMs: () => number;
   maxUpdatesThreshold: () => number;
   // ── Orchestrator hooks (the connection lifecycle stays its property) ──
-  /** Sever the live provider connection (createWorkspace reconnect prep). */
+  /**
+   * Sever the live provider connection — SCOPED, not a full manager
+   * destroy (createWorkspace reconnect prep; delete-of-the-active
+   * workspace). The legacy real-path `stopAll` (full destroy on every
+   * delete) died with the P4-6 honest-delete unification.
+   */
   disconnect: () => void;
   /** Re-run the connect sequence for the given uid (after create). */
   reconnect: (uid: string) => Promise<void>;
-  /** Legacy real-backend delete semantics: full manager destroy(). */
-  stopAll: () => void;
 }
 
 export class WorkspaceService {
@@ -183,30 +186,68 @@ export class WorkspaceService {
   }
 
   /**
-   * Delete a workspace (Tombstone Pattern).
-   * Reclaims storage but preserves a tombstone to prevent resurrection.
+   * The honest delete (P4-6): tombstone → purge → conditional sever.
+   *
+   * Unified semantics (the legacy real/mock divergence is dead): deleting
+   * the ACTIVE workspace first detaches the live provider (a connection
+   * must not keep syncing into a workspace being tombstoned) and severs
+   * the local tie afterwards; deleting a NON-active workspace touches
+   * neither — the active connection stays up throughout.
+   *
+   * Order matters for crash-safety (§D1): the tombstone lands first, so
+   * server rules immediately deny new data writes and a crash mid-purge
+   * leaves a re-runnable tombstoned husk (the purge maintenance action
+   * cleans those).
    */
   async delete(backend: SyncBackend, workspaceId: string): Promise<void> {
-    // Legacy real/mock divergence preserved as backend data, not
-    // branches — see LegacyDeleteBehavior (unified by the honest-delete
-    // item, P4-6).
-    if (backend.legacyDeleteBehavior.destroyConnectionFirst) {
-      // Terminate the active connection to prevent resurrection
-      this.deps.stopAll();
+    const activeWorkspaceId = this.deps.syncState.getActiveWorkspaceId();
+    const wasActive = activeWorkspaceId === workspaceId;
+
+    if (wasActive) {
+      // Scoped sever — NOT the legacy full destroy: only the live
+      // attachment to the workspace being deleted comes down.
+      this.deps.disconnect();
     }
 
-    await backend.deleteWorkspace(workspaceId);
+    await backend.tombstoneWorkspace(workspaceId);
+    const report = await backend.purgeWorkspace(workspaceId);
+    this.deps.events.emit({ type: 'workspace-purged', report });
 
-    // Sever local tie
-    if (backend.legacyDeleteBehavior.severActiveUnconditionally) {
+    if (wasActive) {
       this.deps.syncState.setActiveWorkspaceId(null);
-    } else {
-      const activeWorkspaceId = this.deps.syncState.getActiveWorkspaceId();
-      if (activeWorkspaceId === workspaceId) {
-        this.deps.syncState.setActiveWorkspaceId(null);
-      }
     }
 
-    logger.info(`Workspace deleted and tombstoned: ${workspaceId}`);
+    logger.info(
+      `Workspace deleted: ${workspaceId} (tombstoned; purged ${report.docsDeleted} docs, ` +
+        `${report.blobsDeleted} blobs; active tie ${wasActive ? 'severed' : 'kept'})`
+    );
+  }
+
+  /**
+   * The one-time "Purge deleted workspaces" maintenance action (P4-6):
+   * walk the full directory (tombstoned entries included) and purge the
+   * residuals every pre-P4-6 delete left behind — `history`/`maintenance`/
+   * `metadata` docs and Storage blobs survived the legacy updates-only
+   * purge. Re-asserts each tombstone first (idempotent; also closes any
+   * crash-mid-delete husk), then sweeps. Safe to run repeatedly.
+   */
+  async purgeDeleted(backend: SyncBackend): Promise<PurgeReport> {
+    const all = await backend.listWorkspaces({ includeDeleted: true });
+    const deleted = all.filter((ws) => ws.deletedAt);
+    const total: PurgeReport = { docsDeleted: 0, blobsDeleted: 0 };
+
+    for (const ws of deleted) {
+      await backend.tombstoneWorkspace(ws.workspaceId);
+      const report = await backend.purgeWorkspace(ws.workspaceId);
+      total.docsDeleted += report.docsDeleted;
+      total.blobsDeleted += report.blobsDeleted;
+    }
+
+    logger.info(
+      `Purged ${deleted.length} deleted workspace(s): ${total.docsDeleted} docs, ` +
+        `${total.blobsDeleted} blobs.`
+    );
+    this.deps.events.emit({ type: 'workspace-purged', report: total });
+    return total;
   }
 }

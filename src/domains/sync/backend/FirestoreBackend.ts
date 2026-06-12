@@ -6,9 +6,10 @@
  * connectFireProviderNormal :515-535, createWorkspace :691-698,
  * listWorkspaces :869-882, deleteWorkspace :920-957).
  *
- * This is the ONLY sync module that may import `firebase/firestore`
- * (boundary: every other sync module talks `SyncBackend`). It gains the
- * only `firebase/storage` import when P4-6 lands the purge.
+ * This is the ONLY sync module that may import `firebase/firestore` or
+ * `firebase/storage` (boundary: every other sync module talks
+ * `SyncBackend`; the storage import exists solely for the P4-6 honest
+ * delete's blob purge).
  *
  * Paths (the live layout — `~types/workspace.ts` documents the same):
  *   - metadata directory: `users/{uid}/workspaces/{workspaceId}`
@@ -27,13 +28,21 @@ import {
   query,
   limit,
   writeBatch,
+  type Firestore,
 } from 'firebase/firestore';
+import {
+  getStorage,
+  ref,
+  listAll,
+  deleteObject,
+  type StorageReference,
+} from 'firebase/storage';
 import { getFirebaseApp, getFirestoreDb } from '@lib/sync/firebase-config';
 import { createLogger } from '@lib/logger';
 import type { WorkspaceMetadata } from '~types/workspace';
 import type {
   ConnectOptions,
-  LegacyDeleteBehavior,
+  PurgeReport,
   SyncBackend,
   SyncConnection,
 } from './SyncBackend';
@@ -41,6 +50,13 @@ import { observeWorkspaceMetadata } from './SyncBackend';
 import { createSyncConnectionEmitter } from './connectionEvents';
 
 const logger = createLogger('FirestoreBackend');
+
+/**
+ * The y-cinder-managed subcollections an honest delete must sweep
+ * (firestore.rules documents the same four; the legacy delete purged only
+ * `updates` — sync.md debt #2).
+ */
+const PURGE_SUBCOLLECTIONS = ['updates', 'history', 'maintenance', 'metadata'] as const;
 
 /**
  * The provider event surface the adapter listens to. y-cinder's emitter is
@@ -54,13 +70,6 @@ interface ProviderEmitter {
 }
 
 export class FirestoreBackend implements SyncBackend {
-  // P4-6 unifies delete semantics; until then this preserves the real
-  // branch's behavior exactly (full destroy + unconditional sever).
-  readonly legacyDeleteBehavior: LegacyDeleteBehavior = {
-    destroyConnectionFirst: true,
-    severActiveUnconditionally: true,
-  };
-
   constructor(readonly uid: string) {}
 
   private metaPath(workspaceId: string): string {
@@ -139,42 +148,107 @@ export class FirestoreBackend implements SyncBackend {
     return !updatesSnap.empty;
   }
 
-  async deleteWorkspace(workspaceId: string): Promise<void> {
+  async tombstoneWorkspace(workspaceId: string): Promise<void> {
     const db = getFirestoreDb();
     if (!db) throw new Error('Firestore not initialized');
 
-    // 1. Reclaim storage: recursively delete the updates subcollection.
-    // (KNOWN-INCOMPLETE purge, pinned by the contract suite's P4 todo case:
-    // `history`/`maintenance`/`metadata` docs and Cloud Storage blobs
-    // survive — P4-6's purgeWorkspace finishes the job.)
-    const updatesRef = collection(db, `${this.docPath(workspaceId)}/updates`);
-    let isDeleting = true;
-    while (isDeleting) {
-      const snapshot = await getDocs(query(updatesRef, limit(500)));
-      if (snapshot.size === 0) {
-        isDeleting = false;
-        break;
-      }
-      const batch = writeBatch(db);
-      snapshot.docs.forEach((docSnap) => {
-        batch.delete(docSnap.ref);
-      });
-      await batch.commit();
-    }
-
-    // 2. Plant the tombstone on the root document.
+    // 1. Plant the tombstone on the root document. Rules-side, this closes
+    // the workspace to all new data writes (and allows this exact merge to
+    // be re-asserted on a retried delete).
     await setDoc(
       doc(db, this.docPath(workspaceId)),
       { isDeleted: true, deletedAt: Date.now() },
       { merge: true }
     );
 
-    // 3. Update the metadata index (filtered out of future lists).
+    // 2. Update the metadata index (filtered out of future lists).
     await setDoc(
       doc(db, `users/${this.uid}/workspaces`, workspaceId),
       { deletedAt: Date.now() },
       { merge: true }
     );
+  }
+
+  /** Batched (≤500) delete loop over one subcollection; returns the count. */
+  private async purgeSubcollection(db: Firestore, path: string): Promise<number> {
+    const subRef = collection(db, path);
+    let deleted = 0;
+    for (;;) {
+      const snapshot = await getDocs(query(subRef, limit(500)));
+      if (snapshot.size === 0) break;
+      const batch = writeBatch(db);
+      snapshot.docs.forEach((docSnap) => {
+        batch.delete(docSnap.ref);
+      });
+      await batch.commit();
+      deleted += snapshot.size;
+    }
+    return deleted;
+  }
+
+  /**
+   * Recursive Cloud Storage sweep under one prefix (`listAll` returns one
+   * level of items + sub-prefixes — `large_updates/` lives one level down).
+   * Already-gone objects count as deleted by someone else, not as errors.
+   */
+  private async purgeStoragePrefix(prefix: StorageReference): Promise<number> {
+    const listing = await listAll(prefix);
+    let deleted = 0;
+    for (const item of listing.items) {
+      try {
+        await deleteObject(item);
+        deleted++;
+      } catch (error) {
+        if ((error as { code?: string })?.code === 'storage/object-not-found') continue;
+        throw error;
+      }
+    }
+    for (const sub of listing.prefixes) {
+      deleted += await this.purgeStoragePrefix(sub);
+    }
+    return deleted;
+  }
+
+  async purgeWorkspace(workspaceId: string): Promise<PurgeReport> {
+    const db = getFirestoreDb();
+    if (!db) throw new Error('Firestore not initialized');
+
+    // 1. Sweep the residual subcollection docs (rules permit deletes in a
+    // tombstoned workspace — cleanup must stay possible).
+    let docsDeleted = 0;
+    for (const sub of PURGE_SUBCOLLECTIONS) {
+      docsDeleted += await this.purgeSubcollection(
+        db,
+        `${this.docPath(workspaceId)}/${sub}`
+      );
+    }
+
+    // 2. Sweep the Cloud Storage blobs under exactly this workspace's
+    // prefix (risk R8: never broader). Storage failures must not strand
+    // the delete flow: BYO projects without a Storage bucket have nothing
+    // y-cinder could have uploaded — log and report zero; the purge
+    // maintenance action retries any genuine residue later.
+    let blobsDeleted = 0;
+    try {
+      const app = getFirebaseApp();
+      if (app) {
+        const storage = getStorage(app);
+        blobsDeleted = await this.purgeStoragePrefix(
+          ref(storage, this.docPath(workspaceId))
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        `Storage purge for ${workspaceId} failed (project without Storage?). ` +
+          'Firestore residuals were still purged; re-run "Purge deleted workspaces" to retry.',
+        error
+      );
+    }
+
+    logger.info(
+      `Purged workspace ${workspaceId}: ${docsDeleted} docs, ${blobsDeleted} blobs.`
+    );
+    return { docsDeleted, blobsDeleted };
   }
 
   connect(ydoc: Y.Doc, workspaceId: string, opts: ConnectOptions): SyncConnection {

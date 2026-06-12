@@ -119,6 +119,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     const [isCreatingWorkspace, setIsCreatingWorkspace] = React.useState(false);
     const [isSwitchingWorkspace, setIsSwitchingWorkspace] = React.useState<string | null>(null);
     const [isDeletingWorkspace, setIsDeletingWorkspace] = React.useState<string | null>(null);
+    const [isPurgingDeleted, setIsPurgingDeleted] = React.useState(false);
     const activeWorkspaceId = useSyncStore(state => state.activeWorkspaceId);
 
     // Load workspaces when signed in
@@ -158,6 +159,23 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
         } catch (err) {
             console.error('Failed to switch workspace:', err);
             setIsSwitchingWorkspace(null);
+        }
+    };
+
+    const handlePurgeDeletedWorkspaces = async () => {
+        setIsPurgingDeleted(true);
+        try {
+            // One-time maintenance (P4-6): pre-honest-delete versions left
+            // history/maintenance/metadata docs and Storage blobs behind on
+            // every workspace deletion. Walks ALL tombstoned workspaces and
+            // purges the residue; the result toast rides the
+            // 'workspace-purged' SyncEvent. Safe to run repeatedly.
+            await getSyncOrchestrator().purgeDeletedWorkspaces();
+        } catch (err) {
+            console.error('Failed to purge deleted workspaces:', err);
+            showToast('Failed to purge deleted workspaces.', 'error');
+        } finally {
+            setIsPurgingDeleted(false);
         }
     };
 
@@ -444,6 +462,25 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                         {isCreatingWorkspace ? (
                                             <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
                                         ) : 'Create'}
+                                    </Button>
+                                </div>
+
+                                {/* Maintenance: purge residuals of past deletions (P4-6) */}
+                                <div className="flex items-center justify-between gap-2 pt-2">
+                                    <p className="text-[11px] text-muted-foreground leading-snug">
+                                        Older versions left cloud data behind when deleting
+                                        workspaces. Run once to reclaim it.
+                                    </p>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="shrink-0"
+                                        onClick={handlePurgeDeletedWorkspaces}
+                                        disabled={isPurgingDeleted || isDeletingWorkspace !== null}
+                                    >
+                                        {isPurgingDeleted ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                                        ) : 'Purge deleted workspaces'}
                                     </Button>
                                 </div>
                             </div>

@@ -371,5 +371,66 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       const listed = await manager.listWorkspaces();
       expect(listed.map((w) => w.workspaceId)).toEqual(['ws_alive']);
     });
+
+    it('deleting a NON-active workspace keeps the active one connected (P4-6 unification)', async () => {
+      seedWorkspace('ws_active');
+      seedWorkspace('ws_other');
+      useSyncStore.getState().setActiveWorkspaceId('ws_active');
+
+      const manager = getSyncOrchestrator();
+      await manager.start();
+      await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), {
+        timeout: 5000,
+      });
+
+      await manager.deleteWorkspace('ws_other');
+
+      // The legacy REAL path destroyed the whole manager on any delete;
+      // unified semantics never touch the live connection for non-active
+      // deletions.
+      expect(manager.getStatus()).toBe('connected');
+      expect(useSyncStore.getState().activeWorkspaceId).toBe('ws_active');
+      // …and the delete was honest: tombstone everywhere + purge toast.
+      const ws = readWorkspaces().find((w) => w.workspaceId === 'ws_other');
+      expect(ws?.deletedAt).toBeGreaterThan(0);
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringMatching(/^Remote workspace data purged/),
+        'info'
+      );
+    });
+
+    it('the purge maintenance action sweeps residuals of every tombstoned workspace', async () => {
+      seedWorkspace('ws_alive');
+      seedWorkspace('ws_dead', { deletedAt: Date.now() });
+      // Residual data a pre-P4-6 delete left behind in the dead workspace.
+      injectCloudSnapshot('ws_dead', (doc) => {
+        doc.getMap('library').set('residual', 'leftover');
+      });
+      injectCloudSnapshot('ws_alive', (doc) => {
+        doc.getMap('library').set('keep', 'me');
+      });
+
+      const manager = getSyncOrchestrator();
+      // Authenticated context without connecting: start() routes to the
+      // halt branch (no active workspace) but signs the mock user in.
+      await manager.start();
+      await vi.waitFor(
+        () => expect(useSyncStore.getState().firebaseAuthStatus).toBe('signed-in'),
+        { timeout: 5000 }
+      );
+
+      const report = await manager.purgeDeletedWorkspaces();
+
+      expect(report.docsDeleted).toBe(1);
+      const snapshots = MockFireProvider.getMockStorageData();
+      // The dead workspace's residual blob is gone; the tombstone survives.
+      const deadEntry = snapshots?.[pathFor('ws_dead')] as
+        | { snapshotBase64?: string; isDeleted?: boolean }
+        | undefined;
+      expect(deadEntry?.snapshotBase64).toBeUndefined();
+      expect(deadEntry?.isDeleted).toBe(true);
+      // The living workspace's data survives (scoping).
+      expect(snapshots?.[pathFor('ws_alive')]?.snapshotBase64).toBeTruthy();
+    });
   });
 });

@@ -310,22 +310,18 @@ describe('WorkspaceService.switch — pre-commit crash/abort rows (row 1)', () =
       maxUpdatesThreshold: () => 50,
       disconnect: () => undefined,
       reconnect: async () => undefined,
-      stopAll: () => undefined,
     });
   };
 
   const baseBackend = (overrides: Partial<SyncBackend>): SyncBackend => ({
     uid: UID_BACKEND,
-    legacyDeleteBehavior: {
-      destroyConnectionFirst: false,
-      severActiveUnconditionally: false,
-    },
     createWorkspace: async () => undefined,
     listWorkspaces: async () => [],
     updateWorkspaceMetadata: async () => undefined,
     isWorkspaceAlive: async () => true,
     probeHasData: async () => false,
-    deleteWorkspace: async () => undefined,
+    tombstoneWorkspace: async () => undefined,
+    purgeWorkspace: async () => ({ docsDeleted: 0, blobsDeleted: 0 }),
     connect: () => {
       throw new Error('connect not stubbed');
     },

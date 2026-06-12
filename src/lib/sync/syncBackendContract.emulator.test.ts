@@ -88,6 +88,28 @@ describe.skipIf(!emulatorUp)('firestore emulator', () => {
   const metaPath = (workspaceId: string) => `users/${OWNER}/workspaces/${workspaceId}`;
   const rootPath = (workspaceId: string) => `users/${OWNER}/versicle/${workspaceId}`;
 
+  /** The four y-cinder subcollections an honest delete sweeps (P4-6). */
+  const PURGE_SUBCOLLECTIONS = ['updates', 'history', 'maintenance', 'metadata'] as const;
+
+  /** Batched residual sweep mirroring FirestoreBackend.purgeWorkspace. */
+  const purgeResiduals = async (workspaceId: string): Promise<number> => {
+    let deleted = 0;
+    for (const sub of PURGE_SUBCOLLECTIONS) {
+      for (;;) {
+        const snapshot = await db()
+          .collection(`${rootPath(workspaceId)}/${sub}`)
+          .limit(500)
+          .get();
+        if (snapshot.size === 0) break;
+        const batch = db().batch();
+        snapshot.docs.forEach((docSnap) => batch.delete(docSnap.ref));
+        await batch.commit();
+        deleted += snapshot.size;
+      }
+    }
+    return deleted;
+  };
+
   const makeHarness = async (): Promise<SyncBackendContractHarness> => {
     await testEnv.clearFirestore();
     return {
@@ -140,9 +162,10 @@ describe.skipIf(!emulatorUp)('firestore emulator', () => {
           .add({ update: 'seeded-update-blob', createdAt: Date.now() });
       },
 
-      // Mirrors the real deleteWorkspace tombstoning: plant isDeleted on the
-      // root doc, stamp deletedAt on the metadata doc. (The updates-purge
-      // step is the P4 todo case in the shared contract.)
+      // Mirrors the P4-6 honest delete: tombstone FIRST (root isDeleted +
+      // metadata deletedAt — rules then deny new data writes), then purge
+      // the four y-cinder subcollections under the real rules (which keep
+      // residual-cleanup deletes legal in a tombstoned workspace).
       deleteWorkspace: async (workspaceId) => {
         await db()
           .doc(rootPath(workspaceId))
@@ -150,6 +173,7 @@ describe.skipIf(!emulatorUp)('firestore emulator', () => {
         await db()
           .doc(metaPath(workspaceId))
           .set({ deletedAt: Date.now() }, { merge: true });
+        await purgeResiduals(workspaceId);
       },
 
       isWorkspaceAlive: async (workspaceId) => {
@@ -157,6 +181,33 @@ describe.skipIf(!emulatorUp)('firestore emulator', () => {
         if (snapshot.exists && snapshot.data()?.isDeleted === true) return false;
         return true;
       },
+
+      // One residual doc in each y-cinder subcollection — what every
+      // pre-P4-6 delete left behind (history/maintenance/metadata survived
+      // the legacy updates-only purge).
+      seedResiduals: async (workspaceId) => {
+        for (const sub of PURGE_SUBCOLLECTIONS) {
+          await db()
+            .collection(`${rootPath(workspaceId)}/${sub}`)
+            .add({ residual: sub, createdAt: Date.now() });
+        }
+      },
+
+      countResiduals: async (workspaceId) => {
+        let count = 0;
+        for (const sub of PURGE_SUBCOLLECTIONS) {
+          const snapshot = await db()
+            .collection(`${rootPath(workspaceId)}/${sub}`)
+            .get();
+          count += snapshot.size;
+        }
+        return count;
+      },
+
+      purgeWorkspace: async (workspaceId) => ({
+        docsDeleted: await purgeResiduals(workspaceId),
+        blobsDeleted: 0,
+      }),
 
       attemptWriteToTombstoned: async (workspaceId) => {
         try {
@@ -181,6 +232,10 @@ describe.skipIf(!emulatorUp)('firestore emulator', () => {
       savedEvent: false,
       // Real Firestore listeners cannot be made to fail on demand.
       eventInjection: false,
+      // Honest-delete purge under the real rules (Firestore residuals; the
+      // Storage-blob half needs a Storage emulator and is pinned by the
+      // FirestoreBackend purge unit suite instead).
+      purge: true,
     },
     makeHarness,
   });

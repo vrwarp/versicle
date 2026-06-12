@@ -71,9 +71,25 @@ function makeHarness(): SyncBackendContractHarness {
 
     probeHasData: (workspaceId) => backend.probeHasData(workspaceId),
 
-    deleteWorkspace: (workspaceId) => backend.deleteWorkspace(workspaceId),
+    // The production delete semantics (P4-6 honest delete): tombstone
+    // first, then purge — exactly what WorkspaceService.delete runs.
+    deleteWorkspace: async (workspaceId) => {
+      await backend.tombstoneWorkspace(workspaceId);
+      await backend.purgeWorkspace(workspaceId);
+    },
 
     isWorkspaceAlive: (workspaceId) => backend.isWorkspaceAlive(workspaceId),
+
+    // The mock's residual surface is its one snapshot blob per workspace.
+    seedResiduals: async (workspaceId) => {
+      MockFireProvider.injectSnapshot(
+        `users/${UID}/versicle/${workspaceId}`,
+        btoa('residual-update-bytes')
+      );
+    },
+    countResiduals: async (workspaceId) =>
+      (await backend.probeHasData(workspaceId)) ? 1 : 0,
+    purgeWorkspace: (workspaceId) => backend.purgeWorkspace(workspaceId),
 
     injectConnectionEvent: (workspaceId, event, payload) =>
       MockFireProvider.simulateEvent(event, [payload] as never, {
@@ -96,6 +112,7 @@ describeSyncBackendContract({
     serverSideTombstoneEnforcement: false,
     savedEvent: true,
     eventInjection: true,
+    purge: true,
   },
   makeHarness,
 });
