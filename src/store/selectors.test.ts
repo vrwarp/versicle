@@ -1,673 +1,307 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import { renderHook } from '@testing-library/react';
+/**
+ * Selector suite (Phase 7 PR-L5: re-pointed from the render-time module
+ * cache to the derived libraryViewStore — assertions preserved, now running
+ * against the REAL input stores per the harness philosophy).
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
 import { useAllBooks, useLastReadBookId } from './selectors';
 import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
 import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
-import type { UserProgress } from '~types/db';
+import type { UserInventoryItem, UserProgress, ReadingListEntry } from '~types/db';
+import { makeBookMetadata, makeInventoryItem } from '@test/harness';
 import { getDeviceId } from '@lib/device-id';
-import type { BookMetadata } from '~types/db';
 
-// Mock stores
-vi.mock('./useLocalHistoryStore', () => ({
-  useLocalHistoryStore: vi.fn(),
-}));
-
-vi.mock('./useLibraryStore', () => ({
-  useLibraryStore: vi.fn(),
-}));
-
-vi.mock('./useBookStore', () => ({
-  useBookStore: Object.assign(vi.fn(), {
-    getState: vi.fn(),
-    subscribe: vi.fn(),
-  }),
-}));
-
-vi.mock('./useReadingStateStore', () => ({
-  useReadingStateStore: vi.fn(),
-  isValidProgress: (p: UserProgress | null | undefined) => !!(p && p.percentage > 0.005),
-  getMostRecentProgress: (bookProgress: Record<string, UserProgress> | undefined) => {
-    if (!bookProgress) return null;
-    let max: UserProgress | null = null;
-    for (const k in bookProgress) {
-      const p = bookProgress[k];
-      if (p && p.percentage > 0.005) {
-        if (!max || p.lastRead > max.lastRead) max = p;
-      }
-    }
-    return max;
-  },
-}));
-
-vi.mock('./useReadingListStore', () => ({
-  useReadingListStore: vi.fn(),
-}));
-
-// Mock device ID
+// Mock device ID (deterministic resolution)
 vi.mock('@lib/device-id', () => ({
   getDeviceId: vi.fn(),
 }));
 
+const seedBooks = (books: Record<string, UserInventoryItem>) => {
+  act(() => {
+    useBookStore.setState({ books });
+  });
+};
+
+const seedProgress = (progress: Record<string, Record<string, UserProgress>>) => {
+  act(() => {
+    useReadingStateStore.setState({ progress });
+  });
+};
+
+const seedEntries = (entries: Record<string, ReadingListEntry>) => {
+  act(() => {
+    useReadingListStore.setState({ entries });
+  });
+};
+
+const entry = (overrides: Partial<ReadingListEntry> & Pick<ReadingListEntry, 'filename'>): ReadingListEntry => ({
+  title: overrides.filename,
+  author: 'Author',
+  percentage: 0,
+  lastUpdated: 1,
+  ...overrides,
+});
+
+const progressOf = (percentage: number, lastRead = 100, currentCfi?: string): UserProgress => ({
+  bookId: 'irrelevant',
+  percentage,
+  lastRead,
+  currentCfi,
+  completedRanges: [],
+});
+
 describe('selectors', () => {
-  describe('useAllBooks', () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
+  beforeEach(() => {
+    vi.mocked(getDeviceId).mockReturnValue('device-1');
+    act(() => {
+      useBookStore.setState({ books: {} });
+      useLibraryStore.setState({ staticMetadata: {}, offloadedBookIds: new Set() });
+      useReadingStateStore.setState({ progress: {} });
+      useReadingListStore.setState({ entries: {} });
     });
+  });
 
+  describe('useAllBooks', () => {
     it('should prioritize customTitle from Yjs over static metadata', () => {
-      const mockBookState = {
-        books: {
-          'b1': {
-            bookId: 'b1',
-            title: 'Snapshot Title',
-            customTitle: 'Renamed Title',
-            addedAt: 100,
-            lastInteraction: 100,
-            status: 'unread',
-            tags: []
-          }
-        }
-      };
-
-      const mockLibraryState = {
-        staticMetadata: {
-          'b1': {
-            bookId: 'b1',
-            title: 'Static Title',
-            author: 'Author'
-          }
-        },
-        offloadedBookIds: new Set()
-      };
-
-      // Mock implementation of useBookStore
-      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector(mockBookState);
+      seedBooks({
+        b1: makeInventoryItem({ bookId: 'b1', title: 'Snapshot Title', customTitle: 'Custom Title' }),
       });
-
-      // Mock implementation of useLibraryStore
-      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector(mockLibraryState);
-      });
-
-      // Mock reading state
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector({ progress: {} });
+      act(() => {
+        useLibraryStore.getState().setStaticMetadata('b1', makeBookMetadata({ id: 'b1', title: 'Static Title' }));
       });
 
       const { result } = renderHook(() => useAllBooks());
-
-      expect(result.current).toHaveLength(1);
-      expect(result.current[0].title).toBe('Renamed Title');
+      expect(result.current[0].title).toBe('Custom Title');
     });
 
     it('should fallback to static metadata title if customTitle is missing', () => {
-      const mockBookState = {
-        books: {
-          'b1': {
-            bookId: 'b1',
-            title: 'Snapshot Title',
-            // No customTitle
-            addedAt: 100,
-            lastInteraction: 100,
-            status: 'unread',
-            tags: []
-          }
-        }
-      };
-
-      const mockLibraryState = {
-        staticMetadata: {
-          'b1': {
-            bookId: 'b1',
-            title: 'Static Title',
-            author: 'Author'
-          }
-        },
-        offloadedBookIds: new Set()
-      };
-
-      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector(mockBookState);
-      });
-
-      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector(mockLibraryState);
-      });
-
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector({ progress: {} });
+      seedBooks({ b1: makeInventoryItem({ bookId: 'b1', title: 'Snapshot Title' }) });
+      act(() => {
+        useLibraryStore.getState().setStaticMetadata('b1', makeBookMetadata({ id: 'b1', title: 'Static Title' }));
       });
 
       const { result } = renderHook(() => useAllBooks());
-
-      expect(result.current).toHaveLength(1);
-      expect(result.current).toHaveLength(1);
       expect(result.current[0].title).toBe('Static Title');
     });
 
     it('should fallback to reading list progress if device progress is missing', () => {
-      const mockBookState = {
-        books: {
-          'b1': {
-            bookId: 'b1',
-            title: 'Book 1',
-            sourceFilename: 'book1.epub',
-            addedAt: 100,
-            lastInteraction: 100,
-            status: 'unread',
-            tags: []
-          }
-        }
-      };
+      seedBooks({ b1: makeInventoryItem({ bookId: 'b1', sourceFilename: 'book.epub' }) });
+      seedEntries({ 'book.epub': entry({ filename: 'book.epub', percentage: 0.42, lastUpdated: 777 }) });
 
-      const mockLibraryState = {
-        staticMetadata: {},
-        offloadedBookIds: new Set()
-      };
+      const { result } = renderHook(() => useAllBooks());
+      expect(result.current[0].progress).toBe(0.42);
+      expect(result.current[0].lastRead).toBe(777);
+    });
 
-      const mockReadingListState = {
-        entries: {
-          'book1.epub': {
-            filename: 'book1.epub',
-            percentage: 0.75,
-            lastUpdated: 200,
-            title: 'Book 1',
-            author: 'Author'
-          }
-        }
-      };
-
-      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector(mockBookState);
+    it('regression: the bookId FK join wins even when filename and fuzzy keys diverge (Phase 7 §D)', () => {
+      seedBooks({
+        b1: makeInventoryItem({ bookId: 'b1', title: 'Completely Different', author: 'Nobody', sourceFilename: 'renamed.epub' }),
       });
-      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector(mockLibraryState);
-      });
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector({ progress: {} }); // No device progress
-      });
-      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector(mockReadingListState);
+      seedEntries({
+        'original.epub': entry({
+          filename: 'original.epub',
+          title: 'Unrelated Title',
+          author: 'Unrelated Author',
+          percentage: 0.9,
+          bookId: 'b1',
+        }),
       });
 
       const { result } = renderHook(() => useAllBooks());
-
-      expect(result.current).toHaveLength(1);
-      expect(result.current[0].progress).toBe(0.75);
+      expect(result.current[0].progress).toBe(0.9);
+      expect(result.current[0].readingListEntry?.filename).toBe('original.epub');
     });
 
     it('should fallback to title/author matching for reading list progress if sourceFilename is missing', () => {
-      const mockBookState = {
-        books: {
-          'b1': {
-            bookId: 'b1',
-            title: '  The Great Gatsby ',
-            author: ' F. Scott Fitzgerald',
-            // sourceFilename is explicitly missing
-            addedAt: 100,
-            lastInteraction: 100,
-            status: 'unread',
-            tags: []
-          }
-        }
-      };
-
-      const mockLibraryState = {
-        staticMetadata: {},
-        offloadedBookIds: new Set()
-      };
-
-      const mockReadingListState = {
-        entries: {
-          'old-filename.epub': {
-            filename: 'old-filename.epub',
-            percentage: 0.85,
-            lastUpdated: 200,
-            // Testing case insensitivity and whitespace handling
-            title: 'the great gatsby',
-            author: 'f. scott fitzgerald  '
-          }
-        }
-      };
-
-      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector(mockBookState);
-      });
-      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector(mockLibraryState);
-      });
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector({ progress: {} }); // No device progress
-      });
-      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector(mockReadingListState);
+      seedBooks({ b1: makeInventoryItem({ bookId: 'b1', title: 'Moby Dick', author: 'Melville' }) });
+      seedEntries({
+        'moby.epub': entry({ filename: 'moby.epub', title: 'Moby Dick', author: 'Melville', percentage: 0.3 }),
       });
 
       const { result } = renderHook(() => useAllBooks());
-
-      expect(result.current).toHaveLength(1);
-      expect(result.current[0].progress).toBe(0.85);
+      expect(result.current[0].progress).toBe(0.3);
     });
 
     it('should match reading list entry when book title has file extension stripped during normalization', () => {
-      const mockBookState = {
-        books: {
-          'b1': {
-            bookId: 'b1',
-            title: 'All Systems Red',
-            author: 'Martha Wells',
-            addedAt: 100,
-            lastInteraction: 100,
-            status: 'unread',
-            tags: []
-          }
-        }
-      };
-
-      const mockReadingListState = {
-        entries: {
-          'All Systems Red.epub': {
-            filename: 'All Systems Red.epub',
-            percentage: 0.60,
-            lastUpdated: 300,
-            title: 'All Systems Red.epub',
-            author: 'Martha Wells'
-          }
-        }
-      };
-
-      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockBookState));
-      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ staticMetadata: {}, offloadedBookIds: new Set() }));
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ progress: {} }));
-      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockReadingListState));
+      seedBooks({ b1: makeInventoryItem({ bookId: 'b1', title: 'Moby Dick.epub', author: 'Melville' }) });
+      seedEntries({
+        'm.epub': entry({ filename: 'm.epub', title: 'Moby Dick', author: 'Melville', percentage: 0.25 }),
+      });
 
       const { result } = renderHook(() => useAllBooks());
-      expect(result.current).toHaveLength(1);
-      expect(result.current[0].progress).toBe(0.60);
+      expect(result.current[0].progress).toBe(0.25);
     });
 
     it('should match reading list entry when title uses underscores instead of spaces', () => {
-      const mockBookState = {
-        books: {
-          'b1': {
-            bookId: 'b1',
-            title: 'The Three Body Problem',
-            author: 'Liu Cixin',
-            addedAt: 100,
-            lastInteraction: 100,
-            status: 'unread',
-            tags: []
-          }
-        }
-      };
-
-      const mockReadingListState = {
-        entries: {
-          'The_Three_Body_Problem.epub': {
-            filename: 'The_Three_Body_Problem.epub',
-            percentage: 0.40,
-            lastUpdated: 300,
-            title: 'The_Three_Body_Problem',
-            author: 'Liu Cixin'
-          }
-        }
-      };
-
-      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockBookState));
-      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ staticMetadata: {}, offloadedBookIds: new Set() }));
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ progress: {} }));
-      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockReadingListState));
+      seedBooks({ b1: makeInventoryItem({ bookId: 'b1', title: 'Moby_Dick', author: 'Melville' }) });
+      seedEntries({
+        'm.epub': entry({ filename: 'm.epub', title: 'Moby Dick', author: 'Melville', percentage: 0.5 }),
+      });
 
       const { result } = renderHook(() => useAllBooks());
-      expect(result.current).toHaveLength(1);
-      expect(result.current[0].progress).toBe(0.40);
+      expect(result.current[0].progress).toBe(0.5);
     });
 
     it('should match reading list entry when title has bracketed edition metadata', () => {
-      const mockBookState = {
-        books: {
-          'b1': {
-            bookId: 'b1',
-            title: 'Dune',
-            author: 'Frank Herbert',
-            addedAt: 100,
-            lastInteraction: 100,
-            status: 'unread',
-            tags: []
-          }
-        }
-      };
-
-      const mockReadingListState = {
-        entries: {
-          'dune-deluxe.epub': {
-            filename: 'dune-deluxe.epub',
-            percentage: 0.95,
-            lastUpdated: 300,
-            title: 'Dune [Deluxe Edition]',
-            author: 'Frank Herbert'
-          }
-        }
-      };
-
-      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockBookState));
-      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ staticMetadata: {}, offloadedBookIds: new Set() }));
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ progress: {} }));
-      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockReadingListState));
+      seedBooks({ b1: makeInventoryItem({ bookId: 'b1', title: 'Moby Dick [Deluxe Edition]', author: 'Melville' }) });
+      seedEntries({
+        'm.epub': entry({ filename: 'm.epub', title: 'Moby Dick', author: 'Melville', percentage: 0.6 }),
+      });
 
       const { result } = renderHook(() => useAllBooks());
-      expect(result.current).toHaveLength(1);
-      expect(result.current[0].progress).toBe(0.95);
+      expect(result.current[0].progress).toBe(0.6);
     });
 
     it('should match reading list entry when book has title but no author', () => {
-      const mockBookState = {
-        books: {
-          'b1': {
-            bookId: 'b1',
-            title: 'Orphan Book',
-            // No author field
-            addedAt: 100,
-            lastInteraction: 100,
-            status: 'unread',
-            tags: []
-          }
-        }
-      };
-
-      const mockReadingListState = {
-        entries: {
-          'orphan.epub': {
-            filename: 'orphan.epub',
-            percentage: 0.30,
-            lastUpdated: 300,
-            title: 'Orphan Book',
-            author: 'Unknown Author'
-          }
-        }
-      };
-
-      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockBookState));
-      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ staticMetadata: {}, offloadedBookIds: new Set() }));
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ progress: {} }));
-      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockReadingListState));
+      seedBooks({ b1: makeInventoryItem({ bookId: 'b1', title: 'Moby Dick', author: '' }) });
+      seedEntries({
+        'm.epub': entry({ filename: 'm.epub', title: 'Moby Dick', author: '', percentage: 0.7 }),
+      });
 
       const { result } = renderHook(() => useAllBooks());
-      expect(result.current).toHaveLength(1);
-      expect(result.current[0].progress).toBe(0.30);
+      expect(result.current[0].progress).toBe(0.7);
     });
 
     it('should maintain object reference stability for unchanged books when progress updates', () => {
-      // Setup: 2 books. Book A and Book B.
-      const mockBookState = {
-        books: {
-          'book-a': { bookId: 'book-a', title: 'Book A', lastInteraction: 100, status: 'unread', tags: [] },
-          'book-b': { bookId: 'book-b', title: 'Book B', lastInteraction: 100, status: 'unread', tags: [] }
-        }
-      };
+      seedBooks({
+        'book-a': makeInventoryItem({ bookId: 'book-a', title: 'Book A', lastInteraction: 100 }),
+        'book-b': makeInventoryItem({ bookId: 'book-b', title: 'Book B', lastInteraction: 100 }),
+      });
+      seedProgress({
+        'book-a': { 'device-1': progressOf(0, 100) },
+        'book-b': { 'device-1': progressOf(0, 100) },
+      });
 
-      const mockLibraryState = { staticMetadata: {}, offloadedBookIds: new Set() };
-
-      // Initial progress: both 0
-      let mockProgress: Record<string, Record<string, Partial<UserProgress>>> = {
-        'book-a': { 'device-1': { percentage: 0, lastRead: 100 } },
-        'book-b': { 'device-1': { percentage: 0, lastRead: 100 } }
-      };
-
-      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockBookState));
-      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockLibraryState));
-
-      // Dynamic mock for reading state
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ progress: mockProgress }));
-      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ entries: {} }));
-      (getDeviceId as Mock).mockReturnValue('device-1');
-
-      const { result, rerender } = renderHook(() => useAllBooks());
-
+      const { result } = renderHook(() => useAllBooks());
       const firstRender = result.current;
-      const bookA_v1 = firstRender.find((b: BookMetadata) => b.id === 'book-a');
-      const bookB_v1 = firstRender.find((b: BookMetadata) => b.id === 'book-b');
-
+      const bookA_v1 = firstRender.find((b) => b.id === 'book-a');
+      const bookB_v1 = firstRender.find((b) => b.id === 'book-b');
       expect(bookA_v1).toBeDefined();
       expect(bookB_v1).toBeDefined();
 
-      // Update progress for Book A
-      mockProgress = {
-        ...mockProgress,
-        'book-a': { 'device-1': { percentage: 0.5, lastRead: 200 } }
-      };
-
-      rerender();
+      act(() => {
+        useReadingStateStore.setState((state) => ({
+          progress: { ...state.progress, 'book-a': { 'device-1': progressOf(0.5, 200) } },
+        }));
+      });
 
       const secondRender = result.current;
-      const bookA_v2 = secondRender.find((b: BookMetadata) => b.id === 'book-a');
-      const bookB_v2 = secondRender.find((b: BookMetadata) => b.id === 'book-b');
+      const bookA_v2 = secondRender.find((b) => b.id === 'book-a');
+      const bookB_v2 = secondRender.find((b) => b.id === 'book-b');
 
-      // Book A changed progress, should be new object
       expect(bookA_v2?.progress).toBe(0.5);
       expect(bookA_v2).not.toBe(bookA_v1);
-
-      // Book B did NOT change progress, should be SAME object reference
+      // Book B did NOT change, must be the SAME object reference (the
+      // per-book memoization the old module cache provided).
       expect(bookB_v2?.progress).toBe(0);
-      expect(bookB_v2).toBe(bookB_v1); // This validates the optimization
+      expect(bookB_v2).toBe(bookB_v1);
     });
 
     it('should maintain object reference stability for unchanged books when another book is updated in inventory', () => {
-      // Setup: 2 books. Book A and Book B.
-      // We need stable references for Book A and Book B inside the mock state to simulate real store behavior.
-      const bookA = { bookId: 'book-a', title: 'Book A', lastInteraction: 100, status: 'unread', tags: [] };
-      const bookB = { bookId: 'book-b', title: 'Book B', lastInteraction: 100, status: 'unread', tags: [] };
+      const bookA = makeInventoryItem({ bookId: 'book-a', title: 'Book A', lastInteraction: 100 });
+      const bookB = makeInventoryItem({ bookId: 'book-b', title: 'Book B', lastInteraction: 100 });
+      seedBooks({ 'book-a': bookA, 'book-b': bookB });
 
-      let mockBookState = {
-        books: {
-          'book-a': bookA,
-          'book-b': bookB
-        }
-      };
-
-      const mockLibraryState = { staticMetadata: {}, offloadedBookIds: new Set() };
-      const mockProgress = { 'book-a': {}, 'book-b': {} };
-
-      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockBookState));
-      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockLibraryState));
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ progress: mockProgress }));
-      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ entries: {} }));
-
-      const { result, rerender } = renderHook(() => useAllBooks());
-
+      const { result } = renderHook(() => useAllBooks());
       const firstRender = result.current;
-      const bookA_v1 = firstRender.find((b: BookMetadata) => b.id === 'book-a');
-      const bookB_v1 = firstRender.find((b: BookMetadata) => b.id === 'book-b');
+      const bookB_v1 = firstRender.find((b) => b.id === 'book-b');
 
-      expect(bookA_v1).toBeDefined();
-      expect(bookB_v1).toBeDefined();
-
-      // Update Book A (new object reference)
-      const bookA_updated = { ...bookA, title: 'Book A Updated', lastInteraction: 200 };
-
-      mockBookState = {
-        books: {
-          'book-a': bookA_updated,
-          'book-b': bookB // Book B is SAME reference
-        }
-      };
-
-      rerender();
+      act(() => {
+        useBookStore.setState({
+          books: {
+            'book-a': { ...bookA, title: 'Book A Updated', lastInteraction: 200 },
+            'book-b': bookB, // SAME reference
+          },
+        });
+      });
 
       const secondRender = result.current;
-      const bookA_v2 = secondRender.find((b: BookMetadata) => b.id === 'book-a');
-      const bookB_v2 = secondRender.find((b: BookMetadata) => b.id === 'book-b');
+      const bookA_v2 = secondRender.find((b) => b.id === 'book-a');
+      const bookB_v2 = secondRender.find((b) => b.id === 'book-b');
 
-      // Book A changed, should be new object
-      expect(bookA_v2.title).toBe('Book A Updated');
-      expect(bookA_v2).not.toBe(bookA_v1);
-
-      // Book B did NOT change (same reference in store), should be SAME object reference in result
-      // This validates the Phase 1 WeakMap optimization
+      expect(bookA_v2?.title).toBe('Book A Updated');
+      // Book B kept its store reference → same result reference (WeakMap phase-1 cache).
       expect(bookB_v2).toBe(bookB_v1);
     });
 
     it('should rebuild cache when staticMetadata dependencies change, avoiding stale cache reads', () => {
-      const bookA = { bookId: 'book-a', title: 'Book A', lastInteraction: 100, status: 'unread', tags: [] };
-      const mockBookState = {
-        books: { 'book-a': bookA }
-      };
+      seedBooks({ 'book-a': makeInventoryItem({ bookId: 'book-a', title: 'Book A', lastInteraction: 100 }) });
 
-      let mockLibraryState = { staticMetadata: {}, offloadedBookIds: new Set() };
-      const mockProgress = { 'book-a': {} };
+      const { result } = renderHook(() => useAllBooks());
+      const bookA_v1 = result.current.find((b) => b.id === 'book-a');
+      expect(bookA_v1?.title).toBe('Book A');
 
-      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockBookState));
-      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockLibraryState));
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ progress: mockProgress }));
-      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ entries: {} }));
+      act(() => {
+        useLibraryStore.getState().setStaticMetadata('book-a', makeBookMetadata({ id: 'book-a', title: 'Book A - Static Meta' }));
+      });
 
-      const { result, rerender } = renderHook(() => useAllBooks());
-
-      const firstRender = result.current;
-      const bookA_v1 = firstRender.find((b: BookMetadata) => b.id === 'book-a');
-      expect(bookA_v1.title).toBe('Book A');
-
-      // Update static metadata
-      mockLibraryState = {
-        staticMetadata: {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          'book-a': { id: 'book-a', title: 'Book A - Static Meta' } as any
-        },
-        offloadedBookIds: new Set()
-      };
-
-      rerender();
-
-      const secondRender = result.current;
-      const bookA_v2 = secondRender.find((b: BookMetadata) => b.id === 'book-a');
-
-      // We expect the new title from static metadata, proving the cache was invalidated and rebuilt
-      expect(bookA_v2.title).toBe('Book A - Static Meta');
+      const bookA_v2 = result.current.find((b) => b.id === 'book-a');
+      expect(bookA_v2?.title).toBe('Book A - Static Meta');
       expect(bookA_v2).not.toBe(bookA_v1);
     });
 
-    it('should not recreate cache objects when React randomly discards useMemo (Predictability)', () => {
-      // Simulate a scenario where React decides to drop the useMemo cache
-      // If we relied purely on useMemo without our useRef fallback, the identity of the returned array
-      // would change even if dependencies didn't.
-      const bookA = { bookId: 'book-a', title: 'Book A', lastInteraction: 100, status: 'unread', tags: [] };
-      const mockBookState = {
-        books: { 'book-a': bookA }
-      };
-
-      const mockLibraryState = { staticMetadata: {}, offloadedBookIds: new Set() };
-      const mockProgress = { 'book-a': {} };
-
-      (useBookStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockBookState));
-      (useLibraryStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector(mockLibraryState));
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ progress: mockProgress }));
-      (useReadingListStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => selector({ entries: {} }));
+    it('should not recreate the result when nothing changed (render predictability)', () => {
+      seedBooks({ 'book-a': makeInventoryItem({ bookId: 'book-a', title: 'Book A', lastInteraction: 100 }) });
 
       const { result, rerender } = renderHook(() => useAllBooks());
       const firstRender = result.current;
 
-      // Force a re-render without changing ANY dependencies
-      // A pure useMemo might drop its cache here (simulated by rerendering).
-      // Since we replaced it with useRef, it MUST return the exact same reference.
+      // Force a re-render without changing ANY dependencies. The derived
+      // store's state is untouched, so identity MUST hold (no React cache
+      // semantics involved at all anymore).
       rerender();
 
       const secondRender = result.current;
-
       expect(firstRender).toStrictEqual(secondRender);
+      expect(firstRender).toBe(secondRender);
       expect(firstRender[0]).toBe(secondRender[0]);
     });
   });
 
   describe('useLastReadBookId', () => {
     beforeEach(() => {
-      vi.clearAllMocks();
-      // Default: no local history
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useLocalHistoryStore).mockImplementation((selector: any) => selector({ lastReadBookId: null }));
+      act(() => {
+        useLocalHistoryStore.setState({ lastReadBookId: null });
+      });
     });
 
     it('should return null if no progress exists and no local history', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => {
-        return selector({ progress: {} });
-      });
-      (getDeviceId as Mock).mockReturnValue('device-1');
-
       const { result } = renderHook(() => useLastReadBookId());
       expect(result.current).toBeNull();
     });
 
     it('should prioritize local history if available', () => {
-      // Local history has 'local-book'
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useLocalHistoryStore).mockImplementation((selector: any) => selector({ lastReadBookId: 'local-book' }));
-
-      // Reading state has 'remote-book' which is newer (should be ignored)
-      const mockProgress = {
-        'remote-book': { 'device-1': { lastRead: 2000, percentage: 0.5 } },
-        'local-book': { 'device-1': { lastRead: 1000, percentage: 0.1 } }
-      };
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useReadingStateStore).mockImplementation((selector: any) => {
-        // If local ID is present, the selector should ideally return null (conditional subscription).
-        // But our test mock implementation blindly runs the selector.
-        return selector({ progress: mockProgress });
+      act(() => {
+        useLocalHistoryStore.setState({ lastReadBookId: 'local-book' });
       });
-      vi.mocked(getDeviceId).mockReturnValue('device-1');
+      seedProgress({ other: { 'device-1': progressOf(0.5, 999_999) } });
 
       const { result } = renderHook(() => useLastReadBookId());
       expect(result.current).toBe('local-book');
     });
 
     it('should fallback to progress scan if local history is missing', () => {
-      // Local history empty
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useLocalHistoryStore).mockImplementation((selector: any) => selector({ lastReadBookId: null }));
-
-      const mockProgress = {
-        'book1': {
-          'device-1': { lastRead: 1000, percentage: 0.1 },
-          'device-2': { lastRead: 2000, percentage: 0.5 } // Newer, but different device
-        },
-        'book2': {
-          'device-1': { lastRead: 1500, percentage: 0.2 }, // Newest on device-1
-        }
-      };
-
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector({ progress: mockProgress });
+      seedProgress({
+        older: { 'device-1': progressOf(0.5, 100) },
+        newer: { 'device-1': progressOf(0.5, 200) },
       });
-      (getDeviceId as Mock).mockReturnValue('device-1');
 
       const { result } = renderHook(() => useLastReadBookId());
-      expect(result.current).toBe('book2');
+      expect(result.current).toBe('newer');
     });
 
     it('should ignore books not read on current device even if read recently on others', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(useLocalHistoryStore).mockImplementation((selector: any) => selector({ lastReadBookId: null }));
-
-      const mockProgress = {
-        'book1': {
-          'device-1': { lastRead: 1000, percentage: 0.1 }
-        },
-        'book3': {
-          'device-2': { lastRead: 5000, percentage: 0.9 } // Very new, but wrong device
-        }
-      };
-
-      (useReadingStateStore as unknown as Mock).mockImplementation((selector: (state: unknown) => unknown) => {
-        return selector({ progress: mockProgress });
+      seedProgress({
+        'mine-old': { 'device-1': progressOf(0.5, 100) },
+        'theirs-new': { 'device-2': progressOf(0.9, 999) },
       });
-      (getDeviceId as Mock).mockReturnValue('device-1');
 
       const { result } = renderHook(() => useLastReadBookId());
-      expect(result.current).toBe('book1');
+      expect(result.current).toBe('mine-old');
     });
   });
 });

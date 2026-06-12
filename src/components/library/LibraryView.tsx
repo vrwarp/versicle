@@ -289,7 +289,7 @@ export const LibraryView: React.FC = () => {
     const isDownloadedFilter = libraryFilterMode === 'downloaded';
 
     // 1 & 2. Mapless single-pass filter to prevent intermediate array allocations and GC thrashing
-    const filtered: BookMetadata[] = [];
+    const filtered: typeof books = [];
     for (let i = 0; i < books.length; i++) {
       const book = books[i];
 
