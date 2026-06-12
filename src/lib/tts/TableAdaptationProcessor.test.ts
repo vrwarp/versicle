@@ -4,7 +4,7 @@ import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { bookContent } from '@data/repos/bookContent';
 import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
 import { useGenAIStore } from '@store/useGenAIStore';
-import { type SentenceNode } from './sentence-extraction';
+import type { SentenceNode } from '~types/tts-content';
 
 vi.mock('@data/repos/bookContent', () => ({
     bookContent: {

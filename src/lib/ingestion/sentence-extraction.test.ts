@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { extractSentencesFromNode } from './sentence-extraction';
+import { extractSentencesFromNode, TTS_EXTRACTION_VERSION } from './sentence-extraction';
+import { TextSegmenter, DEFAULT_SENTENCE_STARTERS } from '@lib/tts/TextSegmenter';
+import type { CacheTtsPreparation } from '~types/db';
 
 describe('extractSentencesFromNode', () => {
   const mockCfiGenerator = (range: Range) => `cfi(${range.startOffset})`;
@@ -250,5 +252,67 @@ describe('regression: NFKD normalization corrupted sentence CFI ranges for non-A
     expect(sentences.map(s => s.text)).toEqual(
       ['你好。', '世界！', '这是一个测试？'].map(t => t.normalize('NFKD'))
     );
+  });
+});
+
+describe('extraction v3 — raw at rest (5c-PR4; phase5-tts-strangler.md §5c.1)', () => {
+  // The version constant bumps ONLY with this comparison suite green: on the
+  // composed-accent / ligature / CJK fixtures (the 4197cdab NFKD regression
+  // family above), the v3 output must carry CFIs IDENTICAL to what the v2
+  // pipeline persisted (v2 = raw extraction + an ingest-time refineSegments
+  // pass with empty abbreviations). Refinement is a no-op on these fixtures,
+  // so any drift here would be a real CFI regression from the format change.
+  const extractBoth = (html: string) => {
+    const run = () => {
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      let n = 0;
+      const cfiGenerator = (range: Range) => `cfi(${range.toString()}|${++n})`;
+      return extractSentencesFromNode(div, cfiGenerator).sentences;
+    };
+    const v3 = run();
+    // The legacy v2 tail: refine with the import-time inputs the library store
+    // passed (empty abbreviations/alwaysMerge, default starters).
+    const v2 = TextSegmenter.refineSegments(run(), [], [], DEFAULT_SENTENCE_STARTERS);
+    return { v2, v3 };
+  };
+
+  it('pins the version constant (rows written from here on are unrefined)', () => {
+    expect(TTS_EXTRACTION_VERSION).toBe(3);
+  });
+
+  it.each([
+    ['composed accents (NFC é)', '<p>Le café est bon. Voilà le chat. Fin.</p>'],
+    ['combining marks (e + U+0301)', '<p>Le cafe\u0301 est bon. Fin.</p>'],
+    ['ligature (ﬁ)', '<p>The ﬁrst rule. The second rule.</p>'],
+    ['CJK', '<p>你好。世界！这是一个测试？</p>'],
+  ])('v3 CFIs match the v2 pipeline on %s', (_label, html) => {
+    const { v2, v3 } = extractBoth(html);
+    expect(v3.map(sn => sn.cfi)).toEqual(v2.map(sn => sn.cfi));
+    expect(v3.map(sn => sn.text)).toEqual(v2.map(sn => sn.text));
+  });
+
+  it('stores UNREFINED sentences: an abbreviation split is preserved at rest', () => {
+    const div = document.createElement('div');
+    div.innerHTML = '<p>He met Mr. Smith yesterday.</p>';
+    let n = 0;
+    const { sentences } = extractSentencesFromNode(div, () => `cfi(${++n})`);
+    // Intl.Segmenter splits after "Mr." — v2 baked the merge into the row;
+    // v3 keeps the raw split (playback refines against CURRENT settings).
+    expect(sentences.length).toBeGreaterThanOrEqual(2);
+    expect(sentences[0].text.endsWith('Mr.')).toBe(true);
+    // Each raw sentence carries its own source index (the skip-mask currency).
+    sentences.forEach((sn, i) => expect(sn.sourceIndices).toEqual([i]));
+  });
+
+  it('old rows are retained: the read path serves any extractionVersion (graft rule)', () => {
+    // No purge/filter exists anywhere on extractionVersion (the background
+    // re-ingestion DRIVER is Phase 7 scope). Pin the rule at the type level:
+    // the row schema keeps the field optional, so v1 (absent) / v2 / v3 rows
+    // all remain valid reads.
+    const v1Row = { id: 'b-s', bookId: 'b', sectionId: 's', sentences: [] } as CacheTtsPreparation;
+    const v3Row = { ...v1Row, extractionVersion: TTS_EXTRACTION_VERSION } as CacheTtsPreparation;
+    expect(v1Row.extractionVersion).toBeUndefined();
+    expect(v3Row.extractionVersion).toBe(3);
   });
 });

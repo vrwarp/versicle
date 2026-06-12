@@ -133,14 +133,11 @@ export class MaintenanceService {
           const file = new File([fileBlob], knownFilename || 'book.epub', { type: 'application/epub+zip' });
 
           // Get current settings for extraction
-          const { sentenceStarters, sanitizationEnabled } = useTTSSettingsStore.getState();
+          const { sanitizationEnabled } = useTTSSettingsStore.getState();
 
           onProgress(current, total, `Regenerating ${books[bookId].title}...`);
 
           const manifest = await bookImportService.importBookWithId(bookId, file, {
-            abbreviations: [],
-            alwaysMerge: [],
-            sentenceStarters,
             sanitizationEnabled
           });
 

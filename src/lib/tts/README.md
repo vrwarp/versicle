@@ -41,8 +41,13 @@ is landed; 5b (engine decomposition) and 5c (content pipeline) follow.
 *   **`TTSCache.ts`**: Synthesized-audio cache over `@data/repos/audioCache`. Keys are
     SHA-256 of `text|voiceId` — deliberately speed-free (P0 speed policy: synthesis at
     1.0, playback rate applied at the sink) and pinned by a golden-key test.
-*   **`LexiconService.ts`**: Pronunciation lexicon assembly + application before
-    synthesis (becomes `LexiconEngine` at 5c).
+*   **`LexiconService.ts` / `LexiconEngine.ts` / `systemLexicon.ts`** (5c-PR3):
+    main-thread CRUD facade over the `LexiconAssembler`, which compiles stable
+    `CompiledLexicon` value objects keyed by (bookId, language, store version);
+    the Bible rules lazy-load from `bible-lexicon.json` behind
+    `SystemLexiconProvider` (the eager 2,899-line data file is gone — the
+    build check asserts the ruleset stays out of the entry chunk). Application
+    stays in the yjs-free `LexiconApplier` (the worker-safe half).
 *   **`MediaSessionManager.ts` / `PlatformIntegration.ts` / `BackgroundAudio.ts`**:
     lock-screen metadata, hardware keys, background keep-alive (main-thread side).
 *   **`TTSFlightRecorder.ts`**: Ring-buffer diagnostics (worker export surface at 5b).
@@ -51,8 +56,8 @@ is landed; 5b (engine decomposition) and 5c (content pipeline) follow.
 
 *   **`TextSegmenter.ts`**: Splits paragraph text into speakable sentences (abbreviations,
     URLs, CJK, configurable merge rules).
-*   **`sentence-extraction.ts`**: Ingest-time sentence/CFI extraction (relocates to
-    `lib/ingestion/` at 5c).
+*   Ingest-time sentence/CFI extraction lives at `src/lib/ingestion/sentence-extraction.ts`
+    since 5c-PR4 (raw-at-rest extraction v3; consumption types in `~types/tts-content`).
 *   **`AudioElementPlayer.ts`**: The production `AudioSink` (HTML5 `Audio` + Web Audio
     earcon ducking). ONE instance is owned by `TTSProviderManager` and shared across
     provider swaps.

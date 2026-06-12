@@ -1,30 +1,30 @@
-import { TextSegmenter, DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from './TextSegmenter';
-import { Sanitizer } from './processors/Sanitizer';
+/**
+ * Sentence extraction — the INGESTION-side half of TTS content preparation
+ * (Phase 5c; phase5-tts-strangler.md §5c.1, relocated from src/lib/tts/).
+ * The final `src/domains/library/ingestion/` address arrives with the Phase 7
+ * rewrite; this is the one move (README "nothing moves twice").
+ */
+import { TextSegmenter } from '../tts/TextSegmenter';
+import { Sanitizer } from '../tts/processors/Sanitizer';
 import { createLogger } from '../logger';
-import type { CitationMarker } from '~types/db';
+import type { SentenceNode, ExtractionResult, CitationMarker } from '~types/tts-content';
 
 const logger = createLogger('TTS-Utils');
 
-/**
- * Represents a sentence and its corresponding location (CFI) in the book.
- */
-export interface SentenceNode {
-    /** The text content of the sentence. */
-    text: string;
-    /** The Canonical Fragment Identifier (CFI) pointing to the sentence's location. */
-    cfi: string;
-    /** The indices of the raw source sentences that make up this node. */
-    sourceIndices?: number[];
-}
-
-export interface ExtractionResult {
-    sentences: SentenceNode[];
-    citationMarkers: CitationMarker[];
-}
+// Consumption types live in the types layer since 5c-PR4 (the engine →
+// extractor reverse type-import died); re-exported for ingestion-side callers.
+export type { SentenceNode, ExtractionResult, CitationMarker };
 
 /**
  * Version of the sentence-extraction algorithm, stamped onto newly written
  * `cache_tts_preparation` rows (`CacheTtsPreparation.extractionVersion`).
+ *
+ * v3 ("raw at rest", 5c-PR4): rows store UNREFINED sentences — the ingest-time
+ * refineSegments pass (which baked the import-time abbreviation/starter
+ * settings into persisted rows) is gone. Playback always refines against the
+ * CURRENT settings (SectionQueueBuilder), so v1/v2 rows keep working — they
+ * were simply refined once more than necessary. Old rows are RETAINED (the
+ * graft rule); the background re-ingestion driver is Phase 7 scope.
  *
  * v2: segmentation offsets are computed against the RAW text (NFKD applies only
  * to the outbound sentence text), so Range/CFI positions are correct for
@@ -32,7 +32,7 @@ export interface ExtractionResult {
  * NFKD-normalized text and may carry drifted CFIs wherever decomposable
  * characters (é, ﬁ, …) precede a sentence start.
  */
-export const TTS_EXTRACTION_VERSION = 2;
+export const TTS_EXTRACTION_VERSION = 3;
 
 // Font-size ratio below which an inline element is treated as superscript/subscript.
 // Used as a fixed diagnostic threshold — not a tuning target.
@@ -168,10 +168,9 @@ function detectCitationMarkerElement(el: Element, cfiGenerator: (range: Range) =
 }
 
 export interface ExtractionOptions {
-    abbreviations?: string[];
-    alwaysMerge?: string[];
-    sentenceStarters?: string[];
+    /** Sanitize extracted text (default true). */
     sanitizationEnabled?: boolean;
+    /** Segmentation locale (book language). */
     locale?: string;
 }
 
@@ -345,12 +344,7 @@ export const extractSentencesFromNode = (
         s.sourceIndices = [i];
     });
 
-    // Now refine segments using the options provided
-    const sentences = TextSegmenter.refineSegments(
-        rawSentences,
-        options.abbreviations || [],
-        options.alwaysMerge || DEFAULT_ALWAYS_MERGE,
-        options.sentenceStarters || DEFAULT_SENTENCE_STARTERS
-    );
-    return { sentences, citationMarkers };
+    // RAW AT REST (extraction v3): no ingest-time refinement — persisted rows
+    // carry the raw segmentation; playback refines against current settings.
+    return { sentences: rawSentences, citationMarkers };
 };

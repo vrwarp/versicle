@@ -9,7 +9,7 @@
 import { bookContent } from '@data/repos/bookContent';
 import { handleDbError } from '@data/errors';
 import { extractBookData, generateFileFingerprint } from './ingestion';
-import type { ExtractionOptions } from './tts/sentence-extraction';
+import type { ExtractionOptions } from './ingestion/sentence-extraction';
 import type { StaticBookManifest } from '~types/db';
 
 class BookImportService {

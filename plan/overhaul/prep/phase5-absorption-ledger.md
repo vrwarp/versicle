@@ -34,9 +34,9 @@ Owning suites:
 | 14 | `PlaybackStateManager_Masking.test.ts` / `PlaybackStateManager_Adaptation.test.ts` | mask semantics, adaptation anchor/sibling rules | `QueueModel.test.ts` (the renamed PSM base suite) carries `describe('regression: PlaybackStateManager_Masking')` + `describe('regression: PlaybackStateManager_Adaptation')` verbatim, plus the new immutability/identity suite; behavior also pinned by P14/P15 | 5b-PR2 | ✅ 5b-PR2 |
 | 15 | `TaskSequencer_Predictability.test.ts`, `TaskSequencer.test.ts` | FIFO, error isolation | extended `TaskSequencer.test.ts` (epoch/abort/checkpoint/watchdog/isInsideTask invariants added; `_Predictability` merged as `describe('regression: TaskSequencer_Predictability')`) | 5b-PR3 | ✅ 5b-PR3 (sequencer-epochs commit) |
 | 16 | `TTSProviderManager.test.ts` | event normalization, fallback observable outcome | `describeProviderContract` (×5 at 5a-PR2; piper joins at 5a-PR3) + the new manager suite, which carries `describe('regression: TTSProviderManager.test (pre-5a)')`; the fallback double-fire case is superseded by the single-path manager tests + engine-level P21 (both transports) | 5a-PR2 (rewritten in place — landed one PR earlier than the row predicted, together with the contract suite it absorbs into) | ✅ 5a-PR2 |
-| 17 | `AudioContentPipeline*.test.ts` ×7 | grouping, marker attribution, Bible, structural anomaly, table CFI, trigger analysis | `SectionQueueBuilder` / `ReferenceSectionDetector` / `CfiGrouper` suites | 5c-PR2/3 | ⏳ |
-| 18 | `LexiconService*.test.ts` ×7 | assembly order, initialisms, Bible injection, sort | `LexiconEngine` suite (fuzz/perf survive as `.fuzz`/`.perf` companions) | 5c-PR4 | ⏳ |
-| 19 | `TextSegmenter*.test.ts` ×9 | segmentation/refinement/merge behavior | consolidated `TextSegmenter` spec (3 files: spec/fuzz/perf) | 5c-PR2 | ⏳ |
+| 17 | `AudioContentPipeline*.test.ts` ×7 | grouping, marker attribution, Bible, structural anomaly, table CFI, trigger analysis | `src/kernel/cfi/group.test.ts` (`regression: AudioContentPipeline_Grouping` / `_StructuralAnomaly` / `_MarkerAttribution`), `SectionQueueBuilder.test.ts` (`regression: AudioContentPipeline.test` loadSection + `_Bible`), `SectionAnalysisDriver.test.ts` (`regression: _TriggerAnalysis` + content filtering), `TableAdaptationProcessor.test.ts` (`regression: _TableCfi`) — plus the NEW D4 marker-on-primary-path pin and `ReferenceSectionDetector.test.ts` (retry/timeout machine, strategy, dedup, telemetry) | 5c-PR2 | ✅ 5c-PR2 (`refactor(tts): SectionQueueBuilder + detector strategy; pipeline dies`) |
+| 18 | `LexiconService*.test.ts` ×7 | assembly order, initialisms, Bible injection, sort | `LexiconEngine.test.ts` (`regression: LexiconService.test` / `LexiconServiceSort` / `LexiconServiceBible` / `LexiconServiceInitialisms` over the injected-deps assembler, plus the memo/invalidation + golden cache-key suites); fuzz/perf/trace survive as `LexiconEngine.{fuzz,perf,trace}.test.ts` companions over the yjs-free applier | 5c-PR3 (one PR earlier than the row predicted — absorbed together with the assembler it tests) | ✅ 5c-PR3 (`feat(tts): LexiconEngine + lazy Bible JSON`) |
+| 19 | `TextSegmenter*.test.ts` ×9 | segmentation/refinement/merge behavior | consolidated `TextSegmenter.test.ts` (six per-area suites carried as `describe('regression: TextSegmenter.<stem>')` blocks) + `.fuzz`/`.perf` companions — 3 files | 5c-PR2 | ✅ 5c-PR2 (`refactor(tts): SectionQueueBuilder + detector strategy; pipeline dies`) |
 | 20 | `citation-skipping.integration.test.ts` | three publisher markup styles | **kept as-is** (real-EPUB integration; explicit keeper) | never | n/a |
 
 Also keepers (never absorbed): `BaseCloudProvider.registry.test.ts`, the 6 per-provider
@@ -86,3 +86,16 @@ repo modules that replaced it; the shared parity seam
 repo surfaces instead of a `dbService` object. The freeze discipline and all shrink
 deadlines above are unchanged — the entries were renamed, not widened (one module
 became the two that P3 split it into; no new mockable surface was added).
+
+## Ledger closed — Phase 5 exit (5c-PR4, 2026-06-11)
+
+All 19 absorbable rows are ✅ (row 20, `citation-skipping.integration.test.ts`,
+is the explicit keeper — n/a by design). Both gate-PR `it.fails` riders flipped
+green (P14 at 5b-PR2, P21 at 5a-PR2). The engine-dir and providers-dir
+`vi.mock` bans hold (engine allowlist ∅ since 5b-PR4). Net vitest file count
+at Phase 5 exit: 274 (vs the Phase 0 baseline of 246) — and that 274
+*includes* every contract/parity/kernel/fixture suite Phases 2–5 added; the
+TTS tree itself retired the ~31 ledger files (5c alone: 286→274 across its
+four commits) while keeping every surviving assertion under a named
+`describe('regression: …')` block.
+P9 re-verifies this document and retires it.

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TextSegmenter, DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from './TextSegmenter';
 import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '@test/fuzz-utils';
-import type { SentenceNode } from './sentence-extraction';
+import type { SentenceNode } from '~types/tts-content';
 
 describe('TextSegmenter Fuzzing', () => {
     const SEED = DEFAULT_FUZZ_SEED;

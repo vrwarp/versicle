@@ -322,12 +322,9 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
             const existingBook = userStore.books[existingId];
 
             // 2. Overwrite content in DB using importBookWithId (keeps ID, updates static data)
-            const { sentenceStarters, sanitizationEnabled } = useTTSSettingsStore.getState();
+            const { sanitizationEnabled } = useTTSSettingsStore.getState();
             // Note: importBookWithId returns the NEW manifest from the file
             const manifest = await injectedDB.importBookWithId(existingId, file, {
-              abbreviations: [],
-              alwaysMerge: [],
-              sentenceStarters,
               sanitizationEnabled
             }, (progress, message) => {
               set({ importProgress: progress, importStatus: message });
@@ -444,13 +441,10 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
             logger.info(`Found Ghost Book match by metadata for file "${file.name}": "${ghostMatch.title}" (${ghostMatch.bookId}). Linking binary file to existing Yjs record...`);
             set({ importStatus: `Linking to existing entry: ${ghostMatch.title}...` });
 
-            const { sentenceStarters, sanitizationEnabled } = useTTSSettingsStore.getState();
+            const { sanitizationEnabled } = useTTSSettingsStore.getState();
 
             // Import using the EXISTING ID
             const manifest = await injectedDB.importBookWithId(ghostMatch.bookId, file, {
-              abbreviations: [],
-              alwaysMerge: [],
-              sentenceStarters,
               sanitizationEnabled
             }, (progress, message) => {
               set({ importProgress: progress, importStatus: message });
@@ -491,13 +485,10 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
           logger.warn("Smart matching check failed, proceeding with standard import", e);
         }
 
-        const { sentenceStarters, sanitizationEnabled } = useTTSSettingsStore.getState();
+        const { sanitizationEnabled } = useTTSSettingsStore.getState();
 
         // 1. Pure ingestion: Write to static_* stores only
         const manifest = await injectedDB.addBook(file, {
-          abbreviations: [],
-          alwaysMerge: [],
-          sentenceStarters,
           sanitizationEnabled
         }, (progress, message) => {
           set({ importProgress: progress, importStatus: message });
@@ -600,15 +591,12 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
         error: null
       });
       try {
-        const { sentenceStarters, sanitizationEnabled } = useTTSSettingsStore.getState();
+        const { sanitizationEnabled } = useTTSSettingsStore.getState();
 
         // Process files and get returns manifests
         const { successful, skipped, failed } = await processBatchImport(
           files,
           {
-            abbreviations: [],
-            alwaysMerge: [],
-            sentenceStarters,
             sanitizationEnabled
           },
           (processed, total, filename) => {
@@ -774,16 +762,13 @@ export const createLibraryStore = (injectedDB: IDBService = defaultLibraryDB) =>
           // Synced book download: no local manifest, need to fully import with existing ID
           logger.info(`Book ${id} has no local manifest. Importing with existing ID for synced book.`);
 
-          const { sentenceStarters, sanitizationEnabled } = useTTSSettingsStore.getState();
+          const { sanitizationEnabled } = useTTSSettingsStore.getState();
 
           // Preserve existing inventory data before import
           const existingBook = useBookStore.getState().books[id];
 
           // Import with specific book ID (preserves the synced book's ID)
           const manifest = await injectedDB.importBookWithId(id, file, {
-            abbreviations: [],
-            alwaysMerge: [],
-            sentenceStarters,
             sanitizationEnabled
           }, (progress, message) => {
             set({ importProgress: progress, importStatus: message });

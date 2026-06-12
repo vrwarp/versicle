@@ -10,7 +10,7 @@ import {
     RE_LAST_WORD, RE_LAST_TWO_WORDS, RE_FIRST_WORD, RE_LEADING_PUNCTUATION,
     RE_TRAILING_PUNCTUATION, RE_SENTENCE_FALLBACK, RE_SINGLE_LETTER_OR_ROMAN_NUMERAL,
 } from './TextSegmenter';
-import type { SentenceNode } from './sentence-extraction';
+import type { SentenceNode } from '~types/tts-content';
 
 describe('TextSegmenter', () => {
   it('handles CJK fallback regex', () => {

@@ -6,7 +6,7 @@ import { bookContent } from '@data/repos/bookContent';
 import type { SectionMetadata, CacheTtsPreparation, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry, PerceptualPalette, BookMetadata } from '~types/db';
 import type { ProcessedChapter } from './offscreen-renderer';
 import { sanitizeMetadata } from './sanitizer';
-import { TTS_EXTRACTION_VERSION, type ExtractionOptions } from './tts/sentence-extraction';
+import { TTS_EXTRACTION_VERSION, type ExtractionOptions } from './ingestion/sentence-extraction';
 import { extractContentOffscreen } from './offscreen-renderer';
 import { CURRENT_BOOK_VERSION } from './constants';
 import { extractCoverPalette } from './cover-palette';

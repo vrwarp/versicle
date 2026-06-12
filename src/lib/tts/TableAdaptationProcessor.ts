@@ -2,7 +2,7 @@ import {
     parseCfiRange, stripCfiWrapper, cfiContains, CfiComparator, tryParseCfiPoint,
     type ParsedCfiPoint,
 } from '../../kernel/cfi';
-import type { SentenceNode } from './sentence-extraction';
+import type { SentenceNode } from '~types/tts-content';
 import type { EngineContext } from './engine/EngineContext';
 import { ensureGenAIReady } from './genaiReady';
 

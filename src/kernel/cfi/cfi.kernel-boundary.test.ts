@@ -52,7 +52,7 @@ describe('CFI kernel boundary', () => {
             // Test files are out of scope (matches the depcruise exclude): the
             // admission rule governs the production dependency graph; suites may
             // pull fixtures/helpers from anywhere (e.g. group.test.ts drives the
-            // grouper through @lib/tts/sentence-extraction).
+            // grouper through @lib/ingestion/sentence-extraction).
             if (/\.test\.tsx?$/.test(rel)) continue;
             const text = readFileSync(file, 'utf8');
             for (const m of text.matchAll(/from\s+['"]([^'"]+)['"]/g)) {

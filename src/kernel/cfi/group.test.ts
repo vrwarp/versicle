@@ -16,7 +16,7 @@ import { EpubCFI } from 'epubjs';
 import { groupSegmentsByRoot, attributeMarkersToGroups } from './group';
 import { preprocessBlockRoots, parseCfiRange } from './parse';
 import { generateCfiRange } from './merge';
-import { extractSentencesFromNode } from '@lib/tts/sentence-extraction';
+import { extractSentencesFromNode } from '@lib/ingestion/sentence-extraction';
 import type { CitationMarker } from '~types/db';
 
 describe('regression: AudioContentPipeline_Grouping', () => {

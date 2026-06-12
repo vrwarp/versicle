@@ -68,26 +68,11 @@ export interface CacheSessionState {
  * Store: 'cache_tts_preparation' (Key: `${bookId}-${sectionId}`)
  */
 
-/** A citation marker detected during chapter extraction (superscript numbers, symbol footnotes, etc.). */
-export interface CitationMarker {
-  /** CFI of the marker element (node reference, not range). */
-  cfi: string;
-  /** Text content of the marker, e.g. "1", "[3]", "†". */
-  markerText: string;
-  /** True if the element is or computes as a superscript/subscript. */
-  super: boolean;
-  /** True if markerText is numeric (vs. symbol). */
-  numeric: boolean;
-  /** True if the marker appears immediately after word text with no space (diagnostic). */
-  glued: boolean;
-  /** True if the marker is the first non-whitespace content of its block (e.g. a footnote/
-   *  endnote entry that opens with its reference anchor), vs an in-text citation. */
-  leading: boolean;
-  /** Ratio of element font-size to parent font-size when checked via computed style. */
-  fontSizeRatio?: number;
-  /** href of the nearest <a> inside or equal to the element, if present. */
-  targetHref?: string;
-}
+// The canonical CitationMarker moved to ./tts-content (Phase 5c §5c.1 — the
+// extraction/engine consumption types live together); re-exported here so the
+// cache-row surface (and the ~types/db shim) keeps serving it.
+export type { CitationMarker } from './tts-content';
+import type { CitationMarker } from './tts-content';
 
 export interface CacheTtsPreparation {
   /** Composite key. */

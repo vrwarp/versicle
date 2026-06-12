@@ -9,7 +9,7 @@
  * (./emptySectionMessages — the randomized English NO_TEXT_MESSAGES died).
  */
 import { TextSegmenter } from './TextSegmenter';
-import type { SentenceNode } from './sentence-extraction';
+import type { SentenceNode } from '~types/tts-content';
 import type { TTSQueueItem } from '~types/tts';
 import { emptySectionMessage } from './emptySectionMessages';
 

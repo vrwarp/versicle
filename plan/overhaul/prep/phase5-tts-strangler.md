@@ -597,6 +597,62 @@ Phase 5; sequenced after P3's IDB v25 straggler window per constitution rule 4:
 
 ### 5c — Content
 
+> **STATUS: 5c COMPLETE — Phase 5 exit (2026-06-11).** Landed as four commits
+> mapping 1:1 onto the PR plan below: `feat(cfi): canonical kernel at
+> src/kernel/cfi with parsed oracle` (5c-PR1), `refactor(tts):
+> SectionQueueBuilder + detector strategy; pipeline dies` (5c-PR2),
+> `feat(tts): LexiconEngine + lazy Bible JSON` (5c-PR3), and the extractor
+> relocation/raw-at-rest commit (5c-PR4). The absorption ledger is FULLY
+> closed (rows 17/18/19; see the ledger's closing note). Deviations from this
+> design, recorded per the README header rule:
+>
+> 13. **Kernel address, directly**: the CFI algebra landed at the FINAL
+>     `src/kernel/cfi/` (not the interim `src/lib/cfi/`) — `src/kernel/`
+>     already existed (5b's diagnostics core) and the ≥2-consumer admission is
+>     satisfied via TTS now + the reader through the `src/lib/cfi-utils.ts`
+>     re-export shim (named P6 deletion deadline). A `kernel-imports-nothing`
+>     depcruise rule was born at error with baseline 0, plus a kernel-boundary
+>     vitest suite pinning the epubcfi-shim quarantine (the ONE
+>     `epubjs/src/epubcfi` importer). The Intl.Segmenter cache moved to
+>     `src/kernel/locale/` (sentence snapping is locale-aware; the snap default
+>     derives from the epubjs Book's OPF language until P6 threads it
+>     explicitly).
+> 14. **Pipeline split shape**: `AudioContentPipeline.ts` was deleted OUTRIGHT
+>     (no re-export shim needed — nothing outside the engine imported it). The
+>     loadSection orchestration (fetch → resolveSectionTitle → pure
+>     buildSectionQueue → HOST readerUI write) lives in
+>     `PlaybackController.loadSectionInternal`; the detection/adaptation
+>     orchestration became `SectionAnalysisDriver` (owns
+>     TableAdaptationProcessor + ReferenceSectionDetector); `CfiGrouper`
+>     landed beside the kernel as `src/kernel/cfi/group.ts` with structural
+>     types. The empty-section filler is ONE deterministic message per
+>     language family (vs a keyed catalog) — the ADR names audio-cache
+>     fragmentation as the reason randomization died, and a single message
+>     also minimizes cache entries.
+> 15. **Lexicon**: ledger row 18 closed at 5c-PR3 (with the assembler), one PR
+>     earlier than the row predicted. `LexiconService` survives as the
+>     main-thread CRUD facade holding the `LexiconAssembler`; the global Bible
+>     flag stays an app-layer push (`TtsController` →
+>     `assembler.setGlobalBibleEnabled`) because a lib→settings-store read
+>     would regress the lib-not-to-store ratchet — the store-side imperative
+>     pushes the design targeted died with the 5b store split.
+>     `SystemLexiconProvider` signature: `appliesTo(pref, globalEnabled)` +
+>     `load(language)` memoized per language (frozen arrays). Mid-playback
+>     invalidation reaches the worker via a new `{kind:'lexicon'}` replication
+>     ping slice + `LexiconPort.subscribe`; `replication.test.ts` was updated
+>     in lockstep (loud by design). `processInitialisms` is toggleable
+>     per-call (`{initialisms:false}`) and traces as the visible
+>     `system:initialisms` rule; the golden suite pins default output
+>     byte-identical.
+> 16. **Raw-at-rest v3**: `ExtractionOptions` lost its
+>     abbreviations/alwaysMerge/sentenceStarters fields outright (dead once
+>     ingest-time refinement was removed); the library-store/maintenance
+>     import sites now pass only `{sanitizationEnabled}` (+locale internally).
+>     The v2-vs-v3 CFI comparison suite runs on the composed-accent /
+>     combining-mark / ligature / CJK fixtures extended from `4197dcab`, and a
+>     raw-at-rest pin keeps the un-merged `Mr.` split at rest. Old rows
+>     retained; the re-ingestion driver remains P7.
+
 #### 5c.1 `SentenceExtractor` relocation (R6 finishes)
 
 - `src/lib/tts/sentence-extraction.ts` → `src/lib/ingestion/sentence-extraction.ts`
@@ -924,3 +980,35 @@ already use injected fakes — verify, then flip).
 - **P9 (deletion audit)**: retires the `tts-storage` legacy key, the `'local'` alias
   acceptance, and any 5c re-export shims; verifies the ledger closed and the engine-dir
   `vi.mock` allowlist is empty.
+
+---
+
+## Follow-ups (Phase 5 exit, 2026-06-11)
+
+Deferred work recorded at the phase boundary; owners are the named phases.
+
+- **On-device QA pass (OPEN — phase-exit checklist item)**: Android + iOS
+  Safari lock screen, background keep-alive, cloud→local fallback, dragnet,
+  gapless Capacitor handoff. Cannot be exercised headlessly; the parity suite
+  covers the logic on both transports, but the §Execution-order exit names a
+  device pass before field confidence is claimed.
+- **P6**: reader adopts `src/kernel/cfi/` directly and threads `book.language`
+  into `snapCfiToSentence` explicitly; DELETE the `src/lib/cfi-utils.ts`
+  re-export shim (named deadline). The remaining hand-rolled book/section
+  guards in `playInternal`/`handleContentAnalysisUpdate` (5b deviation 7) are
+  candidates for epoch-checkpoint conversion under their own riders.
+- **P7**: extraction-v3/NFKD background re-ingestion driver
+  (extractionVersion-keyed job queue); `GenAIClient` replaces the DEV-gated
+  `mockGenAIResponse` seam end-to-end (5c-PR2 gated it out of prod paths in
+  the pipeline; `GenAIService.isConfigured` still honors it internally);
+  `SentenceExtractor` rewrite at `domains/library/ingestion/`.
+  `TableAdaptationProcessor` still carries its own inline TOC title lookup —
+  fold into the shared `findTocItem` path when P7 touches it.
+- **P8**: piper-asset PWA runtime caching (recorded at 5a-PR3); settings
+  registry renders the provider panel from the 5a registry.
+- **P9**: retire the `tts-storage` legacy localStorage key and the `'local'`
+  provider alias; delete the cfi-utils shim if P6 missed it; re-verify the
+  absorption ledger stays closed and the engine-dir `vi.mock` allowlist stays
+  ∅; `window.useTTSStore` Playwright shim (5b deviation 6) retires with the
+  spec migration.
+
