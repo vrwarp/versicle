@@ -24,6 +24,7 @@ import { getYjsPersistence, disconnectYjs } from './store/yjs-provider';
 import { playbackCache } from './data/repos/playbackCache';
 import { closeConnection } from './data/connection';
 import { wipeAllData } from './data/wipe';
+import { MockGenAIClient, setGenAIClient, type MockGenAIFixture } from './domains/google';
 import { createLogger } from './lib/logger';
 
 const logger = createLogger('TestApi');
@@ -63,6 +64,19 @@ export interface VersicleTestApi {
    * Replaces the legacy `window.__CLOSE_DB__` global.
    */
   closeDb(): Promise<void>;
+
+  /**
+   * GenAI mock seam (Phase 7 §H — the `localStorage.mockGenAIResponse` exit,
+   * GG-4/privacy D9): swaps the composition-root GenAIClient for a
+   * MockGenAIClient primed with the fixture. Runtime-settable, so specs
+   * install it after boot/reload (the legacy localStorage timing maps 1:1).
+   * `{ response }` resolves every structured call with the fixture (run
+   * through the SAME per-feature validation as real model output);
+   * `{ error }` rejects every call with that message.
+   */
+  genai: {
+    setMock(fixture: MockGenAIFixture): void;
+  };
 }
 
 declare global {
@@ -120,6 +134,12 @@ export function installTestApi(): void {
     resetApp: () => wipeAllData({ reload: false }),
     disconnectYjs: () => disconnectYjs(),
     closeDb: () => closeConnection(),
+    genai: {
+      setMock: (fixture) => {
+        setGenAIClient(new MockGenAIClient(fixture));
+        logger.info('GenAI mock client installed', fixture.error ? '(error mode)' : '');
+      },
+    },
   };
   window.__versicleTest = api;
   logger.info('window.__versicleTest installed (DEV/VITE_E2E build)');

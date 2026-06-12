@@ -19,10 +19,12 @@
 import {
   DriveClient,
   DriveLibrarySync,
+  GeminiClient,
   GoogleAuthClient,
   defaultPlatformOptions,
   setDriveClient,
   setDriveLibrarySync,
+  setGenAIClient,
   setGoogleAuthClient,
 } from '@domains/google';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
@@ -30,6 +32,7 @@ import { useSyncStore } from '@store/useSyncStore';
 import { useDriveStore } from '@store/useDriveStore';
 import { useLibraryStore } from '@store/useLibraryStore';
 import { useBookStore } from '@store/useBookStore';
+import { useGenAIStore } from '@store/useGenAIStore';
 import { createLogger } from '@lib/logger';
 
 let wired = false;
@@ -69,6 +72,25 @@ export function wireGoogleDomain(): void {
       },
       hasConnectedBefore: () => useGoogleServicesStore.getState().isServiceConnected('drive'),
       log: createLogger('DriveLibrarySync'),
+    }),
+  );
+
+  // GenAI (Phase 7 §H): config read PER CALL from the store — the mutable
+  // singleton fields (and the TTS pipeline's configure() clobber, GG-8) are
+  // gone. Log entries arrive pre-redacted (no inlineData bytes) and land in
+  // the store's in-memory ring buffer (never persisted — its partialize
+  // allowlist excludes logs).
+  setGenAIClient(
+    new GeminiClient({
+      getConfig: () => {
+        const s = useGenAIStore.getState();
+        return {
+          apiKey: s.apiKey,
+          model: s.model,
+          rotationEnabled: s.isModelRotationEnabled,
+        };
+      },
+      onLog: (entry) => useGenAIStore.getState().addLog(entry),
     }),
   );
 }

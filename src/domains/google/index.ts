@@ -43,3 +43,56 @@ export {
 } from './drive/holder';
 export { DriveApiError, handleDriveError } from './drive/errors';
 export type { DriveFile, DriveFileIndex } from './drive/types';
+
+// --- GenAI (Phase 7 §H) ---
+export {
+  SchemaType,
+  type GenAIClient,
+  type GenAIRequest,
+  type GenAIRequestContext,
+  type GenAIPrompt,
+  type GenAIPromptPart,
+  type GenAIConfig,
+  type GenAIConfigProvider,
+} from './genai/contract';
+export { GeminiClient, GENAI_ROTATION_MODELS, type GeminiClientDeps } from './genai/GeminiClient';
+export { MockGenAIClient, type MockGenAIFixture } from './genai/MockGenAIClient';
+export { getGenAIClient, setGenAIClient, resetGenAIClientForTesting } from './genai/holder';
+export {
+  GenAINotConfiguredError,
+  GenAIInvalidResponseError,
+  GenAIHttpError,
+  isResourceExhausted,
+} from './genai/errors';
+export {
+  redactPayload,
+  fnv1aHex,
+  type GenAILogEntry,
+  type GenAILogSink,
+} from './genai/logging';
+export {
+  generateTocTitles,
+  validateTocTitles,
+  type TocSectionInput,
+  type TocTitleResult,
+} from './genai/features/tocTitles';
+export {
+  detectReferenceSection,
+  validateReferenceDetection,
+  type ReferenceDetectionNode,
+  type ReferenceDetectionResult,
+  type DetectedContentType,
+} from './genai/features/referenceDetection';
+export {
+  generateTableAdaptations,
+  validateTableAdaptations,
+  type TableAdaptationNode,
+  type TableAdaptationResult,
+} from './genai/features/tableAdaptation';
+export {
+  mapReadingListToLibrary,
+  validateLibraryMappings,
+  type UnmappedEntry,
+  type UnmappedBook,
+  type LibraryMapping,
+} from './genai/features/libraryMapping';

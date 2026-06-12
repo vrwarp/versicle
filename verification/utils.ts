@@ -30,6 +30,15 @@ interface VersicleTestApi {
   resetApp(): Promise<void>;
   disconnectYjs(): Promise<void>;
   closeDb(): Promise<void>;
+  /**
+   * GenAI mock seam (Phase 7): swaps the composition-root GenAIClient for a
+   * mock primed with the fixture (replaces the deleted
+   * `localStorage.mockGenAIResponse` production seam). Runtime-settable —
+   * call after boot/reload, before triggering the AI feature under test.
+   */
+  genai: {
+    setMock(fixture: { response?: unknown; error?: string; delayMs?: number }): void;
+  };
 }
 
 declare global {
