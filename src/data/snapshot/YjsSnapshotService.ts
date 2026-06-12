@@ -3,7 +3,8 @@
  * plan/overhaul/prep/phase3-storage-gateway.md).
  *
  * One tested implementation of the capture → validate → apply dance that
- * BackupService, CheckpointService, and android-backup each hand-rolled:
+ * BackupService, CheckpointService, and the (since-deleted, ADR 0002)
+ * android-backup module each hand-rolled:
  * BackupService re-implemented y-idb's store layout with a raw
  * `indexedDB.open('versicle-yjs')` plus a 1000 ms "wait for flush" sleep;
  * CheckpointService span up a temp Y.Doc + temp IndexeddbPersistence and

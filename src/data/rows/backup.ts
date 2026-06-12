@@ -8,10 +8,11 @@
  * plus binary sanitization happen at write time in
  * BackupService.processManifest.
  *
- * Consumed by BackupService (file restore) and lib/sync/android-backup (the
- * android payload read) — both untrusted ingresses named by D4. Lives here,
- * not in BackupService, so the leaf schema can be imported without dragging
- * the backup orchestration (and its store imports) into the graph.
+ * Consumed by BackupService (file restore) — the untrusted ingress named by
+ * D4. (The other D4 ingress, lib/sync/android-backup, was deleted in P9 —
+ * docs/adr/0002-android-backup.md.) Lives here, not in BackupService, so
+ * the leaf schema can be imported without dragging the backup orchestration
+ * (and its store imports) into the graph.
  */
 import { z } from 'zod';
 
