@@ -13,6 +13,15 @@ export function writeSnapshot(name: string, update: Uint8Array, opts?: {
     transactionRunner?: (<T>(work: () => Promise<T>) => Promise<T>) | undefined;
 } | undefined): Promise<void>;
 /**
+ * Read the COMPLETE persisted state of database `name` as one merged Yjs
+ * update, without constructing an IndexeddbPersistence binding. Resolves
+ * `null` when the database holds no update rows. (Versicle fork surgery 4 —
+ * see PROVENANCE.md.)
+ */
+export function readSnapshot(name: string, opts?: {
+    transactionRunner?: (<T>(work: () => Promise<T>) => Promise<T>) | undefined;
+} | undefined): Promise<Uint8Array | null>;
+/**
  * @extends Observable<string>
  */
 export class IndexeddbPersistence extends Observable<string> {

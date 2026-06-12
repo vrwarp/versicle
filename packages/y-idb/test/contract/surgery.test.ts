@@ -11,13 +11,16 @@
  *   Y.10 `'synced'` durability — the event is not emitted before the
  *        constructor's hydration transaction (which carries the
  *        initial-state write) has COMMITTED.
+ *   Y.11 `readSnapshot(name, { transactionRunner })` module export (Phase 4
+ *        §D4 staged swap) — null on empty/missing, byte round-trip with
+ *        writeSnapshot, multi-row merge, runner wraps the read.
  *
- * All three cuts are additive: characterization.test.ts (Y.1–Y.7, written
+ * All cuts are additive: characterization.test.ts (Y.1–Y.7, written
  * against the pre-surgery source) must stay green alongside this suite.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import * as Y from 'yjs';
-import { IndexeddbPersistence, writeSnapshot } from 'y-idb';
+import { IndexeddbPersistence, writeSnapshot, readSnapshot } from 'y-idb';
 
 const live: IndexeddbPersistence[] = [];
 
@@ -267,5 +270,72 @@ describe('y-idb fork surgery contract (Y.8–Y.10)', () => {
     });
     await providerB.whenSynced;
     expect(contentAtEmit).toBe('yes');
+  });
+
+  it('Y.11a readSnapshot() resolves null for a missing or empty database', async () => {
+    const name = uniqueName('read-empty');
+    // Missing database: opening creates an empty one — still null.
+    await expect(readSnapshot(name)).resolves.toBeNull();
+    // Still null on the now-existing-but-empty database.
+    await expect(readSnapshot(name)).resolves.toBeNull();
+  });
+
+  it('Y.11b readSnapshot() round-trips writeSnapshot byte-identically', async () => {
+    const name = uniqueName('read-roundtrip');
+    const source = new Y.Doc();
+    source.getMap('library').set('book-1', { title: 'Round Trip' });
+    const update = Y.encodeStateAsUpdate(source);
+    source.destroy();
+
+    await writeSnapshot(name, update);
+    const read = await readSnapshot(name);
+    expect(read).not.toBeNull();
+    expect(Array.from(read!)).toEqual(Array.from(update));
+  });
+
+  it('Y.11c readSnapshot() merges multiple update rows into the full persisted state', async () => {
+    const name = uniqueName('read-merge');
+
+    // A normal provider session leaves a snapshot row plus debounced
+    // incremental rows — exactly what a staged database can hold.
+    const docA = new Y.Doc();
+    const providerA = makeProvider(name, docA, { writeDebounceMs: 1 });
+    await providerA.whenSynced;
+    docA.getMap('m').set('first', 1);
+    await providerA.flush();
+    docA.getMap('m').set('second', 2);
+    await providerA.flush();
+    await providerA.destroy();
+    expect((await readUpdateRows(name)).length).toBeGreaterThan(1);
+
+    const read = await readSnapshot(name);
+    expect(read).not.toBeNull();
+    const fresh = new Y.Doc();
+    Y.applyUpdate(fresh, read!);
+    expect(fresh.getMap('m').get('first')).toBe(1);
+    expect(fresh.getMap('m').get('second')).toBe(2);
+    fresh.destroy();
+  });
+
+  it('Y.11d readSnapshot() routes the whole read through the injected transactionRunner', async () => {
+    const name = uniqueName('read-runner');
+    const source = new Y.Doc();
+    source.getMap('m').set('via', 'runner');
+    await writeSnapshot(name, Y.encodeStateAsUpdate(source));
+    source.destroy();
+
+    let runnerCalls = 0;
+    let workSettledInsideRunner = false;
+    const runner = async <T,>(work: () => Promise<T>): Promise<T> => {
+      runnerCalls++;
+      const result = await work();
+      workSettledInsideRunner = true;
+      return result;
+    };
+
+    const read = await readSnapshot(name, { transactionRunner: runner });
+    expect(runnerCalls).toBe(1);
+    expect(workSettledInsideRunner).toBe(true);
+    expect(read).not.toBeNull();
   });
 });

@@ -110,6 +110,67 @@ export const storeState = (idbPersistence, forceStore = true) =>
 export const clearDocument = name => idb.deleteDB(name)
 
 /**
+ * Read the COMPLETE persisted state of database `name` as one merged Yjs
+ * update, without constructing an IndexeddbPersistence binding. (Versicle
+ * fork surgery 4, PROVENANCE.md: the snapshot-read primitive backing the
+ * Phase 4 staged workspace swap — the boot interceptor reads the staging
+ * database before any live binding exists.)
+ *
+ * Resolves `null` when the database holds no update rows (missing database
+ * included: opening creates an empty one with this module's store layout).
+ * Multiple rows (a snapshot plus debounced incremental updates) are merged
+ * with `Y.mergeUpdates`, so the result always hydrates a fresh doc to the
+ * full persisted state. The optional `transactionRunner` wraps the whole
+ * open→read→close unit (callers pass their cross-context exclusive write
+ * gate so the read cannot interleave a concurrent `writeSnapshot`).
+ *
+ * @param {string} name
+ * @param {object} [opts]
+ * @param {<T>(work: () => Promise<T>) => Promise<T>} [opts.transactionRunner]
+ * @return {Promise<Uint8Array|null>}
+ */
+export const readSnapshot = (name, { transactionRunner } = {}) => {
+  const work = () => idb.openDB(name, db =>
+    idb.createStores(db, [
+      ['updates', { autoIncrement: true }],
+      ['custom']
+    ])
+  ).then(db => new Promise((resolve, reject) => {
+    /**
+     * @type {IDBTransaction}
+     */
+    let tx
+    try {
+      tx = db.transaction([updatesStoreName], 'readonly')
+    } catch (e) {
+      db.close()
+      reject(e)
+      return
+    }
+    const request = tx.objectStore(updatesStoreName).getAll()
+    tx.oncomplete = () => {
+      db.close()
+      /** @type {Array<Uint8Array>} */
+      const rows = (request.result || []).map(row =>
+        row instanceof Uint8Array ? row : new Uint8Array(row)
+      )
+      if (rows.length === 0) {
+        resolve(null)
+      } else if (rows.length === 1) {
+        resolve(rows[0])
+      } else {
+        resolve(Y.mergeUpdates(rows))
+      }
+    }
+    tx.onerror = tx.onabort = () => {
+      db.close()
+      reject(tx.error || new Error('readSnapshot transaction failed'))
+    }
+  }))
+  return transactionRunner ? transactionRunner(work) : work()
+}
+
+/**
  * Write `update` as the COMPLETE content of database `name` using this
  * module's own store layout: open/create the database → clear `updates` →
  * add the single snapshot row → await the transaction commit → close.

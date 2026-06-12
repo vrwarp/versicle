@@ -85,3 +85,17 @@ Phase 2 `zustand-middleware-yjs` vendoring established.
   (stored updates still applied before the emit — Y.7 and Y.10b pin it); on
   abort/error the emit still happens (legacy behavior, consumers must not
   wedge). Contract: Y.10/Y.10b.
+- **Surgery 4 — `readSnapshot(name, { transactionRunner })` module export**
+  (Phase 4, plan/overhaul/prep/phase4-sync-strangler.md §D4 staged swap):
+  the read counterpart of `writeSnapshot` — opens/creates the database with
+  the fork's own layout, `getAll`s the `updates` store inside one readonly
+  transaction, closes, and resolves the merged state (`Y.mergeUpdates` when
+  the database holds a snapshot row plus debounced incremental rows; the
+  single row verbatim otherwise; `null` when empty/missing). Needed because
+  the boot interceptor must read the staging database
+  (`versicle-yjs-staging`) before any `IndexeddbPersistence` binding exists;
+  constructing a temp binding just to read would re-create the temp-provider
+  dance Phase 3 deleted. The optional `transactionRunner` wraps the whole
+  open→read→close unit so a read can never interleave a concurrent
+  `writeSnapshot` under the app's cross-context write gate. Contract:
+  Y.11a–d in `test/contract/surgery.test.ts`.
