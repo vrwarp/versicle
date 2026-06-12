@@ -1,21 +1,19 @@
 /**
  * P6 ENTRY GATE — pinyin geometry/alignment characterization (jsdom tier).
  *
- * Pins the CURRENT behavior of useEpubReader's `processChineseContent`
- * (useEpubReader.ts:599-699) before the Phase 6 chinese extraction touches
- * it (prep/phase6-reader-engine.md §Test plan, program rule 7), including
- * the verified CH-1 bug: the loop iterates CODE UNITS while pinyin-pro
- * returns one entry per CODE POINT, so
+ * Pins the behavior of the Chinese content pass behind useEpubReader
+ * (prep/phase6-reader-engine.md §Test plan, program rule 7).
  *
- *   - astral-plane Han (U+20000 𠀀, surrogate pair) gets NO pinyin (the
- *     `[一-鿿]` test rejects each surrogate half), and
- *   - every BMP Han char AFTER an astral char reads its pinyin from a
- *     shifted index (off-by-one per preceding astral char).
- *
- * The CH-1 fix (prep doc PR-1 — a different work item) flips the
- * `it.fails` case below to a plain `it` and must REWRITE the two
- * misalignment pins in the same commit (an enumerated characterization
- * delta, not a silent edit).
+ * CHARACTERIZATION DELTA (prep doc PR-1, enumerated per rule 7): the CH-1
+ * code-point fix landed in chineseContentProcessor.ts — the pinyin loop now
+ * iterates CODE POINTS (pinyin-pro's array unit) with a parallel CODE-UNIT
+ * cursor for Range offsets, and the Han test widened to `\p{Script=Han}`.
+ * The two misalignment pins below were REWRITTEN in that commit to assert
+ * the fixed alignment (astral Han keeps its own entry; nothing after a
+ * surrogate pair or emoji shifts or starves), and the former `it.fails`
+ * target case flipped to a plain `it`. One behavior note: pinyin-pro
+ * returns the character itself for code points it has no reading for —
+ * that was already the BMP behavior and now applies to Ext-B Han too.
  *
  * The E2E companion (verification/test_characterization_pinyin.spec.ts)
  * covers the same surface against the real renderer in the Docker lane.
@@ -210,42 +208,55 @@ describe('characterization: pinyin geometry pipeline (P6 entry gate)', () => {
     });
   });
 
-  it('CH-1 pin: astral Han (U+20000) gets NO pinyin and shifts every following char by one', async () => {
+  it('CH-1 fixed (rewritten pin): astral Han keeps per-code-point pinyin at code-unit geometry', async () => {
     const text = '\u{20000}中文好'; // code units: [D840, DC00, 中, 文, 好]
     slot.contents = makeFakeContents(text);
 
     render(<TestHost />);
 
-    await waitFor(() => expect(latestPositions.length).toBe(2));
+    // 𠀀 is \p{Script=Han} and pinyin-pro returns the char itself for it
+    // (no reading in its dict) — exactly the pre-existing BMP behavior for
+    // unknown readings, so it gets an entry like any other Han char.
+    await waitFor(() => expect(latestPositions.length).toBe(4));
     const p = getPinyin(text); // per CODE POINT: [𠀀, zhōng, wén, hǎo]
 
-    // CURRENT (buggy) behavior, pinned: 𠀀 itself is invisible to the
-    // [一-鿿] per-code-unit test; 中/文 read a +1-shifted index;
-    // 好 indexes past the end and is dropped entirely.
-    expect(latestPositions[0].char).toBe('中');
-    expect(latestPositions[0].pinyin).toBe(p[2]); // 文's pinyin — WRONG, pinned
-    expect(latestPositions[1].char).toBe('文');
-    expect(latestPositions[1].pinyin).toBe(p[3]); // 好's pinyin — WRONG, pinned
-    expect(latestPositions.find((pos) => pos.char === '好')).toBeUndefined();
-    expect(latestPositions.find((pos) => pos.char === '\u{20000}')).toBeUndefined();
+    // char/pinyin alignment per CODE POINT; geometry per CODE UNIT.
+    const expected = [
+      { char: '\u{20000}', pinyin: p[0], unitStart: 0, unitLen: 2 },
+      { char: '中', pinyin: p[1], unitStart: 2, unitLen: 1 },
+      { char: '文', pinyin: p[2], unitStart: 3, unitLen: 1 },
+      { char: '好', pinyin: p[3], unitStart: 4, unitLen: 1 },
+    ];
+    expected.forEach((exp, i) => {
+      expect(latestPositions[i].char).toBe(exp.char);
+      expect(latestPositions[i].pinyin).toBe(exp.pinyin);
+      expect(latestPositions[i].width).toBe(exp.unitLen * UNIT_PX);
+      expect(latestPositions[i].left).toBe(
+        exp.unitStart * UNIT_PX + IFRAME_OFFSET.left + (exp.unitLen * UNIT_PX) / 2,
+      );
+    });
   });
 
-  it('CH-1 pin: an emoji starves the Han chars after it of pinyin', async () => {
+  it('CH-1 fixed (rewritten pin): an emoji no longer starves or shifts the Han chars after it', async () => {
     const text = '考\u{1F600}试'; // code units: [考, D83D, DE00, 试]
     slot.contents = makeFakeContents(text);
 
     render(<TestHost />);
 
-    await waitFor(() => expect(latestPositions.length).toBe(1));
-    const p = getPinyin(text);
+    // The emoji is not Han → no entry; 试 keeps its own pinyin and its
+    // geometry starts at code unit 3 (after the surrogate pair).
+    await waitFor(() => expect(latestPositions.length).toBe(2));
+    const p = getPinyin(text); // per CODE POINT: [kǎo, 😀, shì]
     expect(latestPositions[0].char).toBe('考');
-    expect(latestPositions[0].pinyin).toBe(p[0]); // before the emoji: still aligned
-    expect(latestPositions.find((pos) => pos.char === '试')).toBeUndefined(); // pinned loss
+    expect(latestPositions[0].pinyin).toBe(p[0]);
+    expect(latestPositions[0].left).toBe(0 * UNIT_PX + IFRAME_OFFSET.left + UNIT_PX / 2);
+    expect(latestPositions[1].char).toBe('试');
+    expect(latestPositions[1].pinyin).toBe(p[2]);
+    expect(latestPositions[1].left).toBe(3 * UNIT_PX + IFRAME_OFFSET.left + UNIT_PX / 2);
   });
 
-  // The CH-1 fix (PR-1 of the prep doc) makes this pass — flip to `it` there
-  // and rewrite the two pins above in the same commit.
-  it.fails('CH-1 target: pinyin aligns per code point through astral chars (PR-1 flips this)', async () => {
+  // Flipped from `it.fails` by PR-1 (the CH-1 code-point fix).
+  it('CH-1 target: pinyin aligns per code point through astral chars', async () => {
     const text = '\u{20000}中文好';
     slot.contents = makeFakeContents(text);
 

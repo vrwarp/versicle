@@ -247,12 +247,12 @@ test('Characterization: Traditional toggle round-trips the iframe text (_origina
   await expect(frame!.locator('body')).toContainText('这是一本测试用的中文书', { timeout: 10000 });
 });
 
-// CH-1: astral-plane alignment. FAILS today by design (code-unit indexing,
-// useEpubReader.ts:663-693): after the 𠀀/emoji chapter content, BMP Han
-// chars receive shifted pinyin and trailing chars receive none. PR-1 (the
-// code-point loop + \p{Script=Han} widening) flips this to passing.
-test.fail(
-  'Characterization: astral-plane fixture — pinyin aligns per code point (CH-1, flips at PR-1)',
+// CH-1: astral-plane alignment. Flipped to PASSING by PR-1 (the code-point
+// loop + \p{Script=Han} widening in chineseContentProcessor.ts): after the
+// 𠀀/emoji chapter content, every BMP Han char keeps its own pinyin at its
+// own geometry — no starvation, no shift.
+test(
+  'Characterization: astral-plane fixture — pinyin aligns per code point (CH-1, fixed at PR-1)',
   async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'geometry assertions are desktop-only (prep doc)');
 
