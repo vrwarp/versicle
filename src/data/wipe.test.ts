@@ -85,11 +85,12 @@ describe('wipeAllData', () => {
     vi.restoreAllMocks();
   });
 
-  it('deletes both IndexedDB databases (EpubLibraryDB and versicle-yjs)', async () => {
+  it('deletes every app IndexedDB database (EpubLibraryDB, versicle-yjs, versicle-dict)', async () => {
     await createDatabase('EpubLibraryDB');
     await createDatabase('versicle-yjs');
+    await createDatabase('versicle-dict');
     expect(await listDatabases()).toEqual(
-      expect.arrayContaining(['EpubLibraryDB', 'versicle-yjs'])
+      expect.arrayContaining(['EpubLibraryDB', 'versicle-yjs', 'versicle-dict'])
     );
 
     await wipeAllData({ reload: false });
@@ -97,6 +98,7 @@ describe('wipeAllData', () => {
     const after = await listDatabases();
     expect(after).not.toContain('EpubLibraryDB');
     expect(after).not.toContain('versicle-yjs');
+    expect(after).not.toContain('versicle-dict');
   });
 
   it('removes Versicle-owned localStorage keys and preserves unrelated keys', async () => {
@@ -129,7 +131,11 @@ describe('wipeAllData', () => {
   });
 
   it('clears app-created CacheStorage caches but leaves the SW precache alone', async () => {
-    const cacheNames = new Set(['piper-voices-v1', 'workbox-precache-v2-https://app/']);
+    const cacheNames = new Set([
+      'piper-voices-v1',
+      'versicle-dict-assets',
+      'workbox-precache-v2-https://app/',
+    ]);
     const deleted: string[] = [];
     vi.stubGlobal('caches', {
       keys: async () => Array.from(cacheNames),
@@ -142,6 +148,7 @@ describe('wipeAllData', () => {
     await wipeAllData({ reload: false });
 
     expect(deleted).toContain('piper-voices-v1');
+    expect(deleted).toContain('versicle-dict-assets'); // the SW /dict/* runtime cache
     expect(deleted).not.toContain('workbox-precache-v2-https://app/');
   });
 
@@ -170,6 +177,7 @@ describe('wipeAllData', () => {
       'delete:versicle-yjs',
       'delete:versicle-yjs-staging',
       'delete:EpubLibraryDB',
+      'delete:versicle-dict',
     ]);
   });
 

@@ -4,15 +4,14 @@ import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useAnnotationStore } from '@store/useAnnotationStore';
 import { useBookStore } from '@store/useBookStore';
-import { useVocabularyStore } from '@store/useVocabularyStore';
-import { useChineseDictionary } from '@hooks/useChineseDictionary';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '@hooks/useSectionDuration';
 import { readerCommandsRegistry } from '@domains/reader/ui/ReaderCommands';
+import { HAN_RE } from '@domains/chinese';
+import { VocabTriageCard } from '../chinese/VocabTriageCard';
 import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check, BookOpen, ArrowUpCircle, Smartphone, Trash2, GraduationCap } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '@lib/utils';
-import { Popover, PopoverContent, PopoverTrigger } from './Popover';
 
 export type ActionType =
   | 'vocab'      // Payload: null
@@ -37,126 +36,6 @@ interface CompassPillProps {
     delete?: boolean;
   };
 }
-
-// Helper to identify adjacent compound words in the selection for lookup
-const getCompoundWord = (fullText: string, charIndex: number, dict: Record<string, [string, string]> | null) => {
-  if (!dict) return null;
-  let longestWord = '';
-  let longestDef = '';
-  let longestPinyin = '';
-
-  for (let start = Math.max(0, charIndex - 4); start <= charIndex; start++) {
-    for (let end = charIndex + 1; end <= Math.min(fullText.length, charIndex + 5); end++) {
-      const substring = fullText.substring(start, end);
-      if (substring.length > 1 && dict[substring]) {
-        if (substring.length > longestWord.length) {
-          longestWord = substring;
-          longestPinyin = dict[substring][0];
-          longestDef = dict[substring][1];
-        }
-      }
-    }
-  }
-  return longestWord ? { word: longestWord, pinyin: longestPinyin, definition: longestDef } : null;
-};
-
-// Interactive individual character tile component
-const VocabTile: React.FC<{
-  char: string;
-  pinyin: string;
-  definition: string;
-  isKnown: boolean;
-  onToggle: () => void;
-  fullSelection: string;
-  charIndex: number;
-  dict: Record<string, [string, string]> | null;
-}> = ({ char, pinyin, definition, isKnown, onToggle, fullSelection, charIndex, dict }) => {
-  const [showTooltip, setShowTooltip] = useState(false);
-  const tileRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!showTooltip) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (tileRef.current && !tileRef.current.contains(e.target as Node)) {
-        setShowTooltip(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showTooltip]);
-
-  const compound = dict ? getCompoundWord(fullSelection, charIndex, dict) : null;
-
-  return (
-    <Popover open={showTooltip && (!!pinyin || !!definition)} onOpenChange={setShowTooltip}>
-      <PopoverTrigger asChild>
-        <div
-          ref={tileRef}
-          className="relative flex flex-col items-center"
-          onMouseEnter={() => setShowTooltip(true)}
-          onMouseLeave={() => setShowTooltip(false)}
-        >
-          {/* Main Tile */}
-          <button
-            onClick={onToggle}
-            className={cn(
-              "relative flex flex-col items-center justify-center w-12 h-14 rounded-xl border transition-all duration-200 select-none",
-              isKnown
-                ? "bg-primary/10 border-primary text-primary font-medium shadow-sm hover:bg-primary/15"
-                : "bg-card border-border text-foreground hover:bg-accent hover:border-accent-foreground/30"
-            )}
-            style={{ touchAction: 'manipulation' }}
-          >
-            <span className="text-[10px] text-muted-foreground/80 leading-none h-3 select-none font-pinyin">
-              {pinyin.split(' / ')[0]}
-            </span>
-            <span className="text-lg font-semibold leading-none mt-1 select-none">
-              {char}
-            </span>
-
-            {/* Small [i] icon for touch trigger */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowTooltip(!showTooltip);
-              }}
-              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center text-[9px] text-muted-foreground hover:bg-accent hover:text-foreground shadow-sm transition-colors"
-              title="Show meaning"
-            >
-              i
-            </button>
-
-            {isKnown && (
-              <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-primary flex items-center justify-center text-primary-foreground shadow-sm">
-                <Check size={8} strokeWidth={3} />
-              </div>
-            )}
-          </button>
-        </div>
-      </PopoverTrigger>
-      <PopoverContent
-        side="top"
-        align="center"
-        sideOffset={8}
-        className="w-48 bg-popover text-popover-foreground border border-border text-xs rounded-lg p-2.5 shadow-xl pointer-events-auto leading-relaxed z-[100]"
-        style={{ textShadow: 'none' }}
-      >
-        <div className="font-semibold border-b border-border/40 pb-1 mb-1.5 flex items-center justify-between">
-          <span className="text-sm">{char}</span>
-          <span className="text-muted-foreground font-normal">[{pinyin}]</span>
-        </div>
-        <p className="text-muted-foreground break-words mb-1.5">{definition || 'No standalone definition'}</p>
-        {compound && (
-          <div className="border-t border-border/40 pt-1.5 mt-1.5 text-[10px]">
-            <span className="font-semibold text-primary">In selection: </span>
-            <span className="font-semibold">{compound.word}</span> <span className="text-muted-foreground">[{compound.pinyin}]</span>
-            <p className="text-muted-foreground mt-0.5 break-words">{compound.definition}</p>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
-  );
-};
 
 export const CompassPill: React.FC<CompassPillProps> = ({
   variant,
@@ -195,9 +74,10 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   // Popover state is ephemeral UI state (never synced via Yjs) — it lives in useReaderUIStore.
   const popover = useReaderUIStore(state => state.popover);
 
-  const { knownCharacters, toggleKnownCharacter } = useVocabularyStore();
-  const isChineseSelection = /[\u4e00-\u9fff]/.test(popover.text || '');
-  const { dict } = useChineseDictionary(isChineseSelection);
+  // Full-script Han test (CH-1 family: astral Han selections count too).
+  // The dictionary itself loads only when the triage card opens (PR-11) \u2014
+  // the legacy any-CJK-selection fetch trigger is gone.
+  const isChineseSelection = HAN_RE.test(popover.text || '');
 
   const isLoading = status === 'loading';
 
@@ -664,90 +544,11 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     );
   }
 
-  // Vocab Triage Mode
+  // Vocab Triage Mode (Phase 6 PR-11: extracted to
+  // src/components/chinese/VocabTriageCard — IDB DictionaryService consumer;
+  // the dictionary import is gated on THIS card opening).
   if (variant === 'vocab-triage') {
-    return (
-      <div
-        data-testid="compass-pill-vocab-triage"
-        className="relative z-50 flex flex-col justify-between w-full max-w-md mx-auto transition-all duration-300 bg-background/95 backdrop-blur-md border border-border shadow-2xl rounded-2xl p-4 min-h-[160px]"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border/40 pb-2 mb-3">
-          <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            <GraduationCap size={16} className="text-primary animate-pulse" />
-            <span>Manage Pinyin annotations</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="w-6 h-6 rounded-full hover:bg-muted"
-            onClick={() => {
-              useReaderUIStore.getState().resetCompassState();
-              useReaderUIStore.getState().hidePopover();
-            }}
-            aria-label="Close"
-          >
-            <X size={14} />
-          </Button>
-        </div>
-
-        {/* Subtitle instructions */}
-        <p className="text-xs text-muted-foreground mb-3">
-          Tap characters to toggle Pinyin. Pinyin will be hidden for checked words.
-        </p>
-
-        {/* Body: Tactile Character Tiles */}
-        <div className="flex flex-wrap items-center gap-2 mb-4 justify-center max-h-[300px] overflow-y-auto p-1 custom-scrollbar">
-          {Array.from(popover.text || '').map((char, index) => {
-            const isChinese = /[\u4e00-\u9fff]/.test(char);
-            
-            if (!isChinese) {
-              return (
-                <span
-                  key={`${char}-${index}`}
-                  className="text-muted-foreground/60 text-lg font-mono px-1 flex items-center justify-center min-w-[20px] h-14 select-none"
-                >
-                  {char}
-                </span>
-              );
-            }
-
-            const isKnown = !!knownCharacters[char];
-            const dictEntry = dict ? dict[char] : null;
-            const pinyin = dictEntry ? dictEntry[0] : '';
-            const definition = dictEntry ? dictEntry[1] : '';
-
-            return (
-              <VocabTile
-                key={`${char}-${index}`}
-                char={char}
-                pinyin={pinyin}
-                definition={definition}
-                isKnown={isKnown}
-                onToggle={() => toggleKnownCharacter(char)}
-                fullSelection={popover.text}
-                charIndex={index}
-                dict={dict}
-              />
-            );
-          })}
-        </div>
-
-        {/* Footer */}
-        <div className="flex justify-end pt-1">
-          <Button
-            size="sm"
-            className="px-4 py-1.5 h-8 text-xs rounded-full font-medium"
-            onClick={() => {
-              useReaderUIStore.getState().resetCompassState();
-              useReaderUIStore.getState().hidePopover();
-            }}
-          >
-            Done
-          </Button>
-        </div>
-      </div>
-    );
+    return <VocabTriageCard text={popover.text || ''} />;
   }
 
   // Active Mode

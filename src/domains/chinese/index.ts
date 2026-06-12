@@ -24,6 +24,7 @@ import {
 
 export type { ChineseReadingHooks, ChineseReadingPrefs };
 export type { PinyinPosition } from './types';
+export { HAN_RE } from './engine/PinyinGeometryEngine';
 
 /** Handle returned by {@link registerChineseReading}. */
 export interface ChineseReadingRegistration {

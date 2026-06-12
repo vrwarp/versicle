@@ -30,6 +30,7 @@
  */
 import { createLogger } from '@lib/logger';
 import { closeConnection } from './connection';
+import { closeDictionaryConnection } from './repos/dictionary';
 import { playbackCache } from './repos/playbackCache';
 
 const logger = createLogger('Wipe');
@@ -37,12 +38,15 @@ const logger = createLogger('Wipe');
 /**
  * Every IndexedDB database owned by the app. `versicle-yjs-staging` is the
  * Phase 4 staged-workspace-switch buffer (YJS_STAGING_DB_NAME) — transient,
- * but a wipe must not leave a stale staged workspace behind.
+ * but a wipe must not leave a stale staged workspace behind. `versicle-dict`
+ * is the Phase 6 dictionary index (rebuildable static content, but a wipe
+ * must still leave nothing behind).
  */
 export const APP_DATABASES: readonly string[] = [
   'versicle-yjs',
   'versicle-yjs-staging',
   'EpubLibraryDB',
+  'versicle-dict',
 ];
 
 /** Exact localStorage keys owned by the app (persisted zustand stores). */
@@ -75,11 +79,12 @@ export const APP_LOCAL_STORAGE_PREFIXES: readonly string[] = [
 ];
 
 /**
- * CacheStorage caches created by app code (Piper voice model downloads).
- * The service-worker precache is intentionally left alone: it holds no user
- * data and is managed by the SW lifecycle.
+ * CacheStorage caches created by app code (Piper voice model downloads,
+ * the SW's /dict/* CacheFirst runtime cache). The service-worker precache
+ * is intentionally left alone: it holds no user data and is managed by the
+ * SW lifecycle.
  */
-export const APP_CACHE_PREFIXES: readonly string[] = ['piper-voices'];
+export const APP_CACHE_PREFIXES: readonly string[] = ['piper-voices', 'versicle-dict-assets'];
 
 /** Upper bound for any single flush/close/delete step so a wipe never hangs. */
 const STEP_TIMEOUT_MS = 5000;
@@ -225,6 +230,11 @@ export async function wipeAllData(options: WipeOptions = {}): Promise<void> {
     // In SafeMode the EpubLibraryDB open itself may have failed; the wipe
     // must still proceed.
     logger.warn('Failed to close EpubLibraryDB cleanly before wipe (continuing):', error);
+  }
+  try {
+    await closeDictionaryConnection();
+  } catch (error) {
+    logger.warn('Failed to close versicle-dict cleanly before wipe (continuing):', error);
   }
 
   // 2. Delete both databases outright — no store enumeration to go stale.
