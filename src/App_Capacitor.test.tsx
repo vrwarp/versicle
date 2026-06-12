@@ -19,9 +19,6 @@ vi.mock('./components/reader/ReaderShell', () => ({
 vi.mock('./components/ThemeSynchronizer', () => ({
   ThemeSynchronizer: () => null,
 }));
-vi.mock('./components/GlobalSettingsDialog', () => ({
-  GlobalSettingsDialog: () => null,
-}));
 vi.mock('./components/ui/ToastContainer', () => ({
   ToastContainer: () => null,
 }));

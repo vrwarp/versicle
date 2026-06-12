@@ -8,7 +8,7 @@ test("lexicon accessibility", async ({ page }) => {
   await page.getByTestId("header-settings-button").click();
 
   // 2. Switch to Dictionary tab
-  await page.getByRole("button", { name: "Dictionary" }).click();
+  await page.getByRole("tab", { name: "Dictionary" }).click();
 
   // 3. Open Lexicon Manager
   await page.getByRole("button", { name: "Manage Rules" }).click();

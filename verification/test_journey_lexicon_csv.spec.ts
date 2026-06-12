@@ -7,7 +7,7 @@ test('Journey Lexicon CSV Import/Export', async ({ page }) => {
 
   // Open Global Settings
   await page.getByTestId('header-settings-button').click();
-  await page.getByRole('button', { name: 'Dictionary' }).click();
+  await page.getByRole('tab', { name: 'Dictionary' }).click();
   await page.getByRole('button', { name: 'Manage Rules' }).click();
 
   await utils.captureScreenshot(page, 'lexicon_csv_01_initial_empty');

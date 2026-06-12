@@ -38,7 +38,7 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
 
   // Go to Sync Settings
   await page.getByTestId("header-settings-button").click();
-  await page.getByRole("button", { name: "Sync & Cloud" }).click();
+  await page.getByRole("tab", { name: "Sync & Cloud" }).click();
 
   // In mock mode, sync is auto-enabled without pasting config
   await expect(page.getByRole("heading", { name: "Workspaces" })).toBeVisible();
@@ -62,7 +62,7 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
   console.log(`Workspace ID: ${wsId}`);
 
   // Add some data (Lexicon rule)
-  await page.getByRole("button", { name: "Dictionary" }).click();
+  await page.getByRole("tab", { name: "Dictionary" }).click();
   await page.getByRole("button", { name: "Manage Rules" }).click();
   await page.getByTestId("lexicon-add-rule-btn").click();
   await page.getByTestId("lexicon-input-original").fill("DeleteMe");
@@ -72,7 +72,7 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
 
   // Close Lexicon & go back to Sync & Cloud
   await page.getByTestId("lexicon-close-btn").click();
-  await page.getByRole("button", { name: "Sync & Cloud" }).click();
+  await page.getByRole("tab", { name: "Sync & Cloud" }).click();
 
   // Create a second workspace so we can delete the first one.
   await page.getByPlaceholder("New workspace name").fill("Safe Workspace");

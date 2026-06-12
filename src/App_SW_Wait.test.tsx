@@ -83,7 +83,6 @@ vi.mock('./components/library/LibraryView', () => ({ LibraryView: () => <div dat
 vi.mock('./components/reader/ReaderView', () => ({ ReaderView: () => <div data-testid="reader-view">Reader View</div> }));
 vi.mock('./components/reader/ReaderControlBar', () => ({ ReaderControlBar: () => <div data-testid="reader-control-bar">Control Bar</div> }));
 vi.mock('./components/ThemeSynchronizer', () => ({ ThemeSynchronizer: () => null }));
-vi.mock('./components/GlobalSettingsDialog', () => ({ GlobalSettingsDialog: () => null }));
 vi.mock('./components/ui/ToastContainer', () => ({ ToastContainer: () => null }));
 vi.mock('./components/SafeModeView', () => ({
   SafeModeView: ({ onReset }: { onReset: () => void }) => (

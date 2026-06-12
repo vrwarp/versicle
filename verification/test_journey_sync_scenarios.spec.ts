@@ -233,7 +233,7 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   console.log("[B] Selecting workspace to start sync...");
   await pageB.getByTestId("header-settings-button").click();
   await pageB.waitForTimeout(1000);
-  await pageB.getByRole("button", { name: "Sync & Cloud" }).click();
+  await pageB.getByRole("tab", { name: "Sync & Cloud" }).click();
 
   // WebKit cross-client sync-halt detection lags under full-suite parallel load.
   await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 60000 });
@@ -409,7 +409,7 @@ test("offline resilience", async ({ browser, baseURL }) => {
 
   // Add Lexicon Rule
   await pageA.getByTestId("header-settings-button").click();
-  await pageA.getByRole("button", { name: "Dictionary" }).click();
+  await pageA.getByRole("tab", { name: "Dictionary" }).click();
   await pageA.getByRole("button", { name: "Manage Rules" }).click();
   await pageA.getByTestId("lexicon-add-rule-btn").click();
   await pageA.fill("data-testid=lexicon-input-original", "Offline");
@@ -461,7 +461,7 @@ test("offline resilience", async ({ browser, baseURL }) => {
   console.log("[B] Selecting workspace to start sync...");
   await pageB.getByTestId("header-settings-button").click();
   await pageB.waitForTimeout(1000);
-  await pageB.getByRole("button", { name: "Sync & Cloud" }).click();
+  await pageB.getByRole("tab", { name: "Sync & Cloud" }).click();
 
   // WebKit cross-client sync-halt detection lags under full-suite parallel load.
   await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 60000 });
@@ -481,7 +481,7 @@ test("offline resilience", async ({ browser, baseURL }) => {
 
   // Check Settings
   await pageB.getByTestId("header-settings-button").click();
-  await pageB.getByRole("button", { name: "Dictionary" }).click();
+  await pageB.getByRole("tab", { name: "Dictionary" }).click();
   await pageB.getByRole("button", { name: "Manage Rules" }).click();
 
   console.log("Waiting for synced lexicon rule 'Offline'...");
@@ -502,7 +502,7 @@ test("offline resilience", async ({ browser, baseURL }) => {
       await pageB.getByTestId("header-settings-button").click();
       await pageB.waitForTimeout(1000);
 
-      const dictionaryBtn = pageB.getByRole("button", { name: "Dictionary" });
+      const dictionaryBtn = pageB.getByRole("tab", { name: "Dictionary" });
       await dictionaryBtn.scrollIntoViewIfNeeded();
       await expect(dictionaryBtn).toBeVisible({ timeout: 5000 });
       await dictionaryBtn.click({ force: true });
@@ -538,7 +538,7 @@ test("data liberation", async ({ browser, baseURL }) => {
 
   // Create some data
   await page.getByTestId("header-settings-button").click();
-  await page.getByRole("button", { name: "Dictionary" }).click();
+  await page.getByRole("tab", { name: "Dictionary" }).click();
   await page.getByRole("button", { name: "Manage Rules" }).click();
   await page.getByTestId("lexicon-add-rule-btn").click();
   await page.fill("data-testid=lexicon-input-original", "ExportMe");
@@ -552,7 +552,7 @@ test("data liberation", async ({ browser, baseURL }) => {
   // Open Data Management
   await page.getByTestId("header-settings-button").click();
   await page.waitForTimeout(1000);
-  await page.getByRole("button", { name: "Data Management" }).click({ force: true });
+  await page.getByRole("tab", { name: "Data Management" }).click({ force: true });
 
   // Trigger Quick JSON Export
   const downloadPromise = page.waitForEvent("download");

@@ -98,7 +98,8 @@ vi.mock('@store/useTTSStore', () => ({
 }));
 vi.mock('@store/useUIStore', () => ({
     useUIStore: () => ({
-        setGlobalSettingsOpen: vi.fn()
+        obsoleteLock: false,
+        setObsoleteLock: vi.fn()
     })
 }));
 vi.mock('@store/useAnnotationStore', () => ({

@@ -13,7 +13,7 @@ test('Journey Bible Lexicon Test', async ({ page }) => {
 
   // 2. Switch to Dictionary Tab
   console.log('Switching to Dictionary Tab...');
-  await page.getByRole('button', { name: 'Dictionary' }).click();
+  await page.getByRole('tab', { name: 'Dictionary' }).click();
 
   // 3. Verify Bible Lexicon Global Toggle
   console.log('Verifying Global Toggle...');
@@ -41,7 +41,7 @@ test('Journey Bible Lexicon Test', async ({ page }) => {
   await page.waitForTimeout(500);
   await settingsBtn.click({ force: true });
   await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button', { name: 'Dictionary' }).click();
+  await page.getByRole('tab', { name: 'Dictionary' }).click();
 
   // 6. Verify Per-Book Override Controls
   console.log('Verifying Per-Book Controls...');

@@ -28,7 +28,7 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   await page.waitForTimeout(1000);
 
   await page.click("button[aria-label='Settings']", { force: true });
-  await page.getByRole("button", { name: "Dictionary" }).click();
+  await page.getByRole("tab", { name: "Dictionary" }).click();
   await page.getByRole("button", { name: "Manage Rules" }).click();
   await page.getByTestId("lexicon-add-rule-btn").click();
 
@@ -47,7 +47,7 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
 
   if (!(await page.getByRole("button", { name: "Quick JSON Export" }).isVisible())) {
-    await page.getByRole("button", { name: "Data Management" }).click({ force: true });
+    await page.getByRole("tab", { name: "Data Management" }).click({ force: true });
   }
 
   // Setup download listener
@@ -83,7 +83,7 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
 
   if (!(await page.getByRole("button", { name: "Quick JSON Export" }).isVisible())) {
-    await page.getByRole("button", { name: "Data Management" }).click({ force: true });
+    await page.getByRole("tab", { name: "Data Management" }).click({ force: true });
   }
 
   // Handle the merge confirmation dialog
@@ -125,7 +125,7 @@ test('Journey Full Backup & Restore (ZIP)', async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
 
   if (!(await page.getByRole("button", { name: "Full ZIP Export" }).isVisible())) {
-    await page.getByRole("button", { name: "Data Management" }).click({ force: true });
+    await page.getByRole("tab", { name: "Data Management" }).click({ force: true });
   }
 
   const downloadPromise = page.waitForEvent('download');
@@ -158,7 +158,7 @@ test('Journey Full Backup & Restore (ZIP)', async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
 
   if (!(await page.getByRole("button", { name: "Full ZIP Export" }).isVisible())) {
-    await page.getByRole("button", { name: "Data Management" }).click({ force: true });
+    await page.getByRole("tab", { name: "Data Management" }).click({ force: true });
   }
 
   page.once("dialog", (dialog) => dialog.accept());

@@ -30,7 +30,7 @@ test("reading list csv journey", async ({ page }) => {
   // 2. Open settings, go to data management, and download the reading list
   console.log("Opening Settings -> Data Management...");
   await page.getByTestId("header-settings-button").click();
-  await page.getByRole("button", { name: "Data Management" }).click();
+  await page.getByRole("tab", { name: "Data Management" }).click();
 
   console.log("Downloading Reading List...");
   const downloadPromise = page.waitForEvent("download");

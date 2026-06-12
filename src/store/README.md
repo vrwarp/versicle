@@ -17,7 +17,7 @@ hydration modes, and the per-store flip ledger.
 | `useBookStore` | `library` | library | `books` | merge-defaults | yes | Book inventory (per-book user data; carries __schemaVersion). |
 | `useReadingStateStore` | `progress` | reader | `progress` | merge-defaults | yes | Reading progress per book per device, incl. reading sessions. |
 | `useAnnotationStore` | `annotations` | reader | `annotations` | merge-defaults | yes | Highlights and notes, keyed by UUID. |
-| `usePreferencesStore` | `preferences.<deviceId>` | shell | `currentTheme`, `customTheme`, `fontFamily`, `lineHeight`, `fontSize`, `shouldForceFont`, `readerViewMode`, `libraryLayout`, `libraryFilterMode`, `librarySortOrder`, `activeContext`, `fontProfiles`, `forceTraditionalChinese`, `showPinyin`, `pinyinSize`, `aiConsent` | merge-defaults | yes | Per-device display preferences (theme, fonts, layout, Chinese). |
+| `usePreferencesStore` | `preferences.<deviceId>` | shell | `currentTheme`, `customTheme`, `fontFamily`, `lineHeight`, `fontSize`, `shouldForceFont`, `readerViewMode`, `libraryLayout`, `libraryFilterMode`, `librarySortOrder`, `fontProfiles`, `forceTraditionalChinese`, `showPinyin`, `pinyinSize`, `aiConsent` | merge-defaults | yes | Per-device display preferences (theme, fonts, layout, Chinese). |
 | `useReadingListStore` | `reading-list` | library | `entries` | merge-defaults | yes | Reading-list entries keyed by filename (progress projection). |
 | `useVocabularyStore` | `vocabulary` | chinese | `knownCharacters` | merge-defaults | yes | Known Chinese characters (char → learned-at timestamp). |
 | `useLexiconStore` | `lexicon` | audio | `rules`, `settings` | merge-defaults | yes | TTS pronunciation rules + per-book lexicon settings. |
@@ -40,7 +40,7 @@ hydration modes, and the per-store flip ledger.
 | Store | Persistence | Owner | Purpose |
 |---|---|---|---|
 | `useLibraryStore` | — | library | Static-metadata projection of IndexedDB + offloaded-book set. |
-| `useUIStore` | — | shell | Global UI flags (settings dialog, obsolete-client lock). |
+| `useUIStore` | — | shell | Global UI flags (obsolete-client lock; settings became route state in P8). |
 | `useToastStore` | — | shell | Toast notification state. |
 | `useReaderUIStore` | — | reader | Reader session UI (menus, popover, compass, reader callbacks). |
 | `useBackNavigationStore` | — | shell | Priority-ordered back-button handler registry. |

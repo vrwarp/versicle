@@ -2,7 +2,7 @@
  * renderWithStores: render a component against the REAL Zustand stores.
  *
  * Replaces the "mock 8 store modules to render one dialog" pattern
- * (see the former GlobalSettingsDialog.predictability.test.tsx): instead of
+ * (its descendant lives in src/app/settings/SettingsShell.test.tsx): instead of
  * `vi.mock`, each store is seeded through its real `setState` — including
  * action overrides (spies) — and automatically reset to its module-load
  * initial state when the test finishes.

@@ -150,7 +150,7 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
 
   await pageB.getByTestId('header-settings-button').click();
   await pageB.waitForTimeout(1000);
-  await pageB.getByRole('button', { name: 'Sync & Cloud' }).click();
+  await pageB.getByRole('tab', { name: 'Sync & Cloud' }).click();
 
   await expect(pageB.getByTestId('sync-halt-warning')).toBeVisible({ timeout: 20000 });
   await pageB.getByRole('button', { name: 'Switch' }).click();
@@ -295,7 +295,7 @@ test('Offload Status Hydration', async ({ browser }) => {
 
   await pageB.getByTestId('header-settings-button').click();
   await pageB.waitForTimeout(1000);
-  await pageB.getByRole('button', { name: 'Sync & Cloud' }).click();
+  await pageB.getByRole('tab', { name: 'Sync & Cloud' }).click();
 
   await expect(pageB.getByTestId('sync-halt-warning')).toBeVisible({ timeout: 20000 });
   await pageB.getByRole('button', { name: 'Switch' }).click();
@@ -339,7 +339,7 @@ test('Offline Resilience Test', async ({ browser }) => {
   await expect(page.getByTestId('library-view')).toBeVisible({ timeout: 15000 });
 
   await page.getByTestId('header-settings-button').click();
-  await page.getByRole('button', { name: 'Dictionary' }).click();
+  await page.getByRole('tab', { name: 'Dictionary' }).click();
   await page.getByRole('button', { name: 'Manage Rules' }).click();
   await page.getByTestId('lexicon-add-rule-btn').click();
   await page.getByTestId('lexicon-input-original').fill('OfflineTest');
@@ -357,7 +357,7 @@ test('Offline Resilience Test', async ({ browser }) => {
   await expect(page.getByTestId('library-view')).toBeVisible({ timeout: 10000 });
 
   await page.getByTestId('header-settings-button').click();
-  await page.getByRole('button', { name: 'Dictionary' }).click();
+  await page.getByRole('tab', { name: 'Dictionary' }).click();
   await page.getByRole('button', { name: 'Manage Rules' }).click();
 
   await expect(page.getByText('OfflineTest')).toBeVisible({ timeout: 5000 });

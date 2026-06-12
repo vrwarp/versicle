@@ -10,7 +10,6 @@ import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, 
 import { useShallow } from 'zustand/react/shallow';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
-import { useUIStore } from '@store/useUIStore';
 import { useSidebarState } from '@hooks/useSidebarState';
 import { cn } from '@lib/utils';
 import { Button } from '../../ui/Button';
@@ -33,7 +32,6 @@ export const ReaderChrome: React.FC<ReaderChromeProps> = ({ title, onOpenSyncPan
     setImmersiveMode: state.setImmersiveMode,
   })));
   const isPlaying = useTTSPlaybackStore(state => state.isPlaying);
-  const { setGlobalSettingsOpen } = useUIStore();
 
   const showToc = activeSidebar === 'toc';
   const showAnnotations = activeSidebar === 'annotations';
@@ -178,7 +176,9 @@ export const ReaderChrome: React.FC<ReaderChromeProps> = ({ title, onOpenSyncPan
           size="icon"
           data-testid="reader-settings-button"
           aria-label="Settings"
-          onClick={() => setGlobalSettingsOpen(true)}
+          // Phase 8 §B: settings are URL-addressable (/settings/:tab); the
+          // overlay renders over the library route — back returns here.
+          onClick={() => navigate('/settings')}
           className="rounded-full text-muted-foreground"
         >
           <Settings className="w-5 h-5" />

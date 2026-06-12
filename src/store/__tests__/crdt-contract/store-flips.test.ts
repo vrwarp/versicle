@@ -75,7 +75,9 @@ const prefsDefaults = {
   libraryLayout: 'grid',
   libraryFilterMode: 'all',
   librarySortOrder: 'last_read',
-  activeContext: 'library',
+  // activeContext left syncedKeys in Phase 8 §J (route state now) — the
+  // fixture docs still carry the key; the regression block below pins that
+  // the husk neither hydrates nor propagates.
   forceTraditionalChinese: false,
   showPinyin: false,
   pinyinSize: 100,
@@ -164,6 +166,44 @@ describe('flip wave 3: preferences (scope rebind + merge-defaults + scopedDiff)'
     await drain();
 
     expect(store.getState()).toBe(before); // reference-identical: no patch ran
+  });
+
+  describe('regression: activeContext de-synced (Phase 8 §J)', () => {
+    it('the live def no longer syncs activeContext', () => {
+      expect(PREFERENCES_STORE_DEF.syncedKeys).not.toContain('activeContext');
+    });
+
+    it('two clients: an old client writing the activeContext husk never reaches the new store', async () => {
+      const doc = loadDoc(5);
+      await runCrdtMigrationsOnDoc(doc, { createCheckpoint: async () => 1 });
+
+      // "Device B" is an old client flipping its view context — pre-P8 this
+      // propagated and flipped device A's UI too (RC-10). It must not patch
+      // device A's store anymore.
+      const storeA = bindWithDef<PrefsState>(doc, scopedTo(DEVICE_A), prefsCreator);
+      expect('activeContext' in storeA.getState()).toBe(false);
+
+      (doc.getMap('preferences').get(DEVICE_B) as Y.Map<unknown>).set('activeContext', 'notes');
+      // …and even a write under device A's OWN scope (its former husk) is
+      // filtered by the syncedKeys whitelist.
+      (doc.getMap('preferences').get(DEVICE_A) as Y.Map<unknown>).set('activeContext', 'notes');
+      await drain();
+
+      expect('activeContext' in storeA.getState()).toBe(false);
+    });
+
+    it('local writes never produce an activeContext doc entry', async () => {
+      const doc = loadDoc(5);
+      await runCrdtMigrationsOnDoc(doc, { createCheckpoint: async () => 1 });
+      const newDevice = 'fixture-device-p8';
+      const store = bindWithDef<PrefsState>(doc, scopedTo(newDevice), prefsCreator);
+
+      store.getState().setTheme('dark');
+      await drain();
+
+      const child = doc.getMap('preferences').get(newDevice) as Y.Map<unknown>;
+      expect(child.has('activeContext')).toBe(false);
+    });
   });
 });
 

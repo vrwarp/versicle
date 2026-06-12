@@ -14,7 +14,7 @@ test("lemonfox settings", async ({ page }) => {
 
   // Switch to TTS Engine tab
   console.log("Switching to TTS Engine tab...");
-  await page.getByRole("button", { name: "TTS Engine" }).click();
+  await page.getByRole("tab", { name: "TTS Engine" }).click();
 
   // Verify we are on TTS tab
   await expect(page.getByText("Provider Configuration")).toBeVisible();

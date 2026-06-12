@@ -16,7 +16,7 @@ test("journey workspace switch", async ({ page }) => {
   await page.getByTestId("header-settings-button").click();
 
   // Go to Sync tab
-  await page.getByRole("button", { name: "Sync & Cloud" }).click();
+  await page.getByRole("tab", { name: "Sync & Cloud" }).click();
 
   // In mock mode, sync is auto-enabled without pasting config
 
@@ -47,7 +47,7 @@ test("journey workspace switch", async ({ page }) => {
 
   // Re-open Settings to verify the active workspace changed back
   await page.getByTestId("header-settings-button").click();
-  await page.getByRole("button", { name: "Sync & Cloud" }).click();
+  await page.getByRole("tab", { name: "Sync & Cloud" }).click();
 
   // The library should now be connected back to the first workspace
   await expect(page.getByText("Active: My Library")).toBeVisible();

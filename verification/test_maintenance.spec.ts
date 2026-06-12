@@ -45,7 +45,7 @@ test("orphan repair", async ({ page }) => {
   await page.getByRole("button", { name: "Settings" }).click();
 
   // Go to Data Management Tab
-  await page.getByRole("button", { name: "Data Management" }).click();
+  await page.getByRole("tab", { name: "Data Management" }).click();
 
   // Set dialog handler BEFORE clicking
   page.on("dialog", async (dialog) => {

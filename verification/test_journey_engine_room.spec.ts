@@ -25,15 +25,15 @@ test('Engine Room Journey Test', async ({ page }) => {
   }
 
   // Verify Tabs exist
-  await expect(page.getByRole('button', { name: 'General' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'TTS Engine' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Dictionary' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'General' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'TTS Engine' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Dictionary' })).toBeVisible();
 
   // Check General Tab Content (default)
   await expect(page.getByRole('heading', { name: 'Advanced Import' })).toBeVisible();
 
   // Switch to TTS
-  await page.getByRole('button', { name: 'TTS Engine' }).click();
+  await page.getByRole('tab', { name: 'TTS Engine' }).click();
   await expect(page.getByText('Provider Configuration')).toBeVisible();
   await expect(page.getByText('Active Provider')).toBeVisible();
 
@@ -53,23 +53,23 @@ test('Engine Room Journey Test', async ({ page }) => {
   await readerSettingsBtn.click({ force: true });
 
   await expect(page.getByRole('dialog')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'General' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'General' })).toBeVisible();
 
   // Capture General Tab
   await utils.captureScreenshot(page, 'settings_01_general');
 
   // Capture Dictionary Tab
-  await page.getByRole('button', { name: 'Dictionary' }).click();
+  await page.getByRole('tab', { name: 'Dictionary' }).click();
   await expect(page.getByText('Text Segmentation')).toBeVisible();
   await utils.captureScreenshot(page, 'settings_02_dictionary');
 
   // Capture Data Management Tab
-  await page.getByRole('button', { name: 'Data Management' }).click();
+  await page.getByRole('tab', { name: 'Data Management' }).click();
   await expect(page.getByText('Danger Zone')).toBeVisible();
   await utils.captureScreenshot(page, 'settings_03_data');
 
   // Capture TTS Tab
-  await page.getByRole('button', { name: 'TTS Engine' }).click();
+  await page.getByRole('tab', { name: 'TTS Engine' }).click();
   await expect(page.getByText('Provider Configuration')).toBeVisible();
   await utils.captureScreenshot(page, 'settings_04_tts');
 

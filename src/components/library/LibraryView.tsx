@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo, Suspense } from 'react';
 import { useLibraryStore } from '@store/useLibraryStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useAllBooks } from '@store/libraryViewStore';
@@ -9,9 +9,7 @@ import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
 import { SyncPulseIndicator } from '../sync/SyncPulseIndicator';
 import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Loader2 } from 'lucide-react';
-import { useUIStore } from '@store/useUIStore';
 import { Button } from '../ui/Button';
-import { GlobalNotesView } from '../notes/GlobalNotesView';
 import { ImportSourceDialog } from './ImportSourceDialog';
 import { ContentMissingDialog } from './ContentMissingDialog';
 import { DriveImportDialog } from '../drive/DriveImportDialog';
@@ -37,11 +35,25 @@ import { LibrarySearchBar, type LibrarySearchBarRef } from './LibrarySearchBar';
  * Displays the user's collection of books in a responsive grid or list and allows importing new books.
  * Handles fetching books from the store.
  *
+ * Phase 8 §A/§J: the view context is ROUTE state, not a synced preference —
+ * `/` renders the library, `/notes` renders this same shell in notes
+ * context (the header Select navigates). The notes view itself is lazy so
+ * it stays out of the boot-surface chunk.
+ *
  * @returns A React component rendering the library interface.
  */
 const logger = createLogger('LibraryView');
 
-export const LibraryView: React.FC = () => {
+const GlobalNotesViewLazy = React.lazy(() =>
+  import('../notes/GlobalNotesView').then((m) => ({ default: m.GlobalNotesView })),
+);
+
+interface LibraryViewProps {
+  /** Which context this route renders: the library grid or global notes. */
+  context?: 'library' | 'notes';
+}
+
+export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' }) => {
   // OPTIMIZATION: Use useShallow to prevent re-renders when importProgress/uploadProgress changes
   const books = useAllBooks();
   const {
@@ -56,22 +68,18 @@ export const LibraryView: React.FC = () => {
   const controller = useImportController();
 
 
-  const { libraryLayout, setLibraryLayout, libraryFilterMode, setLibraryFilterMode, librarySortOrder, setLibrarySortOrder, activeContext, setActiveContext } = usePreferencesStore(useShallow(state => ({
+  const { libraryLayout, setLibraryLayout, libraryFilterMode, setLibraryFilterMode, librarySortOrder, setLibrarySortOrder } = usePreferencesStore(useShallow(state => ({
     libraryLayout: state.libraryLayout,
     setLibraryLayout: state.setLibraryLayout,
     libraryFilterMode: state.libraryFilterMode,
     setLibraryFilterMode: state.setLibraryFilterMode,
     librarySortOrder: state.librarySortOrder,
-    setLibrarySortOrder: state.setLibrarySortOrder,
-    activeContext: state.activeContext,
-    setActiveContext: state.setActiveContext
+    setLibrarySortOrder: state.setLibrarySortOrder
   })));
 
   // Alias for backward compatibility in component
   const viewMode = libraryLayout || 'grid';
   const setViewMode = setLibraryLayout;
-
-  const { setGlobalSettingsOpen } = useUIStore();
   const showToast = useToastStore(state => state.showToast);
   const searchBarRef = useRef<LibrarySearchBarRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -465,7 +473,7 @@ export const LibraryView: React.FC = () => {
         {/* Top Row: Title and Actions */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <Select value={activeContext || 'library'} onValueChange={(val) => setActiveContext(val as 'library' | 'notes')}>
+            <Select value={context} onValueChange={(val) => navigate(val === 'notes' ? '/notes' : '/')}>
               <SelectTrigger className="w-auto text-2xl sm:text-3xl font-bold border-0 shadow-none p-0 h-auto focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none flex-shrink-0" aria-label="Select view context">
                 <SelectValue />
               </SelectTrigger>
@@ -478,7 +486,7 @@ export const LibraryView: React.FC = () => {
           </div>
 
           <div className="flex gap-2">
-            {(activeContext || 'library') === 'library' && (
+            {context === 'library' && (
               <>
                 <Button
                   variant="secondary"
@@ -514,7 +522,7 @@ export const LibraryView: React.FC = () => {
             <Button
               variant="secondary"
               size="icon"
-              onClick={() => setGlobalSettingsOpen(true)}
+              onClick={() => navigate('/settings')}
               className="shadow-sm"
               aria-label="Settings"
               data-testid="header-settings-button"
@@ -525,7 +533,7 @@ export const LibraryView: React.FC = () => {
         </div>
 
         {/* Combined Row: Search and Sort */}
-        {(activeContext || 'library') === 'library' && (
+        {context === 'library' && (
           <div className="flex flex-col gap-4 md:flex-row-reverse md:items-center md:justify-between">
             {/* Search Bar */}
             <div className="w-full md:w-72">
@@ -604,11 +612,19 @@ export const LibraryView: React.FC = () => {
           <Loader2 className="h-12 w-12 animate-spin text-primary" aria-hidden="true" />
           <span className="sr-only" aria-live="polite">Loading library...</span>
         </div>
-      ) : activeContext === 'notes' ? (
-        <GlobalNotesView onContentMissing={(bookId) => {
-          const book = books.find(b => b.id === bookId);
-          if (book) handleRestore(book);
-        }} />
+      ) : context === 'notes' ? (
+        <Suspense
+          fallback={
+            <div className="flex justify-center items-center py-12 flex-1" role="status" aria-label="Loading notes">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" aria-hidden="true" />
+            </div>
+          }
+        >
+          <GlobalNotesViewLazy onContentMissing={(bookId) => {
+            const book = books.find(b => b.id === bookId);
+            if (book) handleRestore(book);
+          }} />
+        </Suspense>
       ) : (
         <section className="flex-1 w-full">
           {books.length === 0 ? (

@@ -51,7 +51,7 @@ async function openAppPage(context: BrowserContext, pause?: PausePoint): Promise
 
 async function openSyncSettings(page: Page): Promise<void> {
   await page.getByTestId("header-settings-button").click();
-  await page.getByRole("button", { name: "Sync & Cloud" }).click();
+  await page.getByRole("tab", { name: "Sync & Cloud" }).click();
 }
 
 const readMigrationStatus = (page: Page): Promise<string | null> =>

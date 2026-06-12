@@ -8,7 +8,7 @@ test('verify firebase config clear', async ({ page }) => {
   await page.getByTestId('header-settings-button').click();
 
   // Go to Sync tab
-  await page.getByRole('button', { name: 'Sync & Cloud' }).click();
+  await page.getByRole('tab', { name: 'Sync & Cloud' }).click();
 
   // Verify Firebase Config section appears
   await expect(page.getByRole('heading', { name: 'Firebase Configuration' })).toBeVisible();

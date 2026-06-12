@@ -265,7 +265,7 @@ export const STORE_REGISTRY: readonly StoreRegistryEntry[] = [
     tier: 'ephemeral',
     persistence: null,
     owner: 'shell',
-    summary: 'Global UI flags (settings dialog, obsolete-client lock).',
+    summary: 'Global UI flags (obsolete-client lock; settings became route state in P8).',
   },
   {
     module: 'useToastStore',

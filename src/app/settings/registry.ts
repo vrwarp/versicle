@@ -1,0 +1,133 @@
+/**
+ * Settings panel registry (Phase 8 §B) — the store-registry pattern
+ * (src/store/registry.ts) applied to the settings surface: declarative
+ * descriptors, lazy `load()` per panel (React.lazy source), ONE place that
+ * knows the tab set. `SettingsShell` renders the whole surface from this
+ * table; adding a settings area = adding a row + a self-contained panel
+ * module under ./panels/ (the DiagnosticsTab model — panels own their
+ * state, handlers and store access; no container props).
+ *
+ * `/settings/:tab` route params resolve through {@link resolveSettingsTab},
+ * so every id below is a deep-linkable URL segment.
+ *
+ * NOTE on labels: the i18n ADR (docs/adr/0001-i18n-strategy.md) wants
+ * `labelKey: MessageKey` here. The typed message catalog
+ * (src/kernel/locale/messages.ts) lands with this phase's locale item —
+ * until it exists these are plain strings; the swap is mechanical and
+ * confined to this file.
+ */
+import type { ComponentType } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import {
+  Activity,
+  BookOpen,
+  Cloud,
+  Database,
+  LifeBuoy,
+  Settings as SettingsIcon,
+  Smartphone,
+  Sparkles,
+  Volume2,
+} from 'lucide-react';
+
+export type SettingsTabId =
+  | 'general'
+  | 'tts'
+  | 'genai'
+  | 'sync'
+  | 'devices'
+  | 'dictionary'
+  | 'recovery'
+  | 'diagnostics'
+  | 'data';
+
+export interface SettingsPanel {
+  /** Route param (`/settings/:tab`) and Radix Tabs value. */
+  id: SettingsTabId;
+  /** Visible tab label (becomes a MessageKey with the locale item). */
+  label: string;
+  icon: LucideIcon;
+  /** React.lazy source — the panel chunk loads on first activation. */
+  load: () => Promise<{ default: ComponentType }>;
+  /** Sidebar position (ascending). */
+  order: number;
+  /** Destructive-area styling (the Data Management tab). */
+  danger?: boolean;
+}
+
+export const SETTINGS_PANELS: readonly SettingsPanel[] = [
+  {
+    id: 'general',
+    label: 'General',
+    icon: SettingsIcon,
+    load: () => import('./panels/GeneralPanel'),
+    order: 10,
+  },
+  {
+    id: 'tts',
+    label: 'TTS Engine',
+    icon: Volume2,
+    load: () => import('./panels/TTSPanel'),
+    order: 20,
+  },
+  {
+    id: 'genai',
+    label: 'Generative AI',
+    icon: Sparkles,
+    load: () => import('./panels/GenAIPanel'),
+    order: 30,
+  },
+  {
+    id: 'sync',
+    label: 'Sync & Cloud',
+    icon: Cloud,
+    load: () => import('./panels/SyncPanel'),
+    order: 40,
+  },
+  {
+    id: 'devices',
+    label: 'Devices',
+    icon: Smartphone,
+    load: () => import('./panels/DevicesPanel'),
+    order: 50,
+  },
+  {
+    id: 'dictionary',
+    label: 'Dictionary',
+    icon: BookOpen,
+    load: () => import('./panels/DictionaryPanel'),
+    order: 60,
+  },
+  {
+    id: 'recovery',
+    label: 'Recovery',
+    icon: LifeBuoy,
+    load: () => import('./panels/RecoveryPanel'),
+    order: 70,
+  },
+  {
+    id: 'diagnostics',
+    label: 'Diagnostics',
+    icon: Activity,
+    load: () => import('./panels/DiagnosticsPanel'),
+    order: 80,
+  },
+  {
+    id: 'data',
+    label: 'Data Management',
+    icon: Database,
+    load: () => import('./panels/DataPanel'),
+    order: 90,
+    danger: true,
+  },
+];
+
+const PANEL_IDS = new Set<string>(SETTINGS_PANELS.map((p) => p.id));
+
+/** Default tab for `/settings` and unknown deep-link params. */
+export const DEFAULT_SETTINGS_TAB: SettingsTabId = 'general';
+
+/** Resolve a route param to a registered tab id (unknown → general). */
+export function resolveSettingsTab(param: string | undefined): SettingsTabId {
+  return param && PANEL_IDS.has(param) ? (param as SettingsTabId) : DEFAULT_SETTINGS_TAB;
+}

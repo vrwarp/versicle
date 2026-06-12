@@ -1,22 +1,20 @@
 import { Outlet } from 'react-router-dom';
 import { ReaderControlBar } from '@components/reader/ReaderControlBar';
 import { ThemeSynchronizer } from '@components/ThemeSynchronizer';
-import { GlobalSettingsDialog } from '@components/GlobalSettingsDialog';
 import { ToastContainer } from '@components/ui/ToastContainer';
-import { ErrorBoundary } from '@components/ErrorBoundary';
-import { SyncToastPropagator } from '@components/sync/SyncToastPropagator';
 
 import { BackNavigationManager } from '@components/BackNavigationManager';
+import { SyncToastPropagator } from '@components/sync/SyncToastPropagator';
 
+// Phase 8 §B: GlobalSettingsDialog left this layout — settings are the
+// /settings/:tab route (SettingsShell). The shell no longer subscribes to
+// ten stores while settings are closed.
 export function RootLayout() {
     return (
         <>
             <BackNavigationManager />
             <SyncToastPropagator />
             <ThemeSynchronizer />
-            <ErrorBoundary>
-                <GlobalSettingsDialog />
-            </ErrorBoundary>
             <ToastContainer />
             <ReaderControlBar />
             <div className="min-h-screen bg-background text-foreground main_layout">

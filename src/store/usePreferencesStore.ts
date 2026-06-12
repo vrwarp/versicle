@@ -25,7 +25,10 @@ interface PreferencesState {
     libraryLayout: 'grid' | 'list';
     libraryFilterMode: 'all' | 'downloaded';
     librarySortOrder: 'recent' | 'last_read' | 'author' | 'title';
-    activeContext: 'library' | 'notes';
+    // `activeContext` left the store in Phase 8 §J: the library/notes
+    // switch is ROUTE state now (/ vs /notes). The Y.Map husk old clients
+    // keep writing is inert here (absent from syncedKeys = never written,
+    // never hydrated) and is pruned by the v9 husk-clear migration (P9).
 
     // === LANGUAGE SCOPED FONT RENDERING ===
     fontProfiles: Record<string, FontProfile>;
@@ -58,7 +61,6 @@ interface PreferencesState {
     setLibraryLayout: (layout: 'grid' | 'list') => void;
     setLibraryFilterMode: (mode: 'all' | 'downloaded') => void;
     setLibrarySortOrder: (order: 'recent' | 'last_read' | 'author' | 'title') => void;
-    setActiveContext: (context: 'library' | 'notes') => void;
 
     setForceTraditionalChinese: (force: boolean) => void;
     setShowPinyin: (show: boolean) => void;
@@ -80,7 +82,6 @@ const defaultPreferences = {
     libraryLayout: 'grid' as const,
     libraryFilterMode: 'all' as const,
     librarySortOrder: 'last_read' as const,
-    activeContext: 'library' as const,
 
     forceTraditionalChinese: false,
     showPinyin: false,
@@ -119,7 +120,6 @@ export const PREFERENCES_STORE_DEF: SyncedStoreDef<keyof typeof defaultPreferenc
         'libraryLayout',
         'libraryFilterMode',
         'librarySortOrder',
-        'activeContext',
         'fontProfiles',
         'forceTraditionalChinese',
         'showPinyin',
@@ -152,7 +152,6 @@ export const usePreferencesStore = create<PreferencesState>()(
             setLibraryLayout: (layout) => set({ libraryLayout: layout }),
             setLibraryFilterMode: (mode) => set({ libraryFilterMode: mode }),
             setLibrarySortOrder: (order) => set({ librarySortOrder: order }),
-            setActiveContext: (context) => set({ activeContext: context }),
 
             setForceTraditionalChinese: (force) => set({ forceTraditionalChinese: force }),
             setShowPinyin: (show) => set({ showPinyin: show }),
