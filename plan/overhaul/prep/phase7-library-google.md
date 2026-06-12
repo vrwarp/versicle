@@ -17,6 +17,48 @@ Inputs: `plan/overhaul/README.md` (master plan), `proposals/strangler-incrementa
 
 ---
 
+> **P7 sub-track status (2026-06-12): T4 net/egress + T3 google/genai DONE** — executed on an
+> isolated worktree branched from the 5a merge (`97851137`) while the 5b/5c chain runs on the
+> main tree (merge later). Landed (4 commits): **PR-N1+N2** `src/kernel/net/` (destination
+> registry, NetworkGateway with consent/timeout/offline/counters, NET_* codes,
+> kernel-imports-nothing depcruise rule at error, raw-fetch lint ban at error, CSP generated
+> from the registry into nginx.conf + vite preview + BUILD-time index.html meta — Android gets
+> a CSP for the first time; registry==CSP test permanent; strict flip still P8); **PR-A1+A2**
+> `domains/google/` GoogleAuthClient (per-service credential map, interactive/silent split,
+> revocation-only disconnect) + DriveClient/DriveLibrarySync (typed DRIVE_API_ERROR, 401+403
+> retry, q-escaping, silent boot policy), strategies/manager/lib-google DELETED, 6 call sites
+> migrated, lib/drive façades deprecated (deletion: phase exit); **PR-A3+A4** `domains/google/
+> genai/` (GenAIClient/GeminiClient over the gateway — @google/generative-ai SDK REMOVED —,
+> four `features/*` zod modules with clamps/membership, MockGenAIClient behind
+> `__versicleTest.genai.setMock`, all GenAIService localStorage mock seams deleted, smart-toc
+> journey migrated and green, GenAIService kept as a working façade for the frozen lib/tts/
+> app/tts consumers); **PR-A5+N3(consent)** useGenAIStore partialize allowlist + in-memory
+> redacted ring buffer + persist v0→v1 strip with captured-blob test + synced per-book
+> `aiConsent` + gateway consent resolver (observe-mode default).
+>
+> **Sub-track follow-ups (owned by the 5b/5c chain merge / later PRs):**
+> 1. The TTS provider fetch sites (`GoogleTTSProvider`, `PiperProvider`, `PiperRuntime`,
+>    `BaseCloudProvider`) still raw-fetch — frozen for the parallel chain; their registry
+>    entries exist and the lint ban carries the documented `src/lib/tts/engine|providers`
+>    exemption to burn down at merge.
+> 2. The two `mockGenAIResponse` reads in `AudioContentPipeline.ts` /
+>    `TableAdaptationProcessor.ts` are inert (nothing sets the key) — delete with
+>    `ensureGenAIReady()` unification when the chain merges.
+> 3. Per-book consent is observe-mode: explicit `aiConsent[bookId] === false` denies at the
+>    gateway, but the "ask on first TTS play" prompt + bookId threading through the
+>    EngineContext GenAI port are P5c/TTS-UI work; until then non-interactive calls without a
+>    bookId are legacy-allowed (documented in app/google/aiConsent.ts).
+> 4. `aiConsent` lives in the device-scoped preferences map (the doc's "synced preferences");
+>    consent therefore syncs per device — grandfathering via synced contentAnalysis records
+>    covers cross-device continuity. Revisit if a user-global home appears.
+> 5. GenAIService façade + lib/drive façades carry deletion deadlines (phase exit) once
+>    consumers adopt the domain clients directly.
+> 6. Android device check (PR-A1): @capgo repeated-login-with-different-scopes remains
+>    unverified-on-device (not testable in this environment).
+> 7. T1 library and T2 search tracks of this doc are NOT part of this sub-track.
+
+---
+
 ## Reality check
 
 The four analyses describe a tree two phases old. Every contradiction found between their
