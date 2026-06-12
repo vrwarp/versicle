@@ -1,88 +1,13 @@
 
-import JSZip from 'jszip';
 import { bookImportService } from './BookImportService';
 import type { ExtractionOptions } from './ingestion/sentence-extraction';
 import type { StaticBookManifest } from '~types/db';
 
-/**
- * Unzips a file and extracts all EPUBs contained within.
- * It recursively checks for EPUBs but currently only extracts from the root or flattened structure of the zip.
- *
- * @param file - The ZIP file to process.
- * @param onProgress - Optional callback for reading progress (0-100).
- * @returns A Promise resolving to an array of EPUB Files.
- */
-export async function extractEpubsFromZip(
-    file: File,
-    onProgress?: (percent: number) => void
-): Promise<File[]> {
-    const zip = new JSZip();
-    const epubFiles: File[] = [];
-
-    try {
-        let zipContent: JSZip;
-
-        if (onProgress) {
-            // Read the file with FileReader to report progress
-            const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    if (e.target?.result) {
-                        resolve(e.target.result as ArrayBuffer);
-                    } else {
-                        reject(new Error("Failed to read file"));
-                    }
-                };
-                reader.onerror = () => reject(reader.error);
-                reader.onprogress = (e) => {
-                    if (e.lengthComputable) {
-                        onProgress((e.loaded / e.total) * 100);
-                    }
-                };
-                reader.readAsArrayBuffer(file);
-            });
-            zipContent = await zip.loadAsync(buffer);
-        } else {
-            zipContent = await zip.loadAsync(file);
-        }
-
-        const validEntries: JSZip.JSZipObject[] = [];
-
-        zipContent.forEach((_, zipEntry) => {
-            if (zipEntry.dir) return; // Skip directories
-            if (!zipEntry.name.toLowerCase().endsWith('.epub')) return; // Skip non-epubs
-            validEntries.push(zipEntry);
-        });
-
-        const CONCURRENCY_LIMIT = 5;
-        for (let i = 0; i < validEntries.length; i += CONCURRENCY_LIMIT) {
-            const chunk = validEntries.slice(i, i + CONCURRENCY_LIMIT);
-
-            const chunkPromises = chunk.map(async (zipEntry) => {
-                const blob = await zipEntry.async('blob');
-                // Reconstruct a File object
-                // We use the full relative path as the name to avoid collisions,
-                // but we might want to strip paths depending on requirements.
-                // For now, using the name from the zip entry.
-                const epubFile = new File([blob], zipEntry.name.split('/').pop() || zipEntry.name, {
-                    type: 'application/epub+zip'
-                });
-                epubFiles.push(epubFile);
-            });
-
-            await Promise.all(chunkPromises);
-
-            // Yield to main thread to prevent UI freezing
-            await new Promise(resolve => setTimeout(resolve, 0));
-        }
-
-    } catch (e) {
-        console.error("Failed to process ZIP file:", e);
-        throw new Error("Failed to process ZIP file. It might be corrupted or not a valid ZIP.");
-    }
-
-    return epubFiles;
-}
+// ZIP expansion moved to the unified import pipeline (Phase 7 PR-L1) and
+// gained cancellation; re-exported here for this module's consumers until
+// PR-L2 absorbs the batch path into the ImportOrchestrator.
+export { extractEpubsFromZip } from '@domains/library/import/zip';
+import { extractEpubsFromZip } from '@domains/library/import/zip';
 
 /** A file that could not be imported, with the reason for the failure. */
 export interface BatchImportFailure {

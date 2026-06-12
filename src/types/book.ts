@@ -46,8 +46,20 @@ export interface StaticBookManifest {
   description?: string;
   /** The ISBN of the book, if available. */
   isbn?: string;
-  /** SHA-256 hash of the original EPUB file. */
+  /**
+   * Legacy identity fingerprint: `${filename}-${title}-${author}` plus djb2
+   * hashes of the first/last 4 KiB (NOT a cryptographic hash — the field
+   * name predates Phase 7). Retained for restore acceptance of pre-P7
+   * manifests; new identity checks prefer {@link contentHash}.
+   */
   fileHash: string;
+  /**
+   * SHA-256 (hex) over the EPUB's content bytes only — filename-independent
+   * book identity (Phase 7, phase7-library-google.md §B "identify"). Absent
+   * on manifests written before P7; lazily backfilled when a legacy
+   * fingerprint match succeeds during restore.
+   */
+  contentHash?: string;
   /** The size of the file in bytes. */
   fileSize: number;
   /** Total number of characters in the book. */
