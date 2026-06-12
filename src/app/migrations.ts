@@ -259,6 +259,89 @@ const canonicalizeVocabularyKeys = (doc: Y.Doc): void => {
 };
 
 /**
+ * v8 → v9 (Phase 9 — the LAST format change of the overhaul program;
+ * phase2-fork-surgery.md §9 items 1–2, phase8-shell-pwa.md §RC-10):
+ *
+ * 1. **Preferences husk-clearing.** v6 folded the legacy top-level
+ *    `preferences/<deviceId>` maps into the keyed `preferences` map
+ *    COPY-WITHOUT-CLEAR: clearing then would have let the D5 window (per-map
+ *    quarantine is async and only library-guarded) wipe a still-v5 device's
+ *    LIVE preferences before its UI locked. v9 empties the husk maps'
+ *    content (top-level shared types can never be removed from a Y.Doc).
+ *    Safe NOW because the only clients that ever WRITE those maps are
+ *    v5-era stacks, and every such client has been hard-quarantined since
+ *    the v6 bump (and re-trips on v7/v8): its library-map poison pill fires
+ *    synchronously BEFORE any store patch, so no live preferences can be
+ *    lost to this clear — the husks are pure residue.
+ *
+ * 2. **`library.__schemaVersion` dual-write retirement — meta becomes the
+ *    sole version authority.** The N+1 staging audit (program rule 5):
+ *    the `meta` map's WRITE shipped at v6 (P2, three format generations
+ *    ago); its first enforcement READERS shipped with the P4 doc-level
+ *    quarantine layers (pre-attach metadata probe, pre-apply scratch
+ *    check, live `meta` observer) — between the v6 and v7 releases. The
+ *    fleet-quarantine chain that makes meta-only safe at v9:
+ *      - clients ≤ v7-era: already locked by the v8 bump's dual write
+ *        (their per-map pill saw library.__schemaVersion = 8), and the
+ *        FROZEN library stamp keeps tripping them on every future boot;
+ *      - v8-era clients (the only ones still live on a v8 doc): every
+ *        v8-era build is ≥ P7 and therefore carries the P4 meta layers,
+ *        so `meta.schemaVersion = 9` alone quarantines them.
+ *    The stale `library.__schemaVersion = 8` key is deliberately KEPT, not
+ *    deleted: it is the ONLY quarantine layer pre-P4-era builds possess
+ *    (an offline v6-era straggler that missed v7/v8 still trips on 8 > 6),
+ *    and deleting it would invite middleware resurrection writes (the
+ *    store's declared `__schemaVersion` default diffed against an absent
+ *    key). It is frozen at 8 forever; `readDocSchemaVersion`'s
+ *    `max(meta, library)` reads through it.
+ *
+ * 3. **`activeContext` husk pruning.** P8 §J moved the library/notes
+ *    switch to ROUTE state and dropped `activeContext` from the
+ *    preferences syncedKeys (read-time-only change, no format bump — the
+ *    P8 slot was released). The key lingers in every folded per-device
+ *    map (and the legacy husks, which item 1 clears wholesale); v9 deletes
+ *    it. A not-yet-quarantined v8-era client built before P8 can race a
+ *    re-add into its local doc — inert (v9+ stacks never hydrate the key)
+ *    and stopped fleet-wide by the bump itself.
+ *
+ * Transform discipline (the F.3 pattern): deterministic (sorted
+ * iteration), idempotent (clearing empty maps / deleting absent keys are
+ * no-ops), so concurrent migrations by two clients converge per the
+ * coordinator's LWW core.
+ */
+const clearHusksAndRetireDualWrite = (doc: Y.Doc): void => {
+  // 1. Empty every legacy per-device preference husk (content only; the
+  //    top-level share itself is permanent Y.Doc structure).
+  for (const name of legacyPreferenceMapNames(doc)) {
+    const husk = doc.getMap(name);
+    for (const key of [...husk.keys()].sort()) {
+      husk.delete(key);
+    }
+  }
+
+  // 3. Prune the de-synced activeContext key from the folded device maps.
+  const folded = doc.getMap('preferences');
+  for (const deviceId of [...folded.keys()].sort()) {
+    const deviceMap = folded.get(deviceId);
+    if (deviceMap instanceof Y.Map) {
+      deviceMap.delete('activeContext');
+    }
+  }
+
+  // 2 (the dual-write retirement) lives in the runner: steps with
+  // `to` > LAST_DUAL_WRITTEN_SCHEMA_VERSION bump `meta` alone.
+};
+
+/**
+ * The last version whose bump dual-writes `library.__schemaVersion`
+ * (item 2 above). Steps up to and including v8 keep the dual write so a
+ * chain replayed from an old era terminates in the same doc state the
+ * fleet's staggered releases produced (library frozen at 8); v9 and every
+ * future bump write `meta.schemaVersion` only.
+ */
+export const LAST_DUAL_WRITTEN_SCHEMA_VERSION = 8;
+
+/**
  * The ordered migration registry. `from: 3` exists because v3 was a pure
  * version bump (Firestore path change, no doc-shape change) — the legacy
  * runner folded v2/v3 into one branch.
@@ -266,9 +349,10 @@ const canonicalizeVocabularyKeys = (doc: Y.Doc): void => {
  * v7 → v8 (Phase 7 §D, the rule-4 post-merge step): the one-time
  * reading-list `bookId` FK linker — see migrations.linkReadingList.ts for
  * the join semantics and why the FK needs a quarantining bump (pre-v8
- * clients drop unknown fields on whole-entry rebuilds). Next up: v9 =
- * preferences husk-clearing + library.__schemaVersion dual-write
- * retirement + activeContext husk pruning (P9).
+ * clients drop unknown fields on whole-entry rebuilds).
+ *
+ * v8 → v9 (Phase 9): the program's terminal cleanup bump — husk clearing,
+ * dual-write retirement, activeContext pruning (docblock above).
  */
 export const CRDT_MIGRATIONS: readonly CrdtMigration[] = [
   { from: 1, to: 2, migrate: pruneInvalidReadingSessions },
@@ -278,6 +362,7 @@ export const CRDT_MIGRATIONS: readonly CrdtMigration[] = [
   { from: 5, to: 6, migrate: migrateV5toV6 },
   { from: 6, to: 7, migrate: canonicalizeVocabularyKeys },
   { from: 7, to: 8, migrate: linkReadingListEntries },
+  { from: 8, to: 9, migrate: clearHusksAndRetireDualWrite },
 ];
 
 // ─── The runner ──────────────────────────────────────────────────────────────
@@ -350,14 +435,19 @@ export async function runCrdtMigrationsOnDoc(
       if (step === undefined) {
         throw new Error(`No migration step from v${current} (target v${target}).`);
       }
-      // Transform + dual version bump in ONE transaction: atomic for every
-      // observer (stores, y-idb, remote peers). The meta write is the N+1
-      // staged schema surface; library.__schemaVersion keeps v5-and-older
-      // clients quarantining (their per-map poison pill reads it).
+      // Transform + version bump in ONE transaction: atomic for every
+      // observer (stores, y-idb, remote peers). `meta` is the version
+      // authority. Steps ≤ v8 ALSO write library.__schemaVersion — the
+      // pre-meta-era per-map poison pill surface — so a chain replayed
+      // from an old era terminates with library frozen at 8, exactly the
+      // state the fleet's staggered releases produced; v9+ bumps retired
+      // the dual write (see clearHusksAndRetireDualWrite, item 2).
       doc.transact(() => {
         step.migrate(doc);
         doc.getMap('meta').set('schemaVersion', step.to);
-        doc.getMap('library').set('__schemaVersion', step.to);
+        if (step.to <= LAST_DUAL_WRITTEN_SCHEMA_VERSION) {
+          doc.getMap('library').set('__schemaVersion', step.to);
+        }
       }, MIGRATION_ORIGIN);
       logger.info(`Migration v${current} → v${step.to} complete.`);
       version = step.to;

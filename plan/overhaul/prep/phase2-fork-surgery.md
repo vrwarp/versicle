@@ -785,3 +785,24 @@ order; see the README status banner). Deliberately deferred work, with owners:
 > `bookId` FK linking migration (last PR of Phase 7, gated on v6 + IDB v25 stability).
 > The preferences husk-clearing + `library.__schemaVersion` dual-write retirement
 > renumber from v7 to **v8** (Phase 9). Additive change ships before cleanup.
+>
+> **P9 settlement (2026-06-12, p9-crdt-v9-and-shims): items 1–2 are PAID as
+> CRDT v9** (final numbering after the v7 = vocabulary / v8 = reading-list FK
+> renumbers) — `{from: 8, to: 9}` in `src/app/migrations.ts`
+> (`clearHusksAndRetireDualWrite`): the legacy `preferences/<deviceId>` husks
+> are emptied (content only; top-level shares are permanent), the de-synced
+> `activeContext` key (P8 §J) is pruned from the folded device maps, and the
+> coordinator's bump writes `meta` ALONE for steps past
+> `LAST_DUAL_WRITTEN_SCHEMA_VERSION = 8`. The `library.__schemaVersion` stamp
+> is deliberately FROZEN at 8, not deleted: it remains the only poison-pill
+> surface pre-P4-era builds possess, and deleting the key would invite
+> middleware default-resurrection writes. N+1 audit (rule 5): meta's write
+> shipped at v6, its first readers at P4, and every build that can pass the
+> frozen library tripwire (v8-era = ≥ P7) carries the P4 doc-level meta
+> layers — reasoning documented in full on the migration body. Coverage:
+> captured era-8 fixture (terminal v8 shape, husks + activeContext intact),
+> F.3 matrix v1–v8 → v9, and the standing F.2 v8-stack-vs-v9-doc case, which
+> pins the enforcement-layer CHANGE (middleware pill silent by design; the
+> `readUpdateSchemaVersion` pre-apply gate + the live ProviderConnection
+> `meta` observer quarantine instead). Item 3's settlement note stands
+> unchanged.

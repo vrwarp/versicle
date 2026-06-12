@@ -14,20 +14,28 @@ import {
   __resetCrdtMigrationsForTests,
 } from '@app/migrations';
 import { CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
+import { readUpdateSchemaVersion } from '@domains/sync/core/quarantine';
+import { ProviderConnection } from '@domains/sync/core/ProviderConnection';
+import { getSyncEventBus } from '@domains/sync/events';
+import type { SyncBackend, SyncConnection } from '@domains/sync/backend/SyncBackend';
 import { DEVICE_A, DEVICE_B, BOOK_EN, BOOK_CJK } from '@test/fixtures/ydoc/seed';
 
 /**
  * Migration coordinator suite (phase2-fork-surgery.md §5, contract cases
  * F.2/F.3 plus the coordinator invariants):
  *
- *  - F.3 fixture matrix: v1/v2/v4/v5/v6/v7 → v8 terminate in
+ *  - F.3 fixture matrix: v1/v2/v4/v5/v6/v7/v8 → v9 terminate in
  *    canonically-equal doc JSON; re-running is a no-op; two clients
  *    migrating concurrently converge (determinism + LWW).
  *  - F.2 two-client quarantine (program rule 6 — one case per bump): a
  *    pre-bump stack receiving a migrated doc fires onObsolete(version)
  *    BEFORE any store patch, halts outbound, and the known D5 residual
- *    (Y-level merge already happened on unguarded maps) is pinned. Three
- *    standing pairings: v5-vs-v6, v6-vs-v7, v7-vs-v8.
+ *    (Y-level merge already happened on unguarded maps) is pinned. Four
+ *    standing pairings: v5-vs-v6, v6-vs-v7, v7-vs-v8, and v8-vs-v9 —
+ *    where the enforcement layer CHANGES: the v9 bump retired the
+ *    library.__schemaVersion dual write, so the middleware per-map pill
+ *    stays silent by design and the P4 doc-level meta layers own the
+ *    quarantine (both halves pinned).
  *  - Coordinator invariants (absorbing the durable assertions of the
  *    deleted yjs-provider.migration-race.test.ts spy test): no double-apply,
  *    failure → MigrationError with the pre-migration checkpoint id, atomic
@@ -38,7 +46,7 @@ import { DEVICE_A, DEVICE_B, BOOK_EN, BOOK_CJK } from '@test/fixtures/ydoc/seed'
 // resolve from the repo root instead (vitest always runs from it).
 const fixtureDir = join(process.cwd(), 'src', 'test', 'fixtures', 'ydoc');
 
-const loadDoc = (era: 1 | 2 | 4 | 5 | 6 | 7): Y.Doc => {
+const loadDoc = (era: 1 | 2 | 4 | 5 | 6 | 7 | 8): Y.Doc => {
   const doc = new Y.Doc();
   Y.applyUpdate(doc, new Uint8Array(readFileSync(join(fixtureDir, `v${era}.update.bin`))));
   return doc;
@@ -81,19 +89,21 @@ afterEach(() => {
 
 // ─── F.3: fixture migration matrix ───────────────────────────────────────────
 
-describe('F.3 migration matrix — committed era fixtures → v8', () => {
-  const eras = [1, 2, 4, 5, 6, 7] as const;
+describe('F.3 migration matrix — committed era fixtures → v9', () => {
+  const eras = [1, 2, 4, 5, 6, 7, 8] as const;
 
-  it.each(eras)('v%i → v8: post-migration invariants hold', async (era) => {
+  it.each(eras)('v%i → v9: post-migration invariants hold', async (era) => {
     const doc = loadDoc(era);
     const result = await migrate(doc, 8);
 
-    expect(result).toEqual({ status: 'migrated', from: era, to: 8, checkpointId: 8 });
+    expect(result).toEqual({ status: 'migrated', from: era, to: 9, checkpointId: 8 });
 
-    // Atomic dual version bump (meta is the N+1-staged surface).
-    expect(doc.getMap('meta').get('schemaVersion')).toBe(8);
+    // meta is the sole version authority from v9 on; the library stamp is
+    // FROZEN at 8 (the last dual-written bump) as the pre-meta-era
+    // poison-pill tripwire — never deleted, never advanced.
+    expect(doc.getMap('meta').get('schemaVersion')).toBe(9);
     expect(doc.getMap('library').get('__schemaVersion')).toBe(8);
-    expect(readDocSchemaVersion(doc)).toBe(8);
+    expect(readDocSchemaVersion(doc)).toBe(9);
 
     // v6 scope 1: the residual popover key is gone; annotations intact.
     expect(doc.getMap('annotations').has('popover')).toBe(false);
@@ -116,15 +126,18 @@ describe('F.3 migration matrix — committed era fixtures → v8', () => {
       zh: { fontSize: 120, lineHeight: 1.8 },
     });
 
-    // COPY-WITHOUT-CLEAR: the legacy per-device husks are retained verbatim
-    // (clearing is v9's job (P9), after the fleet upgrades — risk R4/D5).
+    // v9 scope 1: the legacy per-device husks are EMPTIED (v6 copied
+    // without clearing; the fleet-quarantine chain finally made the clear
+    // safe — see clearHusksAndRetireDualWrite). The top-level shares
+    // themselves are permanent Y.Doc structure and remain, contentless.
     for (const device of [DEVICE_A, DEVICE_B]) {
-      const husk = doc.getMap(`preferences/${device}`);
-      expect(husk.size).toBeGreaterThan(0);
-      expect(husk.toJSON()).toEqual(folded.get(device) instanceof Y.Map
-        ? (folded.get(device) as Y.Map<unknown>).toJSON()
-        : folded.get(device));
+      expect(doc.getMap(`preferences/${device}`).size).toBe(0);
     }
+
+    // v9 scope 3: the de-synced activeContext key (P8 §J route state) is
+    // pruned from every folded device map; nothing else was touched.
+    expect('activeContext' in foldedA).toBe(false);
+    expect('activeContext' in foldedB).toBe(false);
 
     // v1→v2 prune: the corrupt session is gone, valid sessions retained.
     const progress = doc.getMap('progress').toJSON() as {
@@ -191,7 +204,7 @@ describe('F.3 migration matrix — committed era fixtures → v8', () => {
       },
     });
     expect(second.status).toBe('noop');
-    expect(second.from).toBe(8);
+    expect(second.from).toBe(9);
     expect(checkpointAgain).not.toHaveBeenCalled(); // no checkpoint on a no-op
     expect(docJson(doc)).toEqual(after);
   });
@@ -216,7 +229,10 @@ describe('F.3 migration matrix — committed era fixtures → v8', () => {
     // v8 ran in both clients concurrently: identical FK on both replicas.
     const entriesA = (docA.getMap('reading-list').get('entries') as Y.Map<Y.Map<unknown>>);
     expect(entriesA.get('alice.epub')?.get('bookId')).toBe(BOOK_EN);
-    expect(readDocSchemaVersion(docA)).toBe(8);
+    // v9 ran in both clients concurrently: husks cleared, prune converged.
+    expect(docA.getMap(`preferences/${DEVICE_A}`).size).toBe(0);
+    expect((docA.getMap('preferences').get(DEVICE_A) as Y.Map<unknown>).has('activeContext')).toBe(false);
+    expect(readDocSchemaVersion(docA)).toBe(9);
   });
 
   it('v1 + v5 clients: staggered-era migrations merge to the same terminal state', async () => {
@@ -237,7 +253,8 @@ describe('F.3 migration matrix — committed era fixtures → v8', () => {
 describe('coordinator invariants', () => {
   it('no-op on an up-to-date doc: no checkpoint, no writes', async () => {
     const doc = loadDoc(5);
-    doc.getMap('library').set('__schemaVersion', CURRENT_SCHEMA_VERSION);
+    // meta is the version authority post-v9 (the library stamp froze at 8).
+    doc.getMap('meta').set('schemaVersion', CURRENT_SCHEMA_VERSION);
     const before = docJson(doc);
 
     const checkpoint = vi.fn();
@@ -350,7 +367,7 @@ describe('coordinator invariants', () => {
     // re-run (after the cause is fixed) picks up from the same version.
     expect(readDocSchemaVersion(doc)).toBe(5);
     const recovery = await migrate(doc);
-    expect(recovery).toMatchObject({ status: 'migrated', from: 5, to: 8 });
+    expect(recovery).toMatchObject({ status: 'migrated', from: 5, to: 9 });
   });
 
   it('a version gap fails loudly (no silent skip)', async () => {
@@ -363,7 +380,7 @@ describe('coordinator invariants', () => {
     ).rejects.toMatchObject({ name: 'MigrationError', checkpointId: 5 });
   });
 
-  it('each step is ONE transaction: transform + dual bump arrive atomically, tagged MIGRATION_ORIGIN', async () => {
+  it('each step is ONE transaction: transform + bump arrive atomically, tagged MIGRATION_ORIGIN', async () => {
     const doc = loadDoc(5);
     const origins: unknown[] = [];
     let popoverGoneWhenBumped = false;
@@ -379,10 +396,34 @@ describe('coordinator invariants', () => {
 
     await migrate(doc);
 
-    // The v5 fixture needs three steps (5→6, 6→7, 7→8) → exactly three
-    // transactions, each carrying its transform + dual bump atomically.
-    expect(origins).toEqual([MIGRATION_ORIGIN, MIGRATION_ORIGIN, MIGRATION_ORIGIN]);
+    // The v5 fixture needs four steps (5→6, 6→7, 7→8, 8→9) → exactly four
+    // transactions, each carrying its transform + bump atomically (dual
+    // bump through v8; meta-only at v9).
+    expect(origins).toEqual([
+      MIGRATION_ORIGIN,
+      MIGRATION_ORIGIN,
+      MIGRATION_ORIGIN,
+      MIGRATION_ORIGIN,
+    ]);
     expect(popoverGoneWhenBumped).toBe(true);
+  });
+
+  it('the v9 step never touches the library map: the dual write is retired, the stamp frozen at 8', async () => {
+    const doc = loadDoc(8);
+    let libraryEvents = 0;
+    doc.getMap('library').observeDeep(() => {
+      libraryEvents += 1;
+    });
+
+    await migrate(doc);
+
+    // Zero library transactions across the whole v8 → v9 run: the frozen
+    // stamp is untouched residue, not a rewrite — pre-P4-era clients keep
+    // their poison-pill tripwire (8 > v≤7) and v8-era clients are caught
+    // by the P4 doc-level meta layers (the F.2 v9 case pins both halves).
+    expect(libraryEvents).toBe(0);
+    expect(doc.getMap('library').get('__schemaVersion')).toBe(8);
+    expect(doc.getMap('meta').get('schemaVersion')).toBe(9);
   });
 
   it('runCrdtMigrations() runs once per tab: repeated calls share the same promise', async () => {
@@ -650,9 +691,11 @@ describe('F.2 two-client quarantine — v7 stack vs migrated v8 doc', () => {
   }
 
   it('onObsolete(8) fires before any store patch; outbound halts; the FK-dropping rebuild residual pinned', async () => {
-    // Client A: the current stack migrates the captured v7 doc to v8.
+    // Client A: a v8-era stack migrates the captured v7 doc to v8. Pinned
+    // at targetVersion 8 — this case documents the v8-era quarantine; the
+    // v9 pairing has its own describe below (program rule 6 is standing).
     const docA = loadDoc(7);
-    await migrate(docA);
+    await migrate(docA, 1, { targetVersion: 8 });
     const v8Update = Y.encodeStateAsUpdate(docA);
 
     // Client B: a v7-era stack — middleware configured schemaVersion: 7.
@@ -750,5 +793,111 @@ describe('F.2 two-client quarantine — v7 stack vs migrated v8 doc', () => {
 
     expect(docB.getMap('library').get('__schemaVersion')).toBe(8);
     expect(docB.getMap('meta').get('schemaVersion')).toBe(8);
+  });
+});
+
+// ─── F.2 (v9): two-client quarantine — v8 stack vs migrated v9 doc ──────────
+// Program rule 6 is STANDING: every schema bump ships its own two-client
+// upgrade test. v9 = the husk-clear + dual-write-retirement bump (P9), and
+// the ENFORCEMENT LAYER CHANGES with it: the library stamp froze at 8, so a
+// v8 client's middleware per-map pill is structurally blind to the v9 bump
+// (8 ≤ 8 — pinned below as the designed delta, not a regression). What
+// quarantines the v8 fleet is the P4 doc-level machinery every v8-era build
+// carries (P4 ≪ P7): the pre-apply scratch check on downloaded state and
+// the live `meta` observer — both asserted here against the real
+// ProviderConnection. This is exactly the N+1 verification documented on
+// clearHusksAndRetireDualWrite: meta's write shipped at v6, its readers at
+// P4, and no client that can pass the frozen library tripwire predates them.
+
+describe('F.2 two-client quarantine — v8 stack vs migrated v9 doc', () => {
+  interface LibraryMirror {
+    __schemaVersion: number;
+    books: Record<string, { title: string }>;
+    setBooks: (books: Record<string, { title: string }>) => void;
+  }
+
+  it('the middleware pill stays silent (library frozen at 8); the P4 doc-level meta layers quarantine instead', async () => {
+    // Client A: the current stack migrates the captured v8 doc to v9.
+    const docA = loadDoc(8);
+    await migrate(docA);
+    const v9Update = Y.encodeStateAsUpdate(docA);
+
+    // §D5 layer 1 — the pre-apply scratch check: a downloaded v9 blob
+    // proves its version on a throwaway doc BEFORE any byte reaches the
+    // live doc. Every clean-sync/switch/reconnect path locks here first.
+    expect(readUpdateSchemaVersion(v9Update)).toBe(9);
+
+    // Client B: a v8-era stack — middleware configured schemaVersion: 8 —
+    // hydrated from its own copy of the v8 doc, with the P4 live `meta`
+    // observer attached (ProviderConnection, currentSchemaVersion 8).
+    const docB = loadDoc(8);
+    const libraryObsolete = vi.fn();
+    const libraryB = createStore<LibraryMirror>()(
+      yjsMiddleware(
+        docB,
+        'library',
+        (set) => ({
+          __schemaVersion: 1,
+          books: {},
+          setBooks: (books) => set({ books }),
+        }),
+        { disableYText: true, schemaVersion: 8, onObsolete: libraryObsolete },
+      ),
+    );
+    await drain();
+    expect(libraryB.getState().__schemaVersion).toBe(8);
+
+    const docLevelObsolete = vi.fn();
+    const destroyed = vi.fn();
+    const fakeConnection: SyncConnection = {
+      on: () => undefined,
+      off: () => undefined,
+      destroy: destroyed,
+    };
+    const connection = new ProviderConnection({
+      events: getSyncEventBus(),
+      doc: () => docB,
+      currentSchemaVersion: 8,
+      onObsolete: docLevelObsolete,
+      setStatus: () => undefined,
+    });
+    connection.attach(
+      { connect: () => fakeConnection } as Pick<SyncBackend, 'connect'> as SyncBackend,
+      'fixture-workspace',
+      { maxWaitTimeMs: 100, maxUpdatesThreshold: 10 },
+    );
+    expect(docLevelObsolete).not.toHaveBeenCalled(); // a v8 doc attaches fine
+
+    // The v9 doc arrives (cloud merge / provider update).
+    Y.applyUpdate(docB, v9Update);
+
+    // §D5 layer 2 — the live observer fired SYNCHRONOUSLY on the commit,
+    // with the incoming version. (In production onObsolete is
+    // handleObsoleteClient: UI lock + the `obsolete` bus event whose
+    // subscriber severs this very connection and stops the heartbeat.)
+    expect(docLevelObsolete).toHaveBeenCalledTimes(1);
+    expect(docLevelObsolete).toHaveBeenCalledWith(9);
+
+    // THE DESIGNED DELTA vs the v6/v7/v8 pairings: the per-map middleware
+    // pill did NOT fire — the v9 bump never advanced library.__schemaVersion
+    // (frozen at 8), so the store-tier pill is blind to it by construction.
+    await drain();
+    expect(libraryObsolete).not.toHaveBeenCalled();
+    expect(libraryB.getState().__schemaVersion).toBe(8);
+
+    // The Y-level merge residual (same shape as every pairing): B's LOCAL
+    // doc already carries the v9 state — husks cleared, activeContext
+    // pruned, meta at 9, library frozen at 8.
+    expect(docB.getMap(`preferences/${DEVICE_A}`).size).toBe(0);
+    expect(
+      (docB.getMap('preferences').get(DEVICE_A) as Y.Map<unknown>).has('activeContext'),
+    ).toBe(false);
+    expect(docB.getMap('meta').get('schemaVersion')).toBe(9);
+    expect(docB.getMap('library').get('__schemaVersion')).toBe(8);
+
+    // Severing is the subscriber's job; the connection object still detaches
+    // cleanly (and in production wireSyncEvents already destroyed it).
+    connection.detach();
+    expect(destroyed).toHaveBeenCalledTimes(1);
   });
 });

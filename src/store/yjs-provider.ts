@@ -24,10 +24,13 @@ const logger = createLogger('YjsProvider');
 // existing entries to the inventory (exact filename, then fuzzy
 // title+author); pre-v8 clients would drop the unknown field on their
 // whole-entry rebuilds, so the bump quarantines them.
-// Program numbering decision: v9 = preferences husk-clearing +
-// library.__schemaVersion dual-write retirement + activeContext Y.Map
-// husk pruning (P9).
-export const CURRENT_SCHEMA_VERSION = 8;
+// v9 (Phase 9 — the program's LAST format change): preferences
+// husk-clearing, library.__schemaVersion dual-write retirement (meta is
+// the sole version authority; library stays FROZEN at 8 as the pre-meta
+// poison-pill tripwire), activeContext Y.Map husk pruning. Fleet-safety
+// reasoning documented on clearHusksAndRetireDualWrite in
+// src/app/migrations.ts.
+export const CURRENT_SCHEMA_VERSION = 9;
 
 // Singleton Y.Doc - Source of Truth for User Data. Constructed lazily on
 // first access instead of at module scope: importing this module (e.g. for

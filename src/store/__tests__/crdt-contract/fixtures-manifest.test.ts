@@ -126,9 +126,10 @@ describe('ydoc fixture manifest guard', () => {
       );
     }
 
-    // Reading list (every era, incl. the era-7 terminal-v7 shape): three
-    // entries — exact-filename match, fuzzy match, orphan — and NONE may
-    // carry `bookId`: the FK is born at the v8 linker step.
+    // Reading list: three entries — exact-filename match, fuzzy match,
+    // orphan. The bookId FK is born at the v8 linker step: eras ≤ 7 carry
+    // NONE; the era-8 terminal-v8 shape carries the linker OUTPUT (both
+    // matches linked, orphan unlinked).
     const entries = (doc.getMap('reading-list').get('entries') as Y.Map<unknown>).toJSON() as Record<
       string,
       Record<string, unknown>
@@ -136,6 +137,19 @@ describe('ydoc fixture manifest guard', () => {
     expect(Object.keys(entries).sort()).toEqual(
       ['alice.epub', 'frankenstein.epub', 'hong-lou-meng (1).epub'].sort(),
     );
-    expect(Object.values(entries).some((entry) => 'bookId' in entry)).toBe(false);
+    if (era >= 8) {
+      expect(entries['alice.epub'].bookId).toBe(BOOK_EN);
+      expect(entries['hong-lou-meng (1).epub'].bookId).toBe(BOOK_CJK);
+      expect('bookId' in entries['frankenstein.epub']).toBe(false);
+    } else {
+      expect(Object.values(entries).some((entry) => 'bookId' in entry)).toBe(false);
+    }
+
+    // Era 8 (the v9 husk-clear INPUT): the legacy husks are still populated
+    // and every preferences map still carries the de-synced activeContext.
+    if (era >= 6) {
+      expect((doc.getMap(`preferences/${DEVICE_A}`).toJSON() as Record<string, unknown>)['activeContext']).toBe('library');
+      expect(((doc.getMap('preferences').get(DEVICE_A) as Y.Map<unknown>).toJSON())['activeContext']).toBe('library');
+    }
   });
 });

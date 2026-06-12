@@ -37,18 +37,27 @@ export const BOOK_CJK = 'fixture-book-hongloumeng';
  * Era 7 (added for the v8 reading-list bookId FK linker, Phase 7 §D):
  * the TERMINAL v7 shape — era 6 with the vocabulary CANONICALIZED (the v7
  * output: simplified keys, duplicate pair min-merged to T0) and the dual
- * version stamp at 7. Reading-list entries carry NO bookId in ANY era
+ * version stamp at 7. Reading-list entries carry NO bookId in any era ≤ 7
  * (the FK did not exist before v8), and the entry set is shared across
  * all eras — one exact-filename match, one fuzzy title+author match, one
  * orphan — so every era links identically at the v8 step and the
- * cross-era canonical-equality invariant keeps holding. */
+ * cross-era canonical-equality invariant keeps holding.
+ *
+ * Era 8 (added for the v9 husk-clear migration, Phase 9): the TERMINAL v8
+ * shape — era 7 with the reading-list entries LINKED (the v8 output: the
+ * exact-filename and fuzzy matches carry their bookId FK, the orphan stays
+ * unlinked) and the dual version stamp at 8. The legacy per-device
+ * preference husks are still POPULATED (v6 copied without clearing) and
+ * every preferences map — husk and folded alike — still carries the
+ * `activeContext` key (de-synced in P8, but v8-era docs were written
+ * before that): exactly the residue the v9 step clears/prunes. */
 
 /** Era-plausible fixed timestamps (ms). */
 const T0 = 1740000000000; // base
 const T1 = 1740000600000;
 const T2 = 1740001200000;
 
-export type FixtureEra = 1 | 2 | 4 | 5 | 6 | 7;
+export type FixtureEra = 1 | 2 | 4 | 5 | 6 | 7 | 8;
 
 export interface EraSeed {
   /** Y.Map name → plain-JSON content to encode with the era's string mapping. */
@@ -222,6 +231,15 @@ const readingList = {
   },
 };
 
+/** Era-8 reading list: the v8 linker OUTPUT (exact + fuzzy matches linked,
+ * orphan untouched) — byte-for-byte what migrating the era-7 fixture
+ * produces, so the cross-era equality invariant holds. */
+const readingListV8 = {
+  'alice.epub': { ...readingList['alice.epub'], bookId: BOOK_EN },
+  'frankenstein.epub': readingList['frankenstein.epub'],
+  'hong-lou-meng (1).epub': { ...readingList['hong-lou-meng (1).epub'], bookId: BOOK_CJK },
+};
+
 const vocabulary = {
   knownCharacters: { 紅: T0, 樓: T1, 夢: T2 },
 };
@@ -321,7 +339,7 @@ export const seedFor = (era: FixtureEra): EraSeed => ({
           meta: { schemaVersion: era },
         }
       : {}),
-    'reading-list': { entries: readingList },
+    'reading-list': { entries: era >= 8 ? readingListV8 : readingList },
     vocabulary: era >= 7 ? vocabularyV7 : era >= 6 ? vocabularyV6 : vocabulary,
     lexicon,
     contentAnalysis,
@@ -329,4 +347,4 @@ export const seedFor = (era: FixtureEra): EraSeed => ({
   },
 });
 
-export const FIXTURE_ERAS: readonly FixtureEra[] = [1, 2, 4, 5, 6, 7];
+export const FIXTURE_ERAS: readonly FixtureEra[] = [1, 2, 4, 5, 6, 7, 8];

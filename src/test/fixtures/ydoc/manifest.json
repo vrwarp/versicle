@@ -120,6 +120,26 @@
         "vocabulary.knownCharacters: 3 CANONICAL simplified keys (the v7 output, duplicate pair min-merged); lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
         "strings are plain (disableYText era)"
       ]
+    },
+    "v8": {
+      "era": 8,
+      "file": "v8.update.bin",
+      "sha256": "84d27f42a93a897836946c4de08e59702da1d636509c4d1a8e376f3045089535",
+      "method": "writer-current-mapping",
+      "fidelityNote": "Full fidelity: plain-JSON-into-Y-types via the vendored middleware mapping (v4+ encoding is exactly this).",
+      "generator": "scripts/capture-ydoc-fixture.ts",
+      "generatorSha": "b9ab5db4b3686059b95832a483dc6d0b4a2bb682",
+      "capturedAt": "2026-06-12T22:55:29.119Z",
+      "contentChecklist": [
+        "library.__schemaVersion === 8",
+        "library.books: 2 books (one CJK title)",
+        "progress: 2 devices, sessions valid",
+        "annotations: 2 annotations",
+        "preferences/<dev-a|dev-b>: scalar prefs + fontProfiles (husks) + folded preferences map + meta.schemaVersion=8 (all carrying activeContext — the v9 prune input)",
+        "reading-list.entries: 3, exact + fuzzy matches LINKED (the v8 output), orphan unlinked",
+        "vocabulary.knownCharacters: 3 CANONICAL simplified keys (the v7 output, duplicate pair min-merged); lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
+        "strings are plain (disableYText era)"
+      ]
     }
   }
 }

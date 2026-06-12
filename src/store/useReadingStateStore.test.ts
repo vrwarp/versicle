@@ -223,10 +223,13 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             expect(remainingSession.cfiRange).toBe('epubcfi(/6/4)');
             expect(remainingSession.startTime).toBe(now - 10000);
 
-            // Atomic dual bump: store state, library map, and meta map agree.
+            // meta carries the authoritative version; the library stamp is
+            // FROZEN at 8 (the v9 dual-write retirement — see
+            // clearHusksAndRetireDualWrite in app/migrations.ts) and the
+            // store state mirrors the doc's library map.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            expect((useBookStore.getState() as any).__schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
-            expect(getYDoc().getMap('library').get('__schemaVersion')).toBe(CURRENT_SCHEMA_VERSION);
+            expect((useBookStore.getState() as any).__schemaVersion).toBe(8);
+            expect(getYDoc().getMap('library').get('__schemaVersion')).toBe(8);
             expect(getYDoc().getMap('meta').get('schemaVersion')).toBe(CURRENT_SCHEMA_VERSION);
         });
     });
