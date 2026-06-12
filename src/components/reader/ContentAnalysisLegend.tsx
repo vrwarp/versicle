@@ -12,6 +12,7 @@ import type { TableImage } from '~types/db';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useImportController } from '@app/library/useImportController';
 import { ContentAnalysisReport } from './ContentAnalysisReport';
+import { formatBytes } from '@kernel/locale/format';
 
 interface ContentAnalysisLegendProps {
     engine?: ReaderEngine | null;
@@ -377,7 +378,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ en
                                                 {img.cfi}
                                             </div>
                                             <div className="flex justify-between items-center text-[9px] text-muted-foreground">
-                                                <span>{(img.imageBlob.size / 1024).toFixed(1)} KB</span>
+                                                <span>{formatBytes(img.imageBlob.size)}</span>
                                             </div>
                                             {adaptationText && (
                                                 <div className="mt-1 p-1 bg-muted/50 rounded border border-border/50 text-[8px] max-h-16 overflow-y-auto leading-tight" title={adaptationText}>

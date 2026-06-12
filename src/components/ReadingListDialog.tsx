@@ -8,6 +8,7 @@ import type { ReadingListEntry } from '~types/db';
 import { ArrowUpDown, Trash2, Edit2, Download, ArrowUp, ArrowDown, BookOpen, Wand2 } from 'lucide-react';
 import { EditReadingListEntryDialog } from './EditReadingListEntryDialog';
 import { exportFile } from '@lib/export';
+import { formatDate } from '@kernel/locale/format';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { genAIService } from '@lib/genai/GenAIService';
 import { SmartLinkDialog } from './SmartLinkDialog';
@@ -56,7 +57,7 @@ const ReadingListRow = React.memo(({ entry, isSelected, onToggleSelection, onEdi
                 {entry.rating ? '★'.repeat(entry.rating) : <span className="text-muted-foreground">-</span>}
             </td>
             <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                {new Date(entry.lastUpdated).toLocaleDateString()}
+                {formatDate(entry.lastUpdated)}
             </td>
             <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">

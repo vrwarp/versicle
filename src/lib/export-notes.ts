@@ -1,15 +1,16 @@
 import type { UserAnnotation } from '~types/db';
+import { formatDate, formatDateTime } from '@kernel/locale/format';
 
 export const exportNotesToMarkdown = (bookTitle: string, annotations: UserAnnotation[]) => {
     let md = `# Notes from ${bookTitle}\n\n`;
-    md += `*Exported from Versicle on ${new Date().toLocaleDateString()}*\n\n---\n\n`;
+    md += `*Exported from Versicle on ${formatDate(Date.now())}*\n\n---\n\n`;
 
     annotations.forEach(ann => {
         md += `> ${ann.text}\n\n`;
         if (ann.note) {
             md += `**Note:** ${ann.note}\n\n`;
         }
-        md += `*${new Date(ann.created).toLocaleString()}*\n\n---\n\n`;
+        md += `*${formatDateTime(ann.created)}*\n\n---\n\n`;
     });
 
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });

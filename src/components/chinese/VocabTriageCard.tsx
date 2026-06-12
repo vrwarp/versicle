@@ -217,8 +217,10 @@ export const VocabTriageCard: React.FC<{ text: string }> = ({ text }) => {
         </p>
       )}
 
-      {/* Body: Tactile Character Tiles */}
-      <div className="flex flex-wrap items-center gap-2 mb-4 justify-center max-h-[300px] overflow-y-auto p-1 custom-scrollbar">
+      {/* Body: Tactile Character Tiles — lang: the tiles render Chinese
+          book text + dictionary entries (i18n ADR §3: content language for
+          Han-unification glyph selection + SR voice choice) */}
+      <div lang="zh" className="flex flex-wrap items-center gap-2 mb-4 justify-center max-h-[300px] overflow-y-auto p-1 custom-scrollbar">
         {Array.from(text).map((char, index) => {
           if (!HAN_RE.test(char)) {
             return (

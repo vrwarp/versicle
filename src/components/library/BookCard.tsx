@@ -7,6 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Button } from '../ui/Button';
 import { ResumeBadge } from './ResumeBadge';
 import { RemoteSessionsSubMenu } from './RemoteSessionsSubMenu';
+import { formatReadingTime } from './readingTime';
 
 /**
  * Props for the BookCard component.
@@ -23,18 +24,6 @@ interface BookCardProps {
   onRestore: (book: BookMetadata) => void;
   /** Optional callback when resume badge is clicked */
   onResume?: (book: BookMetadata, deviceId: string, cfi: string) => void;
-}
-
-const formatDuration = (chars?: number): string => {
-  if (!chars) return '';
-  const minutes = Math.ceil(chars / (180 * 5));
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${remainingMinutes}m`;
-  }
-  return `${minutes}m`;
 }
 
 /**
@@ -80,7 +69,7 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
     }
   }, [book, onResume]);
 
-  const durationString = book.totalChars ? formatDuration(book.totalChars) : null;
+  const durationString = formatReadingTime(book.totalChars);
 
   return (
     <div
@@ -172,10 +161,12 @@ export const BookCard: React.FC<BookCardProps> = React.memo(({
       )}
 
       <div className="p-3 flex flex-col flex-1">
-        <h3 data-testid="book-title" className="font-semibold text-foreground line-clamp-2 mb-1" title={book.title}>
+        {/* lang: book-sourced text carries the CONTENT language (i18n ADR §3
+            — Han-unification glyph selection + screen-reader voice choice) */}
+        <h3 data-testid="book-title" lang={book.language} className="font-semibold text-foreground line-clamp-2 mb-1" title={book.title}>
           {book.title}
         </h3>
-        <p className="text-sm text-muted-foreground line-clamp-1" title={book.author}>
+        <p lang={book.author ? book.language : undefined} className="text-sm text-muted-foreground line-clamp-1" title={book.author}>
           {book.author || 'Unknown Author'}
         </p>
 

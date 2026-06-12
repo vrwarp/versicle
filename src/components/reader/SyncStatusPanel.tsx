@@ -15,6 +15,7 @@ interface SyncStatusPanelProps {
 }
 
 import { DeviceIcon } from './DeviceIcon';
+import { formatDateTime } from '@kernel/locale/format';
 
 export const SyncStatusPanel: React.FC<SyncStatusPanelProps> = ({
     open,
@@ -83,7 +84,7 @@ export const SyncStatusPanel: React.FC<SyncStatusPanelProps> = ({
                                             </span>
                                             <span className="flex items-center gap-1">
                                                 <Calendar className="w-3 h-3" />
-                                                {new Date(session.lastRead).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                                {formatDateTime(session.lastRead)}
                                             </span>
                                         </div>
                                     </div>

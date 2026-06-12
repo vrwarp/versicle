@@ -8,6 +8,7 @@ import { DriveScannerService } from '@lib/drive/DriveScannerService';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 import { getGoogleAuthClient } from '@domains/google';
 import { AlertCircle } from 'lucide-react';
+import { formatBytes } from '@kernel/locale/format';
 
 interface ContentMissingDialogProps {
     open: boolean;
@@ -181,7 +182,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                             </p>
                             <p className="text-xs text-muted-foreground break-all whitespace-normal">
                                 {isDriveConnected 
-                                    ? `"${cloudMatch.name}" (${(cloudMatch.size / 1024 / 1024).toFixed(1)} MB)`
+                                    ? `"${cloudMatch.name}" (${formatBytes(cloudMatch.size)})`
                                     : "Reconnect to download this book from the cloud."}
                             </p>
                         </div>

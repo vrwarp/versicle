@@ -66,7 +66,8 @@ export const BookNotesBlock: React.FC<BookNotesBlockProps> = ({ group, onNavigat
                             <BookOpen className="text-white w-4 h-4" />
                         </div>
                     </div>
-                    <div className="min-w-0">
+                    {/* lang: book-sourced text carries the CONTENT language (i18n ADR §3) */}
+                    <div className="min-w-0" lang={book?.language}>
                         <h3 className="font-bold text-base truncate" title={title}>{title}</h3>
                         <p className="text-sm text-muted-foreground truncate" title={author}>{author}</p>
                     </div>
@@ -103,6 +104,7 @@ export const BookNotesBlock: React.FC<BookNotesBlockProps> = ({ group, onNavigat
                     <AnnotationCard
                         key={ann.id}
                         annotation={ann}
+                        contentLang={book?.language}
                         onNavigate={(cfi) => onNavigate(group.bookId, cfi)}
                     />
                 ))}

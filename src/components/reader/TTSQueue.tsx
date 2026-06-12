@@ -3,6 +3,8 @@ import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { TTSQueueItem } from './TTSQueueItem';
 import { useShallow } from 'zustand/react/shallow';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useBook } from '@store/libraryViewStore';
 
 /**
  * Displays the current TTS playback queue.
@@ -15,6 +17,9 @@ export const TTSQueue: React.FC = () => {
         queue: state.queue,
         currentIndex: state.currentIndex
     })));
+    // Content-language attribution for sentence text (i18n ADR §3).
+    const currentBookId = useReaderUIStore(state => state.currentBookId);
+    const contentLang = useBook(currentBookId)?.language;
     // Engine commands come from the TtsController facade (stable identity).
     const { jumpTo } = useAudioCommands();
     const activeRef = useRef<HTMLButtonElement>(null);
@@ -109,6 +114,7 @@ export const TTSQueue: React.FC = () => {
                             index={index}
                             isActive={isActive}
                             onJump={jumpTo}
+                            contentLang={contentLang}
                             ref={isActive ? activeRef : null}
                         />
                     );

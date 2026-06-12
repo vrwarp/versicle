@@ -7,6 +7,7 @@ import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
 import { Download } from 'lucide-react';
 import type { ContentType } from '~types/content-analysis';
+import { formatTime } from '@kernel/locale/format';
 
 export interface GenAILog {
     id: string;
@@ -257,7 +258,7 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                         logs.slice().reverse().map(log => (
                                             <div key={log.id} className="mb-2 border-b last:border-0 pb-2">
                                                 <div className="font-semibold text-primary">
-                                                    [{new Date(log.timestamp).toLocaleTimeString()}] {log.type.toUpperCase()} - {log.method}
+                                                    [{formatTime(log.timestamp)}] {log.type.toUpperCase()} - {log.method}
                                                 </div>
                                                 {(log.bookTitle || log.sectionTitle || log.correlationId) && (
                                                     <div className="text-muted-foreground mb-1">

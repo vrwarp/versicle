@@ -29,6 +29,7 @@ import { BackButtonPriority } from '@store/useBackNavigationStore';
 import { useImportController } from '@app/library/useImportController';
 import { presentError } from '@app/errors/presentError';
 import { LibrarySearchBar, type LibrarySearchBarRef } from './LibrarySearchBar';
+import { compareTitles } from '@kernel/locale/format';
 
 /**
  * The main library view component.
@@ -334,11 +335,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
           return (b.lastRead || 0) - (a.lastRead || 0);
         }
         case 'author':
-          // Sort by author ascending (A-Z)
-          return (a.author || '').localeCompare(b.author || '');
+          // Sort by author ascending (A-Z) — cached numeric collator (I18N-10)
+          return compareTitles(a.author || '', b.author || '');
         case 'title':
-          // Sort by title ascending (A-Z)
-          return (a.title || '').localeCompare(b.title || '');
+          // Sort by title ascending (A-Z) — cached numeric collator (I18N-10)
+          return compareTitles(a.title || '', b.title || '');
         default:
           return 0;
       }

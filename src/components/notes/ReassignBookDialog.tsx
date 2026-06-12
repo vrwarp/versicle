@@ -7,6 +7,7 @@ import { ScrollArea } from '../ui/ScrollArea';
 import { useAllBooks } from '@store/libraryViewStore';
 import { useDebounce } from '@hooks/useDebounce';
 import { cn } from '@lib/utils';
+import { compareTitles } from '@kernel/locale/format';
 
 interface ReassignBookDialogProps {
     isOpen: boolean;
@@ -41,7 +42,7 @@ export const ReassignBookDialog: React.FC<ReassignBookDialogProps> = ({
                 const authorMatch = (book.author || '').toLowerCase().includes(query);
                 return titleMatch || authorMatch;
             })
-            .sort((a, b) => (a.title || 'Untitled').localeCompare(b.title || 'Untitled'));
+            .sort((a, b) => compareTitles(a.title || 'Untitled', b.title || 'Untitled'));
     }, [books, debouncedSearchQuery]);
 
     const handleConfirm = (e: React.MouseEvent) => {

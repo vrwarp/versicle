@@ -32,6 +32,7 @@ import { ErrorBoundary } from '@components/ErrorBoundary';
 import { cn } from '@lib/utils';
 import { Loader2 } from 'lucide-react';
 import { SETTINGS_PANELS, resolveSettingsTab, type SettingsTabId } from './registry';
+import { formatMessage } from '@kernel/locale/messages';
 
 /** One React.lazy component per descriptor, created once at module scope. */
 const LAZY_PANELS = new Map(
@@ -113,7 +114,7 @@ export const SettingsShell: React.FC = () => {
             <h2 className="text-lg font-semibold mb-4 px-2 hidden sm:block" aria-hidden="true">
               Settings
             </h2>
-            {SETTINGS_PANELS.map(({ id, label, danger }) => (
+            {SETTINGS_PANELS.map(({ id, labelKey, danger }) => (
               <TabsTrigger
                 key={id}
                 value={id}
@@ -124,7 +125,7 @@ export const SettingsShell: React.FC = () => {
                   danger && 'text-destructive hover:text-destructive data-[state=active]:text-destructive mr-10 sm:mr-0',
                 )}
               >
-                {label}
+                {formatMessage(labelKey)}
               </TabsTrigger>
             ))}
           </TabsList>

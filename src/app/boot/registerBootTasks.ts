@@ -28,6 +28,7 @@ import { ttsInitializeTask, deviceRegistrationTask } from './deviceRegistration'
 import { deviceHeartbeatTask, driveAutoScanTask, audioCacheEvictionTask, reingestWaveTask } from './backgroundTasks';
 import { socialLoginTask } from './socialLogin';
 import { wireGoogleDomain } from '../google/wireGoogle';
+import { applyDocumentLanguage } from '@kernel/locale/uiLocale';
 
 let registered = false;
 
@@ -39,6 +40,14 @@ export function registerAppBootTasks(): void {
   // installs the GoogleAuthClient/DriveClient/DriveLibrarySync singletons
   // with store-backed adapters before any boot task or component runs.
   wireGoogleDomain();
+
+  // Locale wiring (Phase 8 §F): documentElement.lang follows the resolved
+  // UI locale (kernel/locale/uiLocale.ts) and re-syncs on change. Runs
+  // here, BEFORE the boot phases, so even SafeMode/loading screens carry
+  // the correct lang — index.html's static lang="en" is only the pre-boot
+  // default. (`lang={book.language}` on book-content nodes is the OTHER
+  // half of the two-locale rule and is per-component.)
+  applyDocumentLanguage();
 
   registerWipeHook({
     name: 'sync/stop',

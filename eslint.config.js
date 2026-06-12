@@ -55,6 +55,71 @@ const audioPlayerImportBan = {
     '(src/app/tts/). getAudioPlayer() is private to src/app/tts/.',
 };
 
+// ---- Shared no-restricted-syntax selectors --------------------------------
+// Flat-config same-named rules REPLACE each other (options never merge), so
+// every block that declares no-restricted-syntax must restate the FULL
+// selector set it wants. These constants are that set, defined once
+// (Phase 8) so a new ban is added in one place and spread into each block.
+
+// Readwrite-transaction ban outside the data layer (Phase 3 D8, C12).
+const readwriteTransactionSelector = {
+  selector:
+    "CallExpression[callee.property.name='transaction'] > Literal[value='readwrite']",
+  message:
+    'readwrite transactions are banned outside src/data — route the ' +
+    'write through a @data/repos/* method (every repo writer holds ' +
+    'the cross-context IDB write gate).',
+};
+
+// Raw-egress ban (Phase 7 §I; C9/C12 rule 7).
+const rawEgressSelectors = [
+  {
+    selector: "CallExpression[callee.name='fetch']",
+    message:
+      'Raw fetch is banned outside src/kernel/net (Phase 7 egress ' +
+      'boundary). Remote hosts: NetworkGateway.egress(destinationId, …) ' +
+      'with a kernel/net/destinations.ts registry entry (CSP is ' +
+      'generated from it). Same-origin/blob URLs: localFetch().',
+  },
+  {
+    selector:
+      "CallExpression[callee.object.name='globalThis'][callee.property.name='fetch'], " +
+      "CallExpression[callee.object.name='window'][callee.property.name='fetch'], " +
+      "CallExpression[callee.object.name='self'][callee.property.name='fetch']",
+    message:
+      'Raw fetch (via globalThis/window/self) is banned outside ' +
+      'src/kernel/net — use NetworkGateway.egress() or localFetch().',
+  },
+  {
+    selector: "NewExpression[callee.name='XMLHttpRequest']",
+    message:
+      'XMLHttpRequest is banned (Phase 7 egress boundary) — use ' +
+      'NetworkGateway.egress() / localFetch() from src/kernel/net.',
+  },
+  {
+    selector: "CallExpression[callee.property.name='sendBeacon']",
+    message:
+      'navigator.sendBeacon is banned (Phase 7 egress boundary) — use ' +
+      'NetworkGateway.egress() from src/kernel/net.',
+  },
+];
+
+// Ad-hoc toLocale* formatting ban (Phase 8 §F): user-facing date/time/number
+// rendering goes through the cached UI-locale formatters in
+// src/kernel/locale/format.ts (which uses Intl directly, never toLocale*).
+// Production-only: the kernel/net + tests carve-out below restates its own
+// selector set WITHOUT this entry (tests may compute expected values however
+// they like).
+const toLocaleSelector = {
+  selector:
+    "CallExpression[callee.property.name=/^toLocale(String|DateString|TimeString)$/]",
+  message:
+    'toLocale* formatting is banned (Phase 8 §F) — use the cached, ' +
+    'UI-locale-aware formatters in @kernel/locale/format ' +
+    '(formatDate/Time/DateTime/RelativeTime/Bytes/Percent/Duration, ' +
+    'compareTitles).',
+};
+
 export default tseslint.config(
   // .claude holds agent worktrees (full checkouts under .claude/worktrees/<name>/);
   // without the ignore, a top-level `eslint .` would also lint every worktree's copy.
@@ -416,43 +481,9 @@ export default tseslint.config(
     rules: {
       'no-restricted-syntax': [
         'error',
-        {
-          selector:
-            "CallExpression[callee.property.name='transaction'] > Literal[value='readwrite']",
-          message:
-            'readwrite transactions are banned outside src/data — route the ' +
-            'write through a @data/repos/* method (every repo writer holds ' +
-            'the cross-context IDB write gate).',
-        },
-        {
-          selector: "CallExpression[callee.name='fetch']",
-          message:
-            'Raw fetch is banned outside src/kernel/net (Phase 7 egress ' +
-            'boundary). Remote hosts: NetworkGateway.egress(destinationId, …) ' +
-            'with a kernel/net/destinations.ts registry entry (CSP is ' +
-            'generated from it). Same-origin/blob URLs: localFetch().',
-        },
-        {
-          selector:
-            "CallExpression[callee.object.name='globalThis'][callee.property.name='fetch'], " +
-            "CallExpression[callee.object.name='window'][callee.property.name='fetch'], " +
-            "CallExpression[callee.object.name='self'][callee.property.name='fetch']",
-          message:
-            'Raw fetch (via globalThis/window/self) is banned outside ' +
-            'src/kernel/net — use NetworkGateway.egress() or localFetch().',
-        },
-        {
-          selector: "NewExpression[callee.name='XMLHttpRequest']",
-          message:
-            'XMLHttpRequest is banned (Phase 7 egress boundary) — use ' +
-            'NetworkGateway.egress() / localFetch() from src/kernel/net.',
-        },
-        {
-          selector: "CallExpression[callee.property.name='sendBeacon']",
-          message:
-            'navigator.sendBeacon is banned (Phase 7 egress boundary) — use ' +
-            'NetworkGateway.egress() from src/kernel/net.',
-        },
+        readwriteTransactionSelector,
+        ...rawEgressSelectors,
+        toLocaleSelector,
       ],
     },
   },
@@ -472,14 +503,7 @@ export default tseslint.config(
     rules: {
       'no-restricted-syntax': [
         'error',
-        {
-          selector:
-            "CallExpression[callee.property.name='transaction'] > Literal[value='readwrite']",
-          message:
-            'readwrite transactions are banned outside src/data — route the ' +
-            'write through a @data/repos/* method (every repo writer holds ' +
-            'the cross-context IDB write gate).',
-        },
+        readwriteTransactionSelector,
       ],
     },
   },
@@ -507,43 +531,9 @@ export default tseslint.config(
     rules: {
       'no-restricted-syntax': [
         'error',
-        {
-          selector:
-            "CallExpression[callee.property.name='transaction'] > Literal[value='readwrite']",
-          message:
-            'readwrite transactions are banned outside src/data — route the ' +
-            'write through a @data/repos/* method (every repo writer holds ' +
-            'the cross-context IDB write gate).',
-        },
-        {
-          selector: "CallExpression[callee.name='fetch']",
-          message:
-            'Raw fetch is banned outside src/kernel/net (Phase 7 egress ' +
-            'boundary). Remote hosts: NetworkGateway.egress(destinationId, …) ' +
-            'with a kernel/net/destinations.ts registry entry (CSP is ' +
-            'generated from it). Same-origin/blob URLs: localFetch().',
-        },
-        {
-          selector:
-            "CallExpression[callee.object.name='globalThis'][callee.property.name='fetch'], " +
-            "CallExpression[callee.object.name='window'][callee.property.name='fetch'], " +
-            "CallExpression[callee.object.name='self'][callee.property.name='fetch']",
-          message:
-            'Raw fetch (via globalThis/window/self) is banned outside ' +
-            'src/kernel/net — use NetworkGateway.egress() or localFetch().',
-        },
-        {
-          selector: "NewExpression[callee.name='XMLHttpRequest']",
-          message:
-            'XMLHttpRequest is banned (Phase 7 egress boundary) — use ' +
-            'NetworkGateway.egress() / localFetch() from src/kernel/net.',
-        },
-        {
-          selector: "CallExpression[callee.property.name='sendBeacon']",
-          message:
-            'navigator.sendBeacon is banned (Phase 7 egress boundary) — use ' +
-            'NetworkGateway.egress() from src/kernel/net.',
-        },
+        readwriteTransactionSelector,
+        ...rawEgressSelectors,
+        toLocaleSelector,
         {
           selector:
             "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/]",
@@ -577,43 +567,9 @@ export default tseslint.config(
     rules: {
       'no-restricted-syntax': [
         'error',
-        {
-          selector:
-            "CallExpression[callee.property.name='transaction'] > Literal[value='readwrite']",
-          message:
-            'readwrite transactions are banned outside src/data — route the ' +
-            'write through a @data/repos/* method (every repo writer holds ' +
-            'the cross-context IDB write gate).',
-        },
-        {
-          selector: "CallExpression[callee.name='fetch']",
-          message:
-            'Raw fetch is banned outside src/kernel/net (Phase 7 egress ' +
-            'boundary). Remote hosts: NetworkGateway.egress(destinationId, …) ' +
-            'with a kernel/net/destinations.ts registry entry (CSP is ' +
-            'generated from it). Same-origin/blob URLs: localFetch().',
-        },
-        {
-          selector:
-            "CallExpression[callee.object.name='globalThis'][callee.property.name='fetch'], " +
-            "CallExpression[callee.object.name='window'][callee.property.name='fetch'], " +
-            "CallExpression[callee.object.name='self'][callee.property.name='fetch']",
-          message:
-            'Raw fetch (via globalThis/window/self) is banned outside ' +
-            'src/kernel/net — use NetworkGateway.egress() or localFetch().',
-        },
-        {
-          selector: "NewExpression[callee.name='XMLHttpRequest']",
-          message:
-            'XMLHttpRequest is banned (Phase 7 egress boundary) — use ' +
-            'NetworkGateway.egress() / localFetch() from src/kernel/net.',
-        },
-        {
-          selector: "CallExpression[callee.property.name='sendBeacon']",
-          message:
-            'navigator.sendBeacon is banned (Phase 7 egress boundary) — use ' +
-            'NetworkGateway.egress() from src/kernel/net.',
-        },
+        readwriteTransactionSelector,
+        ...rawEgressSelectors,
+        toLocaleSelector,
         {
           selector:
             "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/] > Literal" +

@@ -4,6 +4,7 @@ import { parseCfiRange } from '@kernel/cfi';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { BookOpen, Headphones, ScrollText } from 'lucide-react';
 import type { ReadingEventType, ReadingSession } from '~types/db';
+import { formatDate, formatTime } from '@kernel/locale/format';
 
 interface Props {
     bookId: string;
@@ -70,9 +71,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, engine, onNavigat
             if (session.startTime) {
                 const date = new Date(session.startTime);
                 if (!isNaN(date.getTime())) {
-                    const dateStr = date.toLocaleDateString();
-                    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    subLabel = `${dateStr} ${timeStr} • ${subLabel}`;
+                    subLabel = `${formatDate(date)} ${formatTime(date)} • ${subLabel}`;
                 }
             }
 

@@ -9,6 +9,7 @@ import { backupService } from '@lib/BackupService';
 import type { SyncCheckpoint } from '~types/db';
 import { DataRecoveryView } from './DataRecoveryView';
 import { Modal, ModalContent, ModalHeader, ModalTitle } from '../ui/Modal';
+import { formatDateTime } from '@kernel/locale/format';
 
 export interface RecoverySettingsTabProps {
     checkpoints: SyncCheckpoint[];
@@ -116,7 +117,7 @@ export const RecoverySettingsTab: React.FC<RecoverySettingsTabProps> = ({
                             <div key={cp.id} className="flex items-center justify-between p-3 border rounded-md">
                                 <div className="flex flex-col">
                                     <span className="font-medium text-sm">
-                                        {new Date(cp.timestamp).toLocaleString()}
+                                        {formatDateTime(cp.timestamp)}
                                     </span>
                                     <div className="flex gap-2 text-xs text-muted-foreground mt-1">
                                         <span className="capitalize bg-secondary px-1.5 py-0.5 rounded text-secondary-foreground">

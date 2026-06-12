@@ -70,6 +70,7 @@ export const ReaderSidebars: React.FC<ReaderSidebarsProps> = ({
           onHistoryNavigate={(cfi) => {
             commands.jumpTo(cfi);
           }}
+          contentLang={bookMetadata?.language}
         />
       )}
 

@@ -4,7 +4,8 @@ import type { FlightSnapshot } from '~types/db';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { ScrollArea } from '../ui/ScrollArea';
-import { 
+import { formatBytes, formatDateTime, formatTime } from '@kernel/locale/format';
+import {
     Activity, 
     Download, 
     Trash2, 
@@ -82,7 +83,7 @@ export const DiagnosticsTab: React.FC = () => {
                         <h3 className="font-semibold text-foreground">Active Flight Buffer</h3>
                         <p className="text-sm text-muted-foreground">
                             {stats.eventCount} / {stats.capacity} events tracked 
-                            {stats.oldestWall ? ` (since ${new Date(stats.oldestWall).toLocaleTimeString()})` : ''}
+                            {stats.oldestWall ? ` (since ${formatTime(stats.oldestWall)})` : ''}
                         </p>
                     </div>
                 </div>
@@ -174,11 +175,11 @@ export const DiagnosticsTab: React.FC = () => {
                                             <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
                                                 <div className="flex items-center gap-1.5">
                                                     <Clock className="w-3 h-3" />
-                                                    {new Date(snap.createdAt).toLocaleString()}
+                                                    {formatDateTime(snap.createdAt)}
                                                 </div>
                                                 <div className="flex items-center gap-1.5">
                                                     <FileJson className="w-3 h-3" />
-                                                    {snap.eventCount} events ({(snap.sizeBytes / 1024).toFixed(1)} KB)
+                                                    {snap.eventCount} events ({formatBytes(snap.sizeBytes)})
                                                 </div>
                                             </div>
                                             

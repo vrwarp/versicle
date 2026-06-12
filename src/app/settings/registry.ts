@@ -10,13 +10,13 @@
  * `/settings/:tab` route params resolve through {@link resolveSettingsTab},
  * so every id below is a deep-linkable URL segment.
  *
- * NOTE on labels: the i18n ADR (docs/adr/0001-i18n-strategy.md) wants
- * `labelKey: MessageKey` here. The typed message catalog
- * (src/kernel/locale/messages.ts) lands with this phase's locale item —
- * until it exists these are plain strings; the swap is mechanical and
- * confined to this file.
+ * Labels are `labelKey: MessageKey` per the i18n ADR
+ * (docs/adr/0001-i18n-strategy.md §2): the shell resolves them through
+ * `formatMessage` (src/kernel/locale/messages.ts), so a future locale
+ * touches the catalog, not this registry.
  */
 import type { ComponentType } from 'react';
+import type { MessageKey } from '@kernel/locale/messages';
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
@@ -44,8 +44,8 @@ export type SettingsTabId =
 export interface SettingsPanel {
   /** Route param (`/settings/:tab`) and Radix Tabs value. */
   id: SettingsTabId;
-  /** Visible tab label (becomes a MessageKey with the locale item). */
-  label: string;
+  /** Visible tab label — typed catalog key (i18n ADR §2). */
+  labelKey: MessageKey;
   icon: LucideIcon;
   /** React.lazy source — the panel chunk loads on first activation. */
   load: () => Promise<{ default: ComponentType }>;
@@ -58,63 +58,63 @@ export interface SettingsPanel {
 export const SETTINGS_PANELS: readonly SettingsPanel[] = [
   {
     id: 'general',
-    label: 'General',
+    labelKey: 'settings.tab.general',
     icon: SettingsIcon,
     load: () => import('./panels/GeneralPanel'),
     order: 10,
   },
   {
     id: 'tts',
-    label: 'TTS Engine',
+    labelKey: 'settings.tab.tts',
     icon: Volume2,
     load: () => import('./panels/TTSPanel'),
     order: 20,
   },
   {
     id: 'genai',
-    label: 'Generative AI',
+    labelKey: 'settings.tab.genai',
     icon: Sparkles,
     load: () => import('./panels/GenAIPanel'),
     order: 30,
   },
   {
     id: 'sync',
-    label: 'Sync & Cloud',
+    labelKey: 'settings.tab.sync',
     icon: Cloud,
     load: () => import('./panels/SyncPanel'),
     order: 40,
   },
   {
     id: 'devices',
-    label: 'Devices',
+    labelKey: 'settings.tab.devices',
     icon: Smartphone,
     load: () => import('./panels/DevicesPanel'),
     order: 50,
   },
   {
     id: 'dictionary',
-    label: 'Dictionary',
+    labelKey: 'settings.tab.dictionary',
     icon: BookOpen,
     load: () => import('./panels/DictionaryPanel'),
     order: 60,
   },
   {
     id: 'recovery',
-    label: 'Recovery',
+    labelKey: 'settings.tab.recovery',
     icon: LifeBuoy,
     load: () => import('./panels/RecoveryPanel'),
     order: 70,
   },
   {
     id: 'diagnostics',
-    label: 'Diagnostics',
+    labelKey: 'settings.tab.diagnostics',
     icon: Activity,
     load: () => import('./panels/DiagnosticsPanel'),
     order: 80,
   },
   {
     id: 'data',
-    label: 'Data Management',
+    labelKey: 'settings.tab.data',
     icon: Database,
     load: () => import('./panels/DataPanel'),
     order: 90,

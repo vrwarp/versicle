@@ -4,6 +4,7 @@ import { Monitor } from 'lucide-react';
 import { useDeviceStore } from '@store/useDeviceStore';
 import { getDeviceId } from '@lib/device-id';
 import { DeviceIcon } from '../devices/DeviceIcon';
+import { formatTime } from '@kernel/locale/format';
 import {
   DropdownMenuSub,
   DropdownMenuSubTrigger,
@@ -70,7 +71,7 @@ export const RemoteSessionsSubMenu: React.FC<RemoteSessionsSubMenuProps> = React
             <div className="flex flex-col gap-0.5">
               <span>{session.name}</span>
               <span className="text-xs text-muted-foreground">
-                {Math.round(session.percentage * 100)}% • {new Date(session.lastRead).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {Math.round(session.percentage * 100)}% • {formatTime(session.lastRead)}
               </span>
             </div>
           </DropdownMenuItem>

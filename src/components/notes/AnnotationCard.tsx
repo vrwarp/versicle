@@ -5,13 +5,16 @@ import { useAnnotationStore } from '@store/useAnnotationStore';
 import { copyAnnotationAsMarkdown } from '@lib/export-notes';
 import { useToastStore } from '@store/useToastStore';
 import { Button } from '../ui/Button';
+import { formatDate } from '@kernel/locale/format';
 
 interface AnnotationCardProps {
     annotation: UserAnnotation;
     onNavigate: (cfiRange: string) => void;
+    /** Content language of the source book — `lang=` on the excerpt (i18n ADR §3). */
+    contentLang?: string;
 }
 
-export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNavigate }) => {
+export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNavigate, contentLang }) => {
     const { remove, update } = useAnnotationStore();
     const showToast = useToastStore(state => state.showToast);
     const [isEditing, setIsEditing] = useState(false);
@@ -98,6 +101,7 @@ export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNa
                 ) : (
                     <>
                         <p
+                            lang={contentLang}
                             className="text-sm text-muted-foreground italic line-clamp-4 border-l-4 pl-3"
                             style={{ borderColor: annotation.color === 'yellow' ? '#facc15' : annotation.color === 'green' ? '#4ade80' : annotation.color === 'blue' ? '#60a5fa' : annotation.color === 'red' ? '#f87171' : annotation.color }}
                         >
@@ -110,7 +114,7 @@ export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNa
                             </div>
                         )}
                         <p className="text-xs text-muted-foreground mt-2">
-                            {new Date(annotation.created).toLocaleDateString()}
+                            {formatDate(annotation.created)}
                         </p>
                     </>
                 )}
