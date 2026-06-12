@@ -26,7 +26,7 @@ import { SyncStatusPanel } from './SyncStatusPanel';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { ReaderTTSController } from './ReaderTTSController';
-import { generateCfiRange, snapCfiToSentence } from '@kernel/cfi';
+import { ReadingSessionRecorder } from '@domains/reader/session/ReadingSessionRecorder';
 import { TOCPanel, SearchPanel } from './panels';
 import { Button } from '../ui/Button';
 import { useSmartTOC } from '@hooks/useSmartTOC';
@@ -69,7 +69,6 @@ export const ReaderView: React.FC = () => {
     const { activeSidebar, setSidebar } = useSidebarState();
     const viewerRef = useRef<HTMLDivElement>(null);
 
-    const previousLocation = useRef<{ start: string; end: string; timestamp: number } | null>(null);
     const scrollWrapperRef = useRef<HTMLDivElement>(null);
 
     const {
@@ -198,6 +197,10 @@ export const ReaderView: React.FC = () => {
     const [historyTick, setHistoryTick] = useState(0);
     const [pinyinPositions, setPinyinPositions] = useState<PinyinPosition[]>([]);
 
+    // Reading-session recording (Phase 6 §6): one recorder per book; the
+    // creation effect lives below the engine ref it closes over.
+    const recorderRef = useRef<ReadingSessionRecorder | null>(null);
+
     // --- Import Progress Jump Logic ---
     const [showImportJumpDialog, setShowImportJumpDialog] = useState(false);
     // Tracks if we are waiting for the engine to finish generating locations to perform a jump
@@ -219,14 +222,9 @@ export const ReaderView: React.FC = () => {
         initialLocation,
         metadata: bookMetadata,
         onLocationChange: (location, percentage, title, sectionId) => {
-            // Initialize previousLocation if it's null (e.g. initial load), so we can track subsequent moves
-            if (!previousLocation.current) {
-                previousLocation.current = {
-                    start: location.startCfi,
-                    end: location.endCfi,
-                    timestamp: Date.now()
-                };
-            }
+            // Initialize the recorder's previous-location tracker (legacy
+            // step 1 — it ran even when the import-jump check skipped the save).
+            recorderRef.current?.prime(location, Date.now());
 
             // Import Jump Check
             // If we have metadata, no saved CFI (never opened), but have progress (from import), and haven't prompted yet.
@@ -245,85 +243,18 @@ export const ReaderView: React.FC = () => {
             }
             hasPromptedForImport.current = true; // Ensure we only check once per session
 
-            // Prevent infinite loop if CFI hasn't changed (handled in store usually, but double check)
-            const currentProgress = useReadingStateStore.getState().getProgress(bookId || '');
-            if (location.startCfi === (currentProgress?.currentCfi || '')) return;
-
-            // Reading History Calculation
-            // We use a promise to handle the potential async nature of snapCfiToSentence for the PREVIOUS range,
-            // while bundling it with the synchronous update for the CURRENT range.
-            const prepareUpdates = async () => {
-                if (!bookId) return;
-
-                const updates: import('@store/useReadingStateStore').SessionUpdate[] = [];
-
-                // 1. Calculate Previous Range (Async)
-                if (previousLocation.current) {
-                    const prevStart = previousLocation.current.start;
-                    const prevEnd = previousLocation.current.end;
-                    const duration = Date.now() - previousLocation.current.timestamp;
-                    const isScroll = readerViewMode === 'scrolled';
-                    const shouldSave = isScroll ? duration > 2000 : true;
-
-                    if (prevStart && prevEnd && prevStart !== location.startCfi && shouldSave) {
-                        const currentEngine = engineRef.current;
-                        // Capture title synchronously before async op to avoid race condition with setCurrentSection
-                        const previousSectionTitle = panicSaveState.current.currentSectionTitle;
-
-                        if (currentEngine) {
-                            try {
-                                // Engine = kernel CfiRangeResolver; the OPF
-                                // language keeps snapping locale-aware
-                                // (identical to the old Book-based path).
-                                const language = currentEngine.getLanguage();
-                                const [snappedStart, snappedEnd] = await Promise.all([
-                                    snapCfiToSentence(currentEngine, prevStart, language),
-                                    snapCfiToSentence(currentEngine, prevEnd, language)
-                                ]);
-
-                                const range = generateCfiRange(snappedStart, snappedEnd);
-                                const type = isScroll ? 'scroll' : 'page';
-                                const label = previousSectionTitle || undefined;
-
-                                // Ignore generic "Chapter" placeholder
-                                if (label !== 'Chapter') {
-                                    updates.push({ range, type, label });
-                                    setHistoryTick(t => t + 1);
-                                }
-                            } catch (err) {
-                                logger.error("History processing failed", err);
-                                // Continue even if history fails, to save current location
-                            }
-                        }
-                    }
-                }
-
-                // 2. Calculate Current Range (Sync)
-                // Ensure current segment is in history so it appears at top of list
-                const currentRange = generateCfiRange(location.startCfi, location.endCfi);
-                const currentType = readerViewMode === 'scrolled' ? 'scroll' : 'page';
-                updates.push({ range: currentRange, type: currentType, label: title });
-
-                // 3. Single Atomic Update
-                useReadingStateStore.getState().updateReadingSession(
-                    bookId,
-                    location.startCfi,
-                    percentage,
-                    updates
-                );
-            };
-
-            // Execute the updates
-            prepareUpdates().catch(err => {
-                logger.error("Failed to update reading session", err);
+            // Reading-session recording (ReadingSessionRecorder, Phase 6
+            // §6). A false return is the recorder's no-op CFI guard — the
+            // legacy code also skipped the section update in that case.
+            const recorded = recorderRef.current?.onRelocated({
+                location,
+                percentage,
+                title,
+                viewMode: readerViewMode,
+                at: Date.now(),
             });
+            if (recorded === false) return;
 
-            // Update refs immediately (independent of store storage)
-            previousLocation.current = {
-                start: location.startCfi,
-                end: location.endCfi,
-                timestamp: Date.now()
-            };
             setCurrentSection(title, sectionId);
         },
         onTocLoaded: (newToc) => setToc(newToc),
@@ -448,6 +379,36 @@ export const ReaderView: React.FC = () => {
         engineRef.current = engine;
     }, [engine]);
 
+    // Reading-session recorder lifecycle (Phase 6 §6): one per book.
+    // flushSync on teardown is the legacy unmount panic save (raw range,
+    // no snapping — the book may already be destroyed mid-unmount).
+    useEffect(() => {
+        if (!bookId) return;
+        const recorder = new ReadingSessionRecorder({
+            bookId,
+            getResolver: () => engineRef.current,
+            store: {
+                getCurrentCfi: () =>
+                    useReadingStateStore.getState().getProgress(bookId)?.currentCfi,
+                updateReadingSession: (id, cfi, pct, updates) =>
+                    useReadingStateStore.getState().updateReadingSession(id, cfi, pct, updates),
+                addCompletedRange: (id, range, type, label) =>
+                    useReadingStateStore.getState().addCompletedRange(id, range, type, label),
+            },
+            getContext: () => ({
+                title: panicSaveState.current.currentSectionTitle,
+                viewMode: panicSaveState.current.readerViewMode,
+            }),
+            onHistoryRecorded: () => setHistoryTick(t => t + 1),
+        });
+        recorderRef.current = recorder;
+        return () => {
+            recorder.flushSync();
+            recorder.dispose();
+            recorderRef.current = null;
+        };
+    }, [bookId]);
+
     // Sync loading state
     useEffect(() => {
         setIsLoading(hookLoading);
@@ -495,37 +456,8 @@ export const ReaderView: React.FC = () => {
         hidePopover();
     }, [forceTraditionalChinese, showPinyin, hidePopover]);
 
-    // Save reading history on unmount
-    useEffect(() => {
-        return () => {
-            if (bookId && previousLocation.current) {
-                const prevStart = previousLocation.current.start;
-                const prevEnd = previousLocation.current.end;
-                const duration = Date.now() - previousLocation.current.timestamp;
-
-                // Only save if duration > 2s (avoid strict mode double-mounts and accidental nav)
-                if (prevStart && prevEnd && duration > 2000) {
-                    // Panic Save: Synchronous, raw capture.
-                    // We bypass snapCfiToSentence to avoid async calls on the Book instance,
-                    // which might be destroyed during unmount, causing crashes.
-                    // This ensures reading history is saved even if the reader is tearing down.
-                    const range = generateCfiRange(prevStart, prevEnd);
-                    const { readerViewMode: mode, currentSectionTitle: title } = panicSaveState.current;
-                    const type = mode === 'scrolled' ? 'scroll' : 'page';
-                    const label = title || undefined;
-
-                    // Ignore generic "Chapter" placeholder
-                    if (label !== 'Chapter') {
-                        try {
-                            useReadingStateStore.getState().addCompletedRange(bookId, range, type, label);
-                        } catch (e) {
-                            logger.error("History panic save failed", e);
-                        }
-                    }
-                }
-            }
-        };
-    }, [bookId]);
+    // (The legacy unmount panic-save effect lives in the recorder now:
+    // flushSync() in the recorder lifecycle effect above.)
 
     // Handle Unmount Cleanup
     useEffect(() => {
