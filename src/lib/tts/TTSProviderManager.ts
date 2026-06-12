@@ -1,9 +1,12 @@
-import type { ITTSProvider, TTSVoice } from './providers/types';
+import { ProviderPlaybackError, isPlaybackInterruption } from './providers/types';
+import type { ITTSProvider, TTSVoice, Unsubscribe } from './providers/types';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { asLocaleAware, asVoiceDownloadable } from './providers/registry';
 import { Capacitor } from '@capacitor/core';
 import type { PlaybackBackend } from './engine/PlaybackBackend';
+import type { AudioSink } from './engine/AudioSink';
+import { AudioElementPlayer } from './AudioElementPlayer';
 import { buildProviderById } from './providerFactory';
 
 /**
@@ -15,7 +18,9 @@ export interface TTSProviderEvents {
     /** Triggered when playback completes successfully. */
     onEnd: () => void;
     /**
-     * Triggered when an error occurs during playback.
+     * Triggered when an error occurs DURING playback (after play() resolved).
+     * Failures to start playback reject from {@link TTSProviderManager.play}
+     * instead (single failure path, 5a-PR2) — they never arrive here.
      * @param error The error object or message.
      */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,22 +40,34 @@ export interface TTSProviderEvents {
 }
 
 /**
- * Manages the lifecycle and selection of Text-to-Speech providers.
- * Handles initialization, platform detection (Native vs Web), error recovery (Cloud -> Local fallback),
- * and event normalization across different providers.
+ * Manages the lifecycle and selection of Text-to-Speech providers: a dumb holder
+ * (Phase 5a-PR2). On swap it detaches its listener from and disposes the outgoing
+ * provider, and injects ONE shared {@link AudioSink} into providers that play
+ * synthesized audio. It normalizes provider events (interruption filtering) and
+ * rethrows play failures as typed {@link ProviderPlaybackError}s — it performs NO
+ * self-swap and emits NO synthetic `{type:'fallback'}` events. The fallback POLICY
+ * lives in the engine (`AudioPlayerService.recoverWithLocalProvider`), which calls
+ * back through {@link setProviderById} — the S2 double-fire is structurally dead.
  */
 export class TTSProviderManager implements PlaybackBackend {
     private provider: ITTSProvider;
     private events: TTSProviderEvents;
+    /** Detach handle for the listener registered on the CURRENT provider. */
+    private detachProviderListener: Unsubscribe | null = null;
+    /** The one shared audio-output device, injected into every cloud/wasm provider. */
+    private sharedSink: AudioSink | null;
 
     /**
      * Creates a new TTSProviderManager.
      * Automatically selects the appropriate provider based on the platform.
      *
      * @param {TTSProviderEvents} events Callback handlers for provider events.
+     * @param sink Optional shared sink (tests inject a FakeAudioSink); created
+     *   lazily as an {@link AudioElementPlayer} on first cloud/wasm build otherwise.
      */
-    constructor(events: TTSProviderEvents) {
+    constructor(events: TTSProviderEvents, sink?: AudioSink) {
         this.events = events;
+        this.sharedSink = sink ?? null;
         if (Capacitor.isNativePlatform()) {
             this.provider = new CapacitorTTSProvider();
         } else {
@@ -59,48 +76,34 @@ export class TTSProviderManager implements PlaybackBackend {
         this.setupProviderListeners();
     }
 
+    /** The lazily-created shared sink (one HTMLAudioElement for every provider swap). */
+    private getSharedSink(): AudioSink {
+        if (!this.sharedSink) {
+            this.sharedSink = new AudioElementPlayer();
+        }
+        return this.sharedSink;
+    }
+
     private setupProviderListeners() {
-        this.provider.on((event) => {
+        this.detachProviderListener = this.provider.on((event) => {
             if (event.type === 'start') {
                 this.events.onStart();
             } else if (event.type === 'end') {
                 this.events.onEnd();
             } else if (event.type === 'error') {
-                // Handle common interruption errors or real errors
-                const errorObj = event.error as unknown as { error?: string, message?: string };
-                const errorType = errorObj?.error || event.error;
-                // If it's just an interruption (e.g. from cancel), ignore
-                if (errorType === 'interrupted' || errorType === 'canceled') return;
+                // Event normalization: deliberate interruptions (cancel/stop) are not
+                // errors. Everything else forwards verbatim — recovery policy is the
+                // engine's call, not the backend's.
+                if (isPlaybackInterruption(event.error)) return;
 
                 console.error("TTS Provider Error", event.error);
-
-                // Fallback Logic
-                if (this.provider.id !== 'local') {
-                    this.events.onError({ type: 'fallback', message: event.error instanceof Error ? event.error.message : event.error });
-                    this.switchToLocalProvider();
-                } else {
-                    this.events.onError(event.error);
-                }
-
+                this.events.onError(event.error);
             } else if (event.type === 'timeupdate') {
                 this.events.onTimeUpdate(event.currentTime);
             } else if (event.type === 'download-progress') {
                 this.events.onDownloadProgress(event.voiceId, event.percent, event.status);
             }
         });
-    }
-
-    private async switchToLocalProvider() {
-         console.warn("Falling back to local provider...");
-         this.provider.stop(); // Ensure old provider is stopped
-
-         if (Capacitor.isNativePlatform()) {
-             this.provider = new CapacitorTTSProvider();
-         } else {
-             this.provider = new WebSpeechProvider();
-         }
-         this.setupProviderListeners();
-         await this.provider.init();
     }
 
     /**
@@ -111,7 +114,12 @@ export class TTSProviderManager implements PlaybackBackend {
     }
 
     /**
-     * Starts playback of the given text.
+     * Starts playback of the given text. Resolves when audible playback starts.
+     *
+     * Single failure path (5a-PR2): a failure to start REJECTS exactly once —
+     * interruptions rethrow raw (never fallback-worthy); real failures rethrow as
+     * {@link ProviderPlaybackError} with the failing provider's id. No self-swap,
+     * no `{type:'fallback'}` event: the engine decides whether to recover.
      *
      * @param {string} text The text to speak.
      * @param {object} options Playback options.
@@ -122,23 +130,11 @@ export class TTSProviderManager implements PlaybackBackend {
         try {
             return await this.provider.play(text, options);
         } catch (e) {
-            // Catch play errors and treat them as provider errors to trigger fallback if applicable
-             const errorObj = e as unknown as { error?: string, message?: string };
-             const errorType = errorObj?.error || e;
-
-             // Check if it's not just a cancellation
-             if (errorType !== 'interrupted' && errorType !== 'canceled') {
-                 console.error("TTS Provider Play Error", e);
-                 if (this.provider.id !== 'local') {
-                    this.events.onError({ type: 'fallback', message: e instanceof Error ? e.message : e });
-                    await this.switchToLocalProvider();
-                 } else {
-                    // Re-throw if it's local provider or we can't handle it
-                    throw e;
-                 }
-             } else {
-                 throw e;
-             }
+            if (isPlaybackInterruption(e)) {
+                throw e;
+            }
+            console.error("TTS Provider Play Error", e);
+            throw new ProviderPlaybackError(this.provider.id, e);
         }
     }
 
@@ -176,19 +172,27 @@ export class TTSProviderManager implements PlaybackBackend {
 
     /**
      * Swaps the active provider by id, constructing it via the shared provider factory
-     * (which reads API keys + active language from the TTS settings store).
+     * (which reads API keys + active language from the TTS settings store) with the
+     * manager's shared sink injected.
      */
     setProviderById(providerId: string) {
-         this.setProvider(buildProviderById(providerId));
+         this.setProvider(buildProviderById(providerId, this.getSharedSink()));
     }
 
     /**
      * Explicitly sets the provider instance (in-process/test seam).
      *
+     * Swap hygiene (5a-PR2): the outgoing provider's listener is detached and the
+     * provider disposed BEFORE the incoming one wires up — a stale provider can
+     * neither emit into the engine nor hold engine resources (S12 leak).
+     *
      * @param {ITTSProvider} provider The new provider to use.
      */
     setProvider(provider: ITTSProvider) {
+         this.detachProviderListener?.();
+         this.detachProviderListener = null;
          this.provider.stop();
+         this.provider.dispose();
          this.provider = provider;
          this.setupProviderListeners();
     }

@@ -1,6 +1,7 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
 import type { TTSOptions, SpeechSegment } from './types';
 import type { AudioSink } from '../engine/AudioSink';
+import type { TTSCache } from '../TTSCache';
 
 /**
  * A mock cloud provider for testing purposes.
@@ -9,8 +10,8 @@ import type { AudioSink } from '../engine/AudioSink';
 export class MockCloudProvider extends BaseCloudProvider {
   id = 'mock-cloud';
 
-  constructor(audioSink?: AudioSink) {
-    super(audioSink);
+  constructor(audioSink?: AudioSink, cache?: TTSCache) {
+    super(audioSink, cache);
     this.voices = [
       { id: 'mock-male', name: 'Mock Male (Cloud)', lang: 'en-US', provider: 'google' },
       { id: 'mock-female', name: 'Mock Female (Cloud)', lang: 'en-US', provider: 'openai' }

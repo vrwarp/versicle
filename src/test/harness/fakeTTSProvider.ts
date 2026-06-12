@@ -42,6 +42,10 @@ export class FakeTTSProvider implements ITTSProvider {
   });
   /** Locale capability spy (LocaleAware — see providers/registry.ts). */
   setLocale = vi.fn((): void => {});
+  /** Voice-download capability spies (VoiceDownloadable — descriptor-gated). */
+  downloadVoice: (voiceId: string) => Promise<void> = vi.fn(async (): Promise<void> => {});
+  deleteVoice: (voiceId: string) => Promise<void> = vi.fn(async (): Promise<void> => {});
+  isVoiceDownloaded: (voiceId: string) => Promise<boolean> = vi.fn(async (): Promise<boolean> => true);
 
   constructor(options: FakeTTSProviderOptions = {}) {
     this.id = options.id ?? 'fake';

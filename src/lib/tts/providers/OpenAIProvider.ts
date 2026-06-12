@@ -1,6 +1,7 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
 import type { TTSOptions, SpeechSegment } from './types';
 import type { AudioSink } from '../engine/AudioSink';
+import type { TTSCache } from '../TTSCache';
 
 /**
  * TTS Provider for OpenAI's Audio API.
@@ -10,8 +11,8 @@ export class OpenAIProvider extends BaseCloudProvider {
   id = 'openai';
   private apiKey: string | null = null;
 
-  constructor(apiKey?: string, audioSink?: AudioSink) {
-      super(audioSink);
+  constructor(apiKey?: string, audioSink?: AudioSink, cache?: TTSCache) {
+      super(audioSink, cache);
       if (apiKey) this.apiKey = apiKey;
       this.voices = [
           { id: 'alloy', name: 'Alloy', lang: 'en', provider: 'openai' },
@@ -44,7 +45,7 @@ export class OpenAIProvider extends BaseCloudProvider {
    * Synthesizes text using OpenAI's API.
    * Note: OpenAI does not currently return alignment timestamps.
    */
-  protected async fetchAudioData(text: string, options: TTSOptions): Promise<SpeechSegment> {
+  protected async fetchAudioData(text: string, options: TTSOptions, signal?: AbortSignal): Promise<SpeechSegment> {
       if (!this.apiKey) {
           throw new Error("OpenAI API Key missing");
       }
@@ -61,7 +62,7 @@ export class OpenAIProvider extends BaseCloudProvider {
           response_format: 'mp3'
       }, {
           'Authorization': `Bearer ${this.apiKey}`
-      });
+      }, signal);
 
       // OpenAI does not return timestamps
       return {

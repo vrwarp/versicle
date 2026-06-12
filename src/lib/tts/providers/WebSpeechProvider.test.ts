@@ -139,7 +139,7 @@ describe('WebSpeechProvider', () => {
           expect(callback).toHaveBeenCalledWith({ type: 'end' });
       });
 
-      it('should handle errors', async () => {
+      it('rejects a failure to start through the promise ONLY (single-shot, 5a-PR2)', async () => {
           const rawVoices = [{ name: 'Voice 1', lang: 'en-US' }];
           mockSynth.getVoices.mockReturnValue(rawVoices);
           await provider.init();
@@ -152,14 +152,33 @@ describe('WebSpeechProvider', () => {
           const errorEvent = { error: 'some error' };
           if (mockUtterance.onerror) mockUtterance.onerror(errorEvent);
 
-          // Expect promise rejection with the provider's wrapped Error
+          // The rejection is the one and only signal for a start failure — the
+          // pre-5a emit+reject double-signal fed the fallback double-fire (S2).
           await expect(playPromise).rejects.toThrow('SpeechSynthesisError: some error');
+          expect(callback).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+      });
+
+      it('emits mid-playback failures (after start) as an error event', async () => {
+          const rawVoices = [{ name: 'Voice 1', lang: 'en-US' }];
+          mockSynth.getVoices.mockReturnValue(rawVoices);
+          await provider.init();
+
+          const callback = vi.fn();
+          provider.on(callback);
+
+          const playPromise = provider.play('text', { voiceId: 'Voice 1', speed: 1.0 });
+          if (mockUtterance.onstart) mockUtterance.onstart();
+          await playPromise;
+
+          const errorEvent = { error: 'audio-hardware', type: 'error' };
+          if (mockUtterance.onerror) mockUtterance.onerror(errorEvent);
+
           expect(callback).toHaveBeenCalledWith({
               type: 'error',
               error: {
-                  error: 'some error',
-                  message: 'SpeechSynthesisError: some error',
-                  type: undefined,
+                  error: 'audio-hardware',
+                  message: 'SpeechSynthesisError: audio-hardware',
+                  type: 'error',
               },
           });
       });

@@ -113,14 +113,14 @@ describeEngineParity('worker bridge (MessageChannel + Comlink)', async (): Promi
             played.push({ text, ...options });
             const failure = failNext;
             if (failure && currentProviderId !== 'local') {
-                // Replicates TTSProviderManager's CURRENT fallback (the S2 double-fire): the
-                // provider error event AND the play-catch path both emit {type:'fallback'}
-                // and swap to the local provider. 5a-PR2 collapses this to one rejection
-                // path; the P21 it.fails rider tracks the flip.
+                // TTSProviderManager's post-5a-PR2 single failure path: REJECT once
+                // (typed by name — Comlink preserves message/name/stack across the
+                // boundary), no self-swap, no synthetic 'fallback' event. The
+                // worker-resident engine owns recovery via backendSetProviderById.
                 failNext = null;
-                currentProviderId = 'local';
-                void fire({ type: 'error', error: { type: 'fallback', message: failure.message } });
-                void fire({ type: 'error', error: { type: 'fallback', message: failure.message } });
+                const err = new Error(`Provider '${currentProviderId}' failed to start playback: ${failure.message}`);
+                err.name = 'ProviderPlaybackError';
+                throw err;
             }
         },
         backendPreload: async () => {},

@@ -1,39 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BaseCloudProvider } from './BaseCloudProvider';
 import { FakeAudioSink } from '../engine/FakeAudioSink';
+import type { TTSCache } from '../TTSCache';
 import type { TTSOptions, SpeechSegment } from './types';
 
-// Mock dependencies
-vi.mock('../AudioElementPlayer', () => {
-    return {
-        AudioElementPlayer: class {
-            setOnTimeUpdate = vi.fn();
-            setOnEnded = vi.fn();
-            setOnError = vi.fn();
-            setRate = vi.fn();
-            playBlob = vi.fn().mockResolvedValue(undefined);
-            pause = vi.fn();
-            resume = vi.fn();
-            stop = vi.fn();
-            getDuration = () => 0;
-        }
-    };
-});
-
-// Mock TTSCache
+// Injected fakes instead of module mocks (vi.mock is banned in providers/ since
+// 5a-PR2): the sink and cache go in through the BaseCloudProvider constructor.
 const mockGet = vi.fn();
 const mockPut = vi.fn();
 const mockGenerateKey = vi.fn((text) => Promise.resolve(`key-${text}`));
-
-vi.mock('../TTSCache', () => {
-  return {
-    TTSCache: class {
-      get = mockGet;
-      put = mockPut;
-      generateKey = mockGenerateKey;
-    }
-  };
-});
+const spyCache = { get: mockGet, put: mockPut, generateKey: mockGenerateKey } as unknown as TTSCache;
 
 // Concrete implementation of BaseCloudProvider for testing
 class TestProvider extends BaseCloudProvider {
@@ -65,7 +41,7 @@ describe('BaseCloudProvider Request Registry', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    provider = new TestProvider();
+    provider = new TestProvider(new FakeAudioSink(), spyCache);
   });
 
   afterEach(() => {
@@ -164,7 +140,7 @@ describe('regression: speed policy — speed-independent cache, rate at the sink
 
   beforeEach(() => {
     vi.clearAllMocks();
-    provider = new TestProvider();
+    provider = new TestProvider(new FakeAudioSink(), spyCache);
   });
 
   afterEach(() => {
@@ -209,7 +185,7 @@ describe('regression: speed policy — speed-independent cache, rate at the sink
     const origSetRate = sink.setRate.bind(sink);
     sink.setRate = (rate: number) => { order.push(`setRate:${rate}`); origSetRate(rate); };
 
-    const sinkProvider = new TestProvider(sink);
+    const sinkProvider = new TestProvider(sink, spyCache);
     await sinkProvider.play('rated text', { voiceId: 'v1', speed: 1.5 });
 
     // Synthesis is always 1.0; the user's speed reaches the sink as a playback rate,
@@ -224,7 +200,7 @@ describe('regression: cached alignment survives the cache-read path', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    provider = new TestProvider();
+    provider = new TestProvider(new FakeAudioSink(), spyCache);
   });
 
   afterEach(() => {

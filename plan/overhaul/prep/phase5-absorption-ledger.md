@@ -33,7 +33,7 @@ Owning suites:
 | 13 | `engine/AudioPlayerService.isolated.test.ts` | fake-driven smoke incl. dragnet | superseded by P19/P20 (same fakes) | 5b-PR4 | ⏳ |
 | 14 | `PlaybackStateManager_Masking.test.ts` / `PlaybackStateManager_Adaptation.test.ts` | mask semantics, adaptation anchor/sibling rules | `QueueModel` unit suite (immutable snapshots) + P14/P15 | 5b-PR2 | ⏳ |
 | 15 | `TaskSequencer_Predictability.test.ts`, `TaskSequencer.test.ts` | FIFO, error isolation | extended sequencer suite (cancellation added; merge, not delete-without-absorb) | 5b-PR3 | ⏳ |
-| 16 | `TTSProviderManager.test.ts` | event normalization, fallback observable outcome | `describeProviderContract` + new manager suite | 5a-PR3 | ⏳ |
+| 16 | `TTSProviderManager.test.ts` | event normalization, fallback observable outcome | `describeProviderContract` (×5 at 5a-PR2; piper joins at 5a-PR3) + the new manager suite, which carries `describe('regression: TTSProviderManager.test (pre-5a)')`; the fallback double-fire case is superseded by the single-path manager tests + engine-level P21 (both transports) | 5a-PR2 (rewritten in place — landed one PR earlier than the row predicted, together with the contract suite it absorbs into) | ✅ 5a-PR2 |
 | 17 | `AudioContentPipeline*.test.ts` ×7 | grouping, marker attribution, Bible, structural anomaly, table CFI, trigger analysis | `SectionQueueBuilder` / `ReferenceSectionDetector` / `CfiGrouper` suites | 5c-PR2/3 | ⏳ |
 | 18 | `LexiconService*.test.ts` ×7 | assembly order, initialisms, Bible injection, sort | `LexiconEngine` suite (fuzz/perf survive as `.fuzz`/`.perf` companions) | 5c-PR4 | ⏳ |
 | 19 | `TextSegmenter*.test.ts` ×9 | segmentation/refinement/merge behavior | consolidated `TextSegmenter` spec (3 files: spec/fuzz/perf) | 5c-PR2 | ⏳ |
@@ -48,7 +48,7 @@ suites, and the `CapacitorTTSProvider.test.ts` Smart-Handoff suite — the cross
 | Rider | Where | Flips green in |
 |---|---|---|
 | P14 identity (post-mask queue is a fresh array) | `engineParityScenarios.ts`, in-process leg | 5b-PR2 (immutable `QueueModel`) |
-| P21 single-replay (fallback replays the failed sentence exactly once) | both legs | 5a-PR2/5a-PR3 (single failure path) |
+| P21 single-replay (fallback replays the failed sentence exactly once) | both legs | ✅ FLIPPED at 5a-PR2 (single failure path: providers reject once, manager rethrows `ProviderPlaybackError` without self-swap, engine recovers via one sequenced task) — un-marked `it.fails` in the same commit |
 
 ## vi.mock allowlist (phase5 doc N3, rewritten post-P3)
 
@@ -60,6 +60,14 @@ suites, and the `CapacitorTTSProvider.test.ts` Smart-Handoff suite — the cross
 **5b-PR1** when `WorkerEngineHandle` moves to `src/app/tts/`. The four-module core
 shrinks to **∅ at 5b-PR5** when the `SessionStore`/lexicon ports land. `vi.mock` in
 `src/lib/tts/providers/**` is banned from 5a-PR2.
+
+**5a-PR2 note**: the providers-dir ban is live in `eslint.config.js` with exactly two
+allowlisted modules — `@capacitor-community/text-to-speech` (a registered native plugin
+with no injection seam; the providers-dir analogue of the engine-dir PlatformIntegration
+entry) and `./piper-utils` (PiperProvider's module-global synthesis path, leaves the
+allowlist at 5a-PR3 when the injectable `PiperRuntime` replaces it). The cloud-provider
+suites were converted from `vi.mock('../AudioElementPlayer'/'../TTSCache')` to injected
+fakes (`FakeAudioSink` + constructor-injected caches) in the same commit.
 
 **Post-P3 rewrite note** (merge of the gate branch into the post-Phase-3 tree): the
 doc's N3 inventory and the gate branch as authored froze `@db/DBService` — but Phase 3

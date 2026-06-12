@@ -1,8 +1,10 @@
-import { toTTSErrorPayload } from './types';
 import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice, SpeechSegment, Unsubscribe } from './types';
 import { AudioElementPlayer } from '../AudioElementPlayer';
 import type { AudioSink } from '../engine/AudioSink';
 import { TTSCache } from '../TTSCache';
+
+/** Max wall time for one synthesis round-trip before it is abandoned (TimeoutError). */
+const SYNTHESIS_TIMEOUT_MS = 30_000;
 
 export abstract class BaseCloudProvider implements ITTSProvider {
   abstract id: string;
@@ -14,6 +16,8 @@ export abstract class BaseCloudProvider implements ITTSProvider {
   /** Whether the sink was injected (shared, manager-owned) or self-constructed. */
   private readonly ownsSink: boolean;
   private disposed = false;
+  /** Aborts in-flight synthesis fetches on stop()/dispose() (5a-PR2). */
+  private abortController: AbortController | null = null;
 
   /**
    * @param audioSink The audio-output device. The manager injects ONE shared
@@ -52,29 +56,26 @@ export abstract class BaseCloudProvider implements ITTSProvider {
     return this.voices;
   }
 
+  /**
+   * Single-shot failure contract (ITTSProvider.play, 5a-PR2): resolves when audible
+   * playback has started; REJECTS exactly once on failure — it never also emits an
+   * `error` event for the same failure. The pre-5a emit+rethrow double-signal (one
+   * half of the S2 fallback double-fire) is gone; the engine owns recovery, keyed
+   * on the rejection the manager rethrows as `ProviderPlaybackError`.
+   */
   async play(text: string, options: TTSOptions): Promise<void> {
-    try {
-      const { audio } = await this.getOrFetch(text, options);
+    const { audio } = await this.getOrFetch(text, options);
 
-      // We need to wait for playback to START. playBlob resolves when it starts.
-      if (audio) {
-        await this.audioPlayer.playBlob(audio);
-      }
-      // Speed policy: audio is always synthesized at 1.0; `options.speed` is a
-      // playback-time rate applied at the sink AFTER the source is loaded, because the
-      // media load algorithm resets `playbackRate` whenever a new src is assigned
-      // (the sink also pins `defaultPlaybackRate` so later loads inherit the rate).
-      this.audioPlayer.setRate(options.speed);
-      this.emit({ type: 'start' });
-
-    } catch (e) {
-      // KNOWN double-signal (S2): emits AND rethrows for the same failure. Dies at
-      // 5a-PR2 (single-shot contract: reject only) together with the manager's
-      // event-path fallback — kept verbatim here so the registry PR stays
-      // behavior-preserving.
-      this.emit({ type: 'error', error: toTTSErrorPayload(e) });
-      throw e;
+    // We need to wait for playback to START. playBlob resolves when it starts.
+    if (audio) {
+      await this.audioPlayer.playBlob(audio);
     }
+    // Speed policy: audio is always synthesized at 1.0; `options.speed` is a
+    // playback-time rate applied at the sink AFTER the source is loaded, because the
+    // media load algorithm resets `playbackRate` whenever a new src is assigned
+    // (the sink also pins `defaultPlaybackRate` so later loads inherit the rate).
+    this.audioPlayer.setRate(options.speed);
+    this.emit({ type: 'start' });
   }
 
   async preload(text: string, options: TTSOptions): Promise<void> {
@@ -107,8 +108,9 @@ export abstract class BaseCloudProvider implements ITTSProvider {
 
     // 3. Initiate Fetch (Owner)
     const fetchPromise = (async () => {
+      const lease = this.synthesisLease();
       try {
-        const result = await this.fetchAudioData(text, options);
+        const result = await this.fetchAudioData(text, options, lease.signal);
         if (!result.audio) {
           throw new Error("No audio returned from provider");
         }
@@ -118,6 +120,7 @@ export abstract class BaseCloudProvider implements ITTSProvider {
 
         return result;
       } finally {
+        lease.release();
         // Cleanup registry
         this.requestRegistry.delete(cacheKey);
       }
@@ -127,12 +130,53 @@ export abstract class BaseCloudProvider implements ITTSProvider {
     return await fetchPromise;
   }
 
+  /**
+   * A per-request AbortSignal combining the provider-level controller (aborted by
+   * `stop()`/`dispose()` — rejects as AbortError, a deliberate interruption) with a
+   * synthesis timeout (rejects as TimeoutError — a provider failure the engine may
+   * recover from). Composed manually: `AbortSignal.any` is too new for the older
+   * WebKit versions this app still targets.
+   */
+  private synthesisLease(): { signal: AbortSignal; release(): void } {
+    if (!this.abortController) {
+      this.abortController = new AbortController();
+    }
+    const upstream = this.abortController.signal;
+    const local = new AbortController();
+    const onUpstreamAbort = () => local.abort(upstream.reason);
+    if (upstream.aborted) {
+      onUpstreamAbort();
+    } else {
+      upstream.addEventListener('abort', onUpstreamAbort, { once: true });
+    }
+    const timeout = setTimeout(
+      () => local.abort(new DOMException(`TTS synthesis timed out after ${SYNTHESIS_TIMEOUT_MS}ms`, 'TimeoutError')),
+      SYNTHESIS_TIMEOUT_MS,
+    );
+    return {
+      signal: local.signal,
+      release: () => {
+        clearTimeout(timeout);
+        upstream.removeEventListener('abort', onUpstreamAbort);
+      },
+    };
+  }
+
+  /** Abort every in-flight synthesis fetch (they reject as AbortError). */
+  private abortInFlight(): void {
+    if (this.abortController) {
+      this.abortController.abort(new DOMException('TTS playback stopped', 'AbortError'));
+      this.abortController = null;
+    }
+  }
+
   pause(): void {
       this.audioPlayer.pause();
   }
 
   stop(): void {
       this.audioPlayer.stop();
+      this.abortInFlight();
   }
 
   on(callback: (event: TTSEvent) => void): Unsubscribe {
@@ -143,14 +187,16 @@ export abstract class BaseCloudProvider implements ITTSProvider {
   }
 
   /**
-   * Detach listeners and stop playback. The shared sink is NOT destroyed unless this
-   * provider constructed it for itself — sink lifecycle belongs to whoever injected it
-   * (the manager). After dispose the provider emits nothing.
+   * Detach listeners, abort in-flight synthesis, and stop playback. The shared sink
+   * is NOT destroyed unless this provider constructed it for itself — sink lifecycle
+   * belongs to whoever injected it (the manager). After dispose the provider emits
+   * nothing.
    */
   dispose(): void {
       if (this.disposed) return;
       this.disposed = true;
       this.audioPlayer.stop();
+      this.abortInFlight();
       this.eventListeners = [];
       this.requestRegistry.clear();
       if (this.ownsSink) {
@@ -169,8 +215,12 @@ export abstract class BaseCloudProvider implements ITTSProvider {
 
   /**
    * Abstract method for subclasses to implement the API call.
+   *
+   * @param signal Abort signal threaded from `stop()`/`dispose()` (AbortError) and
+   *   the synthesis timeout (TimeoutError). Network implementations MUST pass it to
+   *   their fetches.
    */
-  protected abstract fetchAudioData(text: string, options: TTSOptions): Promise<SpeechSegment>;
+  protected abstract fetchAudioData(text: string, options: TTSOptions, signal?: AbortSignal): Promise<SpeechSegment>;
 
   /**
    * Helper method to perform a POST request and return the response as a Blob.

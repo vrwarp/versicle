@@ -106,13 +106,24 @@ export class WebSpeechProvider implements ITTSProvider {
         // cache), so the engine legitimately speaks live at the requested rate here.
         utterance.rate = options.speed;
 
+        let started = false;
         utterance.onstart = () => {
+            started = true;
             this.emit({ type: 'start' });
             resolve();
         };
         utterance.onend = () => this.emit({ type: 'end' });
         utterance.onerror = (e) => {
             const errorMsg = `SpeechSynthesisError: ${e.error}`;
+            if (!started) {
+                // Single-shot contract: a failure to START surfaces through the
+                // rejection ONLY — never additionally as an 'error' event (the
+                // pre-5a emit+reject double-signal fed the S2 fallback double-fire).
+                reject(new Error(errorMsg));
+                return;
+            }
+            // Mid-playback failure (after play() resolved): the event channel is
+            // the only one left; the engine normalizes interruptions upstream.
             this.emit({
                 type: 'error',
                 error: {
@@ -121,7 +132,6 @@ export class WebSpeechProvider implements ITTSProvider {
                     type: e.type,
                 }
             });
-            reject(new Error(errorMsg));
         };
         utterance.onboundary = (e) => this.emit({ type: 'boundary', charIndex: e.charIndex });
 

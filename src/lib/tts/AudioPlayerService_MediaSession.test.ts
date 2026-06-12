@@ -12,9 +12,9 @@ vi.mock('./providers/WebSpeechProvider', () => {
       getVoices = vi.fn().mockResolvedValue([]);
       play = vi.fn().mockResolvedValue(undefined);
       stop = vi.fn();
-      on = vi.fn();
+      on = vi.fn(() => () => {});
+      dispose = vi.fn();
       pause = vi.fn();
-      resume = vi.fn();
     }
   };
 });
@@ -181,7 +181,8 @@ describe('AudioPlayerService MediaSession Integration', () => {
             pause: vi.fn(),
             resume: vi.fn(),
             preload: vi.fn(),
-            on: vi.fn((cb) => { providerListener = cb; }),
+            dispose: vi.fn(),
+            on: vi.fn((cb) => { providerListener = cb; return () => {}; }),
         } as unknown as ITTSProvider;
 
         await service.setProvider(mockCloudProvider);

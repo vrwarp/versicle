@@ -17,7 +17,8 @@ vi.mock('./providers/WebSpeechProvider', () => {
             play = vi.fn().mockResolvedValue(undefined);
             preload = vi.fn();
             stop = vi.fn();
-            on = vi.fn();
+            on = vi.fn(() => () => {});
+            dispose = vi.fn();
             setConfig = vi.fn();
             pause = vi.fn();
             resume = vi.fn();
@@ -35,7 +36,8 @@ vi.mock('./providers/CapacitorTTSProvider', () => {
             play = vi.fn().mockResolvedValue(undefined);
             preload = vi.fn();
             stop = vi.fn();
-            on = vi.fn();
+            on = vi.fn(() => () => {});
+            dispose = vi.fn();
             pause = vi.fn();
             resume = vi.fn();
         }
@@ -265,10 +267,10 @@ describe('AudioPlayerService', () => {
             // play returns normally to simulate async start
             play: vi.fn().mockResolvedValue(undefined),
             preload: vi.fn(),
-            on: vi.fn(),
+            on: vi.fn(() => () => {}),
             stop: vi.fn(),
             pause: vi.fn(),
-            resume: vi.fn(),
+            dispose: vi.fn(),
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any;
 
@@ -293,7 +295,17 @@ describe('AudioPlayerService', () => {
         // Wait for async logic (fallback provider init and re-play)
         await new Promise(resolve => setTimeout(resolve, 10));
 
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Falling back"));
+        // The engine owns the fallback since 5a-PR2 (one sequenced recovery task);
+        // the warn now comes through the namespaced engine logger.
+        expect(consoleSpy).toHaveBeenCalledWith(
+            '[AudioPlayerService]',
+            expect.stringContaining('falling back to local provider'),
+            expect.anything(),
+        );
+        expect(consoleSpy).toHaveBeenCalledWith(
+            '[AudioPlayerService]',
+            expect.stringContaining('Falling back to local provider'),
+        );
     });
 
     it('should continue playing background audio when status becomes completed', async () => {

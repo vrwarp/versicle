@@ -66,6 +66,48 @@ export function toTTSErrorPayload(e: unknown): TTSErrorPayload {
   return { message: String(e) };
 }
 
+/**
+ * Typed play-failure rethrown by `TTSProviderManager.play` (Phase 5a single
+ * failure path): the manager performs NO self-swap and emits NO synthetic
+ * `{type:'fallback'}` event — the engine owns the recovery policy, keyed on
+ * this error. Identification goes through the `name` field (not `instanceof`)
+ * because the rejection crosses the worker boundary: Comlink re-creates errors
+ * preserving only `{message, name, stack}`.
+ */
+export class ProviderPlaybackError extends Error {
+  override readonly name = 'ProviderPlaybackError';
+  readonly providerId: string;
+
+  constructor(providerId: string, cause: unknown) {
+    const causeMessage = cause instanceof Error
+      ? cause.message
+      : (typeof cause === 'object' && cause !== null && 'message' in cause)
+        ? String((cause as { message: unknown }).message)
+        : String(cause);
+    super(`Provider '${providerId}' failed to start playback: ${causeMessage}`, { cause });
+    this.providerId = providerId;
+  }
+}
+
+/** Worker-boundary-safe check for {@link ProviderPlaybackError} (name survives Comlink). */
+export function isProviderPlaybackError(e: unknown): boolean {
+  return e instanceof Error && e.name === 'ProviderPlaybackError';
+}
+
+/**
+ * Whether a play rejection is a deliberate interruption (user stop / source swap /
+ * aborted fetch) rather than a provider failure — interruptions must never trigger
+ * the local-provider fallback.
+ */
+export function isPlaybackInterruption(e: unknown): boolean {
+  // DOMException is not an Error subclass in every runtime — match by name.
+  if (typeof e === 'object' && e !== null && (e as { name?: unknown }).name === 'AbortError') return true;
+  const code = (typeof e === 'object' && e !== null && 'error' in e)
+    ? (e as { error?: unknown }).error
+    : e;
+  return code === 'interrupted' || code === 'canceled';
+}
+
 export type TTSEvent =
   | { type: 'start' }
   | { type: 'end' }

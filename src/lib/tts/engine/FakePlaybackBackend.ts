@@ -47,13 +47,12 @@ export class FakePlaybackBackend implements PlaybackBackend {
         this.initCount++;
     }
     /**
-     * Arm the backend so the next play() on a non-'local' provider fails over, replicating
-     * TTSProviderManager's CURRENT fallback semantics (the S2 double-fire): the provider's
-     * error event (TTSProviderManager.ts event path) AND the play-catch path BOTH emit
-     * `{type:'fallback'}` and swap to the local provider. Events fire on microtasks to mirror
-     * the async event delivery of the real providers (and of the worker transport).
-     * 5a-PR2 collapses production to a single rejection path; the P21 `it.fails` rider in
-     * engineParityScenarios.ts tracks that flip.
+     * Arm the backend so the next play() on a non-'local' provider REJECTS once with a
+     * `ProviderPlaybackError`-named error — TTSProviderManager's post-5a-PR2 single
+     * failure path (no self-swap, no synthetic `{type:'fallback'}` event; the engine
+     * owns recovery and swaps via setProviderById). The error is built by name, not
+     * class, exactly as it survives the worker boundary (Comlink keeps only
+     * message/name/stack).
      */
     failNextPlay(error: { message: string }): void {
         this.failNext = error;
@@ -64,9 +63,9 @@ export class FakePlaybackBackend implements PlaybackBackend {
         const failure = this.failNext;
         if (failure && this.currentProviderId !== 'local') {
             this.failNext = null;
-            this.currentProviderId = 'local';
-            queueMicrotask(() => this.events.onError({ type: 'fallback', message: failure.message }));
-            queueMicrotask(() => this.events.onError({ type: 'fallback', message: failure.message }));
+            const err = new Error(`Provider '${this.currentProviderId}' failed to start playback: ${failure.message}`);
+            err.name = 'ProviderPlaybackError';
+            throw err;
         }
     }
     preload(text: string, options: { voiceId: string; speed: number }): void {
