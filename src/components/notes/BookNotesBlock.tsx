@@ -1,6 +1,6 @@
 import React from 'react';
 import type { BookAnnotationGroup } from '@hooks/useGroupedAnnotations';
-import { useBook } from '@store/selectors';
+import { useBook } from '@store/libraryViewStore';
 import { AnnotationCard } from './AnnotationCard';
 import { Download, BookOpen, Link } from 'lucide-react';
 import { Button } from '../ui/Button';

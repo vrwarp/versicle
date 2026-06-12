@@ -4,7 +4,7 @@ import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { ScrollArea } from '../ui/ScrollArea';
-import { useAllBooks } from '@store/selectors';
+import { useAllBooks } from '@store/libraryViewStore';
 import { useDebounce } from '@hooks/useDebounce';
 import { cn } from '@lib/utils';
 

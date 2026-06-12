@@ -52,7 +52,7 @@ vi.mock('@store/useReadingStateStore', () => ({
 }));
 
 // Mock selectors
-vi.mock('@store/selectors', () => ({
+vi.mock('@store/libraryViewStore', () => ({
   useBook: (id: any) => mockUseBook(id),
   useLastReadBook: () => mockUseLastReadBook(),
   useAllBooks: vi.fn(),

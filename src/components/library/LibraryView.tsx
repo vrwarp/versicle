@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useLibraryStore } from '@store/useLibraryStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
-import { useAllBooks } from '@store/selectors';
+import { useAllBooks } from '@store/libraryViewStore';
 import { createLogger } from '@lib/logger';
 import { useToastStore } from '@store/useToastStore';
 import { BookCard } from './BookCard';

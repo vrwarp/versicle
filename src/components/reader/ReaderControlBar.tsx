@@ -2,7 +2,7 @@ import React from 'react';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useCurrentDeviceProgress, useBookProgress } from '@store/useReadingStateStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
-import { useBook, useLastReadBook } from '@store/selectors';
+import { useBook, useLastReadBook } from '@store/libraryViewStore';
 import { useAnnotationStore } from '@store/useAnnotationStore';
 import { CompassPill } from '../ui/CompassPill';
 import type { ActionType } from '../ui/CompassPill';

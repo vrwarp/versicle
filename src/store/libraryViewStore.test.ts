@@ -1,11 +1,12 @@
 /**
- * Selector suite (Phase 7 PR-L5: re-pointed from the render-time module
- * cache to the derived libraryViewStore — assertions preserved, now running
- * against the REAL input stores per the harness philosophy).
+ * libraryViewStore hook suite (Phase 7 PR-L5: re-pointed from the
+ * render-time module cache to the derived libraryViewStore — assertions
+ * preserved, running against the REAL input stores per the harness
+ * philosophy; renamed from selectors.test.ts when the façade died).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useAllBooks, useLastReadBookId } from './selectors';
+import { useAllBooks, useLastReadBookId } from './libraryViewStore';
 import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';

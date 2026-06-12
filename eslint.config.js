@@ -261,15 +261,14 @@ export default tseslint.config(
   // hook-internal Book/Rendition plumbing, kernel/cfi/snap.ts) carry no
   // runtime dependency — the lib/search.ts + SearchPanel `Book` passthrough
   // died with the SearchSession reader adoption.
-  // Named runtime exceptions (carve-out blocks below):
+  // Named runtime exception (carve-out block below):
   // src/domains/library/import/extract.ts (the extractor preamble —
-  // ingestion-side epubjs, sanctioned by C8 + the P7 prep-doc banner) and
-  // src/lib/offscreen-renderer.ts (the offscreen ingestion render path —
-  // its §3 relocation into engine/offscreen/ rides the offscreen-renderer
-  // follow-up named in prep/phase6-reader-engine.md §Follow-ups; the P7
-  // ingestion rewrite has landed, so the move is the remaining half).
-  // src/lib/ingestion.ts left the list at the P7-library merge — the
-  // rewrite reduced it to a queue-routing delegate with no epubjs import.
+  // ingestion-side epubjs, sanctioned by C8 + the P7 prep-doc banner).
+  // The offscreen renderer completed its §3 relocation into
+  // src/domains/reader/engine/offscreen/ (the P6 follow-up) and is covered
+  // by the engine carve-out; src/lib/ingestion.ts left the list at the
+  // P7-library merge — the rewrite reduced it to a thin re-export façade
+  // with no epubjs import.
   // The `epubjs/src/epubcfi` submodule is additionally banned
   // EVERYWHERE except the kernel's quarantine shim
   // (src/kernel/cfi/epubcfiShim.ts — see cfi.kernel-boundary.test.ts).
@@ -349,16 +348,14 @@ export default tseslint.config(
       ],
     },
   },
-  // Carve-out 3: NAMED EXCEPTIONS — the ingestion-side epubjs runtime.
+  // Carve-out 3: NAMED EXCEPTION — the ingestion-side epubjs runtime.
   // domains/library/import/extract.ts is the ONE extractor preamble
-  // (P7 prep-doc banner follow-up 6, sanctioned by C8);
-  // lib/offscreen-renderer.ts is its offscreen render dependency, still
-  // awaiting the §3 relocation into engine/offscreen/ (named follow-up in
-  // prep/phase6-reader-engine.md §Follow-ups).
+  // (P7 prep-doc banner follow-up 6, sanctioned by C8). Its offscreen
+  // render dependency lives at domains/reader/engine/offscreen/ (the §3
+  // relocation landed) and rides the engine carve-out above.
   {
     files: [
       'src/domains/library/import/extract.ts',
-      'src/lib/offscreen-renderer.ts',
     ],
     rules: {
       '@typescript-eslint/no-restricted-imports': [

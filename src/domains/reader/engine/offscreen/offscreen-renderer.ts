@@ -1,15 +1,15 @@
 import ePub from 'epubjs';
 import { snapdom } from '@zumer/snapdom';
-import { extractSentencesFromNode, type ExtractionOptions, type SentenceNode } from './ingestion/sentence-extraction';
+import { extractSentencesFromNode, type ExtractionOptions, type SentenceNode } from '@lib/ingestion/sentence-extraction';
 import type { CitationMarker } from '~types/db';
 import {
   registerSanitizeHook,
   observeAndPatchSandbox,
   type EpubJsBookLike,
-} from '@domains/reader/engine/epubSecurity';
+} from '../epubSecurity';
 import type { TableImage } from '~types/db';
-import { CancellationError } from './cancellable-task-runner';
-import { createLogger } from './logger';
+import { CancellationError } from '@lib/cancellable-task-runner';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('OffscreenRenderer');
 

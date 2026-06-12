@@ -10,7 +10,7 @@ import { useToastStore } from '@store/useToastStore';
 import { bookContent } from '@data/repos/bookContent';
 import type { TableImage } from '~types/db';
 import { useReaderUIStore } from '@store/useReaderUIStore';
-import { reprocessBook } from '@lib/ingestion';
+import { useImportController } from '@app/library/useImportController';
 import { ContentAnalysisReport } from './ContentAnalysisReport';
 
 interface ContentAnalysisLegendProps {
@@ -30,6 +30,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ en
     const [isExpanded, setIsExpanded] = useState(true);
     const [isReportOpen, setIsReportOpen] = useState(false);
     const showToast = useToastStore(state => state.showToast);
+    const importController = useImportController();
     const [isReprocessing, setIsReprocessing] = useState(false);
 
     // Table Images Carousel State
@@ -244,7 +245,9 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ en
 
         setIsReprocessing(true);
         try {
-            await reprocessBook(currentBookId);
+            // Through the ImportOrchestrator queue (mutex-guarded) — the
+            // lib/ingestion.reprocessBook delegate died with this re-point.
+            await importController.reprocessBook(currentBookId);
             window.location.reload();
         } catch (e) {
             console.error("Reprocessing failed", e);

@@ -15,7 +15,7 @@
  */
 import { bookContent } from '@data/repos/bookContent';
 import type { CacheTtsPreparationRow } from '@data/rows/cache';
-import { extractContentOffscreen } from '@lib/offscreen-renderer';
+import { extractContentOffscreen } from '@domains/reader/engine/offscreen/offscreen-renderer';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import type { ExtractionOptions } from '@lib/ingestion/sentence-extraction';
 import type { PerceptualPalette } from '~types/db';

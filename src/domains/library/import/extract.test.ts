@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import imageCompression from 'browser-image-compression';
 import { extractBook } from './extract';
 import { extractCoverPalette } from '@lib/cover-palette';
-import { extractContentOffscreen } from '@lib/offscreen-renderer';
+import { extractContentOffscreen } from '@domains/reader/engine/offscreen/offscreen-renderer';
 import { CancellationError } from '@lib/cancellable-task-runner';
 import { TTS_EXTRACTION_VERSION } from '@lib/ingestion/sentence-extraction';
 
@@ -21,7 +21,7 @@ vi.mock('browser-image-compression', () => ({
   default: vi.fn(() => Promise.resolve(new Blob(['thumbnail'], { type: 'image/webp' }))),
 }));
 
-vi.mock('@lib/offscreen-renderer', () => ({
+vi.mock('@domains/reader/engine/offscreen/offscreen-renderer', () => ({
   extractContentOffscreen: vi.fn(async (_file, _options, onProgress, signal) => {
     if (signal?.aborted) {
       const { CancellationError } = await import('@lib/cancellable-task-runner');

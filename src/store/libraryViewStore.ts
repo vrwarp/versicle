@@ -1,5 +1,7 @@
 /**
- * libraryViewStore — the derived library projection (Phase 7 §D, PR-L5).
+ * libraryViewStore — the derived library projection AND its consumer hooks
+ * (Phase 7 §D, PR-L5; the hooks moved in from `selectors.ts` when that
+ * façade died with the post-merge follow-ups).
  *
  * Replaces `selectors.ts`'s render-time machinery: the module-level mutable
  * cache block (`createModuleCache`, 12 eslint-disables of `any`) and the
@@ -7,18 +9,21 @@
  * OFF-RENDER on subscription deltas from its input stores — strictly less
  * work than render-time recompute — and keeps the WeakMap per-book
  * memoization that made the old hook cheap (reference stability for
- * unchanged books is pinned by selectors.test.ts, re-pointed).
+ * unchanged books is pinned by libraryViewStore.test.ts).
  *
  * Reading-list join order (§D): the `bookId` FK written at registration
- * time wins; exact `sourceFilename` next; the fuzzy title+author key LAST —
- * the fallback that keeps pre-linking entries working (it dies post-merge,
- * one release after the linking migration registers).
+ * time (and backfilled by the v8 one-time linker) wins; exact
+ * `sourceFilename` next; the fuzzy title+author key LAST — the fallback
+ * that keeps pre-linking entries working (it dies one release after the
+ * v8 linking migration).
  */
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import { useBookStore } from './useBookStore';
 import { useLibraryStore } from './useLibraryStore';
 import { useReadingStateStore, isValidProgress, getMostRecentProgress } from './useReadingStateStore';
 import { useReadingListStore } from './useReadingListStore';
+import { useLocalHistoryStore } from './useLocalHistoryStore';
 import type { UserInventoryItem, UserProgress, ReadingListEntry, BookMetadata, NavigationItem } from '~types/db';
 import { getDeviceId } from '@lib/device-id';
 import { generateMatchKey } from '@lib/entity-resolution';
@@ -254,3 +259,151 @@ export function ensureLibraryViewStarted(): void {
   useReadingStateStore.subscribe(recomputeLibraryView);
   useReadingListStore.subscribe(recomputeLibraryView);
 }
+
+// ── Consumer hooks (moved from the deleted selectors.ts façade) ────────────
+
+/**
+ * Returns all books with static metadata, progress and the reading-list
+ * entry merged — a plain subscription on the derived projection.
+ */
+export const useAllBooks = (): LibraryBook[] => {
+  ensureLibraryViewStarted();
+  return useLibraryViewStore((state) => state.books);
+};
+
+/**
+ * Returns a single book by ID with static metadata merged.
+ *
+ * Stays on fine-grained input-store selectors (not the projection array):
+ * the reader subscribes here, and per-key selectors avoid re-rendering it
+ * when OTHER books change — the projection's `books` array identity moves
+ * on any library delta.
+ */
+export const useBook = (id: string | null) => {
+  // OPTIMIZATION: Use fine-grained selectors to avoid re-rendering when other books change
+  const book = useBookStore(state => id && state.books ? state.books[id] : null);
+
+  const staticMeta = useLibraryStore(state => id && state.staticMetadata ? state.staticMetadata[id] : null);
+
+  // Set.has is safe to call even if the set is empty, but we must handle null offloadedBookIds
+  const isOffloaded = useLibraryStore(state => id && state.offloadedBookIds ? state.offloadedBookIds.has(id) : false);
+
+  // Subscribe to progress changes ONLY for this specific book
+  const bookProgressMap = useReadingStateStore(state => id && state.progress ? state.progress[id] : undefined);
+
+  // Get reading list entry — §D join order: bookId FK first (written at
+  // registration, backfilled by the v8 linker), exact filename next, the
+  // fuzzy title+author key LAST (pre-linking fallback). One combined
+  // selector so the component subscribes to the RESOLVED entry, not the
+  // whole entries map.
+  const sourceFilename = book?.sourceFilename;
+  const readingListEntry = useReadingListStore(state => {
+    if (!state.entries) return undefined;
+    if (id) {
+      for (const key in state.entries) {
+        if (state.entries[key].bookId === id) return state.entries[key];
+      }
+    }
+    if (sourceFilename && state.entries[sourceFilename]) {
+      return state.entries[sourceFilename];
+    }
+    if (book?.title || book?.author) {
+      const bookKey = generateMatchKey(book.title || '', book.author || '');
+      if (bookKey) {
+        for (const key in state.entries) {
+          const entry = state.entries[key];
+          if (generateMatchKey(entry.title, entry.author) === bookKey) {
+            return entry;
+          }
+        }
+      }
+    }
+    return undefined;
+  });
+
+  // Get resolved progress (Local > Recent) across all devices for this book
+  const progress = useMemo(() => {
+    if (!id) return null;
+    return resolveProgress(bookProgressMap, getDeviceId());
+  }, [id, bookProgressMap]);
+
+  // OPTIMIZATION: Memoize the single book result
+  return useMemo(() => {
+    if (!book) return null;
+
+    const hasCoverBlob = staticMeta?.coverBlob instanceof Blob;
+    const progressPercentage = progress?.percentage || readingListEntry?.percentage || 0;
+
+    return {
+      ...book,
+      id: book.bookId,  // Alias
+      // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
+      title: book.customTitle || staticMeta?.title || book.title,
+      author: book.customAuthor || staticMeta?.author || book.author,
+      coverBlob: staticMeta?.coverBlob || null,
+      // OPTIMIZATION: Use Service Worker route
+      coverUrl: hasCoverBlob ? buildCoverUrl(book.bookId) : undefined,
+      fileHash: staticMeta?.fileHash,
+      fileSize: staticMeta?.fileSize,
+      totalChars: staticMeta?.totalChars,
+      version: staticMeta?.version || undefined,
+      baseFontSize: staticMeta?.baseFontSize,
+      baseLineHeight: staticMeta?.baseLineHeight,
+      syntheticToc: staticMeta?.syntheticToc,
+      useSyntheticToc: book.useSyntheticToc,
+
+      isOffloaded,
+
+      // Merge progress (max across all devices)
+      progress: progressPercentage,
+      currentCfi: progress?.currentCfi || undefined
+    };
+  }, [book, staticMeta, isOffloaded, progress, readingListEntry]);
+};
+
+/**
+ * Returns the ID of the most recently read book.
+ *
+ * OPTIMIZATION: Efficiently scans the progress map to find the book with the latest timestamp.
+ * This avoids iterating over the entire book library or creating large intermediate arrays.
+ *
+ * BOLT OPTIMIZATION: Uses `useLocalHistoryStore` (persisted local state) to avoid
+ * iterating the `progressMap` on every page turn. Also uses conditional subscription
+ * to avoid re-rendering when `progressMap` updates if a local ID is already found.
+ */
+export const useLastReadBookId = () => {
+  const localId = useLocalHistoryStore(state => state.lastReadBookId);
+
+  // Only subscribe to progressMap if localId is missing (first run or reset)
+  // If localId is present, we return null for progressMap to avoid re-rendering when progress changes.
+  // This is critical for performance during reading, as progressMap updates on every page turn.
+  const progressMap = useReadingStateStore(state => !localId ? state.progress : null);
+
+  return useMemo(() => {
+    if (localId) return localId;
+    if (!progressMap) return null;
+
+    const deviceId = getDeviceId();
+    let maxLastRead = 0;
+    let lastReadBookId: string | null = null;
+
+    for (const bookId in progressMap) {
+      const deviceMap = progressMap[bookId];
+      const deviceProgress = deviceMap[deviceId];
+      if (deviceProgress && deviceProgress.lastRead > maxLastRead) {
+        maxLastRead = deviceProgress.lastRead;
+        lastReadBookId = bookId;
+      }
+    }
+    return lastReadBookId;
+  }, [localId, progressMap]);
+};
+
+/**
+ * Returns the most recently read book with metadata merged.
+ * Uses useLastReadBookId and useBook to avoid full library iteration.
+ */
+export const useLastReadBook = () => {
+  const id = useLastReadBookId();
+  return useBook(id);
+};

@@ -35,7 +35,7 @@ import { useReaderUIStore } from '@store/useReaderUIStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useToastStore } from '@store/useToastStore';
-import { useBook } from '@store/selectors';
+import { useBook } from '@store/libraryViewStore';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { createSearchNavigator, type SearchNavigator } from '@app/reader/searchNavigation';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';

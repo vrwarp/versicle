@@ -53,7 +53,7 @@ class MockOffscreenCanvas {
 (global as any).OffscreenCanvas = MockOffscreenCanvas;
 
 // Mock extractContentOffscreen
-vi.mock('./offscreen-renderer', () => ({
+vi.mock('@domains/reader/engine/offscreen/offscreen-renderer', () => ({
   extractContentOffscreen: vi.fn().mockResolvedValue({
     chapters: [
       {

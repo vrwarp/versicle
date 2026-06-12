@@ -78,7 +78,7 @@ vi.mock('./store/useLibraryStore', () => ({
   }),
 }));
 
-vi.mock('./store/selectors', () => ({
+vi.mock('./store/libraryViewStore', () => ({
   useAllBooks: vi.fn().mockReturnValue([]),
   useBook: vi.fn(),
 }));

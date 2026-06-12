@@ -12,11 +12,11 @@ vi.mock('@zumer/snapdom', () => {
     }
   };
 });
-vi.mock('./ingestion/sentence-extraction', () => ({
+vi.mock('@lib/ingestion/sentence-extraction', () => ({
   extractSentencesFromNode: vi.fn(() => ({ sentences: [], citationMarkers: [] })),
   ExtractionOptions: {}
 }));
-vi.mock('./sanitizer', () => ({
+vi.mock('@lib/sanitizer', () => ({
   sanitizeContent: vi.fn((html) => html)
 }));
 

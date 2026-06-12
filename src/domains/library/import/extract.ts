@@ -38,7 +38,7 @@ import type {
   PerceptualPalette,
 } from '~types/db';
 import { TTS_EXTRACTION_VERSION, type ExtractionOptions } from '@lib/ingestion/sentence-extraction';
-import { extractContentOffscreen, type ProcessedChapter } from '@lib/offscreen-renderer';
+import { extractContentOffscreen, type ProcessedChapter } from '@domains/reader/engine/offscreen/offscreen-renderer';
 import { CancellationError } from '@lib/cancellable-task-runner';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import { extractCoverPalette } from '@lib/cover-palette';

@@ -14,7 +14,7 @@ vi.mock('browser-image-compression', () => ({
 }));
 
 // Mock offscreen renderer
-vi.mock('./offscreen-renderer', () => ({
+vi.mock('@domains/reader/engine/offscreen/offscreen-renderer', () => ({
   extractContentOffscreen: vi.fn(async (_file, _options, onProgress) => {
     if (onProgress) onProgress(50, 'Processing...');
     return {

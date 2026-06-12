@@ -157,3 +157,11 @@ export const createAnnotationStore = () => create<AnnotationState>()(
  * Wrapped with yjs() middleware for automatic CRDT synchronization.
  */
 export const useAnnotationStore = createAnnotationStore();
+
+/**
+ * Returns all pending audio bookmarks across all books (moved from the
+ * deleted selectors.ts façade — it is a pure selector over THIS store).
+ */
+export const selectPendingAudioBookmarks = (state: AnnotationState): UserAnnotation[] => {
+    return Object.values(state.annotations).filter(a => a.type === 'audio-bookmark');
+};

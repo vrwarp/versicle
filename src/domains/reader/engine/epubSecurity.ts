@@ -5,7 +5,7 @@
  * Before this module, the sanitize-at-serialize hook and the iframe-sandbox
  * MutationObserver patch were duplicated between the live reader
  * (useEpubReader) and the offscreen ingestion renderer
- * (lib/offscreen-renderer) — and only the live copy honored the
+ * (engine/offscreen/offscreen-renderer) — and only the live copy honored the
  * `__VERSICLE_SANITIZATION_DISABLED__` E2E kill-switch, UNCONDITIONALLY
  * (reachable in prod builds: boundary rule 9 violation, prep doc Reality
  * #10). One implementation now serves both paths, which makes the
