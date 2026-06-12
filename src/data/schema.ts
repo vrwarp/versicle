@@ -45,6 +45,7 @@ import type {
 import type {
   CacheAudioBlobRow,
   CacheRenderMetricsRow,
+  CacheSearchTextRow,
   CacheSessionStateRow,
   CacheTtsPreparationRow,
   TableImageRow,
@@ -69,10 +70,14 @@ export const DB_NAME = 'EpubLibraryDB';
 /**
  * Current schema version. Bumping this is a user-data format change and is
  * governed by the one-in-flight rule (master plan §4 rule 4). v25 (P3-13)
- * is Phase 3's format change; the next IDB bump belongs to a later phase
- * and must add a MIGRATIONS step, never edit an existing one.
+ * was Phase 3's format change. v26 (Phase 7 §F) is the sanctioned additive
+ * fallback the P7 prep doc names ("additive v26 through P3's versioned
+ * migration registry"): it only CREATES the empty `cache_search_text` store
+ * — cache-domain, rebuildable, no data is touched, absence on older builds
+ * simply means search re-extracts (current behavior). The next IDB bump
+ * must add a MIGRATIONS step, never edit an existing one.
  */
-export const DB_VERSION = 25;
+export const DB_VERSION = 26;
 
 /**
  * Interface defining the schema for the IndexedDB database.
@@ -123,6 +128,12 @@ export interface EpubLibraryDB extends DBSchema {
     indexes: {
       by_bookId: string;
     };
+  };
+  /** v26 (Phase 7 §F): per-book plain-text search corpus, written at import
+   *  and deleted with the book. Rebuildable — absence triggers re-extraction. */
+  cache_search_text: {
+    key: string;
+    value: CacheSearchTextRow;
   };
 
   // --- DOMAIN 3: APP (Sync Infrastructure + Schema Evolution) ---
@@ -330,6 +341,19 @@ async function migrateToV25(
 }
 
 /**
+ * The v26 step (Phase 7 §F): create the EMPTY `cache_search_text` store —
+ * the persisted per-book search corpus written at import and lazily on
+ * first search. Purely additive: no existing data is read or moved.
+ * Cache-domain and rebuildable, so the rollback story is trivial (the store
+ * is regenerated from the EPUB if ever lost).
+ */
+function migrateToV26(db: IDBPDatabase<EpubLibraryDB>): void {
+  if (!db.objectStoreNames.contains('cache_search_text')) {
+    db.createObjectStore('cache_search_text', { keyPath: 'bookId' });
+  }
+}
+
+/**
  * The versioned migration registry (D7). APPEND-ONLY: released steps are
  * persisted-format surface (migrations.test.ts runs them against committed
  * v18/v24 fixtures); a later fix is a later step, never an edit. Ordered
@@ -338,6 +362,7 @@ async function migrateToV25(
  */
 export const MIGRATIONS: readonly IdbMigration[] = [
   { toVersion: 25, migrate: migrateToV25 },
+  { toVersion: 26, migrate: migrateToV26 },
 ];
 
 /**

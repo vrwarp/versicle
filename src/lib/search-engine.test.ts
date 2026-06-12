@@ -189,19 +189,56 @@ describe('SearchEngine', () => {
         });
     });
 
-    describe('documented current behavior: case-fold excerpt misalignment (phase7 PR-0c pin; fixed by PR-S2)', () => {
-        it('loses the match from the excerpt when enough length-changing characters precede it', () => {
-            // 45 × "İ" lowercase to 90 code units, so the match index found in
-            // the lowercased haystack is shifted +45 relative to the ORIGINAL
-            // string the excerpt is sliced from — the excerpt window no longer
-            // contains the match. PR-S2 (original-string matching) flips this
-            // assertion to `toContain('target')` deliberately.
+    describe('regression: case-fold excerpt misalignment (pinned broken at PR-0c; FIXED by PR-S2)', () => {
+        it('keeps the match inside the excerpt even when length-changing characters precede it', () => {
+            // 45 × "İ" lowercase to 90 code units. The old lowercase-then-slice
+            // scan found the match at the LOWERCASED index (+45 drift) and
+            // sliced the original string there, losing the match from its own
+            // excerpt — pinned as documented-current-behavior at the entry
+            // gate. PR-S2's original-string matching flips this deliberately.
             const text = 'İ'.repeat(45) + 'target';
             engine.indexBook('turkish', [{ id: '1', href: 'i.html', text }]);
 
             const results = engine.search('turkish', 'target');
             expect(results).toHaveLength(1);
-            expect(results[0].excerpt).not.toContain('target');
+            expect(results[0].excerpt).toContain('target');
+        });
+    });
+
+    describe('searchDetailed (Phase 7 §F: per-occurrence offsets + honest truncation)', () => {
+        it('reports charOffset/matchLength/occurrence against the ORIGINAL string', () => {
+            const text = 'Apple banana apple orange Apple.';
+            engine.indexBook('occ', [{ id: '1', href: 'chap1.html', text, title: 'Fruit' }]);
+
+            const { results, truncated } = engine.searchDetailed('occ', 'apple');
+
+            expect(truncated).toBe(false);
+            expect(results.map((r) => r.occurrence)).toEqual([1, 2, 3]);
+            expect(results.map((r) => r.charOffset)).toEqual([0, 13, 26]);
+            for (const r of results) {
+                expect(text.substring(r.charOffset, r.charOffset + r.matchLength).toLowerCase()).toBe('apple');
+                expect(r.sectionTitle).toBe('Fruit');
+                expect(r.cfi).toBeUndefined(); // CFI is resolved lazily, never by the engine
+            }
+        });
+
+        it('sets truncated instead of silently capping', () => {
+            engine.indexBook('cap', [{ id: '1', href: 'limit.html', text: 'repeat '.repeat(100) }]);
+
+            const capped = engine.searchDetailed('cap', 'repeat');
+            expect(capped.results).toHaveLength(50);
+            expect(capped.truncated).toBe(true);
+
+            const generous = engine.searchDetailed('cap', 'repeat', { limit: 200 });
+            expect(generous.results).toHaveLength(100);
+            expect(generous.truncated).toBe(false);
+        });
+
+        it('treats the query as an escaped literal (regex metacharacters inert)', () => {
+            engine.indexBook('lit', [{ id: '1', href: 'c.html', text: 'a (b) c .* d' }]);
+            expect(engine.searchDetailed('lit', '.*').results).toHaveLength(1);
+            expect(engine.searchDetailed('lit', '(b)').results).toHaveLength(1);
+            expect(engine.searchDetailed('lit', 'x+').results).toHaveLength(0);
         });
     });
 
