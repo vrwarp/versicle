@@ -13,10 +13,9 @@ import { LexiconManager } from './LexiconManager';
 
 import { useRemoteProgress } from '@hooks/useRemoteProgress';
 import { findTocItem, resolveSyntheticPreference } from '@lib/reader/titleResolver';
+import { readerCommandsRegistry } from '@domains/reader/ui/ReaderCommands';
 
-
-
-export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition }) => {
+export const ReaderControlBar: React.FC = () => {
     // Correctly using the store-based toast
     const showToast = useToastStore(state => state.showToast);
     const navigate = useNavigate();
@@ -38,13 +37,12 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
     const isPlaying = useTTSPlaybackStore(state => state.isPlaying);
 
     // Popover state is ephemeral UI state (never synced via Yjs) — it lives in useReaderUIStore.
-    const { immersiveMode, toc, currentSectionTitle, currentSectionId, currentBookId, jumpToLocation, resetCompassState, popover, hidePopover } = useReaderUIStore(useShallow(state => ({
+    const { immersiveMode, toc, currentSectionTitle, currentSectionId, currentBookId, resetCompassState, popover, hidePopover } = useReaderUIStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
         toc: state.toc,
         currentSectionTitle: state.currentSectionTitle,
         currentSectionId: state.currentSectionId,
         currentBookId: state.currentBookId,
-        jumpToLocation: state.jumpToLocation,
         resetCompassState: state.resetCompassState,
         popover: state.popover,
         hidePopover: state.hidePopover
@@ -162,11 +160,12 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
                 }
                 break;
             case 'play':
-                // Play from selection
+                // Play from selection (reader command registry — the
+                // callbacks-in-store path died with Phase 6 §5a)
                 if (popover.cfiRange) {
-                    const playFromSelection = useReaderUIStore.getState().playFromSelection;
-                    if (playFromSelection) {
-                        playFromSelection(popover.cfiRange);
+                    const commands = readerCommandsRegistry.get();
+                    if (commands) {
+                        commands.playFromSelection(popover.cfiRange);
                     } else {
                         showToast("Audio not ready yet", "error");
                     }
@@ -245,14 +244,14 @@ export const ReaderControlBar: React.FC<{ rendition?: unknown }> = ({ rendition 
                             delete: !!popover.id
                         }}
                         onClick={() => {
-                            if (variant === 'sync-alert' && remoteProgress && jumpToLocation) {
-                                jumpToLocation(remoteProgress.cfi);
+                            const commands = readerCommandsRegistry.get();
+                            if (variant === 'sync-alert' && remoteProgress && commands) {
+                                commands.jumpTo(remoteProgress.cfi);
                                 setDismissedSyncAlerts(prev => new Set(prev).add(remoteProgress.deviceId));
                             } else if (variant === 'summary' && lastReadBook) {
                                 navigate(`/read/${lastReadBook.id}`);
                             }
                         }}
-                        rendition={rendition}
                     />
                 </div>
             </div>

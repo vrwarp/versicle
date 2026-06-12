@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { CompassPill } from './CompassPill';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
+import { registerReaderCommands } from '@domains/reader/ui/ReaderCommands';
 
 // Mock Lucide icons
 vi.mock('lucide-react', () => ({
@@ -62,6 +63,26 @@ vi.mock('@hooks/useSectionDuration', () => ({
     })
 }));
 
+/**
+ * Installs a fake ReaderCommands object in the registry — the stand-in for
+ * the reader shell's ReaderCommandsProvider (the pill is mounted OUTSIDE
+ * the reader tree, so it consumes the registry, not the context).
+ */
+function registerFakeCommands() {
+    const commands = {
+        jumpTo: vi.fn(),
+        nextPage: vi.fn(),
+        prevPage: vi.fn(),
+        nextChapter: vi.fn(),
+        prevChapter: vi.fn(),
+        playFromSelection: vi.fn(),
+        scrollToText: vi.fn(),
+        refineSelection: vi.fn(() => null),
+    };
+    const unregister = registerReaderCommands(commands);
+    return { commands, unregister };
+}
+
 describe('CompassPill', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -105,7 +126,7 @@ describe('CompassPill', () => {
         expect(handleAction).toHaveBeenCalledWith('dismiss');
     });
 
-    it('dispatches reader:chapter-nav event when "prev" button is clicked and not playing', () => {
+    it('calls prevChapter on the command registry when "prev" is clicked and not playing', () => {
         // Setup not playing
         vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: false,
@@ -116,20 +137,21 @@ describe('CompassPill', () => {
             pause: mockPause
         } as any);
 
-        render(<CompassPill variant="active" />);
+        const { commands, unregister } = registerFakeCommands();
+        try {
+            render(<CompassPill variant="active" />);
 
-        const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
-        const prevButton = screen.getByTestId('icon-chevrons-left').closest('button');
+            const prevButton = screen.getByTestId('icon-chevrons-left').closest('button');
+            fireEvent.click(prevButton!);
 
-        fireEvent.click(prevButton!);
-
-        expect(dispatchSpy).toHaveBeenCalled();
-        const event = dispatchSpy.mock.calls[0][0] as CustomEvent;
-        expect(event.type).toBe('reader:chapter-nav');
-        expect(event.detail.direction).toBe('prev');
+            expect(commands.prevChapter).toHaveBeenCalledTimes(1);
+            expect(commands.nextChapter).not.toHaveBeenCalled();
+        } finally {
+            unregister();
+        }
     });
 
-    it('dispatches reader:chapter-nav event when "next" button is clicked and not playing', () => {
+    it('calls nextChapter on the command registry when "next" is clicked and not playing', () => {
         // Setup not playing
         vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: false,
@@ -140,21 +162,23 @@ describe('CompassPill', () => {
             pause: mockPause
         } as any);
 
-        render(<CompassPill variant="active" />);
+        const { commands, unregister } = registerFakeCommands();
+        try {
+            render(<CompassPill variant="active" />);
 
-        const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
-        const nextButton = screen.getByTestId('icon-chevrons-right').closest('button');
+            const nextButton = screen.getByTestId('icon-chevrons-right').closest('button');
+            fireEvent.click(nextButton!);
 
-        fireEvent.click(nextButton!);
-
-        expect(dispatchSpy).toHaveBeenCalled();
-        const event = dispatchSpy.mock.calls[0][0] as CustomEvent;
-        expect(event.type).toBe('reader:chapter-nav');
-        expect(event.detail.direction).toBe('next');
+            expect(commands.nextChapter).toHaveBeenCalledTimes(1);
+        } finally {
+            unregister();
+        }
     });
 
-    it('dispatches reader:chapter-nav event when "next" button is clicked and playing', () => {
-        // Setup playing
+    it('calls nextChapter when "next" is clicked while playing (pill stays TTS-agnostic)', () => {
+        // Setup playing — the TTS-aware routing lives INSIDE the reader's
+        // nextChapter command, not in the pill (it replaced the
+        // reader:chapter-nav CustomEvent the same way).
         vi.mocked(useTTSPlaybackStore).mockReturnValue({
             isPlaying: true,
             queue: [{ title: 'Item 1' }],
@@ -164,23 +188,40 @@ describe('CompassPill', () => {
             pause: mockPause
         } as any);
 
+        const { commands, unregister } = registerFakeCommands();
+        try {
+            render(<CompassPill variant="active" />);
+
+            // Should still show chevrons, not skip icons
+            expect(screen.getByTestId('icon-chevrons-right')).toBeInTheDocument();
+            expect(screen.queryByTestId('icon-skip-forward')).not.toBeInTheDocument();
+
+            const nextButton = screen.getByTestId('icon-chevrons-right').closest('button');
+            fireEvent.click(nextButton!);
+
+            expect(commands.nextChapter).toHaveBeenCalledTimes(1);
+
+            // Should NOT call jumpTo
+            expect(mockJumpTo).not.toHaveBeenCalled();
+        } finally {
+            unregister();
+        }
+    });
+
+    it('nav arrows are no-ops when no reader is open (empty registry)', () => {
+        vi.mocked(useTTSPlaybackStore).mockReturnValue({
+            isPlaying: false,
+            queue: [{ title: 'Item 1' }],
+            currentIndex: 0,
+            jumpTo: mockJumpTo,
+            play: mockPlay,
+            pause: mockPause
+        } as any);
+
         render(<CompassPill variant="active" />);
 
-        // Should still show chevrons, not skip icons
-        expect(screen.getByTestId('icon-chevrons-right')).toBeInTheDocument();
-        expect(screen.queryByTestId('icon-skip-forward')).not.toBeInTheDocument();
-
-        const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
         const nextButton = screen.getByTestId('icon-chevrons-right').closest('button');
-        fireEvent.click(nextButton!);
-
-        expect(dispatchSpy).toHaveBeenCalled();
-        const event = dispatchSpy.mock.calls[0][0] as CustomEvent;
-        expect(event.type).toBe('reader:chapter-nav');
-        expect(event.detail.direction).toBe('next');
-
-        // Should NOT call jumpTo
-        expect(mockJumpTo).not.toHaveBeenCalled();
+        expect(() => fireEvent.click(nextButton!)).not.toThrow();
     });
 
     it('renders compact mode correctly', () => {

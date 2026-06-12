@@ -48,6 +48,10 @@ import { AnnotationMarkerOverlay } from './AnnotationMarkerOverlay';
 import { useReaderNavigation } from '@hooks/useReaderNavigation';
 import { ReaderHighlightsStyles } from './ReaderHighlightsStyles';
 import {
+    ReaderCommandsProvider,
+    type ReaderCommands,
+} from '@domains/reader/ui/ReaderCommands';
+import {
     annotationClassName,
     AUDIO_BOOKMARK_PENDING_CLASS,
 } from '@domains/reader/engine/highlightStyles';
@@ -105,7 +109,6 @@ export const ReaderView: React.FC = () => {
         currentSectionId,
         immersiveMode,
         setImmersiveMode,
-        setPlayFromSelection,
         setCurrentSection,
         setCurrentBookId,
         resetCompassState,
@@ -120,8 +123,6 @@ export const ReaderView: React.FC = () => {
         currentSectionId: state.currentSectionId,
         immersiveMode: state.immersiveMode,
         setImmersiveMode: state.setImmersiveMode,
-        setPlayFromSelection: state.setPlayFromSelection,
-        setJumpToLocation: state.setJumpToLocation,
         setCurrentSection: state.setCurrentSection,
         setCurrentBookId: state.setCurrentBookId,
         resetCompassState: state.resetCompassState,
@@ -413,24 +414,6 @@ export const ReaderView: React.FC = () => {
     useEffect(() => {
         setIsLoading(hookLoading);
     }, [hookLoading, setIsLoading]);
-
-    // Register jumpToLocation
-    const { setJumpToLocation } = useReaderUIStore(useShallow(state => ({
-        setJumpToLocation: state.setJumpToLocation
-    })));
-
-    useEffect(() => {
-        if (setJumpToLocation && engine) {
-            setJumpToLocation((cfi) => {
-                try {
-                    engine.display(cfi);
-                } catch (e) {
-                    logger.error("Failed to jump to location", e);
-                }
-            });
-            // Cleanup provided in store reset, effectively replacement overrides previous
-        }
-    }, [setJumpToLocation, engine]);
 
     // Handle errors
     useEffect(() => {
@@ -793,28 +776,6 @@ export const ReaderView: React.FC = () => {
         engine?.next();
     }, [engine]);
 
-    // Listen for custom chapter navigation events from CompassPill
-    useEffect(() => {
-        const handleChapterNav = (e: CustomEvent<{ direction: 'next' | 'prev' }>) => {
-            const { status } = useTTSPlaybackStore.getState();
-            const isTTSActive = status !== 'stopped';
-
-            if (isTTSActive) {
-                if (e.detail.direction === 'next') {
-                    audio.skipToNextSection();
-                } else {
-                    audio.skipToPreviousSection();
-                }
-            } else {
-                if (e.detail.direction === 'next') handleNext();
-                else handlePrev();
-            }
-        };
-
-        window.addEventListener('reader:chapter-nav', handleChapterNav as EventListener);
-        return () => window.removeEventListener('reader:chapter-nav', handleChapterNav as EventListener);
-    }, [handleNext, handlePrev, audio]);
-
     const scrollToText = (text: string) => {
         const iframe = viewerRef.current?.querySelector('iframe');
         if (iframe && iframe.contentWindow) {
@@ -915,11 +876,66 @@ export const ReaderView: React.FC = () => {
         }
     }, [engine, audio]);
 
-    // Register play callback
+    // The reader's typed command surface (Phase 6 §5a): consumed in-tree
+    // via context and by out-of-tree mounts (CompassPill in RootLayout)
+    // through readerCommandsRegistry — the named replacement for the
+    // reader:chapter-nav CustomEvent and the callbacks-in-store.
+    const scrollToTextRef = useRef(scrollToText);
+    scrollToTextRef.current = scrollToText;
+    const handlePlayFromSelectionRef = useRef(handlePlayFromSelection);
     useEffect(() => {
-        setPlayFromSelection(handlePlayFromSelection);
-        return () => setPlayFromSelection(undefined);
-    }, [handlePlayFromSelection, setPlayFromSelection]);
+        handlePlayFromSelectionRef.current = handlePlayFromSelection;
+    }, [handlePlayFromSelection]);
+    const commands = useMemo<ReaderCommands>(() => ({
+        jumpTo: (cfi) => {
+            try {
+                engineRef.current?.display(cfi);
+            } catch (e) {
+                logger.error("Failed to jump to location", e);
+            }
+        },
+        nextPage: () => { engineRef.current?.next(); },
+        prevPage: () => { engineRef.current?.prev(); },
+        nextChapter: () => {
+            // TTS-aware routing (the old reader:chapter-nav listener body).
+            const { status } = useTTSPlaybackStore.getState();
+            if (status !== 'stopped') {
+                audio.skipToNextSection();
+            } else {
+                engineRef.current?.next();
+            }
+        },
+        prevChapter: () => {
+            const { status } = useTTSPlaybackStore.getState();
+            if (status !== 'stopped') {
+                audio.skipToPreviousSection();
+            } else {
+                engineRef.current?.prev();
+            }
+        },
+        playFromSelection: (cfiRange) => handlePlayFromSelectionRef.current(cfiRange),
+        scrollToText: (text) => scrollToTextRef.current(text),
+        refineSelection: () => {
+            // D11: the audio-triage selection refinement, reachable again
+            // (it rode a rendition prop that was never supplied). Reads the
+            // current iframe selection through the engine port.
+            const currentEngine = engineRef.current;
+            if (!currentEngine) return null;
+            try {
+                const view = currentEngine.getContentViews()[0];
+                const selection = view?.window.getSelection();
+                if (selection && selection.rangeCount > 0 && selection.toString().trim()) {
+                    const cfiRange = view.cfiFromRange(selection.getRangeAt(0));
+                    const text = selection.toString();
+                    selection.removeAllRanges();
+                    if (cfiRange) return { cfiRange, text };
+                }
+            } catch {
+                // Selection extraction failed; the caller keeps its original data
+            }
+            return null;
+        },
+    }), [audio]);
 
     // Compute device markers for TOC
     const devices = useDeviceStore(state => state.devices);
@@ -985,6 +1001,7 @@ export const ReaderView: React.FC = () => {
     });
     
     return (
+        <ReaderCommandsProvider commands={commands} engine={engine}>
         <div
             data-testid="reader-view"
             className="flex flex-col h-screen bg-background text-foreground relative"
@@ -1298,5 +1315,6 @@ export const ReaderView: React.FC = () => {
 
             <ReaderHighlightsStyles currentTheme={currentTheme} />
         </div>
+        </ReaderCommandsProvider>
     );
 };

@@ -33,13 +33,11 @@ const MOCK_READER_UI_STATE = {
     reset: vi.fn(),
     setImmersiveMode: vi.fn(),
     immersiveMode: false,
-    setPlayFromSelection: vi.fn(),
     currentSectionTitle: null,
     currentSectionId: null,
     setCurrentSection: vi.fn(),
     setCurrentBookId: vi.fn(),
     resetCompassState: vi.fn(), // Added to prevent undefined() calls
-    playFromSelection: null,
     // Popover state moved here from useAnnotationStore (popover-desync hotfix)
     showPopover: vi.fn(),
     hidePopover: vi.fn(),

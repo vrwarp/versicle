@@ -8,6 +8,7 @@ import { useVocabularyStore } from '@store/useVocabularyStore';
 import { useChineseDictionary } from '@hooks/useChineseDictionary';
 import { useShallow } from 'zustand/react/shallow';
 import { useSectionDuration } from '@hooks/useSectionDuration';
+import { readerCommandsRegistry } from '@domains/reader/ui/ReaderCommands';
 import { ChevronsLeft, ChevronsRight, Play, Pause, StickyNote, Mic, Copy, X, Loader2, Check, BookOpen, ArrowUpCircle, Smartphone, Trash2, GraduationCap } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '@lib/utils';
@@ -35,8 +36,6 @@ interface CompassPillProps {
     pronounce?: boolean;
     delete?: boolean;
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  rendition?: any; // Pass rendition for triage operations
 }
 
 // Helper to identify adjacent compound words in the selection for lookup
@@ -166,8 +165,7 @@ export const CompassPill: React.FC<CompassPillProps> = ({
   progress: overrideProgress,
   onClick,
   onAnnotationAction,
-  availableActions,
-  rendition
+  availableActions
 }) => {
   const compassState = useReaderUIStore(state => state.compassState || {});
   const resetCompassState = useReaderUIStore(state => state.resetCompassState);
@@ -256,21 +254,13 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
           // If the user adjusted the selection, use the new bounds.
           // Otherwise, fall back to the original annotation data.
-          if (rendition) {
-              try {
-                  const contents = rendition.manager?.getContents();
-                  const currentSelection = contents?.[0]?.window?.getSelection();
-                  if (currentSelection && currentSelection.rangeCount > 0 && currentSelection.toString().trim()) {
-                      newCfiRange = new rendition.epubcfi().generateCfiFromRange(
-                          currentSelection.getRangeAt(0),
-                          contents[0].cfiBase
-                      );
-                      newText = currentSelection.toString();
-                      currentSelection.removeAllRanges();
-                  }
-              } catch {
-                  // Selection extraction failed; use original annotation data
-              }
+          // (ReaderCommands.refineSelection — D11: this branch rode a
+          // `rendition` prop that was never supplied; the registry makes
+          // it reachable from this out-of-tree mount.)
+          const refined = readerCommandsRegistry.get()?.refineSelection();
+          if (refined) {
+              newCfiRange = refined.cfiRange;
+              newText = refined.text;
           }
 
           // Mutate CRDT Store: Delete dirty dragnet, insert precise highlight
@@ -315,12 +305,16 @@ export const CompassPill: React.FC<CompassPillProps> = ({
 
   const progress = overrideProgress !== undefined ? overrideProgress : hookProgress;
 
-  // Helper for chapter navigation
+  // Helper for chapter navigation: the reader's command registry (the
+  // TTS-aware routing lives in nextChapter/prevChapter — this pill stays
+  // agnostic, exactly like the CustomEvent dispatch it replaced). Null when
+  // no reader is open; the pill's nav arrows are then no-ops, matching the
+  // legacy listener absence.
   const handleChapterNav = (direction: 'prev' | 'next') => {
-    // Dispatch custom event for ReaderView to pick up
-    // This ensures we always navigate chapters/pages, regardless of TTS status
-    const event = new CustomEvent('reader:chapter-nav', { detail: { direction } });
-    window.dispatchEvent(event);
+    const commands = readerCommandsRegistry.get();
+    if (!commands) return;
+    if (direction === 'next') commands.nextChapter();
+    else commands.prevChapter();
   };
 
   const handleTogglePlay = (e: React.MouseEvent) => {
