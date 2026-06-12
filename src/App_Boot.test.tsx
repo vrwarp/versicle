@@ -104,11 +104,17 @@ vi.mock('./domains/sync/workspaces/stagedSwap', () => ({
   withSwapLock: vi.fn((work: () => Promise<unknown>) => work()),
 }));
 
-vi.mock('./lib/drive/DriveScannerService', () => ({
-  DriveScannerService: {
+// P9: the DriveScannerService façade is deleted — backgroundTasks talks the
+// domain holder (getDriveLibrarySync) directly.
+vi.mock('./domains/google/drive/holder', () => ({
+  getDriveClient: vi.fn(),
+  setDriveClient: vi.fn(),
+  getDriveLibrarySync: vi.fn(() => ({
     shouldAutoSync: h.shouldAutoSync,
     scanAndIndex: h.scanAndIndex,
-  },
+  })),
+  setDriveLibrarySync: vi.fn(),
+  resetDriveHoldersForTesting: vi.fn(),
 }));
 
 vi.mock('./store/useDriveStore', () => ({

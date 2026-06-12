@@ -4,7 +4,7 @@ import { Button } from '../ui/Button';
 import { CloudOff, Loader2, Download, Cloud } from 'lucide-react';
 import type { BookMetadata } from '~types/db';
 import { useDriveStore } from '@store/useDriveStore';
-import { DriveScannerService } from '@lib/drive/DriveScannerService';
+import { getDriveLibrarySync } from '@domains/google';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 import { getGoogleAuthClient } from '@domains/google';
 import { AlertCircle } from 'lucide-react';
@@ -79,7 +79,8 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
             // we bypass the parent onRestore and go direct to ScannerService -> Library
             // or we could fetch blob and pass to onRestore(new File(...))
             // Let's use ScannerService as it encapsulates the download
-            await DriveScannerService.importFile(cloudMatch.id, cloudMatch.name, { overwrite: true });
+            // User gesture: interactive token acquisition (the deleted façade's default).
+            await getDriveLibrarySync().importFile(cloudMatch.id, cloudMatch.name, { overwrite: true }, { interactive: true });
             onOpenChange(false);
         } catch (error) {
             console.error(error);

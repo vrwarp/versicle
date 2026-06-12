@@ -36,14 +36,6 @@ vi.mock('@app/repositories/BookRepository', () => ({
     }
 }));
 
-vi.mock('../genai/GenAIService', () => ({
-    genAIService: {
-        isConfigured: vi.fn(() => false),
-        configure: vi.fn(),
-        generateTableAdaptations: vi.fn().mockResolvedValue([]),
-    }
-}));
-
 vi.mock('@store/useGenAIStore', () => ({
     useGenAIStore: {
         getState: vi.fn(() => ({

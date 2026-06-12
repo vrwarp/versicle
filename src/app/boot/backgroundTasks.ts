@@ -11,7 +11,7 @@ import type { BootTask } from '../bootstrap';
 import { getDeviceId } from '@lib/device-id';
 import { useDeviceStore } from '@store/useDeviceStore';
 import { useDriveStore } from '@store/useDriveStore';
-import { DriveScannerService } from '@lib/drive/DriveScannerService';
+import { getDriveLibrarySync } from '@domains/google';
 import { GoogleAuthRequiredError } from '@domains/google';
 import { audioCache } from '@data/repos/audioCache';
 import { bookContent } from '@data/repos/bookContent';
@@ -90,14 +90,15 @@ export const driveAutoScanTask: BootTask = {
     const now = Date.now();
     if (driveStore.lastScanTime && now - driveStore.lastScanTime <= ONE_WEEK) return;
 
-    const shouldSync = await DriveScannerService.shouldAutoSync();
+    const shouldSync = await getDriveLibrarySync().shouldAutoSync();
     if (!shouldSync) {
       logger.info('Background Drive Scan: Skipping sync based on heuristic or connection status.');
       return;
     }
 
     logger.info('Background Drive Scan: Heuristic triggered, refreshing index...');
-    DriveScannerService.scanAndIndex().catch(err => {
+    // Silent by default (boot policy): never pops auth UI from boot.
+    getDriveLibrarySync().scanAndIndex().catch(err => {
       if (err instanceof GoogleAuthRequiredError) {
         // Silent path: no cached token. Never pops UI, never disconnects —
         // the user reconnects from settings (GG-2 reversal).

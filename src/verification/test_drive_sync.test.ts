@@ -1,9 +1,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mockDriveService } from '@test/harness/MockDriveService';
-import { DriveScannerService } from '@lib/drive/DriveScannerService';
 import {
     DriveLibrarySync,
+    getDriveLibrarySync,
     setDriveLibrarySync,
     resetDriveHoldersForTesting,
 } from '@domains/google';
@@ -16,9 +16,10 @@ import { useBookStore } from '@store/useBookStore';
 const mockLibraryAddBook = vi.fn<(file: File, options?: { overwrite?: boolean }) => Promise<unknown>>()
     .mockResolvedValue(undefined);
 
-// Phase 7: the DriveScannerService facade delegates to the composed
-// DriveLibrarySync — wire one here over the functional MockDriveService
-// (the harness double is DriveClient-shaped) + the REAL stores.
+// Phase 7/P9: the journeys drive the composed DriveLibrarySync (the
+// DriveScannerService facade is deleted) — wire one here over the
+// functional MockDriveService (the harness double is DriveClient-shaped)
+// + the REAL stores.
 function wireMockDriveSync(): void {
     resetDriveHoldersForTesting();
     setDriveLibrarySync(new DriveLibrarySync({
@@ -118,8 +119,8 @@ describe('Google Drive Sync & Import E2E', () => {
 
         useDriveStore.getState().setLinkedFolder(folderId, 'Sync Folder');
 
-        // Manual trigger via DriveScannerService
-        await DriveScannerService.scanAndIndex();
+        // Manual trigger via the wired DriveLibrarySync
+        await getDriveLibrarySync().scanAndIndex();
 
         const index = useDriveStore.getState().index;
         expect(index).toHaveLength(1);
@@ -128,7 +129,7 @@ describe('Google Drive Sync & Import E2E', () => {
 
         // Add another file and sync again
         mockDriveService.addFile('file-2', 'Book B.epub', 'application/epub+zip', folderId, 'content');
-        await DriveScannerService.scanAndIndex();
+        await getDriveLibrarySync().scanAndIndex();
 
         const updatedIndex = useDriveStore.getState().index;
         expect(updatedIndex).toHaveLength(2);
@@ -144,14 +145,14 @@ describe('Google Drive Sync & Import E2E', () => {
 
         // Setup Link & Scan
         useDriveStore.getState().setLinkedFolder(folderId, 'Import Folder');
-        await DriveScannerService.scanAndIndex();
+        await getDriveLibrarySync().scanAndIndex();
 
         // Verify it's in the index
         const indexFile = useDriveStore.getState().index.find(f => f.id === fileId);
         expect(indexFile).toBeDefined();
 
         // Perform Import
-        await DriveScannerService.importFile(fileId, 'New Adventure.epub');
+        await getDriveLibrarySync().importFile(fileId, 'New Adventure.epub', undefined, { interactive: true });
 
         // Expect the library port (the orchestrator in production) to receive the file.
         expect(mockLibraryAddBook).toHaveBeenCalledWith(
@@ -172,7 +173,7 @@ describe('Google Drive Sync & Import E2E', () => {
         mockDriveService.addFile(fileId, bookTitle, 'application/epub+zip', folderId, 'spooky content');
 
         useDriveStore.getState().setLinkedFolder(folderId, 'Ghost Folder');
-        await DriveScannerService.scanAndIndex();
+        await getDriveLibrarySync().scanAndIndex();
 
         // 2. Simulate Ghost Book scenario:
         // Populate useBookStore with the "Ghost Book"
@@ -198,7 +199,7 @@ describe('Google Drive Sync & Import E2E', () => {
         const match = useDriveStore.getState().findFile(bookTitle, bookTitle);
         expect(match).toBeDefined();
 
-        await DriveScannerService.importFile(match!.id, match!.name, { overwrite: true });
+        await getDriveLibrarySync().importFile(match!.id, match!.name, { overwrite: true }, { interactive: true });
 
         // Since the book exists in store (matched by filename), and overwrite is
         // true, the scanner asks the library port to replace in place — the
@@ -219,12 +220,12 @@ describe('Google Drive Sync & Import E2E', () => {
         mockDriveService.addFile(fileId, 'Corrupt.epub', 'application/epub+zip', folderId, 'content');
 
         useDriveStore.getState().setLinkedFolder(folderId, 'My Books');
-        await DriveScannerService.scanAndIndex();
+        await getDriveLibrarySync().scanAndIndex();
 
         // Sabotage the mock
         mockDriveService.deleteFileContent(fileId);
 
-        await expect(DriveScannerService.importFile(fileId, 'Corrupt.epub'))
+        await expect(getDriveLibrarySync().importFile(fileId, 'Corrupt.epub', undefined, { interactive: true }))
             .rejects.toThrow('File content not found');
     });
 });

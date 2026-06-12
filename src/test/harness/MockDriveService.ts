@@ -1,5 +1,5 @@
 
-import type { DriveFile } from '@lib/drive/DriveService';
+import type { DriveFile } from '@domains/google';
 
 export class MockDriveService {
     private files: Map<string, DriveFile> = new Map();
@@ -51,7 +51,7 @@ export class MockDriveService {
         return file;
     }
 
-    // Mocked methods matching DriveService
+    // Mocked methods matching the DriveClient read surface
     async listFolders(parentId = 'root'): Promise<DriveFile[]> {
         return Array.from(this.files.values()).filter(f =>
             f.parents?.includes(parentId) &&

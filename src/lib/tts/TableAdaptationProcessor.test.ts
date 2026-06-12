@@ -12,7 +12,6 @@ vi.mock('@data/repos/bookContent', () => ({
         getBookStructure: vi.fn(),
     }
 }));
-vi.mock('../genai/GenAIService');
 vi.mock('@store/useGenAIStore');
 
 vi.mock('@app/repositories/ContentAnalysisRepository', () => ({

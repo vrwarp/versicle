@@ -5,7 +5,7 @@ import { Button } from '../ui/Button';
 import { Search, Download, Loader2, Cloud, X } from 'lucide-react';
 import { cn } from '@lib/utils';
 import { useDriveStore, type DriveFileIndex } from '@store/useDriveStore';
-import { DriveScannerService } from '@lib/drive/DriveScannerService';
+import { getDriveLibrarySync } from '@domains/google';
 import { useToastStore } from '@store/useToastStore';
 import { useDebounce } from '@hooks/useDebounce';
 import { formatBytes, formatDate, formatRelativeTime } from '@kernel/locale/format';
@@ -35,7 +35,8 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
         if (importingId) return; // Prevent multiple
         setImportingId(file.id);
         try {
-            await DriveScannerService.importFile(file.id, file.name);
+            // User gesture: interactive token acquisition (the deleted façade's default).
+            await getDriveLibrarySync().importFile(file.id, file.name, undefined, { interactive: true });
             showToast(`Imported "${file.name}"`, 'success');
         } catch (error) {
             console.error(error);
@@ -47,7 +48,7 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
 
     const handleRefresh = async () => {
         try {
-            await DriveScannerService.scanAndIndex();
+            await getDriveLibrarySync().scanAndIndex();
         } catch {
             showToast('Failed to refresh index', 'error');
         }

@@ -63,7 +63,12 @@ vi.mock('../repositories/BookRepository', () => ({
 vi.mock('@lib/tts/TTSProviderManager', () => ({ TTSProviderManager: vi.fn() }));
 vi.mock('@lib/tts/PlatformIntegration', () => ({ PlatformIntegration: vi.fn() }));
 vi.mock('@lib/tts/LexiconService', () => ({ LexiconService: { getInstance: vi.fn() } }));
-vi.mock('@lib/genai/GenAIService', () => ({ genAIService: {} }));
+vi.mock('./genaiPort', () => ({
+    genAIIsConfigured: vi.fn(() => false),
+    genAIConfigure: vi.fn(),
+    genAIDetectContentTypes: vi.fn(),
+    genAIGenerateTableAdaptations: vi.fn(),
+}));
 
 import { applyHostCommand } from './createWorkerEngineClient';
 import { contentAnalysisRepository } from '../repositories/ContentAnalysisRepository';

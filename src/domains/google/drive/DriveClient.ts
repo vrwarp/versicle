@@ -1,8 +1,9 @@
 /**
  * DriveClient (Phase 7 §G) — the Drive v3 REST client at its final address.
  *
- * Replaces src/lib/drive/DriveService (which remains as a thin deprecated
- * façade until its consumers migrate). Changes vs the legacy client:
+ * Replaces src/lib/drive/DriveService (a thin deprecated façade until its
+ * P9 deletion — consumers now call this client directly). Changes vs the
+ * legacy client:
  *
  *  - All HTTP through `NetworkGateway.egress('drive', …)` (C9 boundary).
  *  - Typed errors: DriveApiError{status, reason} instead of message-prose

@@ -23,7 +23,12 @@ import { PlatformIntegration } from '@lib/tts/PlatformIntegration';
 import { LexiconService } from '@lib/tts/LexiconService';
 import { bookRepository } from '../repositories/BookRepository';
 import { contentAnalysisRepository } from '../repositories/ContentAnalysisRepository';
-import { genAIService } from '@lib/genai/GenAIService';
+import {
+    genAIIsConfigured,
+    genAIConfigure,
+    genAIDetectContentTypes,
+    genAIGenerateTableAdaptations,
+} from './genaiPort';
 import { createReplicatedSlices, bookSnapshotUpdates } from './replicationSpec';
 import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { useGenAIStore } from '@store/useGenAIStore';
@@ -164,12 +169,12 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         getContentAnalysis: async (bookId, sectionId) =>
             contentAnalysisRepository.getContentAnalysis(bookId, sectionId),
         getBookMetadata: (bookId) => bookRepository.getBookMetadata(bookId),
-        genAIIsConfigured: async () => genAIService.isConfigured(),
-        genAIConfigure: (apiKey, model) => genAIService.configure(apiKey, model),
+        genAIIsConfigured: async () => genAIIsConfigured(),
+        genAIConfigure: (apiKey, model) => genAIConfigure(apiKey, model),
         genAIDetectContentTypes: (nodes, hints, context) =>
-            genAIService.detectContentTypes(nodes, hints, context),
+            genAIDetectContentTypes(nodes, hints, context),
         genAIGenerateTableAdaptations: (nodes, thinkingBudget, context) =>
-            genAIService.generateTableAdaptations(nodes, thinkingBudget, context),
+            genAIGenerateTableAdaptations(nodes, thinkingBudget, context),
         applyHostCommand,
     };
 

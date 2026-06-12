@@ -4,8 +4,9 @@
  * domains-no-store is at error — src/app/google/wireGoogle.ts injects the
  * store-backed adapters).
  *
- * Replaces the static DriveScannerService (which remains as a deprecated
- * façade until its consumers migrate). The four
+ * Replaces the static DriveScannerService (a deprecated façade until its
+ * P9 deletion — consumers now resolve this orchestrator via the holder).
+ * The four
  * `error.message.includes('is not connected')` sniffs became `instanceof
  * GoogleAuthRequiredError` checks (GG-7), and the silent/interactive split
  * is explicit per call: the boot auto-scan policy stays silent (it can no

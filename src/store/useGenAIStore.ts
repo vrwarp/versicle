@@ -2,7 +2,7 @@ export type ReferenceDetectionStrategy = 'gemini' | 'deterministic';
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { GenAILogEntry } from '@lib/genai/GenAIService';
+import type { GenAILogEntry } from '@domains/google';
 import type { ContentType } from '~types/content-analysis';
 
 /**

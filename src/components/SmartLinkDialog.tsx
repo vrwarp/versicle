@@ -4,7 +4,7 @@ import { Button } from './ui/Button';
 import { Checkbox } from './ui/Checkbox';
 import { useReadingListStore } from '@store/useReadingListStore';
 import { useBookStore } from '@store/useBookStore';
-import { genAIService } from '@lib/genai/GenAIService';
+import { getGenAIClient } from '@domains/google';
 import { Loader2, Link2, Unlink } from 'lucide-react';
 import { useGenAIStore } from '@store/useGenAIStore';
 
@@ -73,7 +73,12 @@ export const SmartLinkDialog: React.FC<SmartLinkDialogProps> = ({ open, onOpenCh
             setError(null);
 
             try {
-                const generatedMappings = await genAIService.mapReadingListToLibrary(
+                // Deep feature import (first-use loading, Phase 8 §A).
+                const { mapReadingListToLibrary } = await import(
+                    '@domains/google/genai/features/libraryMapping'
+                );
+                const generatedMappings = await mapReadingListToLibrary(
+                    getGenAIClient(),
                     unmappedEntries,
                     unmappedBooks
                 );

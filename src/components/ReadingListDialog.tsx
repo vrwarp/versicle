@@ -10,7 +10,7 @@ import { EditReadingListEntryDialog } from './EditReadingListEntryDialog';
 import { exportFile } from '@lib/export';
 import { formatDate } from '@kernel/locale/format';
 import { useGenAIStore } from '@store/useGenAIStore';
-import { genAIService } from '@lib/genai/GenAIService';
+import { getGenAIClient } from '@domains/google';
 import { SmartLinkDialog } from './SmartLinkDialog';
 
 interface ReadingListDialogProps {
@@ -98,8 +98,8 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
     const [isSmartLinkOpen, setIsSmartLinkOpen] = useState(false);
     const isGenAIEnabled = useGenAIStore(state => state.isEnabled);
 
-    // Using genAIService to check if any provider is configured (API Key or mock)
-    const canUseGenAI = isGenAIEnabled && genAIService.isConfigured();
+    // The domain client reports whether any provider is configured (API key or mock).
+    const canUseGenAI = isGenAIEnabled && getGenAIClient().isConfigured();
 
     // No need for useEffect -> refreshEntries, store is reactive
 

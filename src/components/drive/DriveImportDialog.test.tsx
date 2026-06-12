@@ -6,11 +6,15 @@ import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 
 // Mock dependencies
 vi.mock('@store/useDriveStore');
-vi.mock('@lib/drive/DriveScannerService', () => ({
-    DriveScannerService: {
-        scanAndIndex: vi.fn(),
-        importFile: vi.fn(),
-    }
+// P9: the DriveScannerService façade is deleted — the dialog talks the
+// domain holder (getDriveLibrarySync) directly.
+const driveSync = { scanAndIndex: vi.fn(), importFile: vi.fn() };
+vi.mock('@domains/google/drive/holder', () => ({
+    getDriveClient: vi.fn(),
+    setDriveClient: vi.fn(),
+    getDriveLibrarySync: vi.fn(() => driveSync),
+    setDriveLibrarySync: vi.fn(),
+    resetDriveHoldersForTesting: vi.fn(),
 }));
 vi.mock('@store/useToastStore', () => ({
     useToastStore: () => vi.fn(),
@@ -46,15 +50,13 @@ describe('DriveImportDialog', () => {
         expect(screen.getByText('Manual Sync')).toBeInTheDocument();
     });
 
-    it('calls scanAndIndex when Manual Sync is clicked', async () => {
-        const { DriveScannerService } = await import('@lib/drive/DriveScannerService');
-
+    it('calls scanAndIndex when Manual Sync is clicked', () => {
         render(<DriveImportDialog isOpen={true} onClose={() => {}} />);
 
         const syncButton = screen.getByText('Manual Sync');
         fireEvent.click(syncButton);
 
-        expect(DriveScannerService.scanAndIndex).toHaveBeenCalled();
+        expect(driveSync.scanAndIndex).toHaveBeenCalled();
     });
 
     it('shows Syncing state when isScanning is true', () => {

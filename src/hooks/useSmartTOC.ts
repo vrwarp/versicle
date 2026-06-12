@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import type { NavigationItem } from '~types/db';
-import { genAIService } from '@lib/genai/GenAIService';
+import { getGenAIClient } from '@domains/google';
 import { bookContent } from '@data/repos/bookContent';
 import { bookRepository } from '@app/repositories/BookRepository';
 import { useGenAIStore } from '@store/useGenAIStore';
@@ -34,7 +34,7 @@ export function useSmartTOC(
       return;
     }
 
-    if (!isAIEnabled || !genAIService.isConfigured()) {
+    if (!isAIEnabled || !getGenAIClient().isConfigured()) {
       showToast('AI features are disabled or not configured. Please check Settings.', 'error');
       return;
     }
@@ -58,7 +58,10 @@ export function useSmartTOC(
       const bookTitle = bookMetadata?.title || 'Unknown Book';
       const language = bookMetadata?.language;
 
-      const generatedTitles = await genAIService.generateTOCForBatch(sectionsToProcess, { bookTitle, language });
+      // Deep feature import (first-use loading, Phase 8 §A — the feature
+      // module's zod schemas must stay out of the static graph).
+      const { generateTocTitles } = await import('@domains/google/genai/features/tocTitles');
+      const generatedTitles = await generateTocTitles(getGenAIClient(), sectionsToProcess, { bookTitle, language });
 
       const titleMap = new Map<string, string>();
       generatedTitles.forEach(item => titleMap.set(item.id, item.title));

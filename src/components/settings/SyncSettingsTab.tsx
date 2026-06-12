@@ -40,7 +40,7 @@ export interface SyncSettingsTabProps {
 import { Modal, ModalContent, ModalHeader, ModalTitle } from '../ui/Modal';
 import { DriveFolderPicker } from '../drive/DriveFolderPicker';
 import { useDriveStore } from '@store/useDriveStore';
-import { DriveScannerService } from '@lib/drive/DriveScannerService';
+import { getDriveLibrarySync } from '@domains/google';
 import { useToastStore } from '@store/useToastStore';
 import { getSyncOrchestratorAsync } from '@app/sync/createSync';
 import { useSyncStore } from '@store/useSyncStore';
@@ -218,7 +218,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
 
         setIsScanning(true);
         try {
-            const newFiles = await DriveScannerService.checkForNewFiles({ interactive: true });
+            const newFiles = await getDriveLibrarySync().checkForNewFiles({ interactive: true });
             if (newFiles.length > 0) {
                 showToast(`Found ${newFiles.length} new books in "${linkedFolderName}".`, 'success');
             } else {

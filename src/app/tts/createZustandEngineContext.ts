@@ -24,7 +24,12 @@ import { useReaderUIStore } from '@store/useReaderUIStore';
 import { LexiconService } from '@lib/tts/LexiconService';
 import { bookRepository } from '../repositories/BookRepository';
 import { contentAnalysisRepository } from '../repositories/ContentAnalysisRepository';
-import { genAIService } from '@lib/genai/GenAIService';
+import {
+    genAIIsConfigured,
+    genAIConfigure,
+    genAIDetectContentTypes,
+    genAIGenerateTableAdaptations,
+} from './genaiPort';
 import { toTTSSettingsData } from './replicationSpec';
 import { repoBookContentPort, createRepoSessionStore } from '@lib/tts/engine/repoPorts';
 import type { EngineContext } from '@lib/tts/engine/EngineContext';
@@ -50,12 +55,12 @@ export function createZustandEngineContext(): EngineContext {
                 typeof useGenAIStore.subscribe === 'function'
                     ? useGenAIStore.subscribe(listener)
                     : () => {},
-            isConfigured: () => genAIService.isConfigured(),
-            configure: (apiKey, model) => genAIService.configure(apiKey, model),
+            isConfigured: () => genAIIsConfigured(),
+            configure: (apiKey, model) => genAIConfigure(apiKey, model),
             detectContentTypes: (nodes, hints, context) =>
-                genAIService.detectContentTypes(nodes, hints, context),
+                genAIDetectContentTypes(nodes, hints, context),
             generateTableAdaptations: (nodes, thinkingBudget, context) =>
-                genAIService.generateTableAdaptations(nodes, thinkingBudget, context),
+                genAIGenerateTableAdaptations(nodes, thinkingBudget, context),
         },
 
         readingState: {
