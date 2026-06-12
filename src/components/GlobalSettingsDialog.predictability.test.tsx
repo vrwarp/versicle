@@ -11,8 +11,19 @@ import { renderWithStores, storeSeed, makeTTSVoice } from '@test/harness';
 // suite — see plan/overhaul/analysis/testing-verification.md §9). It now
 // renders against the real stores via renderWithStores; the only test
 // controls are the two async seams the regression needs to keep pending
-// (checkVoiceDownloaded via a store action override, listCheckpoints via a
-// plain spy on the real service).
+// (checkVoiceDownloaded via the useAudioCommands facade since 5b-PR1,
+// listCheckpoints via a plain spy on the real service).
+
+const { checkVoiceDownloaded } = vi.hoisted(() => ({
+  checkVoiceDownloaded: vi.fn(),
+}));
+vi.mock('@app/tts/useAudioCommands', () => ({
+  useAudioCommands: () => ({
+    downloadVoice: vi.fn(),
+    deleteVoice: vi.fn(),
+    checkVoiceDownloaded,
+  }),
+}));
 
 type Checkpoints = Awaited<ReturnType<typeof CheckpointService.listCheckpoints>>;
 
@@ -25,7 +36,7 @@ describe('GlobalSettingsDialog Predictability', () => {
     let voiceResolver: ((ready: boolean) => void) | undefined;
     let checkpointsResolver: ((list: Checkpoints) => void) | undefined;
 
-    const checkVoiceDownloaded = vi.fn(
+    checkVoiceDownloaded.mockImplementation(
       () => new Promise<boolean>(r => { voiceResolver = r; })
     );
     vi.spyOn(CheckpointService, 'listCheckpoints').mockImplementation(
@@ -38,7 +49,6 @@ describe('GlobalSettingsDialog Predictability', () => {
         storeSeed(useTTSStore, {
           providerId: 'piper',
           voice: makeTTSVoice({ id: 'voice1', provider: 'piper' }),
-          checkVoiceDownloaded,
         }),
       ],
     });

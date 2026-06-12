@@ -4,7 +4,7 @@
  * and the jsdom/SSR `disabled` no-op mode.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { PlaybackListener } from '../AudioPlayerService';
+import type { PlaybackListener } from '@lib/tts/AudioPlayerService';
 
 const { clientState } = vi.hoisted(() => ({
     clientState: {
@@ -16,7 +16,7 @@ const { clientState } = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('@app/tts/createWorkerEngineClient', () => ({
+vi.mock('./createWorkerEngineClient', () => ({
     createWorkerEngineClient: vi.fn(() => new Promise((resolve, reject) => {
         clientState.resolve = resolve;
         clientState.reject = reject;

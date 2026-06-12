@@ -28,6 +28,20 @@ vi.mock('@store/useTTSStore', () => ({
     useTTSStore: vi.fn()
 }));
 
+// Mock the command facade (engine commands moved off the store at 5b-PR1)
+const { mockJumpTo, mockPlay, mockPause } = vi.hoisted(() => ({
+    mockJumpTo: vi.fn(),
+    mockPlay: vi.fn(),
+    mockPause: vi.fn(),
+}));
+vi.mock('@app/tts/useAudioCommands', () => ({
+    useAudioCommands: () => ({
+        jumpTo: mockJumpTo,
+        play: mockPlay,
+        pause: mockPause,
+    }),
+}));
+
 // Mock useReaderUIStore with selector support
 vi.mock('@store/useReaderUIStore', () => ({
     useReaderUIStore: (selector: any) => {
@@ -50,10 +64,6 @@ vi.mock('@hooks/useSectionDuration', () => ({
 }));
 
 describe('CompassPill', () => {
-    const mockJumpTo = vi.fn();
-    const mockPlay = vi.fn();
-    const mockPause = vi.fn();
-
     beforeEach(() => {
         vi.clearAllMocks();
     });

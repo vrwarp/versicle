@@ -1,17 +1,20 @@
 /**
  * `deviceRegistration` boot phase (moved verbatim from App.tsx):
- *  1. wire the TTS store to the engine (must precede profile assembly —
- *     the device profile reads the TTS voice/rate/pitch),
+ *  1. wire the TTS controller to the engine + stores (must precede profile
+ *     assembly — the device profile reads the TTS voice/rate/pitch),
  *  2. assemble the device profile and register/touch this device.
  *
- * C11 eventually gives the TTS controller its own phase (P5); until then it
- * keeps its historical position right before device registration.
+ * Since Phase 5b-PR1 the TTS wiring is TtsController.initialize() (engine→store
+ * mirror, store→engine settings sync, rehydrated-settings replay) — the store
+ * itself is pure state. It keeps its historical position right before device
+ * registration.
  */
 import type { BootTask } from '../bootstrap';
 import { getDeviceId } from '@lib/device-id';
 import { useDeviceStore } from '@store/useDeviceStore';
 import { useTTSStore } from '@store/useTTSStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
+import { getTtsController } from '../tts/TtsController';
 import type { DeviceProfile } from '~types/device';
 import { createLogger } from '@lib/logger';
 
@@ -20,7 +23,7 @@ const logger = createLogger('Boot');
 export const ttsInitializeTask: BootTask = {
   name: 'tts/initialize',
   run: () => {
-    useTTSStore.getState().initialize();
+    getTtsController().initialize();
   },
 };
 

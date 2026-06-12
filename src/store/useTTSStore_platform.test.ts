@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { useTTSStore } from './useTTSStore';
 import { resolveDescriptor } from '@lib/tts/providers/registry';
 import { storeProviderBuildContext } from '@app/tts/providerBuildContext';
+import { useTTSStore } from './useTTSStore';
 import { Capacitor } from '@capacitor/core';
 
 /** The production composition: registry descriptor + store-backed build context. */
@@ -49,33 +49,12 @@ vi.mock('@lib/tts/providers/OpenAIProvider', () => ({
     }
 }));
 
-// Mock AudioPlayerService using vi.hoisted to share mock functions
-const { mockSetProviderById, mockInit, mockGetVoices, mockSubscribe, mockSetVoice, mockWhenReady } = vi.hoisted(() => {
-    return {
-        mockSetProviderById: vi.fn(),
-        mockInit: vi.fn().mockResolvedValue(undefined),
-        mockGetVoices: vi.fn().mockResolvedValue([]),
-        mockSubscribe: vi.fn(),
-        mockSetVoice: vi.fn(),
-        mockWhenReady: vi.fn().mockResolvedValue(undefined),
-    }
-});
+// NOTE: the providerId → engine routing (setProviderById / loadVoices chains)
+// moved to the TtsController facade at Phase 5b-PR1 — those assertions live in
+// src/app/tts/TtsController.test.ts. What remains here is the registry/factory
+// platform detection plus the store-backed build context.
 
-vi.mock('@app/tts/mainThreadAudioPlayer', () => {
-    return {
-        getAudioPlayer: vi.fn(() => ({
-            setProviderById: mockSetProviderById,
-            init: mockInit,
-            getVoices: mockGetVoices,
-            subscribe: mockSubscribe,
-            setVoice: mockSetVoice,
-            whenReady: mockWhenReady,
-        })),
-        resetAudioPlayerForTests: vi.fn(),
-    };
-});
-
-describe('Provider selection (store routing + factory platform detection)', () => {
+describe('Provider selection (factory platform detection + store build context)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         // Reset store state
@@ -95,27 +74,6 @@ describe('Provider selection (store routing + factory platform detection)', () =
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             voices: [{ id: 'test-en', name: 'Test English', lang: 'en-US', provider: 'local' } as any]
         });
-    });
-
-    it('routes the configured providerId to the engine as plain data (setProviderById)', async () => {
-        useTTSStore.getState().setProviderId('local');
-        await Promise.resolve();
-
-        expect(mockSetProviderById).toHaveBeenCalledWith('local');
-    });
-
-    it('routes a cloud providerId through the same uniform call', async () => {
-        useTTSStore.getState().setProviderId('google');
-        await Promise.resolve();
-
-        expect(mockSetProviderById).toHaveBeenCalledWith('google');
-    });
-
-    it('loadVoices re-applies the current providerId', async () => {
-        await useTTSStore.getState().loadVoices();
-
-        expect(mockSetProviderById).toHaveBeenCalledWith('local');
-        expect(mockInit).toHaveBeenCalled();
     });
 
     // The platform branching that used to live in the store now lives in the registry

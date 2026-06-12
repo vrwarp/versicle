@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTTSStore } from '@store/useTTSStore';
+import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { useShallow } from 'zustand/react/shallow';
 import { SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../ui/Sheet';
 import { Button } from '../ui/Button';
@@ -22,15 +23,11 @@ export const UnifiedAudioPanel = () => {
   const {
     isPlaying,
     engineReady,
-    play,
-    pause,
     rate,
     setRate,
     voice,
     setVoice,
     voices,
-    loadVoices,
-    seek,
     providerId,
     sanitizationEnabled,
     setSanitizationEnabled,
@@ -40,15 +37,11 @@ export const UnifiedAudioPanel = () => {
   } = useTTSStore(useShallow(state => ({
     isPlaying: state.isPlaying,
     engineReady: state.engineReady,
-    play: state.play,
-    pause: state.pause,
     rate: state.rate,
     setRate: state.setRate,
     voice: state.voice,
     setVoice: state.setVoice,
     voices: state.voices,
-    loadVoices: state.loadVoices,
-    seek: state.seek,
     providerId: state.providerId,
     sanitizationEnabled: state.sanitizationEnabled,
     setSanitizationEnabled: state.setSanitizationEnabled,
@@ -56,6 +49,9 @@ export const UnifiedAudioPanel = () => {
     setPrerollEnabled: state.setPrerollEnabled,
     activeLanguage: state.activeLanguage
   })));
+
+  // Engine commands come from the TtsController facade (stable identities).
+  const { play, pause, seek, loadVoices } = useAudioCommands();
 
   const [view, setView] = useState<'queue' | 'settings'>('queue');
   const [isLexiconOpen, setIsLexiconOpen] = useState(false);

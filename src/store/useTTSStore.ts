@@ -2,10 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { TTSVoice } from '@lib/tts/providers/types';
 import type { TTSProviderId, TTSApiKeyProviderId } from '@lib/tts/providers/registry';
-import { getAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
 import type { TTSStatus, TTSQueueItem } from '@lib/tts/AudioPlayerService';
 import { DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from '@lib/tts/TextSegmenter';
-import { LexiconService } from '@lib/tts/LexiconService';
 import { normalizeLanguageCode } from '@lib/language-utils';
 
 export interface TTSProfile {
@@ -20,6 +18,13 @@ export const getDefaultMinSentenceLength = (lang: string): number => lang.starts
 
 /**
  * State interface for the Text-to-Speech (TTS) store.
+ *
+ * Since Phase 5b-PR1 every action here is a PURE STATE WRITE: engine commands
+ * (play/pause/voice loading/section navigation/…) live on the TtsController
+ * facade (src/app/tts/TtsController.ts), which also owns the engine→store
+ * mirror subscription and the store→engine settings synchronization. UI
+ * components issue commands via the useAudioCommands() hook and READ state
+ * from this store.
  */
 interface TTSState {
     /** Active language for TTS profile selection. */
@@ -27,11 +32,11 @@ interface TTSState {
     /** Per-language TTS profiles. */
     profiles: Record<string, TTSProfile>;
 
-    /** Flag indicating if TTS is currently playing. */
+    /** Flag indicating if TTS is currently playing (engine mirror). */
     isPlaying: boolean;
     /** Whether the engine is ready to accept commands (worker booted + subscribed). */
     engineReady: boolean;
-    /** Current status of playback. */
+    /** Current status of playback (engine mirror). */
     status: TTSStatus;
     /** Speech rate (speed). Default is 1.0. */
     rate: number;
@@ -39,15 +44,15 @@ interface TTSState {
     pitch: number;
     /** The selected voice for speech synthesis. */
     voice: TTSVoice | null;
-    /** List of available voices */
+    /** List of available voices (loaded by TtsController.loadVoices). */
     voices: TTSVoice[];
-    /** The CFI of the currently spoken sentence or segment. */
+    /** The CFI of the currently spoken sentence or segment (engine mirror). */
     activeCfi: string | null;
-    /** Current index in the playback queue */
+    /** Current index in the playback queue (engine mirror). */
     currentIndex: number;
-    /** The playback queue */
+    /** The playback queue (engine mirror). */
     queue: readonly TTSQueueItem[];
-    /** The last error message, if any */
+    /** The last error message, if any (engine mirror). */
     lastError: string | null;
 
     /** Download State (for Piper) */
@@ -85,12 +90,9 @@ interface TTSState {
     backgroundAudioMode: 'silence' | 'noise' | 'off';
     whiteNoiseVolume: number;
 
-    /** Actions */
+    /** Actions (pure state writes — see module docstring). */
     setBackgroundAudioMode: (mode: 'silence' | 'noise' | 'off') => void;
     setWhiteNoiseVolume: (volume: number) => void;
-    play: () => void;
-    pause: () => void;
-    stop: () => void;
     setRate: (rate: number, lang?: string) => void;
     setPitch: (pitch: number, lang?: string) => void;
     setVoice: (voice: TTSVoice | null, lang?: string) => void;
@@ -107,22 +109,13 @@ interface TTSState {
 
     setActiveLanguage: (lang: string) => void;
 
-    loadVoices: () => Promise<void>;
-    downloadVoice: (voiceId: string) => Promise<void>;
-    deleteVoice: (voiceId: string) => Promise<void>;
-    checkVoiceDownloaded: (voiceId: string) => Promise<boolean>;
-    jumpTo: (index: number) => void;
-    seek: (seconds: number) => void;
     clearError: () => void;
-    /**
-     * Initializes the store subscription to the audio player.
-     * Should be called once at app startup.
-     */
-    initialize: () => void;
 }
 
 /**
- * Zustand store for managing Text-to-Speech configuration and playback state.
+ * Zustand store for managing Text-to-Speech configuration and the mirrored
+ * playback state. Engine commands do NOT live here (Phase 5b-PR1) — see
+ * src/app/tts/TtsController.ts.
  */
 export const useTTSStore = create<TTSState>()(
     persist(
@@ -164,21 +157,21 @@ export const useTTSStore = create<TTSState>()(
                 setActiveLanguage: (rawLang) => {
                     const lang = normalizeLanguageCode(rawLang);
                     const state = get();
-                    // When we change the language context, we also update the active properties
-                    // and fetch the voice objects for the underlying service
+                    // When we change the language context, we also update the active properties.
+                    // The TtsController pushes the resulting rate/voice/language to the engine.
                     const profile = state.profiles[lang] || { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0, minSentenceLength: getDefaultMinSentenceLength(lang) };
-                    
+
                     // Filter voices for this language
                     const languageVoices = state.voices.filter(v => v.lang.startsWith(lang));
-                    
+
                     let selectedVoice = languageVoices.find(v => v.id === profile.voiceId) || null;
-                    
+
                     if (!selectedVoice && languageVoices.length > 0) {
                         // Pick a default matching voice if the profile one is missing
                         selectedVoice = languageVoices[0];
                     }
 
-                    // Use the newly selected voice ID if we found one, 
+                    // Use the newly selected voice ID if we found one,
                     // otherwise RETAIN the existing profile voiceId if we don't have voices loaded yet.
                     const finalVoiceId = selectedVoice ? selectedVoice.id : profile.voiceId;
 
@@ -203,14 +196,6 @@ export const useTTSStore = create<TTSState>()(
                             }
                         }
                     }));
-
-                    // Update the single active audio player properties
-                    const player = getAudioPlayer();
-                    player.setSpeed(profile.rate);
-                    player.setLanguage(lang);
-                    if (selectedVoice) {
-                        player.setVoice(selectedVoice.id);
-                    }
                 },
 
                 customAbbreviations: [
@@ -221,49 +206,9 @@ export const useTTSStore = create<TTSState>()(
                 sentenceStarters: DEFAULT_SENTENCE_STARTERS,
                 minSentenceLength: 36,
 
-                initialize: () => {
-                    const player = getAudioPlayer();
-                    // Engine readiness: in-process resolves immediately; the worker handle
-                    // resolves once the worker has booted and subscribed. UI can gate on this.
-                    void player.whenReady().then(() => set({ engineReady: true }));
-                    // Subscribe to player updates
-                    player.subscribe((status, activeCfi, currentIndex, queue, error, downloadInfo) => {
-                        set(() => ({
-                            status,
-                            // Treat 'loading' as playing to prevent UI flicker (play/pause button)
-                            // during transitions between sentences or while buffering.
-                            // Treat 'completed' as playing to keep background audio and UI active (immersive mode).
-                            isPlaying: status === 'playing' || status === 'loading' || status === 'completed',
-                            activeCfi,
-                            currentIndex,
-                            queue,
-                            lastError: error,
-                            ...(downloadInfo ? {
-                                downloadProgress: downloadInfo.percent,
-                                downloadStatus: downloadInfo.status,
-                                downloadingVoiceId: downloadInfo.voiceId,
-                                isDownloading: downloadInfo.percent < 100
-                            } : {})
-                        }));
-                    });
-                },
-
-                play: () => {
-                    getAudioPlayer().play();
-                },
-                pause: () => {
-                    getAudioPlayer().pause();
-                },
-                stop: () => {
-                    getAudioPlayer().stop();
-                },
                 setRate: (rate, lang?: string) => {
                     const targetLang = lang || get().activeLanguage;
                     const isActive = targetLang === get().activeLanguage;
-                    
-                    if (isActive) {
-                        getAudioPlayer().setSpeed(rate);
-                    }
 
                     set((state) => ({
                         ...(isActive ? { rate } : {}),
@@ -289,10 +234,6 @@ export const useTTSStore = create<TTSState>()(
                     const targetLang = lang || get().activeLanguage;
                     const isActive = targetLang === get().activeLanguage;
 
-                    if (isActive && voice) {
-                        getAudioPlayer().setVoice(voice.id);
-                    }
-
                     set((state) => ({
                         ...(isActive ? { voice } : {}),
                         profiles: {
@@ -303,19 +244,11 @@ export const useTTSStore = create<TTSState>()(
                 },
                 setProviderId: (id) => {
                     set({ providerId: id });
-                    // Reload voices for new provider (this will re-init the provider)
-                    get().loadVoices();
                 },
                 setApiKey: (provider, key) => {
                     set((state) => ({
                         apiKeys: { ...state.apiKeys, [provider]: key }
                     }));
-                    // Update current provider if it matches
-                    const { providerId } = get();
-                    if (providerId === provider) {
-                        // Force re-init of provider
-                        get().setProviderId(providerId);
-                    }
                 },
                 setCustomAbbreviations: (abbrevs) => {
                     set({ customAbbreviations: abbrevs });
@@ -345,7 +278,6 @@ export const useTTSStore = create<TTSState>()(
                     set({ enableCostWarning: enable });
                 },
                 setPrerollEnabled: (enable) => {
-                    getAudioPlayer().setPrerollEnabled(enable);
                     set({ prerollEnabled: enable });
                 },
                 setSanitizationEnabled: (enable) => {
@@ -353,83 +285,12 @@ export const useTTSStore = create<TTSState>()(
                 },
                 setBibleLexiconEnabled: (enable) => {
                     set({ isBibleLexiconEnabled: enable });
-                    LexiconService.getInstance().setGlobalBibleLexiconEnabled(enable);
                 },
                 setBackgroundAudioMode: (mode) => {
                     set({ backgroundAudioMode: mode });
-                    getAudioPlayer().setBackgroundAudioMode(mode);
                 },
                 setWhiteNoiseVolume: (volume) => {
                     set({ whiteNoiseVolume: volume });
-                    getAudioPlayer().setBackgroundVolume(volume);
-                },
-                loadVoices: async () => {
-                    const player = getAudioPlayer();
-                    // Ensure provider is set on player (in case of fresh load). The id is plain
-                    // data on both engine paths; the main-thread backend constructs the live
-                    // provider (with API keys + active language) via the shared factory.
-                    const { providerId } = get();
-                    await player.setProviderById(providerId);
-
-                    await player.init();
-                    const voices = await player.getVoices();
-                    set({ voices });
-
-                    // If current voice is not in new list, pick default
-                    const currentVoice = get().voice;
-                    const activeLang = get().activeLanguage;
-                    const profileVoiceId = get().profiles[activeLang]?.voiceId;
-
-                    let targetVoice = null;
-
-                    // 1. If we have a current voice and it still exists in the new list, AND it matches the active language, keep it
-                    if (currentVoice && voices.find(v => v.id === currentVoice.id) && currentVoice.lang.startsWith(activeLang)) {
-                        targetVoice = currentVoice;
-                    }
-                    // 2. Try the profile's saved voiceId for the active language
-                    else if (profileVoiceId) {
-                        targetVoice = voices.find(v => v.id === profileVoiceId) || null;
-                    }
-
-                    // 3. Fallback to any voice matching the active language
-                    if (!targetVoice && voices.length > 0) {
-                        targetVoice = voices.find(v => v.lang.startsWith(activeLang)) || null;
-                    }
-
-                    // 4. Ultimate fallback to English, then the first available voice
-                    if (!targetVoice && voices.length > 0) {
-                        targetVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
-                    }
-
-                    if (targetVoice) {
-                        // Re-set voice to ensure player knows about it
-                        player.setVoice(targetVoice.id);
-                        set({ voice: targetVoice });
-                    }
-                },
-                downloadVoice: async (voiceId) => {
-                    const player = getAudioPlayer();
-                    try {
-                        set({ isDownloading: true, downloadingVoiceId: voiceId, downloadStatus: 'Starting...' });
-                        await player.downloadVoice(voiceId);
-                        set({ isDownloading: false, downloadStatus: 'Ready', downloadProgress: 100 });
-                    } catch (e) {
-                        set({ isDownloading: false, downloadStatus: 'Failed', lastError: e instanceof Error ? e.message : 'Download failed' });
-                    }
-                },
-                deleteVoice: async (voiceId) => {
-                    const player = getAudioPlayer();
-                    await player.deleteVoice(voiceId);
-                    set({ isDownloading: false, downloadProgress: 0, downloadStatus: 'Not Downloaded', downloadingVoiceId: null });
-                },
-                checkVoiceDownloaded: async (voiceId) => {
-                    return await getAudioPlayer().isVoiceDownloaded(voiceId);
-                },
-                jumpTo: (index) => {
-                    getAudioPlayer().jumpTo(index);
-                },
-                seek: (seconds) => {
-                    getAudioPlayer().seek(seconds);
                 },
                 clearError: () => {
                     set({ lastError: null });
@@ -487,22 +348,14 @@ export const useTTSStore = create<TTSState>()(
             }),
             onRehydrateStorage: () => (state) => {
                 if (state) {
-                    // Ensure active profile exists on rehydration if missing
+                    // Ensure active profile exists on rehydration if missing.
+                    // Engine + LexiconService side effects that used to run here moved
+                    // to TtsController.initialize() (the tts/initialize boot task) —
+                    // rehydration is now a pure state concern (R9 complete).
                     if (!state.profiles) {
                         state.profiles = { en: { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0 } };
                         state.activeLanguage = 'en';
                     }
-
-                    const player = getAudioPlayer();
-                    player.setBackgroundAudioMode(state.backgroundAudioMode);
-                    player.setBackgroundVolume(state.whiteNoiseVolume);
-                    player.setPrerollEnabled(state.prerollEnabled);
-                    player.setSpeed(state.rate);
-                    if (state.voice) {
-                        player.setVoice(state.voice.id);
-                    }
-                    // Sync lexicon state
-                    LexiconService.getInstance().setGlobalBibleLexiconEnabled(state.isBibleLexiconEnabled);
                 }
             },
         }

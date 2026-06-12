@@ -42,6 +42,19 @@ const idbImportBan = {
     '(@data/repos/*) or, inside src/data, the connection/write-gate modules.',
 };
 
+// TTS engine access goes through the command facade (Phase 5b-PR1;
+// phase5-tts-strangler.md §5b.4): components use the useAudioCommands()
+// hook, non-component app code uses getTtsController() — both in
+// src/app/tts/. getAudioPlayer() is the engine composition root and is
+// private to that directory (an override below re-grants it there).
+const audioPlayerImportBan = {
+  name: '@app/tts/mainThreadAudioPlayer',
+  message:
+    'Engine commands live on the TtsController facade (Phase 5b): use ' +
+    'useAudioCommands() in components or getTtsController() in app code ' +
+    '(src/app/tts/). getAudioPlayer() is private to src/app/tts/.',
+};
+
 export default tseslint.config(
   // .claude holds agent worktrees (full checkouts under .claude/worktrees/<name>/);
   // without the ignore, a top-level `eslint .` would also lint every worktree's copy.
@@ -169,6 +182,35 @@ export default tseslint.config(
                 'Create synced stores via defineSyncedStore (src/store/registry.ts) — the registry is the only production yjs() middleware call site.',
             },
             idbImportBan,
+            audioPlayerImportBan,
+          ],
+        },
+      ],
+    },
+  },
+  // The TTS engine composition root is private to src/app/tts/ (Phase 5b-PR1;
+  // phase5-tts-strangler.md §5b.4): production code talks to the engine
+  // through the TtsController command facade (useAudioCommands in components,
+  // getTtsController elsewhere in app/), never through getAudioPlayer()
+  // directly. This override re-grants the import inside src/app/tts/ itself —
+  // flat-config rule entries replace, so the cross-root pattern and the
+  // zustand/idb bans are restated.
+  {
+    files: ['src/app/tts/**/*.{ts,tsx}'],
+    ignores: ['src/**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [crossRootRelativeImportPattern],
+          paths: [
+            {
+              name: 'zustand-middleware-yjs',
+              importNames: ['default'],
+              message:
+                'Create synced stores via defineSyncedStore (src/store/registry.ts) — the registry is the only production yjs() middleware call site.',
+            },
+            idbImportBan,
           ],
         },
       ],
@@ -198,6 +240,7 @@ export default tseslint.config(
                 'Create synced stores via defineSyncedStore (src/store/registry.ts) — the registry is the only production yjs() middleware call site.',
             },
             idbImportBan,
+            audioPlayerImportBan,
             {
               name: '@store/useToastStore',
               message:
@@ -261,13 +304,14 @@ export default tseslint.config(
   // two repos that replaced it when src/db was deleted — see
   // plan/overhaul/prep/phase5-absorption-ledger.md §allowlist):
   //  - @data/repos/bookContent, @data/repos/playbackCache, ../LexiconService,
-  //    ../PlatformIntegration → shrink to ZERO at 5b-PR5
-  //    (SessionStore/lexicon ports replace the direct imports);
-  //  - @app/tts/createWorkerEngineClient (WorkerEngineHandle.test.ts only) is
-  //    the N1 inverted lib→app edge — it leaves this directory (and this
-  //    allowlist) at 5b-PR1 when WorkerEngineHandle moves to src/app/tts/.
-  // At 5b-PR5 the :not() clauses are deleted and every vi.mock/vi.doMock in
-  // the directory becomes a lint error.
+  //    ../PlatformIntegration → shrink to ZERO at the 5b store-split PR
+  //    (SessionStore/lexicon ports replace the direct imports).
+  // The fifth entry (@app/tts/createWorkerEngineClient, the N1 inverted
+  // lib→app edge mocked only by WorkerEngineHandle.test.ts) LEFT this
+  // directory and this allowlist at 5b-PR1: WorkerEngineHandle moved to
+  // src/app/tts/ and the engine dir no longer references app/ at all.
+  // At the store-split PR the :not() clauses are deleted and every
+  // vi.mock/vi.doMock in the directory becomes a lint error.
   //
   // Placement + the repeated readwrite selector are load-bearing: flat config
   // resolves same-named rules last-wins (options replace, never merge), so
@@ -293,14 +337,13 @@ export default tseslint.config(
             ":not([value='@data/repos/bookContent'])" +
             ":not([value='@data/repos/playbackCache'])" +
             ":not([value='../LexiconService'])" +
-            ":not([value='../PlatformIntegration'])" +
-            ":not([value='@app/tts/createWorkerEngineClient'])",
+            ":not([value='../PlatformIntegration'])",
           message:
             'vi.mock in src/lib/tts/engine/ is frozen to the allowlist ' +
             '{@data/repos/bookContent, @data/repos/playbackCache, ../LexiconService, ' +
-            '../PlatformIntegration, @app/tts/createWorkerEngineClient} ' +
+            '../PlatformIntegration} ' +
             '(phase5-tts-strangler.md N3; shrinks to ' +
-            'ZERO at 5b-PR5). Drive the engine through injected fakes ' +
+            'ZERO at the 5b store-split PR). Drive the engine through injected fakes ' +
             '(FakeEngineContext/FakePlaybackBackend) instead.',
         },
         {

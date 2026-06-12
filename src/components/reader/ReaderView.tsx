@@ -24,7 +24,7 @@ import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepo
 import { searchClient } from '@lib/search';
 import { SyncStatusPanel } from './SyncStatusPanel';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';
-import { getAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
+import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { ReaderTTSController } from './ReaderTTSController';
 import { generateCfiRange, snapCfiToSentence } from '@lib/cfi-utils';
 import { TOCPanel, SearchPanel } from './panels';
@@ -164,6 +164,9 @@ export const ReaderView: React.FC = () => {
         resetUI();
         // Do NOT reset reading state (progress), as that wipes user data!
     }, [resetUI]);
+
+    // Engine commands go through the TtsController facade (stable identities).
+    const audio = useAudioCommands();
 
     // Optimization: Select only necessary state to prevent re-renders on every activeCfi/currentIndex change
     const isPlaying = useTTSStore(state => state.isPlaying);
@@ -478,10 +481,10 @@ export const ReaderView: React.FC = () => {
     // Set Book ID and Audio Service context
     useEffect(() => {
         if (bookId) {
-            getAudioPlayer().setBookId(bookId);
+            audio.setBookId(bookId);
             setCurrentBookId(bookId);
         }
-    }, [bookId, setCurrentBookId]);
+    }, [bookId, setCurrentBookId, audio]);
 
     // Hide selection popover when Chinese reading settings change.
     // This prevents "orphaned" popovers that point to nodes we are about to replace in DOM.
@@ -896,9 +899,9 @@ export const ReaderView: React.FC = () => {
 
             if (isTTSActive) {
                 if (e.detail.direction === 'next') {
-                    getAudioPlayer().skipToNextSection();
+                    audio.skipToNextSection();
                 } else {
-                    getAudioPlayer().skipToPreviousSection();
+                    audio.skipToPreviousSection();
                 }
             } else {
                 if (e.detail.direction === 'next') handleNext();
@@ -908,7 +911,7 @@ export const ReaderView: React.FC = () => {
 
         window.addEventListener('reader:chapter-nav', handleChapterNav as EventListener);
         return () => window.removeEventListener('reader:chapter-nav', handleChapterNav as EventListener);
-    }, [handleNext, handlePrev]);
+    }, [handleNext, handlePrev, audio]);
 
     const scrollToText = (text: string) => {
         const iframe = viewerRef.current?.querySelector('iframe');
@@ -1004,12 +1007,12 @@ export const ReaderView: React.FC = () => {
             }
 
             if (bestIndex !== -1) {
-                getAudioPlayer().jumpTo(bestIndex);
+                audio.jumpTo(bestIndex);
             }
         } catch (e) {
             logger.error("Error matching CFI for playback", e);
         }
-    }, [rendition]);
+    }, [rendition, audio]);
 
     // Register play callback
     useEffect(() => {
@@ -1288,7 +1291,7 @@ export const ReaderView: React.FC = () => {
                             // on the section change (see useTTS) races the user's next play and lets a
                             // stale audio-bookmark slip through. A deliberate TOC navigation is never a
                             // resume gesture, so drop the pause timestamp immediately.
-                            getAudioPlayer().clearPauseGesture();
+                            audio.clearPauseGesture();
                             rendition?.display(href);
                             setSidebar('none');
                         }}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useUIStore } from '@store/useUIStore';
 import { useTTSStore } from '@store/useTTSStore';
+import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { useLibraryStore, useBookStore } from '@store/useLibraryStore';
 import { useReadingListStore } from '@store/useReadingListStore';
 import { useReadingStateStore } from '@store/useReadingStateStore';
@@ -172,7 +173,7 @@ export const GlobalSettingsDialog = () => {
         whiteNoiseVolume, setWhiteNoiseVolume,
         voice, voices, setVoice,
         activeLanguage,
-        downloadVoice, deleteVoice, downloadProgress, downloadStatus, isDownloading, checkVoiceDownloaded,
+        downloadProgress, downloadStatus, isDownloading,
         setMinSentenceLength
     } = useTTSStore(useShallow(state => ({
         // Optimization: Use shallow selector to avoid re-renders on activeCfi/progress updates during playback
@@ -189,14 +190,14 @@ export const GlobalSettingsDialog = () => {
         voice: state.voice,
         voices: state.voices,
         setVoice: state.setVoice,
-        downloadVoice: state.downloadVoice,
-        deleteVoice: state.deleteVoice,
         downloadProgress: state.downloadProgress,
         downloadStatus: state.downloadStatus,
         isDownloading: state.isDownloading,
-        checkVoiceDownloaded: state.checkVoiceDownloaded,
         setMinSentenceLength: state.setMinSentenceLength
     })));
+
+    // Engine commands come from the TtsController facade (stable identities).
+    const { downloadVoice, deleteVoice, checkVoiceDownloaded } = useAudioCommands();
 
     const [isVoiceReady, setIsVoiceReady] = useState(false);
 

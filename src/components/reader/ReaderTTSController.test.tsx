@@ -5,9 +5,27 @@ import { useTTSStore } from '@store/useTTSStore';
 import { autoResetStores, makeTTSQueue, seedStore } from '@test/harness';
 import type { Rendition } from 'epubjs';
 
-// Harness migration (Phase 0): seeds the REAL useTTSStore (state + action
-// spies via setState) instead of vi.mock'ing the store module, so the test
-// compiles against the real TTSState shape.
+// Harness migration (Phase 0): seeds the REAL useTTSStore (state via
+// setState) instead of vi.mock'ing the store module, so the test compiles
+// against the real TTSState shape. Engine commands moved to the
+// TtsController facade at Phase 5b-PR1, so the command spies mock the
+// useAudioCommands hook module instead of living on the store.
+
+const { mockJumpTo, mockPlay, mockPause, mockStop } = vi.hoisted(() => ({
+    mockJumpTo: vi.fn(),
+    mockPlay: vi.fn(),
+    mockPause: vi.fn(),
+    mockStop: vi.fn(),
+}));
+
+vi.mock('@app/tts/useAudioCommands', () => ({
+    useAudioCommands: () => ({
+        jumpTo: mockJumpTo,
+        play: mockPlay,
+        pause: mockPause,
+        stop: mockStop,
+    }),
+}));
 
 // Mock Rendition (simplified)
 const mockRendition = {
@@ -20,11 +38,6 @@ const mockRendition = {
 };
 
 describe('ReaderTTSController', () => {
-    const mockJumpTo = vi.fn();
-    const mockPlay = vi.fn();
-    const mockPause = vi.fn();
-    const mockStop = vi.fn();
-
     autoResetStores(useTTSStore);
 
     beforeEach(() => {
@@ -42,11 +55,7 @@ describe('ReaderTTSController', () => {
             currentIndex,
             status,
             isPlaying: status === 'playing',
-            queue: makeTTSQueue(queueLength),
-            jumpTo: mockJumpTo,
-            play: mockPlay,
-            pause: mockPause,
-            stop: mockStop
+            queue: makeTTSQueue(queueLength)
         });
 
         return render(

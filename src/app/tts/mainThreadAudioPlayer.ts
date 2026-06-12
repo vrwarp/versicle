@@ -17,7 +17,7 @@ import { createZustandEngineContext } from './createZustandEngineContext';
 import { TTSProviderManager } from '@lib/tts/TTSProviderManager';
 import { storeProviderBuildContext } from './providerBuildContext';
 import { PlatformIntegration } from '@lib/tts/PlatformIntegration';
-import { WorkerEngineHandle } from '@lib/tts/engine/WorkerEngineHandle';
+import { WorkerEngineHandle } from './WorkerEngineHandle';
 
 let instance: TtsEngine | null = null;
 

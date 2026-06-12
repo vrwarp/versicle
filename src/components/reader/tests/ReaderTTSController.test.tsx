@@ -3,8 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ReaderTTSController } from '../ReaderTTSController';
 import { useTTSStore } from '@store/useTTSStore';
 
-// Mock the store
+// Mock the store + the command facade (engine commands moved to
+// useAudioCommands at Phase 5b-PR1).
 const mockGetState = vi.fn();
+const { jumpToMock } = vi.hoisted(() => ({ jumpToMock: vi.fn() }));
 
 vi.mock('@store/useTTSStore', () => ({
   useTTSStore: Object.assign(vi.fn(), {
@@ -12,11 +14,18 @@ vi.mock('@store/useTTSStore', () => ({
   }),
 }));
 
-describe('ReaderTTSController', () => {
-  let jumpToMock: ReturnType<typeof vi.fn>;
+vi.mock('@app/tts/useAudioCommands', () => ({
+  useAudioCommands: () => ({
+    jumpTo: jumpToMock,
+    play: vi.fn(),
+    pause: vi.fn(),
+    stop: vi.fn(),
+  }),
+}));
 
+describe('ReaderTTSController', () => {
   beforeEach(() => {
-    jumpToMock = vi.fn();
+    jumpToMock.mockClear();
     mockGetState.mockReturnValue({
         activeCfi: 'cfi-1',
         status: 'playing',
@@ -29,8 +38,7 @@ describe('ReaderTTSController', () => {
             activeCfi: 'cfi-1',
             currentIndex: 1,
             status: 'playing',
-            queue: ['item1', 'item2', 'item3'],
-            jumpTo: jumpToMock
+            queue: ['item1', 'item2', 'item3']
         };
         return selector(state);
     });

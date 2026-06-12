@@ -18,10 +18,10 @@ import type {
     TTSQueueItem,
     TTSStatus,
     DownloadInfo,
-} from '../AudioPlayerService';
-import type { TTSVoice } from '../providers/types';
-import { createLogger } from '../../logger';
-import { createWorkerEngineClient, type WorkerEngineClient } from '@app/tts/createWorkerEngineClient';
+} from '@lib/tts/AudioPlayerService';
+import type { TTSVoice } from '@lib/tts/providers/types';
+import { createLogger } from '@lib/logger';
+import { createWorkerEngineClient, type WorkerEngineClient } from './createWorkerEngineClient';
 
 const logger = createLogger('WorkerEngineHandle');
 

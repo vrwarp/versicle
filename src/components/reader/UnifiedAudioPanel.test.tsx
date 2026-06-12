@@ -16,6 +16,16 @@ vi.mock('zustand/react/shallow', () => ({
   useShallow: (selector: any) => selector
 }));
 
+// Mock the command facade (engine commands moved off the store at 5b-PR1).
+vi.mock('@app/tts/useAudioCommands', () => ({
+  useAudioCommands: () => ({
+    play: vi.fn(),
+    pause: vi.fn(),
+    seek: vi.fn(),
+    loadVoices: vi.fn(),
+  }),
+}));
+
 // Mock child components that are complex or not relevant
 vi.mock('./TTSQueue', () => ({
   TTSQueue: () => <div data-testid="tts-queue-mock">Queue</div>

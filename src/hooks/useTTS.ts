@@ -1,21 +1,19 @@
 import { useEffect } from 'react';
 import { useTTSStore } from '@store/useTTSStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
-import { getAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
+import { useAudioCommands } from '@app/tts/useAudioCommands';
 
 /**
  * Custom hook to manage Text-to-Speech (TTS) functionality.
- * Handles loading sentences from the DB and synchronizing with AudioPlayerService.
+ * Handles loading sentences from the DB and synchronizing with the engine
+ * (via the TtsController command facade).
  */
 export const useTTS = () => {
-  const {
-    loadVoices
-  } = useTTSStore();
-
   const currentBookId = useReaderUIStore(state => state.currentBookId);
   const currentSectionId = useReaderUIStore(state => state.currentSectionId);
 
-  const player = getAudioPlayer();
+  const audio = useAudioCommands();
+  const { loadVoices, clearPauseGesture, loadSectionBySectionId } = audio;
 
   // Load voices on mount
   useEffect(() => {
@@ -29,8 +27,8 @@ export const useTTS = () => {
   // and whose clear lives inside an enqueued loadSectionInternal that the guard can skip),
   // so the Dragnet is invalidated synchronously the moment the section changes.
   useEffect(() => {
-    player.clearPauseGesture();
-  }, [player, currentSectionId]);
+    clearPauseGesture();
+  }, [clearPauseGesture, currentSectionId]);
 
   // Main Effect: Sync Audio Service with Visual Location (when idle)
   useEffect(() => {
@@ -52,7 +50,7 @@ export const useTTS = () => {
       const currentSectionTitle = useReaderUIStore.getState().currentSectionTitle;
 
       if (!ignore) {
-        player.loadSectionBySectionId(currentSectionId, false, currentSectionTitle || undefined);
+        loadSectionBySectionId(currentSectionId, false, currentSectionTitle || undefined);
       }
     };
 
@@ -61,7 +59,7 @@ export const useTTS = () => {
     return () => {
       ignore = true;
     };
-  }, [player, currentBookId, currentSectionId]);
+  }, [loadSectionBySectionId, currentBookId, currentSectionId]);
 
   return {};
 };

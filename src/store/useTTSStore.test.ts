@@ -1,29 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useTTSStore } from './useTTSStore';
-import { getAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
 
-// Mock the engine composition root (production now talks to getAudioPlayer()).
-vi.mock('@app/tts/mainThreadAudioPlayer', () => {
-    return {
-        getAudioPlayer: vi.fn(() => ({
-            play: vi.fn(),
-            pause: vi.fn(),
-            stop: vi.fn(),
-            setSpeed: vi.fn(),
-            setVoice: vi.fn(),
-            setLanguage: vi.fn(),
-            init: vi.fn(),
-            getVoices: vi.fn(() => []),
-            setProvider: vi.fn(),
-            whenReady: vi.fn(() => Promise.resolve()),
-            subscribe: vi.fn(),
-            setBackgroundAudioMode: vi.fn(),
-            setBackgroundVolume: vi.fn(),
-            setPrerollEnabled: vi.fn(),
-        })),
-        resetAudioPlayerForTests: vi.fn(),
-    };
-});
+// Since Phase 5b-PR1 the store is PURE STATE: engine commands and the
+// engine→store mirror live on the TtsController facade (src/app/tts/
+// TtsController.ts — see TtsController.test.ts). These tests pin the pure
+// state transitions only; no engine mock is needed because the store no
+// longer imports the engine composition root.
 
 describe('useTTSStore', () => {
   beforeEach(() => {
@@ -55,44 +37,17 @@ describe('useTTSStore', () => {
     expect(state.voice).toBeNull();
   });
 
-  // State is driven by player events through the subscription wired in initialize().
-  it('should sync state from player subscription updates', () => {
-    useTTSStore.getState().initialize();
-    const player = vi.mocked(getAudioPlayer).mock.results.at(-1)!.value;
-    const listener = vi.mocked(player.subscribe).mock.calls[0][0];
-
-    listener('playing', null, 0, [], null);
-    expect(useTTSStore.getState().isPlaying).toBe(true);
-    expect(useTTSStore.getState().status).toBe('playing');
-
-    listener('paused', null, 0, [], null);
-    expect(useTTSStore.getState().isPlaying).toBe(false);
-    expect(useTTSStore.getState().status).toBe('paused');
-
-    // 'loading' should result in isPlaying = true (prevents play/pause UI flicker)
-    listener('loading', null, 0, [], null);
-    expect(useTTSStore.getState().isPlaying).toBe(true);
-    expect(useTTSStore.getState().status).toBe('loading');
-
-    // 'completed' should result in isPlaying = true (to support continuous background audio)
-    listener('completed', null, 0, [], null);
-    expect(useTTSStore.getState().isPlaying).toBe(true);
-    expect(useTTSStore.getState().status).toBe('completed');
-
-    listener('stopped', null, 0, [], null);
-    expect(useTTSStore.getState().isPlaying).toBe(false);
-    expect(useTTSStore.getState().status).toBe('stopped');
-  });
-
-  it('should call player methods on play, pause, stop', () => {
-    const playSpy = vi.spyOn(useTTSStore.getState(), 'play');
-    useTTSStore.getState().play();
-    expect(playSpy).toHaveBeenCalled();
+  it('exposes no engine command actions (they live on TtsController)', () => {
+    const state = useTTSStore.getState() as unknown as Record<string, unknown>;
+    for (const legacyAction of ['play', 'pause', 'stop', 'jumpTo', 'seek', 'loadVoices', 'downloadVoice', 'deleteVoice', 'checkVoiceDownloaded', 'initialize']) {
+      expect(state[legacyAction], `store must not own engine command '${legacyAction}'`).toBeUndefined();
+    }
   });
 
   it('should set rate', () => {
     useTTSStore.getState().setRate(1.5);
     expect(useTTSStore.getState().rate).toBe(1.5);
+    expect(useTTSStore.getState().profiles['en'].rate).toBe(1.5);
   });
 
   it('should set pitch', () => {
@@ -130,5 +85,13 @@ describe('useTTSStore', () => {
     expect(state.rate).toBe(1.5);
     expect(state.pitch).toBe(1.2);
     expect(state.voice?.id).toBe('test-zh');
+  });
+
+  it('setProviderId and setApiKey are pure writes (no engine chain)', () => {
+    useTTSStore.getState().setProviderId('google');
+    expect(useTTSStore.getState().providerId).toBe('google');
+
+    useTTSStore.getState().setApiKey('google', 'key-123');
+    expect(useTTSStore.getState().apiKeys.google).toBe('key-123');
   });
 });

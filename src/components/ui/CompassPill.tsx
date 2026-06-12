@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTTSStore } from '@store/useTTSStore';
+import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useAnnotationStore } from '@store/useAnnotationStore';
 import { useBookStore } from '@store/useBookStore';
@@ -177,17 +178,16 @@ export const CompassPill: React.FC<CompassPillProps> = ({
     isPlaying,
     status,
     queue,
-    currentIndex,
-    play,
-    pause
+    currentIndex
   } = useTTSStore(useShallow(state => ({
     isPlaying: state.isPlaying,
     status: state.status,
     queue: state.queue,
-    currentIndex: state.currentIndex,
-    play: state.play,
-    pause: state.pause
+    currentIndex: state.currentIndex
   })));
+
+  // Engine commands come from the TtsController facade (stable identities).
+  const { play, pause } = useAudioCommands();
 
   const { addAnnotation, removeAnnotation } = useAnnotationStore(useShallow(state => ({
       addAnnotation: state.add,

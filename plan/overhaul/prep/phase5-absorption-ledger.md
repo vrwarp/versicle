@@ -53,12 +53,13 @@ suites, and the `CapacitorTTSProvider.test.ts` Smart-Handoff suite — the cross
 ## vi.mock allowlist (phase5 doc N3, rewritten post-P3)
 
 `src/lib/tts/engine/**` may mock exactly `{@data/repos/bookContent,
-@data/repos/playbackCache, ../LexiconService, ../PlatformIntegration}` plus
-`@app/tts/createWorkerEngineClient` (enforced by `no-restricted-syntax` in
-`eslint.config.js`). The fifth entry is the N1 inverted lib→app edge, mocked only by
-`WorkerEngineHandle.test.ts` — it leaves the directory (and the allowlist) at
-**5b-PR1** when `WorkerEngineHandle` moves to `src/app/tts/`. The four-module core
-shrinks to **∅ at 5b-PR5** when the `SessionStore`/lexicon ports land. `vi.mock` in
+@data/repos/playbackCache, ../LexiconService, ../PlatformIntegration}` (enforced by
+`no-restricted-syntax` in `eslint.config.js`). The former fifth entry
+(`@app/tts/createWorkerEngineClient`, the N1 inverted lib→app edge mocked only by
+`WorkerEngineHandle.test.ts`) **left the directory and the allowlist at 5b-PR1** —
+`WorkerEngineHandle` (+ its test) now lives in `src/app/tts/` and the engine dir no
+longer references `app/` at all. The four-module core shrinks to **∅ at the 5b
+store-split PR** when the `SessionStore`/lexicon ports land. `vi.mock` in
 `src/lib/tts/providers/**` is banned from 5a-PR2.
 
 **5a-PR2 note**: the providers-dir ban is live in `eslint.config.js` with exactly two

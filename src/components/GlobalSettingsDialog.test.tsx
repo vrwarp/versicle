@@ -52,8 +52,20 @@ vi.mock('@store/useGenAIStore', () => ({
 // Mock useTTSStore
 const mockSetVoice = vi.fn();
 const mockDownloadVoice = vi.fn();
+const mockDeleteVoice = vi.fn();
 const mockCheckVoiceDownloaded = vi.fn().mockResolvedValue(false);
 const mockSetProviderId = vi.fn();
+
+// Mock the command facade (voice download/delete/check moved off the store
+// to the TtsController at Phase 5b-PR1). The factory closes over the consts
+// lazily (deref at render time), so plain consts are safe here.
+vi.mock('@app/tts/useAudioCommands', () => ({
+    useAudioCommands: () => ({
+        downloadVoice: mockDownloadVoice,
+        deleteVoice: mockDeleteVoice,
+        checkVoiceDownloaded: mockCheckVoiceDownloaded,
+    }),
+}));
 
 vi.mock('@store/usePreferencesStore', () => ({
     usePreferencesStore: vi.fn(() => ({

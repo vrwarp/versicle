@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { LexiconService } from '@lib/tts/LexiconService';
 import { useLexiconStore } from '@store/useLexiconStore';
-import { getAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
+import { useAudioCommands } from '@app/tts/useAudioCommands';
 import type { LexiconRule } from '~types/db';
 import { Plus, Trash2, Save, X, Download, Upload, ArrowUp, ArrowDown, Play, RefreshCw, CornerDownRight } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -32,6 +32,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     const [editingRule, setEditingRule] = useState<Partial<LexiconRule> | null>(null);
     const [isAdding, setIsAdding] = useState(false);
     const lexiconService = LexiconService.getInstance();
+    const audio = useAudioCommands();
 
     const currentBookId = useReaderUIStore(state => state.currentBookId);
     const inventory = useBookStore(state => currentBookId ? state.books[currentBookId] : undefined);
@@ -201,7 +202,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
         }
 
         if (textToPlay) {
-            getAudioPlayer().preview(textToPlay);
+            audio.preview(textToPlay);
         }
     };
 
