@@ -908,13 +908,15 @@ per program rules:
   criteria; belongs with P8's settings registry pass.
 - **ChineseReadingSettings extraction** (§7 layout, from
   VisualSettings.tsx): P8 settings registry territory, same as above.
-- **offscreen-renderer relocation** (§3: lib/offscreen-renderer.ts →
-  domains/reader/engine/offscreen/): still at src/lib with a named lint
-  exception; its callers (ingestion) are P7 library-track surface — move
-  together with the P7 ingestion rewrite to avoid a double migration.
-- **lib/search.ts type-only epubjs Book**: P7 library/search track owns
-  the file (excluded from this item); the named lint exception stands
-  with its P7 deadline.
+- ~~**offscreen-renderer relocation**~~ **DONE (cross-track follow-ups,
+  2026-06-12)**: lib/offscreen-renderer.ts moved to
+  domains/reader/engine/offscreen/; its named lint exception died (the
+  engine carve-out covers it).
+- ~~**lib/search.ts type-only epubjs Book**~~ **DONE (same batch)**:
+  lib/search.ts deleted with the SearchSession reader adoption; the
+  type-only Book passthrough (useEpubReader → controller → SearchPanel)
+  is gone, and the eslint boundary comment names only useEpubReader's
+  hook-internal plumbing + kernel/cfi/snap.ts.
 - **Locale-aware sentence snapping for zh books** (§1): the kernel
   honors the locale parameter and the engine exposes getLanguage(); the
   recorder still passes 'en' pending the Chinese-fixture boundary

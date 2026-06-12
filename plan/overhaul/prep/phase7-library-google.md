@@ -94,18 +94,27 @@ Inputs: `plan/overhaul/README.md` (master plan), `proposals/strangler-incrementa
 > retaining old rows, defer toggle mechanism + boot task).
 >
 > **Sub-track follow-ups:**
-> 1. **Post-merge migration registration (the rule-4 item, ~20 lines):** the one-time
->    linker is authored + F.3-tested at `src/app/migrations.linkReadingList.ts` but NOT in
->    `CRDT_MIGRATIONS`; it registers as the step AFTER the P6 chain's bump, with the
->    captured-doc fixture + two-client quarantine E2E + the husk-clear renumbering note.
-> 2. **Reader-side adoption (the P6-merge follow-ups, all frozen this track):**
->    SearchPanel/ReaderView onto `SearchSession` via context (then delete the
->    `lib/search.ts` singleton, `scrollToText` + the 500ms timer, the legacy
->    `SearchEngine.search()` shape and `SearchResult`); `ContentAnalysisLegend` off
->    `lib/ingestion.reprocessBook` (then delete that delegate); `useBook`/`useLastReadBook`
->    out of the `@store/selectors` façade.
-> 3. `selectors.ts` itself survives as the hook façade for the frozen reader imports —
->    the module CACHE is gone (the PR-L5 target); full file deletion rides follow-up 2.
+> 1. ~~**Post-merge migration registration (the rule-4 item):**~~ **DONE
+>    (cross-track follow-ups, 2026-06-12):** `linkReadingListEntries` registered as
+>    `{from: 7, to: 8}`; CURRENT_SCHEMA_VERSION = 8; era-7 captured fixture + F.3
+>    matrix to v8 + the F.2 v7-vs-v8 two-client case; husk-clear renumbered to v9
+>    everywhere. Registration surfaced two latent linker bugs (wrong inventory map
+>    name 'books' vs 'library'.books; Y.Text values from pre-v4 eras) — both fixed,
+>    both now pinned by the fixture matrix.
+> 2. ~~**Reader-side adoption (the P6-merge follow-ups):**~~ **DONE (same batch):**
+>    SearchPanel on the controller-owned `SearchSession` (props through the shell —
+>    reconciliation: the shell already passes controller surfaces as props, so no
+>    new context; recorded per program rules); exact-occurrence navigation +
+>    temporary 'search'-layer highlight via `app/reader/searchNavigation.ts`;
+>    `lib/search.ts`, `scrollToText` + the 500ms timer, `SearchEngine.search()`,
+>    `SearchResult` and the type-only epubjs `Book` passthrough all deleted;
+>    `ContentAnalysisLegend` routes through `useImportController().reprocessBook`
+>    (delegate deleted); the 'no-text' first-search path reprocesses through the
+>    orchestrator queue then re-indexes (§F lazy population).
+> 3. ~~`selectors.ts` itself survives…~~ **DONE (same batch):** façade deleted; hooks
+>    live in `libraryViewStore.ts` (useBook gains the §D FK-first join);
+>    `selectPendingAudioBookmarks` lives in `useAnnotationStore.ts`; suites renamed
+>    to `libraryViewStore.test/.perf.test.ts`.
 > 4. The re-ingest defer toggle is mechanism-only (`setReingestDeferred` +
 >    localStorage); its settings-UI surface belongs to P8's settings registry, as does the
 >    "Network activity"-style wave progress panel. v2→v3 convergence reingests are
@@ -118,7 +127,10 @@ Inputs: `plan/overhaul/README.md` (master plan), `proposals/strangler-incrementa
 >    `offscreen-renderer` (ingestion-side, sanctioned by C8).~~ **DONE at the P7-library
 >    merge** (`merge(p7)` onto the Phase-6 tree): eslint carve-out 3 now names
 >    `extract.ts` + `offscreen-renderer.ts`; `src/lib/ingestion.ts` left the list — the
->    rewrite reduced it to a delegate with no epubjs import.
+>    rewrite reduced it to a delegate with no epubjs import. The offscreen
+>    renderer completed its §3 relocation to `domains/reader/engine/offscreen/`
+>    at the cross-track follow-ups (2026-06-12); carve-out 3 now names ONLY
+>    `extract.ts`.
 
 ---
 
