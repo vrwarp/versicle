@@ -316,21 +316,52 @@ describe('y-cinder fork contract (F.1–F.6)', () => {
     });
   });
 
-  describe('F.6 save-success signal (CURRENT gap — flips with the §D6.1 fork delta)', () => {
-    it("a committed save announces NOTHING today: no 'saved' after addDoc resolves (the lastSyncTime-from-flush gap)", async () => {
+  describe("F.6 save-success signal — the §D6.1 'saved' fork delta", () => {
+    // The vendoring commit pinned the PRE-delta gap here (a committed save
+    // announced nothing — the lastSyncTime-from-flush hole). Fork surgery 1
+    // replaced that pin with the delta's semantics.
+    it("a committed save announces itself: 'saved' fires with the commit wall-clock time after addDoc resolves", async () => {
+      const ydoc = new Y.Doc();
+      const provider = makeProvider(ydoc);
+      const savedAts: number[] = [];
+      provider.on('saved', (at: number) => savedAts.push(at));
+
+      const before = Date.now();
+      ydoc.getMap('library').set('book-1', 'Moby Dick');
+      await vi.advanceTimersByTimeAsync(MAX_WAIT * 10);
+
+      expect(addDocMock).toHaveBeenCalledTimes(1);
+      expect(savedAts).toHaveLength(1);
+      expect(savedAts[0]).toBeGreaterThanOrEqual(before);
+      await provider.destroy();
+    });
+
+    it("a failed save emits NO 'saved' (failure surface only — the circuit breaker case)", async () => {
+      const ydoc = new Y.Doc();
+      const provider = makeProvider(ydoc);
+      const savedAts: number[] = [];
+      provider.on('saved', (at: number) => savedAts.push(at));
+
+      addDocMock.mockRejectedValue(new Error('transient network failure'));
+      ydoc.getMap('library').set('book-1', 'Moby Dick');
+      await vi.advanceTimersByTimeAsync(MAX_WAIT * 50);
+
+      expect(addDocMock).toHaveBeenCalledTimes(DEFAULTS.MAX_SAVE_RETRIES);
+      expect(savedAts).toHaveLength(0);
+    });
+
+    it("the destroy() final flush also announces 'saved' (it funnels through the same save path)", async () => {
       const ydoc = new Y.Doc();
       const provider = makeProvider(ydoc);
       const savedAts: number[] = [];
       provider.on('saved', (at: number) => savedAts.push(at));
 
       ydoc.getMap('library').set('book-1', 'Moby Dick');
-      await vi.advanceTimersByTimeAsync(MAX_WAIT * 10);
+      // Destroy INSIDE the debounce window: the final flush saves AND announces.
+      await provider.destroy();
 
       expect(addDocMock).toHaveBeenCalledTimes(1);
-      // Pin of the vendored-SHA behavior: success is silent. This case is
-      // REPLACED by the F.7 'saved' semantics when the fork delta lands.
-      expect(savedAts).toHaveLength(0);
-      await provider.destroy();
+      expect(savedAts).toHaveLength(1);
     });
   });
 });

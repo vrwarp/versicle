@@ -76,4 +76,14 @@ comparison); the deltas the app depends on:
 
 ## Phase 9 modification log (append entries here; design doc §D6)
 
-(Vendoring landed with zero behavior change; fork surgeries append below.)
+- **Surgery 1 — `saved` event** (phase4-sync-strangler.md §D6 delta 1): emitted
+  with the commit wall-clock time (`Date.now()`) after `saveToFirestore()`'s
+  `addDoc` resolves — the success half of the already-complete failure
+  surface. Fires for the debounced save path, the threshold-forced path, and
+  the `destroy()` final flush alike (they all funnel through
+  `saveToFirestore`). Powers the C3 `saved` connection event →
+  `SyncEvent{type:'flushed'}` → `lastSyncTime`; its arrival let
+  `wireSyncEvents.ts` delete the transitional connected-transition
+  `lastSyncTime` floor (the P4 §Follow-ups canary). Contract: F.6 in
+  `test/contract/provider.test.ts` (the same cases that pinned the pre-delta
+  gap), plus the C3 `savedEvent` capability on the emulator runner.

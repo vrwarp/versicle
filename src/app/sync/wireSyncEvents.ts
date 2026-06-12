@@ -9,12 +9,12 @@
  * `sync.*` namespace) — this file maps events to keys+params, and editing
  * copy cannot touch the transport OR this mapping.
  *
- * `lastSyncTime` semantics: driven by `flushed` (a committed save). Until
- * the y-cinder `saved` fork delta lands, real-Firestore sessions only emit
- * `flushed` from the mock transport, so the legacy connected-transition
- * stamp is kept as the transitional floor — without it the pulse tooltip
- * would read "never synced" on real Firestore. The transition stamp goes
- * away with the fork delta (then `flushed` is the only writer).
+ * `lastSyncTime` semantics: driven by `flushed` (a committed save) and by
+ * NOTHING else. Both transports announce committed saves — the mock always
+ * did; the real Firestore path since the y-cinder `saved` fork delta
+ * (packages/y-cinder/PROVENANCE.md, surgery 1). The transitional
+ * connected-transition floor this file carried while the delta was pending
+ * is deleted (its removal was the P4 §Follow-ups canary for the delta).
  *
  * Registered by the `syncInit` boot task with ctx.addCleanup.
  */
@@ -23,26 +23,16 @@ import { peekSyncOrchestrator } from './createSync';
 import { stopDeviceHeartbeat } from '@app/boot/backgroundTasks';
 import { useSyncStore } from '@store/useSyncStore';
 import { useToastStore } from '@store/useToastStore';
-import type { FirestoreSyncStatus } from '~types/sync';
 
 export function wireSyncEvents(): () => void {
-  let lastStatus: FirestoreSyncStatus | null = null;
-
   return getSyncEventBus().on((event) => {
     const toast = useToastStore.getState().showToast;
     const sync = useSyncStore.getState();
 
     switch (event.type) {
-      case 'status': {
+      case 'status':
         sync.setFirestoreStatus(event.status);
-        // Transitional (see module docs): connected-transition floor for
-        // lastSyncTime until real flush events exist on Firestore.
-        if (event.status === 'connected' && lastStatus !== 'connected') {
-          sync.setLastSyncTime(Date.now());
-        }
-        lastStatus = event.status;
         break;
-      }
 
       case 'auth':
         sync.setFirebaseAuthStatus(event.status);

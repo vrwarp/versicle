@@ -60,9 +60,10 @@ const PURGE_SUBCOLLECTIONS = ['updates', 'history', 'maintenance', 'metadata'] a
 
 /**
  * The provider event surface the adapter listens to. y-cinder's emitter is
- * an untyped ObservableV2 at this boundary; `saved` is forward-wired so the
- * fork delta (§D6.1) lights up `lastSyncTime`-from-flush without touching
- * this adapter again.
+ * an untyped ObservableV2 at this boundary; `saved` was forward-wired here
+ * ahead of the fork delta, and since the P9 vendoring + surgery 1
+ * (packages/y-cinder/PROVENANCE.md) the provider emits it after every
+ * committed save — `lastSyncTime`-from-flush is live on this backend.
  */
 interface ProviderEmitter {
   on(event: string, cb: (...args: never[]) => void): void;
@@ -276,7 +277,7 @@ export class FirestoreBackend implements SyncBackend {
     p.on('save-rejected', ((event: never) => emitter.emit('save-rejected', event)) as never);
     p.on('corrupted-document', ((event: never) =>
       emitter.emit('corrupted-document', event)) as never);
-    // Forward-wired: emitted once the y-cinder `saved` fork delta lands.
+    // Live since the y-cinder `saved` fork delta (P9 surgery 1).
     p.on('saved', ((at: number) => emitter.emit('saved', at)) as never);
 
     let destroyed = false;

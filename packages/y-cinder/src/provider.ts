@@ -573,6 +573,13 @@ export class FireProvider extends ObservableV2<any> {
       // Reset retry counter on success
       this._saveRetryCount = 0;
 
+      // FORK SURGERY 1 (Versicle P9; phase4-sync-strangler.md §D6.1): announce
+      // the committed save — the success half of the event surface (every
+      // failure mode already emits). Fires on the debounced path, the
+      // threshold-forced path, and the destroy() final flush alike (they all
+      // funnel through here). Consumers map it to lastSyncTime-from-flush.
+      this.emit('saved', [Date.now()]);
+
       // P0.5 FIX: Check if new updates arrived during save
       // If so, schedule another save
       if (this.updateCache) {

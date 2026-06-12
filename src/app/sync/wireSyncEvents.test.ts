@@ -5,9 +5,9 @@
  * In particular it pins the FLUSH-DRIVEN `lastSyncTime` semantics (P4-3
  * exit criterion): a `flushed` event stamps the store with the save
  * timestamp — the pulse tooltip reports actual sync activity, not
- * connection time. The connected-transition stamp is asserted as the
- * TRANSITIONAL floor it is (see wireSyncEvents module docs; it dies with
- * the y-cinder `saved` fork delta).
+ * connection time. The transitional connected-transition floor died with
+ * the y-cinder `saved` fork delta (P9; packages/y-cinder/PROVENANCE.md
+ * surgery 1) — `flushed` is now the ONLY writer, pinned below.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getSyncEventBus } from '@domains/sync/events';
@@ -74,15 +74,18 @@ describe('wireSyncEvents (single SyncEvent subscriber)', () => {
       expect(useSyncStore.getState().lastSyncTime).toBe(1234567999);
     });
 
-    it('transitional: the connected TRANSITION stamps a floor, repeated connected statuses do not', () => {
+    it("regression: status events never stamp lastSyncTime — 'flushed' is the only writer (the transitional connected-transition floor is dead)", () => {
       const bus = getSyncEventBus();
       bus.emit({ type: 'status', status: 'connected' });
-      const stamped = useSyncStore.getState().lastSyncTime;
-      expect(stamped).not.toBeNull();
+      expect(useSyncStore.getState().lastSyncTime).toBeNull();
 
-      // Same status again — no transition, no re-stamp.
+      bus.emit({ type: 'status', status: 'disconnected' });
       bus.emit({ type: 'status', status: 'connected' });
-      expect(useSyncStore.getState().lastSyncTime).toBe(stamped);
+      expect(useSyncStore.getState().lastSyncTime).toBeNull();
+
+      // Only a committed save moves it.
+      bus.emit({ type: 'flushed', at: 42 });
+      expect(useSyncStore.getState().lastSyncTime).toBe(42);
     });
   });
 

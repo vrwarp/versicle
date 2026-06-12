@@ -40,9 +40,9 @@ export interface SaveRejectedEvent {
  * The normalized transport event surface. `synced` wraps the providers'
  * `sync(isSynced=true)` handshake event; the failure events pass the
  * provider payloads through untouched (isPermissionDeniedEvent walks them);
- * `saved` is the save-success event — emitted by the mock today and by the
- * real provider once the P4 y-cinder fork delta lands (§D6.1). It drives
- * `lastSyncTime`-from-flush.
+ * `saved` is the save-success event — emitted by the mock and, since the
+ * P9 y-cinder fork delta (§D6.1; packages/y-cinder/PROVENANCE.md surgery
+ * 1), by the real provider. It drives `lastSyncTime`-from-flush.
  */
 export interface SyncConnectionEvents {
   synced: () => void;

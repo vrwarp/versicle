@@ -31,12 +31,12 @@ export interface SyncBackendConnection {
 }
 
 /**
- * The transport event surface (phase4-sync-strangler.md §D1): what the real
- * y-cinder FireProvider emits today (`connection-error`, `sync-failure`,
- * `save-rejected`, `corrupted-document`) plus `saved` — the save-success
- * event the P4 fork delta adds (drives lastSyncTime-from-flush). The C3
- * event cases pin both backends to this one surface so mock/real drift
- * becomes a red CI.
+ * The transport event surface (phase4-sync-strangler.md §D1): the failure
+ * events the y-cinder FireProvider always emitted (`connection-error`,
+ * `sync-failure`, `save-rejected`, `corrupted-document`) plus `saved` — the
+ * save-success event the fork delta added (P9 vendoring, surgery 1; drives
+ * lastSyncTime-from-flush). The C3 event cases pin both backends to this
+ * one surface so mock/real drift becomes a red CI.
  */
 export type SyncConnectionEventName =
   | 'connection-error'
@@ -140,8 +140,8 @@ export interface SyncBackendContractCapabilities {
    */
   serverSideTombstoneEnforcement: boolean;
   /**
-   * The transport announces committed saves (`saved`). True for the mock;
-   * true for Firestore only once the P4 y-cinder fork delta lands (§D6.1).
+   * The transport announces committed saves (`saved`). True for the mock
+   * and, since the P9 y-cinder fork delta (§D6.1), for Firestore.
    */
   savedEvent: boolean;
   /** Transport failure events can be injected (mock test hooks). */
