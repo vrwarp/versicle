@@ -75,8 +75,9 @@ describe('AudioPlayerService driven entirely by injected fakes', () => {
         expect(backend.played[0].text).toContain('Hello world');
 
         // The brain only learns playback started when the (main-thread) backend says so.
+        // Sequenced since 5b-PR3: the status lands when the provider.start task runs.
         backend.fireStart();
-        expect(statuses).toContain('playing');
+        await vi.waitFor(() => expect(statuses).toContain('playing'));
 
         await svc.pause();
         expect(backend.pauseCount).toBe(1);

@@ -98,7 +98,13 @@ export interface TtsEngine {
     clearPauseGesture(): void;
 
     // --- Navigation ---
-    setBookId(bookId: string | null): void;
+    /**
+     * Switch the active book. Since 5b-PR3 the engine performs the context
+     * switch (epoch bump) synchronously and runs the stop/reset as a sequenced
+     * task; the in-process engine returns that task's promise, the worker
+     * handle stays fire-and-forget.
+     */
+    setBookId(bookId: string | null): Promise<void> | void;
     loadSection(sectionIndex: number, autoPlay?: boolean): Promise<boolean | void>;
     loadSectionBySectionId(sectionId: string, autoPlay?: boolean, title?: string): Promise<void>;
     jumpTo(index: number): Promise<void> | void;

@@ -55,6 +55,7 @@ vi.mock('@data/repos/playbackCache', async () => {
     return { playbackCache: createParityPlaybackCache(hostDb) };
 });
 
+import { describe, it, expect } from 'vitest';
 import { AudioPlayerService } from '../AudioPlayerService';
 import type { TTSQueueItem } from '../AudioPlayerService';
 import { FakeEngineContext } from './FakeEngineContext';
@@ -219,3 +220,23 @@ describeEngineParity('in-process', async (): Promise<ParityHarness> => {
         },
     };
 }, 'in-process');
+
+// In-process-only subscribe-semantics pin carried from the deleted
+// AudioPlayerService.predictability.test.ts (absorption ledger row 2; the
+// staleness cases live in the shared scenarios' P18 + predictability blocks).
+describe('regression: AudioPlayerService.predictability (subscribe semantics)', () => {
+    it('a listener unsubscribed before the next-tick replay never fires', async () => {
+        const svc = AudioPlayerService.createWithContext(
+            new FakeEngineContext(),
+            FakePlaybackBackend.factory().factory,
+            platformFactory,
+        );
+
+        const listener = vi.fn();
+        const unsubscribe = svc.subscribe(listener);
+        unsubscribe(); // immediately, before the setTimeout(0) replay
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(listener).not.toHaveBeenCalled();
+    });
+});

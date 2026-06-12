@@ -5,7 +5,7 @@ import { lexiconApplier } from './LexiconApplier';
 import { bookContent } from '@data/repos/bookContent';
 import { playbackCache } from '@data/repos/playbackCache';
 import type { SectionMetadata, LexiconRule, PerceptualPalette } from '~types/db';
-import { TaskSequencer } from './TaskSequencer';
+import { TaskSequencer, type TaskContext } from './TaskSequencer';
 import { AudioContentPipeline } from './AudioContentPipeline';
 import { QueueModel } from './QueueModel';
 import type { PlaybackBackend, PlaybackBackendFactory, TTSProviderEvents } from './engine/PlaybackBackend';
@@ -122,33 +122,39 @@ export class AudioPlayerService implements TtsEngine {
             onSeekTo: (time) => this.seekTo(time),
         });
 
+        // Provider events that drive the FSM (start/end/error) run as sequenced
+        // tasks (5b-PR3): the dev-assert makes any un-sequenced status/queue
+        // mutation a crash in dev/test, and these three were the violators.
+        // onTimeUpdate/onDownloadProgress are pure telemetry passthroughs — they
+        // mutate neither status nor queue, and sequencing per-second time updates
+        // would queue them behind synthesis tasks for no benefit.
         const providerEvents: TTSProviderEvents = {
             onStart: () => {
-                this.setStatus('playing');
+                void this.enqueue('provider.start', async () => {
+                    this.setStatus('playing');
+                });
             },
             onEnd: () => {
-                if (this.isPreviewing) {
-                    this.isPreviewing = false;
-                    this.setStatus('stopped');
-                    return;
-                }
-                this.playNext();
+                void this.enqueue('provider.end', () => this.handlePlaybackEnded());
             },
             onError: (error) => {
-                // Mid-playback failure on a non-local provider: recover through the
-                // ONE sequenced fallback task (the doc's 5-line bridge — the legacy
-                // un-enqueued `playInternal(true)` S1 escape hatch is gone). The
-                // manager no longer self-swaps or emits synthetic 'fallback' events,
-                // so this is the only fallback trigger on the event channel.
-                if (this.currentProviderId !== 'local') {
-                    logger.warn("Cloud provider error during playback; falling back to local provider", error);
-                    void this.enqueue(() => this.recoverWithLocalProvider());
-                    return;
-                }
+                void this.enqueue('provider.error', async () => {
+                    // Mid-playback failure on a non-local provider: recover inside
+                    // THIS task (one sequenced task end-to-end — swap + replay; the
+                    // legacy un-enqueued `playInternal(true)` S1 escape hatch and the
+                    // task-per-trigger indirection are both gone). The manager no
+                    // longer self-swaps or emits synthetic 'fallback' events, so this
+                    // is the only fallback trigger on the event channel.
+                    if (this.currentProviderId !== 'local') {
+                        logger.warn("Cloud provider error during playback; falling back to local provider", error);
+                        await this.recoverWithLocalProvider();
+                        return;
+                    }
 
-                logger.error("TTS Provider Error", error);
-                this.setStatus('stopped');
-                this.notifyError("Playback Error: " + (error?.message || "Unknown error"));
+                    logger.error("TTS Provider Error", error);
+                    this.setStatus('stopped');
+                    this.notifyError("Playback Error: " + (error?.message || "Unknown error"));
+                });
             },
             onTimeUpdate: (currentTime) => {
                 this.updateSectionMediaPosition(currentTime);
@@ -195,9 +201,12 @@ export class AudioPlayerService implements TtsEngine {
                 // Force lexicon reload for the new language
                 this.activeLexiconRules = null;
 
-                // If playing, restart to apply the new voice/language immediately
+                // If playing, restart to apply the new voice/language immediately.
+                // Sequenced (5b-PR3): this was the second un-enqueued playInternal
+                // call site (S1) — a store subscription must not drive the FSM
+                // outside the sequencer.
                 if (this.status === 'playing' || this.status === 'loading') {
-                    this.playInternal(true);
+                    void this.enqueue('languageSync.restart', () => this.playInternal(true));
                 }
             }
         });
@@ -251,6 +260,26 @@ export class AudioPlayerService implements TtsEngine {
                 sample: JSON.stringify(diag.sample),
             });
         };
+
+        // The C4 dev-assert (5b-PR3, §5b.3): status writes and queue mutations
+        // happen ONLY inside a running sequenced task. A crashing invariant in
+        // dev/test instead of a convention — the known violators (provider
+        // events, dragnet, setBookId's reset, the language-sync restart, the
+        // async mask/adaptation callbacks) were sequenced in the same change,
+        // so the assert is born green.
+        if (import.meta.env.DEV) {
+            this.stateManager.setMutationGuard((op) => this.assertSequencedMutation(`QueueModel.${op}`));
+        }
+    }
+
+    private assertSequencedMutation(op: string): void {
+        if (import.meta.env.DEV && !this.taskSequencer.isInsideTask()) {
+            throw new Error(
+                `[AudioPlayerService] ${op} outside a sequenced task — status/queue ` +
+                'mutations must run through the TaskSequencer (5b-PR3 C4 invariant; ' +
+                'plan/overhaul/prep/phase5-tts-strangler.md §5b.3)',
+            );
+        }
     }
 
     /**
@@ -269,63 +298,80 @@ export class AudioPlayerService implements TtsEngine {
         return new AudioPlayerService(ctx, backendFactory, platformFactory);
     }
 
-    private enqueue<T>(task: () => Promise<T>): Promise<T | void> {
-        return this.taskSequencer.enqueue(task);
+    private enqueue<T>(label: string, task: (ctx: TaskContext) => Promise<T>): Promise<T | void> {
+        return this.taskSequencer.enqueue(label, task);
     }
 
-    setBookId(bookId: string | null) {
-        if (this.currentBookId !== bookId) {
-            if (bookId) {
-                // Proactively sync language to ensure proper voices are loaded before playback starts
-                const currentLang = normalizeLanguageCode(this.ctx.book.getBookLanguage(bookId));
-                if (currentLang !== this.ctx.config.getActiveLanguage()) {
-                    this.ctx.config.setActiveLanguage(currentLang);
-                    this.activeLexiconRules = null; // Force lexicon reload for the new language
-                }
+    /**
+     * Switch the active book. The CONTEXT SWITCH happens synchronously at call
+     * time — the epoch bump (which makes every previously enqueued task stale,
+     * §5b.3), `currentBookId`, and the metadata/playlist load kickoffs — while
+     * the status/queue mutations (stop + reset) run as a sequenced task, per
+     * the C4 dev-assert. The returned promise resolves when the reset task has
+     * run; fire-and-forget callers may ignore it.
+     */
+    setBookId(bookId: string | null): Promise<void> {
+        if (this.currentBookId === bookId) return Promise.resolve();
+
+        this.taskSequencer.bumpEpoch('setBookId');
+
+        if (bookId) {
+            // Proactively sync language to ensure proper voices are loaded before playback starts
+            const currentLang = normalizeLanguageCode(this.ctx.book.getBookLanguage(bookId));
+            if (currentLang !== this.ctx.config.getActiveLanguage()) {
+                this.ctx.config.setActiveLanguage(currentLang);
             }
-            // Immediately stop playback and reset state to prevent leakage of old book state
+        }
+
+        this.currentBookId = bookId;
+        this.sessionRestored = false;
+        this.lastAppliedAnalysisSectionId = null;
+        this.lastAppliedAnalysisTimestamp = 0;
+        this.currentBookPalette = undefined;
+        this.currentBookPerceptualPalette = undefined;
+        this.currentBookTitle = '';
+        this.currentBookAuthor = '';
+        this.currentBookCoverUrl = undefined;
+        this.activeLexiconRules = null;
+        this.lastUserPauseTimestamp = null;
+
+        // Stop playback and reset queue state to prevent leakage of old book
+        // state. Enqueued (5b-PR3) — but protected against in-flight tasks of
+        // the OLD book by the epoch bump above: any earlier-enqueued task that
+        // checkpoints (play, loadSection…) bails instead of touching the not-
+        // yet-reset queue.
+        const reset = this.enqueue('setBookId.reset', async () => {
             if (this.status !== 'stopped') {
                 this.setStatus('stopped');
                 this.providerManager.stop();
                 this.platformIntegration.stop().catch(e => logger.error("Failed to stop platform integration", e));
             }
             this.stateManager.reset();
-
-            this.currentBookId = bookId;
-            this.sessionRestored = false;
-            this.lastAppliedAnalysisSectionId = null;
-            this.lastAppliedAnalysisTimestamp = 0;
-            this.currentBookPalette = undefined;
-            this.currentBookPerceptualPalette = undefined;
-            this.currentBookTitle = '';
-            this.currentBookAuthor = '';
-            this.currentBookCoverUrl = undefined;
             this.stateManager.setBookId(bookId);
+        });
 
-            if (bookId) {
-                this.ctx.book.getMetadata(bookId).then(metadata => {
-                    if (this.currentBookId === bookId) {
-                        this.currentBookPalette = metadata?.coverPalette;
-                        this.currentBookPerceptualPalette = metadata?.perceptualPalette;
-                        this.currentBookTitle = metadata?.title || '';
-                        this.currentBookAuthor = metadata?.author || '';
-                        this.currentBookCoverUrl = metadata?.coverUrl || (metadata?.coverBlob ? coverUrl(bookId) : undefined);
-                        this.updateMediaSessionMetadata();
-                    }
-                }).catch(e => logger.warn("Failed to load book metadata", e));
+        if (bookId) {
+            this.ctx.book.getMetadata(bookId).then(metadata => {
+                if (this.currentBookId === bookId) {
+                    this.currentBookPalette = metadata?.coverPalette;
+                    this.currentBookPerceptualPalette = metadata?.perceptualPalette;
+                    this.currentBookTitle = metadata?.title || '';
+                    this.currentBookAuthor = metadata?.author || '';
+                    this.currentBookCoverUrl = metadata?.coverUrl || (metadata?.coverBlob ? coverUrl(bookId) : undefined);
+                    this.updateMediaSessionMetadata();
+                }
+            }).catch(e => logger.warn("Failed to load book metadata", e));
 
-                this.playlistPromise = bookContent.getSections(bookId).then(sections => {
-                    if (this.currentBookId !== bookId) return; this.playlist = sections;
-                    this.restoreQueue(bookId);
-                }).catch(e => logger.error("Failed to load playlist", e));
-            } else {
-                this.playlist = [];
-                this.playlistPromise = null;
-            }
-
-            this.activeLexiconRules = null;
-            this.lastUserPauseTimestamp = null;
+            this.playlistPromise = bookContent.getSections(bookId).then(sections => {
+                if (this.currentBookId !== bookId) return; this.playlist = sections;
+                this.restoreQueue(bookId);
+            }).catch(e => logger.error("Failed to load playlist", e));
+        } else {
+            this.playlist = [];
+            this.playlistPromise = null;
         }
+
+        return reset as Promise<void>;
     }
 
     private async engageBackgroundMode(item: TTSQueueItem): Promise<boolean> {
@@ -363,7 +409,13 @@ export class AudioPlayerService implements TtsEngine {
     }
 
     private async restoreQueue(bookId: string) {
-        this.enqueue(async () => {
+        // NOTE: the book-id guard below is deliberately NOT converted to
+        // ctx.checkpoint(): stop() also bumps the epoch, and a user stop
+        // between setBookId and the playlist resolving must not cancel the
+        // restore (the queue should still be there for the next play). The
+        // epoch conversion for this task rides the decomposition PR with a
+        // P12 rider of its own.
+        this.enqueue('restoreQueue', async () => {
             try {
                 const session = await playbackCache.getSession(bookId);
                 const state = session ? { bookId, queue: session.playbackQueue, updatedAt: session.updatedAt } : undefined;
@@ -417,16 +469,8 @@ export class AudioPlayerService implements TtsEngine {
                             bookId,
                             section.sectionId,
                             undefined, // will fetch from DB
-                            (mask) => {
-                                if (this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
-                                    this.stateManager.applySkippedMask(mask, section.sectionId);
-                                }
-                            },
-                            (adaptations) => {
-                                if (this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
-                                    this.stateManager.applyTableAdaptations(adaptations);
-                                }
-                            }
+                            this.sequencedMaskCallback(bookId, sectionIndex, section.sectionId),
+                            this.sequencedAdaptationsCallback(bookId, sectionIndex)
                         );
                     }
                 }
@@ -434,6 +478,34 @@ export class AudioPlayerService implements TtsEngine {
                 logger.error("Failed to restore TTS queue", e);
             }
         });
+    }
+
+    /**
+     * The content pipeline reports skip masks / table adaptations through
+     * detached async callbacks (triggerAnalysis runs in the background) —
+     * which used to mutate the queue OUTSIDE the sequencer (S3-adjacent).
+     * These wrappers enqueue the mutation with the book/section guard
+     * evaluated inside the task (5b-PR3; the AnalysisApplier absorbs all
+     * three call sites in the decomposition PR).
+     */
+    private sequencedMaskCallback(bookId: string, sectionIndex: number, sectionId: string) {
+        return (mask: Set<number>) => {
+            void this.enqueue('analysis.maskCallback', async () => {
+                if (this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
+                    this.stateManager.applySkippedMask(mask, sectionId);
+                }
+            });
+        };
+    }
+
+    private sequencedAdaptationsCallback(bookId: string, sectionIndex: number) {
+        return (adaptations: { indices: number[], text: string }[]) => {
+            void this.enqueue('analysis.adaptationsCallback', async () => {
+                if (this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
+                    this.stateManager.applyTableAdaptations(adaptations);
+                }
+            });
+        };
     }
 
     private updateMediaSessionMetadata() {
@@ -495,7 +567,7 @@ export class AudioPlayerService implements TtsEngine {
 
     /** Swap the active provider by id — the uniform engine API on both transports. */
     public setProviderById(providerId: string) {
-        return this.enqueue(async () => {
+        return this.enqueue('setProviderById', async () => {
             await this.stopInternal();
             this.providerManager.setProviderById(providerId);
             this.currentProviderId = providerId;
@@ -507,7 +579,7 @@ export class AudioPlayerService implements TtsEngine {
      * direct-injection hook. Not part of the {@link TtsEngine} app contract.
      */
     public setProvider(provider: ITTSProvider) {
-        return this.enqueue(async () => {
+        return this.enqueue('setProvider', async () => {
             await this.stopInternal();
             this.providerManager.setProvider?.(provider);
             this.currentProviderId = provider.id;
@@ -517,11 +589,12 @@ export class AudioPlayerService implements TtsEngine {
     /**
      * The single fallback path (5a-PR2, phase5-tts-strangler.md §5a.1): swap the
      * backend to the platform's local provider and replay the current sentence ONCE.
-     * Always runs as a sequenced task — both triggers (`playInternal`'s rejection
-     * handler and the mid-playback error event) enqueue it, and the id guard makes a
-     * doubly-triggered recovery a no-op, so a provider failure can never double-fire
-     * the replay again. 5b-PR3 re-homes this into the sequencer-epoch rework
-     * unchanged in behavior.
+     * Always runs INSIDE the sequenced task that observed the failure (5b-PR3):
+     * `playInternal`'s rejection handler awaits it in the same `play` task, and the
+     * mid-playback error event awaits it inside its own `provider.error` task — the
+     * fallback is one sequenced task end-to-end. The id guard makes a doubly-
+     * triggered recovery a no-op, so a provider failure can never double-fire the
+     * replay.
      */
     private async recoverWithLocalProvider(): Promise<void> {
         if (this.currentProviderId === 'local') return; // already recovered
@@ -564,19 +637,25 @@ export class AudioPlayerService implements TtsEngine {
     }
 
     public loadSection(sectionIndex: number, autoPlay: boolean = true) {
-        const originalBookId = this.currentBookId;
-        return this.enqueue(async () => {
+        // Context-switch command (§5b.3): bump before enqueueing ourselves so
+        // previously queued navigation/playback tasks go stale.
+        this.taskSequencer.bumpEpoch('loadSection');
+        return this.enqueue('loadSection', async (ctx) => {
             if (this.playlistPromise) await this.playlistPromise;
-            if (this.currentBookId !== originalBookId) return;
+            // Converted hand-rolled guard (S7): originalBookId comparison -> epoch
+            // checkpoint. setBookId bumps the epoch synchronously, so a load
+            // enqueued for the old book cancels here (P17/P18 own this behavior).
+            ctx.checkpoint();
             return this.loadSectionInternal(sectionIndex, autoPlay);
         });
     }
 
     public loadSectionBySectionId(sectionId: string, autoPlay: boolean = true, sectionTitle?: string) {
-        const originalBookId = this.currentBookId;
-        return this.enqueue(async () => {
+        return this.enqueue('loadSectionBySectionId', async (ctx) => {
             if (this.playlistPromise) await this.playlistPromise;
-            if (this.currentBookId !== originalBookId) return;
+            // Converted hand-rolled guard (S7): stale after setBookId/stop/
+            // loadSection bumped the epoch (P18 pins the setBookId case).
+            ctx.checkpoint();
 
             const index = this.playlist.findIndex(s => s.sectionId === sectionId);
             
@@ -601,23 +680,29 @@ export class AudioPlayerService implements TtsEngine {
         });
     }
 
+    // Section skips are sequenced tasks (5b-PR3): they were the remaining
+    // un-sequenced public paths that mutate the queue (via loadSectionInternal).
     public async skipToNextSection(): Promise<boolean> {
-        return this.advanceToNextChapter();
+        const loaded = await this.enqueue('skipToNextSection', async () => this.advanceToNextChapter());
+        return loaded ?? false;
     }
 
     public async skipToPreviousSection(): Promise<boolean> {
-        if (!this.currentBookId || this.playlist.length === 0) return false;
-        let prevSectionIndex = this.stateManager.currentSectionIndex - 1;
-        while (prevSectionIndex >= 0) {
-            const loaded = await this.loadSectionInternal(prevSectionIndex, true);
-            if (loaded) return true;
-            prevSectionIndex--;
-        }
-        return false;
+        const loaded = await this.enqueue('skipToPreviousSection', async () => {
+            if (!this.currentBookId || this.playlist.length === 0) return false;
+            let prevSectionIndex = this.stateManager.currentSectionIndex - 1;
+            while (prevSectionIndex >= 0) {
+                const ok = await this.loadSectionInternal(prevSectionIndex, true);
+                if (ok) return true;
+                prevSectionIndex--;
+            }
+            return false;
+        });
+        return loaded ?? false;
     }
 
     setQueue(items: TTSQueueItem[], startIndex: number = 0) {
-        return this.enqueue(async () => {
+        return this.enqueue('setQueue', async () => {
             if (this.stateManager.isIdenticalTo(items)) {
                 this.stateManager.setQueue(items, startIndex, this.stateManager.currentSectionIndex);
                 // persist and notify are automatic.
@@ -632,7 +717,7 @@ export class AudioPlayerService implements TtsEngine {
     }
 
     jumpTo(index: number) {
-        return this.enqueue(async () => {
+        return this.enqueue('jumpTo', async () => {
             if (this.stateManager.jumpTo(index)) {
                 await this.stopInternal();
                 await this.playInternal();
@@ -641,7 +726,7 @@ export class AudioPlayerService implements TtsEngine {
     }
 
     async preview(text: string): Promise<void> {
-        return this.enqueue(async () => {
+        return this.enqueue('preview', async () => {
             await this.stopInternal();
             this.isPreviewing = true;
             this.setStatus('playing');
@@ -663,16 +748,23 @@ export class AudioPlayerService implements TtsEngine {
     }
 
     async play(): Promise<void> {
-        const now = Date.now();
-        logger.debug(`Play called. lastUserPauseTimestamp: ${this.lastUserPauseTimestamp}, diff: ${this.lastUserPauseTimestamp ? now - this.lastUserPauseTimestamp : 'N/A'}`);
-        if (this.lastUserPauseTimestamp && (now - this.lastUserPauseTimestamp <= 5000)) {
-            logger.debug('Triggering Dragnet Capture');
-            await this.executeDragnetCapture();
-        }
-        this.lastUserPauseTimestamp = null;
-
         flightRecorder.record('APS', 'play', { status: this.status });
-        return this.enqueue(() => this.playInternal());
+        // Dragnet capture is part of the play task (5b-PR3): the pause->play
+        // gesture check runs INSIDE the sequencer with the timestamp evaluated
+        // at task time, instead of as an un-sequenced prelude (S3). A play that
+        // went stale (stop/setBookId/loadSection bumped the epoch after it was
+        // enqueued) cancels before capturing or synthesizing.
+        return this.enqueue('play', async (ctx) => {
+            ctx.checkpoint();
+            const now = Date.now();
+            logger.debug(`Play called. lastUserPauseTimestamp: ${this.lastUserPauseTimestamp}, diff: ${this.lastUserPauseTimestamp ? now - this.lastUserPauseTimestamp : 'N/A'}`);
+            if (this.lastUserPauseTimestamp && (now - this.lastUserPauseTimestamp <= 5000)) {
+                logger.debug('Triggering Dragnet Capture');
+                await this.executeDragnetCapture();
+            }
+            this.lastUserPauseTimestamp = null;
+            return this.playInternal();
+        }) as Promise<void>;
     }
 
     private async executeDragnetCapture() {
@@ -809,10 +901,11 @@ export class AudioPlayerService implements TtsEngine {
             }
             if (isProviderPlaybackError(e) && this.currentProviderId !== 'local') {
                 // The single failure path: providers reject exactly once; the manager
-                // rethrows typed and does NOT self-swap. Recovery is one sequenced
-                // task (the doc's 5-line bridge) — the failed sentence replays once.
+                // rethrows typed and does NOT self-swap. Recovery completes INSIDE the
+                // task that observed the failure (one sequenced task end-to-end,
+                // 5b-PR3) — the failed sentence replays exactly once.
                 logger.warn("Cloud provider failed to start playback; falling back to local provider", e);
-                void this.enqueue(() => this.recoverWithLocalProvider());
+                await this.recoverWithLocalProvider();
                 return;
             }
             logger.error("Play error", e);
@@ -822,7 +915,7 @@ export class AudioPlayerService implements TtsEngine {
     }
 
     async resume(): Promise<void> {
-        return this.enqueue(() => this.resumeInternal());
+        return this.enqueue('resume', () => this.resumeInternal());
     }
 
     private async resumeInternal(): Promise<void> {
@@ -832,7 +925,7 @@ export class AudioPlayerService implements TtsEngine {
 
     pause() {
         this.lastUserPauseTimestamp = Date.now();
-        return this.enqueue(async () => {
+        return this.enqueue('pause', async () => {
             flightRecorder.record('APS', 'pause', { index: this.stateManager.currentIndex });
             this.providerManager.pause();
             this.setStatus('paused');
@@ -862,7 +955,11 @@ export class AudioPlayerService implements TtsEngine {
     }
 
     stop() {
-        return this.enqueue(async () => {
+        // Context-switch command (§5b.3): bump before enqueueing ourselves so
+        // previously queued playback tasks (play/loadSection) cancel at their
+        // checkpoints instead of racing the stop.
+        this.taskSequencer.bumpEpoch('stop');
+        return this.enqueue('stop', async () => {
             await this.stopInternal();
         });
     }
@@ -878,7 +975,7 @@ export class AudioPlayerService implements TtsEngine {
     }
 
     next() {
-        return this.enqueue(async () => {
+        return this.enqueue('next', async () => {
             flightRecorder.record('APS', 'next', { hasNext: this.stateManager.hasNext() });
             if (this.stateManager.hasNext()) {
                 this.stateManager.next();
@@ -891,7 +988,7 @@ export class AudioPlayerService implements TtsEngine {
     }
 
     prev() {
-        return this.enqueue(async () => {
+        return this.enqueue('prev', async () => {
             flightRecorder.record('APS', 'prev', { hasPrev: this.stateManager.hasPrev() });
             if (this.stateManager.hasPrev()) {
                 this.stateManager.prev();
@@ -908,7 +1005,7 @@ export class AudioPlayerService implements TtsEngine {
     setSpeed(speed: number) {
         if (this.speed === speed) return;
         this.speed = speed;
-        return this.enqueue(async () => {
+        return this.enqueue('setSpeed', async () => {
             if (this.status === 'playing' || this.status === 'loading') {
                 this.providerManager.stop();
                 await this.playInternal();
@@ -917,7 +1014,7 @@ export class AudioPlayerService implements TtsEngine {
     }
 
     seekTo(time: number) {
-        return this.enqueue(async () => {
+        return this.enqueue('seekTo', async () => {
             const changed = this.stateManager.seekToTime(time);
             const wasPlaying = (this.status === 'playing' || this.status === 'loading');
 
@@ -943,7 +1040,7 @@ export class AudioPlayerService implements TtsEngine {
     }
 
     seek(offset: number) {
-        return this.enqueue(async () => {
+        return this.enqueue('seek', async () => {
             if (offset > 0) {
                 if (this.stateManager.hasNext()) {
                     this.stateManager.next();
@@ -965,7 +1062,7 @@ export class AudioPlayerService implements TtsEngine {
     setVoice(voiceId: string) {
         if (this.voiceId === voiceId) return;
         this.voiceId = voiceId;
-        return this.enqueue(async () => {
+        return this.enqueue('setVoice', async () => {
             if (this.status === 'playing' || this.status === 'loading') {
                 this.providerManager.stop();
                 await this.playInternal();
@@ -973,44 +1070,54 @@ export class AudioPlayerService implements TtsEngine {
         });
     }
 
-    private playNext() {
-        this.enqueue(async () => {
-            if (this.status !== 'stopped') {
-                if (this.currentBookId) {
-                    const item = this.stateManager.getCurrentItem();
-                    if (item && item.cfi && !item.isPreroll) {
-                        try {
-                            this.ctx.readingState.addCompletedRange(this.currentBookId, item.cfi, 'tts');
-                        } catch (e) {
-                            logger.error("Failed to update history", e);
-                        }
-                    }
-                }
+    /**
+     * The provider's `end` event, executed as the sequenced `provider.end`
+     * task (5b-PR3; the former `playNext` + the preview-stop branch of the
+     * event handler): record history, then advance to the next visible item,
+     * the next chapter, or completion.
+     */
+    private async handlePlaybackEnded(): Promise<void> {
+        if (this.isPreviewing) {
+            this.isPreviewing = false;
+            this.setStatus('stopped');
+            return;
+        }
+        if (this.status === 'stopped') return;
 
-                const hasNext = this.stateManager.hasNext();
-                flightRecorder.record('APS', 'playNext', {
-                    index: this.stateManager.currentIndex,
-                    hasNext,
-                    queueLen: this.stateManager.queue.length
-                });
-
-                if (hasNext) {
-                    this.platformIntegration.setBackgroundAudioMode(this.platformIntegration.getBackgroundAudioMode(), true);
-
-                    this.stateManager.next();
-                    await this.playInternal();
-                } else {
-                    const loaded = await this.advanceToNextChapter();
-                    if (!loaded) {
-                        flightRecorder.record('APS', 'playNext.completed');
-                        this.setStatus('completed');
-                    }
+        if (this.currentBookId) {
+            const item = this.stateManager.getCurrentItem();
+            if (item && item.cfi && !item.isPreroll) {
+                try {
+                    this.ctx.readingState.addCompletedRange(this.currentBookId, item.cfi, 'tts');
+                } catch (e) {
+                    logger.error("Failed to update history", e);
                 }
             }
+        }
+
+        const hasNext = this.stateManager.hasNext();
+        flightRecorder.record('APS', 'playNext', {
+            index: this.stateManager.currentIndex,
+            hasNext,
+            queueLen: this.stateManager.queue.length
         });
+
+        if (hasNext) {
+            this.platformIntegration.setBackgroundAudioMode(this.platformIntegration.getBackgroundAudioMode(), true);
+
+            this.stateManager.next();
+            await this.playInternal();
+        } else {
+            const loaded = await this.advanceToNextChapter();
+            if (!loaded) {
+                flightRecorder.record('APS', 'playNext.completed');
+                this.setStatus('completed');
+            }
+        }
     }
 
     private setStatus(status: TTSStatus) {
+        this.assertSequencedMutation('setStatus');
         const oldStatus = this.status;
         if ((oldStatus === 'playing' || oldStatus === 'loading') && (status === 'paused' || status === 'stopped')) {
             if (this.currentBookId) {
@@ -1127,7 +1234,7 @@ export class AudioPlayerService implements TtsEngine {
             this.lastAppliedAnalysisSectionId = section.sectionId;
             this.lastAppliedAnalysisTimestamp = analysis.generatedAt;
 
-            this.enqueue(async () => {
+            this.enqueue('analysis.apply', async () => {
                 // Validate current context
                 if (this.currentBookId !== bookId) return;
                 const activeSection = this.playlist[this.stateManager.currentSectionIndex];
@@ -1209,16 +1316,8 @@ export class AudioPlayerService implements TtsEngine {
             this.prerollEnabled,
             this.speed,
             sectionTitle || section.title,
-            (mask) => {
-                if (this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
-                    this.stateManager.applySkippedMask(mask, section.sectionId);
-                }
-            },
-            (adaptations) => {
-                if (this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
-                    this.stateManager.applyTableAdaptations(adaptations);
-                }
-            }
+            this.sequencedMaskCallback(bookId, sectionIndex, section.sectionId),
+            this.sequencedAdaptationsCallback(bookId, sectionIndex)
         );
 
         flightRecorder.record('APS', 'loadSectionInternal', {

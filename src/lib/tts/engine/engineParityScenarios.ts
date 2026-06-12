@@ -740,8 +740,36 @@ export function describeEngineParity(
                     await h.engine.setBookId('book-B');
                     releaseA();
 
-                    // The stale task must bail on the originalBookId guard without touching the
-                    // DB or the queue; book B keeps working normally afterwards.
+                    // The stale task must bail on the epoch checkpoint (5b-PR3; formerly
+                    // the originalBookId guard) without touching the DB or the queue;
+                    // book B keeps working normally afterwards.
+                    await h.engine.loadSection(0, false);
+                    await waitForQueue(h, (q) => q.some((i) => i.text.includes('Book B sentence')));
+                    expect(h.host.contentFetchCount('book-A', 'sec-a1')).toBe(0);
+                    expect(h.queueRefs().some((q) => q.some((i) => i.text.includes('Book A only')))).toBe(false);
+                }));
+        });
+
+        describe('regression: AudioPlayerService.predictability', () => {
+            it('a loadSection(index) parked on book A’s playlist is a no-op after setBookId(B) lands first', () =>
+                withHarness(async (h) => {
+                    await h.host.setGenAISettings(GENAI_DISABLED);
+                    h.host.seedSections('book-A', [{ sectionId: 'sec-a1', title: 'A1' }]);
+                    h.host.seedTTSContent('book-A', 'sec-a1', [{ text: 'Book A only sentence.', cfi: CFI_BODY }]);
+                    h.host.seedSections('book-B', [{ sectionId: 'sec-b1', title: 'B1' }]);
+                    h.host.seedTTSContent('book-B', 'sec-b1', [{ text: 'Book B sentence.', cfi: CFI_BODY }]);
+
+                    // Hold book A's playlist load so the enqueued loadSection task is
+                    // still parked on it when book B takes over (the absorbed suite's
+                    // "loadSection race condition fix" case, by section INDEX).
+                    const releaseA = h.host.gateSections('book-A');
+                    await h.engine.setBookId('book-A');
+                    void h.engine.loadSection(0, false); // deliberately NOT awaited
+                    await h.engine.setBookId('book-B');
+                    releaseA();
+
+                    // The stale-by-epoch task cancels: book A's content is never
+                    // fetched and its queue never broadcast; book B works normally.
                     await h.engine.loadSection(0, false);
                     await waitForQueue(h, (q) => q.some((i) => i.text.includes('Book B sentence')));
                     expect(h.host.contentFetchCount('book-A', 'sec-a1')).toBe(0);

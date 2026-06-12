@@ -186,7 +186,15 @@ export class WorkerTtsEngine {
     pause(): void { void this.e.pause(); }
     stop(): void { void this.e.stop(); }
     preview(text: string): Promise<void> { return this.e.preview(text); }
-    setBookId(bookId: string | null): void { this.e.setBookId(bookId); }
+    /**
+     * Fire-and-forget across the boundary, like every navigation command: the
+     * Comlink call resolves after the engine's SYNCHRONOUS context switch
+     * (epoch bump + currentBookId + load kickoffs, 5b-PR3); the sequenced
+     * stop/reset completion is observable on the snapshot channel. Awaiting
+     * the reset task here would let a caller deadlock the sequencer against a
+     * task parked on the old book's still-loading playlist.
+     */
+    setBookId(bookId: string | null): void { void this.e.setBookId(bookId); }
     loadSection(index: number, autoPlay?: boolean): void { void this.e.loadSection(index, autoPlay); }
     loadSectionBySectionId(sectionId: string, autoPlay?: boolean, title?: string): void {
         void this.e.loadSectionBySectionId(sectionId, autoPlay, title);

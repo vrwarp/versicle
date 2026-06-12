@@ -47,6 +47,23 @@ export class QueueModel {
 
     private listeners: StateChangeListener[] = [];
 
+    /**
+     * DEV-only mutation tripwire (Phase 5b-PR3, the C4 dev-assert): the engine
+     * installs a guard that throws unless a sequenced task is currently
+     * running, making "only sequenced tasks mutate the queue" a crashing
+     * invariant in dev/test instead of a convention. No-op when unset
+     * (standalone QueueModel unit tests drive the model directly).
+     */
+    private mutationGuard: ((op: string) => void) | null = null;
+
+    setMutationGuard(guard: ((op: string) => void) | null): void {
+        this.mutationGuard = guard;
+    }
+
+    private assertMutable(op: string): void {
+        this.mutationGuard?.(op);
+    }
+
     /** Freeze in DEV/test so any in-place mutation attempt throws loudly. */
     private static seal(items: TTSQueueItem[]): ReadonlyArray<TTSQueueItem> {
         return import.meta.env.DEV ? Object.freeze(items) : items;
@@ -81,6 +98,7 @@ export class QueueModel {
      * Resets the playback state to its initial values.
      */
     reset() {
+        this.assertMutable('reset');
         flightRecorder.record('PSM', 'reset');
         this.replaceQueue([]);
         this._currentIndex = 0;
@@ -99,6 +117,7 @@ export class QueueModel {
      * @param {number} sectionIndex The index of the current section in the book.
      */
     setQueue(items: TTSQueueItem[], startIndex: number, sectionIndex: number) {
+        this.assertMutable('setQueue');
         flightRecorder.record('PSM', 'setQueue', {
             len: items.length,
             startIndex,
@@ -124,6 +143,7 @@ export class QueueModel {
      * @param {string} sectionId The section ID for validation.
      */
     applySkippedMask(rawSkippedIndices: Set<number>, sectionId?: string) {
+        this.assertMutable('applySkippedMask');
         let changed = false;
 
         const newQueue = this._queue.map((item) => {
@@ -166,6 +186,7 @@ export class QueueModel {
      * @param {Array<{ indices: number[], text: string }>} adaptations List of adaptations.
      */
     applyTableAdaptations(adaptations: { indices: number[], text: string }[]) {
+        this.assertMutable('applyTableAdaptations');
         let changed = false;
 
         // Clone queue to avoid mutation
@@ -311,6 +332,7 @@ export class QueueModel {
     }
 
     next(): boolean {
+        this.assertMutable('next');
         const nextIndex = this.getNextVisibleIndex(this._currentIndex);
         if (nextIndex !== -1) {
             flightRecorder.record('PSM', 'next', { from: this._currentIndex, to: nextIndex });
@@ -323,6 +345,7 @@ export class QueueModel {
     }
 
     prev(): boolean {
+        this.assertMutable('prev');
         const prevIndex = this.getPrevVisibleIndex(this._currentIndex);
         if (prevIndex !== -1) {
             flightRecorder.record('PSM', 'prev', { from: this._currentIndex, to: prevIndex });
@@ -359,6 +382,7 @@ export class QueueModel {
     }
 
     jumpTo(index: number): boolean {
+        this.assertMutable('jumpTo');
         if (index >= 0 && index < this._queue.length) {
             flightRecorder.record('PSM', 'jumpTo', { from: this._currentIndex, to: index });
             this._currentIndex = index;
@@ -377,6 +401,7 @@ export class QueueModel {
      * @returns {boolean} True if the index changed.
      */
     seekToTime(time: number): boolean {
+        this.assertMutable('seekToTime');
         if (!this._queue.length || !this.prefixSums.length) return false;
 
         const charsPerSecond = this.calculateCharsPerSecond();
@@ -406,6 +431,7 @@ export class QueueModel {
      * Jumps to the last item in the queue.
      */
     jumpToEnd() {
+        this.assertMutable('jumpToEnd');
         if (this._queue.length > 0) {
             const last = this._queue.length - 1;
             flightRecorder.record('PSM', 'jumpToEnd', { from: this._currentIndex, to: last });

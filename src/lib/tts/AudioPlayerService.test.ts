@@ -155,6 +155,11 @@ vi.mock('./TextSegmenter', () => ({
 describe('AudioPlayerService', () => {
     let service: AudioPlayerService;
 
+    /** Run a private status/queue mutation INSIDE the sequencer (C4 dev-assert, 5b-PR3). */
+    const sequenced = (fn: () => void) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (service as any).taskSequencer.enqueue('test.sequenced', async () => fn()) as Promise<void>;
+
     beforeEach(() => {
         vi.spyOn(console, 'error').mockImplementation(() => { });
         vi.spyOn(console, 'warn').mockImplementation(() => { });
@@ -314,16 +319,16 @@ describe('AudioPlayerService', () => {
         const playSpy = vi.spyOn(BackgroundAudio.prototype, 'play');
         const forceStopSpy = vi.spyOn(BackgroundAudio.prototype, 'forceStop');
 
-        // Ensure we are in a playing state
-        // @ts-expect-error Access private
-        service.setStatus('playing');
+        // Ensure we are in a playing state (sequenced: the C4 dev-assert)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await sequenced(() => (service as any).setStatus('playing'));
 
         expect(playSpy).toHaveBeenCalled();
         playSpy.mockClear();
 
         // Transition to completed
-        // @ts-expect-error Access private
-        service.setStatus('completed');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await sequenced(() => (service as any).setStatus('completed'));
 
         expect(playSpy).toHaveBeenCalled();
         expect(forceStopSpy).not.toHaveBeenCalled();
@@ -353,12 +358,12 @@ describe('AudioPlayerService', () => {
         expect(genAIService.detectContentTypes).toHaveBeenCalled();
     });
 
-    it('should synchronously stop playback and reset state when switching book IDs', async () => {
+    it('stops playback and resets state on book switch before any queued work for the new book runs', async () => {
         // 1. Setup initial state: Book 1 playing
-        service.setBookId('book1');
+        void service.setBookId('book1');
         await service.setQueue([{ text: "Book 1", cfi: "cfi1" }]);
-        // @ts-expect-error Access private
-        service.setStatus('playing');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await sequenced(() => (service as any).setStatus('playing'));
 
         // Verify initial state
         // @ts-expect-error Access private
@@ -371,16 +376,22 @@ describe('AudioPlayerService', () => {
         // @ts-expect-error Access private
         const publishSpy = vi.spyOn(service, 'publishSnapshot');
 
-        // 2. Switch to Book 2
-        service.setBookId('book2');
+        // 2. Switch to Book 2. The context switch (epoch bump + currentBookId)
+        // is synchronous; the stop/reset runs as the FIRST sequenced task
+        // (5b-PR3) — awaiting setBookId observes the completed reset, and any
+        // task enqueued before the switch is stale by epoch.
+        // @ts-expect-error Access private
+        expect(service.currentBookId).toBe('book1');
+        const switched = service.setBookId('book2');
+        // @ts-expect-error Access private — the context switch is still synchronous
+        expect(service.currentBookId).toBe('book2');
+        await switched;
 
-        // 3. Verify synchronous reset
+        // 3. Verify the reset landed
         // @ts-expect-error Access private
         expect(service.status).toBe('stopped');
-        // @ts-expect-error Access private
-        expect(service.currentBookId).toBe('book2');
 
-        // Queue should be empty immediately (before restoreQueue completes)
+        // Queue is reset (before restoreQueue completes)
         expect(service.getQueue().length).toBe(0);
 
         // Should have published a snapshot with null CFI (cleared state)
@@ -502,8 +513,8 @@ describe('AudioPlayerService', () => {
             await new Promise(resolve => setTimeout(resolve, 10));
 
             // Case 1: Start of book
-            // @ts-expect-error Access private state manager
-            service.stateManager.setQueue([{ text: 'a', cfi: '1' }], 0, 0); 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await sequenced(() => (service as any).stateManager.setQueue([{ text: 'a', cfi: '1' }], 0, 0));
             // @ts-expect-error Access private
             expect(service.calculateBookProgress()).toBe(0);
 
@@ -518,15 +529,15 @@ describe('AudioPlayerService', () => {
             expect(service.calculateBookProgress()).toBe(0.1);
 
             // Case 3: Start of second section (sec2)
-            // @ts-expect-error Access private
-            service.stateManager.setQueue([{ text: 'b', cfi: '2' }], 0, 1);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await sequenced(() => (service as any).stateManager.setQueue([{ text: 'b', cfi: '2' }], 0, 1));
             // sec1(100) + sec2(0) = 100 / 200 = 0.5
             // @ts-expect-error Access private
             expect(service.calculateBookProgress()).toBe(0.5);
 
             // Case 4: End of last section (sec3)
-            // @ts-expect-error Access private
-            service.stateManager.setQueue([{ text: 'c', cfi: '3' }], 1, 2);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await sequenced(() => (service as any).stateManager.setQueue([{ text: 'c', cfi: '3' }], 1, 2));
             // @ts-expect-error Access private
             service.stateManager.prefixSums = [0, 50, 100];
             // Total: 100 (sec1) + 0 (sec2) + 50 (sec3 current) = 150 / 200 = 0.75

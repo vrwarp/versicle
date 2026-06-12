@@ -95,9 +95,12 @@ describe('AudioPlayerService - State Protection', () => {
         // So we need to set the section index first.
 
         // The only way to set section index publicly is via loadSection/loadSectionInternal or restoreQueue.
-        // Let's mock restoreQueue behavior or use private access.
-        // @ts-expect-error Accessing private stateManager for test
-        service.stateManager.setQueue(dummyQueue, 0, 5); // Valid section index 5
+        // Sequenced (the 5b-PR3 C4 dev-assert rejects un-sequenced queue mutation).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (service as any).taskSequencer.enqueue('test.seed', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (service as any).stateManager.setQueue(dummyQueue, 0, 5); // Valid section index 5
+        });
 
         // Wait for subscription to fire associated with setQueue
         await new Promise(resolve => setTimeout(resolve, 10));
