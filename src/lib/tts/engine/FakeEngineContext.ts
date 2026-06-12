@@ -117,6 +117,8 @@ export class FakeEngineContext implements EngineContext {
 
     /** keyed by `${bookId}/${sectionId}` → persisted ContentAnalysis (the getContentAnalysis result). */
     contentAnalyses: Record<string, ContentAnalysis> = {};
+    /** Every getContentAnalysis fetch, as `${bookId}/${sectionId}` (parity P16 dedup pin). */
+    readonly contentAnalysisFetchLog: string[] = [];
     readonly savedReferenceCfis: Array<{ bookId: string; sectionId: string; cfi: string | undefined }> = [];
     readonly savedTableAdaptations: Array<{ bookId: string; sectionId: string; adaptations: { rootCfi: string; text: string }[] }> = [];
 
@@ -127,7 +129,10 @@ export class FakeEngineContext implements EngineContext {
             this.analysisListeners.add(listener);
             return () => this.analysisListeners.delete(listener);
         },
-        getContentAnalysis: async (bookId: string, sectionId: string) => this.contentAnalyses[`${bookId}/${sectionId}`],
+        getContentAnalysis: async (bookId: string, sectionId: string) => {
+            this.contentAnalysisFetchLog.push(`${bookId}/${sectionId}`);
+            return this.contentAnalyses[`${bookId}/${sectionId}`];
+        },
         saveReferenceStartCfi: (bookId: string, sectionId: string, cfi: string | undefined) => {
             this.savedReferenceCfis.push({ bookId, sectionId, cfi });
         },

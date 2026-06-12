@@ -1,0 +1,39 @@
+{
+  "state": {
+    "activeLanguage": "zh",
+    "profiles": {
+      "en": {
+        "voiceId": "v-en-webspeech",
+        "rate": 1,
+        "pitch": 1,
+        "volume": 1
+      },
+      "zh": {
+        "voiceId": "v-zh-webspeech",
+        "rate": 1.5,
+        "pitch": 1,
+        "volume": 1
+      }
+    },
+    "rate": 1.5,
+    "pitch": 1,
+    "voice": null,
+    "providerId": "local",
+    "apiKeys": {
+      "google": "",
+      "openai": "sk-FIXTURE-v2-openai-key",
+      "lemonfox": ""
+    },
+    "customAbbreviations": [],
+    "alwaysMerge": [],
+    "sentenceStarters": [],
+    "minSentenceLength": 12,
+    "enableCostWarning": false,
+    "prerollEnabled": false,
+    "sanitizationEnabled": true,
+    "isBibleLexiconEnabled": false,
+    "backgroundAudioMode": "noise",
+    "whiteNoiseVolume": 0.25
+  },
+  "version": 2
+}

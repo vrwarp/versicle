@@ -26,6 +26,9 @@ export class FakePlaybackBackend implements PlaybackBackend {
     downloadedVoices = new Set<string>();
     /** Provider ids requested via the uniform by-id API. */
     readonly providerIds: string[] = [];
+    /** The provider the backend currently routes to ('local' initially, like the manager). */
+    currentProviderId = 'local';
+    private failNext: { message: string } | null = null;
 
     /** A PlaybackBackendFactory that produces a shared instance, captured here for assertions. */
     static factory(): { factory: PlaybackBackendFactory; get(): FakePlaybackBackend | null } {
@@ -43,8 +46,28 @@ export class FakePlaybackBackend implements PlaybackBackend {
     async init(): Promise<void> {
         this.initCount++;
     }
+    /**
+     * Arm the backend so the next play() on a non-'local' provider fails over, replicating
+     * TTSProviderManager's CURRENT fallback semantics (the S2 double-fire): the provider's
+     * error event (TTSProviderManager.ts event path) AND the play-catch path BOTH emit
+     * `{type:'fallback'}` and swap to the local provider. Events fire on microtasks to mirror
+     * the async event delivery of the real providers (and of the worker transport).
+     * 5a-PR2 collapses production to a single rejection path; the P21 `it.fails` rider in
+     * engineParityScenarios.ts tracks that flip.
+     */
+    failNextPlay(error: { message: string }): void {
+        this.failNext = error;
+    }
+
     async play(text: string, options: { voiceId: string; speed: number }): Promise<void> {
         this.played.push({ text, ...options });
+        const failure = this.failNext;
+        if (failure && this.currentProviderId !== 'local') {
+            this.failNext = null;
+            this.currentProviderId = 'local';
+            queueMicrotask(() => this.events.onError({ type: 'fallback', message: failure.message }));
+            queueMicrotask(() => this.events.onError({ type: 'fallback', message: failure.message }));
+        }
     }
     preload(text: string, options: { voiceId: string; speed: number }): void {
         this.preloaded.push({ text, ...options });
@@ -60,6 +83,7 @@ export class FakePlaybackBackend implements PlaybackBackend {
     }
     setProviderById(providerId: string): void {
         this.providerIds.push(providerId);
+        this.currentProviderId = providerId;
     }
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     setProvider(_provider: ITTSProvider): void {

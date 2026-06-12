@@ -214,4 +214,67 @@ export default tseslint.config(
       ],
     },
   },
+  // Engine-dir vi.mock allowlist (Phase 5 entry gate; phase5-tts-strangler.md
+  // N3 + §vi.mock policy, README §4 rule 3 ratchet "vi.mock in
+  // engine/provider/data dirs → 0"): the engine parity/unit suites drive the
+  // engine through injected fakes (FakeEngineContext, FakePlaybackBackend),
+  // but AudioPlayerService still imports the src/data repos directly and the
+  // pipeline reaches LexiconService/PlatformIntegration, so exactly these
+  // module mocks remain allowed inside src/lib/tts/engine/. The allowlist is
+  // FROZEN here (rewired post-P3: the doc's `@db/DBService` entry became the
+  // two repos that replaced it when src/db was deleted — see
+  // plan/overhaul/prep/phase5-absorption-ledger.md §allowlist):
+  //  - @data/repos/bookContent, @data/repos/playbackCache, ../LexiconService,
+  //    ../PlatformIntegration → shrink to ZERO at 5b-PR5
+  //    (SessionStore/lexicon ports replace the direct imports);
+  //  - @app/tts/createWorkerEngineClient (WorkerEngineHandle.test.ts only) is
+  //    the N1 inverted lib→app edge — it leaves this directory (and this
+  //    allowlist) at 5b-PR1 when WorkerEngineHandle moves to src/app/tts/.
+  // At 5b-PR5 the :not() clauses are deleted and every vi.mock/vi.doMock in
+  // the directory becomes a lint error.
+  //
+  // Placement + the repeated readwrite selector are load-bearing: flat config
+  // resolves same-named rules last-wins (options replace, never merge), so
+  // this block must sit AFTER the Phase 3 readwrite-transaction ban above and
+  // restate that selector — otherwise one of the two rules would silently
+  // stop applying to src/lib/tts/engine/.
+  {
+    files: ['src/lib/tts/engine/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.property.name='transaction'] > Literal[value='readwrite']",
+          message:
+            'readwrite transactions are banned outside src/data — route the ' +
+            'write through a @data/repos/* method (every repo writer holds ' +
+            'the cross-context IDB write gate).',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/] > Literal" +
+            ":not([value='@data/repos/bookContent'])" +
+            ":not([value='@data/repos/playbackCache'])" +
+            ":not([value='../LexiconService'])" +
+            ":not([value='../PlatformIntegration'])" +
+            ":not([value='@app/tts/createWorkerEngineClient'])",
+          message:
+            'vi.mock in src/lib/tts/engine/ is frozen to the allowlist ' +
+            '{@data/repos/bookContent, @data/repos/playbackCache, ../LexiconService, ' +
+            '../PlatformIntegration, @app/tts/createWorkerEngineClient} ' +
+            '(phase5-tts-strangler.md N3; shrinks to ' +
+            'ZERO at 5b-PR5). Drive the engine through injected fakes ' +
+            '(FakeEngineContext/FakePlaybackBackend) instead.',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/][arguments.0.type!='Literal']",
+          message:
+            'vi.mock in src/lib/tts/engine/ must name its module as a plain string literal ' +
+            'so the allowlist rule above can see it (phase5-tts-strangler.md N3).',
+        },
+      ],
+    },
+  },
 );
