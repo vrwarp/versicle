@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { MigrationStateService } from '@domains/sync/workspaces/MigrationStateService';
 import { clearStagedState } from '@domains/sync/workspaces/stagedSwap';
 import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
-import { getSyncOrchestrator } from '@app/sync/createSync';
+import { getSyncOrchestratorAsync } from '@app/sync/createSync';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('WorkspaceMigrationConfirm');
@@ -50,7 +50,7 @@ export const WorkspaceMigrationConfirmModal: React.FC<WorkspaceMigrationConfirmM
             }
 
             // Start sync with the new workspace
-            void getSyncOrchestrator().start();
+            void getSyncOrchestratorAsync().then(orchestrator => orchestrator.start());
 
             onResolved();
         } catch (e) {

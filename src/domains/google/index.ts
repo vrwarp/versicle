@@ -55,7 +55,17 @@ export {
   type GenAIConfig,
   type GenAIConfigProvider,
 } from './genai/contract';
-export { GeminiClient, GENAI_ROTATION_MODELS, type GeminiClientDeps } from './genai/GeminiClient';
+// Phase 8 §A (first-use splitting): the GenAI IMPLEMENTATION left this
+// index's static value surface. The composition root installs the lazy
+// facade (GeminiClient loads on the first generate call) and the feature
+// modules load via deep dynamic imports at their lib/genai façade call
+// sites — static value re-exports here would drag them back into the
+// entry chunk (the feature modules carry module-scope zod schemas that
+// defeat tree-shaking; check 4 of scripts/check-worker-chunk.mjs pins the
+// emitted artifact). Their TYPES remain part of this public surface;
+// in-domain code and tests import the implementation modules directly.
+export type { GeminiClientDeps } from './genai/GeminiClient';
+export { makeLazyGenAIClient } from './genai/lazyClient';
 export { MockGenAIClient, type MockGenAIFixture } from './genai/MockGenAIClient';
 export { getGenAIClient, setGenAIClient, resetGenAIClientForTesting } from './genai/holder';
 export {
@@ -70,29 +80,18 @@ export {
   type GenAILogEntry,
   type GenAILogSink,
 } from './genai/logging';
-export {
-  generateTocTitles,
-  validateTocTitles,
-  type TocSectionInput,
-  type TocTitleResult,
-} from './genai/features/tocTitles';
-export {
-  detectReferenceSection,
-  validateReferenceDetection,
-  type ReferenceDetectionNode,
-  type ReferenceDetectionResult,
-  type DetectedContentType,
+export type { TocSectionInput, TocTitleResult } from './genai/features/tocTitles';
+export type {
+  ReferenceDetectionNode,
+  ReferenceDetectionResult,
+  DetectedContentType,
 } from './genai/features/referenceDetection';
-export {
-  generateTableAdaptations,
-  validateTableAdaptations,
-  type TableAdaptationNode,
-  type TableAdaptationResult,
+export type {
+  TableAdaptationNode,
+  TableAdaptationResult,
 } from './genai/features/tableAdaptation';
-export {
-  mapReadingListToLibrary,
-  validateLibraryMappings,
-  type UnmappedEntry,
-  type UnmappedBook,
-  type LibraryMapping,
+export type {
+  UnmappedEntry,
+  UnmappedBook,
+  LibraryMapping,
 } from './genai/features/libraryMapping';

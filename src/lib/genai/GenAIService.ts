@@ -28,15 +28,17 @@
  * client adoption by consumers is later work; the façade stays until then.
  */
 import type { ContentType } from '~types/content-analysis';
-import {
-  detectReferenceSection,
-  generateTableAdaptations as generateTableAdaptationsFeature,
-  generateTocTitles,
-  getGenAIClient,
-  mapReadingListToLibrary as mapReadingListToLibraryFeature,
-} from '@domains/google';
+import { getGenAIClient } from '@domains/google';
 import type { GenAILogEntry, GenAIPrompt } from '@domains/google';
 import { createLogger } from '../logger';
+
+// Phase 8 §A first-use splitting: the feature modules (tocTitles,
+// referenceDetection, tableAdaptation, libraryMapping) load on FIRST CALL
+// via deep dynamic imports — this façade rides the entry chunk (TTS engine
+// graph), so static feature-value imports here would drag the whole GenAI
+// feature layer into it (check 4 of scripts/check-worker-chunk.mjs asserts
+// it stays out). Deep module paths (not the domain index) keep the async
+// chunks separate from the statically-imported index.
 
 export type { GenAILogEntry };
 
@@ -104,6 +106,7 @@ class GenAIService {
     sections: { id: string; text: string }[],
     context?: { bookTitle?: string; language?: string },
   ): Promise<{ id: string; title: string }[]> {
+    const { generateTocTitles } = await import('@domains/google/genai/features/tocTitles');
     return generateTocTitles(getGenAIClient(), sections, context);
   }
 
@@ -117,6 +120,9 @@ class GenAIService {
     justification: string;
     agreedWithHeuristic: boolean;
   }> {
+    const { detectReferenceSection } = await import(
+      '@domains/google/genai/features/referenceDetection'
+    );
     const result = await detectReferenceSection(getGenAIClient(), nodes, hints, context);
     return {
       // The legacy ContentType union is single-variant ('reference'); the
@@ -136,7 +142,10 @@ class GenAIService {
     thinkingBudget: number = 512,
     context?: { bookTitle?: string; sectionTitle?: string },
   ): Promise<{ cfi: string; adaptation: string }[]> {
-    return generateTableAdaptationsFeature(getGenAIClient(), nodes, thinkingBudget, context);
+    const { generateTableAdaptations } = await import(
+      '@domains/google/genai/features/tableAdaptation'
+    );
+    return generateTableAdaptations(getGenAIClient(), nodes, thinkingBudget, context);
   }
 
   /** Reading-list ↔ library mapping (feature: libraryMapping). */
@@ -144,7 +153,10 @@ class GenAIService {
     unmappedEntries: { filename: string; title: string; author: string }[],
     unmappedBooks: { bookId: string; title: string; author: string; sourceFilename?: string }[],
   ): Promise<{ readingListFilename: string; libraryBookId: string }[]> {
-    return mapReadingListToLibraryFeature(getGenAIClient(), unmappedEntries, unmappedBooks);
+    const { mapReadingListToLibrary } = await import(
+      '@domains/google/genai/features/libraryMapping'
+    );
+    return mapReadingListToLibrary(getGenAIClient(), unmappedEntries, unmappedBooks);
   }
 }
 

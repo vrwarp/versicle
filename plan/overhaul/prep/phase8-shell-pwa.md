@@ -705,3 +705,71 @@ Re-measured against the post-P6/P7 tree (HEAD `fd5f1302`). Deltas vs the
   `GlobalSettingsDialog.test.tsx` + `.predictability` → SettingsShell suite;
   `CompassPill.test` + `_Accessibility` + `_NoteRecall` → pill feature
   suites + ReaderControlBar suite.
+
+### p8-routes-and-settings — LANDED (2026-06-12)
+
+PR-0 + PR-4 + PR-5 + PR-6 + PR-7 of this doc, as four commits. Recorded
+deviations and decisions (design-doc-vs-reality, README §Program rules):
+
+- **Routes:** `/`, `/notes`, `/read/:id` (lazy), `/settings/:tab?` (lazy
+  shell, lazy panels). `/read/:id` flipped lazy in PR-4 rather than PR-7 —
+  both landed in this one item, so the chunk churn argument was moot.
+- **Settings-over-reader simplification:** the `/settings/:tab` route
+  renders the dialog over the LIBRARY (the §B deep-link acceptance);
+  opening settings FROM the reader navigates away from `/read/:id` and
+  back restores it (reading position persists; TTS is a global engine and
+  keeps playing). The full background-location pattern (settings overlay
+  keeping the reader mounted) needs nested settings routes under
+  `read/:id` — left to the PWA/a11y item or P9 if reader-context settings
+  prove load-bearing.
+- **`useUIStore.isGlobalSettingsOpen`:** DELETED instead of kept as a
+  navigating shim — the setter cannot navigate without a store→router
+  edge (layering violation / import cycle), and all call sites were
+  internal (LibraryView, ReaderChrome). Migration note 5's shim is
+  therefore moot.
+- **Settings labels:** plain strings in the registry until the locale
+  item lands `MessageKey` (`labelKey` swap is confined to
+  `app/settings/registry.ts`).
+- **E2E selectors:** 21 verification specs swapped
+  `getByRole('button', { name: '<Tab>' })` → `getByRole('tab', …)` — the
+  Radix tablist semantics are the §B point; testids unchanged.
+- **§L flip:** `ui-imports-kernel-only` born at ERROR (baseline 0) with
+  two named carve-outs riding the toast item: `ToastContainer.tsx` (store
+  value import) and `Toast.tsx` (type-only). Delete the pathNot with §D.
+- **First-use splitting (§A):** firebase loads via
+  `createSync.ts` (light) → dynamic `composeSync.ts` (heavy:
+  SyncOrchestrator/AuthSession/FirestoreBackend/firebase-config) inside
+  the `syncInit` run() body, gated on `isSyncEnabled()` — un-configured
+  users never fetch the chunk. Config PRESENCE moved to SDK-free
+  `lib/sync/firebase-config-presence.ts`. `getSyncOrchestrator()` became
+  `getSyncOrchestratorAsync()` (+ `peekSyncOrchestrator()` for the
+  obsolete-sever path). GenAI: `makeLazyGenAIClient` facade installed by
+  wireGoogle; the domain index dropped its STATIC feature/GeminiClient
+  value re-exports (module-scope zod schemas defeat tree-shaking);
+  GenAIService deep-dynamic-imports the feature modules; the holder's
+  not-configured fallback no longer constructs GeminiClient. epubjs:
+  extract.ts/reprocess.ts load epubjs + the offscreen renderer lazily.
+- **Check 4 deltas vs the sketch:** lives in
+  `scripts/check-worker-chunk.mjs` (NOT renamed to check-bundle.mjs — the
+  npm script name `check:worker-chunk` is pinned by docs/CI); entry
+  chunks are derived from built `index.html` script tags (post-split,
+  `index-*.js` also matches chunks Rollup named after `index.ts`
+  modules); the epubjs pattern names the FULL-ENGINE modules
+  (epub.js/book.js/rendition.js/managers/) because the kernel CFI shim's
+  sanctioned `epubjs/src/epubcfi` submodule (epubcfi.js + utils/core.js)
+  legitimately rides the entry+worker; the genai pattern names
+  GeminiClient + features/ (holder/contract/logging are wiring surface).
+  Size ratchet recorded: entry static closure = ONE chunk, 441,686 gzip
+  bytes (`bundle-baseline.json`, 10% headroom; pre-split entry closure
+  was ~2.87 MB raw across two chunks incl. firebase+epubjs+genai).
+  Probe regression PROVEN: a deliberate static
+  `import '@domains/sync/backend/FirestoreBackend'` in createSync.ts
+  re-eagered the firebase tree and check 4 FAILED listing it; reverted.
+- **Drive stays statically wired** (deviation from §A's "drive/genai
+  lazy facades"): DriveClient/DriveLibrarySync are small REST modules,
+  the holders type against the concrete classes (a structural facade
+  can't carry private fields), and check 4 doesn't assert drive. Lazy
+  drive facades = P9 candidate if entry budget pressure appears.
+- **Hand-off to the toast item:** ToastContainer/Toast ui/ carve-outs
+  (above) + the boot-time-toast gap (ToastContainer still mounts in
+  RootLayout, below the router gate).

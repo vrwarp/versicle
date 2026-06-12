@@ -77,7 +77,11 @@ vi.mock('./lib/MaintenanceService', () => ({
 // The sync composition root (P4-3: the orchestrator replaced
 // FirestoreSyncManager; boot drives it through these exports).
 vi.mock('./app/sync/createSync', () => ({
-  getSyncOrchestrator: vi.fn(() => ({ start: h.syncInitialize })),
+  getSyncOrchestratorAsync: vi.fn(async () => ({ start: h.syncInitialize })),
+  peekSyncOrchestrator: vi.fn(() => null),
+  // P8 first-use gate: boot only composes (downloads the firebase chunk)
+  // when sync could run — the boot pins below run with the gate OPEN.
+  isSyncEnabled: vi.fn(() => true),
   configureSyncBackendSelection: vi.fn(async () => undefined),
   stopSyncConnections: vi.fn(),
   stopSyncForWipe: vi.fn(),

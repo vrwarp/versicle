@@ -159,13 +159,13 @@ describe('SyncOrchestrator', () => {
 
     describe('regression: composition-root accessor is a singleton (was getInstance)', () => {
         it('should return a singleton instance until reset', async () => {
-            const { getSyncOrchestrator, stopSyncForWipe } = await import('@app/sync/createSync');
+            const { getSyncOrchestratorAsync, stopSyncForWipe } = await import('@app/sync/createSync');
             stopSyncForWipe();
-            const instance1 = getSyncOrchestrator();
-            const instance2 = getSyncOrchestrator();
+            const instance1 = await getSyncOrchestratorAsync();
+            const instance2 = await getSyncOrchestratorAsync();
             expect(instance1).toBe(instance2);
             stopSyncForWipe();
-            expect(getSyncOrchestrator()).not.toBe(instance1);
+            expect(await getSyncOrchestratorAsync()).not.toBe(instance1);
             stopSyncForWipe();
         });
     });

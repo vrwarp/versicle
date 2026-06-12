@@ -32,7 +32,7 @@ import { MockFireProvider } from '../backend/MockFireProvider';
 import { getSyncEventBus, type SyncEvent } from '../events';
 import {
   configureSyncBackendSelection,
-  getSyncOrchestrator,
+  getSyncOrchestratorAsync,
   stopSyncForWipe,
 } from '@app/sync/createSync';
 import { wireSyncEvents } from '@app/sync/wireSyncEvents';
@@ -155,7 +155,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
       timeout: 5000,
     });
     expect(busEvents).toContainEqual({ type: 'obsolete', incomingVersion });
-    expect(getSyncOrchestrator().getStatus()).toBe('disconnected');
+    expect((await getSyncOrchestratorAsync()).getStatus()).toBe('disconnected');
     expect(isDeviceHeartbeatRunning()).toBe(false);
   };
 
@@ -164,7 +164,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     injectCloudUpdate('ws_fleet', await buildFutureVersionUpdate());
     useSyncStore.getState().setActiveWorkspaceId('ws_fleet');
 
-    await getSyncOrchestrator().start();
+    await (await getSyncOrchestratorAsync()).start();
     await expectLocked(FUTURE_VERSION);
 
     // No remote byte reached the live doc (the gate fired pre-download).
@@ -184,7 +184,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     injectCloudUpdate('ws_v7doc', await buildFutureVersionUpdate());
     useSyncStore.getState().setActiveWorkspaceId('ws_v7doc');
 
-    await getSyncOrchestrator().start();
+    await (await getSyncOrchestratorAsync()).start();
     await expectLocked(FUTURE_VERSION);
 
     expect(JSON.stringify(getYDoc().getMap('library').toJSON())).not.toContain(
@@ -200,7 +200,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     useSyncStore.getState().setActiveWorkspaceId('ws_a');
     vi.spyOn(CheckpointService, 'createCheckpoint').mockResolvedValue(7);
 
-    await expect(getSyncOrchestrator().switchWorkspace('ws_b')).rejects.toThrow(
+    await expect((await getSyncOrchestratorAsync()).switchWorkspace('ws_b')).rejects.toThrow(
       /requires schema/
     );
     await expectLocked(FUTURE_VERSION);
@@ -219,7 +219,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     // The local doc was migrated to CURRENT (the coordinator's dual-write).
     getYDoc().getMap('meta').set('schemaVersion', CURRENT_SCHEMA_VERSION);
 
-    const manager = getSyncOrchestrator();
+    const manager = await getSyncOrchestratorAsync();
     await manager.start();
     await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), { timeout: 5000 });
 
@@ -239,7 +239,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     seedWorkspace('ws_live');
     useSyncStore.getState().setActiveWorkspaceId('ws_live');
 
-    const manager = getSyncOrchestrator();
+    const manager = await getSyncOrchestratorAsync();
     await manager.start();
     await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), { timeout: 5000 });
 

@@ -21,7 +21,11 @@
  * chapters in the offscreen render loop (the cancellable-task-runner
  * pattern); abort surfaces as `CancellationError`.
  */
-import ePub from 'epubjs';
+// Phase 8 §A (first-use splitting): epubjs and the offscreen renderer load
+// lazily at the extraction call sites — this module rides the eager
+// LibraryView graph (via the ImportOrchestrator), and a static import here
+// would put epubjs back into the entry chunk (check 4 of
+// scripts/check-worker-chunk.mjs asserts the emitted artifact).
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 import type {
@@ -38,7 +42,7 @@ import type {
   PerceptualPalette,
 } from '~types/db';
 import { TTS_EXTRACTION_VERSION, type ExtractionOptions } from '@lib/ingestion/sentence-extraction';
-import { extractContentOffscreen, type ProcessedChapter } from '@domains/reader/engine/offscreen/offscreen-renderer';
+import type { ProcessedChapter } from '@domains/reader/engine/offscreen/offscreen-renderer';
 import { CancellationError } from '@lib/cancellable-task-runner';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import { extractCoverPalette } from '@lib/cover-palette';
@@ -154,6 +158,7 @@ export interface BookPreamble {
 export async function extractPreamble(file: Blob, options: PreambleOptions): Promise<BookPreamble> {
   throwIfAborted(options.signal);
 
+  const { default: ePub } = await import('epubjs');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const book = (ePub as any)(file, { replacements: 'none' });
   try {
@@ -373,6 +378,9 @@ export async function extractBook(file: File, opts: ExtractBookOptions): Promise
   throwIfAborted(signal);
 
   const optionsWithLocale: ExtractionOptions = { ...extraction, locale: shared.language };
+  const { extractContentOffscreen } = await import(
+    '@domains/reader/engine/offscreen/offscreen-renderer'
+  );
   const { chapters, baseFontSize, baseLineHeight } = await extractContentOffscreen(
     file,
     optionsWithLocale,

@@ -15,7 +15,7 @@
  *  - the signIn/signOut commands and the isConfigured derivation.
  */
 import { useEffect, useCallback, useMemo } from 'react';
-import { getSyncOrchestrator } from '@app/sync/createSync';
+import { getSyncOrchestratorAsync } from '@app/sync/createSync';
 import { useSyncStore } from '@store/useSyncStore';
 import { isMockFirestoreEnabled } from '../test-flags';
 
@@ -45,22 +45,23 @@ export const useFirestoreSync = () => {
         }
 
         // Idempotent for the already-started boot case; picks up
-        // settings-time enablement without a reload.
-        void getSyncOrchestrator().start();
+        // settings-time enablement without a reload. The await covers the
+        // P8 first-use composition (firebase chunk loads on enablement).
+        void getSyncOrchestratorAsync().then((orchestrator) => orchestrator.start());
     }, [firebaseEnabled, isConfigured]);
 
     /**
      * Sign in with Google
      */
     const signIn = useCallback(async () => {
-        await getSyncOrchestrator().signIn();
+        await (await getSyncOrchestratorAsync()).signIn();
     }, []);
 
     /**
      * Sign out
      */
     const signOut = useCallback(async () => {
-        await getSyncOrchestrator().signOut();
+        await (await getSyncOrchestratorAsync()).signOut();
     }, []);
 
     return {

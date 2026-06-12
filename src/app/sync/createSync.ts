@@ -1,13 +1,23 @@
 /**
  * Sync composition root (phase4-sync-strangler.md §D1/§D2; master plan §2
- * boundary rules 3 + 9): the ONE place that constructs the SyncOrchestrator
- * and decides which `SyncBackend` implementation the app runs on.
+ * boundary rules 3 + 9): the ONE place that decides which `SyncBackend`
+ * implementation the app runs on and holds the orchestrator singleton.
+ *
+ * Phase 8 §A split this module in two: THIS file is the LIGHT half (state,
+ * gates, public accessors — zero firebase in its static graph) and
+ * composeSync.ts is the HEAVY half (orchestrator + FirestoreBackend +
+ * firebase SDK), reachable only through the dynamic import inside
+ * {@link getSyncOrchestratorAsync}. Un-configured users (sync off) never
+ * download the firebase chunk; configured users load it inside the
+ * `syncInit` boot task body. Check 4 of scripts/check-worker-chunk.mjs
+ * pins the emitted entry chunk firebase-free.
  *
  * - The orchestrator (src/domains/sync/core/SyncOrchestrator.ts) is
  *   store-free; every store/flag/yjs-provider touch it needs is injected
- *   HERE as a port adapter (the EngineContext pattern). `getSyncOrchestrator`
- *   replaces the legacy `FirestoreSyncManager.getInstance()`; construction is
- *   owned by the `syncInit` boot task.
+ *   in composeSync.ts as a port adapter (the EngineContext pattern).
+ *   `getSyncOrchestratorAsync` replaces the legacy
+ *   `FirestoreSyncManager.getInstance()`; construction is owned by the
+ *   `syncInit` boot task.
  *
  * - Backend selection: production needs nothing — the orchestrator runs on
  *   `FirestoreBackend`. DEV/E2E with `window.__VERSICLE_MOCK_FIRESTORE__`
@@ -20,84 +30,70 @@
  *   emitted artifact, not this import shape.
  *
  * - The single enablement gate (§D2): start() runs only when
- *   `(firebaseEnabled && isConfigured) || mockEnabled` — the legacy boot
- *   path ignored the `firebaseEnabled` flag (prep doc reality item 20).
+ *   `(firebaseEnabled && isConfigured) || mockEnabled` — see
+ *   {@link isSyncEnabled}, which reads config PRESENCE through the SDK-free
+ *   firebase-config-presence module.
  */
-import {
-  createSyncOrchestrator,
-  type SyncOrchestrator,
-} from '@domains/sync/core/SyncOrchestrator';
+import type { SyncOrchestrator } from '@domains/sync/core/SyncOrchestrator';
 import type { SyncBackendSelection } from '@domains/sync/core/ports';
-import { FirestoreBackend } from '@domains/sync/backend/FirestoreBackend';
-import { getSyncEventBus } from '@domains/sync/events';
-import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
-import { MigrationStateService } from '@domains/sync/workspaces/MigrationStateService';
-import { isFirebaseConfigured } from '@lib/sync/firebase-config';
-import {
-  getYDoc,
-  waitForYjsSync,
-  handleObsoleteClient,
-  CURRENT_SCHEMA_VERSION,
-} from '@store/yjs-provider';
+import { isFirebaseConfigured } from '@lib/sync/firebase-config-presence';
 import { useSyncStore } from '@store/useSyncStore';
-import { useBookStore } from '@store/useBookStore';
 import {
   isMockFirestoreEnabled,
   getMockFirestoreUserId,
-  getFirestoreDebounceOverrideMs,
 } from '../../test-flags';
 
 let instance: SyncOrchestrator | null = null;
-let selection: SyncBackendSelection = {
-  factory: (uid) => new FirestoreBackend(uid),
-};
+let instancePromise: Promise<SyncOrchestrator> | null = null;
+let selection: SyncBackendSelection | null = null;
+
+/**
+ * The single enablement gate (§D2): callers that would START sync check
+ * this BEFORE composing, so the firebase chunk is never even fetched while
+ * sync is off/un-configured. The orchestrator re-checks it internally
+ * (injected as the isEnabled dep), so calling start() remains safe either
+ * way.
+ */
+export function isSyncEnabled(): boolean {
+  return (
+    Boolean(selection?.mockSession) ||
+    (useSyncStore.getState().firebaseEnabled && isFirebaseConfigured())
+  );
+}
 
 /**
  * The app-wide orchestrator accessor serving boot and the UI
  * (SyncSettingsTab, WorkspaceMigrationConfirmModal, useFirestoreSync,
- * wireSyncEvents). Constructs lazily on first use.
+ * wireSyncEvents). Composes lazily on first use — the await covers the
+ * one-time dynamic import of the heavy half (local chunk load, no
+ * network round-trips beyond the asset fetch).
  */
-export function getSyncOrchestrator(): SyncOrchestrator {
-  if (!instance) {
-    instance = createSyncOrchestrator({
-      backendSelection: selection,
-      events: getSyncEventBus(),
-      doc: getYDoc,
-      whenLocalSynced: () => waitForYjsSync(),
-      onObsolete: handleObsoleteClient,
-      currentSchemaVersion: CURRENT_SCHEMA_VERSION,
-      // merge-defaults hydration guarantees `books` is always present
-      // (flip wave 4) — the old `|| {}` fallback canary is gone.
-      isCleanClient: () => Object.keys(useBookStore.getState().books).length === 0,
-      isEnabled: () =>
-        Boolean(selection.mockSession) ||
-        (useSyncStore.getState().firebaseEnabled && isFirebaseConfigured()),
-      debounceOverrideMs: () => getFirestoreDebounceOverrideMs() || 0,
-      syncState: {
-        getActiveWorkspaceId: () => useSyncStore.getState().activeWorkspaceId,
-        setActiveWorkspaceId: (id) => useSyncStore.getState().setActiveWorkspaceId(id),
-        setFirebaseEnabled: (enabled) => useSyncStore.getState().setFirebaseEnabled(enabled),
+export async function getSyncOrchestratorAsync(): Promise<SyncOrchestrator> {
+  if (instance) return instance;
+  if (!instancePromise) {
+    const p: Promise<SyncOrchestrator> = import('./composeSync').then(
+      ({ composeSyncOrchestrator }) => {
+        // A wipe/reset may have superseded this composition while the
+        // chunk loaded — only install if we are still the current attempt.
+        const composed = composeSyncOrchestrator({ selection, isEnabled: isSyncEnabled });
+        if (instancePromise === p) {
+          selection = composed.selection;
+          instance = composed.orchestrator;
+        }
+        return instance ?? composed.orchestrator;
       },
-      checkpoints: {
-        createCheckpoint: (trigger, options) =>
-          CheckpointService.createCheckpoint(trigger, options),
-        createAutomaticCheckpoint: (trigger, intervalMs) =>
-          CheckpointService.createAutomaticCheckpoint(trigger, intervalMs),
-      },
-      migrationState: {
-        setStaged: (targetWorkspaceId, backupCheckpointId, previousWorkspaceId) =>
-          MigrationStateService.setStaged(
-            targetWorkspaceId,
-            backupCheckpointId,
-            previousWorkspaceId
-          ),
-        setAwaitingConfirmation: (targetWorkspaceId, backupCheckpointId) =>
-          MigrationStateService.setAwaitingConfirmation(targetWorkspaceId, backupCheckpointId),
-        setRestoringBackup: () => MigrationStateService.setRestoringBackup(),
-        clear: () => MigrationStateService.clear(),
-      },
-    });
+    );
+    instancePromise = p;
   }
+  return instancePromise;
+}
+
+/**
+ * Synchronous view of the singleton for callers that must never CREATE it
+ * (e.g. wireSyncEvents' obsolete-quarantine sever: if sync never composed,
+ * there is no connection to sever).
+ */
+export function peekSyncOrchestrator(): SyncOrchestrator | null {
   return instance;
 }
 
@@ -114,14 +110,15 @@ export function stopSyncConnections(): void {
 /**
  * Full teardown for wipeAllData (registered as a wipe hook in
  * registerBootTasks) and for test isolation: stop everything and drop the
- * instance so the next getSyncOrchestrator() composes fresh. Replaces the
- * legacy `FirestoreSyncManager.resetInstance()`.
+ * instance so the next getSyncOrchestratorAsync() composes fresh. Replaces
+ * the legacy `FirestoreSyncManager.resetInstance()`.
  */
 export function stopSyncForWipe(): void {
   if (instance) {
     instance.stop();
     instance = null;
   }
+  instancePromise = null;
 }
 
 /**

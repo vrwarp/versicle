@@ -20,7 +20,7 @@ import * as Y from 'yjs';
 import { MockFireProvider } from '../backend/MockFireProvider';
 import {
   configureSyncBackendSelection,
-  getSyncOrchestrator,
+  getSyncOrchestratorAsync,
   stopSyncForWipe,
 } from '@app/sync/createSync';
 import { wireSyncEvents } from '@app/sync/wireSyncEvents';
@@ -116,7 +116,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
 
   describe('start() — mock auth synthesis and smart routing', () => {
     it('auto-provisions "My Library" and connects when zero remote workspaces exist', async () => {
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       await manager.start();
 
       await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), {
@@ -143,7 +143,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
     it('halts (disconnected, no workspace assigned) when remote workspaces exist but none is selected', async () => {
       seedWorkspace('ws_existing');
 
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       await manager.start();
 
       // Routing decision is async — wait until auth lands, then assert halt.
@@ -164,7 +164,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       window.__VERSICLE_MOCK_USER_ID__ = 'custom-user';
       // The id flag is read at composition time — re-run the root.
       await configureSyncBackendSelection();
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       await manager.start();
 
       await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), {
@@ -180,7 +180,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_fresh');
       useSyncStore.getState().setActiveWorkspaceId('ws_fresh');
 
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       await manager.start();
 
       await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), {
@@ -194,7 +194,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_fresh');
       useSyncStore.getState().setActiveWorkspaceId('ws_fresh');
 
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       await manager.start();
       await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), {
         timeout: 5000,
@@ -209,7 +209,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_dead', { deletedAt: Date.now() });
       useSyncStore.getState().setActiveWorkspaceId('ws_dead');
 
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       // Call the connect path directly (handleAuthStateChange fires it
       // without awaiting — pinned debt, phase4-sync-strangler.md item 17 —
       // so going through start() would leave an unhandled rejection).
@@ -231,7 +231,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
         doc.getMap('library').set('characterization-probe', 'cloud-data');
       });
 
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       await manager.start();
 
       await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), {
@@ -265,7 +265,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
         doc.getMap('library').set('characterization-probe', 'workspace-b-data');
       });
 
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       await manager.switchWorkspace('ws_b');
 
       // Protected pre-migration checkpoint (P0 pinning semantics).
@@ -299,7 +299,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_a');
       useSyncStore.getState().setActiveWorkspaceId('ws_a');
 
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       await manager.switchWorkspace('ws_a');
 
       expect(createCheckpointSpy).not.toHaveBeenCalled();
@@ -312,7 +312,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_dead', { deletedAt: Date.now() });
       useSyncStore.getState().setActiveWorkspaceId('ws_a');
 
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       await expect(manager.switchWorkspace('ws_dead')).rejects.toThrow(WorkspaceDeletedError);
 
       expect(showToast).toHaveBeenCalledWith(
@@ -336,7 +336,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
     it('tombstones the workspace in both the directory and the snapshot store', async () => {
       seedWorkspace('ws_doomed');
 
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       await manager.deleteWorkspace('ws_doomed');
 
       const ws = readWorkspaces().find((w) => w.workspaceId === 'ws_doomed');
@@ -352,7 +352,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_other');
       useSyncStore.getState().setActiveWorkspaceId('ws_active');
 
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
 
       // Deleting a NON-active workspace keeps the active tie.
       await manager.deleteWorkspace('ws_other');
@@ -367,7 +367,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_alive');
       seedWorkspace('ws_dead', { deletedAt: Date.now() });
 
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       const listed = await manager.listWorkspaces();
       expect(listed.map((w) => w.workspaceId)).toEqual(['ws_alive']);
     });
@@ -377,7 +377,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       seedWorkspace('ws_other');
       useSyncStore.getState().setActiveWorkspaceId('ws_active');
 
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       await manager.start();
       await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), {
         timeout: 5000,
@@ -410,7 +410,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
         doc.getMap('library').set('keep', 'me');
       });
 
-      const manager = getSyncOrchestrator();
+      const manager = await getSyncOrchestratorAsync();
       // Authenticated context without connecting: start() routes to the
       // halt branch (no active workspace) but signs the mock user in.
       await manager.start();

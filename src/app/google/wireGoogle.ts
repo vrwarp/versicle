@@ -19,9 +19,9 @@
 import {
   DriveClient,
   DriveLibrarySync,
-  GeminiClient,
   GoogleAuthClient,
   defaultPlatformOptions,
+  makeLazyGenAIClient,
   setDriveClient,
   setDriveLibrarySync,
   setGenAIClient,
@@ -91,8 +91,11 @@ export function wireGoogleDomain(): void {
   // gone. Log entries arrive pre-redacted (no inlineData bytes) and land in
   // the store's in-memory ring buffer (never persisted — its partialize
   // allowlist excludes logs).
+  // Phase 8 §A: installed as the LAZY facade — GeminiClient (and the
+  // egress plumbing behind it) loads on the first generate call, keeping
+  // the GenAI implementation out of the entry chunk (check 4).
   setGenAIClient(
-    new GeminiClient({
+    makeLazyGenAIClient({
       getConfig: () => {
         const s = useGenAIStore.getState();
         return {

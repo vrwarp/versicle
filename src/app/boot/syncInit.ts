@@ -9,7 +9,11 @@
  * (§D2) — lives inside the orchestrator deps wired by createSync.
  */
 import type { BootTask } from '../bootstrap';
-import { configureSyncBackendSelection, getSyncOrchestrator } from '../sync/createSync';
+import {
+  configureSyncBackendSelection,
+  getSyncOrchestratorAsync,
+  isSyncEnabled,
+} from '../sync/createSync';
 import { wireSyncEvents } from '../sync/wireSyncEvents';
 import { createLogger } from '@lib/logger';
 
@@ -31,6 +35,17 @@ export const syncInitTask: BootTask = {
       logger.info('Sync init skipped: migration awaiting confirmation.');
       return;
     }
-    void getSyncOrchestrator().start();
+    // First-use gate (Phase 8 §A): the heavy sync composition (firebase
+    // SDK) loads inside THIS run() body, and only when sync could actually
+    // run — un-configured users never download the firebase chunk at all.
+    // The orchestrator re-checks isEnabled internally; this outer check
+    // only prevents the chunk fetch.
+    if (!isSyncEnabled()) {
+      logger.info('Sync init skipped: sync disabled or not configured.');
+      return;
+    }
+    // Intentionally NOT awaited: start() may touch the network and boot
+    // must never block on sync completion (pinned by App_Boot.test.tsx).
+    void getSyncOrchestratorAsync().then((orchestrator) => orchestrator.start());
   },
 };

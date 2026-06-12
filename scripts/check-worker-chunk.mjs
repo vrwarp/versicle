@@ -2,7 +2,7 @@
 /**
  * Emitted-artifact purity checks (master plan §2 rules 6 + 9; C12).
  *
- * Two assertions over the production build:
+ * Four assertions over the production build:
  *  1. WORKER PURITY — the TTS worker chunk closure contains no
  *     zustand/yjs/src-store code (details below).
  *  2. PROD MOCK PURITY (P4-2, phase4-sync-strangler.md §D1) — NO production
@@ -11,6 +11,13 @@
  *     `import.meta.env.DEV || VITE_E2E` branch (src/app/sync/createSync.ts);
  *     this check is the GATE that the dead branch actually got eliminated
  *     (Rollup inlining surprises — risk R7 — fail here, not in the field).
+ *  3. LAZY-LEXICON PURITY (5c-PR3) — bible-lexicon.json stays an async
+ *     chunk, out of the entry/worker static closures.
+ *  4. ENTRY-CHUNK BUDGET (Phase 8 §A / prep PR-7) — the ENTRY static
+ *     closure contains NO firebase/epubjs/GenAI-implementation/reader-
+ *     surface sources (content assertion) and its gzip size never
+ *     regresses past the recorded baseline + headroom (size ratchet,
+ *     bundle-baseline.json).
  *
  * Worker-purity details:
  *
@@ -39,9 +46,10 @@
  * treemaps to stats-worker.html for spelunking).
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const assetsDir = join(repoRoot, 'dist', 'assets');
@@ -254,7 +262,18 @@ function collectStaticClosure(entryFiles) {
   return [...seen];
 }
 
-const entryChunks = readdirSync(assetsDir).filter((f) => /^index-[\w-]+\.js$/.test(f));
+// The REAL entry chunk(s) come from the built index.html script tags —
+// post-P8 code splitting, `index-*.js` also matches shared/lazy chunks
+// that Rollup named after `index.ts` modules (e.g. domains/google/index),
+// so a filename heuristic would scan the wrong graph.
+const indexHtml = readFileSync(join(repoRoot, 'dist', 'index.html'), 'utf8');
+const entryChunks = [...indexHtml.matchAll(/(?:src|href)="\/assets\/([^"]+\.js)"/g)]
+  .map((m) => m[1])
+  .filter((f) => existsSync(join(assetsDir, f)));
+if (entryChunks.length === 0) {
+  console.error('No entry chunk found in dist/index.html — build layout changed?');
+  process.exit(1);
+}
 const eagerHomes = collectStaticClosure([...entryChunks, ...entries]);
 const bibleViolations = chunksWithBible.filter((c) => eagerHomes.includes(c));
 if (bibleViolations.length > 0) {
@@ -271,3 +290,124 @@ console.log(
   `PASS: bible-lexicon.json is lazy — emitted only in async chunk(s) ` +
     `${chunksWithBible.join(', ')}; absent from the entry/worker static closures.`,
 );
+
+// ── Check 4: entry-chunk budget (Phase 8 §A; phase8-shell-pwa.md PR-7) ──────
+// 4a. CONTENT ASSERTION (the durable one): the ENTRY static closure must
+//     contain none of the first-use-loaded heavyweights. These moved out of
+//     the entry graph via: React.lazy routes (/read/:id → ReaderShell →
+//     epubjs), the createSync/composeSync split (firebase loads inside the
+//     syncInit boot-task run() body, only when sync is enabled+configured),
+//     and the lazy GenAI facade + deep feature imports (GeminiClient and
+//     the genai feature modules load on first generate call). If this ever
+//     fails, find the static import that re-eagered the chunk
+//     (`ANALYZE=true vite build` → stats.html) — do not weaken the list.
+// NOTE on epubjs: the kernel CFI shim (src/kernel/cfi/epubcfiShim.ts) is
+// SANCTIONED to import the lean `epubjs/src/epubcfi` submodule (it rides
+// the entry AND the worker — that was the whole point of the 5c kernel).
+// The submodule's closure is epubcfi.js + utils/core.js only, so the
+// forbidden markers below name the FULL-ENGINE modules instead of the
+// package prefix.
+const ENTRY_FORBIDDEN = [
+  { pattern: 'node_modules/firebase/', label: 'firebase' },
+  { pattern: 'node_modules/@firebase/', label: '@firebase' },
+  { pattern: 'node_modules/epubjs/src/epub.js', label: 'epubjs (engine entry)' },
+  { pattern: 'node_modules/epubjs/src/book.js', label: 'epubjs (Book)' },
+  { pattern: 'node_modules/epubjs/src/rendition.js', label: 'epubjs (Rendition)' },
+  { pattern: 'node_modules/epubjs/src/managers/', label: 'epubjs (view managers)' },
+  { pattern: 'src/domains/sync/backend/FirestoreBackend', label: 'FirestoreBackend' },
+  { pattern: 'src/app/sync/composeSync', label: 'sync composition (heavy half)' },
+  { pattern: 'src/domains/google/genai/GeminiClient', label: 'GeminiClient' },
+  { pattern: 'src/domains/google/genai/features/', label: 'GenAI feature modules' },
+  { pattern: 'src/components/reader/ReaderShell', label: 'ReaderShell (reader surface)' },
+];
+
+const entryClosure = collectStaticClosure(entryChunks);
+console.log(
+  `Entry chunk(s): ${entryChunks.join(', ')} — static closure ` +
+    `(${entryClosure.length}): ${entryClosure.join(', ')}`,
+);
+
+const entryViolations = [];
+let entrySources = 0;
+for (const chunk of entryClosure) {
+  const mapPath = join(assetsDir, `${chunk}.map`);
+  if (!existsSync(mapPath)) {
+    console.error(
+      `Missing sourcemap ${chunk}.map — the entry-budget check needs ` +
+        'build.sourcemap to stay enabled in vite.config.ts.',
+    );
+    process.exit(1);
+  }
+  const { sources = [] } = JSON.parse(readFileSync(mapPath, 'utf8'));
+  entrySources += sources.length;
+  for (const rawSource of sources) {
+    const source = rawSource.replaceAll('\\', '/');
+    for (const { pattern, label } of ENTRY_FORBIDDEN) {
+      if (source.includes(pattern)) {
+        entryViolations.push({ chunk, source: rawSource, label });
+      }
+    }
+  }
+}
+
+if (entryViolations.length > 0) {
+  console.error(
+    `\nFAIL: entry static closure contains ${entryViolations.length} ` +
+      'first-use module(s) that must stay lazy:',
+  );
+  for (const { chunk, source, label } of entryViolations.slice(0, 25)) {
+    console.error(`  [${label}] ${source}  (in ${chunk})`);
+  }
+  console.error(
+    '\nThe Phase 8 §A code splitting moved these behind dynamic imports ' +
+      '(lazy routes, createSync→composeSync, the lazy GenAI facade). A ' +
+      'static import somewhere re-eagered them — inspect with ' +
+      '`ANALYZE=true vite build` → stats.html.',
+  );
+  process.exit(1);
+}
+
+// 4b. SIZE RATCHET: gzip total of the entry static closure, recorded in
+//     bundle-baseline.json (set right after the PR-7 split landed). Allows
+//     ~10% headroom; regenerate deliberately with --update-entry-baseline
+//     after intentional entry growth/shrink.
+const BUNDLE_BASELINE_PATH = join(repoRoot, 'bundle-baseline.json');
+const ENTRY_HEADROOM = 1.1;
+let entryGzipBytes = 0;
+for (const chunk of entryClosure) {
+  entryGzipBytes += gzipSync(readFileSync(join(assetsDir, chunk))).length;
+}
+
+if (process.argv.includes('--update-entry-baseline')) {
+  writeFileSync(
+    BUNDLE_BASELINE_PATH,
+    `${JSON.stringify({ entryGzipBytes }, null, 2)}\n`,
+  );
+  console.log(`Entry-budget baseline written: ${entryGzipBytes} gzip bytes.`);
+} else if (!existsSync(BUNDLE_BASELINE_PATH)) {
+  console.error(
+    `\nFAIL: ${BUNDLE_BASELINE_PATH} missing — record the entry budget ` +
+      'with `node scripts/check-worker-chunk.mjs --skip-build --update-entry-baseline`.',
+  );
+  process.exit(1);
+} else {
+  const { entryGzipBytes: baseline } = JSON.parse(
+    readFileSync(BUNDLE_BASELINE_PATH, 'utf8'),
+  );
+  const limit = Math.round(baseline * ENTRY_HEADROOM);
+  if (entryGzipBytes > limit) {
+    console.error(
+      `\nFAIL: entry static closure is ${entryGzipBytes} gzip bytes — over ` +
+        `the budget (baseline ${baseline} + 10% headroom = ${limit}). If the ` +
+        'growth is deliberate, regenerate with --update-entry-baseline and ' +
+        'justify it in the PR; otherwise find what got eagerly imported.',
+    );
+    process.exit(1);
+  }
+  console.log(
+    `PASS: entry budget — ${entrySources} original sources across ` +
+      `${entryClosure.length} entry chunk(s); no firebase / epubjs / GenAI ` +
+      `implementation / ReaderShell; ${entryGzipBytes} gzip bytes ≤ ` +
+      `${limit} (baseline ${baseline} + 10%).`,
+  );
+}

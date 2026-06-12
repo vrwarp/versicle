@@ -15,50 +15,20 @@ import {
     persistentMultipleTabManager
 } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
-import { useSyncStore } from '@store/useSyncStore';
-import type { FirebaseConfigSettings } from '@store/useSyncStore';
 import { getSyncEventBus } from '@domains/sync/events';
 import { createLogger } from '../logger';
+// The SDK-free presence half lives in firebase-config-presence.ts (Phase 8
+// §A: boot-path callers check "is a config stored?" without pulling the
+// firebase SDK into the entry chunk). Re-exported here so SDK-side
+// consumers keep one import — including the store edge: this module's
+// only store dependency now routes through the presence module (the
+// lib-not-to-store ratchet stays at its pre-split count).
+import { getFirebaseConfig } from './firebase-config-presence';
+import type { FirebaseConfigSettings } from './firebase-config-presence';
+export { getFirebaseConfig, isFirebaseConfigValid, isFirebaseConfigured } from './firebase-config-presence';
+export type { FirebaseConfig } from './firebase-config-presence';
 
 const logger = createLogger('Firebase');
-
-/**
- * Firebase configuration interface (re-export for convenience)
- */
-export type FirebaseConfig = FirebaseConfigSettings;
-
-/**
- * Get Firebase config from the sync store
- */
-export const getFirebaseConfig = (): FirebaseConfig | null => {
-    const { firebaseConfig } = useSyncStore.getState();
-
-    // All values are required
-    if (!firebaseConfig.apiKey || !firebaseConfig.authDomain ||
-        !firebaseConfig.projectId || !firebaseConfig.appId) {
-        return null;
-    }
-
-    // Use local proxy if in dev mode OR if explicitly configured (e.g. for Docker/Nginx)
-    // explicitly check for window availability for SSR safety
-    const useProxy = import.meta.env.DEV || import.meta.env.VITE_AUTH_USE_PROXY === 'true';
-
-    if (useProxy && typeof window !== 'undefined') {
-        return {
-            ...firebaseConfig,
-            authDomain: window.location.host // e.g. "localhost:5173" or "my-app.com"
-        };
-    }
-
-    return firebaseConfig;
-};
-
-/**
- * Check if Firebase config has all required fields filled
- */
-export const isFirebaseConfigValid = (config: FirebaseConfigSettings): boolean => {
-    return !!(config.apiKey && config.authDomain && config.projectId && config.appId);
-};
 
 // Lazy initialization - only create instances when needed
 let app: FirebaseApp | null = null;
@@ -168,13 +138,6 @@ export const getFirestoreDb = (): Firestore | null => {
 export const getGoogleProvider = (): GoogleAuthProvider | null => {
     if (!googleProvider) initializeFirebase();
     return googleProvider;
-};
-
-/**
- * Check if Firebase is configured (all required fields present)
- */
-export const isFirebaseConfigured = (): boolean => {
-    return getFirebaseConfig() !== null;
 };
 
 /**

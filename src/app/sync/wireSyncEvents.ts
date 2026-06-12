@@ -19,7 +19,7 @@
  */
 import { getSyncEventBus } from '@domains/sync/events';
 import { RULES_OUT_OF_DATE_MESSAGE } from '@domains/sync/backend/permissionDenied';
-import { getSyncOrchestrator } from './createSync';
+import { peekSyncOrchestrator } from './createSync';
 import { stopDeviceHeartbeat } from '@app/boot/backgroundTasks';
 import { useSyncStore } from '@store/useSyncStore';
 import { useToastStore } from '@store/useToastStore';
@@ -137,7 +137,10 @@ export function wireSyncEvents(): () => void {
         // status label) and stop the device heartbeat — zero outbound
         // writes after the lock. The UI lock itself is set by
         // handleObsoleteClient (store/yjs-provider), which emitted this.
-        getSyncOrchestrator().severObsoleteConnection();
+        // peek (not get): if sync never composed there is no connection to
+        // sever, and composing the firebase chunk just to sever would be
+        // absurd (P8 first-use split).
+        peekSyncOrchestrator()?.severObsoleteConnection();
         stopDeviceHeartbeat();
         break;
 

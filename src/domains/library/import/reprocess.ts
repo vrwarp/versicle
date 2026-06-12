@@ -15,7 +15,6 @@
  */
 import { bookContent } from '@data/repos/bookContent';
 import type { CacheTtsPreparationRow } from '@data/rows/cache';
-import { extractContentOffscreen } from '@domains/reader/engine/offscreen/offscreen-renderer';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import type { ExtractionOptions } from '@lib/ingestion/sentence-extraction';
 import type { PerceptualPalette } from '~types/db';
@@ -59,6 +58,11 @@ export async function reprocessBookContent(
   // thumbnail compression), exactly as the legacy `reprocessBook` did.
   const preamble = await extractPreamble(fileBlob, { cover: 'raw', signal: opts.signal });
 
+  // Lazy (Phase 8 §A): the offscreen renderer (→ epubjs) loads at first
+  // reprocess, keeping it out of the eager LibraryView/orchestrator graph.
+  const { extractContentOffscreen } = await import(
+    '@domains/reader/engine/offscreen/offscreen-renderer'
+  );
   const { chapters, baseFontSize, baseLineHeight } = await extractContentOffscreen(
     fileBlob,
     { ...opts.extraction, locale: preamble.language },
