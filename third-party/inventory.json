@@ -12,7 +12,10 @@
       "license": "GPL-3.0-or-later",
       "provenance": "Compiled into piper_phonemize.wasm and packed into piper_phonemize.data (Emscripten FS image of espeak-ng-data) by the upstream DavidCks/piper-wasm build, which states it followed the wide-video/piper-wasm recipe; the exact espeak-ng and piper-phonemize commits are recorded nowhere. GPLv3 §6 corresponding source is therefore currently unidentifiable — long-term fix is rebuilding the WASM from pinned commits in CI (gap report D3). Vendored into git at Phase 5a-PR3 (verbatim blobs from piper-wasm@0.1.4; SHA-256 hashes in third-party/piper/PROVENANCE.md).",
       "path": "third-party/piper/piper_phonemize.wasm, third-party/piper/piper_phonemize.data (git-tracked; copied to dist/piper/ at build by the vite piper-vendor plugin)",
-      "distribution": ["web", "android"],
+      "distribution": [
+        "web",
+        "android"
+      ],
       "notes": "piper-wasm's blanket 'MIT' package.json claim does not cover these blobs — the binary links GPL-3 espeak-ng, so the artifact is GPL-governed."
     },
     {
@@ -22,7 +25,10 @@
       "license": "MIT",
       "provenance": "Compiled to WASM by the upstream DavidCks/piper-wasm build; exact source commit unrecorded (same build chain as the espeak-ng entry). Vendored into git at Phase 5a-PR3.",
       "path": "third-party/piper/piper_phonemize.wasm (git-tracked; ships in dist/piper/)",
-      "distribution": ["web", "android"]
+      "distribution": [
+        "web",
+        "android"
+      ]
     },
     {
       "name": "piper-wasm build artifacts (piper_phonemize.js loader + piper_worker.js)",
@@ -32,7 +38,10 @@
       "provenance": "Vendored into git at Phase 5a-PR3 from piper-wasm@0.1.4 build/ output (upstream hashes in third-party/piper/PROVENANCE.md). piper_worker.js is COMMITTED PATCHED SOURCE: the 6 string patches formerly applied at install time by the deleted scripts/patch_piper_worker.js are baked in, plus a Versicle-authored request-id envelope (patch 7) for PiperRuntime's stale-reply protocol.",
       "path": "third-party/piper/piper_phonemize.js, third-party/piper/piper_worker.js (git-tracked; ship in dist/piper/)",
       "modifications": "piper_worker.js: config injection, phoneme-ID clamping, error handling (the former install-time patch set), and the request-id envelope — full patch list in third-party/piper/PROVENANCE.md. CI smoke: src/lib/tts/providers/piperVendoredAssets.test.ts asserts the patch anchors are present.",
-      "distribution": ["web", "android"]
+      "distribution": [
+        "web",
+        "android"
+      ]
     },
     {
       "name": "PT Sans Narrow Web (modified: pinyin tone glyphs injected)",
@@ -42,19 +51,39 @@
       "provenance": "ParaType PT Sans Narrow Web 2.003W; pinyin tone glyphs (ǎ ǐ ǒ ǔ ǚ) were programmatically injected into the TTF binaries using Python fonttools (per README.md Licenses & Attributions). The fonttools script that produced the modified binaries is NOT in the repo — the derivative is currently unreproducible (UNKNOWN — needs investigation).",
       "path": "public/fonts/PT_Sans-Narrow-Web-Regular.ttf, public/fonts/PT_Sans-Narrow-Web-Bold.ttf",
       "modifications": "Glyph injection as above. KNOWN VIOLATION (gap report D2): these are Modified Versions under OFL-1.1 but retain the Reserved Font Names ('PT Sans' family, copyright reserves 'PT Sans'/'PT Serif'/'ParaType') in name table, filenames, and the src/index.css font-family. The rename off the RFNs (with persisted-preference migration) is scheduled for Phase 8 of the overhaul plan; this entry is inventory-only until then.",
-      "distribution": ["web", "android"],
+      "distribution": [
+        "web",
+        "android"
+      ],
       "notes": "Mitigating: the full OFL-1.1 text and ParaType copyright ride inside the TTF name table, so license text accompanies copies."
     },
     {
       "name": "CC-CEDICT (compiled Chinese-English dictionary)",
-      "version": "UNKNOWN — needs investigation (release date/entry-count header is stripped by scripts/compile-dict.cjs, so the shipped release is unknowable)",
+      "version": "pinned MDBG release per scripts/cedict.lock.json (sha256-verified; exact release date/entry count shipped in the public/dict/cedict.meta.json sidecar — release 2026-06-12 at pinning time)",
       "source": "https://www.mdbg.net/chinese/dictionary?page=cc-cedict",
       "license": "CC-BY-SA-4.0",
-      "provenance": "Compiled from the mdbg.net CC-CEDICT export by scripts/compile-dict.cjs (source URL recorded in the script); the compiler discards the '#' header lines containing the license declaration and release metadata.",
-      "path": "public/dict/cedict.json (14.4 MB, git-tracked; ships in dist/dict/)",
-      "modifications": "Format conversion to JSON lookup table; license/provenance header dropped (gap report D5 — fix is a __meta stamp or sidecar and removing the silent mock-dictionary fallback).",
-      "distribution": ["web", "android"],
-      "notes": "Attribution + ShareAlike statement present in README.md and two in-app credits surfaces."
+      "provenance": "Compiled at build time by scripts/compile-dict.cjs from the mdbg.net CC-CEDICT export pinned in scripts/cedict.lock.json (sha256 + release date); the '#' header (license declaration + release metadata) is parsed and RETAINED as the cedict.meta.json sidecar. The silent mock-dictionary fallback was deleted (failure is fatal; --mock writes only the test fixture src/test/fixtures/dict/cedict.mock.json).",
+      "path": "public/dict/cedict.json + cedict.meta.json (generated, git-ignored since Phase 6 PR-12; built in CI and dev bootstrap via `npm run compile-dict`; ships in dist/dict/)",
+      "modifications": "Format conversion to JSON lookup table; license/provenance header retained as sidecar (gap report D5 closed at Phase 6 PR-12).",
+      "distribution": [
+        "web",
+        "android"
+      ],
+      "notes": "Attribution + ShareAlike statement present in README.md and two in-app credits surfaces; cedict.meta.json carries sourceUrl/license/releaseDate/entry counts/sha256s for the credits surfaces (P8 reads it)."
+    },
+    {
+      "name": "trad2simp single-character table (derived from OpenCC dictionary data via opencc-js)",
+      "version": "generated from opencc-js@1.0.5 (regenerate via `npm run generate-trad2simp` on opencc-js upgrades)",
+      "source": "https://github.com/nk2028/opencc-js (dictionary data from https://github.com/BYVoid/OpenCC)",
+      "license": "Apache-2.0",
+      "provenance": "Generated by scripts/generate-trad2simp.mjs from the opencc-js cn<->tw converters (pass 1: inverse of the display mapping; pass 2: direct tw->cn). Committed and reviewed like source because it feeds the deterministic CRDT v7 vocabulary canonicalization (Phase 6 PR-13); sidecar src/domains/chinese/vocabulary/trad2simp.meta.json records counts + rationale.",
+      "path": "src/domains/chinese/vocabulary/trad2simp.json (+ trad2simp.meta.json sidecar; bundles into dist/)",
+      "modifications": "Single-character extraction from the OpenCC phrase dictionaries; multi-character conversions excluded.",
+      "distribution": [
+        "web",
+        "android"
+      ],
+      "notes": "opencc-js itself is already a production npm dependency covered by the license gate; this entry records the DERIVED committed artifact."
     },
     {
       "name": "y-cinder (fork of PodRaven/y-fire)",
@@ -63,7 +92,10 @@
       "license": "MIT",
       "provenance": "Personal fork consumed as a pinned git dependency (package.json); retains the upstream MIT LICENSE ('Pod Raven 2024') and declares fork provenance in its README.",
       "path": "node_modules/y-cinder (bundled into dist/ at build)",
-      "distribution": ["web", "android"],
+      "distribution": [
+        "web",
+        "android"
+      ],
       "notes": "Slated for in-repo workspace vendoring in Phase 4; the vendoring PR must carry the LICENSE file and a fork-of header per the P0 licensing checklist."
     },
     {
@@ -73,7 +105,10 @@
       "license": "MIT",
       "provenance": "Personal fork VENDORED into the repo as an npm workspace (Phase 3, plan/overhaul/prep/phase3-storage-gateway.md §D6): ES source imported from the fork at the exact SHA the app was previously git-pinned to; src/y-idb.js verified byte-identical to the previously installed artifact, and the consumer-facing src/y-idb.d.ts is the tsc-emitted declaration from the same install. Retains the upstream MIT LICENSE (Kevin Jahns / RWTH Aachen) verbatim; full lineage, pre-existing fork deltas, and a running Phase 3 modification log live in packages/y-idb/PROVENANCE.md.",
       "path": "packages/y-idb (workspace package; src/ bundled into dist/ at build)",
-      "distribution": ["web", "android"],
+      "distribution": [
+        "web",
+        "android"
+      ],
       "modifications": "Packaging only at vendor time (private: true, exports point at the ES source, lib0 moved to peerDependencies next to the existing yjs peer, build/release tooling dropped) — zero behavior change, pinned by the contract suite in packages/y-idb/test/contract/. Subsequent fork surgery is logged in PROVENANCE.md.",
       "notes": "package.json stays private:true (never published), which keeps it OUT of license-checker output — this inventory entry plus the in-tree LICENSE file are its license record. y-cinder remains git-pinned until its own phase (P4)."
     },
@@ -84,7 +119,10 @@
       "license": "MIT",
       "provenance": "Personal fork VENDORED into the repo as an npm workspace (Phase 2, plan/overhaul/prep/phase2-fork-surgery.md §6): TS source imported from the fork repo at the exact SHA the app was previously git-pinned to; the fork's committed dist/ at that SHA was verified byte-identical to the previously installed artifact. Retains the upstream MIT LICENSE (Joseph R Miles) verbatim; full lineage, pre-existing fork deltas, and a running Phase 2 modification log live in packages/zustand-middleware-yjs/PROVENANCE.md.",
       "path": "packages/zustand-middleware-yjs (workspace package; src/ bundled into dist/ at build)",
-      "distribution": ["web", "android"],
+      "distribution": [
+        "web",
+        "android"
+      ],
       "modifications": "Packaging only at vendor time (peerDependencies for yjs/zustand, exports point at TS source, build/release tooling deleted, jest specs ported to vitest) — zero behavior change, pinned by the contract suite in packages/zustand-middleware-yjs/test/contract/. Subsequent fork surgery is logged in PROVENANCE.md.",
       "notes": "package.json stays private:true (never published), which keeps it OUT of license-checker output — this inventory entry plus the in-tree LICENSE file are its license record. y-idb was vendored the same way in Phase 3 (packages/y-idb); y-cinder remains git-pinned until its own phase (P4)."
     },
@@ -96,7 +134,10 @@
       "provenance": "Hand-written patch-package diff modifying dist/esm/google-provider.js of the MPL-2.0 upstream; applied by postinstall. The patch file in this public repo is the MPL §3.2 source-availability mechanism for the modification. No upstream PR reference recorded (gap report D6 — should be upstreamed).",
       "path": "patches/@capgo+capacitor-social-login+7.20.0.patch",
       "modifications": "Adds login_hint plumbing to the Google OAuth provider (ESM dist only; CJS and .d.ts untouched).",
-      "distribution": ["web", "android"]
+      "distribution": [
+        "web",
+        "android"
+      ]
     },
     {
       "name": "Alice's Adventures in Wonderland (demo EPUB, Project Gutenberg #11)",
@@ -105,7 +146,11 @@
       "license": "Public domain (Project Gutenberg License governs use of the embedded PG trademark text)",
       "provenance": "Downloaded from Project Gutenberg; exact download date/edition unrecorded.",
       "path": "public/alice.epub, public/books/alice.epub (byte-identical duplicates, both ship in dist/), src/test/fixtures/alice.epub, verification/alice.epub",
-      "distribution": ["web", "android", "test"]
+      "distribution": [
+        "web",
+        "android",
+        "test"
+      ]
     },
     {
       "name": "Project Gutenberg test-fixture EPUBs (frankenstein, jane-eyre, pride-and-prejudice, room-with-a-view)",
@@ -114,7 +159,9 @@
       "license": "Public domain (Project Gutenberg License governs use of the embedded PG trademark text)",
       "provenance": "Committed as Playwright E2E fixtures; exact Project Gutenberg editions and download dates unrecorded. Not distributed in any build output (verification/ is test-only).",
       "path": "verification/frankenstein.epub, verification/jane-eyre.epub, verification/pride-and-prejudice.epub, verification/room-with-a-view.epub",
-      "distribution": ["test"]
+      "distribution": [
+        "test"
+      ]
     },
     {
       "name": "Google Drive product logo",
@@ -123,7 +170,10 @@
       "license": "Proprietary — Google trademark/brand asset (not open-source licensed; used nominatively to identify the Google Drive integration)",
       "provenance": "Google brand asset; exact origin and brand-guideline review unrecorded (gap report D9).",
       "path": "public/logo_drive_2020q4_color_2x_web_64dp.png (used by src/components/settings/SyncSettingsTab.tsx; ships in dist/)",
-      "distribution": ["web", "android"]
+      "distribution": [
+        "web",
+        "android"
+      ]
     },
     {
       "name": "Background-audio media assets (silence.ogg, 10s_8k_sub_bass_vbr_off.webm)",
@@ -132,7 +182,10 @@
       "license": "UNKNOWN — needs investigation (likely first-party-generated trivial audio, but unrecorded)",
       "provenance": "UNKNOWN — needs investigation. Fix per gap report D9: record origin or regenerate with a documented ffmpeg command.",
       "path": "src/assets/silence.ogg, src/assets/10s_8k_sub_bass_vbr_off.webm (bundled into dist/)",
-      "distribution": ["web", "android"]
+      "distribution": [
+        "web",
+        "android"
+      ]
     },
     {
       "name": "Bible book-name lexicon data (bible-lexicon.ts)",
@@ -141,7 +194,10 @@
       "license": "UNKNOWN — needs investigation (content is factual abbreviation data, so copyright risk is minimal, but the citation is dead)",
       "provenance": "UNKNOWN — needs investigation. Fix per gap report D9: commit the CSV or rewrite the comment as hand-assembled.",
       "path": "src/data/bible-lexicon.ts (2,899 lines of data; bundled into dist/)",
-      "distribution": ["web", "android"]
+      "distribution": [
+        "web",
+        "android"
+      ]
     },
     {
       "name": "Piper voice models (runtime-fetched, per-user)",
@@ -150,7 +206,9 @@
       "license": "Heterogeneous per-voice dataset licenses (several upstream MODEL_CARDs are non-commercial or attribution-bearing); NOT redistributed by Versicle — fetched directly by the user's browser on demand",
       "provenance": "Fetched at runtime from https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/ (src/lib/tts/providers/PiperProvider.ts). User-initiated download, not Versicle redistribution; the voice picker surfaces no per-voice license info (gap report D10 product gap).",
       "path": "(runtime fetch only; cached in user's browser storage)",
-      "distribution": ["runtime-fetch"]
+      "distribution": [
+        "runtime-fetch"
+      ]
     },
     {
       "name": "onnxruntime-web (vendored local runtime for Piper synthesis)",
@@ -159,7 +217,10 @@
       "license": "MIT",
       "provenance": "Vendored into git at Phase 5a-PR3: ort.min.js + ort-wasm{,-simd,-threaded,-simd-threaded}.wasm extracted verbatim from the npm registry tarball onnxruntime-web-1.17.1.tgz (SHA-256 d48e46a437bc11d6b3a30e587fbae8aaa5061b567230e9aeecb5bc5059fcbd02; recorded in third-party/piper/PROVENANCE.md). Replaces the former cdnjs runtime fetch (deleted with piper-utils.ts) so Piper synthesis performs zero third-party egress.",
       "path": "third-party/piper/onnxruntime/ (git-tracked; ships in dist/piper/onnxruntime/)",
-      "distribution": ["web", "android"]
+      "distribution": [
+        "web",
+        "android"
+      ]
     }
   ]
 }

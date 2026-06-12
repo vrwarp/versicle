@@ -1,0 +1,9 @@
+{
+  "generator": "scripts/generate-trad2simp.mjs",
+  "source": "opencc-js@1.0.5 bundled dictionaries (cn↔tw)",
+  "license": "Apache-2.0 (OpenCC dictionary data)",
+  "entryCount": 3800,
+  "fromInverseOfDisplayMapping": 2741,
+  "fromDirectTw2Cn": 1059,
+  "rationale": "Must invert the EXACT cn→tw mapping the reader displays with (TraditionalConverter), and must be a committed code-versioned artifact because it feeds the deterministic CRDT v7 migration."
+}

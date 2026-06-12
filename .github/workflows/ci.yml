@@ -77,6 +77,19 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Restore compiled dictionary
+        # Keyed on the pinned release (scripts/cedict.lock.json): a cache
+        # hit skips the network entirely, so a flaky mdbg.net download can
+        # only ever FAIL the step — never degrade the artifact (Phase 6
+        # PR-12; the legacy compiler silently shipped an 11-entry mock).
+        id: dict-cache
+        uses: actions/cache@v4
+        with:
+          path: public/dict
+          key: cedict-${{ hashFiles('scripts/cedict.lock.json') }}
+      - name: Compile dictionary (pinned release, checksum-verified)
+        if: steps.dict-cache.outputs.cache-hit != 'true'
+        run: npm run compile-dict
       - name: Build (tsc -b && vite build)
         run: npm run build
       - name: Worker-chunk purity (C12)
