@@ -23,7 +23,35 @@ import type { WorkspaceMetadata } from '~types/workspace';
 export interface SyncBackendConnection {
   /** Detach and flush; the workspace doc must be durable afterwards. */
   disconnect(): Promise<void> | void;
+  /**
+   * Subscribe to transport events. Optional until every backend exposes the
+   * P4 `SyncConnection` surface; required for the event-surface cases
+   * (capabilities.eventInjection / capabilities.savedEvent).
+   */
+  on?(event: SyncConnectionEventName, cb: (payload: unknown) => void): void;
 }
+
+/**
+ * The transport event surface (phase4-sync-strangler.md §D1): what the real
+ * y-cinder FireProvider emits today (`connection-error`, `sync-failure`,
+ * `save-rejected`, `corrupted-document`) plus `saved` — the save-success
+ * event the P4 fork delta adds (drives lastSyncTime-from-flush). The C3
+ * event cases pin both backends to this one surface so mock/real drift
+ * becomes a red CI.
+ */
+export type SyncConnectionEventName =
+  | 'connection-error'
+  | 'sync-failure'
+  | 'save-rejected'
+  | 'corrupted-document'
+  | 'saved';
+
+export const SYNC_CONNECTION_ERROR_EVENTS = [
+  'connection-error',
+  'sync-failure',
+  'save-rejected',
+  'corrupted-document',
+] as const satisfies readonly SyncConnectionEventName[];
 
 /**
  * What a backend must provide to run the contract. Mirrors the surface P4
@@ -39,7 +67,21 @@ export interface SyncBackendContractHarness {
    */
   connect?(doc: Y.Doc, workspaceId: string): Promise<SyncBackendConnection>;
   createWorkspace(name: string): Promise<WorkspaceMetadata>;
-  listWorkspaces(): Promise<WorkspaceMetadata[]>;
+  listWorkspaces(opts?: { includeDeleted?: boolean }): Promise<WorkspaceMetadata[]>;
+  /**
+   * Patch workspace metadata in place (P4's post-migration `schemaVersion`
+   * stamp — quarantine layer 3 of phase4-sync-strangler.md §D5).
+   */
+  updateWorkspaceMetadata(
+    workspaceId: string,
+    patch: Partial<WorkspaceMetadata>
+  ): Promise<void>;
+  /**
+   * The clean-sync probe: does the workspace's replicated doc hold any
+   * data? (FirestoreSyncManager.performCleanSync's main-doc + updates
+   * check / mock snapshot check.)
+   */
+  probeHasData(workspaceId: string): Promise<boolean>;
   /** Tombstone deletion — the workspace must never be resurrectable. */
   deleteWorkspace(workspaceId: string): Promise<void>;
   /** The pre-flight gate every connect runs (tombstone check). */
@@ -50,6 +92,22 @@ export interface SyncBackendContractHarness {
    * emulator) can implement this.
    */
   attemptWriteToTombstoned?(workspaceId: string): Promise<boolean>;
+  /**
+   * Make probeHasData turn true WITHOUT a realtime connection (e.g. write
+   * an `updates` doc directly). Used by the probe cases when
+   * capabilities.connect is off.
+   */
+  seedWorkspaceData?(workspaceId: string): Promise<void>;
+  /**
+   * Fire a transport event on the workspace's live connection(s), as if the
+   * backend's listener had surfaced it; returns how many connections it hit.
+   * Only injectable transports (the mock) can implement this.
+   */
+  injectConnectionEvent?(
+    workspaceId: string,
+    event: SyncConnectionEventName,
+    payload: unknown
+  ): number | Promise<number>;
   dispose?(): Promise<void> | void;
 }
 
@@ -61,6 +119,13 @@ export interface SyncBackendContractCapabilities {
    * just by client convention.
    */
   serverSideTombstoneEnforcement: boolean;
+  /**
+   * The transport announces committed saves (`saved`). True for the mock;
+   * true for Firestore only once the P4 y-cinder fork delta lands (§D6.1).
+   */
+  savedEvent: boolean;
+  /** Transport failure events can be injected (mock test hooks). */
+  eventInjection: boolean;
 }
 
 export interface SyncBackendContractOptions {
@@ -132,6 +197,103 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
       });
     });
 
+    describe('connection event surface', () => {
+      if (capabilities.connect && capabilities.savedEvent) {
+        it('the connection announces committed saves (saved → lastSyncTime-from-flush)', async () => {
+          const ws = await harness.createWorkspace('Flush');
+          const doc = new Y.Doc();
+          const connection = await harness.connect!(doc, ws.workspaceId);
+          const savedAts: number[] = [];
+          connection.on!('saved', (at) => savedAts.push(at as number));
+
+          doc.getMap('library').set('book-1', 'Moby Dick');
+          await expect
+            .poll(() => savedAts.length, { timeout: 2000 })
+            .toBeGreaterThan(0);
+          expect(savedAts[0]).toBeGreaterThan(0);
+          await connection.disconnect();
+        });
+      } else {
+        it.todo(
+          'the connection announces committed saves (saved) — Firestore needs ' +
+            "the P4 y-cinder fork delta (§D6.1: success event after the debounced save commits)"
+        );
+      }
+
+      if (capabilities.connect && capabilities.eventInjection) {
+        for (const event of SYNC_CONNECTION_ERROR_EVENTS) {
+          it(`'${event}' surfaces through the connection event API`, async () => {
+            const ws = await harness.createWorkspace('Events');
+            const doc = new Y.Doc();
+            const connection = await harness.connect!(doc, ws.workspaceId);
+            const received: unknown[] = [];
+            connection.on!(event, (payload) => received.push(payload));
+
+            const payload =
+              event === 'save-rejected'
+                ? { code: 'document-too-large', sizeBytes: 2_000_000 }
+                : event === 'corrupted-document'
+                  ? { docId: ws.workspaceId }
+                  : new Error(`${event} (injected)`);
+            const hit = await harness.injectConnectionEvent!(
+              ws.workspaceId,
+              event,
+              payload
+            );
+
+            expect(hit).toBeGreaterThan(0);
+            expect(received).toHaveLength(1);
+            expect(received[0]).toBe(payload);
+            await connection.disconnect();
+          });
+        }
+      } else {
+        it.todo(
+          'transport failure events (connection-error/sync-failure/save-rejected/' +
+            'corrupted-document) surface through the connection event API ' +
+            '(injectable transports only)'
+        );
+      }
+    });
+
+    describe('data probe (clean-sync pre-flight)', () => {
+      it('probeHasData is false on a freshly created workspace', async () => {
+        const ws = await harness.createWorkspace('Empty');
+        await expect(harness.probeHasData(ws.workspaceId)).resolves.toBe(false);
+      });
+
+      if (capabilities.connect) {
+        it('probeHasData turns true after state is written through a connection', async () => {
+          const ws = await harness.createWorkspace('Holder');
+          const doc = new Y.Doc();
+          const connection = await harness.connect!(doc, ws.workspaceId);
+          doc.getMap('library').set('book-1', 'Moby Dick');
+          await connection.disconnect();
+          await expect(harness.probeHasData(ws.workspaceId)).resolves.toBe(true);
+        });
+      } else {
+        it('probeHasData turns true once the workspace holds replicated data', async () => {
+          const ws = await harness.createWorkspace('Holder');
+          await harness.seedWorkspaceData!(ws.workspaceId);
+          await expect(harness.probeHasData(ws.workspaceId)).resolves.toBe(true);
+        });
+      }
+
+      it('probeHasData on one workspace is not confused by data in a sibling', async () => {
+        const holder = await harness.createWorkspace('Holder');
+        const empty = await harness.createWorkspace('Empty');
+        if (capabilities.connect) {
+          const doc = new Y.Doc();
+          const connection = await harness.connect!(doc, holder.workspaceId);
+          doc.getMap('library').set('book-1', 'Moby Dick');
+          await connection.disconnect();
+        } else {
+          await harness.seedWorkspaceData!(holder.workspaceId);
+        }
+        await expect(harness.probeHasData(empty.workspaceId)).resolves.toBe(false);
+      });
+    });
+
     describe('workspace CRUD', () => {
       it('listWorkspaces is empty before any workspace exists', async () => {
         await expect(harness.listWorkspaces()).resolves.toEqual([]);
@@ -154,14 +316,58 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
           [first.workspaceId, second.workspaceId].sort()
         );
       });
+
+      // P4 quarantine layer 3 (phase4-sync-strangler.md §D5.3): after a
+      // successful local migration the orchestrator stamps the workspace
+      // metadata with the migrated schemaVersion, keeping the workspace-list
+      // version gate honest. This is the emulator metadata-stamp case named
+      // in the P4-4 exit criteria.
+      it('updateWorkspaceMetadata patches schemaVersion and the patch survives listWorkspaces', async () => {
+        const ws = await harness.createWorkspace('Migratable');
+        await harness.updateWorkspaceMetadata(ws.workspaceId, {
+          schemaVersion: ws.schemaVersion + 1,
+        });
+        const listed = await harness.listWorkspaces();
+        const updated = listed.find((w) => w.workspaceId === ws.workspaceId);
+        expect(updated?.schemaVersion).toBe(ws.schemaVersion + 1);
+        // The patch must not clobber unrelated fields.
+        expect(updated?.name).toBe('Migratable');
+        expect(updated?.createdAt).toBe(ws.createdAt);
+      });
+
+      it('updateWorkspaceMetadata is idempotent (re-stamping the same version is safe)', async () => {
+        const ws = await harness.createWorkspace('Stamped');
+        await harness.updateWorkspaceMetadata(ws.workspaceId, { schemaVersion: 7 });
+        await harness.updateWorkspaceMetadata(ws.workspaceId, { schemaVersion: 7 });
+        const listed = await harness.listWorkspaces();
+        expect(
+          listed.find((w) => w.workspaceId === ws.workspaceId)?.schemaVersion
+        ).toBe(7);
+      });
     });
 
     describe('tombstone semantics', () => {
+      it('a never-created workspace passes isWorkspaceAlive (missing ≠ tombstoned — offline fail-safe)', async () => {
+        await expect(harness.isWorkspaceAlive('ws_never_existed')).resolves.toBe(true);
+      });
+
       it('deleteWorkspace removes the workspace from listWorkspaces', async () => {
         const ws = await harness.createWorkspace('Doomed');
         await harness.deleteWorkspace(ws.workspaceId);
         const listed = await harness.listWorkspaces();
         expect(listed.find((w) => w.workspaceId === ws.workspaceId)).toBeUndefined();
+      });
+
+      it('listWorkspaces({ includeDeleted: true }) still surfaces tombstoned workspaces (purge maintenance surface)', async () => {
+        const doomed = await harness.createWorkspace('Doomed');
+        const survivor = await harness.createWorkspace('Survivor');
+        await harness.deleteWorkspace(doomed.workspaceId);
+        const all = await harness.listWorkspaces({ includeDeleted: true });
+        expect(all.map((w) => w.workspaceId).sort()).toEqual(
+          [doomed.workspaceId, survivor.workspaceId].sort()
+        );
+        const tombstoned = all.find((w) => w.workspaceId === doomed.workspaceId);
+        expect(tombstoned?.deletedAt).toBeGreaterThan(0);
       });
 
       it('a tombstoned workspace fails the isWorkspaceAlive pre-flight', async () => {

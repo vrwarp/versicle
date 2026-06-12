@@ -37,13 +37,36 @@ interface MockStorageData {
 }
 
 /**
- * Mock implementation of FireProvider for testing
+ * Event-surface parity with the real y-cinder FireProvider
+ * (phase4-sync-strangler.md §D6.2): the real provider emits
+ * `connection-error | sync-failure | save-rejected | corrupted-document`
+ * (node_modules/y-cinder/dist/provider.js). The mock mirrors that surface so
+ * the C3 contract suite can pin event drift as a red CI, plus `saved` — the
+ * save-success event the P4 y-cinder fork delta adds (it powers
+ * `lastSyncTime`-from-flush). The mock emits `saved` after every successful
+ * snapshot write to localStorage, which is its equivalent of a committed
+ * Firestore save.
  */
-export class MockFireProvider extends ObservableV2<{
+export interface MockSaveRejectedEvent {
+    code: 'permission-denied' | 'document-too-large' | 'max-retries-exceeded';
+    sizeBytes?: number;
+    error?: Error;
+}
+
+export interface MockFireProviderEvents {
     sync: (isSynced: boolean) => void;
     synced: () => void;
     'connection-error': (error: Error) => void;
-}> {
+    'sync-failure': (error: Error) => void;
+    'save-rejected': (event: MockSaveRejectedEvent) => void;
+    'corrupted-document': (event: { docId: string }) => void;
+    saved: (at: number) => void;
+}
+
+/**
+ * Mock implementation of FireProvider for testing
+ */
+export class MockFireProvider extends ObservableV2<MockFireProviderEvents> {
     readonly doc: Y.Doc;
     readonly awareness: awarenessProtocol.Awareness;
     readonly documentPath: string;
@@ -59,6 +82,9 @@ export class MockFireProvider extends ObservableV2<{
     private static shouldFailSync = false;
     private static syncDelay = 100; // ms
 
+    /** Live (constructed, not yet destroyed) providers — see simulateEvent. */
+    private static liveInstances = new Set<MockFireProvider>();
+
     constructor(config: MockFireProviderConfig) {
         super();
         this.doc = config.ydoc;
@@ -66,6 +92,7 @@ export class MockFireProvider extends ObservableV2<{
         this.firebaseApp = config.firebaseApp;
         this.maxWaitFirestoreTime = config.maxWaitTime || 2000;
         this.awareness = new awarenessProtocol.Awareness(this.doc);
+        MockFireProvider.liveInstances.add(this);
 
         logger.debug(`Initialized for path: ${config.path}`);
 
@@ -159,13 +186,17 @@ export class MockFireProvider extends ObservableV2<{
                 allData = JSON.parse(existing);
             }
 
+            const at = Date.now();
             allData[this.documentPath] = {
                 snapshotBase64,
-                lastModified: Date.now(),
+                lastModified: at,
                 path: this.documentPath
             };
 
             localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(allData));
+            // Parity with the P4 y-cinder `saved` fork delta: a committed
+            // save announces itself (drives lastSyncTime-from-flush).
+            this.emit('saved', [at]);
             // logger.debug(`Saved snapshot (${snapshot.byteLength} bytes)`);
         } catch (e) {
             logger.error('Failed to save to storage:', e);
@@ -187,6 +218,7 @@ export class MockFireProvider extends ObservableV2<{
 
         logger.debug('Destroying');
         this.destroyed = true;
+        MockFireProvider.liveInstances.delete(this);
 
         if (this.syncTimeout) {
             clearTimeout(this.syncTimeout);
@@ -233,6 +265,31 @@ export class MockFireProvider extends ObservableV2<{
         } catch {
             return null;
         }
+    }
+
+    /**
+     * Test hook: fire a transport event on live providers, as if the real
+     * FireProvider's Firestore listener had surfaced it. Used by the C3
+     * contract event cases and failure-path tests; optionally scoped to
+     * providers whose document path contains `pathIncludes`.
+     *
+     * Returns the number of providers the event was emitted on, so tests can
+     * assert they actually hit a live connection.
+     */
+    static simulateEvent<E extends keyof MockFireProviderEvents>(
+        event: E,
+        payload: Parameters<MockFireProviderEvents[E]>,
+        opts?: { pathIncludes?: string }
+    ): number {
+        let hit = 0;
+        for (const provider of MockFireProvider.liveInstances) {
+            if (opts?.pathIncludes && !provider.documentPath.includes(opts.pathIncludes)) {
+                continue;
+            }
+            provider.emit(event, payload);
+            hit++;
+        }
+        return hit;
     }
 
     /**

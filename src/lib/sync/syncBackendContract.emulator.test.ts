@@ -97,11 +97,42 @@ describe.skipIf(!emulatorUp)('firestore emulator', () => {
         return metadata;
       },
 
-      listWorkspaces: async () => {
+      listWorkspaces: async (opts) => {
         const snapshot = await db().collection(`users/${OWNER}/workspaces`).get();
-        return snapshot.docs
-          .map((d) => d.data() as WorkspaceMetadata)
-          .filter((ws) => !ws.deletedAt);
+        const all = snapshot.docs.map((d) => d.data() as WorkspaceMetadata);
+        return opts?.includeDeleted ? all : all.filter((ws) => !ws.deletedAt);
+      },
+
+      // Mirrors P4's post-migration metadata stamp (quarantine layer 3):
+      // a merge-write onto the metadata doc, under the real rules.
+      updateWorkspaceMetadata: async (workspaceId, patch) => {
+        await db().doc(metaPath(workspaceId)).set(patch, { merge: true });
+      },
+
+      // Mirrors performCleanSync's REAL branch (~:390-403): main doc holds
+      // content/stateVector/snapshotBase64, or the updates subcollection is
+      // non-empty.
+      probeHasData: async (workspaceId) => {
+        const docSnap = await db().doc(rootPath(workspaceId)).get();
+        const data = docSnap.data();
+        const hasMainDocData = Boolean(
+          docSnap.exists && (data?.content || data?.stateVector || data?.snapshotBase64)
+        );
+        if (hasMainDocData) return true;
+        const updatesSnap = await db()
+          .collection(`${rootPath(workspaceId)}/updates`)
+          .limit(1)
+          .get();
+        return !updatesSnap.empty;
+      },
+
+      // Realtime connect is still pending (capabilities.connect = false), so
+      // the probe cases seed data the way the provider would: an update doc
+      // in the updates subcollection.
+      seedWorkspaceData: async (workspaceId) => {
+        await db()
+          .collection(`${rootPath(workspaceId)}/updates`)
+          .add({ update: 'seeded-update-blob', createdAt: Date.now() });
       },
 
       // Mirrors the real deleteWorkspace tombstoning: plant isDeleted on the
@@ -141,6 +172,10 @@ describe.skipIf(!emulatorUp)('firestore emulator', () => {
       // P4: drive the real y-cinder FireProvider against the emulator.
       connect: false,
       serverSideTombstoneEnforcement: true,
+      // `saved` needs the P4 y-cinder fork delta (§D6.1) — flips with it.
+      savedEvent: false,
+      // Real Firestore listeners cannot be made to fail on demand.
+      eventInjection: false,
     },
     makeHarness,
   });

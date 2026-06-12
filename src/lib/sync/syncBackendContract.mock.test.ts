@@ -59,6 +59,11 @@ function makeHarness(): SyncBackendContractHarness {
       });
       return {
         disconnect: () => provider.destroy(),
+        on: (event, cb) =>
+          provider.on(
+            event as Parameters<typeof provider.on>[0],
+            cb as never
+          ),
       };
     },
 
@@ -73,7 +78,30 @@ function makeHarness(): SyncBackendContractHarness {
       return metadata;
     },
 
-    listWorkspaces: async () => readWorkspaces().filter((ws) => !ws.deletedAt),
+    listWorkspaces: async (opts) =>
+      opts?.includeDeleted
+        ? readWorkspaces()
+        : readWorkspaces().filter((ws) => !ws.deletedAt),
+
+    updateWorkspaceMetadata: async (workspaceId, patch) => {
+      writeWorkspaces(
+        readWorkspaces().map((ws) =>
+          ws.workspaceId === workspaceId ? { ...ws, ...patch } : ws
+        )
+      );
+    },
+
+    // Mirrors performCleanSync's mock branch: cloud data exists when the
+    // mock snapshot store holds a snapshotBase64 for the workspace path.
+    probeHasData: async (workspaceId) => {
+      const snapshots = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || '{}');
+      return Boolean(snapshots[pathFor(workspaceId)]?.snapshotBase64);
+    },
+
+    injectConnectionEvent: (workspaceId, event, payload) =>
+      MockFireProvider.simulateEvent(event, [payload] as never, {
+        pathIncludes: workspaceId,
+      }),
 
     deleteWorkspace: async (workspaceId) => {
       writeWorkspaces(
@@ -107,6 +135,8 @@ describeSyncBackendContract({
     // The mock enforces tombstones by client convention only — rules live
     // on the Firestore side (see syncBackendContract.emulator.test.ts).
     serverSideTombstoneEnforcement: false,
+    savedEvent: true,
+    eventInjection: true,
   },
   makeHarness,
 });
