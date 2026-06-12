@@ -190,6 +190,38 @@ rows marked "gate PR" deleted with their `describe('regression: …')` blocks la
 
 ### 5a — Providers
 
+> **STATUS: 5a COMPLETE** (implementation chain `feat(tts): ProviderDescriptor registry…`,
+> `…shared provider contract suite…`, `…vendor piper runtime…`). The P21 single-replay
+> rider flipped green on both transports at 5a-PR2. Deviations from this design, recorded
+> per the README header rule:
+>
+> 1. **Registry address**: landed at `src/lib/tts/providers/registry.ts` (the current home
+>    of the provider tree), not the final `src/domains/audio/` address — the geography move
+>    belongs to the sub-phase that deletes the legacy path (README §2 rule), i.e. later in
+>    Phase 5.
+> 2. **Ledger row 16** (`TTSProviderManager.test.ts`) closed at 5a-PR2 instead of 5a-PR3:
+>    the suite was rewritten in place alongside the contract suite it absorbs into (named
+>    regression block carried).
+> 3. **Capacitor failure mode**: the contract suite encodes `failureMode: 'event'` for
+>    CapacitorTTSProvider — the native speak promise settles on COMPLETION (that is what
+>    makes Smart Handoff possible), so a rejection channel for start failures does not
+>    exist; a failure still surfaces exactly once (one error event after the optimistic
+>    start). All five other providers are reject-only.
+> 4. **providers/ vi.mock ban** ("verify, then flip"): verification found the suites did
+>    NOT all use injected fakes — they were converted at 5a-PR2 (FakeAudioSink +
+>    constructor-injected caches + FakePiperRuntime). One permanent allowlist entry
+>    remains: `@capacitor-community/text-to-speech` (registered native plugin, no
+>    injection seam — the providers-dir analogue of the engine-dir PlatformIntegration
+>    entry).
+> 5. **PiperRuntime surface**: model accessors are keyed by model/config URL pairs rather
+>    than bare voiceId — the durable Cache API store keys ARE the legacy HuggingFace URLs
+>    (the compatibility constraint below), and only `PiperProvider` owns the voiceId→URL
+>    mapping. Intent (LRU, awaited deletes, dispose, request-id protocol) is unchanged.
+> 6. **SW precache**: the vendored `dist/piper/onnxruntime/*.wasm` files (~10 MB each)
+>    are excluded from the PWA precache manifest (4 MB budget) — same effective offline
+>    behavior as the cdnjs era; full piper-asset offline caching is P8 (PWA runtime
+>    caching) scope.
+
 #### 5a.1 `ProviderDescriptor` registry (final address `src/domains/audio/providers/registry.ts`)
 
 ```ts
