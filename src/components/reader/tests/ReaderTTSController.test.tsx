@@ -7,6 +7,7 @@ import { autoResetStores, makeTTSQueue, seedStore } from '@test/harness';
 import { HighlightLayerManager, type AnnotatingRendition } from '@domains/reader/engine/HighlightLayerManager';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { ReaderCommandsProvider, type ReaderCommands } from '@domains/reader/ui/ReaderCommands';
+import { KeyboardShortcutHost } from '@app/shortcuts/KeyboardShortcutHost';
 
 // Engine-port stub over a fake rendition: the controller consumes only
 // display() + highlights, and the pins below keep asserting the underlying
@@ -26,8 +27,14 @@ const noopCommands: ReaderCommands = {
     playFromSelection: () => { },
     refineSelection: () => null,
 };
+// Phase 8 §E: the controller's keys are KeyboardShortcutService
+// registrations; the host (normally mounted by RootLayout) provides the
+// single window keydown listener these suites drive with fireEvent.
 const withEngine = (engine: ReaderEngine | null, ui: ReactElement) => (
-    <ReaderCommandsProvider commands={noopCommands} engine={engine}>{ui}</ReaderCommandsProvider>
+    <ReaderCommandsProvider commands={noopCommands} engine={engine}>
+        <KeyboardShortcutHost />
+        {ui}
+    </ReaderCommandsProvider>
 );
 
 // Harness migration (Phase 0): seeds the REAL useTTSPlaybackStore (state via

@@ -1,13 +1,18 @@
 /**
  * ReaderViewport — the epub.js mount point + reader-area navigation
- * (Phase 6 §5, prep/phase6-reader-engine.md PR-9). Keyboard/touch/wheel
- * handling rides the ReaderCommands context: the P0 keyboard-gating
- * predicates live in useReaderNavigation, byte-identical — only the
- * page-turn actions come from the command surface.
+ * (Phase 6 §5, prep/phase6-reader-engine.md PR-9). Wheel/touch handling
+ * stays in useReaderNavigation; page-turn KEYS are KeyboardShortcutService
+ * registrations (Phase 8 §E — scope 'reader', yielding to 'tts-active'),
+ * and the engine's iframe keydown stream feeds the same service through
+ * the ONE bridge.
  */
 import React from 'react';
 import { useReaderNavigation } from '@hooks/useReaderNavigation';
 import { useReaderCommands, useReaderEngine } from '@domains/reader/ui/ReaderCommands';
+import {
+  useReaderPageTurnShortcuts,
+  useReaderEngineKeyBridge,
+} from '@app/shortcuts/readerShortcuts';
 
 export interface ReaderViewportProps {
   viewerRef: React.RefObject<HTMLDivElement | null>;
@@ -23,15 +28,20 @@ export const ReaderViewport: React.FC<ReaderViewportProps> = ({
   const commands = useReaderCommands();
   const engine = useReaderEngine();
 
-  // Navigation handling (Keyboard, Touch, Wheel)
+  // Navigation handling (Touch, Wheel — scrolled mode)
   useReaderNavigation({
-    engine,
     readerViewMode,
-    handlePrev: commands.prevPage,
-    handleNext: commands.nextPage,
     scrollWrapperRef,
     viewerRef,
   });
+
+  // Keyboard: ArrowLeft/ArrowRight page turns (scope 'reader') + the
+  // iframe keydown bridge (keys work with focus inside the book text).
+  useReaderPageTurnShortcuts({
+    handlePrev: commands.prevPage,
+    handleNext: commands.nextPage,
+  });
+  useReaderEngineKeyBridge(engine);
 
   return (
     <div ref={scrollWrapperRef} className="flex-1 relative min-w-0 flex flex-col items-center">

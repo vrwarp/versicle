@@ -6,6 +6,7 @@ import { TtsAnnouncements } from '@components/TtsAnnouncements';
 
 import { BackNavigationManager } from '@components/BackNavigationManager';
 import { SyncToastPropagator } from '@components/sync/SyncToastPropagator';
+import { KeyboardShortcutHost } from '@app/shortcuts/KeyboardShortcutHost';
 
 // Phase 8 §B: GlobalSettingsDialog left this layout — settings are the
 // /settings/:tab route (SettingsShell). The shell no longer subscribes to
@@ -22,6 +23,7 @@ export function RootLayout() {
             <ThemeSynchronizer />
             <LiveAnnouncer />
             <TtsAnnouncements />
+            <KeyboardShortcutHost />
             <ReaderControlBar />
             <div className="min-h-screen bg-background text-foreground main_layout">
                 <Outlet />

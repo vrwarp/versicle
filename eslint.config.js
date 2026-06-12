@@ -120,6 +120,22 @@ const toLocaleSelector = {
     'compareTitles).',
 };
 
+// Keydown-listener ban (Phase 8 §E): TWO overlapping window keydown
+// registries caused the P0 destructive-conflict hotfix; ONE listener now
+// feeds the KeyboardShortcutService. Register shortcuts via useShortcut()
+// (src/app/shortcuts/) — the only directory allowed to addEventListener
+// ('keydown') (carve-out block below). Tests are exempt via the
+// kernel/net + tests carve-out (fireEvent drives the real listener).
+const keydownListenerSelector = {
+  selector:
+    "CallExpression[callee.property.name='addEventListener'] > Literal[value='keydown']",
+  message:
+    "addEventListener('keydown') is banned outside src/app/shortcuts/ " +
+    '(Phase 8 §E): register shortcuts on the KeyboardShortcutService via ' +
+    'useShortcut() — scope stacking replaces ad-hoc cross-listener ' +
+    'predicates.',
+};
+
 export default tseslint.config(
   // .claude holds agent worktrees (full checkouts under .claude/worktrees/<name>/);
   // without the ignore, a top-level `eslint .` would also lint every worktree's copy.
@@ -513,6 +529,7 @@ export default tseslint.config(
         readwriteTransactionSelector,
         ...rawEgressSelectors,
         toLocaleSelector,
+        keydownListenerSelector,
       ],
     },
   },
@@ -533,6 +550,21 @@ export default tseslint.config(
       'no-restricted-syntax': [
         'error',
         readwriteTransactionSelector,
+      ],
+    },
+  },
+  // src/app/shortcuts carve-out (Phase 8 §E): the ONE place the window
+  // keydown listener is legal — every other production selector is
+  // restated (flat-config same-named rules replace, never merge).
+  {
+    files: ['src/app/shortcuts/**/*.{ts,tsx}'],
+    ignores: ['src/**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        readwriteTransactionSelector,
+        ...rawEgressSelectors,
+        toLocaleSelector,
       ],
     },
   },
@@ -563,6 +595,7 @@ export default tseslint.config(
         readwriteTransactionSelector,
         ...rawEgressSelectors,
         toLocaleSelector,
+        keydownListenerSelector,
         {
           selector:
             "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/]",
@@ -599,6 +632,7 @@ export default tseslint.config(
         readwriteTransactionSelector,
         ...rawEgressSelectors,
         toLocaleSelector,
+        keydownListenerSelector,
         {
           selector:
             "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/] > Literal" +

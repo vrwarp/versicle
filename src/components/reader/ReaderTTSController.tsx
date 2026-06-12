@@ -1,27 +1,14 @@
 import type React from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { useReaderEngine } from '@domains/reader/ui/ReaderCommands';
+import { useTtsPlaybackShortcuts } from '@app/shortcuts/readerShortcuts';
 
 interface ReaderTTSControllerProps {
   viewMode: string;
 }
-
-// HOTFIX keyboard-gating (interim until the Phase 8 KeyboardShortcutService):
-// Focused interactive controls own Space themselves; hijacking it for play/pause
-// (and calling preventDefault) would swallow e.g. a header button's activation.
-const INTERACTIVE_TARGET_SELECTOR = 'button, a[href], select, summary, [role="button"]';
-
-// An open overlay (Radix dialog/sheet/menu/popover) owns Escape: it dismisses the
-// overlay, and stopping playback at the same time would kill the audio session the
-// user only meant to close a dialog over.
-const OPEN_OVERLAY_SELECTOR = [
-  '[role="dialog"][data-state="open"]',
-  '[role="alertdialog"][data-state="open"]',
-  '[data-radix-popper-content-wrapper] [data-state="open"]'
-].join(', ');
 
 /**
  * Component to handle TTS-related side effects that update frequently.
@@ -30,7 +17,7 @@ const OPEN_OVERLAY_SELECTOR = [
  *
  * Handles:
  * 1. Highlighting the current sentence (activeCfi)
- * 2. Keyboard navigation during TTS (currentIndex)
+ * 2. Keyboard navigation during TTS (KeyboardShortcutService registrations)
  * 3. Visibility reconciliation (syncing visual state when returning to foreground)
  */
 export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
@@ -41,11 +28,9 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   const engine = useReaderEngine();
   // We subscribe to these changing values here, so the shell doesn't have to.
   // Use shallow comparison for primitive values to avoid unnecessary re-renders
-  const { activeCfi, currentIndex, status, queue } = useTTSPlaybackStore(useShallow(state => ({
+  const { activeCfi, status } = useTTSPlaybackStore(useShallow(state => ({
     activeCfi: state.activeCfi,
-    currentIndex: state.currentIndex,
-    status: state.status,
-    queue: state.queue
+    status: state.status
   })));
 
   // Engine commands come from the TtsController facade (stable identities).
@@ -105,68 +90,13 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [engine, viewMode]);
 
-  // --- Keyboard Navigation ---
-  // Use a ref to access the latest state in the event listener without re-binding it constantly.
-  // This prevents removing/adding the listener on every sentence change.
-  const stateRef = useRef({ status, currentIndex, queue, play, pause, stop });
-  useEffect(() => {
-    stateRef.current = { status, currentIndex, queue, play, pause, stop };
-  }, [status, currentIndex, queue, play, pause, stop]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent holding the key down from spamming actions (matches useReaderNavigation)
-      if (e.repeat) return;
-
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      ) {
-        return;
-      }
-
-      const { status: currentStatus, currentIndex: idx, queue: q, play: doPlay, pause: doPause, stop: doStop } = stateRef.current;
-
-      // HOTFIX keyboard-gating: this controller only owns the keyboard while TTS is
-      // playing or paused. Otherwise useReaderNavigation owns ArrowLeft/ArrowRight
-      // (page turns) — acting here too would turn the page twice per keypress.
-      const ttsOwnsKeys = currentStatus === 'playing' || currentStatus === 'paused';
-
-      if (e.key === 'ArrowLeft' && ttsOwnsKeys) {
-        if (idx > 0) jumpTo(idx - 1);
-      }
-      if (e.key === 'ArrowRight' && ttsOwnsKeys) {
-        if (idx < q.length - 1) jumpTo(idx + 1);
-      }
-      if (e.key === ' ' || e.code === 'Space') {
-        // Let a focused interactive control keep its own Space activation.
-        if (target instanceof Element && target.closest(INTERACTIVE_TARGET_SELECTOR)) {
-          return;
-        }
-        if (currentStatus === 'playing') {
-          e.preventDefault();
-          doPause();
-        } else if (currentStatus === 'paused') {
-          e.preventDefault();
-          doPlay();
-        }
-      }
-      if (e.key === 'Escape') {
-        if (ttsOwnsKeys) {
-          // Escape closes the topmost overlay before it may stop playback.
-          if (document.querySelector(OPEN_OVERLAY_SELECTOR)) {
-            return;
-          }
-          e.preventDefault();
-          doStop();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [jumpTo]);
+  // --- Keyboard Navigation (Phase 8 §E) ---
+  // The window keydown registry + interim gating predicate died here: the
+  // sentence jumps / Space play-pause / Escape stop are 'tts-active'-scope
+  // registrations on the KeyboardShortcutService (live while
+  // playing|paused). The repeat/input/Space-on-control/Escape-overlay
+  // policies are the service's built-ins, byte-identical to the hotfix.
+  useTtsPlaybackShortcuts({ play, pause, stop, jumpTo });
 
   return null;
 };

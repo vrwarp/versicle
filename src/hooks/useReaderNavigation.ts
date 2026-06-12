@@ -1,21 +1,25 @@
 import { useEffect, useRef } from 'react';
-import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
-import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 
 interface UseReaderNavigationProps {
-    engine: ReaderEngine | null;
     readerViewMode: 'paginated' | 'scrolled';
-    handlePrev: () => void;
-    handleNext: () => void;
     scrollWrapperRef: React.RefObject<HTMLDivElement | null>;
     viewerRef: React.RefObject<HTMLDivElement | null>;
 }
 
+/**
+ * Reader-area wheel + touch navigation (scrolled mode).
+ *
+ * Phase 8 §E: the KEYBOARD half of this hook — one of the two overlapping
+ * window keydown registries, including the P0 interim TTS-status
+ * predicate ("Interim mitigation until the Phase 8
+ * KeyboardShortcutService replaces both") — was deleted. Page-turn keys
+ * are now `useReaderPageTurnShortcuts` registrations on the
+ * KeyboardShortcutService (src/app/shortcuts/), where scope stacking
+ * replaces the cross-registry peeking; the engine's iframe keydown stream
+ * feeds the same service via `useReaderEngineKeyBridge`.
+ */
 export function useReaderNavigation({
-    engine,
     readerViewMode,
-    handlePrev,
-    handleNext,
     scrollWrapperRef,
     viewerRef
 }: UseReaderNavigationProps) {
@@ -70,65 +74,4 @@ export function useReaderNavigation({
             wrapper.removeEventListener('touchend', handleTouchEnd);
         };
     }, [readerViewMode, scrollWrapperRef, viewerRef]);
-
-    // Keyboard navigation (Left/Right Arrows)
-    useEffect(() => {
-        const handleKeyDown = (e: Event) => {
-            const keyboardEvent = e as KeyboardEvent;
-
-            // Prevent holding the key down from spamming page turns
-            if (keyboardEvent.repeat) return;
-
-            // Ignore keypresses if the user is typing in an input field (like the Search or Notes panel)
-            const target = keyboardEvent.target as Element;
-            if (
-                target &&
-                (target.tagName === 'INPUT' ||
-                    target.tagName === 'TEXTAREA' ||
-                    (target as HTMLElement).isContentEditable)
-            ) {
-                return;
-            }
-
-            // HOTFIX keyboard-gating: while TTS is playing or paused, ReaderTTSController
-            // owns ArrowLeft/ArrowRight (sentence jumps). Both registries listen globally,
-            // so acting here too would fire a page turn on top of the sentence jump.
-            // Interim mitigation until the Phase 8 KeyboardShortcutService replaces both.
-            const ttsStatus = useTTSPlaybackStore.getState().status;
-            if (ttsStatus === 'playing' || ttsStatus === 'paused') {
-                return;
-            }
-
-            if (keyboardEvent.key === 'ArrowLeft') {
-                if (keyboardEvent.cancelable) {
-                    keyboardEvent.preventDefault();
-                }
-                handlePrev();
-            } else if (keyboardEvent.key === 'ArrowRight') {
-                if (keyboardEvent.cancelable) {
-                    keyboardEvent.preventDefault();
-                }
-                handleNext();
-            }
-        };
-
-        // 1. Listen on the parent window (active when clicking menus, buttons, HUD)
-        window.addEventListener('keydown', handleKeyDown);
-
-        // 2. Listen on the forwarded iframe keydown stream via the engine port
-        //    (active when clicking the book text — the P0 hotfix path)
-        let unsubscribe: (() => void) | undefined;
-        if (engine) {
-            unsubscribe = engine.subscribe((event) => {
-                if (event.type === 'keydown') {
-                    handleKeyDown(event.event);
-                }
-            });
-        }
-
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            unsubscribe?.();
-        };
-    }, [engine, handlePrev, handleNext]);
 }

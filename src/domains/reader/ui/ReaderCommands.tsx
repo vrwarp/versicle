@@ -27,8 +27,9 @@
  * the ReaderCommands object (it owns those imports already) and the
  * provider owns context + registry lifecycle. `nextPage`/`prevPage` are
  * additions over the sketch: the keyboard path turns pages regardless of
- * TTS chapter routing (the P0 keyboard-gating predicates live in
- * useReaderNavigation and must stay byte-identical).
+ * TTS chapter routing (since Phase 8 §E the keys are
+ * KeyboardShortcutService registrations — src/app/shortcuts/ — where
+ * scope stacking replaced the P0 interim predicates).
  */
 import React, { createContext, useContext, useEffect } from 'react';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
