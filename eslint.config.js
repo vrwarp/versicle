@@ -293,25 +293,16 @@ export default tseslint.config(
       ],
     },
   },
-  // Engine-dir vi.mock allowlist (Phase 5 entry gate; phase5-tts-strangler.md
-  // N3 + §vi.mock policy, README §4 rule 3 ratchet "vi.mock in
-  // engine/provider/data dirs → 0"): the engine parity/unit suites drive the
-  // engine through injected fakes (FakeEngineContext, FakePlaybackBackend),
-  // but AudioPlayerService still imports the src/data repos directly and the
-  // pipeline reaches LexiconService/PlatformIntegration, so exactly these
-  // module mocks remain allowed inside src/lib/tts/engine/. The allowlist is
-  // FROZEN here (rewired post-P3: the doc's `@db/DBService` entry became the
-  // two repos that replaced it when src/db was deleted — see
-  // plan/overhaul/prep/phase5-absorption-ledger.md §allowlist):
-  //  - @data/repos/bookContent, @data/repos/playbackCache, ../LexiconService,
-  //    ../PlatformIntegration → shrink to ZERO at the 5b store-split PR
-  //    (SessionStore/lexicon ports replace the direct imports).
-  // The fifth entry (@app/tts/createWorkerEngineClient, the N1 inverted
-  // lib→app edge mocked only by WorkerEngineHandle.test.ts) LEFT this
-  // directory and this allowlist at 5b-PR1: WorkerEngineHandle moved to
-  // src/app/tts/ and the engine dir no longer references app/ at all.
-  // At the store-split PR the :not() clauses are deleted and every
-  // vi.mock/vi.doMock in the directory becomes a lint error.
+  // Engine-dir vi.mock ban (Phase 5; phase5-tts-strangler.md N3 + §vi.mock
+  // policy, README §4 rule 3 ratchet "vi.mock in engine/provider/data dirs →
+  // 0"): the allowlist reached ZERO at 5b-PR4. The entry-gate freeze held
+  // four modules ({@data/repos/bookContent, @data/repos/playbackCache,
+  // ../LexiconService, ../PlatformIntegration} — the post-P3 rewrite of the
+  // doc's `@db/DBService` entry); the decomposition replaced every direct
+  // import with EngineContext ports (BookContentPort + SessionStore), so the
+  // suites now inject in-memory fakes (FakeEngineContext, FakePlaybackBackend,
+  // parityHostDb port factories, WorkerTtsEngine constructor ports) and
+  // every vi.mock/vi.doMock in the directory is a lint error.
   //
   // Placement + the repeated readwrite selector are load-bearing: flat config
   // resolves same-named rules last-wins (options replace, never merge), so
@@ -333,25 +324,12 @@ export default tseslint.config(
         },
         {
           selector:
-            "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/] > Literal" +
-            ":not([value='@data/repos/bookContent'])" +
-            ":not([value='@data/repos/playbackCache'])" +
-            ":not([value='../LexiconService'])" +
-            ":not([value='../PlatformIntegration'])",
+            "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/]",
           message:
-            'vi.mock in src/lib/tts/engine/ is frozen to the allowlist ' +
-            '{@data/repos/bookContent, @data/repos/playbackCache, ../LexiconService, ' +
-            '../PlatformIntegration} ' +
-            '(phase5-tts-strangler.md N3; shrinks to ' +
-            'ZERO at the 5b store-split PR). Drive the engine through injected fakes ' +
-            '(FakeEngineContext/FakePlaybackBackend) instead.',
-        },
-        {
-          selector:
-            "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/][arguments.0.type!='Literal']",
-          message:
-            'vi.mock in src/lib/tts/engine/ must name its module as a plain string literal ' +
-            'so the allowlist rule above can see it (phase5-tts-strangler.md N3).',
+            'vi.mock in src/lib/tts/engine/ is banned (allowlist reached ZERO at ' +
+            '5b-PR4; phase5-tts-strangler.md N3). Drive the engine through injected ' +
+            'fakes instead: FakeEngineContext/FakePlaybackBackend, the parityHostDb ' +
+            'port factories, or the WorkerTtsEngine constructor ports.',
         },
       ],
     },

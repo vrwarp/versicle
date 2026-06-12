@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { createZustandEngineContext } from '@app/tts/createZustandEngineContext';
 import { AudioContentPipeline } from './AudioContentPipeline';
-import { preprocessBlockRoots, parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
+import { preprocessBlockRoots, parseCfiRange, generateCfiRange, type PreprocessedRoot } from '../cfi-utils';
 
 // Helper to access private method
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -37,6 +37,48 @@ describe('AudioContentPipeline Grouping Logic', () => {
 
         expect(case1.length).toBe(1); // Div captures both children
         expect(case2.length).toBe(1); // Div (in middle) expands scope to capture P2
+    });
+
+    describe('regression: AudioPlayerService.test (grouping)', () => {
+        // Carried from the deleted AudioPlayerService.test.ts grouping block
+        // (absorption ledger row 1): the pure groupSentencesByRoot pins lived
+        // there for historical reasons; the colliding-parent skip-mask case is
+        // covered end-to-end by parity P14 (sourceIndices-keyed masks).
+        it('groups sentences by parent and generates Range CFIs for rootCfi', () => {
+            const pipeline = new AudioContentPipeline(createZustandEngineContext());
+            const sentences = [
+                { text: 'A', cfi: 'epubcfi(/6/14!/4/2/1:0)' },
+                { text: 'B', cfi: 'epubcfi(/6/14!/4/2/3:0)' }, // Same parent /4/2
+                { text: 'C', cfi: 'epubcfi(/6/14!/4/4/1:0)' }, // New parent /4/4
+            ];
+
+            const groups = groupSentences(pipeline, sentences);
+
+            expect(groups).toHaveLength(2);
+            expect(groups[0].segments).toHaveLength(2);
+            expect(groups[0].rootCfi).toBe(
+                generateCfiRange('epubcfi(/6/14!/4/2/1:0)', 'epubcfi(/6/14!/4/2/3:0)'));
+            expect(groups[1].segments).toHaveLength(1);
+            expect(groups[1].rootCfi).toBe(
+                generateCfiRange('epubcfi(/6/14!/4/4/1:0)', 'epubcfi(/6/14!/4/4/1:0)'));
+        });
+
+        it('generates unique rootCfi for adjacent groups sharing the same parent (Map Collision Fix)', () => {
+            const pipeline = new AudioContentPipeline(createZustandEngineContext());
+            // Groups separated by an intervening different parent: A1 / B1 / A2.
+            const sentences = [
+                { text: 'A1', cfi: 'epubcfi(/6/14!/4/2/1:0)' }, // Parent A
+                { text: 'B1', cfi: 'epubcfi(/6/14!/4/4/1:0)' }, // Parent B
+                { text: 'A2', cfi: 'epubcfi(/6/14!/4/2/3:0)' }, // Parent A again
+            ];
+
+            const groups = groupSentences(pipeline, sentences);
+
+            expect(groups).toHaveLength(3);
+            expect(groups[0].rootCfi).not.toBe(groups[2].rootCfi);
+            expect(groups[0].rootCfi).toContain('1:0');
+            expect(groups[2].rootCfi).toContain('3:0');
+        });
     });
 
     describe('regression: range-CFI table roots keep distinct group identities (D2)', () => {

@@ -26,6 +26,7 @@ import { bookRepository } from '../repositories/BookRepository';
 import { contentAnalysisRepository } from '../repositories/ContentAnalysisRepository';
 import { genAIService } from '@lib/genai/GenAIService';
 import { toTTSSettingsData } from './replicationSpec';
+import { repoBookContentPort, createRepoSessionStore } from '@lib/tts/engine/repoPorts';
 import type { EngineContext } from '@lib/tts/engine/EngineContext';
 
 /**
@@ -119,5 +120,12 @@ export function createZustandEngineContext(): EngineContext {
             openBatteryOptimizationSettings: () =>
                 BatteryOptimization.openBatteryOptimizationSettings(),
         },
+
+        // Storage ports (5b decomposition): the repo-backed implementations.
+        // Existing module-level `vi.mock('@data/repos/...')` mocks in lib-level
+        // pipeline tests keep intercepting these reads unchanged (the port
+        // delegates to the mocked module).
+        content: repoBookContentPort,
+        session: createRepoSessionStore(),
     };
 }

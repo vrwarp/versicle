@@ -25,8 +25,9 @@ import type {
     TtsEngine,
     PlaybackSnapshot,
     SnapshotListener,
-    TTSQueueItem,
-} from '@lib/tts/AudioPlayerService';
+    FlightRecorderExport,
+} from '@lib/tts/engine/TtsEngine';
+import type { TTSQueueItem } from '~types/tts';
 import type { TTSVoice } from '@lib/tts/providers/types';
 import { createLogger } from '@lib/logger';
 import { createWorkerEngineClient, type WorkerEngineClient } from './createWorkerEngineClient';
@@ -53,7 +54,7 @@ export class WorkerEngineHandle implements TtsEngine {
 
     // Latest FULL playback snapshot (queue always attached), kept current by the internal
     // subscription, so subscribe() can replay it to new listeners (mirroring
-    // AudioPlayerService.subscribe semantics) and snapshot() can serve it synchronously.
+    // PlaybackController.subscribe semantics) and snapshot() can serve it synchronously.
     private cachedSnapshot: PlaybackSnapshot = INITIAL_SNAPSHOT;
 
     // No Web Worker in this environment (jsdom unit tests, SSR). The handle becomes a benign
@@ -134,7 +135,6 @@ export class WorkerEngineHandle implements TtsEngine {
     setPrerollEnabled(enabled: boolean): void { this.run((c) => c.engine.setPrerollEnabled(enabled)); }
     setBackgroundAudioMode(mode: 'silence' | 'noise' | 'off'): void { this.run((c) => c.engine.setBackgroundAudioMode(mode)); }
     setBackgroundVolume(volume: number): void { this.run((c) => c.engine.setBackgroundVolume(volume)); }
-    clearPauseGesture(): void { this.run((c) => c.engine.clearPauseGesture()); }
 
     // --- Navigation (fire-and-forget) ---
     setBookId(bookId: string | null): void { this.run((c) => c.setBook(bookId)); }
@@ -155,6 +155,18 @@ export class WorkerEngineHandle implements TtsEngine {
     async deleteVoice(voiceId: string): Promise<void> { await this.call((c) => c.engine.deleteVoice(voiceId), undefined); }
     isVoiceDownloaded(voiceId: string): Promise<boolean> { return this.call((c) => c.engine.isVoiceDownloaded(voiceId), false); }
 
+    // --- Diagnostics (S9: the worker-side flight recorder is the one that
+    // sees engine traffic; the tab reads it through the handle) ---
+    exportDiagnostics(): Promise<FlightRecorderExport> {
+        return this.call((c) => c.engine.exportDiagnostics(), {
+            stats: { eventCount: 0, capacity: 0, oldestWall: null },
+            events: [],
+        });
+    }
+    triggerDiagnosticsSnapshot(trigger: string, note?: string): Promise<string | null> {
+        return this.call((c) => c.engine.triggerDiagnosticsSnapshot(trigger, note), null);
+    }
+
     // --- The snapshot stream ---
     /** The latest full snapshot, synchronously (handle cache). */
     snapshot(): PlaybackSnapshot {
@@ -163,7 +175,7 @@ export class WorkerEngineHandle implements TtsEngine {
 
     subscribe(listener: SnapshotListener): () => void {
         this.listeners.add(listener);
-        // Mirror AudioPlayerService.subscribe: deliver the current snapshot on the next tick.
+        // Mirror PlaybackController.subscribe: deliver the current snapshot on the next tick.
         setTimeout(() => {
             if (this.listeners.has(listener)) {
                 listener(this.cachedSnapshot);

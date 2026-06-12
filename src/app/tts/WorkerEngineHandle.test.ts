@@ -5,7 +5,7 @@
  * routing, and the jsdom/SSR `disabled` no-op mode.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { PlaybackSnapshot, SnapshotListener } from '@lib/tts/AudioPlayerService';
+import type { PlaybackSnapshot, SnapshotListener } from '@lib/tts/engine/TtsEngine';
 
 const { clientState } = vi.hoisted(() => ({
     clientState: {

@@ -1,7 +1,8 @@
 /**
  * WorkerTtsEngine — the worker-resident host for the TTS orchestration brain.
  *
- * It runs a real {@link AudioPlayerService} inside the Worker, wired to:
+ * It constructs the real {@link PlaybackController} DIRECTLY inside the Worker
+ * (5b-PR4: the AudioPlayerService façade is gone), wired to:
  *  - a {@link WorkerEngineContext} (host state replicated from the main thread), and
  *  - a *proxy* {@link PlaybackBackend} + {@link MediaPlatform} whose methods call back to the
  *    main thread (where the real providers, `HTMLAudioElement`, and `navigator.mediaSession`
@@ -12,12 +13,14 @@
  * round-trip without spawning an OS thread.
  */
 import * as Comlink from 'comlink';
-import { AudioPlayerService, type TTSQueueItem, type TTSStatus, type SnapshotListener } from '../AudioPlayerService';
+import { PlaybackController } from './PlaybackController';
+import type { TTSQueueItem } from '~types/tts';
+import type { TTSStatus, SnapshotListener, FlightRecorderExport } from './TtsEngine';
 import { WorkerEngineContext, type EngineStateUpdate, type EngineHostCommand } from './WorkerEngineContext';
 import type { PlaybackBackend, TTSProviderEvents } from './PlaybackBackend';
 import type { MediaPlatform } from '../PlatformIntegration';
 import type { TTSVoice } from '../providers/types';
-import type { LexiconRule, ContentAnalysis, BookMetadata, GenAIPort } from './EngineContext';
+import type { LexiconRule, ContentAnalysis, BookMetadata, GenAIPort, BookContentPort, SessionStore } from './EngineContext';
 import type { MediaSessionMetadata } from '../MediaSessionManager';
 import type { BackgroundAudioMode } from '../BackgroundAudio';
 
@@ -78,16 +81,25 @@ export interface EngineHost {
 }
 
 export class WorkerTtsEngine {
-    private engine: AudioPlayerService | null = null;
+    private engine: PlaybackController | null = null;
     private ctx: WorkerEngineContext | null = null;
     private backendEvents: TTSProviderEvents | null = null;
     private backgroundAudioMode: BackgroundAudioMode = 'silence';
+
+    /**
+     * @param ports Optional storage-port injection (tests). Production (the
+     * worker entry) constructs with no arguments — the context defaults to the
+     * repo-backed ports (the worker reads/writes IndexedDB directly).
+     */
+    constructor(private readonly ports: { content?: BookContentPort; session?: SessionStore } = {}) {}
 
     /** Wire the engine to the main-thread host. Must be called once before any other method. */
     async connect(host: EngineHost): Promise<void> {
         const platformName = host.platformName();
 
         this.ctx = new WorkerEngineContext({
+            content: this.ports.content,
+            session: this.ports.session,
             post: (cmd) => host.applyHostCommand(cmd),
             platformName,
             getRules: (bookId, language) => host.lexiconGetRules(bookId, language),
@@ -135,7 +147,7 @@ export class WorkerTtsEngine {
             stop: () => host.platformStop(),
         });
 
-        this.engine = AudioPlayerService.createWithContext(this.ctx, backendFactory, platformFactory);
+        this.engine = PlaybackController.createWithContext(this.ctx, backendFactory, platformFactory);
     }
 
     /** Main → worker: apply a replicated store-state snapshot. */
@@ -169,7 +181,7 @@ export class WorkerTtsEngine {
         }
     }
 
-    private get e(): AudioPlayerService {
+    private get e(): PlaybackController {
         if (!this.engine) throw new Error('WorkerTtsEngine.connect() must be called first');
         return this.engine;
     }
@@ -212,9 +224,16 @@ export class WorkerTtsEngine {
     setPrerollEnabled(enabled: boolean): void { this.e.setPrerollEnabled(enabled); }
     setBackgroundAudioMode(mode: BackgroundAudioMode): void { this.e.setBackgroundAudioMode(mode); }
     setBackgroundVolume(volume: number): void { this.e.setBackgroundVolume(volume); }
-    clearPauseGesture(): void { this.e.clearPauseGesture(); }
     getVoices(): Promise<TTSVoice[]> { return this.e.getVoices(); }
     downloadVoice(voiceId: string): Promise<void> { return this.e.downloadVoice(voiceId); }
     deleteVoice(voiceId: string): Promise<void> { return this.e.deleteVoice(voiceId); }
     isVoiceDownloaded(voiceId: string): Promise<boolean> { return this.e.isVoiceDownloaded(voiceId); }
+
+    // --- Diagnostics (5b §5b.6, the S9 fix): the WORKER-side flight recorder
+    // is the one that sees engine traffic; the main thread reads it through
+    // these methods via the handle, never through its own module singleton. ---
+    exportDiagnostics(): Promise<FlightRecorderExport> { return this.e.exportDiagnostics(); }
+    triggerDiagnosticsSnapshot(trigger: string, note?: string): Promise<string | null> {
+        return this.e.triggerDiagnosticsSnapshot(trigger, note);
+    }
 }

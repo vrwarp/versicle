@@ -14,7 +14,7 @@
  *   4. the voice-fallback algorithm (regression: useTTSStore_voice_recall).
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { PlaybackSnapshot, SnapshotListener, TtsEngine } from '@lib/tts/AudioPlayerService';
+import type { PlaybackSnapshot, SnapshotListener, TtsEngine } from '@lib/tts/engine/TtsEngine';
 import type { TTSVoice } from '@lib/tts/providers/types';
 import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
@@ -47,7 +47,6 @@ function makeFakeEngine() {
         isVoiceDownloaded: vi.fn().mockResolvedValue(false),
         subscribe: vi.fn((l: SnapshotListener) => { listener = l; return () => { listener = undefined; }; }),
         setBookId: vi.fn(),
-        clearPauseGesture: vi.fn(),
         whenReady: vi.fn().mockResolvedValue(undefined),
         loadSection: vi.fn().mockResolvedValue(undefined),
         loadSectionBySectionId: vi.fn().mockResolvedValue(undefined),
@@ -469,7 +468,6 @@ describe('TtsController', () => {
             c.setBookId('book-1'); expect(raw.setBookId).toHaveBeenCalledWith('book-1');
             c.loadSectionBySectionId('sec-1', false, 'Title');
             expect(raw.loadSectionBySectionId).toHaveBeenCalledWith('sec-1', false, 'Title');
-            c.clearPauseGesture(); expect(raw.clearPauseGesture).toHaveBeenCalled();
         });
 
         it('commands stay bound when destructured (useAudioCommands contract)', async () => {

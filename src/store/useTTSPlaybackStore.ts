@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { TTSVoice } from '@lib/tts/providers/types';
-import type { TTSStatus, TTSQueueItem } from '@lib/tts/AudioPlayerService';
+import type { TTSStatus } from '@lib/tts/engine/TtsEngine';
+import type { TTSQueueItem } from '~types/tts';
 
 /**
  * EPHEMERAL TTS playback state — the other half of the 5b split of the legacy

@@ -17,6 +17,9 @@
  */
 import type { TTSQueueItem } from '~types/tts';
 import type { TTSVoice } from '../providers/types';
+import type { FlightRecorderExport } from '../TTSFlightRecorder';
+
+export type { FlightRecorderExport };
 
 /** The possible states of TTS playback (canonical home since 5b-PR2). */
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'completed';
@@ -73,8 +76,8 @@ export function isAudiblePlayback(status: TTSStatus): boolean {
 
 /**
  * The public engine surface the app talks to — a STANDALONE interface since 5b-PR2
- * (no longer a `Pick` of AudioPlayerService; the S8 coupling is gone). Both the
- * in-process `AudioPlayerService` and the worker-backed `WorkerEngineHandle`
+ * (no longer a `Pick` of the engine class; the S8 coupling is gone). Both the
+ * in-process `PlaybackController` and the worker-backed `WorkerEngineHandle`
  * implement it, so the app can be pointed at either via `getAudioPlayer()`.
  *
  * Commands are ACKs: a resolved promise means the command was accepted (enqueued),
@@ -95,7 +98,6 @@ export interface TtsEngine {
     setPrerollEnabled(enabled: boolean): void;
     setBackgroundAudioMode(mode: 'silence' | 'noise' | 'off'): void;
     setBackgroundVolume(volume: number): void;
-    clearPauseGesture(): void;
 
     // --- Navigation ---
     /**
@@ -118,6 +120,14 @@ export interface TtsEngine {
     downloadVoice(voiceId: string): Promise<void>;
     deleteVoice(voiceId: string): Promise<void>;
     isVoiceDownloaded(voiceId: string): Promise<boolean>;
+
+    // --- Diagnostics (S9: the engine runs in the worker, whose flight
+    // recorder is a different module instance than the main thread's —
+    // DiagnosticsTab reads the LIVE engine buffer through the handle) ---
+    /** The engine-side flight recorder's live ring buffer + stats. */
+    exportDiagnostics(): Promise<FlightRecorderExport>;
+    /** Freeze the engine-side ring buffer into a persisted snapshot; resolves its id. */
+    triggerDiagnosticsSnapshot(trigger: string, note?: string): Promise<string | null>;
 
     // --- The snapshot stream ---
     /** Subscribe to playback snapshots; the latest snapshot (with queue) replays on the next tick. */

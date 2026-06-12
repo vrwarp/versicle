@@ -7,48 +7,25 @@
  *
  * The `host.*` seams replicate state the way the production client does: store-slice pushes
  * via applyStateUpdate (genAI/analysis/progress/bookLanguage — see replicationSpec.ts) and
- * host ports for async reads (book metadata, persisted ContentAnalysis rows). The data repos
- * the worker-resident engine imports are the same mocked modules (the engine-dir vi.mock
- * allowlist: {@data/repos/bookContent, @data/repos/playbackCache, ../LexiconService} here —
- * PlatformIntegration is proxied, not imported, on this transport).
+ * host ports for async reads (book metadata, persisted ContentAnalysis rows). Storage is
+ * INJECTED through the WorkerTtsEngine constructor ports (BookContentPort + SessionStore,
+ * 5b-PR4) — ZERO vi.mock (the phase5 doc N3 deadline; enforced by eslint).
  */
 import { vi } from 'vitest';
 import * as Comlink from 'comlink';
-import type { ParityHostDbState } from './parityHostDb';
+import {
+    createParityBookContent,
+    createParityHostDbState,
+    createParitySessionStore,
+    gateParitySections,
+    resetParityHostDb,
+} from './parityHostDb';
 
-const hostDb = vi.hoisted(
-    (): ParityHostDbState => ({
-        sections: {},
-        ttsState: {},
-        ttsContent: {},
-        contentErrors: {},
-        sectionGates: {},
-        contentFetches: {},
-    }),
-);
-
-vi.mock('../LexiconService', () => ({
-    LexiconService: {
-        getInstance: () => ({
-            getRules: vi.fn().mockResolvedValue([]),
-            applyLexicon: (t: string) => t,
-            getBibleLexiconPreference: vi.fn().mockResolvedValue('default'),
-        }),
-    },
-}));
-
-vi.mock('@data/repos/bookContent', async () => {
-    const { createParityBookContent } = await import('./parityHostDb');
-    return { bookContent: createParityBookContent(hostDb) };
-});
-vi.mock('@data/repos/playbackCache', async () => {
-    const { createParityPlaybackCache } = await import('./parityHostDb');
-    return { playbackCache: createParityPlaybackCache(hostDb) };
-});
+const hostDb = createParityHostDbState();
 
 import { WorkerTtsEngine, type EngineHost, type BackendEvent } from './WorkerTtsEngine';
 import type { TTSVoice } from '../providers/types';
-import type { TTSQueueItem } from '../AudioPlayerService';
+import type { TTSQueueItem } from '~types/tts';
 import type {
     BookMetadata,
     ContentAnalysis,
@@ -58,7 +35,6 @@ import type {
     Progress,
 } from './EngineContext';
 import type { EngineHostCommand } from './WorkerEngineContext';
-import { gateParitySections, resetParityHostDb } from './parityHostDb';
 import {
     advanceParityClock,
     describeEngineParity,
@@ -80,7 +56,12 @@ describeEngineParity('worker bridge (MessageChannel + Comlink)', async (): Promi
     resetParityHostDb(hostDb);
 
     const channel = new MessageChannel();
-    const engine = new WorkerTtsEngine();
+    // Storage ports injected (5b-PR4): the worker-resident engine reads the
+    // shared in-memory parity state instead of the IndexedDB-backed repos.
+    const engine = new WorkerTtsEngine({
+        content: createParityBookContent(hostDb),
+        session: createParitySessionStore(hostDb),
+    });
     Comlink.expose(engine, channel.port1);
     channel.port1.start();
     const remote = Comlink.wrap<WorkerTtsEngine>(channel.port2);
@@ -225,7 +206,6 @@ describeEngineParity('worker bridge (MessageChannel + Comlink)', async (): Promi
             },
             skipToNextSection: () => remote.skipToNextSection(),
             skipToPreviousSection: () => remote.skipToPreviousSection(),
-            clearPauseGesture: () => remote.clearPauseGesture(),
         },
         backend: {
             played: () => played,

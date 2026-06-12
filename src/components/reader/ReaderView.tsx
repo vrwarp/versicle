@@ -1285,13 +1285,9 @@ export const ReaderView: React.FC = () => {
                         activeTocId={activeTocId ?? undefined}
                         deviceMarkers={deviceMarkers}
                         onNavigate={(href) => {
-                            // Invalidate any pending pause→play "Dragnet" capture on the navigation
-                            // INTENT (the TOC click), synchronously. The reader's relocation →
-                            // currentSectionId update is slow/unreliable on WebKit, so clearing only
-                            // on the section change (see useTTS) races the user's next play and lets a
-                            // stale audio-bookmark slip through. A deliberate TOC navigation is never a
-                            // resume gesture, so drop the pause timestamp immediately.
-                            audio.clearPauseGesture();
+                            // Dragnet invalidation moved INSIDE the engine (5b-PR4): the
+                            // DragnetGesture unit disarms on the engine's own section-index
+                            // change, so the TOC handler no longer pokes the engine.
                             rendition?.display(href);
                             setSidebar('none');
                         }}

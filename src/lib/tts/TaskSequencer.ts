@@ -24,7 +24,7 @@
  *    `TSQ` flight-recorder anomaly (and triggers a diagnostic snapshot) —
  *    a hung task wedges the whole queue, which is precisely the failure mode
  *    the detached-persistence policy exists to avoid (see SessionStore notes
- *    in AudioPlayerService).
+ *    in the EngineContext SessionStore port).
  *  - **isInsideTask()**: feeds the DEV assert that status/queue mutations
  *    happen only inside a running sequenced task (the C4 invariant).
  */

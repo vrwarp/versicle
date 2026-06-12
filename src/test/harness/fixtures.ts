@@ -5,7 +5,7 @@
  * domain types.
  */
 import type { BookMetadata, UserInventoryItem } from '~types/db';
-import type { TTSQueueItem } from '@lib/tts/AudioPlayerService';
+import type { TTSQueueItem } from '~types/tts';
 
 export function makeInventoryItem(
   overrides: Partial<UserInventoryItem> & Pick<UserInventoryItem, 'bookId'>,

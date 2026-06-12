@@ -21,7 +21,11 @@ import type {
     LexiconRule,
     ContentAnalysis,
     BookMetadata,
+    BookContentPort,
+    SessionStore,
+    PlaybackSessionRow,
 } from './EngineContext';
+import type { TTSQueueItem } from '~types/tts';
 
 type AnalysisListener = (state: { sections: Record<string, SectionAnalysis> }) => void;
 
@@ -185,6 +189,35 @@ export class FakeEngineContext implements EngineContext {
         isBatteryOptimizationEnabled: async () => this.batteryOptimizationEnabled,
         openBatteryOptimizationSettings: async () => {
             this.openedBatterySettings.push(Date.now());
+        },
+    };
+
+    // --- Storage ports (5b decomposition; in-memory, seed via the public maps) ---
+    /** bookId → spine sections (content.getSections). */
+    sections: Record<string, Array<{ sectionId: string; title?: string; characterCount?: number }>> = {};
+    /** `${bookId}/${sectionId}` → prepared sentences (content.getTTSPreparation). */
+    ttsContent: Record<string, { sentences: Array<{ text: string; cfi: string; sourceIndices?: number[] }> } | undefined> = {};
+    /** bookId → persisted playback session (session.loadSession source). */
+    sessions: Record<string, PlaybackSessionRow | undefined> = {};
+    /** Recorded session writes (assert against these). */
+    readonly persistedQueues: Array<{ bookId: string; queue: ReadonlyArray<TTSQueueItem> }> = [];
+    readonly persistedPauseTimes: Array<{ bookId: string; lastPauseTime: number | null }> = [];
+
+    content: BookContentPort = {
+        getSections: async (bookId: string) => (this.sections[bookId] ?? []) as never,
+        getTTSPreparation: async (bookId: string, sectionId: string) =>
+            this.ttsContent[`${bookId}/${sectionId}`] as never,
+        getTableImages: async () => [],
+        getBookStructure: async () => undefined,
+    };
+
+    session: SessionStore = {
+        loadSession: async (bookId: string) => this.sessions[bookId],
+        persistQueue: (bookId: string, queue: ReadonlyArray<TTSQueueItem>) => {
+            this.persistedQueues.push({ bookId, queue });
+        },
+        persistPauseTime: async (bookId: string, lastPauseTime: number | null) => {
+            this.persistedPauseTimes.push({ bookId, lastPauseTime });
         },
     };
 

@@ -354,10 +354,56 @@ export class PiperRuntime {
 
 ### 5b — Engine
 
-> **STATUS: 5b FIRST HALF LANDED** (implementation chain `feat(tts): TtsController
-> command facade…`, `…PlaybackSnapshot{seq} channel + immutable QueueModel…`,
-> `…tts-settings split + v1 migration…`). The P14 identity rider flipped green at the
-> QueueModel commit. Deviations from this design, recorded per the README header rule:
+> **STATUS: 5b COMPLETE.** Second half landed as two commits — `feat(tts): sequencer
+> epochs + dev-assert; events, dragnet, fallback sequenced` (the doc's 5b-PR3) and
+> `refactor(tts): decompose the engine; AudioPlayerService dies` (the doc's 5b-PR4).
+> `AudioPlayerService.ts` is GONE (exit criterion met); the engine-dir `vi.mock`
+> allowlist is **∅** (N3 deadline met); parity 23 scenarios × 2 transports green with
+> zero `it.fails` riders; ledger rows 1/2/4/5/7/10–13/15 closed. Deviations of the
+> second half, recorded per the README header rule:
+>
+> 7. **Guard conversion scope (§5b.3)**: the loadSection/loadSectionBySectionId/play
+>    book-id guards converted to `ctx.checkpoint()`; `restoreQueue`'s guard is
+>    deliberately NOT converted — `stop()` also bumps the epoch, and a user stop
+>    between `setBookId` and the playlist resolving must not cancel the restore. The
+>    `playInternal`/`handleContentAnalysisUpdate` book/section guards remain hand-rolled
+>    (behavior-identical; candidates for 5c-or-later conversion under their own riders).
+> 8. **setBookId semantics**: the context switch (epoch bump, `currentBookId`, load
+>    kickoffs) stays synchronous; only the stop/reset is sequenced. The in-process
+>    engine returns the reset-task promise; `WorkerTtsEngine.setBookId` stays
+>    fire-and-forget — awaiting the reset across Comlink can deadlock the sequencer
+>    against a task parked on the old book's still-loading playlist (found by the
+>    worker parity leg).
+> 9. **Storage ports beyond the doc's SessionStore**: reaching the zero-vi.mock
+>    deadline also required a `BookContentPort` on EngineContext (the pipeline's
+>    getTTSPreparation/getTableImages/getBookStructure reads + the controller's
+>    getSections), with repo-backed production impls in `engine/repoPorts.ts` and
+>    injection seams on `WorkerTtsEngine`'s constructor. The repo-backed SessionStore
+>    also closes playbackCache's documented P13a cold-start clobber (every persist
+>    chains behind a one-time session seed read) — the P3 dual-owner fix.
+> 10. **Dragnet invalidation timing**: per the design, section-change invalidation is
+>    engine-internal (DragnetGesture watches the QueueModel section index) and the
+>    `clearPauseGesture` API + ReaderView/useTTS call sites are deleted. Recorded
+>    tradeoff: the ReaderView TOC handler used to clear on navigation INTENT, ahead of
+>    WebKit's slow relocation; the engine now disarms when its own section actually
+>    changes (P20 rewritten to pin the new trigger).
+> 11. **Diagnostics surface**: `exportDiagnostics()` + `triggerDiagnosticsSnapshot()`
+>    landed on `TtsEngine`/`WorkerTtsEngine`/`WorkerEngineHandle`; DiagnosticsTab reads
+>    live stats/buffer through `useAudioCommands` (worker data), persisted snapshots
+>    through the diagnostics repo via TtsController. The ring-buffer core moved to
+>    `src/kernel/diagnostics/ringRecorder.ts` (N7; generic, zero internal deps);
+>    `TTSFlightRecorder` is the audio-domain wrapper keeping the anomaly heuristic and
+>    IDB persistence.
+> 12. **Addresses**: the decomposed units live at `src/lib/tts/engine/` (the established
+>    5a geography deviation — the `domains/audio/` move belongs to the sub-phase that
+>    deletes the legacy path). The 5b.1 lexicon-cache row stayed a `PlaybackController`
+>    field (the `CompiledLexicon` handle arrives with 5c's LexiconEngine); the N5
+>    deletions (`checkBatteryOptimization`, public `resume()`, `setBackgroundAudioMode`
+>    typed) landed.
+>
+> First-half status (5b-PR1/2 + store split), kept for the record: the P14 identity
+> rider flipped green at the QueueModel commit. Deviations from this design, recorded
+> per the README header rule:
 >
 > 1. **PR regrouping**: landed as three commits cutting across the doc's PR map —
 >    (i) the command facade (`TtsController` + `useAudioCommands` + the

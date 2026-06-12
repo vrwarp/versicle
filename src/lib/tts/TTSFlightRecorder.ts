@@ -1,16 +1,26 @@
 import { v4 as uuid } from 'uuid';
 import { diagnostics } from '@data/repos/diagnostics';
-import type { 
-    FlightEventSource, 
-    FlightEvent, 
-    FlightSnapshot 
+import { RingRecorder } from '../../kernel/diagnostics/ringRecorder';
+import type {
+    FlightEventSource,
+    FlightEvent,
+    FlightSnapshot
 } from '~types/db';
 
-const MAX_EVENTS = 2000;
-const MAX_STRING_LEN = 80;
-
 /**
- * Lightweight ring-buffer based event tracer for the TTS subsystem.
+ * TTSFlightRecorder — the audio domain's named flight recorder.
+ *
+ * Since 5b-PR4 the generic ring-buffer core lives in
+ * src/kernel/diagnostics/ringRecorder.ts (N7: zero internal deps; further
+ * consumers arrive in P6/P7); this wrapper owns everything TTS-specific —
+ * the playback-context provider, the premature-chapter-advance anomaly
+ * heuristic, and snapshot persistence (IndexedDB via the diagnostics repo;
+ * works in both the worker and the main thread).
+ *
+ * Each JS context (main thread, TTS worker) has its own module instance; the
+ * production engine runs in the worker, so its live buffer is exported over
+ * the engine handle (TtsEngine.exportDiagnostics — the S9 fix), while the
+ * persisted snapshots are shared through IndexedDB.
  */
 
 export type ContextProvider = () => {
@@ -25,19 +35,19 @@ export type ContextProvider = () => {
     nextItemSkipped?: boolean | undefined;
 };
 
-/**
- * Lightweight ring-buffer based event tracer for the TTS subsystem.
- */
+/** The live-buffer export served over the engine handle (S9). */
+export interface FlightRecorderExport {
+    stats: { eventCount: number; capacity: number; oldestWall: number | null };
+    events: FlightEvent[];
+}
+
 class TTSFlightRecorder {
-    private buffer: FlightEvent[] = [];
-    private seq = 0;
-    private head = 0;
-    private full = false;
+    private ring = new RingRecorder<FlightEventSource>();
     private contextProvider: ContextProvider | null = null;
 
     /**
      * Optional callback invoked synchronously when an anomaly is detected,
-     * BEFORE the snapshot is taken. This allows the caller (AudioPlayerService)
+     * BEFORE the snapshot is taken. This allows the caller (the engine)
      * to emit detailed diagnostic events that get captured in the snapshot.
      */
     onAnomalyDetected: ((currentIndex: number, queueLen: number) => void) | null = null;
@@ -49,35 +59,9 @@ class TTSFlightRecorder {
 
     /** Record an event. Hot path — must be fast. */
     record(src: FlightEventSource, ev: string, data?: Record<string, string | number | boolean | null | undefined>) {
-        const event: FlightEvent = {
-            seq: this.seq++,
-            ts: performance.now(),
-            wall: Date.now(),
-            src,
-            ev,
-        };
+        this.ring.record(src, ev, data);
 
-        if (data) {
-            const d: Record<string, string | number | boolean | null | undefined> = {};
-            for (const key in data) {
-                const val = data[key];
-                d[key] = typeof val === 'string' && val.length > MAX_STRING_LEN
-                    ? val.slice(0, MAX_STRING_LEN)
-                    : val;
-            }
-            event.d = d;
-        }
-
-        if (this.full) {
-            this.buffer[this.head] = event;
-        } else {
-            this.buffer.push(event);
-        }
-
-        this.head = (this.head + 1) % MAX_EVENTS;
-        if (this.head === 0 && !this.full) this.full = true;
-
-        // Anomaly detection
+        // Anomaly detection (TTS-specific heuristic; stays out of the kernel core)
         if (ev === 'playNext') {
             // Check if it's an anomaly (chapter advance far from end)
             if (data && typeof data.index === 'number' && typeof data.queueLen === 'number' && data.hasNext === false) {
@@ -96,29 +80,22 @@ class TTSFlightRecorder {
 
     /** Export events in chronological order. */
     export(): FlightEvent[] {
-        if (!this.full) return this.buffer.slice();
-        return [
-            ...this.buffer.slice(this.head),
-            ...this.buffer.slice(0, this.head)
-        ];
+        return this.ring.export();
     }
 
     /** Get buffer stats for the UI. */
     getStats(): { eventCount: number; capacity: number; oldestWall: number | null } {
-        const events = this.export();
-        return {
-            eventCount: events.length,
-            capacity: MAX_EVENTS,
-            oldestWall: events[0]?.wall ?? null
-        };
+        return this.ring.getStats();
+    }
+
+    /** The live-buffer export served over the engine handle (S9). */
+    exportForHandle(): FlightRecorderExport {
+        return { stats: this.getStats(), events: this.export() };
     }
 
     /** Clear the live buffer. */
     clear() {
-        this.buffer = [];
-        this.head = 0;
-        this.full = false;
-        this.seq = 0;
+        this.ring.clear();
     }
 
     // ─── Snapshot API ───

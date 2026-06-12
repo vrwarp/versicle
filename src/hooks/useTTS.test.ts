@@ -9,7 +9,6 @@ const { mockCommands } = vi.hoisted(() => {
     return {
         mockCommands: {
             loadVoices: vi.fn(),
-            clearPauseGesture: vi.fn(),
             loadSectionBySectionId: vi.fn(),
             stop: vi.fn(),
         },
@@ -86,11 +85,6 @@ describe('useTTS', () => {
     it('should load voices on mount', () => {
         renderHook(() => useTTS());
         expect(mockCommands.loadVoices).toHaveBeenCalled();
-    });
-
-    it('should invalidate the Dragnet pause gesture when the section changes', () => {
-        renderHook(() => useTTS());
-        expect(mockCommands.clearPauseGesture).toHaveBeenCalled();
     });
 
     it('should request player to load section by ID when idle', async () => {

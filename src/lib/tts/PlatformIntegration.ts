@@ -1,7 +1,7 @@
 import { BackgroundAudio, type BackgroundAudioMode } from './BackgroundAudio';
 import { MediaSessionManager, type MediaSessionMetadata } from './MediaSessionManager';
 import { Capacitor } from '@capacitor/core';
-import type { TTSStatus } from './AudioPlayerService';
+import type { TTSStatus } from './engine/TtsEngine';
 import { createLogger } from '../logger';
 
 const logger = createLogger('PlatformIntegration');

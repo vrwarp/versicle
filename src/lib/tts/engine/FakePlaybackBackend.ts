@@ -1,12 +1,12 @@
 /**
  * FakePlaybackBackend — a deterministic in-memory {@link PlaybackBackend} for unit tests.
  *
- * Records the commands `AudioPlayerService` issues and captures the event callbacks so a
+ * Records the commands the `PlaybackController` issues and captures the event callbacks so a
  * test can drive the playback lifecycle (`fireStart` / `fireEnd` / `fireError` / …) without
  * any real provider, `speechSynthesis`, `HTMLAudioElement`, or network access.
  *
  * Use the static {@link FakePlaybackBackend.factory} as the `PlaybackBackendFactory` passed
- * to `AudioPlayerService.createWithContext`.
+ * to `PlaybackController.createWithContext`.
  */
 import type { ITTSProvider, TTSVoice } from '../providers/types';
 import type { PlaybackBackend, PlaybackBackendFactory, TTSProviderEvents } from './PlaybackBackend';

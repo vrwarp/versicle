@@ -1,6 +1,6 @@
 /**
  * The engine behavioral contract, written once and run against BOTH transports:
- *   - in-process: AudioPlayerService driven directly (engineParity.inprocess.test.ts)
+ *   - in-process: PlaybackController driven directly (engineParity.inprocess.test.ts)
  *   - worker:     the same engine behind WorkerTtsEngine over a MessageChannel + Comlink
  *                 (engineParity.worker.test.ts) — the exact wiring of the production worker,
  *                 minus OS-thread isolation.
@@ -33,7 +33,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import type { TTSVoice } from '../providers/types';
-import type { TTSQueueItem } from '../AudioPlayerService';
+import type { TTSQueueItem } from '~types/tts';
 import { generateCfiRange, mergeCfiSlow } from '../../cfi-utils';
 
 export interface ParitySnapshot {
@@ -108,7 +108,6 @@ export interface ParityHarness {
         loadSectionBySectionId(sectionId: string, autoPlay?: boolean): void;
         skipToNextSection(): Promise<boolean>;
         skipToPreviousSection(): Promise<boolean>;
-        clearPauseGesture(): Promise<void> | void;
     };
     backend: {
         played(): Array<{ text: string; voiceId: string; speed: number }>;
@@ -835,18 +834,39 @@ export function describeEngineParity(
                     expect(h.backend.earcons()).not.toContain('bookmark_captured');
                 }));
 
-            it('P20 dragnet invalidation: clearPauseGesture between pause and play suppresses the capture', () =>
+            it('P20 dragnet invalidation: a section change between pause and play suppresses the capture', () =>
                 withHarness(async (h) => {
-                    await startDragnetPlayback(h);
+                    // Section-change invalidation is INTERNAL since 5b-PR4 (the
+                    // DragnetGesture unit disarms on the engine's own section
+                    // navigation) — the external clearPauseGesture API and its
+                    // ReaderView/useTTS call sites are gone. The durable behavior
+                    // is unchanged: a chapter change between a pause and a play is
+                    // deliberate navigation, not a resume gesture, so no stale
+                    // audio-bookmark may be captured.
+                    await h.host.setGenAISettings(GENAI_DISABLED);
+                    h.host.seedSections(DRAGNET_BOOK, [
+                        { sectionId: 'dn-a', title: 'Alpha', characterCount: 120 },
+                        { sectionId: 'dn-b', title: 'Bravo', characterCount: 120 },
+                    ]);
+                    h.host.seedTTSContent(DRAGNET_BOOK, 'dn-a', [
+                        { text: 'Alpha dragnet sentence.', cfi: CFI_BODY },
+                    ]);
+                    h.host.seedTTSContent(DRAGNET_BOOK, 'dn-b', [
+                        { text: 'Bravo dragnet sentence.', cfi: CFI_BODY },
+                    ]);
+                    await h.engine.setBookId(DRAGNET_BOOK);
+                    await h.engine.loadSection(0, true);
+                    await vi.waitFor(() => expect(h.backend.played().length).toBeGreaterThan(0));
+                    await h.fireStart();
+                    await vi.waitFor(() =>
+                        expect(h.snapshots().some((s) => s.status === 'playing')).toBe(true));
 
                     await h.engine.pause();
                     await vi.waitFor(() =>
                         expect(h.snapshots().some((s) => s.status === 'paused')).toBe(true));
-                    // The reader calls this synchronously on section navigation (useTTS):
-                    // a chapter change between pause and play is navigation, not a resume
-                    // gesture. Pinned here so 5b's DragnetGesture internalization (which
-                    // deletes the ReaderView/useTTS call sites) cannot silently drop it.
-                    await h.engine.clearPauseGesture();
+                    // Deliberate navigation to another section between pause and play.
+                    await h.engine.loadSection(1, false);
+                    await waitForQueue(h, (q) => q.some((i) => i.text.includes('Bravo dragnet')));
                     await h.engine.play();
 
                     await vi.waitFor(() => expect(h.backend.played().length).toBeGreaterThan(1));
@@ -921,7 +941,7 @@ export function describeEngineParity(
                     expect(h.backend.played().length).toBe(1);
 
                     // … but the next play resumes the SAME sentence with the new rate.
-                    await h.engine.clearPauseGesture(); // keep the dragnet path out of this pin
+                    h.advanceTime(6000); // expire the dragnet window — keep the capture path out of this pin
                     await h.engine.play();
                     await vi.waitFor(() => expect(h.backend.played().length).toBe(2));
                     const replay = h.backend.played()[1];

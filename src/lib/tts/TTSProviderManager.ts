@@ -55,7 +55,7 @@ export interface TTSProviderEvents {
  * synthesized audio. It normalizes provider events (interruption filtering) and
  * rethrows play failures as typed {@link ProviderPlaybackError}s — it performs NO
  * self-swap and emits NO synthetic `{type:'fallback'}` events. The fallback POLICY
- * lives in the engine (`AudioPlayerService.recoverWithLocalProvider`), which calls
+ * lives in the engine (`PlaybackController.recoverWithLocalProvider`), which calls
  * back through {@link setProviderById} — the S2 double-fire is structurally dead.
  */
 export class TTSProviderManager implements PlaybackBackend {

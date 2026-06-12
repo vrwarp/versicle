@@ -34,7 +34,7 @@ import { useReaderUIStore } from '@store/useReaderUIStore';
 import { createLogger } from '@lib/logger';
 import type { WorkerTtsEngine, EngineHost } from '@lib/tts/engine/WorkerTtsEngine';
 import type { EngineHostCommand } from '@lib/tts/engine/WorkerEngineContext';
-import type { SnapshotListener } from '@lib/tts/AudioPlayerService';
+import type { SnapshotListener } from '@lib/tts/engine/TtsEngine';
 
 const logger = createLogger('WorkerEngineClient');
 

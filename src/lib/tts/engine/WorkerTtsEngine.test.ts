@@ -2,46 +2,34 @@ import { describe, it, expect, vi } from 'vitest';
 import * as Comlink from 'comlink';
 
 /**
- * Verification of the live worker bridge. We run the real WorkerTtsEngine (→ AudioPlayerService)
+ * Verification of the live worker bridge. We run the real WorkerTtsEngine (→ PlaybackController)
  * on one end of a MessageChannel and drive it over Comlink from the other — exactly the wiring a
  * real Web Worker uses, minus OS-thread isolation. This exercises the full round-trip:
  * engine API call (main→worker), backend command (worker→host proxy), provider event
  * (host→worker), and the status callback (worker→main proxy).
  *
- * The engine's remaining in-process collaborators that aren't part of the bridge (LexiconService,
- * dbService) are stubbed — the worker injects its own backend + media platform, so the real
- * providers / MediaSession are never constructed here.
+ * Storage is injected through the WorkerTtsEngine constructor ports (5b-PR4) — no vi.mock.
  */
-vi.mock('../LexiconService', () => ({
-    LexiconService: {
-        getInstance: () => ({
-            getRules: vi.fn().mockResolvedValue([]),
-            applyLexicon: (t: string) => t,
-            getBibleLexiconPreference: vi.fn().mockResolvedValue('default'),
-        }),
-    },
-}));
-
-vi.mock('@data/repos/bookContent', () => ({
-    bookContent: {
-        getSections: vi.fn().mockResolvedValue([]),
-    }
-}));
-vi.mock('@data/repos/playbackCache', () => ({
-    playbackCache: {
-        getSession: vi.fn().mockResolvedValue(null),
-        saveQueue: vi.fn(),
-        savePauseTime: vi.fn().mockResolvedValue(undefined),
-    }
-}));
-
 import { WorkerTtsEngine, type EngineHost, type BackendEvent } from './WorkerTtsEngine';
 import type { EngineHostCommand } from './WorkerEngineContext';
+import type { BookContentPort } from './EngineContext';
 
 describe('WorkerTtsEngine over a MessageChannel (live worker bridge)', () => {
     it('runs orchestration across the boundary: play → backend proxy → provider event → status', async () => {
         const channel = new MessageChannel();
-        const engine = new WorkerTtsEngine();
+        const engine = new WorkerTtsEngine({
+            content: {
+                getSections: async () => [],
+                getTTSPreparation: async () => undefined,
+                getTableImages: async () => [],
+                getBookStructure: async () => undefined,
+            } as unknown as BookContentPort,
+            session: {
+                loadSession: async () => undefined,
+                persistQueue: () => {},
+                persistPauseTime: async () => {},
+            },
+        });
         Comlink.expose(engine, channel.port1);
         channel.port1.start();
         const remote = Comlink.wrap<WorkerTtsEngine>(channel.port2);

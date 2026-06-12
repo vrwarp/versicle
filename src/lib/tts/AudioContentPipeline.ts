@@ -1,4 +1,3 @@
-import { bookContent } from '@data/repos/bookContent';
 import { TextSegmenter } from './TextSegmenter';
 import type { EngineContext } from './engine/EngineContext';
 import { generateSecureId } from '../crypto';
@@ -7,7 +6,7 @@ import type { CitationMarker } from '~types/db';
 import { getParentCfi, generateCfiRange, parseCfiRange, preprocessBlockRoots, type PreprocessedRoot } from '../cfi-utils';
 import type { SectionMetadata } from '~types/db';
 import type { ContentType } from '~types/content-analysis';
-import type { TTSQueueItem } from './AudioPlayerService';
+import type { TTSQueueItem } from '~types/tts';
 import type { SentenceNode } from './sentence-extraction';
 import { BIBLE_ABBREVIATIONS } from './bible-lexicon';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
@@ -61,7 +60,7 @@ export class AudioContentPipeline {
         onAdaptationsFound?: (adaptations: { indices: number[], text: string }[]) => void
     ): Promise<TTSQueueItem[] | null> {
         try {
-            const ttsContent = await bookContent.getTTSPreparation(bookId, section.sectionId);
+            const ttsContent = await this.ctx.content.getTTSPreparation(bookId, section.sectionId);
 
             // Determine Title
             let title: string | undefined = undefined;
@@ -79,7 +78,7 @@ export class AudioContentPipeline {
 
             // Priority 2: Label from the Stored TOC
             if (!title) {
-                const structure = await bookContent.getBookStructure(bookId);
+                const structure = await this.ctx.content.getBookStructure(bookId);
 
                 const tocSource = (useSynthetic && bookMetadata?.syntheticToc)
                     ? bookMetadata.syntheticToc
@@ -229,13 +228,13 @@ export class AudioContentPipeline {
                     // Fetch sentences if not provided, as processTableAdaptations needs them
                     let targetSentences = sentences;
                     if (!targetSentences) {
-                        const content = await bookContent.getTTSPreparation(bookId, sectionId);
+                        const content = await this.ctx.content.getTTSPreparation(bookId, sectionId);
                         targetSentences = content?.sentences || [];
                     }
 
                     // Trigger table adaptations
                     // The callback is optional — results are persisted to useContentAnalysisStore
-                    // by processTableAdaptations, and AudioPlayerService reactively subscribes.
+                    // by processTableAdaptations, and the engine's AnalysisApplier reactively subscribes.
                     await this.tableProcessor.processTableAdaptations(
                         bookId, sectionId, targetSentences,
                         onAdaptationsFound || (() => { }) // no-op if no callback
@@ -310,7 +309,7 @@ export class AudioContentPipeline {
         (async () => {
             try {
                 // 1. Get Content
-                const ttsContent = await bookContent.getTTSPreparation(bookId, nextSection.sectionId);
+                const ttsContent = await this.ctx.content.getTTSPreparation(bookId, nextSection.sectionId);
                 if (!ttsContent || ttsContent.sentences.length === 0) return;
 
                 const analysisTasks: Promise<unknown>[] = [];
@@ -318,7 +317,7 @@ export class AudioContentPipeline {
                 // 2. Reference Detection Analysis
                 if (genAISettings.contentFilterSkipTypes.length > 0) {
                     // Fetch Table CFIs for Grouping
-                    const tableImages = await bookContent.getTableImages(bookId);
+                    const tableImages = await this.ctx.content.getTableImages(bookId);
                     const sectionTableImages = tableImages.filter(img => img.sectionId === nextSection.sectionId);
 
                     // Preprocess table roots for efficient querying (optimized)
@@ -369,7 +368,7 @@ export class AudioContentPipeline {
             let targetSentences = sentences;
             let citationMarkers: CitationMarker[] | undefined;
             if (!targetSentences) {
-                const ttsContent = await bookContent.getTTSPreparation(bookId, sectionId);
+                const ttsContent = await this.ctx.content.getTTSPreparation(bookId, sectionId);
                 targetSentences = ttsContent?.sentences || [];
                 citationMarkers = ttsContent?.citationMarkers;
             }
@@ -377,7 +376,7 @@ export class AudioContentPipeline {
             if (targetSentences.length === 0) return indicesToSkip;
 
             // Fetch Table CFIs for Grouping
-            const tableImages = await bookContent.getTableImages(bookId);
+            const tableImages = await this.ctx.content.getTableImages(bookId);
             // OPTIMIZATION: Filter table images by the current section ID to avoid checking irrelevant tables.
             // This reduces getParentCfi complexity from O(N_sentences * N_total_book_tables) to O(N_sentences * N_section_tables).
             const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
@@ -509,7 +508,7 @@ export class AudioContentPipeline {
                 if (await this.ctx.genAI.isConfigured()) {
                     const bookMetadata = await this.ctx.book.getMetadata(bookId);
                     const bookTitle = bookMetadata?.title || 'Unknown Book';
-                    const structure = await bookContent.getBookStructure(bookId);
+                    const structure = await this.ctx.content.getBookStructure(bookId);
                     const sectionMap = new Map<string, string>();
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const findSectionTitle = (items: { href: string, title?: string, subitems?: any[] }[]) => {

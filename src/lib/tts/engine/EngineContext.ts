@@ -2,12 +2,14 @@
  * EngineContext — the single boundary between the TTS engine core and the host
  * environment (React/Zustand stores, native platform bridges).
  *
- * The engine core (AudioPlayerService, AudioContentPipeline, TableAdaptationProcessor)
- * must reach the outside world ONLY through this interface. It deliberately does NOT
- * abstract `dbService` (IndexedDB) or `genAIService` (fetch) — both are available in a
- * Web Worker, so the core may import them directly. What is abstracted here is exactly
- * the set of dependencies that are NOT worker-safe: the main-thread Zustand stores and
- * the Capacitor native bridge.
+ * The engine core (PlaybackController, AudioContentPipeline, TableAdaptationProcessor)
+ * must reach the outside world ONLY through this interface — including, since the
+ * 5b decomposition, its storage reads/writes: {@link BookContentPort} (derived
+ * content reads) and {@link SessionStore} (the playback-session persistence with
+ * the WebKit-detach discipline). The production implementations wrap the
+ * `src/data` repos (see engine/repoPorts.ts — worker-safe, both threads use the
+ * same modules); tests inject in-memory fakes, which is what lets the engine-dir
+ * `vi.mock` allowlist sit at ZERO (phase5 doc N3 deadline).
  *
  * Two implementations exist:
  *  - `createZustandEngineContext()` — the production wiring. Forwards every call to the
@@ -23,6 +25,8 @@
  * type queries on type-only imports. These imports are erased at runtime and create no
  * runtime dependency, so the core stays worker-portable.
  */
+import type { bookContent } from '@data/repos/bookContent';
+import type { TTSQueueItem } from '~types/tts';
 import type { useGenAIStore } from '@store/useGenAIStore';
 import type { useReadingStateStore } from '@store/useReadingStateStore';
 import type { SectionAnalysis, TableAdaptation } from '@store/useContentAnalysisStore';
@@ -209,6 +213,56 @@ export interface PlatformInfoPort {
 }
 
 /**
+ * Derived-content reads (sections, prepared TTS sentences, table images, book
+ * structure). The shape is exactly the `bookContent` repo's (type-only import,
+ * erased at runtime) so the production port is the repo itself; tests inject
+ * in-memory fakes (see engine/parityHostDb.ts) instead of `vi.mock`ing the
+ * repo module.
+ */
+export type BookContentPort = Pick<
+    typeof bookContent,
+    'getSections' | 'getTTSPreparation' | 'getTableImages' | 'getBookStructure'
+>;
+
+/** The persisted playback-session row the engine restores from. */
+export interface PlaybackSessionRow {
+    bookId: string;
+    playbackQueue: TTSQueueItem[];
+    lastPauseTime?: number;
+    updatedAt: number;
+}
+
+/**
+ * SessionStore — the playback-session persistence port (Phase 5b decomposition;
+ * phase5-tts-strangler.md §5b.1). The ONE owner of `cache_session_state`
+ * traffic in the engine: restore reads, queue writes, and pause-time writes
+ * all flow through here (this closes the P3 dual-owner gap where
+ * AudioPlayerService and the QueueModel each talked to `playbackCache`).
+ *
+ * ## The WebKit-detach discipline (preserved VERBATIM from the legacy engine)
+ *
+ * The `cache_session_state` IndexedDB write can hang indefinitely on WebKit
+ * (its transaction never settles — see src/data/repos/playbackCache.ts, the
+ * protected keeper carved from the multi-week WebKit investigation). Callers
+ * must therefore NEVER await these writes inside a sequenced task:
+ *
+ *  - `persistQueue` is fire-and-forget BY TYPE (returns void; the impl
+ *    debounces into the repo's in-memory mirror);
+ *  - `persistPauseTime` returns a promise, but the engine detaches it
+ *    (`void ….catch(() => {})`) — awaiting it inside the TaskSequencer would
+ *    wedge every subsequent play/pause/skip task behind a hung transaction
+ *    (isPlaying never flips, skip never advances).
+ */
+export interface SessionStore {
+    /** Read a book's persisted session (restore source). */
+    loadSession(bookId: string): Promise<PlaybackSessionRow | undefined>;
+    /** Persist the playback queue. Fire-and-forget (mirror + debounced disk write). */
+    persistQueue(bookId: string, queue: ReadonlyArray<TTSQueueItem>): void;
+    /** Persist (or clear, with `null`) the last pause timestamp. Callers detach (WebKit). */
+    persistPauseTime(bookId: string, lastPauseTime: number | null): Promise<void>;
+}
+
+/**
  * The aggregate context handed to the engine core. One object, injected at the
  * composition root, carrying every non-worker-safe capability the core needs.
  */
@@ -223,4 +277,8 @@ export interface EngineContext {
     readerUI: ReaderUIPort;
     lexicon: LexiconPort;
     platform: PlatformInfoPort;
+    /** Derived-content reads (5b decomposition; replaces direct repo imports). */
+    content: BookContentPort;
+    /** Playback-session persistence (5b decomposition; the single session owner). */
+    session: SessionStore;
 }

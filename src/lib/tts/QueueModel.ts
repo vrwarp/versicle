@@ -1,6 +1,4 @@
 import type { TTSQueueItem } from '~types/tts';
-import type { TTSStatus } from './engine/TtsEngine';
-import { playbackCache } from '@data/repos/playbackCache';
 import { flightRecorder } from './TTSFlightRecorder';
 
 
@@ -30,9 +28,10 @@ let nextQueueId = 0;
  * array reference (the reference check was defeated by exactly that in-place
  * mutation).
  *
- * Also tracks the current index, section index, and reading progress, and
- * persists session state to the database (the persistence half moves behind
- * the SessionStore port later in 5b).
+ * Also tracks the current index, section index, and reading progress. The
+ * model is PURE since 5b-PR4: persistence moved behind the SessionStore port
+ * (EngineContext), driven by the PlaybackController's subscription keyed on
+ * `queueId` — the QueueModel no longer touches storage at all.
  */
 export class QueueModel {
     private _queue: ReadonlyArray<TTSQueueItem> = QueueModel.seal([]);
@@ -40,10 +39,6 @@ export class QueueModel {
     private _currentIndex: number = 0;
     private _currentSectionIndex: number = -1;
     prefixSums: number[] = [0];
-
-    // Persistence dedupe: the queueId last written to cache_session_state.
-    private lastPersistedQueueId: string | null = null;
-    private currentBookId: string | null = null;
 
     private listeners: StateChangeListener[] = [];
 
@@ -80,21 +75,6 @@ export class QueueModel {
     }
 
     /**
-     * Sets the active book ID and resets state if the book changes.
-     *
-     * @param {string | null} bookId The ID of the book.
-     */
-    setBookId(bookId: string | null) {
-        if (this.currentBookId !== bookId) {
-            this.currentBookId = bookId;
-            this.lastPersistedQueueId = null;
-            if (!bookId) {
-                this.reset();
-            }
-        }
-    }
-
-    /**
      * Resets the playback state to its initial values.
      */
     reset() {
@@ -104,7 +84,6 @@ export class QueueModel {
         this._currentIndex = 0;
         this._currentSectionIndex = -1;
         this.prefixSums = [0];
-        this.lastPersistedQueueId = null;
         this.notifyListeners();
     }
 
@@ -130,7 +109,6 @@ export class QueueModel {
         this._currentIndex = startIndex;
         this._currentSectionIndex = sectionIndex;
         this.calculatePrefixSums();
-        this.persistQueue();
         this.notifyListeners();
     }
 
@@ -170,7 +148,6 @@ export class QueueModel {
             });
             this.replaceQueue(newQueue);
             this.calculatePrefixSums();
-            this.persistQueue();
             this.notifyListeners();
         }
     }
@@ -244,7 +221,6 @@ export class QueueModel {
             });
             this.replaceQueue(newQueue);
             this.calculatePrefixSums();
-            this.persistQueue();
             this.notifyListeners();
         }
     }
@@ -337,7 +313,6 @@ export class QueueModel {
         if (nextIndex !== -1) {
             flightRecorder.record('PSM', 'next', { from: this._currentIndex, to: nextIndex });
             this._currentIndex = nextIndex;
-            this.persistQueue();
             this.notifyListeners();
             return true;
         }
@@ -350,7 +325,6 @@ export class QueueModel {
         if (prevIndex !== -1) {
             flightRecorder.record('PSM', 'prev', { from: this._currentIndex, to: prevIndex });
             this._currentIndex = prevIndex;
-            this.persistQueue();
             this.notifyListeners();
             return true;
         }
@@ -386,7 +360,6 @@ export class QueueModel {
         if (index >= 0 && index < this._queue.length) {
             flightRecorder.record('PSM', 'jumpTo', { from: this._currentIndex, to: index });
             this._currentIndex = index;
-            this.persistQueue();
             this.notifyListeners();
             return true;
         }
@@ -420,7 +393,6 @@ export class QueueModel {
         if (newIndex !== this._currentIndex) {
             flightRecorder.record('PSM', 'seekToTime', { time, from: this._currentIndex, to: newIndex });
             this._currentIndex = newIndex;
-            this.persistQueue();
             this.notifyListeners();
             return true;
         }
@@ -436,7 +408,6 @@ export class QueueModel {
             const last = this._queue.length - 1;
             flightRecorder.record('PSM', 'jumpToEnd', { from: this._currentIndex, to: last });
             this._currentIndex = last;
-            this.persistQueue();
             this.notifyListeners();
         }
     }
@@ -490,44 +461,6 @@ export class QueueModel {
         const charsPerSecond = this.calculateCharsPerSecond();
         if (charsPerSecond === 0) return 0;
         return this.prefixSums[this._queue.length] / charsPerSecond;
-    }
-
-    /**
-     * Persists the current queue and playback position.
-     * Optimizes writes by keying on the queue's content identity (`queueId`) —
-     * NOT on array reference, which copy-on-write would defeat (and which the
-     * old in-place mask defeated in the opposite direction, S4).
-     */
-    persistQueue() {
-        if (this.currentBookId) {
-            if (this.lastPersistedQueueId !== this._queueId) {
-                // Copy: the repo takes a mutable array and the persisted record must
-                // not alias the (frozen) published queue.
-                playbackCache.saveQueue(this.currentBookId, [...this._queue]);
-                this.lastPersistedQueueId = this._queueId;
-            }
-        }
-    }
-
-    /**
-     * Updates the persistent playback state (last read CFI, pause time) in the database.
-     *
-     * @param {TTSStatus} status The current playback status.
-     */
-    async savePlaybackState(status: TTSStatus) {
-        if (!this.currentBookId) return;
-
-        const isPaused = status === 'paused';
-        const lastPauseTime = isPaused ? Date.now() : null;
-
-
-
-        try {
-            // Only update pause time in local cache session state
-            await playbackCache.savePauseTime(this.currentBookId, lastPauseTime);
-        } catch (e) {
-            console.warn('Failed to save playback state', e);
-        }
     }
 
     subscribe(listener: StateChangeListener): () => void {

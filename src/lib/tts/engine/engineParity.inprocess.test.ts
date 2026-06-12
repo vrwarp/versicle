@@ -1,66 +1,27 @@
 /**
  * The shared engine behavioral contract, run against the IN-PROCESS transport:
- * AudioPlayerService driven directly with FakeEngineContext + FakePlaybackBackend.
- * The same scenarios run over the worker bridge in engineParity.worker.test.ts.
+ * PlaybackController driven directly with FakeEngineContext + FakePlaybackBackend +
+ * the injected parityHostDb storage ports. The same scenarios run over the worker
+ * bridge in engineParity.worker.test.ts.
  *
- * vi.mock here is frozen to the engine-dir allowlist (phase5-tts-strangler.md N3, rewritten
- * post-P3 when src/db died): {@data/repos/bookContent, @data/repos/playbackCache,
- * ../LexiconService, ../PlatformIntegration} — enforced by eslint
- * (no-restricted-syntax in eslint.config.js); shrinks to ∅ at 5b-PR5.
+ * ZERO vi.mock (phase5-tts-strangler.md N3 deadline, reached at 5b-PR4): the
+ * engine reaches storage only through the EngineContext ports, so the suite
+ * injects in-memory fakes instead of mocking modules — enforced by eslint
+ * (no-restricted-syntax in eslint.config.js).
  */
 import { vi } from 'vitest';
-import type { ParityHostDbState } from './parityHostDb';
-
-const hostDb = vi.hoisted(
-    (): ParityHostDbState => ({
-        sections: {},
-        ttsState: {},
-        ttsContent: {},
-        contentErrors: {},
-        sectionGates: {},
-        contentFetches: {},
-    }),
-);
-
-vi.mock('../PlatformIntegration', () => ({
-    PlatformIntegration: vi.fn(function () {
-        return {
-            updateMetadata: vi.fn(),
-            updatePlaybackState: vi.fn(),
-            stop: vi.fn().mockResolvedValue(undefined),
-            setBackgroundAudioMode: vi.fn(),
-            getBackgroundAudioMode: vi.fn(() => 'off'),
-            setBackgroundVolume: vi.fn(),
-            setPositionState: vi.fn(),
-        };
-    }),
-}));
-
-vi.mock('../LexiconService', () => ({
-    LexiconService: {
-        getInstance: vi.fn(() => ({
-            getRules: vi.fn().mockResolvedValue([]),
-            applyLexicon: vi.fn((t: string) => t),
-            getBibleLexiconPreference: vi.fn().mockResolvedValue('default'),
-        })),
-    },
-}));
-
-vi.mock('@data/repos/bookContent', async () => {
-    const { createParityBookContent } = await import('./parityHostDb');
-    return { bookContent: createParityBookContent(hostDb) };
-});
-vi.mock('@data/repos/playbackCache', async () => {
-    const { createParityPlaybackCache } = await import('./parityHostDb');
-    return { playbackCache: createParityPlaybackCache(hostDb) };
-});
-
 import { describe, it, expect } from 'vitest';
-import { AudioPlayerService } from '../AudioPlayerService';
-import type { TTSQueueItem } from '../AudioPlayerService';
+import { PlaybackController } from './PlaybackController';
+import type { TTSQueueItem } from '~types/tts';
 import { FakeEngineContext } from './FakeEngineContext';
 import { FakePlaybackBackend } from './FakePlaybackBackend';
-import { gateParitySections, resetParityHostDb } from './parityHostDb';
+import {
+    createParityBookContent,
+    createParityHostDbState,
+    createParitySessionStore,
+    gateParitySections,
+    resetParityHostDb,
+} from './parityHostDb';
 import {
     advanceParityClock,
     describeEngineParity,
@@ -95,14 +56,19 @@ const PARITY_TTS_SETTINGS = {
     profiles: { en: { voiceId: null, rate: 1.0, pitch: 1.0, volume: 1.0, minSentenceLength: 0 } },
 } as Partial<TTSSettingsData>;
 
+const hostDb = createParityHostDbState();
+
 describeEngineParity('in-process', async (): Promise<ParityHarness> => {
     resetParityHostDb(hostDb);
 
     const ctx = new FakeEngineContext();
     ctx.ttsSettings = PARITY_TTS_SETTINGS;
     ctx.genAISettings = { isEnabled: false } as Partial<GenAISettingsSnapshot>;
+    // Storage ports: the shared parity in-memory implementations.
+    ctx.content = createParityBookContent(hostDb);
+    ctx.session = createParitySessionStore(hostDb);
     const backendRef = FakePlaybackBackend.factory();
-    const svc = AudioPlayerService.createWithContext(ctx, backendRef.factory, platformFactory);
+    const svc = PlaybackController.createWithContext(ctx, backendRef.factory, platformFactory);
     const backend = backendRef.get()!;
 
     const snapshots: ParitySnapshot[] = [];
@@ -142,7 +108,6 @@ describeEngineParity('in-process', async (): Promise<ParityHarness> => {
             },
             skipToNextSection: () => svc.skipToNextSection(),
             skipToPreviousSection: () => svc.skipToPreviousSection(),
-            clearPauseGesture: () => svc.clearPauseGesture(),
         },
         backend: {
             played: () => backend.played,
@@ -226,7 +191,7 @@ describeEngineParity('in-process', async (): Promise<ParityHarness> => {
 // staleness cases live in the shared scenarios' P18 + predictability blocks).
 describe('regression: AudioPlayerService.predictability (subscribe semantics)', () => {
     it('a listener unsubscribed before the next-tick replay never fires', async () => {
-        const svc = AudioPlayerService.createWithContext(
+        const svc = PlaybackController.createWithContext(
             new FakeEngineContext(),
             FakePlaybackBackend.factory().factory,
             platformFactory,

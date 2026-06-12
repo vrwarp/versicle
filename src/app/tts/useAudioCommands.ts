@@ -19,8 +19,11 @@ import { getTtsController, type TtsController } from './TtsController';
 export type AudioCommands = Pick<TtsController,
     | 'play' | 'pause' | 'stop' | 'jumpTo' | 'seek' | 'preview'
     | 'setBookId' | 'loadSectionBySectionId'
-    | 'skipToNextSection' | 'skipToPreviousSection' | 'clearPauseGesture'
+    | 'skipToNextSection' | 'skipToPreviousSection'
     | 'loadVoices' | 'downloadVoice' | 'deleteVoice' | 'checkVoiceDownloaded'
+    | 'exportDiagnostics' | 'triggerDiagnosticsSnapshot'
+    | 'listDiagnosticSnapshots' | 'deleteDiagnosticSnapshot'
+    | 'clearDiagnosticSnapshots' | 'shareDiagnosticSnapshot'
 >;
 
 export function useAudioCommands(): AudioCommands {

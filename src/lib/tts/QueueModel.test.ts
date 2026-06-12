@@ -13,16 +13,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueueModel } from './QueueModel';
-import type { TTSQueueItem } from './AudioPlayerService';
-import { playbackCache } from '@data/repos/playbackCache';
-
-// Mock the playback session repo
-vi.mock('@data/repos/playbackCache', () => ({
-    playbackCache: {
-        saveQueue: vi.fn(),
-        savePauseTime: vi.fn(),
-    }
-}));
+import type { TTSQueueItem } from '~types/tts';
 
 describe('QueueModel', () => {
     let manager: QueueModel;
@@ -52,17 +43,6 @@ describe('QueueModel', () => {
         expect(manager.queue).toEqual([]);
         expect(manager.currentIndex).toBe(0);
         expect(manager.currentSectionIndex).toBe(-1);
-    });
-
-    it('should handle book ID changes', () => {
-        const items = [{ text: 'Hello', cfi: '1' }];
-        manager.setQueue(items, 0, 0);
-
-        manager.setBookId('book2');
-
-        // setBookId only resets when the id is cleared; a switch to another
-        // book keeps the queue (AudioPlayerService owns the cross-book reset).
-        expect(manager.queue).toEqual(items);
     });
 
     it('should check if queue is identical', () => {
@@ -273,56 +253,10 @@ describe('QueueModel', () => {
         });
     });
 
-    describe('Persistence', () => {
-        it('should persist queue correctly', () => {
-            const items = [{ text: 'Hello', cfi: '1' }, { text: 'World', cfi: '2' }];
-            manager.setBookId('book1');
-            manager.setQueue(items, 0, 1);
-
-            // setQueue automatically persists
-            expect(playbackCache.saveQueue).toHaveBeenCalledWith('book1', items);
-        });
-
-        it('should save playback state', async () => {
-            const items = [{ text: 'Hello', cfi: 'cfi1' }];
-            manager.setBookId('book1');
-            manager.setQueue(items, 0, 0);
-
-            await manager.savePlaybackState('paused');
-
-            expect(playbackCache.savePauseTime).toHaveBeenCalledWith('book1', expect.any(Number));
-        });
-
-        it('should not persist if bookId is not set', () => {
-            const items = [{ text: 'Hello', cfi: '1' }];
-            manager.setQueue(items, 0, 1); // No book ID set
-
-            expect(playbackCache.saveQueue).not.toHaveBeenCalled();
-        });
-
-        it('dedupes persistence on queueId: index moves do not re-save, queue changes do', () => {
-            const items = [
-                { text: 'Hello', cfi: '1', sourceIndices: [0] },
-                { text: 'World', cfi: '2', sourceIndices: [1] },
-            ];
-            manager.setBookId('book1');
-            manager.setQueue(items, 0, 0);
-            expect(playbackCache.saveQueue).toHaveBeenCalledTimes(1);
-
-            // Index-only moves keep the same queueId — no re-save.
-            manager.next();
-            manager.jumpTo(0);
-            expect(playbackCache.saveQueue).toHaveBeenCalledTimes(1);
-
-            // A content change (mask) stamps a new queueId — saved again, with the
-            // masked flag included (the S4 bug: the reference-dedupe used to skip
-            // exactly this write because the array was mutated in place).
-            manager.applySkippedMask(new Set([1]));
-            expect(playbackCache.saveQueue).toHaveBeenCalledTimes(2);
-            const saved = vi.mocked(playbackCache.saveQueue).mock.calls[1][1];
-            expect(saved[1].isSkipped).toBe(true);
-        });
-    });
+    // NOTE (5b-PR4): the Persistence describe moved to
+    // engine/PlaybackController.test.ts — the QueueModel is PURE now; the
+    // queueId-deduped session writes live in the controller's subscription
+    // over the SessionStore port.
 
     describe('Events', () => {
         it('should notify subscribers on state change (incl. queueId)', () => {
@@ -377,7 +311,6 @@ describe('QueueModel', () => {
         ];
 
         beforeEach(() => {
-            manager.setBookId('test-book');
             manager.setQueue([...mockQueue], 0, 0); // Start at 0
             vi.clearAllMocks();
         });
@@ -463,7 +396,6 @@ describe('QueueModel', () => {
         });
 
         beforeEach(() => {
-            manager.setBookId('test-book');
             vi.clearAllMocks();
         });
 

@@ -18,7 +18,7 @@ is landed; 5b (engine decomposition) and 5c (content pipeline) follow.
 
 ## Core services
 
-*   **`AudioPlayerService.ts`**: The orchestration "brain" — queue management, playback
+*   **`engine/PlaybackController.ts`**: The orchestration "brain" — queue management, playback
     FSM, provider routing (incl. the single sequenced local-provider fallback task),
     section navigation, restore, media-session updates. Runs inside the TTS worker in
     production (`WorkerTtsEngine`); decomposed and ultimately deleted at 5b.
@@ -29,7 +29,7 @@ is landed; 5b (engine decomposition) and 5c (content pipeline) follow.
     and disposes outgoing providers on swap, injects the ONE shared `AudioSink`,
     normalizes events (interruption filtering), and rethrows play failures as typed
     `ProviderPlaybackError`s. It performs NO fallback itself — recovery policy is the
-    engine's (`AudioPlayerService.recoverWithLocalProvider`).
+    engine's (`PlaybackController.recoverWithLocalProvider`).
 *   **`TaskSequencer.ts`**: Serializes engine commands (cancellation/epochs arrive at 5b).
 *   **`PlaybackStateManager.ts`**: Queue + index state (becomes the immutable `QueueModel`
     at 5b).

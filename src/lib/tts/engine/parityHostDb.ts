@@ -1,43 +1,28 @@
 /**
  * Shared storage seam for the engine parity suite (Phase 5 entry gate, §0.1).
  *
- * Originally written against `@db/DBService`; Phase 3 deleted `src/db` and the engine now
- * imports the `src/data` repos directly (`bookContent` for sections/TTS preparation/table
- * images/structure, `playbackCache` for the persisted session). Both parity transports mock
- * the SAME repo modules (`@data/repos/bookContent`, `@data/repos/playbackCache`,
- * `../LexiconService`, `../PlatformIntegration` — the frozen engine-dir vi.mock allowlist,
- * phase5 doc N3 as rewritten post-P3; see plan/overhaul/prep/phase5-absorption-ledger.md).
- * This module centralizes the repo mocks so the `host.*` harness seams
- * (`seedSections`/`seedTTSState`/`seedTTSContent`/`gateSections`/…) write into one in-memory
- * state object that the mocked repos read.
+ * History: originally written against `@db/DBService`, then (post-P3) against
+ * the `src/data` repos via the engine-dir `vi.mock` allowlist. Since 5b-PR4
+ * the engine reaches storage ONLY through the EngineContext ports
+ * (`BookContentPort` for derived-content reads, `SessionStore` for the
+ * playback session), so this module now builds INJECTED in-memory port
+ * implementations — both parity transports construct the engine with them
+ * directly (FakeEngineContext fields in-process; WorkerTtsEngine constructor
+ * opts on the worker leg) and the `vi.mock` allowlist is EMPTY (the N3
+ * deadline; enforced by eslint).
  *
- * Usage in a parity test file (the state literal must be created inside `vi.hoisted` because
- * the mock factory runs during the hoisted import phase):
- *
- * ```ts
- * const hostDb = vi.hoisted(() => createParityHostDbState());
- * vi.mock('@data/repos/bookContent', async () => {
- *     const { createParityBookContent } = await import('./parityHostDb');
- *     return { bookContent: createParityBookContent(hostDb) };
- * });
- * vi.mock('@data/repos/playbackCache', async () => {
- *     const { createParityPlaybackCache } = await import('./parityHostDb');
- *     return { playbackCache: createParityPlaybackCache(hostDb) };
- * });
- * ```
- *
- * NOTE for `vi.hoisted`: it runs before imports, so it cannot call this module's helpers.
- * `createParityHostDbState` is written to be inlined there via `import()` — see the test
- * files, which use the async form `vi.hoisted` cannot support and instead inline the literal.
+ * The `host.*` harness seams (`seedSections`/`seedTTSState`/`seedTTSContent`/
+ * `gateSections`/…) write into one shared state object the ports read.
  */
-import type { TTSQueueItem } from '../AudioPlayerService';
+import type { TTSQueueItem } from '~types/tts';
+import type { BookContentPort, SessionStore } from './EngineContext';
 
 export interface ParityHostDbState {
-    /** bookId → spine sections (bookContent.getSections). */
+    /** bookId → spine sections (content.getSections). */
     sections: Record<string, Array<{ sectionId: string; title?: string; characterCount?: number }>>;
-    /** bookId → persisted TTS session queue (playbackCache.getSession.playbackQueue). */
+    /** bookId → persisted TTS session queue (session.loadSession().playbackQueue). */
     ttsState: Record<string, { queue: TTSQueueItem[] } | null>;
-    /** `${bookId}/${sectionId}` → prepared sentences (bookContent.getTTSPreparation). */
+    /** `${bookId}/${sectionId}` → prepared sentences (content.getTTSPreparation). */
     ttsContent: Record<string, { sentences: Array<{ text: string; cfi: string; sourceIndices?: number[] }> } | undefined>;
     /** `${bookId}/${sectionId}` present ⇒ getTTSPreparation REJECTS (unloadable section). */
     contentErrors: Record<string, true>;
@@ -47,7 +32,7 @@ export interface ParityHostDbState {
     contentFetches: Record<string, number>;
 }
 
-/** Fresh empty state. Test files inline this shape in `vi.hoisted` (see module docs). */
+/** Fresh empty state. */
 export function createParityHostDbState(): ParityHostDbState {
     return {
         sections: {},
@@ -59,7 +44,7 @@ export function createParityHostDbState(): ParityHostDbState {
     };
 }
 
-/** Reset state in place between harnesses (the mocked repos close over the object). */
+/** Reset state in place between harnesses (the ports close over the object). */
 export function resetParityHostDb(db: ParityHostDbState): void {
     db.sections = {};
     db.ttsState = {};
@@ -70,11 +55,13 @@ export function resetParityHostDb(db: ParityHostDbState): void {
 }
 
 /**
- * The `bookContent` repo surface the engine graph touches in the parity scenarios:
- * AudioPlayerService (getSections), AudioContentPipeline + TableAdaptationProcessor
- * (getTTSPreparation/getTableImages/getBookStructure).
+ * The `BookContentPort` surface the engine graph touches in the parity
+ * scenarios: PlaybackController (getSections), AudioContentPipeline +
+ * TableAdaptationProcessor (getTTSPreparation/getTableImages/getBookStructure).
+ * The seeded literals carry only the fields the engine reads, so the factory
+ * casts once to the port type.
  */
-export function createParityBookContent(db: ParityHostDbState) {
+export function createParityBookContent(db: ParityHostDbState): BookContentPort {
     return {
         getSections: async (bookId: string) => {
             const gate = db.sectionGates[bookId];
@@ -91,23 +78,23 @@ export function createParityBookContent(db: ParityHostDbState) {
         },
         getTableImages: async () => [],
         getBookStructure: async () => undefined,
-    };
+    } as unknown as BookContentPort;
 }
 
 /**
- * The `playbackCache` repo surface the engine graph touches in the parity scenarios:
- * AudioPlayerService (getSession — the restore source), PlaybackStateManager
- * (saveQueue/savePauseTime — fire-and-forget persistence the scenarios never read back).
+ * The `SessionStore` surface the parity scenarios touch: loadSession is the
+ * restore source; the persistence writes are fire-and-forget and never read
+ * back by the scenarios.
  */
-export function createParityPlaybackCache(db: ParityHostDbState) {
+export function createParitySessionStore(db: ParityHostDbState): SessionStore {
     return {
-        getSession: async (bookId: string) => {
+        loadSession: async (bookId: string) => {
             const state = db.ttsState[bookId];
             if (!state) return undefined;
             return { bookId, playbackQueue: state.queue, updatedAt: 0 };
         },
-        saveQueue: (): void => {},
-        savePauseTime: async (): Promise<void> => {},
+        persistQueue: (): void => {},
+        persistPauseTime: async (): Promise<void> => {},
     };
 }
 

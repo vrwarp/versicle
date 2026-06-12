@@ -2,17 +2,18 @@
  * Main-thread composition root for the TTS engine.
  *
  * Production runs the engine in a Web Worker: {@link getAudioPlayer} returns a
- * {@link WorkerEngineHandle} that drives a worker-resident {@link AudioPlayerService} (see
+ * {@link WorkerEngineHandle} that drives a worker-resident {@link PlaybackController} (see
  * createWorkerEngineClient / tts.worker.ts). The handle satisfies the {@link TtsEngine}
- * interface, so `useTTSStore` / `useTTS` / `ReaderView` call sites are unchanged.
+ * interface, so TtsController/useAudioCommands call sites are unchanged.
  *
  * The in-process builder ({@link getInProcessAudioPlayer}) exists for unit-testing the engine
  * class directly (a real Worker can't run under jsdom). It is the ONE place that pulls the
  * main-thread-only deps (`createZustandEngineContext`, `TTSProviderManager`,
- * `PlatformIntegration`) — keeping them out of `AudioPlayerService.ts` is what makes the engine
- * module worker-importable.
+ * `PlatformIntegration`) — keeping them out of the engine modules is what makes the engine
+ * graph worker-importable.
  */
-import { AudioPlayerService, type TtsEngine } from '@lib/tts/AudioPlayerService';
+import { PlaybackController } from '@lib/tts/engine/PlaybackController';
+import type { TtsEngine } from '@lib/tts/engine/TtsEngine';
 import { createZustandEngineContext } from './createZustandEngineContext';
 import { TTSProviderManager } from '@lib/tts/TTSProviderManager';
 import { storeProviderBuildContext } from './providerBuildContext';
@@ -34,15 +35,15 @@ export function getAudioPlayer(): TtsEngine {
     return instance!;
 }
 
-let inProcessInstance: AudioPlayerService | null = null;
+let inProcessInstance: PlaybackController | null = null;
 
 /**
- * Build (and cache) an in-process `AudioPlayerService` wired to the live stores + real backend.
+ * Build (and cache) an in-process `PlaybackController` wired to the live stores + real backend.
  * For unit tests that exercise the engine class directly, where a Web Worker isn't available.
  */
-export function getInProcessAudioPlayer(): AudioPlayerService {
+export function getInProcessAudioPlayer(): PlaybackController {
     if (!inProcessInstance) {
-        inProcessInstance = AudioPlayerService.createWithContext(
+        inProcessInstance = PlaybackController.createWithContext(
             createZustandEngineContext(),
             (events) => new TTSProviderManager(events, undefined, storeProviderBuildContext),
             (events) => new PlatformIntegration(events),

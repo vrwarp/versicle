@@ -13,22 +13,17 @@ export const useTTS = () => {
   const currentSectionId = useReaderUIStore(state => state.currentSectionId);
 
   const audio = useAudioCommands();
-  const { loadVoices, clearPauseGesture, loadSectionBySectionId } = audio;
+  const { loadVoices, loadSectionBySectionId } = audio;
 
   // Load voices on mount
   useEffect(() => {
     loadVoices();
   }, [loadVoices]);
 
-  // Invalidate the pause→play "Dragnet" capture whenever the reader navigates to a
-  // different section. A chapter change between a pause and a play is a deliberate
-  // navigation, not a resume gesture, so it must not capture a stale audio-bookmark.
-  // This is separate from the queue-sync effect below (which early-returns while playing
-  // and whose clear lives inside an enqueued loadSectionInternal that the guard can skip),
-  // so the Dragnet is invalidated synchronously the moment the section changes.
-  useEffect(() => {
-    clearPauseGesture();
-  }, [clearPauseGesture, currentSectionId]);
+  // NOTE (5b-PR4): the pause→play "Dragnet" invalidation on section change is
+  // INTERNAL to the engine now (DragnetGesture subscribes to the engine's own
+  // section-index changes) — the clearPauseGesture effect that lived here is
+  // gone, together with the engine API method.
 
   // Main Effect: Sync Audio Service with Visual Location (when idle)
   useEffect(() => {

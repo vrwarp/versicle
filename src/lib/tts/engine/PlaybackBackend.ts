@@ -1,7 +1,7 @@
 /**
  * PlaybackBackend — the audio synthesis + playback boundary.
  *
- * `AudioPlayerService` (the orchestration "brain") talks to the audio/provider layer ONLY
+ * `PlaybackController` (the orchestration "brain") talks to the audio/provider layer ONLY
  * through this interface. Everything behind it is main-thread-bound: native speech engines
  * (`speechSynthesis`, Capacitor TTS) and cloud-provider playback through the {@link AudioSink}
  * (`HTMLAudioElement`). None of that can run in a Web Worker.
@@ -9,7 +9,7 @@
  * This is exactly the seam a worker topology needs: the orchestration runs in the worker
  * with a *proxy* backend whose calls are forwarded (via Comlink/postMessage) to a real
  * `TTSProviderManager` living on the main thread, which posts playback events back. Because
- * `AudioPlayerService` depends on this interface — not the concrete `TTSProviderManager` —
+ * `PlaybackController` depends on this interface — not the concrete `TTSProviderManager` —
  * the orchestration code does not change when it moves across the boundary.
  *
  * The production implementation is {@link TTSProviderManager}. Tests use `FakePlaybackBackend`.
@@ -22,7 +22,7 @@ import type { TTSProviderEvents } from '../TTSProviderManager';
 export type { TTSProviderEvents };
 
 /**
- * The command surface `AudioPlayerService` invokes on the audio backend. A worker proxy and
+ * The command surface `PlaybackController` invokes on the audio backend. A worker proxy and
  * the in-process `TTSProviderManager` both satisfy it.
  */
 export interface PlaybackBackend {

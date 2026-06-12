@@ -1,14 +1,12 @@
-import { isPlaybackInterruption, isProviderPlaybackError } from './providers/types';
-import type { ITTSProvider, TTSVoice } from './providers/types';
+import { isPlaybackInterruption, isProviderPlaybackError } from '../providers/types';
+import type { ITTSProvider, TTSVoice } from '../providers/types';
 import type { TTSQueueItem } from '~types/tts';
-import { lexiconApplier } from './LexiconApplier';
-import { bookContent } from '@data/repos/bookContent';
-import { playbackCache } from '@data/repos/playbackCache';
-import type { SectionMetadata, LexiconRule, PerceptualPalette } from '~types/db';
-import { TaskSequencer, type TaskContext } from './TaskSequencer';
-import { AudioContentPipeline } from './AudioContentPipeline';
-import { QueueModel } from './QueueModel';
-import type { PlaybackBackend, PlaybackBackendFactory, TTSProviderEvents } from './engine/PlaybackBackend';
+import { lexiconApplier } from '../LexiconApplier';
+import type { SectionMetadata, LexiconRule } from '~types/db';
+import { TaskSequencer, type TaskContext } from '../TaskSequencer';
+import { AudioContentPipeline } from '../AudioContentPipeline';
+import { QueueModel } from '../QueueModel';
+import type { PlaybackBackend, PlaybackBackendFactory, TTSProviderEvents } from './PlaybackBackend';
 import type {
     TtsEngine,
     TTSStatus,
@@ -16,53 +14,57 @@ import type {
     PlaybackError,
     PlaybackSnapshot,
     SnapshotListener,
-} from './engine/TtsEngine';
-import type { MediaPlatform, MediaPlatformFactory } from './PlatformIntegration';
-import { flightRecorder } from './TTSFlightRecorder';
-import type { SectionAnalysis, TableAdaptation, EngineContext } from './engine/EngineContext';
-import { mergeCfiSlow } from '../cfi-utils';
-import { createLogger } from '../logger';
-import { normalizeLanguageCode } from '../language-utils';
+    FlightRecorderExport,
+} from './TtsEngine';
+import type { MediaPlatform, MediaPlatformFactory } from '../PlatformIntegration';
+import type { BackgroundAudioMode } from '../BackgroundAudio';
+import { flightRecorder } from '../TTSFlightRecorder';
+import type { EngineContext } from './EngineContext';
+import { AnalysisApplier } from './AnalysisApplier';
+import { MediaMetadataPublisher, type BookPresentation } from './MediaMetadataPublisher';
+import { DragnetGesture } from './DragnetGesture';
+import { createLogger } from '../../logger';
+import { normalizeLanguageCode } from '../../language-utils';
 import { coverUrl } from '@data/covers';
 
-const logger = createLogger('AudioPlayerService');
+const logger = createLogger('PlaybackController');
 
 /**
- * Canonical home of {@link TTSQueueItem} is src/types/tts.ts (Phase 1a type
- * split, layering-deps.md LD-1): types/db.ts (CacheSessionState.playbackQueue,
- * TTSState.queue) needs it and the types layer may not import lib/tts.
- * Canonical home of the engine contract — {@link TtsEngine},
- * {@link PlaybackSnapshot}, {@link TTSStatus}, {@link DownloadInfo} — is
- * src/lib/tts/engine/TtsEngine.ts (5b-PR2: TtsEngine is a STANDALONE
- * interface, no longer a Pick of this class; the positional PlaybackListener
- * tuple is gone). Re-exported here (type-only, zero runtime change) so
- * existing consumers keep compiling.
+ * PlaybackController — the TTS engine's orchestration core (Phase 5b
+ * decomposition; phase5-tts-strangler.md §5b.1 — the strangled remainder of
+ * the 1,300-line AudioPlayerService god class, which is GONE).
+ *
+ * The controller is the playback FSM and the SOLE status writer; everything
+ * else is a composed unit behind a seam:
+ *
+ *  - {@link QueueModel} — the immutable queue/position model (no persistence);
+ *  - {@link AnalysisApplier} — GenAI mask/adaptation application (subscriptions,
+ *    timestamp dedup, sequenced mutation commands);
+ *  - {@link MediaMetadataPublisher} — the ONE media-session metadata builder,
+ *    book progress, deadbanded position pushes;
+ *  - {@link DragnetGesture} — the pause→play audio-bookmark capture, with
+ *    section-change invalidation INTERNAL to the engine;
+ *  - `ctx.content` / `ctx.session` (EngineContext ports) — derived-content
+ *    reads and the single-owner playback-session persistence (WebKit-detach
+ *    discipline documented on the port);
+ *  - {@link TaskSequencer} — every status/queue mutation runs as a sequenced
+ *    task (the C4 dev-assert crashes in dev/test otherwise).
+ *
+ * Construction: `WorkerTtsEngine.connect` builds this directly inside the
+ * worker (the production path); `getInProcessAudioPlayer()` builds it on the
+ * main thread for unit tests; parity tests build it with fakes.
  */
-export type { TTSQueueItem } from '~types/tts';
-export type {
-    TtsEngine,
-    TTSStatus,
-    DownloadInfo,
-    PlaybackError,
-    PlaybackSnapshot,
-    SnapshotListener,
-} from './engine/TtsEngine';
-
-/**
- * Singleton service that manages Text-to-Speech playback.
- * Handles queue management, provider switching (Local/Cloud), synchronization,
- * media session integration, and state persistence.
- */
-export class AudioPlayerService implements TtsEngine {
-    readonly engineName: string = 'AudioPlayerService';
-    // Components
+export class PlaybackController implements TtsEngine {
+    readonly engineName: string = 'PlaybackController';
     // TaskSequencer ensures async operations are executed serially to prevent race conditions.
     private taskSequencer = new TaskSequencer();
     // AudioContentPipeline handles loading content, GenAI filtering, and text refinement.
-    // Assigned in the constructor so it shares the service's injected EngineContext.
     private contentPipeline: AudioContentPipeline;
     // QueueModel manages the queue (immutably), current index, and position calculations.
     private stateManager = new QueueModel();
+    private readonly analysis: AnalysisApplier;
+    private readonly metadata: MediaMetadataPublisher;
+    private readonly dragnet: DragnetGesture;
 
     private readonly ctx: EngineContext;
     private providerManager: PlaybackBackend;
@@ -74,6 +76,8 @@ export class AudioPlayerService implements TtsEngine {
     private seq = 0;
     /** The queueId carried by the previously PUBLISHED snapshot (broadcast diet). */
     private lastPublishedQueueId: string | null = null;
+    /** The queueId last handed to the session store (persistence dedupe). */
+    private lastPersistedQueueId: string | null = null;
     private activeLexiconRules: LexiconRule[] | null = null;
     private speed: number = 1.0;
     private voiceId: string | null = null;
@@ -90,14 +94,9 @@ export class AudioPlayerService implements TtsEngine {
     private sessionRestored: boolean = false;
     private prerollEnabled: boolean = false;
     private isPreviewing: boolean = false;
-    private lastAppliedAnalysisSectionId: string | null = null;
-    private lastAppliedAnalysisTimestamp: number = 0;
-    private lastUserPauseTimestamp: number | null = null;
-    private currentBookPalette: number[] | undefined = undefined;
-    private currentBookPerceptualPalette: PerceptualPalette | undefined = undefined;
-    private currentBookTitle: string = '';
-    private currentBookAuthor: string = '';
-    private currentBookCoverUrl: string | undefined = undefined;
+    private book: BookPresentation = {
+        title: '', author: '', coverUrl: undefined, palette: undefined, perceptualPalette: undefined,
+    };
 
     private constructor(
         ctx: EngineContext,
@@ -106,11 +105,6 @@ export class AudioPlayerService implements TtsEngine {
     ) {
         this.ctx = ctx;
         this.contentPipeline = new AudioContentPipeline(this.ctx);
-
-        // Subscribe to content analysis changes (Reactive Injection)
-        this.ctx.contentAnalysis.subscribe((state) => {
-            this.handleContentAnalysisUpdate(state);
-        });
 
         this.platformIntegration = platformFactory({
             onPlay: () => this.play(),
@@ -140,11 +134,10 @@ export class AudioPlayerService implements TtsEngine {
             onError: (error) => {
                 void this.enqueue('provider.error', async () => {
                     // Mid-playback failure on a non-local provider: recover inside
-                    // THIS task (one sequenced task end-to-end — swap + replay; the
-                    // legacy un-enqueued `playInternal(true)` S1 escape hatch and the
-                    // task-per-trigger indirection are both gone). The manager no
-                    // longer self-swaps or emits synthetic 'fallback' events, so this
-                    // is the only fallback trigger on the event channel.
+                    // THIS task (one sequenced task end-to-end — swap + replay).
+                    // The manager doesn't self-swap or emit synthetic 'fallback'
+                    // events, so this is the only fallback trigger on the event
+                    // channel.
                     if (this.currentProviderId !== 'local') {
                         logger.warn("Cloud provider error during playback; falling back to local provider", error);
                         await this.recoverWithLocalProvider();
@@ -157,13 +150,37 @@ export class AudioPlayerService implements TtsEngine {
                 });
             },
             onTimeUpdate: (currentTime) => {
-                this.updateSectionMediaPosition(currentTime);
+                this.metadata.updatePosition(currentTime);
             },
             onDownloadProgress: (voiceId, percent, status) => {
                 this.notifyDownloadProgress(voiceId, percent, status);
             }
         };
         this.providerManager = backendFactory(providerEvents);
+
+        this.metadata = new MediaMetadataPublisher(this.platformIntegration, {
+            queue: this.stateManager,
+            getPlaylist: () => this.playlist,
+            getBook: () => this.book,
+            getSpeed: () => this.speed,
+        });
+
+        this.dragnet = new DragnetGesture({
+            queue: this.stateManager,
+            annotations: this.ctx.annotations,
+            backend: () => this.providerManager,
+            getBookId: () => this.currentBookId,
+        });
+
+        this.analysis = new AnalysisApplier({
+            ctx: this.ctx,
+            pipeline: this.contentPipeline,
+            queue: this.stateManager,
+            enqueue: (label, task) => this.enqueue(label, task),
+            getBookId: () => this.currentBookId,
+            getSection: (sectionIndex) => this.playlist[sectionIndex],
+        });
+        this.analysis.start();
 
         // Subscribe to state manager changes
         this.stateManager.subscribe((snapshot) => {
@@ -175,7 +192,20 @@ export class AudioPlayerService implements TtsEngine {
                     snapshot.currentSectionIndex
                 );
             }
-            this.updateMediaSessionMetadata();
+            // Section-change invalidation of a pending dragnet gesture is
+            // INTERNAL since 5b-PR4 (the ReaderView/useTTS clearPauseGesture
+            // call sites are gone).
+            this.dragnet.noteSectionIndex(snapshot.currentSectionIndex);
+            // Persistence (single owner: the SessionStore port), deduped on the
+            // queue's content identity. Resets publish an EMPTY queue with a
+            // fresh queueId and must NOT clobber the persisted session (the
+            // restore that follows a book switch still reads it) — the legacy
+            // QueueModel likewise never persisted from reset().
+            if (this.currentBookId && snapshot.queue.length > 0 && snapshot.queueId !== this.lastPersistedQueueId) {
+                this.lastPersistedQueueId = snapshot.queueId;
+                this.ctx.session.persistQueue(this.currentBookId, snapshot.queue);
+            }
+            this.metadata.updateMediaSessionMetadata();
             this.publishSnapshot({ activeCfi: snapshot.currentItem?.cfi || null });
         });
 
@@ -202,8 +232,7 @@ export class AudioPlayerService implements TtsEngine {
                 this.activeLexiconRules = null;
 
                 // If playing, restart to apply the new voice/language immediately.
-                // Sequenced (5b-PR3): this was the second un-enqueued playInternal
-                // call site (S1) — a store subscription must not drive the FSM
+                // Sequenced (5b-PR3): a store subscription must not drive the FSM
                 // outside the sequencer.
                 if (this.status === 'playing' || this.status === 'loading') {
                     void this.enqueue('languageSync.restart', () => this.playInternal(true));
@@ -211,24 +240,6 @@ export class AudioPlayerService implements TtsEngine {
             }
         });
 
-        // Subscribe to GenAI settings changes for hot-swapping behavior and late-hydration support
-        this.ctx.genAI.subscribe(() => {
-            const bookId = this.currentBookId;
-            if (!bookId) return;
-
-            const sectionIndex = this.stateManager.currentSectionIndex;
-            if (sectionIndex === -1) return;
-
-            const section = this.playlist[sectionIndex];
-            if (!section) return;
-
-            // Reset timestamp to force re-application or clearing of mask
-            this.lastAppliedAnalysisSectionId = null;
-            this.lastAppliedAnalysisTimestamp = 0;
-
-            this.applyCachedAnalysis(bookId, section.sectionId);
-        });
-        
         // Flight Recorder Context
         flightRecorder.setContextProvider(() => {
             const queue = this.stateManager.queue;
@@ -262,11 +273,8 @@ export class AudioPlayerService implements TtsEngine {
         };
 
         // The C4 dev-assert (5b-PR3, §5b.3): status writes and queue mutations
-        // happen ONLY inside a running sequenced task. A crashing invariant in
-        // dev/test instead of a convention — the known violators (provider
-        // events, dragnet, setBookId's reset, the language-sync restart, the
-        // async mask/adaptation callbacks) were sequenced in the same change,
-        // so the assert is born green.
+        // happen ONLY inside a running sequenced task — a crashing invariant
+        // in dev/test instead of a convention.
         if (import.meta.env.DEV) {
             this.stateManager.setMutationGuard((op) => this.assertSequencedMutation(`QueueModel.${op}`));
         }
@@ -275,7 +283,7 @@ export class AudioPlayerService implements TtsEngine {
     private assertSequencedMutation(op: string): void {
         if (import.meta.env.DEV && !this.taskSequencer.isInsideTask()) {
             throw new Error(
-                `[AudioPlayerService] ${op} outside a sequenced task — status/queue ` +
+                `[PlaybackController] ${op} outside a sequenced task — status/queue ` +
                 'mutations must run through the TaskSequencer (5b-PR3 C4 invariant; ' +
                 'plan/overhaul/prep/phase5-tts-strangler.md §5b.3)',
             );
@@ -283,19 +291,19 @@ export class AudioPlayerService implements TtsEngine {
     }
 
     /**
-     * Construct an AudioPlayerService with an explicitly injected context and playback
-     * backend. This is the ONLY construction path: the main thread uses it via
-     * {@link getAudioPlayer} (Zustand context + TTSProviderManager), tests use it with fakes,
-     * and a worker shell uses it with a message-channel-backed context + proxy backend.
-     * Keeping both dependencies injected (no defaults) is what keeps this module free of
+     * Construct a PlaybackController with an explicitly injected context and playback
+     * backend. This is the ONLY construction path: the worker host uses it
+     * (WorkerTtsEngine.connect — the production wiring), the main thread's in-process
+     * builder uses it for unit tests, and the parity suites use it with fakes.
+     * Keeping all dependencies injected (no defaults) is what keeps this module free of
      * worker-unsafe imports. See {@link EngineContext} and {@link PlaybackBackend}.
      */
     static createWithContext(
         ctx: EngineContext,
         backendFactory: PlaybackBackendFactory,
         platformFactory: MediaPlatformFactory,
-    ): AudioPlayerService {
-        return new AudioPlayerService(ctx, backendFactory, platformFactory);
+    ): PlaybackController {
+        return new PlaybackController(ctx, backendFactory, platformFactory);
     }
 
     private enqueue<T>(label: string, task: (ctx: TaskContext) => Promise<T>): Promise<T | void> {
@@ -325,15 +333,11 @@ export class AudioPlayerService implements TtsEngine {
 
         this.currentBookId = bookId;
         this.sessionRestored = false;
-        this.lastAppliedAnalysisSectionId = null;
-        this.lastAppliedAnalysisTimestamp = 0;
-        this.currentBookPalette = undefined;
-        this.currentBookPerceptualPalette = undefined;
-        this.currentBookTitle = '';
-        this.currentBookAuthor = '';
-        this.currentBookCoverUrl = undefined;
+        this.analysis.reset();
+        this.book = { title: '', author: '', coverUrl: undefined, palette: undefined, perceptualPalette: undefined };
         this.activeLexiconRules = null;
-        this.lastUserPauseTimestamp = null;
+        this.dragnet.clear('setBookId');
+        this.lastPersistedQueueId = null;
 
         // Stop playback and reset queue state to prevent leakage of old book
         // state. Enqueued (5b-PR3) — but protected against in-flight tasks of
@@ -347,22 +351,23 @@ export class AudioPlayerService implements TtsEngine {
                 this.platformIntegration.stop().catch(e => logger.error("Failed to stop platform integration", e));
             }
             this.stateManager.reset();
-            this.stateManager.setBookId(bookId);
         });
 
         if (bookId) {
             this.ctx.book.getMetadata(bookId).then(metadata => {
                 if (this.currentBookId === bookId) {
-                    this.currentBookPalette = metadata?.coverPalette;
-                    this.currentBookPerceptualPalette = metadata?.perceptualPalette;
-                    this.currentBookTitle = metadata?.title || '';
-                    this.currentBookAuthor = metadata?.author || '';
-                    this.currentBookCoverUrl = metadata?.coverUrl || (metadata?.coverBlob ? coverUrl(bookId) : undefined);
-                    this.updateMediaSessionMetadata();
+                    this.book = {
+                        title: metadata?.title || '',
+                        author: metadata?.author || '',
+                        coverUrl: metadata?.coverUrl || (metadata?.coverBlob ? coverUrl(bookId) : undefined),
+                        palette: metadata?.coverPalette,
+                        perceptualPalette: metadata?.perceptualPalette,
+                    };
+                    this.metadata.updateMediaSessionMetadata();
                 }
             }).catch(e => logger.warn("Failed to load book metadata", e));
 
-            this.playlistPromise = bookContent.getSections(bookId).then(sections => {
+            this.playlistPromise = this.ctx.content.getSections(bookId).then(sections => {
                 if (this.currentBookId !== bookId) return; this.playlist = sections;
                 this.restoreQueue(bookId);
             }).catch(e => logger.error("Failed to load playlist", e));
@@ -374,50 +379,14 @@ export class AudioPlayerService implements TtsEngine {
         return reset as Promise<void>;
     }
 
-    private async engageBackgroundMode(item: TTSQueueItem): Promise<boolean> {
-        try {
-            this.platformIntegration.updateMetadata({
-                title: item.title || 'Chapter Text',
-                artist: this.currentBookAuthor || 'Versicle',
-                album: this.currentBookTitle || '',
-                artwork: this.currentBookCoverUrl ? [{ src: this.currentBookCoverUrl }] : [],
-                coverPalette: this.currentBookPalette,
-                perceptualPalette: this.currentBookPerceptualPalette,
-                sectionIndex: this.stateManager.currentSectionIndex,
-                totalSections: this.playlist.length,
-                progress: this.calculateBookProgress()
-            });
-            this.platformIntegration.updatePlaybackState('playing');
-            return true;
-        } catch (e) {
-            logger.error('Background engagement failed', e);
-            return false;
-        }
-    }
-
-    private updateSectionMediaPosition(providerTime: number) {
-        const position = this.stateManager.getCurrentPosition(providerTime);
-        const duration = this.stateManager.getTotalDuration();
-
-        const safeDuration = Math.max(duration, position);
-
-        this.platformIntegration.setPositionState({
-            duration: safeDuration,
-            playbackRate: this.speed,
-            position: position
-        });
-    }
-
     private async restoreQueue(bookId: string) {
         // NOTE: the book-id guard below is deliberately NOT converted to
         // ctx.checkpoint(): stop() also bumps the epoch, and a user stop
         // between setBookId and the playlist resolving must not cancel the
-        // restore (the queue should still be there for the next play). The
-        // epoch conversion for this task rides the decomposition PR with a
-        // P12 rider of its own.
+        // restore (the queue should still be there for the next play).
         this.enqueue('restoreQueue', async () => {
             try {
-                const session = await playbackCache.getSession(bookId);
+                const session = await this.ctx.session.loadSession(bookId);
                 const state = session ? { bookId, queue: session.playbackQueue, updatedAt: session.updatedAt } : undefined;
                 const progress = this.ctx.readingState.getProgress(bookId);
 
@@ -456,6 +425,8 @@ export class AudioPlayerService implements TtsEngine {
                         ? state.queue.map(item => item.isSkipped ? { ...item, isSkipped: false } : item)
                         : state.queue;
 
+                    // The restored queue's identity matches what's already persisted —
+                    // don't immediately write it back.
                     this.stateManager.setQueue(cleanedQueue, currentIndex, sectionIndex);
                     // Subscription handles metadata and listeners
 
@@ -463,14 +434,14 @@ export class AudioPlayerService implements TtsEngine {
                     if (sectionIndex >= 0 && sectionIndex < this.playlist.length) {
                         const section = this.playlist[sectionIndex];
 
-                        this.applyCachedAnalysis(bookId, section.sectionId);
+                        this.analysis.applyCachedAnalysis(bookId, section.sectionId);
 
                         this.contentPipeline.triggerAnalysis(
                             bookId,
                             section.sectionId,
                             undefined, // will fetch from DB
-                            this.sequencedMaskCallback(bookId, sectionIndex, section.sectionId),
-                            this.sequencedAdaptationsCallback(bookId, sectionIndex)
+                            this.analysis.maskCallback(bookId, sectionIndex, section.sectionId),
+                            this.analysis.adaptationsCallback(bookId, sectionIndex)
                         );
                     }
                 }
@@ -480,80 +451,7 @@ export class AudioPlayerService implements TtsEngine {
         });
     }
 
-    /**
-     * The content pipeline reports skip masks / table adaptations through
-     * detached async callbacks (triggerAnalysis runs in the background) —
-     * which used to mutate the queue OUTSIDE the sequencer (S3-adjacent).
-     * These wrappers enqueue the mutation with the book/section guard
-     * evaluated inside the task (5b-PR3; the AnalysisApplier absorbs all
-     * three call sites in the decomposition PR).
-     */
-    private sequencedMaskCallback(bookId: string, sectionIndex: number, sectionId: string) {
-        return (mask: Set<number>) => {
-            void this.enqueue('analysis.maskCallback', async () => {
-                if (this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
-                    this.stateManager.applySkippedMask(mask, sectionId);
-                }
-            });
-        };
-    }
-
-    private sequencedAdaptationsCallback(bookId: string, sectionIndex: number) {
-        return (adaptations: { indices: number[], text: string }[]) => {
-            void this.enqueue('analysis.adaptationsCallback', async () => {
-                if (this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
-                    this.stateManager.applyTableAdaptations(adaptations);
-                }
-            });
-        };
-    }
-
-    private updateMediaSessionMetadata() {
-        const item = this.stateManager.getCurrentItem();
-        if (item) {
-            this.platformIntegration.updateMetadata({
-                title: item.title || 'Chapter Text',
-                artist: this.currentBookAuthor || 'Versicle',
-                album: this.currentBookTitle || '',
-                artwork: this.currentBookCoverUrl ? [{ src: this.currentBookCoverUrl }] : [],
-                coverPalette: this.currentBookPalette,
-                perceptualPalette: this.currentBookPerceptualPalette,
-                sectionIndex: this.stateManager.currentSectionIndex,
-                totalSections: this.playlist.length,
-                progress: this.calculateBookProgress()
-            });
-
-            this.updateSectionMediaPosition(0);
-        }
-    }
-
-    private calculateBookProgress(): number {
-        if (!this.currentBookId || this.playlist.length === 0) return 0;
-
-        let totalChars = 0;
-        let completedChars = 0;
-
-        for (let i = 0; i < this.playlist.length; i++) {
-            const section = this.playlist[i];
-            totalChars += section.characterCount || 0;
-
-            if (i < this.stateManager.currentSectionIndex) {
-                completedChars += section.characterCount || 0;
-            } else if (i === this.stateManager.currentSectionIndex) {
-                // Add characters consumed within the current section
-                // prefixSums[index] gives cumulative chars before index in the current queue.
-                if (this.stateManager.prefixSums && this.stateManager.currentIndex >= 0) {
-                    completedChars += this.stateManager.prefixSums[this.stateManager.currentIndex];
-                }
-            }
-        }
-
-        if (totalChars === 0) return 0;
-        return Math.min(Math.max(completedChars / totalChars, 0), 1);
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    public setBackgroundAudioMode(mode: any) {
+    public setBackgroundAudioMode(mode: BackgroundAudioMode) {
         this.platformIntegration.setBackgroundAudioMode(mode, this.status === 'playing' || this.status === 'loading');
     }
 
@@ -658,7 +556,7 @@ export class AudioPlayerService implements TtsEngine {
             ctx.checkpoint();
 
             const index = this.playlist.findIndex(s => s.sectionId === sectionId);
-            
+
             flightRecorder.record('APS', 'loadSectionBySectionId.guard', {
                 sectionId,
                 found: index !== -1,
@@ -680,8 +578,8 @@ export class AudioPlayerService implements TtsEngine {
         });
     }
 
-    // Section skips are sequenced tasks (5b-PR3): they were the remaining
-    // un-sequenced public paths that mutate the queue (via loadSectionInternal).
+    // Section skips are sequenced tasks (5b-PR3): they mutate the queue via
+    // loadSectionInternal.
     public async skipToNextSection(): Promise<boolean> {
         const loaded = await this.enqueue('skipToNextSection', async () => this.advanceToNextChapter());
         return loaded ?? false;
@@ -705,7 +603,7 @@ export class AudioPlayerService implements TtsEngine {
         return this.enqueue('setQueue', async () => {
             if (this.stateManager.isIdenticalTo(items)) {
                 this.stateManager.setQueue(items, startIndex, this.stateManager.currentSectionIndex);
-                // persist and notify are automatic.
+                // persist and notify are automatic (the state-manager subscription).
                 return;
             }
 
@@ -751,65 +649,14 @@ export class AudioPlayerService implements TtsEngine {
         flightRecorder.record('APS', 'play', { status: this.status });
         // Dragnet capture is part of the play task (5b-PR3): the pause->play
         // gesture check runs INSIDE the sequencer with the timestamp evaluated
-        // at task time, instead of as an un-sequenced prelude (S3). A play that
-        // went stale (stop/setBookId/loadSection bumped the epoch after it was
-        // enqueued) cancels before capturing or synthesizing.
+        // at task time. A play that went stale (stop/setBookId/loadSection
+        // bumped the epoch after it was enqueued) cancels before capturing or
+        // synthesizing.
         return this.enqueue('play', async (ctx) => {
             ctx.checkpoint();
-            const now = Date.now();
-            logger.debug(`Play called. lastUserPauseTimestamp: ${this.lastUserPauseTimestamp}, diff: ${this.lastUserPauseTimestamp ? now - this.lastUserPauseTimestamp : 'N/A'}`);
-            if (this.lastUserPauseTimestamp && (now - this.lastUserPauseTimestamp <= 5000)) {
-                logger.debug('Triggering Dragnet Capture');
-                await this.executeDragnetCapture();
-            }
-            this.lastUserPauseTimestamp = null;
+            await this.dragnet.maybeCapture();
             return this.playInternal();
         }) as Promise<void>;
-    }
-
-    private async executeDragnetCapture() {
-        const queue = this.stateManager.queue;
-        const currentIndex = this.stateManager.currentIndex;
-
-        logger.debug(`executeDragnetCapture. currentIndex: ${currentIndex}, queueLength: ${queue.length}, currentBookId: ${this.currentBookId}`);
-
-        // Boundary protection: don't cross chapter boundaries backwards
-        const startIndex = Math.max(0, currentIndex - 1);
-        const targetItems = queue.slice(startIndex, currentIndex + 1);
-
-        logger.debug(`targetItems count: ${targetItems.length}`);
-
-        if (targetItems.length === 0 || !this.currentBookId) {
-            logger.warn('Dragnet Capture failed: no target items or no bookId');
-            this.providerManager.playEarcon('bookmark_failed');
-            return;
-        }
-
-        // 1. Concatenate Text
-        const mergedText = targetItems.map((item: TTSQueueItem) => item.text).join(' ');
-
-        // 2. Generate Spanning CFI
-        let mergedCfi = targetItems[0].cfi;
-        if (targetItems.length > 1 && targetItems[0].cfi && targetItems[1].cfi) {
-            mergedCfi = mergeCfiSlow(targetItems[0].cfi, targetItems[1].cfi);
-        }
-
-        if (!mergedCfi) {
-            this.providerManager.playEarcon('bookmark_failed');
-            return;
-        }
-
-        // 3. Audio Feedback (Earcon)
-        this.providerManager.playEarcon('bookmark_captured');
-
-        // 4. Dispatch to Yjs Store
-        this.ctx.annotations.add({
-            bookId: this.currentBookId,
-            cfiRange: mergedCfi,
-            type: 'audio-bookmark',
-            text: mergedText,
-            color: '#ff9800' // Default color, won't be strictly used due to custom CSS
-        });
     }
 
     private async playInternal(force: boolean = false): Promise<void> {
@@ -851,7 +698,7 @@ export class AudioPlayerService implements TtsEngine {
         }
 
         if (this.status !== 'playing') {
-            const engaged = await this.engageBackgroundMode(item);
+            const engaged = this.metadata.engageBackgroundMode(item);
             if (this.currentBookId !== initialBookId) return;
 
             if (!engaged && this.ctx.platform.getPlatform() === 'android') {
@@ -862,8 +709,9 @@ export class AudioPlayerService implements TtsEngine {
             this.setStatus('loading');
         }
 
-        // updateMediaSessionMetadata() and notifyListeners() are handled by listeners or setStatus
-        this.stateManager.persistQueue(); // Ensure persistence before play.
+        // Ensure persistence before play (deduped on queueId — a no-op unless
+        // the queue content changed since the last persist).
+        this.persistQueueNow();
 
         try {
             const voiceId = this.voiceId || '';
@@ -914,17 +762,13 @@ export class AudioPlayerService implements TtsEngine {
         }
     }
 
-    async resume(): Promise<void> {
-        return this.enqueue('resume', () => this.resumeInternal());
-    }
-
     private async resumeInternal(): Promise<void> {
         this.sessionRestored = true;
         return this.playInternal(true);
     }
 
     pause() {
-        this.lastUserPauseTimestamp = Date.now();
+        this.dragnet.armPause();
         return this.enqueue('pause', async () => {
             flightRecorder.record('APS', 'pause', { index: this.stateManager.currentIndex });
             this.providerManager.pause();
@@ -934,24 +778,9 @@ export class AudioPlayerService implements TtsEngine {
             // awaiting it here would wedge the TaskSequencer so every subsequent
             // play/pause/skip task queues behind it forever (isPlaying never flips,
             // skip never advances). Detach it so playback control stays responsive.
+            // (The policy lives on the SessionStore port — see EngineContext.)
             void this.savePlaybackState('paused').catch(() => {});
         });
-    }
-
-    /**
-     * Invalidate any pending pause→play "Dragnet" capture. Called synchronously when the
-     * reader navigates to a different section (see useTTS). A chapter change between a
-     * pause and a play is a deliberate navigation, not a resume gesture, so it must not
-     * capture a stale audio-bookmark. This runs OUTSIDE the task sequencer so it always
-     * precedes a subsequent play() — unlike the clear inside loadSectionInternal, which is
-     * enqueued and can be skipped by the loadSectionBySectionId guard (or never reached
-     * when the queue-sync early-returns while playing).
-     */
-    public clearPauseGesture(): void {
-        if (this.lastUserPauseTimestamp !== null) {
-            flightRecorder.record('APS', 'clearPauseGesture', {});
-            this.lastUserPauseTimestamp = null;
-        }
     }
 
     stop() {
@@ -1072,8 +901,7 @@ export class AudioPlayerService implements TtsEngine {
 
     /**
      * The provider's `end` event, executed as the sequenced `provider.end`
-     * task (5b-PR3; the former `playNext` + the preview-stop branch of the
-     * event handler): record history, then advance to the next visible item,
+     * task (5b-PR3): record history, then advance to the next visible item,
      * the next chapter, or completion.
      */
     private async handlePlaybackEnded(): Promise<void> {
@@ -1213,69 +1041,6 @@ export class AudioPlayerService implements TtsEngine {
         };
     }
 
-    private handleContentAnalysisUpdate(state: { sections: Record<string, SectionAnalysis> }) {
-        const bookId = this.currentBookId;
-        if (!bookId) return;
-
-        const sectionIndex = this.stateManager.currentSectionIndex;
-        if (sectionIndex === -1) return;
-
-        const section = this.playlist[sectionIndex];
-        if (!section) return;
-
-        const key = `${bookId}/${section.sectionId}`;
-        const analysis = state.sections[key];
-
-        if (analysis && analysis.status === 'success') {
-            // Skip if we've already processed this exact analysis update for this specific section
-            if (this.lastAppliedAnalysisSectionId === section.sectionId && analysis.generatedAt <= this.lastAppliedAnalysisTimestamp) return;
-
-            // Update timestamp synchronously to prevent concurrent duplicate enqueueing
-            this.lastAppliedAnalysisSectionId = section.sectionId;
-            this.lastAppliedAnalysisTimestamp = analysis.generatedAt;
-
-            this.enqueue('analysis.apply', async () => {
-                // Validate current context
-                if (this.currentBookId !== bookId) return;
-                const activeSection = this.playlist[this.stateManager.currentSectionIndex];
-                if (!activeSection || activeSection.sectionId !== section.sectionId) return;
-
-                const genAISettings = this.ctx.genAI.getSettings();
-
-                // 1. Apply or clear Skip Mask
-                if (genAISettings.isEnabled && genAISettings.isContentAnalysisEnabled && genAISettings.contentFilterSkipTypes.length > 0) {
-                    const mask = await this.contentPipeline.detectContentSkipMask(bookId, section.sectionId, genAISettings.contentFilterSkipTypes);
-                    if (mask.size > 0 && this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
-                        this.stateManager.applySkippedMask(mask, section.sectionId);
-                    }
-                } else {
-                    this.stateManager.applySkippedMask(new Set(), section.sectionId);
-                }
-
-                // 2. Apply or clear Table Adaptations
-                if (genAISettings.isEnabled && genAISettings.isTableAdaptationEnabled && analysis.tableAdaptations) {
-                    const ttsContent = await bookContent.getTTSPreparation(bookId, section.sectionId);
-                    if (ttsContent && this.currentBookId === bookId && this.stateManager.currentSectionIndex === sectionIndex) {
-                        const adaptations = this.contentPipeline.tableProcessor.mapSentencesToAdaptations(
-                            ttsContent.sentences,
-                            new Map(analysis.tableAdaptations.map((a: TableAdaptation) => [a.rootCfi, a.text]))
-                        );
-                        this.stateManager.applyTableAdaptations(adaptations);
-                    }
-                } else {
-                    this.stateManager.applyTableAdaptations([]);
-                }
-            });
-        }
-    }
-
-    private applyCachedAnalysis(bookId: string, sectionId: string) {
-        const analysis = this.ctx.contentAnalysis.getAnalysis(bookId, sectionId);
-        if (analysis && analysis.status === 'success') {
-            this.handleContentAnalysisUpdate(this.ctx.contentAnalysis.getSnapshot());
-        }
-    }
-
     private notifyError(message: string, code: string = 'TTS_PLAYBACK_ERROR') {
         this.publishSnapshot({ error: { code, message } });
     }
@@ -1284,27 +1049,33 @@ export class AudioPlayerService implements TtsEngine {
         this.publishSnapshot({ download: { voiceId, percent, status } });
     }
 
-    public async checkBatteryOptimization() {
-        if (this.ctx.platform.getPlatform() === 'android') {
-            const isEnabled = await this.ctx.platform.isBatteryOptimizationEnabled();
-            if (isEnabled) {
-                // Prompt user to disable battery optimization for reliable background playback
-                this.ctx.notifications.showToast(
-                    'For reliable background playback, please disable battery optimization for this app.',
-                    'info'
-                );
-                await this.ctx.platform.openBatteryOptimizationSettings();
-            }
-        }
+    // --- Diagnostics (S9: served over the engine handle so the UI reads the
+    // ENGINE-side flight recorder — in production, the worker's instance) ---
+
+    async exportDiagnostics(): Promise<FlightRecorderExport> {
+        return flightRecorder.exportForHandle();
+    }
+
+    triggerDiagnosticsSnapshot(trigger: string, note: string = ''): Promise<string | null> {
+        return flightRecorder.snapshot(trigger, note);
+    }
+
+    /** Persist queue content NOW (deduped on queueId; reset/empty never persists). */
+    private persistQueueNow(): void {
+        if (!this.currentBookId) return;
+        const queue = this.stateManager.queue;
+        if (queue.length === 0) return;
+        if (this.stateManager.queueId === this.lastPersistedQueueId) return;
+        this.lastPersistedQueueId = this.stateManager.queueId;
+        this.ctx.session.persistQueue(this.currentBookId, queue);
     }
 
     private async loadSectionInternal(sectionIndex: number, autoPlay: boolean, sectionTitle?: string): Promise<boolean> {
         if (!this.currentBookId || sectionIndex < 0 || sectionIndex >= this.playlist.length) return false;
 
         // Clear dragnet state on navigation to prevent capturing previous section context
-        this.lastUserPauseTimestamp = null;
-        this.lastAppliedAnalysisSectionId = null;
-        this.lastAppliedAnalysisTimestamp = 0;
+        this.dragnet.clear('loadSection');
+        this.analysis.reset();
 
         const section = this.playlist[sectionIndex];
 
@@ -1316,8 +1087,8 @@ export class AudioPlayerService implements TtsEngine {
             this.prerollEnabled,
             this.speed,
             sectionTitle || section.title,
-            this.sequencedMaskCallback(bookId, sectionIndex, section.sectionId),
-            this.sequencedAdaptationsCallback(bookId, sectionIndex)
+            this.analysis.maskCallback(bookId, sectionIndex, section.sectionId),
+            this.analysis.adaptationsCallback(bookId, sectionIndex)
         );
 
         flightRecorder.record('APS', 'loadSectionInternal', {
@@ -1339,13 +1110,13 @@ export class AudioPlayerService implements TtsEngine {
             }
 
             this.stateManager.setQueue(newQueue, 0, sectionIndex);
-            // Automatic persist and notify.
+            // Automatic persist and notify (the state-manager subscription).
 
             if (autoPlay) {
                 await this.playInternal();
             }
 
-            this.applyCachedAnalysis(this.currentBookId, section.sectionId);
+            this.analysis.applyCachedAnalysis(this.currentBookId, section.sectionId);
             this.contentPipeline.triggerAnalysis(this.currentBookId, section.sectionId, undefined);
             this.contentPipeline.triggerNextChapterAnalysis(this.currentBookId, sectionIndex, this.playlist);
             return true;
@@ -1402,7 +1173,9 @@ export class AudioPlayerService implements TtsEngine {
             this.ctx.readingState.updatePlaybackPosition(this.currentBookId, lastPlayedCfi);
         }
 
-        // Call stateManager to save legacy cache/db
-        await this.stateManager.savePlaybackState(status);
+        // Persist the pause timestamp through the SessionStore port (callers
+        // detach this promise — the WebKit policy on the port).
+        const isPaused = status === 'paused';
+        await this.ctx.session.persistPauseTime(this.currentBookId, isPaused ? Date.now() : null);
     }
 }

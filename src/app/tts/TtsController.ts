@@ -35,7 +35,9 @@
  * side effects did.
  */
 import { getAudioPlayer } from './mainThreadAudioPlayer';
-import type { TtsEngine } from '@lib/tts/AudioPlayerService';
+import { diagnostics } from '@data/repos/diagnostics';
+import type { FlightSnapshot } from '~types/db';
+import type { TtsEngine, FlightRecorderExport } from '@lib/tts/engine/TtsEngine';
 import { isAudiblePlayback } from '@lib/tts/engine/TtsEngine';
 import type { TTSVoice } from '@lib/tts/providers/types';
 import { LexiconService } from '@lib/tts/LexiconService';
@@ -236,13 +238,52 @@ export class TtsController {
         return this.engine.skipToPreviousSection();
     };
 
-    /**
-     * Invalidate any pending pause→play "Dragnet" capture (deliberate navigation
-     * is not a resume gesture). Called synchronously by the reader on section
-     * navigation — see useTTS / the ReaderView TOC handler.
-     */
-    clearPauseGesture = (): void => {
-        this.engine.clearPauseGesture();
+    // --- Diagnostics (S9: the LIVE buffer/stats and the snapshot capture go
+    // over the engine handle — in production the WORKER-side flight recorder,
+    // the one that actually sees engine traffic; never the main-thread module
+    // singleton. The PERSISTED snapshots are plain IndexedDB rows shared by
+    // both contexts, served from the diagnostics repo.) ---
+
+    exportDiagnostics = (): Promise<FlightRecorderExport> => {
+        return this.engine.exportDiagnostics();
+    };
+
+    triggerDiagnosticsSnapshot = (trigger: string, note?: string): Promise<string | null> => {
+        return this.engine.triggerDiagnosticsSnapshot(trigger, note);
+    };
+
+    listDiagnosticSnapshots = async (): Promise<Omit<FlightSnapshot, 'eventsJSON'>[]> => {
+        try {
+            return await diagnostics.listSnapshots();
+        } catch (e) {
+            logger.error('Failed to list diagnostic snapshots', e);
+            return [];
+        }
+    };
+
+    deleteDiagnosticSnapshot = async (id: string): Promise<void> => {
+        try {
+            await diagnostics.deleteSnapshot(id);
+        } catch { /* best effort */ }
+    };
+
+    clearDiagnosticSnapshots = async (): Promise<void> => {
+        try {
+            await diagnostics.clearSnapshots();
+        } catch { /* best effort */ }
+    };
+
+    shareDiagnosticSnapshot = async (id: string): Promise<void> => {
+        const snapshot = await diagnostics.getSnapshot(id);
+        if (!snapshot) return;
+        const { exportFile } = await import('@lib/export');
+        const filename = `flight_${snapshot.trigger}_${new Date(snapshot.createdAt)
+            .toISOString().slice(0, 16).replace(/:/g, '-')}.json`;
+        await exportFile({
+            filename,
+            data: snapshot.eventsJSON,
+            mimeType: 'application/json',
+        });
     };
 
     // --- Voice management ---

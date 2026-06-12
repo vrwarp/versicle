@@ -40,7 +40,10 @@ import type {
     ContentAnalysis,
     BookMetadata,
     GenAIPort,
+    BookContentPort,
+    SessionStore,
 } from './EngineContext';
+import { repoBookContentPort, createRepoSessionStore } from './repoPorts';
 
 /** Main-thread → worker state replication messages. */
 export type EngineStateUpdate =
@@ -87,6 +90,15 @@ export interface WorkerEngineContextOptions {
     genAIGenerateTableAdaptations?: GenAIPort['generateTableAdaptations'];
     /** Locale-aware default; pure, computed locally. Override only for tests. */
     defaultMinSentenceLength?: (lang: string) => number;
+    /**
+     * Storage ports (5b decomposition). The worker reads/writes IndexedDB
+     * DIRECTLY through the src/data repos (worker-safe; the detached-write
+     * discipline lives on the SessionStore port) — these default to the
+     * repo-backed implementations. Tests inject in-memory fakes, which is
+     * what keeps the engine-dir vi.mock allowlist at zero.
+     */
+    content?: BookContentPort;
+    session?: SessionStore;
 }
 
 export class WorkerEngineContext implements EngineContext {
@@ -103,6 +115,8 @@ export class WorkerEngineContext implements EngineContext {
     private readonly genAIDetectFn: GenAIPort['detectContentTypes'];
     private readonly genAIAdaptFn: GenAIPort['generateTableAdaptations'];
     private readonly minSentenceLength: (lang: string) => number;
+    readonly content: BookContentPort;
+    readonly session: SessionStore;
 
     // Replicated state (populated by applyUpdate). Boot slices start as `null` — "never
     // replicated" — and their getters THROW rather than serve a silent default, so a missing
@@ -136,6 +150,8 @@ export class WorkerEngineContext implements EngineContext {
             (async () => ({ classifications: [], justification: '', agreedWithHeuristic: false }));
         this.genAIAdaptFn = opts.genAIGenerateTableAdaptations ?? (async () => []);
         this.minSentenceLength = opts.defaultMinSentenceLength ?? ((lang) => (lang.startsWith('zh') ? 6 : 36));
+        this.content = opts.content ?? repoBookContentPort;
+        this.session = opts.session ?? createRepoSessionStore();
     }
 
     /** Apply a state snapshot pushed by the main thread, firing the relevant subscribers. */

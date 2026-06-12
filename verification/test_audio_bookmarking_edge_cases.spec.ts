@@ -40,10 +40,11 @@ test('Timeout Protection', async ({ page }) => {
 });
 
 test('Navigation Guard', async ({ page }) => {
-  // Previously WebKit-skipped. Now passes after clearing the Dragnet pause-timestamp on
-  // the TOC navigation INTENT (see ReaderView onNavigate → AudioPlayerService.clearPauseGesture):
-  // WebKit's slow rendition.display() relocation meant the section-change clear raced the
-  // user's next play, capturing a stale audio-bookmark.
+  // Dragnet invalidation is ENGINE-INTERNAL since 5b-PR4: the DragnetGesture unit disarms
+  // when the engine's own section changes (loadSection / section-index change) — the
+  // intent-time clearPauseGesture API and its ReaderView/useTTS call sites are gone. This
+  // test waits for the new chapter's queue to load before pressing play, so the engine has
+  // disarmed by then (the same ordering a real user hits: play targets the loaded chapter).
   // Verify that navigating to a new chapter during a pause prevents capturing stale context.
   console.log('Testing Navigation Guard...');
   await utils.resetApp(page);
