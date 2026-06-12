@@ -140,10 +140,12 @@ export default tseslint.config(
   // .claude holds agent worktrees (full checkouts under .claude/worktrees/<name>/);
   // without the ignore, a top-level `eslint .` would also lint every worktree's copy.
   // packages/*/src is VENDORED fork source (zustand-middleware-yjs incl. its
-  // ported upstream specs; y-idb's upstream JS + hand-maintained d.ts): it
-  // predates this repo's lint discipline and stays diff-minimal against
-  // upstream by design (each package's PROVENANCE.md), so it is exempt.
-  // The first-party contract suites in packages/*/test ARE linted.
+  // ported upstream specs; y-idb's upstream JS + hand-maintained d.ts;
+  // y-cinder's TS source plus its ported-from-the-fork unit suite under
+  // test/unit + test/utils): it predates this repo's lint discipline and
+  // stays diff-minimal against upstream by design (each package's
+  // PROVENANCE.md), so it is exempt.
+  // The first-party contract suites in packages/*/test/contract ARE linted.
   // dist-types*/ are tsc -b declaration outputs (gitignored).
   {
     ignores: [
@@ -154,6 +156,9 @@ export default tseslint.config(
       '.claude',
       'packages/zustand-middleware-yjs/src',
       'packages/y-idb/src',
+      'packages/y-cinder/src',
+      'packages/y-cinder/test/unit',
+      'packages/y-cinder/test/utils',
       'packages/*/dist-types',
       'packages/*/dist-types-test',
     ],

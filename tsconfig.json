@@ -11,6 +11,12 @@
       "path": "./packages/y-idb/tsconfig.test.json"
     },
     {
+      "path": "./packages/y-cinder"
+    },
+    {
+      "path": "./packages/y-cinder/tsconfig.test.json"
+    },
+    {
       "path": "./tsconfig.app.json"
     },
     {

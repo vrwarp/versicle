@@ -77,12 +77,13 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 
 ### y-cinder (fork of PodRaven/y-fire)
 
-- **Version:** 3.0.2603210004 @ 9c5c205e6bfef008c5dd8733c67619a5a73d5f62
+- **Version:** 3.0.2603210004, vendored from fork SHA 9c5c205e6bfef008c5dd8733c67619a5a73d5f62
 - **License:** MIT
 - **Source:** https://github.com/vrwarp/y-cinder (upstream: https://github.com/podraven/y-fire)
-- **Path:** node_modules/y-cinder (bundled into dist/ at build)
-- **Provenance:** Personal fork consumed as a pinned git dependency (package.json); retains the upstream MIT LICENSE ('Pod Raven 2024') and declares fork provenance in its README.
-- **Notes:** Slated for in-repo workspace vendoring in Phase 4; the vendoring PR must carry the LICENSE file and a fork-of header per the P0 licensing checklist.
+- **Path:** packages/y-cinder (workspace package; src/ bundled into dist/ at build)
+- **Provenance:** Personal fork VENDORED into the repo as an npm workspace (Phase 9, paying off the deferred P4-1 item — plan/overhaul/prep/phase4-sync-strangler.md §D6/§Follow-ups): TS source imported from the fork repo at the exact SHA the app was previously git-pinned to; the fork's committed dist/ at that SHA was verified byte-identical to the previously installed artifact and was built from src/ in the same commit. Retains the upstream MIT LICENSE ('Pod Raven 2024') verbatim plus the fork-of readme header; full lineage, pre-existing fork deltas, and a running Phase 9 modification log live in packages/y-cinder/PROVENANCE.md.
+- **Modifications:** Packaging only at vendor time (private: true, exports point at the TS source, lib0 added as a peer next to the existing firebase/yjs peers, build/release tooling dropped, one type-only `export type` fix for esbuild consumption, the fork's unit suite ported to test/unit) — zero behavior change, pinned by the contract suite in packages/y-cinder/test/contract/. Subsequent fork surgery is logged in PROVENANCE.md.
+- **Notes:** package.json stays private:true (never published), which keeps it OUT of license-checker output — this inventory entry plus the in-tree LICENSE file are its license record. Vendored the same way as packages/zustand-middleware-yjs (Phase 2) and packages/y-idb (Phase 3).
 
 ### y-idb (fork of yjs/y-indexeddb)
 
@@ -171,7 +172,7 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 
 ## Bundled npm packages (production dependency tree)
 
-575 packages, grouped by license. The private
+574 packages, grouped by license. The private
 vendored forks `zustand-middleware-yjs` and `y-idb` (both MIT) are
 excluded from the scan and recorded in the inventory section above.
 
@@ -347,7 +348,7 @@ excluded from the scan and recorded in the inventory section above.
 - `yaml@2.9.0` — Copyright Eemeli Aro <eemeli@gmail.com> — <https://github.com/eemeli/yaml>
 - `yargs-parser@21.1.1` — Copyright (c) 2016, Contributors — <https://github.com/yargs/yargs-parser>
 
-### MIT (442)
+### MIT (441)
 
 - `@alloc/quick-lru@5.2.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com) — <https://github.com/sindresorhus/quick-lru>
 - `@apideck/better-ajv-errors@0.3.6` — Copyright (c) 2021 Apideck — <https://github.com/apideck-libraries/better-ajv-errors>
@@ -785,7 +786,6 @@ excluded from the scan and recorded in the inventory section above.
 - `workbox-window@7.4.1` — Copyright 2018 Google LLC — <https://github.com/googlechrome/workbox>
 - `wrap-ansi@7.0.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com) — <https://github.com/chalk/wrap-ansi>
 - `wrap-ansi@8.1.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com) — <https://github.com/chalk/wrap-ansi>
-- `y-cinder@3.0.2603210004` — Copyright (c) 2024 Pod Raven — <https://github.com/vrwarp/y-cinder>
 - `y-protocols@1.0.7` — Copyright (c) 2019 Kevin Jahns <kevin.jahns@protonmail.com>. — <https://github.com/yjs/y-protocols>
 - `yargs@17.7.2` — Copyright 2010 James Halliday (mail@substack.net); Modified work Copyright 2014 Contributors (ben@npmjs.com) — <https://github.com/yargs/yargs>
 - `yjs@13.6.29` — Copyright (c) 2023.   - Kevin Jahns <kevin.jahns@protonmail.com>..   - Chair of Computer Science 5 (Databases & Information Systems), RWTH Aachen University, Germany — <https://github.com/yjs/yjs>

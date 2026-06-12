@@ -310,6 +310,10 @@ console.log(
 const ENTRY_FORBIDDEN = [
   { pattern: 'node_modules/firebase/', label: 'firebase' },
   { pattern: 'node_modules/@firebase/', label: '@firebase' },
+  // The vendored provider rides FirestoreBackend (the lazy composeSync
+  // chunk); its source path no longer matches node_modules/ after the P9
+  // workspace vendoring, so name it explicitly.
+  { pattern: 'packages/y-cinder/', label: 'y-cinder (vendored sync provider)' },
   { pattern: 'node_modules/epubjs/src/epub.js', label: 'epubjs (engine entry)' },
   { pattern: 'node_modules/epubjs/src/book.js', label: 'epubjs (Book)' },
   { pattern: 'node_modules/epubjs/src/rendition.js', label: 'epubjs (Rendition)' },

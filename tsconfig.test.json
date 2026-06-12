@@ -18,7 +18,11 @@
   // check exactly those files.
   "exclude": [],
   // `references` are not inherited from tsconfig.app.json via `extends`;
-  // repeat the vendored-fork reference so store tests importing
-  // zustand-middleware-yjs resolve to its declarations too.
-  "references": [{ "path": "./packages/zustand-middleware-yjs" }]
+  // repeat the vendored-fork references so store tests importing
+  // zustand-middleware-yjs (and sync tests importing y-cinder) resolve to
+  // their declarations too.
+  "references": [
+    { "path": "./packages/zustand-middleware-yjs" },
+    { "path": "./packages/y-cinder" }
+  ]
 }

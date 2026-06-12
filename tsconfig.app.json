@@ -58,5 +58,8 @@
   // declarations instead of pulling foreign source into this project's
   // (stricter) compilation. NOTE: `references` are NOT inherited via
   // `extends` — tsconfig.test.json repeats this list.
-  "references": [{ "path": "./packages/zustand-middleware-yjs" }]
+  "references": [
+    { "path": "./packages/zustand-middleware-yjs" },
+    { "path": "./packages/y-cinder" }
+  ]
 }
