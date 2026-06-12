@@ -249,15 +249,21 @@ export class ImportOrchestrator {
   /**
    * Re-derive a book's content from its stored binary. Same-book overlap is
    * impossible: the work runs under the book's mutex (kills D6's concurrent
-   * ReprocessingInterstitial runs).
+   * ReprocessingInterstitial runs). The §E re-ingest wave passes
+   * `verifyDerived` (graft R4: old rows retained when the self-check fails).
    */
-  reprocess(bookId: string, priority: 'normal' | 'idle' = 'normal'): Promise<void> {
+  reprocess(
+    bookId: string,
+    priority: 'normal' | 'idle' = 'normal',
+    opts: Pick<Parameters<LibraryPersistence['reprocess']>[1], 'verifyDerived'> = {},
+  ): Promise<void> {
     return this.enqueue(
       priority === 'idle' ? 'reingest' : 'reprocess',
       () =>
         this.deps.mutex.run(bookId, async () => {
           const result = await this.deps.persistence.reprocess(bookId, {
             extraction: this.deps.extractionOptions(),
+            verifyDerived: opts.verifyDerived,
           });
           if (result.coverPalette || result.perceptualPalette) {
             this.deps.inventory.update(bookId, {

@@ -8,7 +8,7 @@ import type { UserInventoryItem, ReadingListEntry, BookMetadata } from '~types/d
 import type { StaticManifestRow } from '@data/rows/static';
 import type { ExtractionOptions } from '@lib/ingestion/sentence-extraction';
 import type { FullBookExtraction } from './import/extract';
-import type { ReprocessResult } from './import/reprocess';
+import type { ReprocessOptions, ReprocessResult } from './import/reprocess';
 
 /** The synced inventory (useBookStore behind the seam). */
 export interface InventoryPort {
@@ -81,7 +81,7 @@ export interface LibraryPersistence {
   /** Filename → bookId index lookup (duplicate-detection backstop). */
   getBookIdByFilename(filename: string): string | undefined;
   /** Re-derive content from the stored binary (reprocess/reingest jobs). */
-  reprocess(bookId: string, opts: { extraction?: ExtractionOptions; signal?: AbortSignal }): Promise<ReprocessResult>;
+  reprocess(bookId: string, opts: ReprocessOptions): Promise<ReprocessResult>;
 }
 
 /** Settings captured PER JOB (severs the useTTSSettingsStore reach-ins, coupling #2). */

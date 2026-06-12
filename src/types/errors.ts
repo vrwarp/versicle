@@ -86,6 +86,7 @@ export const APP_ERROR_CODES = [
   'INGEST_INVALID_FILE',
   'INGEST_FILE_MISMATCH',
   'INGEST_CANCELLED',
+  'INGEST_VERIFICATION_FAILED',
   // SEARCH_* — the in-book search engine/session (Phase 7).
   'SEARCH_UNKNOWN',
   'SEARCH_SESSION_DISPOSED',

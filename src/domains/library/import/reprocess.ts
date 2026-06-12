@@ -14,12 +14,14 @@
  * 4-store transaction in Phase 3 (D5.3).
  */
 import { bookContent } from '@data/repos/bookContent';
+import type { CacheTtsPreparationRow } from '@data/rows/cache';
 import { extractContentOffscreen } from '@lib/offscreen-renderer';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import type { ExtractionOptions } from '@lib/ingestion/sentence-extraction';
 import type { PerceptualPalette } from '~types/db';
+import { AppError } from '~types/errors';
 import { TTS_EXTRACTION_VERSION } from '@lib/ingestion/sentence-extraction';
-import { extractPreamble, mapChapters, type BookSearchText } from './extract';
+import { extractPreamble, mapChapters, type BookSearchText, type ChapterMapping } from './extract';
 
 export interface ReprocessResult {
   /** Set when the cover palette was re-extracted — apply to the synced inventory. */
@@ -29,9 +31,21 @@ export interface ReprocessResult {
   searchText: BookSearchText;
 }
 
+export interface ReprocessOptions {
+  extraction?: ExtractionOptions;
+  signal?: AbortSignal;
+  /**
+   * The §E re-ingest self-check (graft R4): inspects the OLD rows vs the
+   * fresh mapping BEFORE anything is persisted. Returning false aborts with
+   * INGEST_VERIFICATION_FAILED and the old rows are RETAINED — a failed
+   * re-extract degrades to current behavior, never worse.
+   */
+  verifyDerived?: (oldRows: CacheTtsPreparationRow[], next: ChapterMapping) => boolean;
+}
+
 export async function reprocessBookContent(
   bookId: string,
-  opts: { extraction?: ExtractionOptions; signal?: AbortSignal } = {},
+  opts: ReprocessOptions = {},
 ): Promise<ReprocessResult> {
   const file = await bookContent.getBookFile(bookId);
 
@@ -53,6 +67,16 @@ export async function reprocessBookContent(
   );
 
   const mapping = mapChapters(bookId, chapters);
+
+  if (opts.verifyDerived) {
+    const oldRows = await bookContent.listTtsPrepForBook(bookId);
+    if (!opts.verifyDerived(oldRows, mapping)) {
+      throw new AppError('Re-ingested content failed the alignment self-check; old rows retained.', {
+        code: 'INGEST_VERIFICATION_FAILED',
+        context: { bookId },
+      });
+    }
+  }
 
   const manifest = await bookContent.getManifest(bookId);
   if (manifest) {

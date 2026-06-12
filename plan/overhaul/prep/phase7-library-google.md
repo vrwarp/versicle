@@ -64,6 +64,61 @@ Inputs: `plan/overhaul/README.md` (master plan), `proposals/strangler-incrementa
 
 ---
 
+> **P7 sub-track status (2026-06-12): T1 library + T2 search DONE** — executed on an isolated
+> worktree branched from the post-P5 tree (`2de2c597`) while the P6 reader chain runs on the
+> main tree (merge later). Landed (6 commits): **entry gates** (the I-1..I-5 invariant suite
+> over a `LibraryWorkflows` adapter + import-flow characterization + the PR-0c search
+> consolidation, all green on the pre-change tree first); **PR-L1** one pure
+> `extractBook(file, {depth, extraction, signal})` at `domains/library/import/` (the three
+> `lib/ingestion.ts` copies deleted; shared preamble + `mapChapters`; `searchText` + a
+> perceptualPalette/language-carrying `inventory` as extractor outputs; cancellable
+> offscreen render + streaming ZIP); **search** `SearchSession` (injected engine factory,
+> generation-counter dispose, crash reset), engine `searchDetailed` (original-string
+> escaped-literal matching — the İ-excerpt pin flipped to fixed — with
+> charOffset/occurrence/`truncated`), `findRangeForOffset`/`resolveResultCfi` (CFI generator
+> INJECTED, no epubjs in the domain), and the persisted corpus: **IDB v26** (the doc's
+> sanctioned additive fallback — P3 shipped v25 without the asked-for store) +
+> `searchTextRepo` + delete-with-book + M.7; **PR-L2/L3/L4** ImportOrchestrator
+> (validate→identify→policy→extract→persist→register, two-priority queue, ghost matching +
+> reading-list registration NOW also on batch — the two P0 pins flipped deliberately),
+> SHA-256 `contentHash` + legacy-tail restore acceptance (renamed-file D7) + lazy manifest
+> upgrade, LibraryService + ONE KeyedMutex (the five race files absorbed into the invariant
+> suite and deleted; `useLibraryStore` 841→128-line projection with per-key-only offload
+> actions — I-5 structural), `app/library` composition + `useImportController` +
+> `presentError`; **PR-L5** derived `libraryViewStore` (off-render recompute; module cache +
+> render-time fuzzy joins deleted; FK-first reading-list join with fuzzy fallback retained;
+> typed `LibraryBook` kills the BookCard casts; `selectors.perf` green: 1 device-id
+> resolution per recompute, 0 on dependency-free re-renders); **PR-L6** the §E re-ingest
+> wave (stamp-based candidacy vs `TTS_EXTRACTION_VERSION = 3`, NFKD restamp fast path
+> v1→v2, idle-priority resumable jobs through the queue, `derivedContentSane` R4 self-check
+> retaining old rows, defer toggle mechanism + boot task).
+>
+> **Sub-track follow-ups:**
+> 1. **Post-merge migration registration (the rule-4 item, ~20 lines):** the one-time
+>    linker is authored + F.3-tested at `src/app/migrations.linkReadingList.ts` but NOT in
+>    `CRDT_MIGRATIONS`; it registers as the step AFTER the P6 chain's bump, with the
+>    captured-doc fixture + two-client quarantine E2E + the husk-clear renumbering note.
+> 2. **Reader-side adoption (the P6-merge follow-ups, all frozen this track):**
+>    SearchPanel/ReaderView onto `SearchSession` via context (then delete the
+>    `lib/search.ts` singleton, `scrollToText` + the 500ms timer, the legacy
+>    `SearchEngine.search()` shape and `SearchResult`); `ContentAnalysisLegend` off
+>    `lib/ingestion.reprocessBook` (then delete that delegate); `useBook`/`useLastReadBook`
+>    out of the `@store/selectors` façade.
+> 3. `selectors.ts` itself survives as the hook façade for the frozen reader imports —
+>    the module CACHE is gone (the PR-L5 target); full file deletion rides follow-up 2.
+> 4. The re-ingest defer toggle is mechanism-only (`setReingestDeferred` +
+>    localStorage); its settings-UI surface belongs to P8's settings registry, as does the
+>    "Network activity"-style wave progress panel. v2→v3 convergence reingests are
+>    deliberately lowest-priority (v2 rows are correct under v3's playback re-refinement).
+> 5. PR-0b Playwright journey hardening + the journey re-runs were NOT executed in this
+>    environment (no browser lane); run `test_journey_advanced_import`/`_import_error`/
+>    `_drag_drop`/`_library`/`_search` on the merge PR.
+> 6. `domains/library/import/extract.ts` imports epubjs (the preamble) — when P6's
+>    epubjs-import lint lands, add it to the extractor allowlist alongside
+>    `offscreen-renderer` (ingestion-side, sanctioned by C8).
+
+---
+
 ## Reality check
 
 The four analyses describe a tree two phases old. Every contradiction found between their
