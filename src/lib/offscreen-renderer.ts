@@ -1,6 +1,7 @@
 import ePub from 'epubjs';
 import { snapdom } from '@zumer/snapdom';
 import { extractSentencesFromNode, type ExtractionOptions, type SentenceNode } from './tts';
+import type { CitationMarker } from '../types/db';
 import { sanitizeContent } from './sanitizer';
 import type { TableImage } from '../types/db';
 import { createLogger } from './logger';
@@ -28,6 +29,7 @@ const patchIframeSandbox = (iframe: HTMLIFrameElement) => {
 export interface ProcessedChapter {
   href: string;
   sentences: SentenceNode[];
+  citationMarkers: CitationMarker[];
   textContent: string;
   title?: string;
   tables?: Omit<TableImage, 'bookId' | 'id' | 'sectionId'>[]; // sectionId is contextually known by ProcessedChapter.href
@@ -298,7 +300,7 @@ export async function extractContentOffscreen(
         if (!title) title = `Chapter ${i + 1}`;
 
         // Extract sentences with CFIs
-        const sentences = extractSentencesFromNode(body, (range) => {
+        const { sentences, citationMarkers } = extractSentencesFromNode(body, (range) => {
           // contents.cfiFromRange returns the CFI for the range.
           // It should include the base CFI (spine index) if correctly initialized.
           return contents.cfiFromRange(range);
@@ -331,6 +333,7 @@ export async function extractContentOffscreen(
         results.push({
           href: item.href,
           sentences,
+          citationMarkers,
           textContent: body.textContent || '',
           title,
           tables: capturedTables

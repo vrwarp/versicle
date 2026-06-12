@@ -5,6 +5,19 @@ import { generateSecureId } from '../crypto';
 
 const logger = createLogger('GenAIService');
 
+function truncateWords(text: string, maxWords: number): string {
+  const words = text.trimStart().split(/\s+/);
+  if (words.length <= maxWords) return text.trim();
+  return words.slice(0, maxWords).join(' ') + '…';
+}
+
+function truncateChars(text: string, maxChars: number): string {
+  const t = text.trim();
+  if (t.length <= maxChars) return t;
+  const cut = t.lastIndexOf(' ', maxChars);
+  return (cut > 0 ? t.slice(0, cut) : t.slice(0, maxChars)) + '…';
+}
+
 export interface GenAILogEntry {
   id: string;
   timestamp: number;
@@ -253,43 +266,74 @@ ${JSON.stringify(sections)}`;
 
   /**
    * Detects content types for a batch of root nodes.
-   * @param nodes Array of objects with id and sampleText.
-   * @returns Array of objects with id and type.
+   * Applies asymmetric detail (front 60% ~8-word truncation, tail 40% ~120-char truncation),
+   * sparse JSON (omit false flags), and an optional deterministic enumerator hint.
    */
-  public async detectContentTypes(nodes: { id: string, sampleText: string }[], context?: { bookTitle?: string, sectionTitle?: string }): Promise<{ id: string, type: ContentType }[]> {
-    if (nodes.length === 0) return [];
+  public async detectContentTypes(
+    nodes: { id: string, sampleText: string, leadsWithMarker?: boolean }[],
+    hints: { enumeratorCandidate: number },
+    context?: { bookTitle?: string, sectionTitle?: string }
+  ): Promise<{ classifications: { id: string, type: ContentType }[], justification: string, agreedWithHeuristic: boolean }> {
+    if (nodes.length === 0) return { classifications: [], justification: '', agreedWithHeuristic: false };
 
-    const prompt = `You will be provided an array of text samples from an EPUB book section, ordered exactly as they appear in the book.
-Your task is to identify where the end of chapter "references" section begins. References typically include footnotes, bibliographies, citations, or endnotes.
+    const n = nodes.length;
+    const splitPoint = Math.ceil(n * 0.6);
+
+    const renderedNodes = nodes.map((node, i) => {
+      const isTail = i >= splitPoint;
+      const raw = node.sampleText;
+      const sampleText = isTail ? truncateChars(raw, 120) : truncateWords(raw, 8);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const entry: Record<string, any> = { id: parseInt(node.id, 10), sampleText };
+      // A group flagged leadsWithMarker begins with a citation anchor — typical of a footnote
+      // or endnote entry that opens with its reference number/symbol.
+      if (node.leadsWithMarker) entry.leadsWithMarker = true;
+      return entry;
+    });
+
+    const hintLines: string[] = [];
+    if (hints.enumeratorCandidate >= 0) {
+      hintLines.push(`- HINT A (enumerated bibliography): Group ${hints.enumeratorCandidate} starts a consecutive run of numbered entries (e.g. "[1] Author…"). This pattern suggests a bibliography-style reference section starting there.`);
+    }
+    const hintSection = hintLines.length > 0
+      ? `\n### Hints from deterministic analysis (candidates, not ground truth):\n${hintLines.join('\n')}\nIn your justification, explicitly state whether you agree or disagree with each hint and why.\n`
+      : '';
+
+    const prompt = `You will be provided an array of text groups from an EPUB book section, ordered as they appear in the book.
+Your task is to identify where the end-of-chapter "references" section begins. References include footnotes, bibliographies, citations, or endnotes.
+
+A group may carry "leadsWithMarker": true, meaning that group BEGINS with a citation anchor/marker
+(e.g. a footnote or endnote entry that opens with its reference number or symbol). A run of such
+groups at the end of the section is a strong indicator of an endnote/footnote block — even when the
+entries have no visible enumerator in the sample text.
 
 ### Task:
-Find the index of the first sample that clearly marks the beginning of the references section.
-Once the references section begins, everything after it is also considered part of the references.
-If the text does not contain a references section, or if the references don't appear at the end, return -1.
-
-Samples:
-${JSON.stringify(nodes)}`;
+Find the index of the first group that clearly marks the beginning of the references section.
+Once the references section begins, everything after it is also references.
+If there is no references section at the end, return -1.
+${hintSection}
+Groups:
+${JSON.stringify(renderedNodes)}`;
 
     const schema = {
       type: SchemaType.OBJECT,
       properties: {
         justification: { type: SchemaType.STRING },
         referenceStartIndex: { type: SchemaType.INTEGER },
+        agreedWithHeuristic: { type: SchemaType.BOOLEAN },
       },
-      required: ['justification', 'referenceStartIndex'],
+      required: ['justification', 'referenceStartIndex', 'agreedWithHeuristic'],
     };
 
-    const result = await this.generateStructured<{ justification: string; referenceStartIndex: number }>(prompt, schema, undefined, context);
+    const result = await this.generateStructured<{ justification: string; referenceStartIndex: number; agreedWithHeuristic: boolean }>(prompt, schema, undefined, context);
 
     const startIndex = result.referenceStartIndex;
+    const classifications = nodes.map((node, index) => ({
+      id: node.id,
+      type: (startIndex !== -1 && index >= startIndex ? 'reference' : 'main') as ContentType,
+    }));
 
-    return nodes.map((node, index) => {
-      // If startIndex is valid and we've reached it, mark as reference
-      if (startIndex !== -1 && index >= startIndex) {
-        return { id: node.id, type: 'reference' as ContentType };
-      }
-      return { id: node.id, type: 'main' as ContentType };
-    });
+    return { classifications, justification: result.justification, agreedWithHeuristic: result.agreedWithHeuristic };
   }
 
   public async generateTableAdaptations(

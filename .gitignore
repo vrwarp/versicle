@@ -37,6 +37,8 @@ venv/
 # Test output
 test_output*.txt
 verification_output*.txt
+test-results/
+playwright-report/
 
 .agents
 

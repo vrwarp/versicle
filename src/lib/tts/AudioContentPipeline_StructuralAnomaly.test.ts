@@ -39,7 +39,7 @@ describe('AudioContentPipeline - Structural Anomaly Grouping (TDD Regression)', 
         const cfiGen = createMockCfiGenerator();
         
         // Extract sentences from the DOM
-        const sentences = extractSentencesFromNode(container, cfiGen);
+        const { sentences } = extractSentencesFromNode(container, cfiGen);
         document.body.removeChild(container);
 
         // Call the private groupSentencesByRoot method

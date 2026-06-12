@@ -3,7 +3,8 @@ import type { NavigationItem } from '../types/db';
 import { v4 as uuidv4 } from 'uuid';
 import imageCompression from 'browser-image-compression';
 import { getDB } from '../db/db';
-import type { SectionMetadata, TTSContent, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry, PerceptualPalette } from '../types/db';
+import type { SectionMetadata, CacheTtsPreparation, StaticBookManifest, StaticResource, UserInventoryItem, UserProgress, UserOverrides, TableImage, ReadingListEntry, PerceptualPalette } from '../types/db';
+import type { ProcessedChapter } from './offscreen-renderer';
 import { getSanitizedBookMetadata } from '../db/validators';
 import type { ExtractionOptions } from './tts';
 import { extractContentOffscreen } from './offscreen-renderer';
@@ -13,6 +14,16 @@ import { createLogger } from './logger';
 import { normalizeLanguageCode } from './language-utils';
 
 const logger = createLogger('Ingestion');
+
+function toCacheTtsPrep(bookId: string, chapter: ProcessedChapter): CacheTtsPreparation {
+    return {
+        id: `${bookId}-${chapter.href}`,
+        bookId,
+        sectionId: chapter.href,
+        sentences: chapter.sentences,
+        citationMarkers: chapter.citationMarkers?.length > 0 ? chapter.citationMarkers : undefined,
+    };
+}
 
 export { extractCoverPalette } from './cover-palette';
 
@@ -103,7 +114,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
 
     const syntheticToc: NavigationItem[] = [];
     const sections: SectionMetadata[] = [];
-    const ttsContentBatches: TTSContent[] = [];
+    const ttsContentBatches: CacheTtsPreparation[] = [];
     const tableBatches: TableImage[] = [];
     let totalChars = 0;
 
@@ -125,12 +136,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
         totalChars += chapter.textContent.length;
 
         if (chapter.sentences.length > 0) {
-            ttsContentBatches.push({
-                id: `${bookId}-${chapter.href}`,
-                bookId,
-                sectionId: chapter.href,
-                sentences: chapter.sentences
-            });
+            ttsContentBatches.push(toCacheTtsPrep(bookId, chapter));
         }
 
         if (chapter.tables && chapter.tables.length > 0) {
@@ -192,14 +198,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
     // TTS preparation cache: drop old section rows, write the new ones.
     const prepStore = tx.objectStore('cache_tts_preparation');
     for (const key of oldPrepKeys) prepStore.delete(key);
-    for (const batch of ttsContentBatches) {
-        prepStore.put({
-            id: batch.id,
-            bookId: batch.bookId,
-            sectionId: batch.sectionId,
-            sentences: batch.sentences
-        });
-    }
+    for (const batch of ttsContentBatches) prepStore.put(batch);
 
     // Table-image cache: drop old rows, write the new ones (imageBlob now an ArrayBuffer).
     const tableStore = tx.objectStore('cache_table_images');
@@ -238,7 +237,7 @@ export interface BookExtractionData {
     progress: UserProgress;
     overrides: UserOverrides;
     readingListEntry: ReadingListEntry;
-    ttsContentBatches: TTSContent[];
+    ttsContentBatches: CacheTtsPreparation[];
     tableBatches: TableImage[];
 }
 
@@ -312,7 +311,7 @@ export async function extractBookData(
     const bookId = uuidv4();
     const syntheticToc: NavigationItem[] = [];
     const sections: SectionMetadata[] = [];
-    const ttsContentBatches: TTSContent[] = [];
+    const ttsContentBatches: CacheTtsPreparation[] = [];
     const tableBatches: TableImage[] = [];
     let totalChars = 0;
 
@@ -334,12 +333,7 @@ export async function extractBookData(
         totalChars += chapter.textContent.length;
 
         if (chapter.sentences.length > 0) {
-            ttsContentBatches.push({
-                id: `${bookId}-${chapter.href}`,
-                bookId,
-                sectionId: chapter.href,
-                sentences: chapter.sentences
-            });
+            ttsContentBatches.push(toCacheTtsPrep(bookId, chapter));
         }
 
         if (chapter.tables && chapter.tables.length > 0) {

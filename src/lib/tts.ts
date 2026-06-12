@@ -1,6 +1,7 @@
 import { TextSegmenter, DEFAULT_ALWAYS_MERGE, DEFAULT_SENTENCE_STARTERS } from './tts/TextSegmenter';
 import { Sanitizer } from './tts/processors/Sanitizer';
 import { createLogger } from './logger';
+import type { CitationMarker } from '../types/db';
 
 const logger = createLogger('TTS-Utils');
 
@@ -14,6 +15,144 @@ export interface SentenceNode {
     cfi: string;
     /** The indices of the raw source sentences that make up this node. */
     sourceIndices?: number[];
+}
+
+export interface ExtractionResult {
+    sentences: SentenceNode[];
+    citationMarkers: CitationMarker[];
+}
+
+// Font-size ratio below which an inline element is treated as superscript/subscript.
+// Used as a fixed diagnostic threshold — not a tuning target.
+const CITATION_FONT_SIZE_RATIO = 0.85;
+
+/** Citation text patterns: bare/bracketed numbers, parenthesized numbers, symbol markers. */
+const CITATION_TEXT_RE = /^\[?\(?\d{1,3}\)?\]?$|^[*†‡§¶]+$/;
+
+/**
+ * Result of citation detection.
+ *  - isCitation: element should be suppressed from spoken text.
+ *  - marker: full marker metadata, present only when a CFI could be generated.
+ *
+ * Suppression is intentionally decoupled from capture: a qualifying <sup>/<a>
+ * is always suppressed even if CFI generation fails (matching legacy behavior),
+ * but it is only recorded as a marker when its CFI is available.
+ */
+interface CitationDetection {
+    isCitation: boolean;
+    marker: CitationMarker | null;
+}
+
+const NO_CITATION: CitationDetection = { isCitation: false, marker: null };
+
+/**
+ * True when `el` is the first non-whitespace content of its nearest block-level ancestor —
+ * i.e., the block "leads with" this marker. Typical of a footnote/endnote entry that opens
+ * with its reference anchor, as opposed to an in-text citation that follows running prose.
+ */
+function isLeadingInBlock(el: Element): boolean {
+    let node: Node = el;
+    while (node.parentElement) {
+        const parent = node.parentElement;
+        // Any non-whitespace sibling before us at this level means we don't lead the block.
+        let sib = node.previousSibling;
+        while (sib) {
+            if ((sib.textContent || '').trim() !== '') return false;
+            sib = sib.previousSibling;
+        }
+        if (BLOCK_TAGS.has(parent.tagName.toUpperCase())) return true;
+        node = parent;
+    }
+    return true;
+}
+
+/**
+ * Classifies an inline element as a citation marker and captures its metadata.
+ * Handles <sup>, <sub>, <a> with note-link semantics, and CSS-superscript <span>.
+ */
+function detectCitationMarkerElement(el: Element, cfiGenerator: (range: Range) => string | null, doc: Document): CitationDetection {
+    const tagName = el.tagName.toUpperCase();
+    const text = el.textContent?.trim() || '';
+
+    if (!CITATION_TEXT_RE.test(text)) return NO_CITATION;
+
+    // Guard: skip if inside MathML (superscript numbers are exponents there)
+    if (el.closest && el.closest('math, [role="math"], .MathJax, .MathJax_Preview')) return NO_CITATION;
+
+    const isNumeric = /^\[?\(?\d{1,3}\)?\]?$/.test(text);
+
+    let isSuper = tagName === 'SUP' || tagName === 'SUB';
+    let fontSizeRatio: number | undefined;
+
+    if (!isSuper) {
+        if (tagName === 'A') {
+            // Anchor is a citation if it has note-link semantics
+            const href = el.getAttribute('href') || '';
+            const hasEpubType = el.getAttribute('epub:type') === 'noteref';
+            const hasRole = el.getAttribute('role') === 'doc-noteref';
+            const isNoteLink = href.startsWith('#') || /notes|endnote|footnote/i.test(href);
+            if (!hasEpubType && !hasRole && !isNoteLink) return NO_CITATION;
+            isSuper = true;
+        } else {
+            // SPAN or other inline: need computed style to confirm superscript.
+            // No defaultView (e.g. DOMParser docs at read-time) → cannot classify → skip.
+            const win = doc.defaultView;
+            if (!win) return NO_CITATION;
+            try {
+                const style = win.getComputedStyle(el);
+                const va = style.verticalAlign;
+                if (va === 'super' || va === 'sub') {
+                    isSuper = true;
+                } else if (el.parentElement) {
+                    const parentStyle = win.getComputedStyle(el.parentElement);
+                    const elSize = parseFloat(style.fontSize);
+                    const parentSize = parseFloat(parentStyle.fontSize);
+                    if (parentSize > 0) {
+                        fontSizeRatio = elSize / parentSize;
+                        if (fontSizeRatio < CITATION_FONT_SIZE_RATIO) isSuper = true;
+                    }
+                }
+            } catch {
+                // ignore
+            }
+            if (!isSuper) return NO_CITATION;
+        }
+    }
+
+    // Qualified citation → always suppress. Generate CFI to capture metadata; if
+    // CFI generation fails, still suppress but record no marker.
+    let cfi: string | null = null;
+    try {
+        const range = doc.createRange();
+        range.selectNode(el);
+        cfi = cfiGenerator(range);
+    } catch {
+        // ignore
+    }
+    if (!cfi) return { isCitation: true, marker: null };
+
+    // Detect glued: marker immediately follows text without whitespace
+    const prevSibling = el.previousSibling;
+    const glued = prevSibling?.nodeType === Node.TEXT_NODE &&
+        !/\s$/.test(prevSibling.textContent || '');
+
+    // Find target href from self or nearest child <a>
+    const anchor = tagName === 'A' ? el : el.querySelector('a');
+    const targetHref = anchor?.getAttribute('href') || undefined;
+
+    return {
+        isCitation: true,
+        marker: {
+            cfi,
+            markerText: text,
+            super: tagName === 'SUP' || tagName === 'SUB' || isSuper,
+            numeric: isNumeric,
+            glued: !!glued,
+            leading: isLeadingInBlock(el),
+            fontSizeRatio,
+            targetHref,
+        },
+    };
 }
 
 export interface ExtractionOptions {
@@ -38,15 +177,16 @@ const BLOCK_TAGS = new Set([
  * @param rootNode - The root DOM node to traverse.
  * @param cfiGenerator - A callback function that generates a CFI string from a DOM Range.
  * @param options - Configuration options for segmentation.
- * @returns An array of SentenceNode objects.
+ * @returns An ExtractionResult with sentences and captured citation markers.
  */
 export const extractSentencesFromNode = (
     rootNode: Node,
     cfiGenerator: (range: Range) => string | null,
     options: ExtractionOptions = {}
-): SentenceNode[] => {
+): ExtractionResult => {
     // Collect raw sentences first
     const rawSentences: SentenceNode[] = [];
+    const citationMarkers: CitationMarker[] = [];
     const doc = rootNode.ownerDocument || (rootNode as Document);
 
     // Default sanitization to true if not specified
@@ -153,35 +293,13 @@ export const extractSentencesFromNode = (
                 return;
             }
 
-            // Citation Heuristics: Skip <sup> or <a> containing only typical citation markers
-            // We do this before checking for block tags or traversing children
-            if (tagName === 'SUP' || tagName === 'A') {
-                const text = el.textContent?.trim() || '';
-                // Three patterns that identify typical citation marker text:
-                //   /^\[?\d+\]?$/  — bare or bracketed number: "1", "12", "[1]", "[12]"
-                //   /^\(\d+\)$/    — parenthesized number:     "(1)", "(12)"
-                //   /^[\*†‡]+$/    — symbol markers:           "*", "†", "‡", "**"
-                const isCitationText = /^\[?\d+\]?$/.test(text) || /^\(\d+\)$/.test(text) || /^[*†‡]+$/.test(text);
-
-                if (isCitationText) {
-                    if (tagName === 'SUP') {
-                        return; // Always skip superscript citations
-                    } else if (tagName === 'A') {
-                        const href = el.getAttribute('href') || '';
-                        const hasEpubType = el.getAttribute('epub:type') === 'noteref';
-                        const hasRole = el.getAttribute('role') === 'doc-noteref';
-
-                        // Skip if: epub:type=noteref, role=doc-noteref, local anchor #,
-                        // or links to an external notes/endnotes file
-                        const isNoteLink = href.startsWith('#')
-                            || /notes/i.test(href)
-                            || /endnote/i.test(href)
-                            || /footnote/i.test(href);
-
-                        if (hasEpubType || hasRole || isNoteLink) {
-                            return;
-                        }
-                    }
+            // Citation detection: capture marker metadata and suppress from spoken text.
+            // Handles <sup>, <sub>, <a> with note-link semantics, and CSS-superscript <span>.
+            if (tagName === 'SUP' || tagName === 'SUB' || tagName === 'A' || tagName === 'SPAN') {
+                const { isCitation, marker } = detectCitationMarkerElement(el, cfiGenerator, doc);
+                if (isCitation) {
+                    if (marker) citationMarkers.push(marker);
+                    return; // suppress from spoken text
                 }
             }
 
@@ -216,10 +334,11 @@ export const extractSentencesFromNode = (
     });
 
     // Now refine segments using the options provided
-    return TextSegmenter.refineSegments(
+    const sentences = TextSegmenter.refineSegments(
         rawSentences,
         options.abbreviations || [],
         options.alwaysMerge || DEFAULT_ALWAYS_MERGE,
         options.sentenceStarters || DEFAULT_SENTENCE_STARTERS
     );
+    return { sentences, citationMarkers };
 };

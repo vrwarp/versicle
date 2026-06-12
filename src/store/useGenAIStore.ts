@@ -1,3 +1,5 @@
+export type ReferenceDetectionStrategy = 'gemini' | 'deterministic';
+
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { genAIService } from '../lib/genai/GenAIService';
@@ -13,6 +15,7 @@ interface GenAIState {
   isTableAdaptationEnabled: boolean;
   contentFilterSkipTypes: ContentType[];
   isDebugModeEnabled: boolean;
+  referenceDetectionStrategy: ReferenceDetectionStrategy;
   logs: GenAILogEntry[];
   maxLogs: number;
   usageStats: {
@@ -27,6 +30,7 @@ interface GenAIState {
   setTableAdaptationEnabled: (enabled: boolean) => void;
   setContentFilterSkipTypes: (types: ContentType[]) => void;
   setDebugModeEnabled: (enabled: boolean) => void;
+  setReferenceDetectionStrategy: (strategy: ReferenceDetectionStrategy) => void;
   incrementUsage: (tokens: number) => void;
   setMaxLogs: (max: number) => void;
   addLog: (log: GenAILogEntry) => void;
@@ -45,8 +49,9 @@ export const useGenAIStore = create<GenAIState>()(
       isTableAdaptationEnabled: false,
       contentFilterSkipTypes: ['reference'],
       isDebugModeEnabled: false,
+      referenceDetectionStrategy: 'gemini' as ReferenceDetectionStrategy,
       logs: [],
-      maxLogs: 100,
+      maxLogs: 500,
       usageStats: {
         totalTokens: 0,
         estimatedCost: 0,
@@ -68,6 +73,7 @@ export const useGenAIStore = create<GenAIState>()(
       setTableAdaptationEnabled: (enabled) => set({ isTableAdaptationEnabled: enabled }),
       setContentFilterSkipTypes: (types) => set({ contentFilterSkipTypes: types }),
       setDebugModeEnabled: (enabled) => set({ isDebugModeEnabled: enabled }),
+      setReferenceDetectionStrategy: (strategy) => set({ referenceDetectionStrategy: strategy }),
       incrementUsage: (tokens) =>
         set((state) => ({
           usageStats: {

@@ -13,7 +13,7 @@ vi.mock('@zumer/snapdom', () => {
   };
 });
 vi.mock('./tts', () => ({
-  extractSentencesFromNode: vi.fn(() => []),
+  extractSentencesFromNode: vi.fn(() => ({ sentences: [], citationMarkers: [] })),
   ExtractionOptions: {}
 }));
 vi.mock('./sanitizer', () => ({
