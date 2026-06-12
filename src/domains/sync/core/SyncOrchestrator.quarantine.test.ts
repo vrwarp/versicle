@@ -76,6 +76,14 @@ const seedWorkspace = (workspaceId: string, extra: Partial<WorkspaceMetadata> = 
  */
 async function buildFutureVersionUpdate(): Promise<Uint8Array> {
   const doc = new Y.Doc();
+  // Deterministic merge outcome: Y.Map resolves CONCURRENT same-key sets
+  // toward the higher clientID, and both docs draw random ids — when the
+  // live doc already carries meta.schemaVersion (the layer-3 stamp test
+  // writes it on the shared singleton), the v7 stamp's victory in the
+  // layer-2 residual assertion was a coin flip. Pin client A above the
+  // live client (same trick as CheckpointService.test.ts tempDocCounter)
+  // so the merged value is always the future version.
+  doc.clientID = getYDoc().clientID + 1;
   Y.applyUpdate(doc, new Uint8Array(readFileSync(join(fixtureDir, 'v5.update.bin'))));
   await runCrdtMigrationsOnDoc(doc, { createCheckpoint: () => Promise.resolve(1) });
   doc.transact(() => {
