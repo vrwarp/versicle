@@ -19,7 +19,7 @@ import type { EngineContext } from './engine/EngineContext';
 import type { CitationMarker, SectionMetadata } from '~types/db';
 import type { ContentType } from '~types/content-analysis';
 import type { SentenceNode } from '~types/tts-content';
-import { preprocessBlockRoots, groupSegmentsByRoot, type CfiGroup } from '../../kernel/cfi';
+import { preprocessBlockRoots, groupSegmentsByRoot, type CfiGroup } from '@kernel/cfi';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { ReferenceSectionDetector, collectReferenceTailIndices } from './ReferenceSectionDetector';
 import { createGenAILogTelemetry } from './detectionTelemetry';

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createLogger } from '@lib/logger';
+import { localFetch } from '@kernel/net';
 
 const logger = createLogger('useChineseDictionary');
 
@@ -16,7 +17,7 @@ export function useChineseDictionary(isChineseBook: boolean) {
     isFetching = true;
     logger.debug('Loading CC-CEDICT dictionary dynamically...');
 
-    fetch('/dict/cedict.json')
+    localFetch('/dict/cedict.json')
       .then((res) => {
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);

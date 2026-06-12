@@ -60,7 +60,11 @@ export const APP_LOCAL_STORAGE_KEYS: readonly string[] = [
  * - `versicle`     → versicle-device-id, versicle_cover_blob_repair_v1,
  *                    versicle_mock_firestore_snapshot
  * - `__VERSICLE_`  → __VERSICLE_MIGRATION_STATE__, __VERSICLE_WORKSPACES__
- * - `mockGenAI`    → mockGenAIResponse / mockGenAIError (E2E injection keys)
+ * - `mockGenAI`    → mockGenAIResponse / mockGenAIError — LEGACY E2E keys.
+ *                    The production seams that read them died in Phase 7
+ *                    (mocks install via window.__versicleTest.genai.setMock);
+ *                    the prefix stays so a wipe still scrubs stale keys from
+ *                    old sessions.
  *
  * Only these are removed — never the whole origin's localStorage.
  */

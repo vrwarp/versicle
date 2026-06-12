@@ -19,5 +19,5 @@ export {
     tryFastMergeCfi,
     generateEpubCfi,
     snapCfiToSentence,
-} from '../kernel/cfi';
-export type { CfiRangeData, PreprocessedRoot } from '../kernel/cfi';
+} from '@kernel/cfi';
+export type { CfiRangeData, PreprocessedRoot } from '@kernel/cfi';

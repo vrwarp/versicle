@@ -5,9 +5,12 @@
  *     typed shim (src/kernel/cfi/epubcfiShim.ts). The `@ts-expect-error`'d
  *     epubjs internals are quarantined there; everything else uses the
  *     kernel's typed surface.
- *  2. src/kernel/** imports nothing internal outside src/kernel/** (master
- *     plan §2 rule 1 — belt to the dependency-cruiser `kernel-imports-nothing`
- *     braces; this one also covers test files, which depcruise excludes).
+ *  2. src/kernel/** imports nothing internal outside src/kernel/** except
+ *     ~types (master plan §2 rule 1 — belt to the dependency-cruiser
+ *     `kernel-imports-nothing` braces; this one also covers non-test files
+ *     that depcruise excludes). ~types is the one sanctioned dependency:
+ *     itself a zero-dep layer, it carries the C10 append-only AppError code
+ *     union that kernel/net's typed NET_* errors extend (Phase 7 §I).
  *
  * Source-scan style follows the worker-chunk / single-instance checks: assert
  * the tree, not a convention.
@@ -45,7 +48,7 @@ describe('CFI kernel boundary', () => {
         expect(offenders, 'epubjs/src/epubcfi is quarantined to the kernel shim — use src/kernel/cfi instead').toEqual([]);
     });
 
-    it('src/kernel production modules import nothing internal outside src/kernel', () => {
+    it('src/kernel production modules import nothing internal outside src/kernel (~types excepted)', () => {
         const offenders: string[] = [];
         for (const file of walk(join(SRC, 'kernel'))) {
             const rel = relative(SRC, file).replaceAll('\\', '/');
@@ -57,16 +60,17 @@ describe('CFI kernel boundary', () => {
             const text = readFileSync(file, 'utf8');
             for (const m of text.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
                 const spec = m[1];
+                // ~types is the ONE sanctioned internal dependency (see header).
                 const internal =
                     spec.startsWith('@app') || spec.startsWith('@components') || spec.startsWith('@data') ||
                     spec.startsWith('@domains') || spec.startsWith('@hooks') || spec.startsWith('@lib') ||
-                    spec.startsWith('@store') || spec.startsWith('~types') || spec.startsWith('@workers') ||
+                    spec.startsWith('@store') || spec.startsWith('@workers') ||
                     spec.startsWith('@test') ||
                     // relative escape above the kernel root (e.g. ../../lib/…)
-                    /^(\.\.\/)+(app|components|data|domains|hooks|lib|store|types|test|workers)(\/|$)/.test(spec);
+                    /^(\.\.\/)+(app|components|data|domains|hooks|lib|store|test|workers)(\/|$)/.test(spec);
                 if (internal) offenders.push(`${rel} → ${spec}`);
             }
         }
-        expect(offenders, 'kernel admission rule: zero internal imports').toEqual([]);
+        expect(offenders, 'kernel admission rule: zero internal imports beyond ~types').toEqual([]);
     });
 });

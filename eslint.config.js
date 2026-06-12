@@ -24,7 +24,7 @@ const downgradeToWarn = (rules) =>
 // for the files it matches).
 const crossRootRelativeImportPattern = {
   regex:
-    '^(\\.\\./)+(app|components|data|domains|hooks|lib|store|types|test|workers)(/|$)',
+    '^(\\.\\./)+(app|components|data|domains|hooks|kernel|lib|store|types|test|workers)(/|$)',
   message:
     'Cross-root relative import. Use the path alias for this root instead (e.g. @lib/foo, @data/bar, ~types/baz — see tsconfig.app.json "paths"). Run `node scripts/codemod-aliases.mjs` to fix in bulk.',
 };
@@ -276,8 +276,79 @@ export default tseslint.config(
   // readwrite transaction opened outside the write gate can overlap a Yjs
   // flush — the proven cross-context WebKit hang pair (write-gate.ts docs).
   // Reads (readonly transactions, one-shot db.get/getAll) stay free.
+  //
+  // Since Phase 7 (§I) this block ALSO carries the raw-egress ban (C9/C12
+  // rule 7): all network egress goes through
+  // `NetworkGateway.egress(destinationId, …)` and same-origin/blob fetches
+  // through `localFetch` (both src/kernel/net) — raw fetch/XMLHttpRequest/
+  // navigator.sendBeacon are banned everywhere else, at ERROR (the repo was
+  // migrated clean when this landed). Exemptions, each restating ONLY the
+  // selectors that still apply (flat-config same-named rules are last-wins):
+  //  - src/kernel/net/** (the gateway itself) — carve-out block below;
+  //  - src/lib/tts/engine/** and src/lib/tts/providers/** — their dedicated
+  //    no-restricted-syntax blocks below intentionally omit the fetch
+  //    selectors: the provider fetch sites (GoogleTTSProvider, PiperProvider,
+  //    PiperRuntime, BaseCloudProvider) are owned by the parallel Phase 5b/5c
+  //    chain and migrate onto egress() when it merges (their destinations
+  //    are already declared in kernel/net/destinations.ts).
   {
     files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/data/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.property.name='transaction'] > Literal[value='readwrite']",
+          message:
+            'readwrite transactions are banned outside src/data — route the ' +
+            'write through a @data/repos/* method (every repo writer holds ' +
+            'the cross-context IDB write gate).',
+        },
+        {
+          selector: "CallExpression[callee.name='fetch']",
+          message:
+            'Raw fetch is banned outside src/kernel/net (Phase 7 egress ' +
+            'boundary). Remote hosts: NetworkGateway.egress(destinationId, …) ' +
+            'with a kernel/net/destinations.ts registry entry (CSP is ' +
+            'generated from it). Same-origin/blob URLs: localFetch().',
+        },
+        {
+          selector:
+            "CallExpression[callee.object.name='globalThis'][callee.property.name='fetch'], " +
+            "CallExpression[callee.object.name='window'][callee.property.name='fetch'], " +
+            "CallExpression[callee.object.name='self'][callee.property.name='fetch']",
+          message:
+            'Raw fetch (via globalThis/window/self) is banned outside ' +
+            'src/kernel/net — use NetworkGateway.egress() or localFetch().',
+        },
+        {
+          selector: "NewExpression[callee.name='XMLHttpRequest']",
+          message:
+            'XMLHttpRequest is banned (Phase 7 egress boundary) — use ' +
+            'NetworkGateway.egress() / localFetch() from src/kernel/net.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='sendBeacon']",
+          message:
+            'navigator.sendBeacon is banned (Phase 7 egress boundary) — use ' +
+            'NetworkGateway.egress() from src/kernel/net.',
+        },
+      ],
+    },
+  },
+  // kernel/net carve-out: the gateway is the ONE place raw fetch is legal.
+  // The readwrite-transaction selector is restated (flat-config same-named
+  // rules replace, never merge). Test files share the carve-out: the egress
+  // boundary is a PRODUCTION property (tests stub fetch via vi.stubGlobal and
+  // the emulator suites fetch localhost REST endpoints); the engine/providers
+  // blocks below still win for their own directories.
+  {
+    files: [
+      'src/kernel/net/**/*.{ts,tsx}',
+      'src/**/*.test.{ts,tsx}',
+      'src/test/**/*.{ts,tsx}',
+    ],
     ignores: ['src/data/**'],
     rules: {
       'no-restricted-syntax': [

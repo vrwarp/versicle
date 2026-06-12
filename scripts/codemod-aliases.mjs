@@ -61,6 +61,7 @@ const ROOTS = [
   'components',
   'db',
   'hooks',
+  'kernel',
   'lib',
   'store',
   'types',

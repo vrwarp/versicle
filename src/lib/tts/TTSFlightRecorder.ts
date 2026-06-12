@@ -1,6 +1,6 @@
 import { v4 as uuid } from 'uuid';
 import { diagnostics } from '@data/repos/diagnostics';
-import { RingRecorder } from '../../kernel/diagnostics/ringRecorder';
+import { RingRecorder } from '@kernel/diagnostics/ringRecorder';
 import type {
     FlightEventSource,
     FlightEvent,

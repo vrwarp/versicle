@@ -12,6 +12,7 @@ import { CURRENT_BOOK_VERSION } from './constants';
 import { extractCoverPalette } from './cover-palette';
 import { createLogger } from './logger';
 import { normalizeLanguageCode } from './language-utils';
+import { localFetch } from '@kernel/net';
 
 const logger = createLogger('Ingestion');
 
@@ -203,7 +204,7 @@ export async function reprocessBook(bookId: string): Promise<void> {
     try {
         const coverUrl = await book.coverUrl();
         if (coverUrl) {
-            const response = await fetch(coverUrl);
+            const response = await localFetch(coverUrl);
             const coverBlob = await response.blob();
             if (coverBlob) {
                 const result = await extractCoverPalette(coverBlob);
@@ -358,7 +359,7 @@ export async function extractBookData(
 
     if (coverUrl) {
         try {
-            const response = await fetch(coverUrl);
+            const response = await localFetch(coverUrl);
             coverBlob = await response.blob();
             if (coverBlob) {
                 try {
@@ -582,7 +583,7 @@ export async function extractBookMetadata(file: File): Promise<{
 
     if (coverUrl) {
         try {
-            const response = await fetch(coverUrl);
+            const response = await localFetch(coverUrl);
             coverBlob = await response.blob();
             if (coverBlob) {
                 try {

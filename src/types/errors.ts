@@ -47,6 +47,7 @@ export const APP_ERROR_NAMESPACES = [
   'INGEST',
   'NET',
   'BACKUP',
+  'GOOGLE',
 ] as const;
 
 /** Domain namespaces for {@link AppErrorCode}. Append-only. */
@@ -73,15 +74,28 @@ export const APP_ERROR_CODES = [
   'TTS_UNKNOWN',
   // GENAI_* — Gemini structured-output boundary.
   'GENAI_UNKNOWN',
+  'GENAI_NOT_CONFIGURED',
+  'GENAI_INVALID_RESPONSE',
   // DRIVE_* — Google Drive HTTP boundary.
   'DRIVE_UNKNOWN',
+  'DRIVE_API_ERROR',
   // INGEST_* — book import / EPUB ingestion.
   'INGEST_UNKNOWN',
   'INGEST_DUPLICATE_BOOK',
-  // NET_* — generic network/fetch failures.
+  // NET_* — generic network/fetch failures + the kernel/net egress gateway (Phase 7).
   'NET_UNKNOWN',
+  'NET_UNKNOWN_DESTINATION',
+  'NET_HOST_NOT_ALLOWED',
+  'NET_CONSENT_REQUIRED',
+  'NET_TIMEOUT',
+  'NET_OFFLINE',
   // BACKUP_* — backup/snapshot capture, validation, and restore.
   'BACKUP_SNAPSHOT_INVALID',
+  // GOOGLE_* — Google OAuth boundary (GoogleAuthClient, Phase 7).
+  'GOOGLE_AUTH_REQUIRED',
+  'GOOGLE_AUTH_REVOKED',
+  'GOOGLE_AUTH_TRANSIENT',
+  'GOOGLE_UNKNOWN_SERVICE',
 ] as const satisfies readonly `${AppErrorNamespace}_${Uppercase<string>}`[];
 
 /** Stable, append-only union of error codes. See {@link APP_ERROR_CODES}. */

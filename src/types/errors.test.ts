@@ -32,15 +32,27 @@ describe('AppErrorCode union', () => {
       SYNC_MIGRATION_FAILED: 'SYNC',
       TTS_UNKNOWN: 'TTS',
       GENAI_UNKNOWN: 'GENAI',
+      GENAI_NOT_CONFIGURED: 'GENAI',
+      GENAI_INVALID_RESPONSE: 'GENAI',
       DRIVE_UNKNOWN: 'DRIVE',
+      DRIVE_API_ERROR: 'DRIVE',
       INGEST_UNKNOWN: 'INGEST',
       INGEST_DUPLICATE_BOOK: 'INGEST',
       NET_UNKNOWN: 'NET',
-      BACKUP_SNAPSHOT_INVALID: 'BACKUP'
+      NET_UNKNOWN_DESTINATION: 'NET',
+      NET_HOST_NOT_ALLOWED: 'NET',
+      NET_CONSENT_REQUIRED: 'NET',
+      NET_TIMEOUT: 'NET',
+      NET_OFFLINE: 'NET',
+      BACKUP_SNAPSHOT_INVALID: 'BACKUP',
+      GOOGLE_AUTH_REQUIRED: 'GOOGLE',
+      GOOGLE_AUTH_REVOKED: 'GOOGLE',
+      GOOGLE_AUTH_TRANSIENT: 'GOOGLE',
+      GOOGLE_UNKNOWN_SERVICE: 'GOOGLE'
     };
     for (const code of APP_ERROR_CODES) {
       expect(code.startsWith(`${namespaceOf[code]}_`)).toBe(true);
-      expect(code).toMatch(/^(APP|DB|SYNC|TTS|GENAI|DRIVE|INGEST|NET|BACKUP)_[A-Z0-9_]+$/);
+      expect(code).toMatch(/^(APP|DB|SYNC|TTS|GENAI|DRIVE|INGEST|NET|BACKUP|GOOGLE)_[A-Z0-9_]+$/);
     }
   });
 

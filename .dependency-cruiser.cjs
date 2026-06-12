@@ -58,14 +58,18 @@ module.exports = {
       name: 'kernel-imports-nothing',
       severity: 'error',
       comment:
-        'src/kernel is the L0 layer (master plan §2 rule 1): admission ' +
-        'requires zero internal deps and ≥2 consuming domains. Born at ' +
-        'error with baseline 0 when kernel/cfi + kernel/locale joined ' +
-        'kernel/diagnostics (Phase 5c). The kernel-boundary vitest suite ' +
-        '(src/kernel/cfi/cfi.kernel-boundary.test.ts) covers test files, ' +
-        'which this cruise excludes.',
+        'src/kernel is the L0 layer (master plan §2 rule 1 + the C12 ' +
+        'admission rule): zero internal imports beyond ~types, and ≥2 ' +
+        'consuming domains. ~types is the one sanctioned dependency — it ' +
+        'is itself a zero-dep layer (types-imports-nothing) and carries ' +
+        'the C10 append-only AppError code union that kernel/net\'s typed ' +
+        'NET_* errors extend (Phase 7 §I). Born at error with baseline 0 ' +
+        'when kernel/cfi + kernel/locale joined kernel/diagnostics (Phase ' +
+        '5c); kernel/net joined at the Phase 7 merge. The kernel-boundary ' +
+        'vitest suite (src/kernel/cfi/cfi.kernel-boundary.test.ts) covers ' +
+        'test files, which this cruise excludes.',
       from: { path: '^src/kernel' },
-      to: { path: '^src', pathNot: '^src/kernel' },
+      to: { path: '^src', pathNot: '^src/(kernel|types)' },
     },
     {
       name: 'lib-not-to-store',

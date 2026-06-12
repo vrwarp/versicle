@@ -21,6 +21,7 @@ export default defineConfig({
       '@data': srcAlias('data'),
       '@domains': srcAlias('domains'),
       '@hooks': srcAlias('hooks'),
+      '@kernel': srcAlias('kernel'),
       '@lib': srcAlias('lib'),
       '@store': srcAlias('store'),
       '~types': srcAlias('types'),

@@ -161,7 +161,7 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 
 ## Bundled npm packages (production dependency tree)
 
-576 packages, grouped by license. The private
+575 packages, grouped by license. The private
 vendored forks `zustand-middleware-yjs` and `y-idb` (both MIT) are
 excluded from the scan and recorded in the inventory section above.
 
@@ -193,7 +193,7 @@ excluded from the scan and recorded in the inventory section above.
 
 - `ua-parser-js@2.0.8` — Copyright (C) 2007 Free Software Foundation, Inc.. <https://fsf.org/> — <https://github.com/faisalman/ua-parser-js>
 
-### Apache-2.0 (62)
+### Apache-2.0 (61)
 
 - `@firebase/ai@1.4.1` — Copyright Firebase — <https://github.com/firebase/firebase-js-sdk>
 - `@firebase/analytics-compat@0.2.23` — Copyright Firebase — <https://github.com/firebase/firebase-js-sdk>
@@ -239,7 +239,6 @@ excluded from the scan and recorded in the inventory section above.
 - `@firebase/storage@0.13.14` — Copyright Firebase — <https://github.com/firebase/firebase-js-sdk>
 - `@firebase/util@1.12.1` — Copyright Firebase — <https://github.com/firebase/firebase-js-sdk>
 - `@firebase/webchannel-wrapper@1.0.3` — Copyright Firebase — <https://github.com/firebase/firebase-js-sdk>
-- `@google/generative-ai@0.24.1` — <https://github.com/google/generative-ai-js>
 - `@grpc/grpc-js@1.9.15` — Copyright Google Inc. — <https://github.com/grpc/grpc-node.git#master>
 - `@grpc/proto-loader@0.7.15` — Copyright Google Inc. — <https://github.com/grpc/grpc-node>
 - `@trickfilm400/rollup-plugin-off-main-thread@3.0.0-pre1` — Copyright Surma — <https://github.com/Trickfilm400/rollup-plugin-off-main-thread>

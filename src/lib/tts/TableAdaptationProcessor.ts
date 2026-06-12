@@ -1,7 +1,7 @@
 import {
     parseCfiRange, stripCfiWrapper, cfiContains, CfiComparator, tryParseCfiPoint,
     type ParsedCfiPoint,
-} from '../../kernel/cfi';
+} from '@kernel/cfi';
 import type { SentenceNode } from '~types/tts-content';
 import type { EngineContext } from './engine/EngineContext';
 import { ensureGenAIReady } from './genaiReady';

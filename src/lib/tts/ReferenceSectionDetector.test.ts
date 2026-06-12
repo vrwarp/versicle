@@ -13,7 +13,7 @@ import {
 } from './ReferenceSectionDetector';
 import type { DetectionObservation } from './ReferenceSectionDetector';
 import { FakeEngineContext } from './engine/FakeEngineContext';
-import type { CfiGroup } from '../../kernel/cfi';
+import type { CfiGroup } from '@kernel/cfi';
 
 const group = (rootCfi: string, fullText: string, sourceIndices: number[] = []): CfiGroup => ({
     rootCfi,

@@ -1,172 +1,49 @@
-import { DriveService, type DriveFile } from './DriveService';
-import { useDriveStore } from '@store/useDriveStore';
-import { useLibraryStore } from '@store/useLibraryStore';
-import { useBookStore } from '@store/useBookStore';
-import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
-import { createLogger } from '../logger';
+/**
+ * @deprecated Phase 7 façade — scan/index/diff/import orchestration lives at
+ * `src/domains/google/drive/DriveLibrarySync.ts` (injected DriveClient +
+ * store-backed ports wired in src/app/google/wireGoogle.ts; the
+ * `error.message.includes('is not connected')` sniffs became `instanceof
+ * GoogleAuthRequiredError`). This module keeps the legacy static surface
+ * compiling for its consumers (DriveImportDialog, ContentMissingDialog,
+ * SyncSettingsTab, the boot auto-scan task) and forwards the
+ * silent/interactive split explicitly.
+ *
+ * Deletion deadline: Phase 7 exit (migrate consumers to
+ * `getDriveLibrarySync()` from '@domains/google').
+ */
+import { getDriveLibrarySync } from '@domains/google';
+import type { DriveFile, DriveFileIndex, DriveRequestOptions } from '@domains/google';
 
-const logger = createLogger('DriveScannerService');
+export type { DriveFile, DriveFileIndex };
 
 export class DriveScannerService {
-    /**
-     * Scans the linked folder for EPUB files.
-     * @returns A list of DriveFile objects found in the folder.
-     */
-    static async scanLinkedFolder(): Promise<DriveFile[]> {
-        const { linkedFolderId } = useDriveStore.getState();
+  /** Silent by default (boot policy); pass { interactive: true } from UI. */
+  static scanLinkedFolder(opts?: DriveRequestOptions): Promise<DriveFile[]> {
+    return getDriveLibrarySync().scanLinkedFolder(opts);
+  }
 
-        if (!linkedFolderId) {
-            logger.warn("No linked folder ID found.");
-            return [];
-        }
+  /** User-gesture import: interactive token acquisition by default. */
+  static importFile(
+    fileId: string,
+    fileName: string,
+    options?: { overwrite?: boolean },
+    opts: DriveRequestOptions = { interactive: true },
+  ): Promise<void> {
+    return getDriveLibrarySync().importFile(fileId, fileName, options, opts);
+  }
 
-        try {
-            // List all EPUB files in the linked folder
-            return await DriveService.listFilesRecursive(linkedFolderId, 'application/epub+zip');
-        } catch (error) {
-            if (error instanceof Error && error.message.includes('is not connected')) {
-                logger.warn(`Failed to scan linked folder: ${error.message}`);
-            } else {
-                logger.error("Failed to scan linked folder:", error);
-            }
-            throw error;
-        }
-    }
+  /** Silent by default (boot policy); pass { interactive: true } from UI. */
+  static scanAndIndex(opts?: DriveRequestOptions): Promise<void> {
+    return getDriveLibrarySync().scanAndIndex(opts);
+  }
 
-    /**
-     * Downloads a file from Drive and imports it into the library.
-     * @param fileId The ID of the file to download.
-     * @param fileName The name of the file (used for the File object).
-     */
-    static async importFile(fileId: string, fileName: string, options?: { overwrite?: boolean }): Promise<void> {
-        try {
-            logger.info(`Downloading file: ${fileName} (${fileId})`);
-            const blob = await DriveService.downloadFile(fileId);
+  /** Silent by default; the settings "Scan" button passes interactive. */
+  static checkForNewFiles(opts?: DriveRequestOptions): Promise<DriveFileIndex[]> {
+    return getDriveLibrarySync().checkForNewFiles(opts);
+  }
 
-            const file = new File([blob], fileName, { type: 'application/epub+zip' });
-
-            logger.info(`Importing file to library: ${fileName}`);
-            await useLibraryStore.getState().addBook(file, options);
-        } catch (error) {
-            if (error instanceof Error && error.message.includes('is not connected')) {
-                logger.warn(`Failed to import file ${fileName}: ${error.message}`);
-            } else {
-                logger.error(`Failed to import file ${fileName}:`, error);
-            }
-            throw error;
-        }
-    }
-
-    /**
-     * Helper to map DriveFile items to lightweight DriveFileIndex
-     */
-    private static mapToDriveFileIndex(file: DriveFile): import('@store/useDriveStore').DriveFileIndex {
-        return {
-            id: file.id,
-            name: file.name,
-            size: parseInt(file.size || '0', 10),
-            modifiedTime: file.modifiedTime || new Date().toISOString(),
-            mimeType: file.mimeType
-        };
-    }
-
-    /**
-     * Full scan of the linked folder.
-     * Updates the local `useDriveStore` index.
-     * This is the "heavy" operation.
-     */
-    static async scanAndIndex(): Promise<void> {
-        const { linkedFolderId, setScannedFiles, setScanning } = useDriveStore.getState();
-
-        if (!linkedFolderId) {
-            logger.warn("No linked folder ID found.");
-            return;
-        }
-
-        try {
-            setScanning(true);
-            logger.info("Starting full drive scan...");
-
-            // Fetch all EPUBs
-            const rawFiles = await DriveService.listFilesRecursive(linkedFolderId, 'application/epub+zip');
-
-            // Map to index format
-            const index = rawFiles.map(this.mapToDriveFileIndex);
-
-            logger.info(`Scan complete. Indexed ${index.length} files.`);
-            setScannedFiles(index);
-        } catch (error) {
-            if (error instanceof Error && error.message.includes('is not connected')) {
-                logger.warn(`Failed to scan and index: ${error.message}`);
-            } else {
-                logger.error("Failed to scan and index:", error);
-            }
-            throw error;
-        } finally {
-            setScanning(false);
-        }
-    }
-
-    /**
-     * Checks for new EPUB files by comparing the Cloud Index against Local Library.
-     * Returns a list of files that are in the Index but NOT in the Library.
-     * 
-     * If the index is empty, it triggers a scan first.
-     */
-    static async checkForNewFiles(): Promise<import('@store/useDriveStore').DriveFileIndex[]> {
-        let { index } = useDriveStore.getState();
-
-        // If index is empty, force a scan
-        if (index.length === 0) {
-            await this.scanAndIndex();
-            // Refetch state
-            index = useDriveStore.getState().index;
-        }
-
-        const libraryBooks = useBookStore.getState().books;
-        const libraryFilenames = new Set(Object.values(libraryBooks).map(b => b.sourceFilename));
-
-        // Diff: In Cloud Index AND NOT in Local Library
-        const newFiles = index.filter(f => !libraryFilenames.has(f.name));
-
-        logger.info(`Diff logic: Found ${newFiles.length} new files available for import.`);
-
-        return newFiles;
-    }
-
-    /**
-     * Heuristic check: Should we sync?
-     * Checks if the linked folder has been viewed more recently than the last scan.
-     */
-    static async shouldAutoSync(): Promise<boolean> {
-        const { linkedFolderId, lastScanTime } = useDriveStore.getState();
-
-        if (!linkedFolderId) return false;
-
-        // If service is not connected, we shouldn't try to sync
-        if (!useGoogleServicesStore.getState().isServiceConnected('drive')) {
-            return false;
-        }
-
-        // If never scanned, we definitely need to sync
-        if (!lastScanTime) return true;
-
-        try {
-            const metadata = await DriveService.getFolderMetadata(linkedFolderId);
-            const viewedTime = metadata.viewedByMeTime ? new Date(metadata.viewedByMeTime).getTime() : 0;
-
-            // If viewed time is more recent than last scan time, we should sync
-            // Note: If viewedByMeTime is undefined (0), we won't sync based on this heuristic,
-            // unless lastScanTime is also somehow 0 (which is handled above).
-            return viewedTime > lastScanTime;
-        } catch (error) {
-            if (error instanceof Error && error.message.includes('is not connected')) {
-                logger.warn(`Failed to check folder metadata for auto-sync heuristic: ${error.message}`);
-                return false;
-            }
-            logger.warn("Failed to check folder metadata for auto-sync heuristic:", error);
-            // Default to true on error to be safe
-            return true;
-        }
-    }
+  /** Always silent — never pops UI, never disconnects (GG-2). */
+  static shouldAutoSync(): Promise<boolean> {
+    return getDriveLibrarySync().shouldAutoSync();
+  }
 }

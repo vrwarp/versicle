@@ -16,8 +16,8 @@
  *    entry point.
  */
 import type { CitationMarker } from '~types/db';
-import type { CfiGroup } from '../../kernel/cfi';
-import { attributeMarkersToGroups } from '../../kernel/cfi';
+import type { CfiGroup } from '@kernel/cfi';
+import { attributeMarkersToGroups } from '@kernel/cfi';
 import { findTocItem } from '../reader/titleResolver';
 import { ensureGenAIReady } from './genaiReady';
 import type { GenAIPort, ContentAnalysisPort, BookInfoPort, BookContentPort } from './engine/EngineContext';

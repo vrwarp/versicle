@@ -34,7 +34,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { TTSVoice } from '../providers/types';
 import type { TTSQueueItem } from '~types/tts';
-import { generateCfiRange, mergeCfiSlow } from '../../../kernel/cfi';
+import { generateCfiRange, mergeCfiSlow } from '@kernel/cfi';
 
 export interface ParitySnapshot {
     status: string;

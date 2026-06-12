@@ -36,6 +36,7 @@
       "@data/*": ["./src/data/*"],
       "@domains/*": ["./src/domains/*"],
       "@hooks/*": ["./src/hooks/*"],
+      "@kernel/*": ["./src/kernel/*"],
       "@lib/*": ["./src/lib/*"],
       "@store/*": ["./src/store/*"],
       "~types/*": ["./src/types/*"],

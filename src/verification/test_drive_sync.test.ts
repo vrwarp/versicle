@@ -2,19 +2,41 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mockDriveService } from '@test/harness/MockDriveService';
 import { DriveScannerService } from '@lib/drive/DriveScannerService';
+import {
+    DriveLibrarySync,
+    setDriveLibrarySync,
+    resetDriveHoldersForTesting,
+} from '@domains/google';
 import { useDriveStore } from '@store/useDriveStore';
 import { useBookStore } from '@store/useBookStore';
+import { useLibraryStore } from '@store/useLibraryStore';
 
-// Mock the real DriveService with our functional mock
-vi.mock('@lib/drive/DriveService', () => ({
-    DriveService: {
-        listFolders: (parentId?: string) => mockDriveService.listFolders(parentId),
-        getFolderMetadata: (folderId: string) => mockDriveService.getFolderMetadata(folderId),
-        listFiles: (parentId: string, mimeType?: string) => mockDriveService.listFiles(parentId, mimeType),
-        listFilesRecursive: (parentId: string, mimeType?: string) => mockDriveService.listFilesRecursive(parentId, mimeType),
-        downloadFile: (fileId: string) => mockDriveService.downloadFile(fileId),
-    }
-}));
+// Phase 7: the DriveScannerService facade delegates to the composed
+// DriveLibrarySync — wire one here over the functional MockDriveService
+// (the harness double is DriveClient-shaped) + the REAL stores.
+function wireMockDriveSync(): void {
+    resetDriveHoldersForTesting();
+    setDriveLibrarySync(new DriveLibrarySync({
+        client: {
+            listFilesRecursive: (parentId, mimeType) => mockDriveService.listFilesRecursive(parentId, mimeType),
+            getFolderMetadata: (folderId) => mockDriveService.getFolderMetadata(folderId),
+            downloadFile: (fileId) => mockDriveService.downloadFile(fileId),
+        },
+        driveIndex: {
+            getLinkedFolderId: () => useDriveStore.getState().linkedFolderId,
+            getLastScanTime: () => useDriveStore.getState().lastScanTime,
+            getIndex: () => useDriveStore.getState().index,
+            setScanning: (isScanning) => useDriveStore.getState().setScanning(isScanning),
+            setScannedFiles: (files) => useDriveStore.getState().setScannedFiles(files),
+        },
+        library: {
+            addBook: (file, options) => useLibraryStore.getState().addBook(file, options),
+            getLibraryFilenames: () =>
+                new Set(Object.values(useBookStore.getState().books).map((b) => b.sourceFilename)),
+        },
+        hasConnectedBefore: () => true,
+    }));
+}
 
 // Mock the DB layer to prevent actual IndexedDB calls during import
 vi.mock('@data/repos/bookContent', () => ({
@@ -58,6 +80,7 @@ describe('Google Drive Sync & Import E2E', () => {
         vi.spyOn(console, 'error').mockImplementation(() => {});
         vi.clearAllMocks();
         mockDriveService.reset();
+        wireMockDriveSync();
 
         // Reset stores
         useDriveStore.setState({

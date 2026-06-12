@@ -20,7 +20,7 @@ test("smart toc success", async ({ page }) => {
     { id: "np-5", title: "AI Generated: Pool of Tears" },
   ];
 
-  await page.evaluate((mockData) => {
+  await page.evaluate(() => {
     localStorage.setItem(
       "genai-storage",
       JSON.stringify({
@@ -28,14 +28,20 @@ test("smart toc success", async ({ page }) => {
         version: 0,
       })
     );
-    localStorage.setItem("mockGenAIResponse", JSON.stringify(mockData));
-  }, mockResponse);
+  });
 
   // Reload to pick up store changes
   await page.reload();
 
   // Wait for library to load
   await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 10000 });
+
+  // Install the GenAI mock through the typed test API (Phase 7: the
+  // localStorage.mockGenAIResponse production seam is gone). Runtime-settable,
+  // so post-reload installation is the supported timing.
+  await page.evaluate((mockData) => {
+    window.__versicleTest!.genai.setMock({ response: mockData });
+  }, mockResponse);
 
   // 3. Open Reader
   // Ensure book is present (reload might have cleared state or DB latency)
@@ -123,8 +129,6 @@ test("smart toc failure", async ({ page }) => {
         version: 0,
       })
     );
-    localStorage.removeItem("mockGenAIResponse");
-    localStorage.removeItem("mockGenAIError");
   });
   await page.reload();
 
@@ -176,7 +180,6 @@ test("smart toc failure", async ({ page }) => {
         version: 0,
       })
     );
-    localStorage.setItem("mockGenAIError", "true");
   });
   await page.reload();
 
@@ -188,6 +191,11 @@ test("smart toc failure", async ({ page }) => {
     await page.locator('[data-testid^="book-card-"]').first().click();
     await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 20000 });
   }
+
+  // Phase 7: simulated service failure via the typed mock seam.
+  await page.evaluate(() => {
+    window.__versicleTest!.genai.setMock({ error: "Simulated GenAI Error" });
+  });
 
   await page.getByTestId("reader-toc-button").click();
   await expect(page.getByTestId("reader-toc-sidebar")).toBeVisible();

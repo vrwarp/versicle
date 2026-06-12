@@ -2,10 +2,30 @@ export type ReferenceDetectionStrategy = 'gemini' | 'deterministic';
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { genAIService } from '@lib/genai/GenAIService';
 import type { GenAILogEntry } from '@lib/genai/GenAIService';
 import type { ContentType } from '~types/content-analysis';
 
+/**
+ * GenAI configuration + activity-log store (Phase 7 §H, privacy D3/GG-3).
+ *
+ * PERSISTENCE CONTRACT (PR-A5): `partialize` is an explicit ALLOWLIST —
+ * settings only. `logs` is an IN-MEMORY ring buffer (`maxLogs`-capped) and
+ * is NEVER persisted: the pre-Phase-7 spread-partialize wrote full prompts
+ * — book text and base64 table screenshots — to plaintext localStorage
+ * unconditionally, with quadratic re-serialization on every set() and
+ * latent QuotaExceededError corruption. Entries arrive PRE-REDACTED from
+ * the GenAI client (inlineData → {byteCount, hash} — domains/google/genai/
+ * logging.ts). persist version 1 strips `logs`/`usageStats` from existing
+ * blobs on rehydrate (strip-only, tolerated by older code reading the
+ * slimmer blob; localStorage-only — NOT synced user data, so the program's
+ * one-in-flight format-change rule is not engaged).
+ *
+ * `apiKey` stays in the allowlist deliberately (BYO-key product model);
+ * secrets isolation is the privacy report's D11, out of Phase 7 scope.
+ *
+ * The store no longer configures any singleton: the GeminiClient reads
+ * config PER CALL via the provider wired in src/app/google/wireGoogle.ts.
+ */
 interface GenAIState {
   apiKey: string;
   model: string;
@@ -16,12 +36,9 @@ interface GenAIState {
   contentFilterSkipTypes: ContentType[];
   isDebugModeEnabled: boolean;
   referenceDetectionStrategy: ReferenceDetectionStrategy;
+  /** In-memory ring buffer (never persisted; pre-redacted entries). */
   logs: GenAILogEntry[];
   maxLogs: number;
-  usageStats: {
-    totalTokens: number;
-    estimatedCost: number;
-  };
   setApiKey: (key: string) => void;
   setModel: (model: string) => void;
   setEnabled: (enabled: boolean) => void;
@@ -31,16 +48,29 @@ interface GenAIState {
   setContentFilterSkipTypes: (types: ContentType[]) => void;
   setDebugModeEnabled: (enabled: boolean) => void;
   setReferenceDetectionStrategy: (strategy: ReferenceDetectionStrategy) => void;
-  incrementUsage: (tokens: number) => void;
   setMaxLogs: (max: number) => void;
   addLog: (log: GenAILogEntry) => void;
   clearLogs: () => void;
-  init: () => void;
 }
+
+/** The persisted slice (explicit allowlist — see module header). */
+type PersistedGenAIState = Pick<
+  GenAIState,
+  | 'apiKey'
+  | 'model'
+  | 'isEnabled'
+  | 'isModelRotationEnabled'
+  | 'isContentAnalysisEnabled'
+  | 'isTableAdaptationEnabled'
+  | 'contentFilterSkipTypes'
+  | 'isDebugModeEnabled'
+  | 'referenceDetectionStrategy'
+  | 'maxLogs'
+>;
 
 export const useGenAIStore = create<GenAIState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       apiKey: '',
       model: 'gemini-flash-lite-latest',
       isEnabled: false,
@@ -52,35 +82,16 @@ export const useGenAIStore = create<GenAIState>()(
       referenceDetectionStrategy: 'gemini' as ReferenceDetectionStrategy,
       logs: [],
       maxLogs: 500,
-      usageStats: {
-        totalTokens: 0,
-        estimatedCost: 0,
-      },
-      setApiKey: (key) => {
-        set({ apiKey: key });
-        genAIService.configure(key, get().model, get().isModelRotationEnabled);
-      },
-      setModel: (model) => {
-        set({ model });
-        genAIService.configure(get().apiKey, model, get().isModelRotationEnabled);
-      },
+      setApiKey: (key) => set({ apiKey: key }),
+      setModel: (model) => set({ model }),
       setEnabled: (enabled) => set({ isEnabled: enabled }),
-      setModelRotationEnabled: (enabled) => {
-        set({ isModelRotationEnabled: enabled });
-        genAIService.configure(get().apiKey, get().model, enabled);
-      },
+      setModelRotationEnabled: (enabled) => set({ isModelRotationEnabled: enabled }),
       setContentAnalysisEnabled: (enabled) => set({ isContentAnalysisEnabled: enabled }),
       setTableAdaptationEnabled: (enabled) => set({ isTableAdaptationEnabled: enabled }),
       setContentFilterSkipTypes: (types) => set({ contentFilterSkipTypes: types }),
       setDebugModeEnabled: (enabled) => set({ isDebugModeEnabled: enabled }),
-      setReferenceDetectionStrategy: (strategy) => set({ referenceDetectionStrategy: strategy }),
-      incrementUsage: (tokens) =>
-        set((state) => ({
-          usageStats: {
-            totalTokens: state.usageStats.totalTokens + tokens,
-            estimatedCost: state.usageStats.estimatedCost,
-          },
-        })),
+      setReferenceDetectionStrategy: (strategy) =>
+        set({ referenceDetectionStrategy: strategy }),
       setMaxLogs: (max) => set({ maxLogs: max }),
       addLog: (log) =>
         set((state) => {
@@ -91,23 +102,37 @@ export const useGenAIStore = create<GenAIState>()(
           return { logs: newLogs };
         }),
       clearLogs: () => set({ logs: [] }),
-      init: () => {
-          const { apiKey, model, isModelRotationEnabled } = get();
-          genAIService.configure(apiKey, model, isModelRotationEnabled);
-          genAIService.setLogCallback((log) => {
-              get().addLog(log);
-          });
-      }
     }),
     {
       name: 'genai-storage',
+      version: 1,
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        ...state,
+      partialize: (state): PersistedGenAIState => ({
+        apiKey: state.apiKey,
+        model: state.model,
+        isEnabled: state.isEnabled,
+        isModelRotationEnabled: state.isModelRotationEnabled,
+        isContentAnalysisEnabled: state.isContentAnalysisEnabled,
+        isTableAdaptationEnabled: state.isTableAdaptationEnabled,
+        contentFilterSkipTypes: state.contentFilterSkipTypes,
+        isDebugModeEnabled: state.isDebugModeEnabled,
+        referenceDetectionStrategy: state.referenceDetectionStrategy,
+        maxLogs: state.maxLogs,
       }),
-      onRehydrateStorage: () => (state) => {
-          state?.init();
-      }
-    }
-  )
+      /**
+       * v0 → v1: strip the legacy persisted `logs` (full prompts, base64
+       * table images) and dead `usageStats` from existing blobs. Settings
+       * (apiKey/model/flags) survive untouched — pinned by the captured-
+       * blob regression test (useGenAIStore.migration.test.ts).
+       */
+      migrate: (persistedState, version) => {
+        if (version < 1 && persistedState && typeof persistedState === 'object') {
+          const state = persistedState as Record<string, unknown>;
+          delete state.logs;
+          delete state.usageStats;
+        }
+        return persistedState as PersistedGenAIState;
+      },
+    },
+  ),
 );

@@ -15,7 +15,7 @@ export interface FirebaseConfig {
     measurementId?: string;
 }
 
-import { googleIntegrationManager } from '@lib/google/GoogleIntegrationManager';
+import { getGoogleAuthClient } from '@domains/google';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 import type { FirebaseAuthStatus } from '~types/sync';
 
@@ -209,7 +209,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
 
         setIsScanning(true);
         try {
-            const newFiles = await DriveScannerService.checkForNewFiles();
+            const newFiles = await DriveScannerService.checkForNewFiles({ interactive: true });
             if (newFiles.length > 0) {
                 showToast(`Found ${newFiles.length} new books in "${linkedFolderName}".`, 'success');
             } else {
@@ -227,7 +227,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
         setIsDriveConnecting(true);
         try {
             // Pass login_hint if we have the firebase email to encourage same-account usage
-            await googleIntegrationManager.connectService('drive', firebaseUserEmail || undefined);
+            await getGoogleAuthClient().connect('drive', firebaseUserEmail || undefined);
         } catch (error) {
             console.error("Failed to connect Drive", error);
         } finally {
@@ -237,7 +237,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
 
     const handleDriveDisconnect = async () => {
         try {
-            await googleIntegrationManager.disconnectService('drive');
+            await getGoogleAuthClient().disconnect('drive');
             // Optionally clear linked folder on disconnect?
             // useDriveStore.getState().clearLinkedFolder();
         } catch (error) {

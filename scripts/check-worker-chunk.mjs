@@ -157,6 +157,9 @@ console.log(
 const MOCK_FORBIDDEN = [
   { pattern: 'src/domains/sync/backend/MockBackend', label: 'MockBackend' },
   { pattern: 'src/domains/sync/backend/MockFireProvider', label: 'MockFireProvider' },
+  // Phase 7 (§H, boundary rule 9): the GenAI mock is reachable only via the
+  // DEV/VITE_E2E-gated installTestApi() — never from the prod graph.
+  { pattern: 'src/domains/google/genai/MockGenAIClient', label: 'MockGenAIClient' },
 ];
 
 const allChunks = readdirSync(assetsDir).filter((f) => f.endsWith('.js'));
@@ -203,7 +206,7 @@ if (mockViolations.length > 0) {
 
 console.log(
   `PASS: ${scannedSources} original sources across ${allChunks.length} ` +
-    'production chunk(s); no MockBackend / MockFireProvider in the prod bundle.',
+    'production chunk(s); no MockBackend / MockFireProvider / MockGenAIClient in the prod bundle.',
 );
 
 // ── Check 3: lazy-lexicon purity (Phase 5c-PR3; phase5-tts-strangler.md §5c.3) ──
