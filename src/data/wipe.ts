@@ -34,8 +34,16 @@ import { playbackCache } from './repos/playbackCache';
 
 const logger = createLogger('Wipe');
 
-/** Both IndexedDB databases owned by the app. */
-export const APP_DATABASES: readonly string[] = ['versicle-yjs', 'EpubLibraryDB'];
+/**
+ * Every IndexedDB database owned by the app. `versicle-yjs-staging` is the
+ * Phase 4 staged-workspace-switch buffer (YJS_STAGING_DB_NAME) — transient,
+ * but a wipe must not leave a stale staged workspace behind.
+ */
+export const APP_DATABASES: readonly string[] = [
+  'versicle-yjs',
+  'versicle-yjs-staging',
+  'EpubLibraryDB',
+];
 
 /** Exact localStorage keys owned by the app (persisted zustand stores). */
 export const APP_LOCAL_STORAGE_KEYS: readonly string[] = [

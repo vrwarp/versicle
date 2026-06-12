@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
 import { MigrationStateService } from '@domains/sync/workspaces/MigrationStateService';
+import { clearStagedState } from '@domains/sync/workspaces/stagedSwap';
 import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
 import { getSyncOrchestrator } from '@app/sync/createSync';
 import { createLogger } from '@lib/logger';
@@ -37,6 +38,15 @@ export const WorkspaceMigrationConfirmModal: React.FC<WorkspaceMigrationConfirmM
                 logger.info(`Deleted migration backup checkpoint #${backupCheckpointId}`);
             } catch (e) {
                 logger.warn('Failed to delete backup checkpoint:', e);
+            }
+
+            // Drop the staging database — the switch is finalized, so the
+            // crash-resume buffer (§D4) is no longer needed. Best-effort:
+            // the next stage write clears junk anyway.
+            try {
+                await clearStagedState();
+            } catch (e) {
+                logger.warn('Failed to clear staged switch state:', e);
             }
 
             // Start sync with the new workspace

@@ -42,7 +42,7 @@ export interface PendingWorkspaceMigration {
   backupCheckpointId: number;
 }
 
-export type BootHaltReason = 'restoring-backup';
+export type BootHaltReason = 'restoring-backup' | 'applying-staged-switch';
 
 export interface BootContext {
   /** Surface a human-readable boot progress message (loading screen). */

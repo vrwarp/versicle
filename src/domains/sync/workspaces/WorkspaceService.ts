@@ -5,11 +5,13 @@
  * `activeWorkspaceId` reads/writes go through SyncStatePort, the connection
  * hooks come from the orchestrator).
  *
- * `switchWorkspace` is still the legacy multi-stage commit (pre-flight →
- * protected backup → state lock → download → verify → destructive apply →
- * reload). The staged-swap item (§D4) re-orders it onto durable local
- * staging; until then every step here is pinned by the orchestrator
- * characterization + quarantine suites.
+ * `switchWorkspace` is the §D4 staged swap: pre-flight → protected backup →
+ * download (pure read) → verify on scratch → durable staging → STAGED
+ * commit → reload. The destructive apply happens on the NEXT boot, in the
+ * migration interceptor's STAGED arm (stagedSwap.applyStagedSwap), which is
+ * idempotent and crash-resumable. Nothing destructive — and no state-machine
+ * engagement — happens before the downloaded state has been verified and
+ * durably staged.
  */
 import type { WorkspaceMetadata } from '~types/workspace';
 import { WorkspaceDeletedError } from '~types/errors';
@@ -20,6 +22,7 @@ import type { SyncEventBus } from '../events';
 import { downloadWorkspaceState } from '../core/downloadWorkspaceState';
 import { readUpdateSchemaVersion } from '../core/quarantine';
 import type { CheckpointsPort, MigrationStatePort, SyncStatePort } from '../core/ports';
+import { stageWorkspaceState, pauseIfArmed } from './stagedSwap';
 
 const logger = createLogger('WorkspaceService');
 
@@ -74,8 +77,15 @@ export class WorkspaceService {
   }
 
   /**
-   * Switch to an existing workspace using the multi-stage commit process.
-   * Flow B: Pre-flight → Backup → State Lock → Hydrate → Apply → Reload.
+   * Switch to an existing workspace — the §D4 staged swap.
+   *
+   * Everything before the STAGED commit is a PURE READ of live state: no
+   * state-machine engagement, no `activeWorkspaceId` write, no wipe. (The
+   * legacy flow locked the state machine and flipped the id BEFORE the
+   * download — a crash during download left a dangling AWAITING state; the
+   * new ordering shrinks the pre-commit crash window to zero.) The
+   * destructive apply runs on the next boot, idempotently, from durable
+   * staging (stagedSwap.applyStagedSwap).
    */
   async switch(backend: SyncBackend, targetWorkspaceId: string): Promise<void> {
     const { events, syncState, checkpoints, migrationState } = this.deps;
@@ -88,7 +98,7 @@ export class WorkspaceService {
 
     logger.info(`Switching workspace: ${currentWorkspaceId} → ${targetWorkspaceId}`);
 
-    // Step 0: Pre-flight validation
+    // Step 1: Pre-flight validation (unchanged).
     const isAlive = await backend.isWorkspaceAlive(targetWorkspaceId);
     if (!isAlive) {
       events.emit({
@@ -100,28 +110,21 @@ export class WorkspaceService {
     }
 
     try {
-      // Step 1: Backup current state.
+      // Step 2: Backup current state (unchanged).
       // Protected: the rolling checkpoint prune must not delete the
       // rollback target while the migration state machine is unresolved.
       logger.info('Creating pre-migration checkpoint...');
       const backupId = await checkpoints.createCheckpoint('pre-migration', { protected: true });
       logger.info(`Pre-migration checkpoint created: #${backupId}`);
 
-      // Step 2: State Lock
-      migrationState.setAwaitingConfirmation(targetWorkspaceId, backupId);
-
-      // Step 3: Update active workspace ID (persists across reload)
-      syncState.setActiveWorkspaceId(targetWorkspaceId);
-
-      // Step 4: Hydrate remote state into temp Y.Doc
+      // Step 3: Download — a pure read into a temp doc. A synchronous
+      // connect failure rejects (routed to the non-destructive catch
+      // below); a timeout resolves with whatever synced (legacy behavior,
+      // pinned by the characterization suite).
       logger.info('Downloading remote workspace state...');
       events.emit({ type: 'switch', phase: 'downloading' });
 
       const maxWaitTime = this.deps.debounceOverrideMs() || 2000;
-
-      // Legacy switch behavior: a synchronous connect failure rejects
-      // (routed to the non-destructive catch below); a timeout resolves
-      // with whatever synced.
       const remoteBlob = await downloadWorkspaceState(backend, targetWorkspaceId, {
         maxWaitTimeMs: maxWaitTime,
         maxUpdatesThreshold: this.deps.maxUpdatesThreshold(),
@@ -129,11 +132,11 @@ export class WorkspaceService {
         onAttachError: 'reject',
       });
 
-      // Step 4b: Verify — quarantine layer 1 for the switch path
-      // (§D4 step 4 / §D5.1): scratch-check the downloaded state's
-      // version BEFORE the destructive apply. The throw routes to the
-      // non-destructive catch below (state machine cleared, id
-      // reverted — the download is a pure read).
+      // Step 4: Verify on a scratch doc — quarantine layer 1 for the
+      // switch path (§D4 step 4 / §D5.1): the schema-version gate runs
+      // BEFORE anything is staged or applied. A garbage blob throws here
+      // (same non-destructive catch).
+      events.emit({ type: 'switch', phase: 'verifying' });
       const incomingVersion = readUpdateSchemaVersion(remoteBlob);
       if (incomingVersion > this.deps.currentSchemaVersion) {
         this.deps.onObsolete(incomingVersion);
@@ -142,29 +145,32 @@ export class WorkspaceService {
         );
       }
 
-      // Step 5: Apply & Reload
-      logger.info('Applying remote state and reloading...');
-      try {
-        await checkpoints.applyRemoteState(remoteBlob);
-        // applyRemoteState triggers window.location.reload()
-      } catch (applyError) {
-        // The destructive phase may already have wiped local
-        // persistence — do NOT clear the migration state here.
-        // Transition to RESTORING_BACKUP so the boot interceptor
-        // restores the pinned pre-migration checkpoint on reload.
-        logger.error('Failed to apply remote state, rolling back to backup:', applyError);
-        migrationState.setRestoringBackup();
-        syncState.setActiveWorkspaceId(currentWorkspaceId);
-        events.emit({ type: 'switch', phase: 'failed-rolling-back' });
-        window.location.reload();
-        return;
-      }
+      // Step 5: Stage durably. Still non-destructive — the staging
+      // database is scratch space until the state machine commits.
+      await stageWorkspaceState(remoteBlob);
+      events.emit({ type: 'switch', phase: 'staged' });
+
+      // Step 6: THE commit point. From here the switch is resolvable on
+      // every subsequent boot: STAGED → idempotent apply → the existing
+      // AWAITING_CONFIRMATION flow. Order per §D4: state machine first —
+      // the apply reconciles `activeWorkspaceId` itself, so a kill between
+      // these lines cannot strand the id.
+      migrationState.setStaged(
+        targetWorkspaceId,
+        backupId,
+        currentWorkspaceId ?? undefined
+      );
+      syncState.setActiveWorkspaceId(targetWorkspaceId);
+
+      await pauseIfArmed('swap:staged');
+      window.location.reload();
     } catch (error) {
       logger.error('Workspace switch failed:', error);
-      // Clean up migration state on failure (nothing destructive has
-      // run before Step 5, so local IDB is genuinely untouched here)
+      // Nothing destructive has run and the state machine was never
+      // engaged (the STAGED commit is the last fallible step), so abort
+      // is a pure cleanup: drop any partial state-machine write and keep
+      // the user exactly where they were.
       migrationState.clear();
-      // Revert workspace ID
       syncState.setActiveWorkspaceId(currentWorkspaceId);
       events.emit({ type: 'switch', phase: 'failed-aborted' });
       throw error;

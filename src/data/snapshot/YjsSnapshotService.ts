@@ -19,12 +19,22 @@
  * disconnect, when to reload) stays with the callers.
  */
 import * as Y from 'yjs';
-import { writeSnapshot } from 'y-idb';
+import { writeSnapshot, readSnapshot as readSnapshotRows, clearDocument } from 'y-idb';
 import { AppError } from '~types/errors';
 import { runExclusiveIdbWrite } from '../write-gate';
 
 /** The IndexedDB database name the app's y-idb persistence binds to. */
 export const YJS_DB_NAME = 'versicle-yjs';
+
+/**
+ * The durable local staging database for the Phase 4 crash-resumable
+ * workspace switch (phase4-sync-strangler.md §D4): the verified remote blob
+ * is staged here BEFORE the state machine commits, and the boot
+ * interceptor's STAGED arm applies main ← staging idempotently. Named here
+ * (next to YJS_DB_NAME) so `wipeAllData` can include it without importing
+ * upwards into domains/.
+ */
+export const YJS_STAGING_DB_NAME = 'versicle-yjs-staging';
 
 /**
  * Capture the full state of `doc` as a single binary update (the snapshot
@@ -91,4 +101,36 @@ export async function applySnapshot(
     validateSnapshot(update);
   }
   await writeSnapshot(dbName, update, { transactionRunner: runExclusiveIdbWrite });
+}
+
+/**
+ * Read the complete persisted Yjs state of `dbName` as one merged update,
+ * without constructing a live persistence binding — `null` when the
+ * database holds no updates (missing database included). The boot-time read
+ * half of the staged workspace swap (the interceptor reads
+ * `YJS_STAGING_DB_NAME` before any provider exists).
+ *
+ * Runs through the exclusive write gate purely for serialization: a read
+ * can never interleave a concurrent `applySnapshot` on the same database.
+ */
+export async function readSnapshot(opts?: { dbName?: string }): Promise<Uint8Array | null> {
+  const dbName = opts?.dbName ?? YJS_DB_NAME;
+  return readSnapshotRows(dbName, { transactionRunner: runExclusiveIdbWrite });
+}
+
+/**
+ * Delete the Yjs database `dbName` outright (the fork's `clearDocument`,
+ * i.e. `indexedDB.deleteDatabase`). Used to clear staging junk before a new
+ * stage write, to drop staging after a finalized switch, and as the
+ * wipe-main step of the staged apply when no live persistence binding
+ * exists (boot time — `persistence.clearData()` needs a binding).
+ *
+ * PRECONDITION: no live y-idb binding on `dbName` in THIS tab (the deletion
+ * would otherwise block on our own open connection). Other tabs holding the
+ * database open delay the deletion — the same exposure the legacy
+ * `clearData()` path had.
+ */
+export async function deleteYjsDatabase(opts?: { dbName?: string }): Promise<void> {
+  const dbName = opts?.dbName ?? YJS_DB_NAME;
+  await runExclusiveIdbWrite(() => Promise.resolve(clearDocument(dbName)), `deleteYjsDatabase(${dbName})`);
 }

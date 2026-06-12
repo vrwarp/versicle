@@ -16,7 +16,10 @@ import {
   captureDoc,
   validateSnapshot,
   applySnapshot,
+  readSnapshot,
+  deleteYjsDatabase,
   YJS_DB_NAME,
+  YJS_STAGING_DB_NAME,
 } from './YjsSnapshotService';
 import { runExclusiveIdbWrite, idbWriteLockIdle } from '../write-gate';
 import { AppError } from '~types/errors';
@@ -174,5 +177,38 @@ describe('YjsSnapshotService', () => {
     await applying;
     expect(applied).toBe(true);
     expect(await readUpdateRows(name)).toHaveLength(1);
+  });
+
+  describe('staged-swap primitives (Phase 4 §D4: readSnapshot / deleteYjsDatabase)', () => {
+    it('exports the staging database name next to the main one', () => {
+      expect(YJS_STAGING_DB_NAME).toBe('versicle-yjs-staging');
+    });
+
+    it('readSnapshot round-trips applySnapshot and is null on an empty database', async () => {
+      const name = uniqueName('read');
+      await expect(readSnapshot({ dbName: name })).resolves.toBeNull();
+
+      const source = new Y.Doc();
+      source.getMap('library').set('staged', 'blob');
+      const update = captureDoc(source);
+      source.destroy();
+      await applySnapshot(update, { dbName: name });
+
+      const read = await readSnapshot({ dbName: name });
+      expect(read).not.toBeNull();
+      expect(Array.from(read!)).toEqual(Array.from(update));
+    });
+
+    it('deleteYjsDatabase removes the database (readSnapshot turns null again)', async () => {
+      const name = uniqueName('delete');
+      const source = new Y.Doc();
+      source.getMap('m').set('k', 'v');
+      await applySnapshot(captureDoc(source), { dbName: name });
+      source.destroy();
+      await expect(readSnapshot({ dbName: name })).resolves.not.toBeNull();
+
+      await deleteYjsDatabase({ dbName: name });
+      await expect(readSnapshot({ dbName: name })).resolves.toBeNull();
+    });
   });
 });

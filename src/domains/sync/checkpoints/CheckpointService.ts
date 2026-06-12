@@ -2,9 +2,16 @@ import { checkpoints } from '@data/repos/checkpoints';
 import * as Y from 'yjs';
 import { getYDoc, getYjsPersistence, disconnectYjs } from '@store/yjs-provider';
 import type { SyncCheckpoint } from '~types/db';
-import { captureDoc, validateSnapshot, applySnapshot } from '@data/snapshot/YjsSnapshotService';
+import {
+  captureDoc,
+  validateSnapshot,
+  applySnapshot,
+  deleteYjsDatabase,
+} from '@data/snapshot/YjsSnapshotService';
+import { isStorageSupported } from '@lib/sync/support';
 import { createLogger } from '@lib/logger';
 import { MigrationStateService } from '../workspaces/MigrationStateService';
+import { withSwapLock } from '../workspaces/stagedSwap';
 
 const logger = createLogger('CheckpointService');
 
@@ -20,6 +27,12 @@ const logger = createLogger('CheckpointService');
 export interface DestructiveRestoreOptions {
   /** Sever cloud sync before the local wipe; failures are non-blocking. */
   pauseSync?: () => void | Promise<void>;
+  /**
+   * Revert the persisted active-workspace tie during a rollback whose
+   * migration state carries `previousWorkspaceId` (staged swaps, P4-5).
+   * Injected by the boot interceptor — domains/sync stays store-free.
+   */
+  setActiveWorkspaceId?: (id: string) => void;
 }
 
 /**
@@ -29,8 +42,9 @@ export interface DestructiveRestoreOptions {
  * NOTE on the `@store/yjs-provider` import: domains/ is store-free by rule
  * (depcruise `domains-no-store`), but the live doc/persistence handles are
  * that rule's one named carve-out — this module relocated as a PURE MOVE
- * (phase4-sync-strangler.md §D7); the staged-swap item (§D4) reshapes the
- * destructive paths into `stagedSwap.ts`, where the handles become injected.
+ * (phase4-sync-strangler.md §D7). The staged swap (§D4) moved the
+ * switch-path destructive apply into `stagedSwap.ts` (fully injected); the
+ * checkpoint capture/restore here still legitimately needs the live doc.
  */
 export class CheckpointService {
   /**
@@ -101,6 +115,17 @@ export class CheckpointService {
    * fully written back. Clearing it earlier would let a failed or
    * interrupted rollback silently boot into the target workspace; keeping
    * it set means a crash mid-restore retries the rollback on next boot.
+   *
+   * The hard-reset path runs whenever IndexedDB exists — INCLUDING at boot,
+   * where no live persistence binding has been constructed yet (the
+   * RESTORING_BACKUP interceptor arm precedes `startYjsPersistence`; the
+   * wipe is then a plain database deletion). Pre-P4-5 this branched on the
+   * live binding alone, so a boot-time rollback silently fell into the
+   * in-memory soft path: nothing was persisted, the state machine was
+   * cleared anyway, and the next manual reload booted into the TARGET
+   * workspace's data — a P1b boot-sequencing regression the staged-swap
+   * crash-resume suite now pins closed. The destructive section also runs
+   * under the cross-tab swap lock (§D4), like the staged apply.
    */
   static async restoreCheckpoint(id: number, opts?: DestructiveRestoreOptions): Promise<void> {
     const checkpoint = await checkpoints.get(id);
@@ -114,24 +139,42 @@ export class CheckpointService {
     await this.pauseSync(opts, 'restore');
 
     const persistence = getYjsPersistence();
-    if (persistence) {
-      logger.info('Performing Hard Reset restore...');
-      // 1. Wipe existing persistence
-      await persistence.clearData();
+    if (persistence || isStorageSupported()) {
+      await withSwapLock(async () => {
+        logger.info('Performing Hard Reset restore...');
+        if (persistence) {
+          // 1. Wipe existing persistence
+          await persistence.clearData();
 
-      // 2. Disconnect current persistence to close IDB connections and release locks
-      await disconnectYjs();
+          // 2. Disconnect current persistence to close IDB connections and
+          // release locks
+          await disconnectYjs();
+        } else {
+          // Boot path: no live binding — wipe the database directly.
+          await deleteYjsDatabase();
+        }
 
-      // 3. Write the snapshot durably. applySnapshot resolves only after
-      // the transaction has COMMITTED (vendored y-idb writeSnapshot through
-      // the cross-context write gate) — this replaces the temp-doc +
-      // temp-IndexeddbPersistence + whenSynced dance, which was durable
-      // only via IDBDatabase.close() waiting out in-flight transactions.
-      await applySnapshot(checkpoint.blob);
+        // 3. Write the snapshot durably. applySnapshot resolves only after
+        // the transaction has COMMITTED (vendored y-idb writeSnapshot through
+        // the cross-context write gate) — this replaces the temp-doc +
+        // temp-IndexeddbPersistence + whenSynced dance, which was durable
+        // only via IDBDatabase.close() waiting out in-flight transactions.
+        await applySnapshot(checkpoint.blob);
 
-      // 4. Restore is fully persisted — only now is it safe to clear the
-      // migration state machine (no-op outside a workspace-switch rollback).
-      MigrationStateService.clear();
+        // 4. The restored data is durable, but the active-workspace tie may
+        // still point at the abandoned switch target — revert it BEFORE the
+        // state machine clears (a crash between these lines retries the
+        // whole rollback; previousWorkspaceId is absent on states written by
+        // pre-P4-5 clients, which keep legacy behavior).
+        const migrationState = MigrationStateService.getState();
+        if (migrationState?.previousWorkspaceId && opts?.setActiveWorkspaceId) {
+          opts.setActiveWorkspaceId(migrationState.previousWorkspaceId);
+        }
+
+        // 5. Restore is fully persisted — only now is it safe to clear the
+        // migration state machine (no-op outside a workspace-switch rollback).
+        MigrationStateService.clear();
+      });
 
       logger.info('Hard Reset complete. Reloading...');
       window.location.reload();
@@ -164,43 +207,13 @@ export class CheckpointService {
     }
   }
 
-  /**
-   * Applies a downloaded remote state vector to the primary IDB persistence.
-   * Validates the blob, destroys existing data, writes the new state
-   * durably, and triggers a reload. Used during workspace context switching.
-   */
-  static async applyRemoteState(
-    remoteBlob: Uint8Array,
-    opts?: DestructiveRestoreOptions
-  ): Promise<void> {
-    // 0a. Prove the blob applies cleanly BEFORE any destructive step.
-    validateSnapshot(remoteBlob);
-
-    // 0b. Disconnect cloud sync to prevent concurrent modifications
-    // (injected handle — §D7 inversion).
-    await this.pauseSync(opts, 'remote state application');
-
-    const persistence = getYjsPersistence();
-    if (persistence) {
-      logger.info('Applying remote state via Hard Reset...');
-      // 1. Wipe existing persistence
-      await persistence.clearData();
-
-      // 2. Disconnect current persistence to close IDB connections and release locks
-      await disconnectYjs();
-
-      // 3. Write the remote state durably (commit-awaited; see
-      // restoreCheckpoint step 3 for why this replaced the temp-provider
-      // dance).
-      await applySnapshot(remoteBlob);
-
-      logger.info('Remote state applied. Reloading...');
-      window.location.reload();
-    } else {
-      logger.error('Cannot apply remote state: Yjs Persistence not active.');
-      throw new Error('Yjs Persistence not active. Cannot apply remote state.');
-    }
-  }
+  // NOTE: the legacy `applyRemoteState` (wipe main + write a downloaded
+  // network blob + reload, called mid-switch) was ABSORBED into the staged
+  // swap (phase4-sync-strangler.md §D4): the switch path now stages the
+  // verified blob durably (stagedSwap.stageWorkspaceState) and the boot
+  // interceptor's STAGED arm performs the destructive apply idempotently
+  // (stagedSwap.applyStagedSwap). Its durability/validate-before-destroy
+  // pins moved to stagedSwap.test.ts ('regression: …' blocks, ledger rule 8).
 
   /**
    * Deletes a specific checkpoint by ID.

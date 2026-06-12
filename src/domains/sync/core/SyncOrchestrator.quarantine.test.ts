@@ -44,6 +44,7 @@ import {
 import { runCrdtMigrationsOnDoc, __resetCrdtMigrationsForTests } from '@app/migrations';
 import { CheckpointService } from '../checkpoints/CheckpointService';
 import { MigrationStateService } from '../workspaces/MigrationStateService';
+import { readSnapshot, YJS_STAGING_DB_NAME } from '@data/snapshot/YjsSnapshotService';
 import { useSyncStore } from '@store/useSyncStore';
 import { useUIStore } from '@store/useUIStore';
 import { getYDoc, CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
@@ -198,17 +199,16 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     injectCloudUpdate('ws_b', await buildFutureVersionUpdate());
     useSyncStore.getState().setActiveWorkspaceId('ws_a');
     vi.spyOn(CheckpointService, 'createCheckpoint').mockResolvedValue(7);
-    const applyRemoteStateSpy = vi
-      .spyOn(CheckpointService, 'applyRemoteState')
-      .mockResolvedValue(undefined);
 
     await expect(getSyncOrchestrator().switchWorkspace('ws_b')).rejects.toThrow(
       /requires schema/
     );
     await expectLocked(FUTURE_VERSION);
 
-    // Nothing destructive ran and the state machine resolved cleanly.
-    expect(applyRemoteStateSpy).not.toHaveBeenCalled();
+    // Nothing destructive ran and the state machine resolved cleanly: the
+    // verify gate fires BEFORE the staged swap's stage step, so the
+    // staging database was never written and no STAGED commit happened.
+    await expect(readSnapshot({ dbName: YJS_STAGING_DB_NAME })).resolves.toBeNull();
     expect(MigrationStateService.getState()).toBeNull();
     expect(useSyncStore.getState().activeWorkspaceId).toBe('ws_a');
   });

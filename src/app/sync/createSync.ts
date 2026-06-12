@@ -83,12 +83,14 @@ export function getSyncOrchestrator(): SyncOrchestrator {
           CheckpointService.createCheckpoint(trigger, options),
         createAutomaticCheckpoint: (trigger, intervalMs) =>
           CheckpointService.createAutomaticCheckpoint(trigger, intervalMs),
-        // §D7 inversion: the destructive apply severs sync through the
-        // injected handle instead of importing the orchestrator.
-        applyRemoteState: (blob) =>
-          CheckpointService.applyRemoteState(blob, { pauseSync: stopSyncConnections }),
       },
       migrationState: {
+        setStaged: (targetWorkspaceId, backupCheckpointId, previousWorkspaceId) =>
+          MigrationStateService.setStaged(
+            targetWorkspaceId,
+            backupCheckpointId,
+            previousWorkspaceId
+          ),
         setAwaitingConfirmation: (targetWorkspaceId, backupCheckpointId) =>
           MigrationStateService.setAwaitingConfirmation(targetWorkspaceId, backupCheckpointId),
         setRestoringBackup: () => MigrationStateService.setRestoringBackup(),

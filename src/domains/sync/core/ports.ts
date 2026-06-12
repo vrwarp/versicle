@@ -25,20 +25,25 @@ export interface SyncStatePort {
 
 /**
  * Checkpoint operations the sync flows depend on. Wired to the (static)
- * CheckpointService by the composition root — which also injects the
- * `pauseSync` shutdown handle into the destructive `applyRemoteState`
- * (the §D7 circular-import inversion: CheckpointService no longer imports
- * the sync manager to destroy it).
+ * CheckpointService by the composition root. (The legacy destructive
+ * `applyRemoteState` member is gone: the staged swap (§D4) moved the
+ * destructive apply to the boot interceptor's STAGED arm —
+ * domains/sync/workspaces/stagedSwap.ts — so the switch path itself never
+ * wipes anything.)
  */
 export interface CheckpointsPort {
   createCheckpoint(trigger: string, options?: { protected?: boolean }): Promise<number>;
   createAutomaticCheckpoint(trigger: string, intervalMs: number): Promise<number | null>;
-  /** Destructive: wipes local persistence and writes the blob. Reloads. */
-  applyRemoteState(remoteBlob: Uint8Array): Promise<void>;
 }
 
 /** The localStorage migration state machine (workspace switch). */
 export interface MigrationStatePort {
+  /** The §D4 commit point: verified blob is durably staged. */
+  setStaged(
+    targetWorkspaceId: string,
+    backupCheckpointId: number,
+    previousWorkspaceId?: string
+  ): void;
   setAwaitingConfirmation(targetWorkspaceId: string, backupCheckpointId: number): void;
   setRestoringBackup(): void;
   clear(): void;

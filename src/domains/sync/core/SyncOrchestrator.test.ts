@@ -98,7 +98,6 @@ describe('SyncOrchestrator', () => {
     let checkpointsPort: {
         createCheckpoint: ReturnType<typeof vi.fn<(trigger: string, options?: { protected?: boolean }) => Promise<number>>>;
         createAutomaticCheckpoint: ReturnType<typeof vi.fn<(trigger: string, intervalMs: number) => Promise<number | null>>>;
-        applyRemoteState: ReturnType<typeof vi.fn<(blob: Uint8Array) => Promise<void>>>;
     };
 
     const makeOrchestrator = (
@@ -141,7 +140,6 @@ describe('SyncOrchestrator', () => {
         checkpointsPort = {
             createCheckpoint: vi.fn(async () => 1),
             createAutomaticCheckpoint: vi.fn(async () => null),
-            applyRemoteState: vi.fn(async () => undefined),
         };
         MigrationStateService.clear();
 
@@ -479,31 +477,24 @@ describe('SyncOrchestrator', () => {
             await switchPromise;
 
             expect(checkpointsPort.createCheckpoint).toHaveBeenCalledWith('pre-migration', { protected: true });
-            expect(checkpointsPort.applyRemoteState).toHaveBeenCalled();
-            // The state machine references the pinned backup across the reload
+            // The state machine references the pinned backup across the
+            // reload. Since P4-5 the switch commits STAGED (the boot
+            // interceptor's idempotent apply performs the destructive step
+            // and the AWAITING_CONFIRMATION transition — pinned by
+            // stagedSwap.test.ts and App_Boot.test.tsx); the protected
+            // backup id rides the state machine exactly as before.
             expect(MigrationStateService.getState()).toEqual({
-                status: 'AWAITING_CONFIRMATION',
+                status: 'STAGED',
                 targetWorkspaceId: 'ws_target',
-                backupCheckpointId: 7
+                backupCheckpointId: 7,
+                previousWorkspaceId: 'ws_current'
             });
         });
 
-        it('rolls back to the pinned backup instead of clearing state when applying remote state fails', async () => {
-            // The destructive apply step fails after it may have wiped IDB
-            checkpointsPort.applyRemoteState.mockRejectedValue(new Error('IDB write failed'));
-
-            const switchPromise = orchestrator.switchWorkspace('ws_target');
-            await completeRemoteDownload();
-            await switchPromise; // Resolves: failure is routed to the rollback path
-
-            // Migration state must survive as RESTORING_BACKUP so the boot
-            // interceptor restores the pinned pre-migration checkpoint.
-            expect(MigrationStateService.getState()).toEqual({
-                status: 'RESTORING_BACKUP',
-                targetWorkspaceId: 'ws_target',
-                backupCheckpointId: 7
-            });
-            expect(activeWorkspaceId).toBe('ws_current');
-        });
+        // The destructive-apply failure row ("rolls back to the pinned
+        // backup instead of clearing state") moved with the destructive
+        // apply itself: the boot interceptor routes a failed staged apply
+        // to RESTORING_BACKUP (App_Boot.test.tsx) and the apply's
+        // validate-before-destroy rows live in stagedSwap.test.ts.
     });
 });

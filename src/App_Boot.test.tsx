@@ -44,6 +44,7 @@ const h = vi.hoisted(() => {
     repairCoverBlobs: vi.fn(),
     shouldAutoSync: vi.fn(),
     scanAndIndex: vi.fn(),
+    applyStagedSwap: vi.fn(),
     driveState: {
       linkedFolderId: null as string | null,
       lastScanTime: null as number | null,
@@ -88,6 +89,15 @@ vi.mock('./domains/sync/checkpoints/CheckpointService', () => ({
     listCheckpoints: h.listCheckpoints,
     deleteCheckpoint: h.deleteCheckpoint,
   },
+}));
+
+// The staged swap (P4-5): the boot interceptor's STAGED arm delegates here.
+vi.mock('./domains/sync/workspaces/stagedSwap', () => ({
+  applyStagedSwap: h.applyStagedSwap,
+  clearStagedState: vi.fn(async () => undefined),
+  stageWorkspaceState: vi.fn(async () => undefined),
+  pauseIfArmed: vi.fn(async () => undefined),
+  withSwapLock: vi.fn((work: () => Promise<unknown>) => work()),
 }));
 
 vi.mock('./lib/drive/DriveScannerService', () => ({
@@ -189,6 +199,7 @@ function resetBootMocks() {
   h.repairCoverBlobs.mockResolvedValue(undefined);
   h.syncInitialize.mockReturnValue(new Promise(() => {})); // never resolves — boot must not block on sync
   h.restoreCheckpoint.mockReturnValue(new Promise(() => {})); // restore reloads the page; never resolves in tests
+  h.applyStagedSwap.mockReturnValue(new Promise(() => {})); // apply reloads the page; never resolves in tests
   h.listCheckpoints.mockResolvedValue([]);
   h.deleteCheckpoint.mockResolvedValue(undefined);
   h.shouldAutoSync.mockResolvedValue(false);
@@ -330,10 +341,14 @@ describe('boot: migration interceptor — RESTORING_BACKUP', () => {
     render(<App />);
 
     await waitFor(() => {
-      // The second arg is the §D7 pauseSync shutdown handle.
+      // The second arg carries the §D7 pauseSync shutdown handle and the
+      // P4-5 active-workspace revert hook.
       expect(h.restoreCheckpoint).toHaveBeenCalledWith(
         42,
-        expect.objectContaining({ pauseSync: expect.any(Function) }),
+        expect.objectContaining({
+          pauseSync: expect.any(Function),
+          setActiveWorkspaceId: expect.any(Function),
+        }),
       );
     });
 
@@ -341,6 +356,66 @@ describe('boot: migration interceptor — RESTORING_BACKUP', () => {
     expect(h.listCheckpoints).not.toHaveBeenCalled();
     // The rollback path never raises the confirmation modal.
     expect(screen.queryByTestId('migration-confirm-modal')).not.toBeInTheDocument();
+  });
+});
+
+describe('boot: migration interceptor — STAGED (P4-5 staged swap)', () => {
+  it('runs the idempotent staged apply, halts, and never initializes sync', async () => {
+    window.localStorage.setItem(
+      MIGRATION_STATE_KEY,
+      JSON.stringify({
+        status: 'STAGED',
+        targetWorkspaceId: 'ws-target',
+        backupCheckpointId: 42,
+        previousWorkspaceId: 'ws-before',
+      }),
+    );
+    h.books = { b1: { id: 'b1' } };
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(h.applyStagedSwap).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'STAGED',
+          targetWorkspaceId: 'ws-target',
+          backupCheckpointId: 42,
+          previousWorkspaceId: 'ws-before',
+        }),
+        expect.objectContaining({
+          pauseSync: expect.any(Function),
+          setActiveWorkspaceId: expect.any(Function),
+        }),
+      );
+    });
+
+    // The apply arm halts boot exactly like the rollback arm does.
+    expect(h.syncInitialize).not.toHaveBeenCalled();
+    expect(h.listCheckpoints).not.toHaveBeenCalled();
+    expect(h.restoreCheckpoint).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('migration-confirm-modal')).not.toBeInTheDocument();
+  });
+
+  it('routes a failed staged apply to RESTORING_BACKUP', async () => {
+    window.localStorage.setItem(
+      MIGRATION_STATE_KEY,
+      JSON.stringify({
+        status: 'STAGED',
+        targetWorkspaceId: 'ws-target',
+        backupCheckpointId: 42,
+      }),
+    );
+    h.books = { b1: { id: 'b1' } };
+    h.applyStagedSwap.mockRejectedValue(new Error('staging vanished'));
+
+    render(<App />);
+
+    await waitFor(() => {
+      const state = JSON.parse(window.localStorage.getItem(MIGRATION_STATE_KEY) || 'null');
+      expect(state?.status).toBe('RESTORING_BACKUP');
+      expect(state?.backupCheckpointId).toBe(42);
+    });
+    expect(h.syncInitialize).not.toHaveBeenCalled();
   });
 });
 

@@ -15,6 +15,20 @@
  * every reader returns its inert default.
  */
 
+/**
+ * Deterministic kill points for the kill-mid-switch journey
+ * (phase4-sync-strangler.md §D8): the staged workspace swap parks forever
+ * when it reaches the armed point, so Playwright can `page.close()` there —
+ * modelling process death with the migration state machine and IndexedDB
+ * exactly as a crash would leave them.
+ *
+ *  - 'swap:staged'       after STAGED commits, before the reload (switch path)
+ *  - 'swap:before-apply' boot STAGED arm, before reading the staging DB
+ *  - 'swap:mid-apply'    boot STAGED arm, after the main DB wipe, before
+ *                        the rewrite — the most dangerous crash window
+ */
+export type SwapPausePoint = 'swap:staged' | 'swap:before-apply' | 'swap:mid-apply';
+
 declare global {
   interface Window {
     /** Route sync through MockFireProvider instead of Firestore. */
@@ -25,6 +39,8 @@ declare global {
     __VERSICLE_MOCK_SYNC_DELAY__?: number;
     /** Override the Firestore flush debounce (ms) to speed up sync E2Es. */
     __VERSICLE_FIRESTORE_DEBOUNCE_MS__?: number;
+    /** Park the staged workspace swap at this point (kill-mid-switch E2E). */
+    __VERSICLE_SWAP_PAUSE__?: SwapPausePoint;
   }
 }
 
@@ -46,4 +62,9 @@ export function getMockSyncDelayMs(): number | undefined {
 /** Firestore flush-debounce override in ms; undefined when not injected. */
 export function getFirestoreDebounceOverrideMs(): number | undefined {
   return typeof window !== 'undefined' ? window.__VERSICLE_FIRESTORE_DEBOUNCE_MS__ : undefined;
+}
+
+/** The armed swap pause point, or undefined (production: always undefined). */
+export function getSwapPausePoint(): SwapPausePoint | undefined {
+  return typeof window !== 'undefined' ? window.__VERSICLE_SWAP_PAUSE__ : undefined;
 }

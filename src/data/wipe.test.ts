@@ -168,6 +168,7 @@ describe('wipeAllData', () => {
     }
     expect(ordering.events.filter(event => event.startsWith('delete:'))).toEqual([
       'delete:versicle-yjs',
+      'delete:versicle-yjs-staging',
       'delete:EpubLibraryDB',
     ]);
   });

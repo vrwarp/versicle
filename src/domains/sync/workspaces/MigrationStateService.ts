@@ -49,14 +49,40 @@ export class MigrationStateService {
     }
 
     /**
+     * Transition to STAGED — the commit point of the crash-resumable staged
+     * switch (Phase 4 §D4 step 6): the verified blob is durably in the
+     * staging database; the boot interceptor's STAGED arm performs the
+     * idempotent apply. `previousWorkspaceId` records the pre-switch active
+     * workspace so a later rollback can revert the local tie.
+     */
+    static setStaged(
+        targetWorkspaceId: string,
+        backupCheckpointId: number,
+        previousWorkspaceId?: string,
+    ): void {
+        MigrationStateService.setState({
+            status: 'STAGED',
+            targetWorkspaceId,
+            backupCheckpointId,
+            ...(previousWorkspaceId ? { previousWorkspaceId } : {}),
+        });
+    }
+
+    /**
      * Transition to AWAITING_CONFIRMATION.
-     * Called after backup and remote state hydration, before reload.
+     * Called after the staged apply has been durably written, before reload.
+     * Preserves `previousWorkspaceId` from a STAGED state so a rollback can
+     * still revert the active-workspace tie.
      */
     static setAwaitingConfirmation(targetWorkspaceId: string, backupCheckpointId: number): void {
+        const current = MigrationStateService.getState();
         MigrationStateService.setState({
             status: 'AWAITING_CONFIRMATION',
             targetWorkspaceId,
             backupCheckpointId,
+            ...(current?.previousWorkspaceId
+                ? { previousWorkspaceId: current.previousWorkspaceId }
+                : {}),
         });
     }
 
@@ -74,6 +100,9 @@ export class MigrationStateService {
             status: 'RESTORING_BACKUP',
             targetWorkspaceId: current.targetWorkspaceId,
             backupCheckpointId: current.backupCheckpointId,
+            ...(current.previousWorkspaceId
+                ? { previousWorkspaceId: current.previousWorkspaceId }
+                : {}),
         });
     }
 }

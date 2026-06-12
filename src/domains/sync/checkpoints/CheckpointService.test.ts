@@ -30,9 +30,19 @@ const mocks = vi.hoisted(() => {
         disconnectYjs,
         // null = the suite's default (soft-restore fallback). The hard-reset
         // (S.2) tests install an object with a clearData spy.
-        persistence: null as null | { clearData: () => Promise<void> }
+        persistence: null as null | { clearData: () => Promise<void> },
+        // false = the suite's default: with no live binding AND no
+        // IndexedDB, restore falls back to the in-memory soft path (the
+        // legacy tests below pin that fallback). The P4-5 boot-path tests
+        // flip this to true: IndexedDB exists but no binding does — the
+        // hard path must run against the database directly.
+        storageSupported: false
     };
 });
+
+vi.mock('@lib/sync/support', () => ({
+    isStorageSupported: () => mocks.storageSupported,
+}));
 
 vi.mock('@data/connection', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@data/connection')>()),
@@ -64,6 +74,33 @@ const yDoc = getYDoc();
 
 let tempDocCounter = 0;
 
+/** Drop the main Yjs database (shared by the S.2 and P4-5 hard-path suites). */
+const deleteMainDb = () => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase('versicle-yjs');
+    request.onsuccess = () => resolve();
+    request.onblocked = () => resolve();
+    request.onerror = () => reject(request.error);
+});
+
+/** Raw read of the main database's update rows (fake-indexeddb). */
+const readYjsUpdateRows = async (): Promise<Uint8Array[]> => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('versicle-yjs');
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+    try {
+        return await new Promise<Uint8Array[]>((resolve, reject) => {
+            const tx = db.transaction(['updates'], 'readonly');
+            const request = tx.objectStore('updates').getAll();
+            request.onsuccess = () => resolve(request.result as Uint8Array[]);
+            request.onerror = () => reject(request.error);
+        });
+    } finally {
+        db.close();
+    }
+};
+
 describe('CheckpointService', () => {
     afterEach(() => {
         vi.restoreAllMocks();
@@ -83,6 +120,7 @@ describe('CheckpointService', () => {
         mocks.firestoreDestroy.mockReset();
         mocks.disconnectYjs.mockClear();
         mocks.persistence = null;
+        mocks.storageSupported = false;
 
         // Clear yDoc
         yDoc.transact(() => {
@@ -419,35 +457,10 @@ describe('CheckpointService', () => {
      * the checkpoint store are mocked.
      */
     describe('regression: hard-reset restore via YjsSnapshotService (S.2)', () => {
-        const deleteYjsDatabase = () => new Promise<void>((resolve, reject) => {
-            const request = indexedDB.deleteDatabase('versicle-yjs');
-            request.onsuccess = () => resolve();
-            request.onblocked = () => resolve();
-            request.onerror = () => reject(request.error);
-        });
-
-        const readYjsUpdateRows = async (): Promise<Uint8Array[]> => {
-            const db = await new Promise<IDBDatabase>((resolve, reject) => {
-                const request = indexedDB.open('versicle-yjs');
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-            try {
-                return await new Promise<Uint8Array[]>((resolve, reject) => {
-                    const tx = db.transaction(['updates'], 'readonly');
-                    const request = tx.objectStore('updates').getAll();
-                    request.onsuccess = () => resolve(request.result as Uint8Array[]);
-                    request.onerror = () => reject(request.error);
-                });
-            } finally {
-                db.close();
-            }
-        };
-
         let clearData: ReturnType<typeof vi.fn<() => Promise<void>>>;
 
         beforeEach(async () => {
-            await deleteYjsDatabase();
+            await deleteMainDb();
             clearData = vi.fn<() => Promise<void>>(async () => undefined);
             mocks.persistence = { clearData };
         });
@@ -519,32 +532,100 @@ describe('CheckpointService', () => {
             expect(MigrationStateService.getState()?.status).toBe('RESTORING_BACKUP');
         });
 
-        it('applyRemoteState persists the remote blob durably through the same path', async () => {
-            const remoteDoc = new Y.Doc();
-            remoteDoc.clientID = yDoc.clientID + (++tempDocCounter);
-            remoteDoc.getMap('library').set('workspace', 'remote');
-            const remoteBlob = Y.encodeStateAsUpdate(remoteDoc);
-            remoteDoc.destroy();
+        // NOTE: the S.2 applyRemoteState cases (durable remote-blob write,
+        // corrupted-blob rejection before anything destructive) moved with
+        // the method: the staged swap absorbed applyRemoteState into
+        // stagedSwap.ts, and stagedSwap.test.ts carries the assertions as
+        // 'regression: …' blocks (test-absorption ledger, program rule 8).
+    });
 
-            await CheckpointService.applyRemoteState(remoteBlob, { pauseSync: mocks.firestoreDestroy });
-
-            expect(mocks.firestoreDestroy).toHaveBeenCalledTimes(1);
-            expect(clearData).toHaveBeenCalledTimes(1);
-            expect(mocks.disconnectYjs).toHaveBeenCalledTimes(1);
-
-            const rows = await readYjsUpdateRows();
-            expect(rows).toHaveLength(1);
-            expect(Array.from(rows[0])).toEqual(Array.from(remoteBlob));
+    /**
+     * P4-5: the boot-path rollback. The RESTORING_BACKUP interceptor arm
+     * runs BEFORE `startYjsPersistence`, so no live binding exists — the
+     * hard-reset restore must still persist durably (pre-P4-5 this fell
+     * into the in-memory soft path: nothing written, state cleared anyway,
+     * and the next manual reload silently booted the TARGET workspace).
+     */
+    describe('regression: boot-time rollback persists durably without a live binding (P4-5)', () => {
+        const deleteMainDb = () => new Promise<void>((resolve, reject) => {
+            const request = indexedDB.deleteDatabase('versicle-yjs');
+            request.onsuccess = () => resolve();
+            request.onblocked = () => resolve();
+            request.onerror = () => reject(request.error);
         });
 
-        it('applyRemoteState rejects a corrupted blob before anything destructive runs', async () => {
-            await expect(
-                CheckpointService.applyRemoteState(new Uint8Array(0), { pauseSync: mocks.firestoreDestroy })
-            ).rejects.toMatchObject({ code: 'BACKUP_SNAPSHOT_INVALID' });
+        beforeEach(async () => {
+            await deleteMainDb();
+            mocks.persistence = null;        // boot: no binding constructed yet
+            mocks.storageSupported = true;   // …but IndexedDB exists
+        });
 
-            expect(mocks.firestoreDestroy).not.toHaveBeenCalled();
-            expect(clearData).not.toHaveBeenCalled();
+        afterEach(() => {
+            MigrationStateService.clear();
+        });
+
+        const seedCheckpoint = (): Uint8Array => {
+            const tempDoc = new Y.Doc();
+            tempDoc.clientID = yDoc.clientID + (++tempDocCounter);
+            tempDoc.getMap('library').set('restored', 'boot-hard');
+            const blob = Y.encodeStateAsUpdate(tempDoc);
+            tempDoc.destroy();
+            mocks.get.mockResolvedValue({ blob });
+            return blob;
+        };
+
+        it('writes the snapshot into versicle-yjs and clears the state machine, in order', async () => {
+            const blob = seedCheckpoint();
+            MigrationStateService.setState({
+                status: 'RESTORING_BACKUP',
+                targetWorkspaceId: 'ws_target',
+                backupCheckpointId: 1
+            });
+
+            await CheckpointService.restoreCheckpoint(1, { pauseSync: mocks.firestoreDestroy });
+
+            // No binding to wipe/disconnect — the database was replaced directly.
             expect(mocks.disconnectYjs).not.toHaveBeenCalled();
+            const rows = await readYjsUpdateRows();
+            expect(rows).toHaveLength(1);
+            expect(Array.from(rows[0])).toEqual(Array.from(blob));
+            expect(MigrationStateService.getState()).toBeNull();
+        });
+
+        it('reverts activeWorkspaceId to previousWorkspaceId when the state carries it (staged swaps)', async () => {
+            seedCheckpoint();
+            MigrationStateService.setState({
+                status: 'RESTORING_BACKUP',
+                targetWorkspaceId: 'ws_target',
+                backupCheckpointId: 1,
+                previousWorkspaceId: 'ws_before'
+            });
+            const setActiveWorkspaceId = vi.fn();
+
+            await CheckpointService.restoreCheckpoint(1, {
+                pauseSync: mocks.firestoreDestroy,
+                setActiveWorkspaceId,
+            });
+
+            expect(setActiveWorkspaceId).toHaveBeenCalledWith('ws_before');
+            expect(MigrationStateService.getState()).toBeNull();
+        });
+
+        it('leaves activeWorkspaceId alone for legacy states without previousWorkspaceId', async () => {
+            seedCheckpoint();
+            MigrationStateService.setState({
+                status: 'RESTORING_BACKUP',
+                targetWorkspaceId: 'ws_target',
+                backupCheckpointId: 1
+            });
+            const setActiveWorkspaceId = vi.fn();
+
+            await CheckpointService.restoreCheckpoint(1, {
+                pauseSync: mocks.firestoreDestroy,
+                setActiveWorkspaceId,
+            });
+
+            expect(setActiveWorkspaceId).not.toHaveBeenCalled();
         });
     });
 });

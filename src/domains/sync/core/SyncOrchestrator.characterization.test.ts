@@ -26,6 +26,11 @@ import {
 import { wireSyncEvents } from '@app/sync/wireSyncEvents';
 import { CheckpointService } from '../checkpoints/CheckpointService';
 import { MigrationStateService } from '../workspaces/MigrationStateService';
+import {
+  readSnapshot,
+  deleteYjsDatabase,
+  YJS_STAGING_DB_NAME,
+} from '@data/snapshot/YjsSnapshotService';
 import { useSyncStore } from '@store/useSyncStore';
 import { useToastStore } from '@store/useToastStore';
 import { CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
@@ -242,20 +247,17 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
     });
   });
 
-  describe('switchWorkspace — multi-stage commit (mock path)', () => {
+  describe('switchWorkspace — staged swap (mock path, P4-5 §D4 ordering)', () => {
     let createCheckpointSpy: ReturnType<typeof vi.spyOn>;
-    let applyRemoteStateSpy: ReturnType<typeof vi.spyOn>;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       createCheckpointSpy = vi
         .spyOn(CheckpointService, 'createCheckpoint')
         .mockResolvedValue(7) as ReturnType<typeof vi.spyOn>;
-      applyRemoteStateSpy = vi
-        .spyOn(CheckpointService, 'applyRemoteState')
-        .mockResolvedValue(undefined) as ReturnType<typeof vi.spyOn>;
+      await deleteYjsDatabase({ dbName: YJS_STAGING_DB_NAME });
     });
 
-    it('downloads the target workspace, pins a protected checkpoint, locks the state machine, and applies', async () => {
+    it('downloads, pins a protected checkpoint, stages durably, then commits STAGED + the id flip', async () => {
       seedWorkspace('ws_a');
       seedWorkspace('ws_b');
       useSyncStore.getState().setActiveWorkspaceId('ws_a');
@@ -268,23 +270,29 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
 
       // Protected pre-migration checkpoint (P0 pinning semantics).
       expect(createCheckpointSpy).toHaveBeenCalledWith('pre-migration', { protected: true });
-      // State machine survives the (spied-out) reload as AWAITING_CONFIRMATION.
+
+      // The commit point: STAGED, carrying the rollback target AND the
+      // pre-switch workspace (so a later rollback reverts the local tie).
+      // AWAITING_CONFIRMATION engagement moved to the boot interceptor's
+      // idempotent apply (stagedSwap.applyStagedSwap).
       expect(MigrationStateService.getState()).toEqual({
-        status: 'AWAITING_CONFIRMATION',
+        status: 'STAGED',
         targetWorkspaceId: 'ws_b',
         backupCheckpointId: 7,
+        previousWorkspaceId: 'ws_a',
       });
-      // The active workspace id flips BEFORE apply (current pre-commit
-      // ordering — the staged-swap item re-orders this; see §D4 step 3).
+      // The id flips only at the commit point (legacy flipped it BEFORE the
+      // download — a crash mid-download left a dangling state).
       expect(useSyncStore.getState().activeWorkspaceId).toBe('ws_b');
       expect(showToast).toHaveBeenCalledWith('Downloading workspace data...', 'info');
 
-      // The blob handed to applyRemoteState is the downloaded ws_b state.
-      expect(applyRemoteStateSpy).toHaveBeenCalledTimes(1);
-      const blob = applyRemoteStateSpy.mock.calls[0][0] as Uint8Array;
+      // The downloaded ws_b state is durably in the staging database.
+      const staged = await readSnapshot({ dbName: YJS_STAGING_DB_NAME });
+      expect(staged).not.toBeNull();
       const decoded = new Y.Doc();
-      Y.applyUpdate(decoded, blob);
+      Y.applyUpdate(decoded, staged!);
       expect(decoded.getMap('library').get('characterization-probe')).toBe('workspace-b-data');
+      decoded.destroy();
     });
 
     it('is a no-op when switching to the already-active workspace', async () => {
@@ -295,8 +303,8 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       await manager.switchWorkspace('ws_a');
 
       expect(createCheckpointSpy).not.toHaveBeenCalled();
-      expect(applyRemoteStateSpy).not.toHaveBeenCalled();
       expect(MigrationStateService.getState()).toBeNull();
+      await expect(readSnapshot({ dbName: YJS_STAGING_DB_NAME })).resolves.toBeNull();
     });
 
     it('pre-flight rejects a tombstoned target before any destructive step', async () => {
@@ -311,11 +319,17 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
         'Cannot switch: This workspace has been deleted.',
         'error'
       );
-      // Nothing destructive ran: no checkpoint, no state machine, no id flip.
+      // Nothing destructive ran: no checkpoint, no state machine, no id
+      // flip, nothing staged.
       expect(createCheckpointSpy).not.toHaveBeenCalled();
       expect(MigrationStateService.getState()).toBeNull();
       expect(useSyncStore.getState().activeWorkspaceId).toBe('ws_a');
+      await expect(readSnapshot({ dbName: YJS_STAGING_DB_NAME })).resolves.toBeNull();
     });
+
+    // The per-stage abort/crash rows (kill between every pair of stages,
+    // idempotent re-apply) are pinned by the owning suite:
+    // src/domains/sync/workspaces/stagedSwap.test.ts.
   });
 
   describe('deleteWorkspace / listWorkspaces (mock path)', () => {
