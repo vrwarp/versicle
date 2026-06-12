@@ -765,3 +765,68 @@ migration is a separate commit within the PR.
 - **P9:** `~types/db` shim deletion (reader types consumed via domain modules by then);
   ratchet completion (`as any` → 0 needs PRs 3/7/9 deltas); the absorption ledger entries from
   PR-14's test consolidation.
+
+---
+
+## Status — p6-shell-decomposition (2026-06-12)
+
+The second cluster (PR-3/4/6/8/9 of §Execution + the §8 stub item) is DONE
+on this branch. Reconciliations against the doc, recorded per program rules:
+
+1. **§8 stub retirement took the §8.5 fallback** — deliberately. Upstream
+   epubjs 0.3.93 declares every surface as `export default class`, and TS
+   cannot declaration-merge members into a default export via module
+   augmentation (under `skipLibCheck` the attempt fails silently; verified
+   with a probe). The §2a untyped internals are typed in
+   `src/domains/reader/engine/epubjsInternals.ts` (intersection types over
+   upstream, engine-dir only); the ambient shadow IS deleted. Fallout was
+   ONE import fix (`TOCPanel.test.tsx` used the stub's invented
+   `NavigationItem` export) — well under the predicted scale, because the
+   kernel/cfi adoption had already deleted `cfi-utils.ts` and its two
+   `@ts-expect-error` directives.
+2. **§5a provider shape**: `ReaderCommandsProvider` does not build the
+   commands itself — TTS-aware chapter routing needs `app/tts` + the
+   playback store, which `domains/reader/ui` must not import
+   (domains-no-store). The shell-side controller assembles the object; the
+   provider owns context + registry lifecycle. `nextPage`/`prevPage` are
+   additions over the sketch so the keyboard path keeps its byte-identical
+   P0 gating (raw page turns, never chapter-routed). D11 decision: made
+   `refineSelection()` REACHABLE via the registry (delete-instead remains
+   PR-14's option if the Docker audio-bookmarking journey shows no need).
+3. **§5 geography**: domain-pure code landed at final addresses
+   (`domains/reader/session/ReadingSessionRecorder`, `domains/reader/ui/
+   ReaderCommands`, engine modules, `domains/chinese/engine` seam +
+   `types.ts`). The React shell pieces (`ReaderShell`, `shell/*`) stay
+   under `src/components/reader/` and the controller under `src/app/
+   reader/` — `domains/reader/ui` cannot hold store-coupled components
+   under domains-no-store; the move to the doc's `domains/reader/ui`
+   address is P8/P9 territory once rule-4 read/write split lands.
+4. **§6 recorder**: extraction commit write-identical, serialization fix
+   isolated with the doc's delayed-resolver interleaving test. `flushSync`
+   drains queued AND in-flight recordings unsnapped before the legacy
+   panic segment; the in-flight pass's late async completion drops via the
+   seq guard (the doc's "stale write dropped"). Dead `lexiconText`/third
+   LexiconManager mount were NOT carried into the shell (PR-14 dead code,
+   deleted with the file).
+5. **Test seam (§2b)**: `window.rendition` / `__reader_added_annotations_
+   count` → `__versicleTest.reader` + the 6 dependent specs had ALREADY
+   landed with the engine-port item; verified, no action.
+6. **A11y**: engine-titled iframes + ReaderOverlay note markers + the new
+   `<main>` landmark in ReaderShell; `test_a11y_axe.spec.ts` gains a
+   per-rule ratchet (`expectAbsentRules: ['frame-title',
+   'aria-hidden-focus']` on the reader surface, always-on). `region` stays
+   un-asserted until P8 dissolves the RootLayout CompassPill mount.
+   EXECUTION NOTE: the Playwright specs are typechecked here (tsc -b e2e
+   project); the Docker lane (`./run_verification.sh`) must run the
+   reading/sync/compass/audio-bookmarking journeys + `@a11y` before the
+   phase closes.
+7. **D5 lands**: theme-only changes no longer flow()+display() — the
+   relocation-event-frequency change the doc predicted is pinned by
+   useEpubReader_Theming.test.tsx (hook tier) + epubTheming.test.ts
+   (module tier). D3 single selection pipeline pinned by
+   useEpubReader_Selection.test.tsx.
+
+Remaining Phase 6 items (other work packages): PR-1 CH-1 fix, PR-10–13
+(chinese engine/dictionary/cedict/vocab canonicalization — vocab is CRDT
+v7 per the program decision), PR-14 exit audit (incl. D13 test
+consolidation + the duplicate ReaderTTSController suites).

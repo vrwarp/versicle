@@ -8,9 +8,22 @@
  * attaches the full violation list as a JSON artifact, but only FAILS on
  * serious/critical violations when A11Y_ENFORCE=1 is set. The first nightly
  * runs' artifacts are the data for the committed baseline; the gate flips
- * to enforcing as the known violations (aria-hidden-focus on note markers,
- * nested-interactive in BookCard/VocabTile, the unnamed reader iframe) are
- * burned down by their owning Phase 1+ workstreams.
+ * to enforcing as the known violations (nested-interactive in
+ * BookCard/VocabTile) are burned down by their owning workstreams.
+ *
+ * Phase 6 ratchet (prep/phase6-reader-engine.md §4 / PR-9): the reader
+ * surface's P0 baseline findings are FIXED and now assert ALWAYS, not just
+ * under A11Y_ENFORCE —
+ *   - frame-title: the engine titles every section iframe at content
+ *     render (EpubJsEngine content hook, the C7 SR contract),
+ *   - aria-hidden-focus: note markers ride the ReaderOverlay
+ *     'interactive' contract (focusable buttons never inside an
+ *     aria-hidden container),
+ *   - region (landmark): the reader body is a real <main> landmark
+ *     (ReaderShell); the header is the <header> banner. NOT asserted yet:
+ *     the RootLayout CompassPill mount is still outside any landmark — it
+ *     dissolves in P8, which owns flipping 'region' to expectAbsent.
+ * A regression in these named rules fails the nightly lane outright.
  *
  * Runs in the existing Docker flow (nightly lane), e.g.:
  *   ./run_verification.sh --project=desktop --grep @a11y
@@ -25,7 +38,20 @@ const ENFORCE = !!process.env.A11Y_ENFORCE;
 /** WCAG A/AA + best-practice rule tags — the standard axe gate. */
 const RULE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'];
 
-async function scanSurface(page: Page, testInfo: TestInfo, surface: string): Promise<void> {
+async function scanSurface(
+  page: Page,
+  testInfo: TestInfo,
+  surface: string,
+  opts: {
+    /**
+     * Rules whose P0-baseline findings were fixed by an owning workstream:
+     * ANY violation of these (regardless of impact, regardless of
+     * A11Y_ENFORCE) fails the scan — the per-rule ratchet that burns the
+     * baseline down without flipping the whole gate at once.
+     */
+    expectAbsentRules?: string[];
+  } = {},
+): Promise<void> {
   // Parent document only: legacy mode disables axe's frame injection and
   // iframes:false skips frame-content rules. epub.js creates/destroys
   // sandboxed blob iframes during section load and axe's injection hangs or
@@ -60,6 +86,15 @@ async function scanSurface(page: Page, testInfo: TestInfo, surface: string): Pro
   // The scan itself must have executed against a real surface.
   expect(results.passes.length + results.violations.length).toBeGreaterThan(0);
 
+  // Per-rule ratchet: fixed baseline findings must stay fixed.
+  if (opts.expectAbsentRules?.length) {
+    const regressed = results.violations.filter((v) => opts.expectAbsentRules!.includes(v.id));
+    expect(
+      regressed.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.length })),
+      `regressed fixed-baseline axe rules on ${surface}`
+    ).toEqual([]);
+  }
+
   if (ENFORCE) {
     expect(
       seriousOrCritical.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.length })),
@@ -86,7 +121,11 @@ test('a11y scan: reader surface', { tag: '@a11y' }, async ({ page }, testInfo) =
     .poll(() => utils.getReaderFrame(page) !== null, { timeout: 15000 })
     .toBe(true);
 
-  await scanSurface(page, testInfo, 'reader');
+  // Phase 6 fixed findings (see header): titled iframe + interactive
+  // note-marker overlay. 'region' joins when P8 dissolves the CompassPill.
+  await scanSurface(page, testInfo, 'reader', {
+    expectAbsentRules: ['frame-title', 'aria-hidden-focus'],
+  });
 });
 
 test('a11y scan: global settings dialog', { tag: '@a11y' }, async ({ page }, testInfo) => {

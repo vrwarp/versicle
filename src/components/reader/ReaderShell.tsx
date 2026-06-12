@@ -107,8 +107,9 @@ export const ReaderShell: React.FC = () => {
                     onOpenSyncPanel={() => setSyncPanelOpen(true)}
                 />
 
-                {/* Main Content */}
-                <div className="flex-1 relative overflow-hidden flex justify-center">
+                {/* Main Content — a real <main> landmark (P0 a11y baseline:
+                    the reader body lived outside any landmark region) */}
+                <main aria-label="Book" className="flex-1 relative overflow-hidden flex justify-center">
                     <ReaderSidebars
                         bookId={bookId}
                         engine={controller.engine}
@@ -140,7 +141,7 @@ export const ReaderShell: React.FC = () => {
                         scrollWrapperRef={controller.scrollWrapperRef}
                         readerViewMode={controller.readerViewMode}
                     />
-                </div>
+                </main>
 
                 <DebugHighlightLayer
                     bookId={bookId}

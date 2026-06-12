@@ -81,6 +81,11 @@ describe('renderer-swap smoke: ReaderView boots on FakeReaderEngine', () => {
       expect(screen.getByTestId('reader-header')).toBeInTheDocument();
       expect(screen.getByTestId('reader-iframe-container')).toBeInTheDocument();
     });
+
+    // P6 a11y landmark fix (P0 baseline: reader body outside any landmark
+    // region): the content area is a real <main>, the header a banner.
+    expect(screen.getByRole('main', { name: 'Book' })).toBeInTheDocument();
+    expect(screen.getByRole('banner')).toBeInTheDocument();
   });
 
   it('navigates sections through the port (TOC → engine.display)', async () => {
