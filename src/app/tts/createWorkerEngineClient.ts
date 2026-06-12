@@ -18,6 +18,7 @@
 import * as Comlink from 'comlink';
 import { Capacitor } from '@capacitor/core';
 import { TTSProviderManager } from '@lib/tts/TTSProviderManager';
+import { storeProviderBuildContext } from './providerBuildContext';
 import { PlatformIntegration } from '@lib/tts/PlatformIntegration';
 import { LexiconService } from '@lib/tts/LexiconService';
 import { bookRepository } from '../repositories/BookRepository';
@@ -120,7 +121,9 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         ]);
     };
 
-    // The real audio backend lives on the main thread; its events are forwarded into the worker.
+    // The real audio backend lives on the main thread; its events are forwarded into the
+    // worker. The build-context source is injected HERE (the composition root) — the
+    // manager itself never reads a store (5a-PR3 ctx-passing flip).
     const backend = new TTSProviderManager({
         onStart: () => { void engine.dispatchBackendEvent({ type: 'start' }); },
         onEnd: () => { void engine.dispatchBackendEvent({ type: 'end' }); },
@@ -132,7 +135,7 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         onDownloadProgress: (voiceId, percent, status) => {
             void engine.dispatchBackendEvent({ type: 'downloadProgress', voiceId, percent, status });
         },
-    });
+    }, undefined, storeProviderBuildContext);
 
     // The real media platform (lock screen / background audio) on the main thread.
     const platform = new PlatformIntegration({

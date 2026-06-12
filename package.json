@@ -22,8 +22,7 @@
     "tests": "vitest run",
     "coverage": "vitest run --coverage",
     "preview": "vite preview",
-    "prepare-piper": "mkdir -p public/piper && cp node_modules/piper-wasm/build/piper_phonemize.js public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.wasm public/piper/ && cp node_modules/piper-wasm/build/piper_phonemize.data public/piper/ && cp node_modules/piper-wasm/build/worker/piper_worker.js public/piper/ && node scripts/patch_piper_worker.js",
-    "postinstall": "patch-package && npm run prepare-piper"
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@capacitor-community/safe-area": "^7.0.0",
@@ -66,7 +65,6 @@
     "opencc-js": "^1.0.5",
     "papaparse": "^5.5.3",
     "pinyin-pro": "^3.28.1",
-    "piper-wasm": "^0.1.4",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-lazy-load-image-component": "^1.6.3",

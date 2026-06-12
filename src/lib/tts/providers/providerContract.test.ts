@@ -1,22 +1,25 @@
 /**
- * The shared provider contract (describeProviderContract.ts), run against every
- * provider through a per-provider harness — 5a-PR2. PiperProvider joins at 5a-PR3
- * when `PiperRuntime` becomes injectable (its synthesis path is still the
- * module-global piper-utils worker until then).
+ * The shared provider contract (describeProviderContract.ts), run against ALL SIX
+ * providers through per-provider harnesses (5a-PR2 brought five; PiperProvider
+ * joined at 5a-PR3 when the injectable `PiperRuntime` replaced the module-global
+ * piper-utils worker).
  *
  * vi.mock appears exactly once: for the Capacitor NATIVE plugin module — the one
  * boundary with no injection seam (allowlisted in eslint.config.js, mirroring the
  * engine-dir PlatformIntegration entry). Everything else is injected fakes:
- * FakeAudioSink + InMemoryTTSCache + stubbed fetch/speechSynthesis.
+ * FakeAudioSink + InMemoryTTSCache + FakePiperRuntime + stubbed
+ * fetch/speechSynthesis.
  */
 import { describe, vi, afterEach } from 'vitest';
 import { describeProviderContract, InMemoryTTSCache, type ProviderContractHarness } from './describeProviderContract';
 import { FakeAudioSink } from '../engine/FakeAudioSink';
+import { FakePiperRuntime } from './FakePiperRuntime';
 import { GoogleTTSProvider } from './GoogleTTSProvider';
 import { OpenAIProvider } from './OpenAIProvider';
 import { LemonFoxProvider } from './LemonFoxProvider';
 import { WebSpeechProvider } from './WebSpeechProvider';
 import { CapacitorTTSProvider } from './CapacitorTTSProvider';
+import { PiperProvider } from './PiperProvider';
 
 // ---------------------------------------------------------------------------
 // Capacitor native plugin double (no injection seam exists for a registered
@@ -124,6 +127,51 @@ describe('TTS provider contract (5a-PR2)', () => {
             blob: async () => new Blob(['synthesized-audio'], { type: 'audio/mp3' }),
         } as unknown as Response),
     ));
+
+    // -----------------------------------------------------------------------
+    // Piper (5a-PR3): injected FakePiperRuntime; catalog served from the fake's
+    // cache with the network stubbed offline (the SWR background refresh must
+    // never leave the test).
+    // -----------------------------------------------------------------------
+
+    describeProviderContract('piper', async () => {
+        const sink = new FakeAudioSink();
+        const cache = new InMemoryTTSCache();
+        const runtime = new FakePiperRuntime();
+        runtime.catalogJson = {
+            'en_US-contract-high': {
+                key: 'en_US-contract-high',
+                name: 'contract',
+                language: { code: 'en_US' },
+                quality: 'high',
+                num_speakers: 1,
+                speaker_id_map: {},
+                files: {
+                    'en/en_US/contract/high/en_US-contract-high.onnx': {},
+                    'en/en_US/contract/high/en_US-contract-high.onnx.json': {},
+                },
+            },
+        };
+        vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('offline'); }));
+
+        const provider = new PiperProvider('en', sink, cache, runtime.asRuntime());
+        await provider.init();
+
+        return {
+            provider,
+            voiceId: 'piper:en_US-contract-high',
+            failureMode: 'reject' as const,
+            armPlayFailure: () => { runtime.failNextGenerate = new Error('wasm inference failed'); },
+            synthesisBodies: () => runtime.generated.map((req) => JSON.stringify({
+                text: req.text,
+                modelUrl: req.modelUrl,
+                configUrl: req.configUrl,
+                speakerId: req.speakerId,
+            })),
+            liveSpeakRates: () => [],
+            sink,
+        };
+    });
 
     // -----------------------------------------------------------------------
     // Web Speech: stubbed speechSynthesis + utterance lifecycle.

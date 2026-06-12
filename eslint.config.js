@@ -280,13 +280,13 @@ export default tseslint.config(
   // Provider-dir vi.mock ban (Phase 5a-PR2; phase5-tts-strangler.md §vi.mock
   // policy, README §4 rule 3 ratchet "vi.mock in engine/provider/data dirs →
   // 0"): provider suites drive providers through injected fakes (FakeAudioSink,
-  // InMemoryTTSCache, stubbed fetch/speechSynthesis, constructor-injected
-  // caches). Exactly two module mocks remain allowed:
+  // InMemoryTTSCache, FakePiperRuntime, stubbed fetch/speechSynthesis,
+  // constructor-injected caches). Exactly ONE module mock remains allowed:
   //  - '@capacitor-community/text-to-speech' — a registered NATIVE plugin with
   //    no injection seam (the providers-dir analogue of the engine-dir
-  //    PlatformIntegration entry; permanent until a Capacitor port exists);
-  //  - './piper-utils' — PiperProvider's module-global synthesis path; leaves
-  //    the allowlist at 5a-PR3 when the injectable PiperRuntime replaces it.
+  //    PlatformIntegration entry; permanent until a Capacitor port exists).
+  // The './piper-utils' entry died at 5a-PR3 with the module itself (the
+  // injectable PiperRuntime replaced it).
   // Same flat-config caveat as the engine block above: same-named rules are
   // last-wins, so the readwrite selector is restated here.
   {
@@ -305,13 +305,12 @@ export default tseslint.config(
         {
           selector:
             "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/] > Literal" +
-            ":not([value='@capacitor-community/text-to-speech'])" +
-            ":not([value='./piper-utils'])",
+            ":not([value='@capacitor-community/text-to-speech'])",
           message:
             'vi.mock in src/lib/tts/providers/ is banned (5a-PR2) except for ' +
-            '{@capacitor-community/text-to-speech, ./piper-utils — the latter dies at ' +
-            '5a-PR3}. Inject fakes instead: FakeAudioSink + InMemoryTTSCache via the ' +
-            'provider constructors, vi.stubGlobal for fetch/speechSynthesis.',
+            '@capacitor-community/text-to-speech (native plugin, no injection seam). ' +
+            'Inject fakes instead: FakeAudioSink + InMemoryTTSCache + FakePiperRuntime ' +
+            'via the provider constructors, vi.stubGlobal for fetch/speechSynthesis.',
         },
         {
           selector:

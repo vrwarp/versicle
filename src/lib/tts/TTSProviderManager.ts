@@ -2,12 +2,21 @@ import { ProviderPlaybackError, isPlaybackInterruption } from './providers/types
 import type { ITTSProvider, TTSVoice, Unsubscribe } from './providers/types';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
-import { asLocaleAware, asVoiceDownloadable } from './providers/registry';
+import { asLocaleAware, asVoiceDownloadable, resolveDescriptor } from './providers/registry';
+import type { ProviderBuildContext } from './providers/registry';
 import { Capacitor } from '@capacitor/core';
 import type { PlaybackBackend } from './engine/PlaybackBackend';
 import type { AudioSink } from './engine/AudioSink';
 import { AudioElementPlayer } from './AudioElementPlayer';
-import { buildProviderById } from './providerFactory';
+
+/**
+ * Supplies the construction inputs (API key, language) for a provider id. The
+ * composition roots inject a store-backed source
+ * (`@app/tts/providerBuildContext`); lib/tts itself never reads a store — the
+ * 5a-PR3 ctx-passing flip that deleted `providerFactory.ts` and its
+ * lib→store edge.
+ */
+export type ProviderBuildContextSource = (providerId: string) => Omit<ProviderBuildContext, 'sink'>;
 
 /**
  * Interface defining the events emitted by the TTSProviderManager.
@@ -56,6 +65,8 @@ export class TTSProviderManager implements PlaybackBackend {
     private detachProviderListener: Unsubscribe | null = null;
     /** The one shared audio-output device, injected into every cloud/wasm provider. */
     private sharedSink: AudioSink | null;
+    /** Injected build-context source (store-backed in production; inert default in tests). */
+    private readonly getBuildContext: ProviderBuildContextSource;
 
     /**
      * Creates a new TTSProviderManager.
@@ -64,10 +75,14 @@ export class TTSProviderManager implements PlaybackBackend {
      * @param {TTSProviderEvents} events Callback handlers for provider events.
      * @param sink Optional shared sink (tests inject a FakeAudioSink); created
      *   lazily as an {@link AudioElementPlayer} on first cloud/wasm build otherwise.
+     * @param getBuildContext Per-provider construction inputs (API key, language).
+     *   Production injects the store-backed source from the composition root;
+     *   the default supplies no key and 'en' (device providers need neither).
      */
-    constructor(events: TTSProviderEvents, sink?: AudioSink) {
+    constructor(events: TTSProviderEvents, sink?: AudioSink, getBuildContext?: ProviderBuildContextSource) {
         this.events = events;
         this.sharedSink = sink ?? null;
+        this.getBuildContext = getBuildContext ?? (() => ({ language: 'en' }));
         if (Capacitor.isNativePlatform()) {
             this.provider = new CapacitorTTSProvider();
         } else {
@@ -171,12 +186,16 @@ export class TTSProviderManager implements PlaybackBackend {
     }
 
     /**
-     * Swaps the active provider by id, constructing it via the shared provider factory
-     * (which reads API keys + active language from the TTS settings store) with the
-     * manager's shared sink injected.
+     * Swaps the active provider by id: descriptor-driven construction with an
+     * explicitly passed {@link ProviderBuildContext} (injected source + the
+     * manager's shared sink) — no store reach-in anywhere on this path.
      */
     setProviderById(providerId: string) {
-         this.setProvider(buildProviderById(providerId, this.getSharedSink()));
+         const descriptor = resolveDescriptor(providerId);
+         this.setProvider(descriptor.build({
+             ...this.getBuildContext(providerId),
+             sink: this.getSharedSink(),
+         }));
     }
 
     /**

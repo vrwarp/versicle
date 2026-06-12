@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useTTSStore } from './useTTSStore';
-import { buildProviderById } from '@lib/tts/providerFactory';
+import { resolveDescriptor } from '@lib/tts/providers/registry';
+import { storeProviderBuildContext } from '@app/tts/providerBuildContext';
 import { Capacitor } from '@capacitor/core';
+
+/** The production composition: registry descriptor + store-backed build context. */
+const buildProviderById = (id: string) =>
+    resolveDescriptor(id).build(storeProviderBuildContext(id));
 
 // Mock Capacitor
 vi.mock('@capacitor/core', () => ({
@@ -113,7 +118,8 @@ describe('Provider selection (store routing + factory platform detection)', () =
         expect(mockInit).toHaveBeenCalled();
     });
 
-    // The platform branching that used to live in the store now lives in the single factory.
+    // The platform branching that used to live in the store now lives in the registry
+    // ('local' alias resolution); the store read lives in the app-layer context source.
     it('factory: builds WebSpeechProvider on web for the local provider', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (Capacitor.isNativePlatform as any).mockReturnValue(false);

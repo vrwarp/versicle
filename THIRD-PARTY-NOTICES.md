@@ -24,8 +24,8 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 - **Version:** UNKNOWN — needs investigation (exact espeak-ng commit not recorded by upstream piper-wasm build)
 - **License:** GPL-3.0-or-later
 - **Source:** https://github.com/espeak-ng/espeak-ng
-- **Path:** public/piper/piper_phonemize.wasm, public/piper/piper_phonemize.data (gitignored; copied from node_modules/piper-wasm at postinstall and shipped in dist/piper/)
-- **Provenance:** Compiled into piper_phonemize.wasm and packed into piper_phonemize.data (Emscripten FS image of espeak-ng-data) by the upstream DavidCks/piper-wasm build, which states it followed the wide-video/piper-wasm recipe; the exact espeak-ng and piper-phonemize commits are recorded nowhere. GPLv3 §6 corresponding source is therefore currently unidentifiable — long-term fix is rebuilding the WASM from pinned commits in CI (gap report D3).
+- **Path:** third-party/piper/piper_phonemize.wasm, third-party/piper/piper_phonemize.data (git-tracked; copied to dist/piper/ at build by the vite piper-vendor plugin)
+- **Provenance:** Compiled into piper_phonemize.wasm and packed into piper_phonemize.data (Emscripten FS image of espeak-ng-data) by the upstream DavidCks/piper-wasm build, which states it followed the wide-video/piper-wasm recipe; the exact espeak-ng and piper-phonemize commits are recorded nowhere. GPLv3 §6 corresponding source is therefore currently unidentifiable — long-term fix is rebuilding the WASM from pinned commits in CI (gap report D3). Vendored into git at Phase 5a-PR3 (verbatim blobs from piper-wasm@0.1.4; SHA-256 hashes in third-party/piper/PROVENANCE.md).
 - **Notes:** piper-wasm's blanket 'MIT' package.json claim does not cover these blobs — the binary links GPL-3 espeak-ng, so the artifact is GPL-governed.
 
 ### piper-phonemize (compiled into piper_phonemize.wasm)
@@ -33,17 +33,17 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 - **Version:** UNKNOWN — needs investigation (exact commit not recorded by upstream piper-wasm build)
 - **License:** MIT
 - **Source:** https://github.com/rhasspy/piper-phonemize
-- **Path:** public/piper/piper_phonemize.wasm (gitignored; ships in dist/piper/)
-- **Provenance:** Compiled to WASM by the upstream DavidCks/piper-wasm build; exact source commit unrecorded (same build chain as the espeak-ng entry).
+- **Path:** third-party/piper/piper_phonemize.wasm (git-tracked; ships in dist/piper/)
+- **Provenance:** Compiled to WASM by the upstream DavidCks/piper-wasm build; exact source commit unrecorded (same build chain as the espeak-ng entry). Vendored into git at Phase 5a-PR3.
 
 ### piper-wasm build artifacts (piper_phonemize.js loader + piper_worker.js)
 
-- **Version:** 0.1.4 (piper-wasm npm package)
+- **Version:** 0.1.4 (piper-wasm npm package, vendored — the npm dependency was removed at Phase 5a-PR3)
 - **License:** MIT (wrapper/loader code; embedded espeak-ng payload is GPL-3.0 — see espeak-ng entry)
 - **Source:** https://github.com/DavidCks/piper-wasm
-- **Path:** public/piper/piper_phonemize.js, public/piper/piper_worker.js (gitignored; ship in dist/piper/)
-- **Provenance:** Copied verbatim from node_modules/piper-wasm/build/ into public/piper/ by the prepare-piper postinstall script (package.json); piper_worker.js is then string-patched in place.
-- **Modifications:** scripts/patch_piper_worker.js applies 6 string-replacement patches to piper_worker.js at install time (config injection, phoneme-ID clamping, error handling).
+- **Path:** third-party/piper/piper_phonemize.js, third-party/piper/piper_worker.js (git-tracked; ship in dist/piper/)
+- **Provenance:** Vendored into git at Phase 5a-PR3 from piper-wasm@0.1.4 build/ output (upstream hashes in third-party/piper/PROVENANCE.md). piper_worker.js is COMMITTED PATCHED SOURCE: the 6 string patches formerly applied at install time by the deleted scripts/patch_piper_worker.js are baked in, plus a Versicle-authored request-id envelope (patch 7) for PiperRuntime's stale-reply protocol.
+- **Modifications:** piper_worker.js: config injection, phoneme-ID clamping, error handling (the former install-time patch set), and the request-id envelope — full patch list in third-party/piper/PROVENANCE.md. CI smoke: src/lib/tts/providers/piperVendoredAssets.test.ts asserts the patch anchors are present.
 
 ### PT Sans Narrow Web (modified: pinyin tone glyphs injected)
 
@@ -151,17 +151,17 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 - **Path:** (runtime fetch only; cached in user's browser storage)
 - **Provenance:** Fetched at runtime from https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/ (src/lib/tts/providers/PiperProvider.ts). User-initiated download, not Versicle redistribution; the voice picker surfaces no per-voice license info (gap report D10 product gap).
 
-### onnxruntime-web (runtime-fetched from CDN)
+### onnxruntime-web (vendored local runtime for Piper synthesis)
 
 - **Version:** 1.17.1
 - **License:** MIT
 - **Source:** https://github.com/microsoft/onnxruntime
-- **Path:** (runtime fetch only)
-- **Provenance:** Loaded at runtime from cdnjs (src/lib/tts/providers/piper-utils.ts); not bundled or redistributed today. If/when vendored into public/piper/ (tts-providers target design), it must gain a redistributed-artifact entry here and in THIRD-PARTY-NOTICES.
+- **Path:** third-party/piper/onnxruntime/ (git-tracked; ships in dist/piper/onnxruntime/)
+- **Provenance:** Vendored into git at Phase 5a-PR3: ort.min.js + ort-wasm{,-simd,-threaded,-simd-threaded}.wasm extracted verbatim from the npm registry tarball onnxruntime-web-1.17.1.tgz (SHA-256 d48e46a437bc11d6b3a30e587fbae8aaa5061b567230e9aeecb5bc5059fcbd02; recorded in third-party/piper/PROVENANCE.md). Replaces the former cdnjs runtime fetch (deleted with piper-utils.ts) so Piper synthesis performs zero third-party egress.
 
 ## Bundled npm packages (production dependency tree)
 
-577 packages, grouped by license. The private
+576 packages, grouped by license. The private
 vendored forks `zustand-middleware-yjs` and `y-idb` (both MIT) are
 excluded from the scan and recorded in the inventory section above.
 
@@ -338,7 +338,7 @@ excluded from the scan and recorded in the inventory section above.
 - `yaml@2.9.0` — Copyright Eemeli Aro <eemeli@gmail.com> — <https://github.com/eemeli/yaml>
 - `yargs-parser@21.1.1` — Copyright (c) 2016, Contributors — <https://github.com/yargs/yargs-parser>
 
-### MIT (443)
+### MIT (442)
 
 - `@alloc/quick-lru@5.2.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com) — <https://github.com/sindresorhus/quick-lru>
 - `@apideck/better-ajv-errors@0.3.6` — Copyright (c) 2021 Apideck — <https://github.com/apideck-libraries/better-ajv-errors>
@@ -669,7 +669,6 @@ excluded from the scan and recorded in the inventory section above.
 - `path-webpack@0.0.3` — Copyright fchasen@gmail.com — <https://github.com/fchasen/path-webpack>
 - `picomatch@4.0.4` — Copyright (c) 2017-present, Jon Schlinkert. — <https://github.com/micromatch/picomatch>
 - `pinyin-pro@3.28.1` — Copyright (c) 2022-present zh-lx — <https://github.com/zh-lx/pinyin-pro>
-- `piper-wasm@0.1.4` — Copyright DavidCks — <https://github.com/DavidCks/piper-wasm>
 - `possible-typed-array-names@1.1.0` — Copyright (c) 2024 Jordan Harband — <https://github.com/ljharb/possible-typed-array-names>
 - `postcss@8.5.15` — Copyright 2013 Andrey Sitnik <andrey@sitnik.es> — <https://github.com/postcss/postcss>
 - `pretty-bytes@5.6.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com) — <https://github.com/sindresorhus/pretty-bytes>
