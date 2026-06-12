@@ -1,4 +1,5 @@
 import { BaseCloudProvider } from './BaseCloudProvider';
+import { toTTSErrorPayload } from './types';
 import type { TTSOptions, TTSVoice, SpeechSegment } from './types';
 import type { AudioSink } from '../engine/AudioSink';
 import { piperGenerate, isModelPersisted, deleteCachedModel, fetchWithBackoff, cacheModel, stitchWavs } from './piper-utils';
@@ -191,7 +192,7 @@ export class PiperProvider extends BaseCloudProvider {
       // Rollback: clear any partial cache
       deleteCachedModel(modelUrl, modelConfigUrl);
 
-      this.emit({ type: 'error', error: e });
+      this.emit({ type: 'error', error: toTTSErrorPayload(e) });
       this.emit({ type: 'download-progress', percent: 0, status: 'Failed', voiceId });
       throw e;
     }
@@ -274,8 +275,7 @@ export class PiperProvider extends BaseCloudProvider {
     }
 
     return {
-      audio: audioBlob,
-      isNative: false
+      audio: audioBlob
     };
   }
 }

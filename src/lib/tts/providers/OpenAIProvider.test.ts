@@ -92,7 +92,6 @@ describe('OpenAIProvider', () => {
 
       expect(result).toEqual({
         audio: mockBlob,
-        isNative: false,
         alignment: undefined
       });
     });

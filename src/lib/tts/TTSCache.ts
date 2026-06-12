@@ -16,13 +16,17 @@ export class TTSCache {
    * every playback speed. (Entries written by older builds included the speed in
    * the key; those simply miss and are regenerated — the cache is regenerable.)
    *
+   * The trailing `|1` is the retired `pitch` parameter's slot: the param was always
+   * defaulted (vestige noted at Phase 5a), so it was removed from the signature with
+   * the hash input kept byte-identical — existing cache entries keep hitting. The
+   * golden-key regression test (TTSCache.test.ts) pins this.
+   *
    * @param text - The text content.
    * @param voiceId - The ID of the voice used.
-   * @param pitch - The pitch setting (default 1.0).
    * @returns A Promise that resolves to the hex string hash key.
    */
-  async generateKey(text: string, voiceId: string, pitch: number = 1.0): Promise<string> {
-    const data = `${text}|${voiceId}|${pitch}`;
+  async generateKey(text: string, voiceId: string): Promise<string> {
+    const data = `${text}|${voiceId}|1`;
     const encoder = new TextEncoder();
     const dataBuffer = encoder.encode(data);
     const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);

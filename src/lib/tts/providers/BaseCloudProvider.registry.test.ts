@@ -76,7 +76,7 @@ describe('BaseCloudProvider Request Registry', () => {
     const text = 'concurrent test';
     const options: TTSOptions = { voiceId: 'v1', speed: 1.0 };
     const mockAudioBlob = new Blob(['audio'], { type: 'audio/mp3' });
-    const mockResult: SpeechSegment = { audio: mockAudioBlob, isNative: false };
+    const mockResult: SpeechSegment = { audio: mockAudioBlob };
 
     // Setup fetch to take some time
     let resolveFetch: (value: SpeechSegment) => void;
@@ -186,7 +186,7 @@ describe('regression: speed policy — speed-independent cache, rate at the sink
 
   it('deduplicates concurrent requests for the same text across different speeds', async () => {
     mockGet.mockResolvedValue(undefined); // Cache miss
-    const mockResult: SpeechSegment = { audio: new Blob(['audio'], { type: 'audio/mp3' }), isNative: false };
+    const mockResult: SpeechSegment = { audio: new Blob(["audio"], { type: "audio/mp3" }) };
     provider.fetchAudioDataMock.mockResolvedValue(mockResult);
 
     const [r1, r2] = await Promise.all([

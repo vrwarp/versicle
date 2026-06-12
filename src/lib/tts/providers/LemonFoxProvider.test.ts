@@ -91,7 +91,6 @@ describe('LemonFoxProvider', () => {
 
       expect(result).toEqual({
         audio: mockBlob,
-        isNative: false,
         alignment: undefined
       });
     });

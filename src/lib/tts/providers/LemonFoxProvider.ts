@@ -88,7 +88,6 @@ export class LemonFoxProvider extends BaseCloudProvider {
 
     return {
       audio: blob,
-      isNative: false,
       alignment: undefined
     };
   }

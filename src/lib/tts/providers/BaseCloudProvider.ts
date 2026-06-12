@@ -1,4 +1,5 @@
-import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice, SpeechSegment } from './types';
+import { toTTSErrorPayload } from './types';
+import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice, SpeechSegment, Unsubscribe } from './types';
 import { AudioElementPlayer } from '../AudioElementPlayer';
 import type { AudioSink } from '../engine/AudioSink';
 import { TTSCache } from '../TTSCache';
@@ -10,14 +11,21 @@ export abstract class BaseCloudProvider implements ITTSProvider {
   protected cache: TTSCache;
   protected eventListeners: ((event: TTSEvent) => void)[] = [];
   protected requestRegistry: Map<string, Promise<SpeechSegment>> = new Map();
+  /** Whether the sink was injected (shared, manager-owned) or self-constructed. */
+  private readonly ownsSink: boolean;
+  private disposed = false;
 
   /**
-   * @param audioSink The audio-output device. Defaults to the real {@link AudioElementPlayer};
-   *   tests inject a `FakeAudioSink` to drive playback deterministically without jsdom.
+   * @param audioSink The audio-output device. The manager injects ONE shared
+   *   {@link AudioElementPlayer} so provider swaps reuse the same element; tests inject
+   *   a `FakeAudioSink`. When absent (direct construction) the provider creates its own.
+   * @param cache The synthesized-audio cache. Injectable so provider unit tests can use
+   *   an in-memory fake instead of mocking the module (vi.mock is banned in providers/).
    */
-  constructor(audioSink: AudioSink = new AudioElementPlayer()) {
-    this.audioPlayer = audioSink;
-    this.cache = new TTSCache();
+  constructor(audioSink?: AudioSink, cache: TTSCache = new TTSCache()) {
+    this.ownsSink = !audioSink;
+    this.audioPlayer = audioSink ?? new AudioElementPlayer();
+    this.cache = cache;
     this.setupAudioPlayer();
   }
 
@@ -28,8 +36,13 @@ export abstract class BaseCloudProvider implements ITTSProvider {
     this.audioPlayer.setOnEnded(() => {
         this.emit({ type: 'end' });
     });
+    // Mid-playback sink errors (after play() resolved) — the one legitimate use of the
+    // 'error' EVENT under the single-shot contract (failures to start reject instead).
     this.audioPlayer.setOnError((e) => {
-        this.emit({ type: 'error', error: e });
+        this.emit({
+            type: 'error',
+            error: { message: e ? `Media error ${e.code}${e.message ? `: ${e.message}` : ''}` : 'Media playback error' },
+        });
     });
   }
 
@@ -43,8 +56,7 @@ export abstract class BaseCloudProvider implements ITTSProvider {
     try {
       const { audio } = await this.getOrFetch(text, options);
 
-      // 5. Play
-      // We need to wait for playback to START. playBlob returns a promise that resolves when it starts.
+      // We need to wait for playback to START. playBlob resolves when it starts.
       if (audio) {
         await this.audioPlayer.playBlob(audio);
       }
@@ -56,7 +68,11 @@ export abstract class BaseCloudProvider implements ITTSProvider {
       this.emit({ type: 'start' });
 
     } catch (e) {
-      this.emit({ type: 'error', error: e });
+      // KNOWN double-signal (S2): emits AND rethrows for the same failure. Dies at
+      // 5a-PR2 (single-shot contract: reject only) together with the manager's
+      // event-path fallback — kept verbatim here so the registry PR stays
+      // behavior-preserving.
+      this.emit({ type: 'error', error: toTTSErrorPayload(e) });
       throw e;
     }
   }
@@ -79,8 +95,7 @@ export abstract class BaseCloudProvider implements ITTSProvider {
     if (cached) {
       return {
         audio: new Blob([cached.audio], { type: 'audio/mp3' }),
-        alignment: cached.alignment,
-        isNative: false
+        alignment: cached.alignment
       };
     }
 
@@ -116,19 +131,35 @@ export abstract class BaseCloudProvider implements ITTSProvider {
       this.audioPlayer.pause();
   }
 
-  resume(): void {
-      this.audioPlayer.resume();
-  }
-
   stop(): void {
       this.audioPlayer.stop();
   }
 
-  on(callback: (event: TTSEvent) => void): void {
+  on(callback: (event: TTSEvent) => void): Unsubscribe {
       this.eventListeners.push(callback);
+      return () => {
+          this.eventListeners = this.eventListeners.filter(l => l !== callback);
+      };
+  }
+
+  /**
+   * Detach listeners and stop playback. The shared sink is NOT destroyed unless this
+   * provider constructed it for itself — sink lifecycle belongs to whoever injected it
+   * (the manager). After dispose the provider emits nothing.
+   */
+  dispose(): void {
+      if (this.disposed) return;
+      this.disposed = true;
+      this.audioPlayer.stop();
+      this.eventListeners = [];
+      this.requestRegistry.clear();
+      if (this.ownsSink) {
+          this.audioPlayer.destroy();
+      }
   }
 
   protected emit(event: TTSEvent) {
+      if (this.disposed) return;
       this.eventListeners.forEach(l => l(event));
   }
 

@@ -66,7 +66,6 @@ export class OpenAIProvider extends BaseCloudProvider {
       // OpenAI does not return timestamps
       return {
           audio: blob,
-          isNative: false,
           alignment: undefined
       };
   }

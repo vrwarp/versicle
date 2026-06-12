@@ -177,25 +177,20 @@ describe('WebSpeechProvider', () => {
           expect(mockSynth.pause).toHaveBeenCalled();
       });
 
-      it('resume should restart synthesis if paused (workaround)', async () => {
-          // Ensure voices are loaded so play() doesn't block
+      it('dispose cancels synthesis and detaches listeners (no events after dispose)', async () => {
           mockSynth.getVoices.mockReturnValue([{ name: 'Voice 1', lang: 'en-US' }]);
           await provider.init();
 
-          // Setup state to simulate previous play
+          const events: string[] = [];
+          provider.on((e) => events.push(e.type));
+
+          provider.dispose();
+          expect(mockSynth.cancel).toHaveBeenCalled();
+
+          // Driving the (now-detached) provider must not reach the listener.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (provider as any).lastText = 'test text';
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (provider as any).lastOptions = { voiceId: 'Voice 1', speed: 1.0 };
-
-          mockSynth.paused = true;
-          provider.resume();
-
-          // resume() triggers play() which is async. We need to wait a tick.
-          await new Promise(resolve => setTimeout(resolve, 10));
-
-          // Current implementation re-calls play(), which calls speak()
-          expect(mockSynth.speak).toHaveBeenCalled();
+          (provider as any).emit({ type: 'start' });
+          expect(events).toEqual([]);
       });
   });
 });

@@ -31,19 +31,22 @@ describe('TTSCache', () => {
       expect(key1).not.toBe(key2);
     });
 
-    it('should include pitch in hash', async () => {
-      const key1 = await cache.generateKey('Hello', 'voice1', 1.0);
-      const key2 = await cache.generateKey('Hello', 'voice1', 1.2);
-      expect(key1).not.toBe(key2);
+    it('golden key: byte-identical to the pre-5a (text|voiceId|pitch=1) format', async () => {
+      // Phase 5a deleted the vestigial always-defaulted `pitch` parameter. The hash
+      // input keeps the legacy `|1` slot so EXISTING cache entries still hit. This is
+      // the precomputed SHA-256 of 'Hello|voice1|1' — if this assertion fails, every
+      // user's audio cache silently misses. Do not "clean up" the trailing slot.
+      const key = await cache.generateKey('Hello', 'voice1');
+      expect(key).toBe('758d1a70e61d76508db4543b0e9d498e0e93c0c14e511559c9c1261c2bdeb10e');
     });
   });
 
   describe('regression: speed policy — speed-independent cache key', () => {
     it('takes no speed input: same text+voice always maps to the same entry', async () => {
-      // The signature is (text, voiceId, pitch?) — playback speed is
-      // applied at the audio sink, so it must never fragment the audio cache.
+      // The signature is (text, voiceId) — playback speed is applied at the
+      // audio sink, so it must never fragment the audio cache.
       const key1 = await cache.generateKey('Hello', 'voice1');
-      const key2 = await cache.generateKey('Hello', 'voice1', 1.0);
+      const key2 = await cache.generateKey('Hello', 'voice1');
       expect(key1).toBe(key2);
     });
   });

@@ -38,7 +38,6 @@ export class MockCloudProvider extends BaseCloudProvider {
     ]);
 
     return {
-      isNative: false,
       audio: new Blob([wavHeader], { type: 'audio/wav' }),
       alignment: [
         { timeSeconds: 0, charIndex: 0, type: 'sentence' }

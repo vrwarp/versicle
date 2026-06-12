@@ -8,7 +8,7 @@
  * start/end/boundary events.
  */
 import { vi } from 'vitest';
-import type { ITTSProvider, TTSEvent, TTSVoice } from '@lib/tts/providers/types';
+import type { ITTSProvider, TTSEvent, TTSVoice, Unsubscribe } from '@lib/tts/providers/types';
 
 export interface FakeTTSProviderOptions {
   id?: string;
@@ -36,17 +36,23 @@ export class FakeTTSProvider implements ITTSProvider {
   play: ITTSProvider['play'] = vi.fn(async (): Promise<void> => {});
   preload: ITTSProvider['preload'] = vi.fn(async (): Promise<void> => {});
   pause = vi.fn((): void => {});
-  resume = vi.fn((): void => {});
   stop = vi.fn((): void => {});
-  setLocale: NonNullable<ITTSProvider['setLocale']> = vi.fn((): void => {});
+  dispose = vi.fn((): void => {
+    this.listeners.clear();
+  });
+  /** Locale capability spy (LocaleAware — see providers/registry.ts). */
+  setLocale = vi.fn((): void => {});
 
   constructor(options: FakeTTSProviderOptions = {}) {
     this.id = options.id ?? 'fake';
     this.voices = options.voices ?? [makeTTSVoice()];
   }
 
-  on(callback: (event: TTSEvent) => void): void {
+  on(callback: (event: TTSEvent) => void): Unsubscribe {
     this.listeners.add(callback);
+    return () => {
+      this.listeners.delete(callback);
+    };
   }
 
   /** Drive a provider event into every registered listener. */

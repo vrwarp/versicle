@@ -15,6 +15,7 @@ import { useGenAIStore } from '@store/useGenAIStore';
 import { TTSAbbreviationSettings } from './reader/TTSAbbreviationSettings';
 import { LexiconManager } from './reader/LexiconManager';
 
+import { resolveDescriptor, type TTSApiKeyProviderId } from '@lib/tts/providers/registry';
 import { maintenanceService } from '@lib/MaintenanceService';
 import { backupService } from '@lib/BackupService';
 import { wipeAllData } from '@data/wipe';
@@ -198,6 +199,34 @@ export const GlobalSettingsDialog = () => {
     })));
 
     const [isVoiceReady, setIsVoiceReady] = useState(false);
+
+    /**
+     * Explicit "Test Key" action (5a buffered API-key edits): commit happened on
+     * blur; here we build a throwaway provider from the registry with the entered
+     * key and probe it (init + voice listing) WITHOUT touching the active provider.
+     */
+    const handleTestApiKey = async (provider: TTSApiKeyProviderId, key: string) => {
+        const descriptor = resolveDescriptor(provider);
+        const probe = descriptor.build({ apiKey: key, language: activeLanguage || 'en' });
+        try {
+            if (!key) {
+                showToast(`${descriptor.displayName}: enter an API key first.`, 'error');
+                return;
+            }
+            await probe.init();
+            const probeVoices = await probe.getVoices();
+            if (probeVoices.length > 0) {
+                showToast(`${descriptor.displayName}: key OK (${probeVoices.length} voices available).`, 'success');
+            } else {
+                showToast(`${descriptor.displayName}: key accepted, but no voices were returned.`, 'info');
+            }
+        } catch (e) {
+            logger.warn('API key test failed', e);
+            showToast(`${descriptor.displayName}: key test failed — ${e instanceof Error ? e.message : String(e)}`, 'error');
+        } finally {
+            probe.dispose();
+        }
+    };
 
     useEffect(() => {
         let ignore = false;
@@ -531,6 +560,7 @@ export const GlobalSettingsDialog = () => {
                                 onProviderChange={setProviderId}
                                 apiKeys={apiKeys}
                                 onApiKeyChange={setApiKey}
+                                onTestApiKey={handleTestApiKey}
                                 backgroundAudioMode={backgroundAudioMode}
                                 onBackgroundAudioModeChange={setBackgroundAudioMode}
                                 whiteNoiseVolume={whiteNoiseVolume}

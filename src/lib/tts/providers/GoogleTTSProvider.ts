@@ -131,8 +131,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
 
     return {
       audio: blob,
-      alignment,
-      isNative: false
+      alignment
     };
   }
 }

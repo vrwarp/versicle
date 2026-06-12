@@ -1,6 +1,7 @@
 import type { ITTSProvider, TTSVoice } from './providers/types';
 import { WebSpeechProvider } from './providers/WebSpeechProvider';
 import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
+import { asLocaleAware, asVoiceDownloadable } from './providers/registry';
 import { Capacitor } from '@capacitor/core';
 import type { PlaybackBackend } from './engine/PlaybackBackend';
 import { buildProviderById } from './providerFactory';
@@ -208,45 +209,44 @@ export class TTSProviderManager implements PlaybackBackend {
         }
     }
 
-    // Proxy other methods if needed (downloadVoice, etc)
-    // Casting to any for provider specific methods as per original code
+    /**
+     * Voice download routing, driven by the registry's capability descriptor
+     * ({@link asVoiceDownloadable}) instead of `id === 'piper' … as any` probing.
+     * Non-capable providers are a silent no-op (their voices aren't artifacts).
+     */
     async downloadVoice(voiceId: string): Promise<void> {
-        if (this.provider.id === 'piper') {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const piper = this.provider as any;
-            if (typeof piper.downloadVoice === 'function') {
-                await piper.downloadVoice(voiceId);
-            }
+        const downloadable = asVoiceDownloadable(this.provider);
+        if (downloadable) {
+            await downloadable.downloadVoice(voiceId);
         }
     }
 
     async deleteVoice(voiceId: string): Promise<void> {
-        if (this.provider.id === 'piper') {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const piper = this.provider as any;
-            if (typeof piper.deleteVoice === 'function') {
-                await piper.deleteVoice(voiceId);
-            }
+        const downloadable = asVoiceDownloadable(this.provider);
+        if (downloadable) {
+            await downloadable.deleteVoice(voiceId);
         }
-    }
-
-    async isVoiceDownloaded(voiceId: string): Promise<boolean> {
-         if (this.provider.id === 'piper') {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const piper = this.provider as any;
-             if (typeof piper.isVoiceDownloaded === 'function') {
-                return await piper.isVoiceDownloaded(voiceId);
-            }
-         }
-         return true;
     }
 
     /**
-     * Sets the locale for the current provider.
+     * Whether the voice's artifact is present locally. `false` for providers without
+     * downloadable voices — the pre-registry `true` was a UI lie ("downloaded" for
+     * voices that aren't artifacts at all); the settings UI gates the download panel
+     * on the descriptor capability, never on this answer.
+     */
+    async isVoiceDownloaded(voiceId: string): Promise<boolean> {
+        const downloadable = asVoiceDownloadable(this.provider);
+        if (downloadable) {
+            return await downloadable.isVoiceDownloaded(voiceId);
+        }
+        return false;
+    }
+
+    /**
+     * Sets the locale for the current provider (locale-aware providers only —
+     * descriptor-driven guard).
      */
     setLocale(locale: string) {
-        if (typeof this.provider.setLocale === 'function') {
-            this.provider.setLocale(locale);
-        }
+        asLocaleAware(this.provider)?.setLocale(locale);
     }
 }
