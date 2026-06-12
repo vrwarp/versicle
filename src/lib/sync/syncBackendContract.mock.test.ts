@@ -1,13 +1,13 @@
 /**
- * SyncBackend contract (C3) run against the mock backend: MockFireProvider
- * for doc replication plus the exact localStorage workspace-directory
- * semantics of FirestoreSyncManager's `__VERSICLE_MOCK_FIRESTORE__`
- * branches (createWorkspace ~:680, listWorkspaces ~:862, deleteWorkspace
- * ~:895, validateWorkspaceIsAlive ~:209). When P4 extracts `MockBackend`,
- * this harness collapses to `new MockBackend(...)` and the storage-key
- * mirroring below is deleted with the inline branches it documents.
+ * SyncBackend contract (C3) run against the REAL `MockBackend`
+ * (src/domains/sync/backend/MockBackend.ts) — P4-2 collapsed the original
+ * localStorage-mirroring harness to thin adapters over the extracted
+ * backend, exactly as the P0 skeleton planned. The storage-key semantics
+ * formerly duplicated here now live in (and are pinned through) the
+ * backend itself.
  */
-import { MockFireProvider } from './drivers/MockFireProvider';
+import { MockBackend } from '@domains/sync/backend/MockBackend';
+import { MockFireProvider } from '@domains/sync/backend/MockFireProvider';
 import { CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
 import type { WorkspaceMetadata } from '~types/workspace';
 import {
@@ -16,17 +16,7 @@ import {
 } from './syncBackendContract';
 
 const UID = 'mock-user';
-/** Same keys as the manager's mock branches — shared state is the point. */
 const WORKSPACES_KEY = '__VERSICLE_WORKSPACES__';
-const SNAPSHOT_KEY = 'versicle_mock_firestore_snapshot';
-
-const pathFor = (workspaceId: string) => `users/${UID}/versicle/${workspaceId}`;
-
-const readWorkspaces = (): WorkspaceMetadata[] =>
-  JSON.parse(localStorage.getItem(WORKSPACES_KEY) || '[]');
-
-const writeWorkspaces = (workspaces: WorkspaceMetadata[]): void =>
-  localStorage.setItem(WORKSPACES_KEY, JSON.stringify(workspaces));
 
 let nextWorkspaceId = 0;
 
@@ -37,33 +27,29 @@ function makeHarness(): SyncBackendContractHarness {
   MockFireProvider.setMockFailure(false);
   MockFireProvider.setSyncDelay(1);
 
+  const backend = new MockBackend(UID);
+
   return {
     connect: async (doc, workspaceId) => {
-      const provider = new MockFireProvider({
-        firebaseApp: null,
-        ydoc: doc,
-        path: pathFor(workspaceId),
+      const connection = backend.connect(doc, workspaceId, {
         // Keep the mock's debounced snapshot save fast; destroy() always
         // performs a final save, which is what durability relies on.
-        maxWaitTime: 5,
+        maxWaitTimeMs: 5,
+        maxUpdatesThreshold: 50,
       });
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(
-          () => reject(new Error('MockFireProvider never emitted synced')),
+          () => reject(new Error('MockBackend connection never emitted synced')),
           2000
         );
-        provider.on('synced', () => {
+        connection.on('synced', () => {
           clearTimeout(timer);
           resolve();
         });
       });
       return {
-        disconnect: () => provider.destroy(),
-        on: (event, cb) =>
-          provider.on(
-            event as Parameters<typeof provider.on>[0],
-            cb as never
-          ),
+        disconnect: () => connection.destroy(),
+        on: (event, cb) => connection.on(event, cb as never),
       };
     },
 
@@ -74,52 +60,25 @@ function makeHarness(): SyncBackendContractHarness {
         createdAt: Date.now(),
         schemaVersion: CURRENT_SCHEMA_VERSION,
       };
-      writeWorkspaces([...readWorkspaces(), metadata]);
+      await backend.createWorkspace(metadata);
       return metadata;
     },
 
-    listWorkspaces: async (opts) =>
-      opts?.includeDeleted
-        ? readWorkspaces()
-        : readWorkspaces().filter((ws) => !ws.deletedAt),
+    listWorkspaces: (opts) => backend.listWorkspaces(opts),
 
-    updateWorkspaceMetadata: async (workspaceId, patch) => {
-      writeWorkspaces(
-        readWorkspaces().map((ws) =>
-          ws.workspaceId === workspaceId ? { ...ws, ...patch } : ws
-        )
-      );
-    },
+    updateWorkspaceMetadata: (workspaceId, patch) =>
+      backend.updateWorkspaceMetadata(workspaceId, patch),
 
-    // Mirrors performCleanSync's mock branch: cloud data exists when the
-    // mock snapshot store holds a snapshotBase64 for the workspace path.
-    probeHasData: async (workspaceId) => {
-      const snapshots = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || '{}');
-      return Boolean(snapshots[pathFor(workspaceId)]?.snapshotBase64);
-    },
+    probeHasData: (workspaceId) => backend.probeHasData(workspaceId),
+
+    deleteWorkspace: (workspaceId) => backend.deleteWorkspace(workspaceId),
+
+    isWorkspaceAlive: (workspaceId) => backend.isWorkspaceAlive(workspaceId),
 
     injectConnectionEvent: (workspaceId, event, payload) =>
       MockFireProvider.simulateEvent(event, [payload] as never, {
         pathIncludes: workspaceId,
       }),
-
-    deleteWorkspace: async (workspaceId) => {
-      writeWorkspaces(
-        readWorkspaces().map((ws) =>
-          ws.workspaceId === workspaceId ? { ...ws, deletedAt: Date.now() } : ws
-        )
-      );
-      const snapshots = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || '{}');
-      snapshots[pathFor(workspaceId)] = { isDeleted: true, deletedAt: Date.now() };
-      localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshots));
-    },
-
-    isWorkspaceAlive: async (workspaceId) => {
-      const ws = readWorkspaces().find((w) => w.workspaceId === workspaceId);
-      if (ws?.deletedAt) return false;
-      const snapshots = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || '{}');
-      return !snapshots[pathFor(workspaceId)]?.isDeleted;
-    },
 
     dispose: () => {
       localStorage.removeItem(WORKSPACES_KEY);
@@ -129,7 +88,7 @@ function makeHarness(): SyncBackendContractHarness {
 }
 
 describeSyncBackendContract({
-  backendName: 'MockFireProvider (localStorage)',
+  backendName: 'MockBackend (localStorage + MockFireProvider)',
   capabilities: {
     connect: true,
     // The mock enforces tombstones by client convention only — rules live

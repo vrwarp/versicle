@@ -11,12 +11,17 @@
  *     --project demo-versicle-rules
  *   npx vitest run src/lib/sync/syncBackendContract.emulator.test.ts
  *
- * The harness mirrors FirestoreSyncManager's REAL (non-mock) workspace
- * branches over raw Firestore (createWorkspace ~:690, listWorkspaces
- * ~:870, deleteWorkspace tombstoning ~:940-962, validateWorkspaceIsAlive
- * ~:225). Realtime `connect` needs the full y-cinder FireProvider (app +
- * auth + storage emulators) — that lands with P4's backend extraction, so
- * those cases register as todo here (capabilities.connect = false).
+ * The harness mirrors `FirestoreBackend`
+ * (src/domains/sync/backend/FirestoreBackend.ts) over raw Firestore. It
+ * cannot host the backend class directly yet: FirestoreBackend talks the
+ * MODULAR firebase SDK through firebase-config (which needs a real app +
+ * signed-in auth to satisfy the rules' request.auth), while
+ * rules-unit-testing hands out COMPAT Firestore instances with baked-in
+ * auth contexts. The collapse to `new FirestoreBackend(...)` happens when
+ * the y-cinder vendoring item wires the auth+firestore+storage emulator
+ * trio and flips capabilities.connect = true (phase4-sync-strangler.md
+ * §D8). Until then this mirror + the shared contract keep the REAL branch
+ * semantics pinned (risk R3).
  *
  * Runs in the node environment: the Firebase SDK's emulator transports are
  * unreliable under jsdom's XMLHttpRequest.

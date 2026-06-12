@@ -24,7 +24,7 @@ const downgradeToWarn = (rules) =>
 // for the files it matches).
 const crossRootRelativeImportPattern = {
   regex:
-    '^(\\.\\./)+(app|components|data|hooks|lib|store|types|test|workers)(/|$)',
+    '^(\\.\\./)+(app|components|data|domains|hooks|lib|store|types|test|workers)(/|$)',
   message:
     'Cross-root relative import. Use the path alias for this root instead (e.g. @lib/foo, @data/bar, ~types/baz — see tsconfig.app.json "paths"). Run `node scripts/codemod-aliases.mjs` to fix in bulk.',
 };

@@ -7,12 +7,16 @@
  * Features:
  * - Stores Yjs updates in localStorage for cross-context persistence
  * - Simulates auth states and sync events
- * - Compatible with FirestoreSyncManager via window.__VERSICLE_MOCK_FIRESTORE__
+ * - Wrapped by MockBackend (the C3 mock implementation), which is selected
+ *   only at the composition root behind `__VERSICLE_MOCK_FIRESTORE__`
+ *   (src/app/sync/createSync.ts) — this module must never enter a
+ *   production import graph (chunk-content check in
+ *   scripts/check-worker-chunk.mjs enforces it).
  */
 import * as Y from 'yjs';
 import { ObservableV2 } from 'lib0/observable';
 import * as awarenessProtocol from 'y-protocols/awareness';
-import { createLogger } from '../../logger';
+import { createLogger } from '@lib/logger';
 import { getMockSyncDelayMs } from '../../../test-flags';
 
 const logger = createLogger('MockFireProvider');

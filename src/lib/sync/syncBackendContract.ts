@@ -3,15 +3,14 @@
  * (plan/overhaul/proposals/contract-first.md): connect / workspace CRUD /
  * tombstone semantics, executed against every backend implementation.
  *
- * Phase 0 SKELETON (just-in-time authoring rule): the `SyncBackend`
- * interface itself does not exist yet — P4 carves it out of
- * FirestoreSyncManager's inline `__VERSICLE_MOCK_FIRESTORE__` branches.
- * This suite pins the behavior the seam must preserve, running today
- * against a MockFireProvider-backed harness
- * (syncBackendContract.mock.test.ts) and, when the Firebase emulator is up,
- * against a Firestore-backed harness (syncBackendContract.emulator.test.ts).
- * When P4 lands, the harnesses shrink to thin adapters over the real
- * `SyncBackend` implementations and this file becomes the C3 pinning suite.
+ * Since P4-2 the `SyncBackend` interface exists at
+ * src/domains/sync/backend/SyncBackend.ts and this file is the C3 PINNING
+ * suite: the mock runner (syncBackendContract.mock.test.ts) drives the real
+ * `MockBackend`; the emulator runner (syncBackendContract.emulator.test.ts)
+ * still mirrors the FirestoreBackend semantics over
+ * `@firebase/rules-unit-testing` (its header explains why it cannot host
+ * the modular-SDK backend until the auth+storage emulator wiring lands with
+ * the y-cinder vendoring item).
  *
  * Pattern follows src/lib/tts/engine/engineParityScenarios.ts: one
  * behavioral spec, N transports.

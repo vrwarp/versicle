@@ -1,6 +1,18 @@
 #!/usr/bin/env node
 /**
- * Worker-chunk purity check (master plan §2 rule 6; C12 contract).
+ * Emitted-artifact purity checks (master plan §2 rules 6 + 9; C12).
+ *
+ * Two assertions over the production build:
+ *  1. WORKER PURITY — the TTS worker chunk closure contains no
+ *     zustand/yjs/src-store code (details below).
+ *  2. PROD MOCK PURITY (P4-2, phase4-sync-strangler.md §D1) — NO production
+ *     chunk contains MockBackend/MockFireProvider. The mock sync backend is
+ *     reachable only through the composition root's dynamic import inside an
+ *     `import.meta.env.DEV || VITE_E2E` branch (src/app/sync/createSync.ts);
+ *     this check is the GATE that the dead branch actually got eliminated
+ *     (Rollup inlining surprises — risk R7 — fail here, not in the field).
+ *
+ * Worker-purity details:
  *
  * The TTS worker must never bundle zustand, yjs, or src/store/ modules:
  * a second Y.Doc + IndexedDB persistence inside the worker is the
@@ -138,4 +150,58 @@ if (violations.length > 0) {
 console.log(
   `PASS: ${totalSources} original sources across ${closure.length} ` +
     'chunk(s); no zustand / yjs / src/store in the TTS worker closure.',
+);
+
+// ── Check 2: prod mock purity (every emitted chunk, not just the worker) ──
+// Substring patterns matched against sourcemap `sources` entries.
+const MOCK_FORBIDDEN = [
+  { pattern: 'src/domains/sync/backend/MockBackend', label: 'MockBackend' },
+  { pattern: 'src/domains/sync/backend/MockFireProvider', label: 'MockFireProvider' },
+];
+
+const allChunks = readdirSync(assetsDir).filter((f) => f.endsWith('.js'));
+const mockViolations = [];
+let scannedSources = 0;
+for (const chunk of allChunks) {
+  const mapPath = join(assetsDir, `${chunk}.map`);
+  if (!existsSync(mapPath)) {
+    console.error(
+      `Missing sourcemap ${chunk}.map — the mock-purity check needs ` +
+        'build.sourcemap to stay enabled in vite.config.ts.',
+    );
+    process.exit(1);
+  }
+  const { sources = [] } = JSON.parse(readFileSync(mapPath, 'utf8'));
+  scannedSources += sources.length;
+  for (const rawSource of sources) {
+    const source = rawSource.replaceAll('\\', '/');
+    for (const { pattern, label } of MOCK_FORBIDDEN) {
+      if (source.includes(pattern)) {
+        mockViolations.push({ chunk, source: rawSource, label });
+      }
+    }
+  }
+}
+
+if (mockViolations.length > 0) {
+  console.error(
+    `\nFAIL: production bundle contains ${mockViolations.length} mock sync ` +
+      'module(s):',
+  );
+  for (const { chunk, source, label } of mockViolations) {
+    console.error(`  [${label}] ${source}  (in ${chunk})`);
+  }
+  console.error(
+    '\nMockBackend/MockFireProvider must only be reachable through the ' +
+      'dynamic import in src/app/sync/createSync.ts, inside the ' +
+      '`import.meta.env.DEV || VITE_E2E` branch. Find the static import ' +
+      'that pulled them into the prod graph (`ANALYZE=true vite build` → ' +
+      'stats.html).',
+  );
+  process.exit(1);
+}
+
+console.log(
+  `PASS: ${scannedSources} original sources across ${allChunks.length} ` +
+    'production chunk(s); no MockBackend / MockFireProvider in the prod bundle.',
 );

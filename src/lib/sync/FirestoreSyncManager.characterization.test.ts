@@ -19,7 +19,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
 import { FirestoreSyncManager, getFirestoreSyncManager } from './FirestoreSyncManager';
-import { MockFireProvider } from './drivers/MockFireProvider';
+import { MockFireProvider } from '@domains/sync/backend/MockFireProvider';
+import { configureSyncBackendSelection } from '@app/sync/createSync';
 import { CheckpointService } from './CheckpointService';
 import { MigrationStateService } from './MigrationStateService';
 import { useSyncStore } from '@store/useSyncStore';
@@ -59,7 +60,7 @@ const injectCloudSnapshot = (workspaceId: string, build: (doc: Y.Doc) => void): 
 describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () => {
   let showToast: ReturnType<typeof vi.spyOn>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.spyOn(console, 'info').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -73,6 +74,10 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
     MigrationStateService.clear();
 
     FirestoreSyncManager.resetInstance();
+    // Since P4-2, backend selection is the composition root's job — the
+    // manager no longer reads `__VERSICLE_MOCK_FIRESTORE__` itself. This is
+    // the same call the `syncInit` boot task makes before initialize().
+    await configureSyncBackendSelection();
     useSyncStore.getState().setActiveWorkspaceId(null);
     useSyncStore.getState().setFirebaseEnabled(false);
     useSyncStore.getState().setFirestoreStatus('disconnected');
@@ -145,6 +150,8 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
 
     it('honors __VERSICLE_MOCK_USER_ID__ when synthesizing the mock user', async () => {
       window.__VERSICLE_MOCK_USER_ID__ = 'custom-user';
+      // The id flag is read at composition time — re-run the root.
+      await configureSyncBackendSelection();
       const manager = getFirestoreSyncManager();
       await manager.initialize();
 

@@ -8,7 +8,6 @@
 * - y-indexeddb: Primary (always active, source of truth for offline)
 * - y-fire: Secondary (active only when authenticated)
 */
-import { FireProvider } from 'y-cinder';
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import type { FirebaseApp } from 'firebase/app';
@@ -17,24 +16,24 @@ import { CheckpointService } from './CheckpointService';
 import { MigrationStateService } from './MigrationStateService';
 import * as Y from 'yjs';
 import { useBookStore } from '@store/useBookStore';
-import { doc, getDoc, setDoc, collection, getDocs, query, limit, writeBatch } from 'firebase/firestore';
 import type { WorkspaceMetadata } from '~types/workspace';
 import { WorkspaceDeletedError } from '~types/errors';
+import type {
+    SyncBackend,
+    SyncBackendFactory,
+    SyncConnection,
+} from '@domains/sync/backend/SyncBackend';
+import { FirestoreBackend } from '@domains/sync/backend/FirestoreBackend';
+import { downloadWorkspaceState } from '@domains/sync/core/downloadWorkspaceState';
 
 import {
     getFirebaseApp,
     getFirebaseAuth,
     isFirebaseConfigured,
     initializeFirebase,
-    getFirestoreDb
 } from './firebase-config';
-import { MockFireProvider } from './drivers/MockFireProvider';
 import { createLogger } from '../logger';
-import {
-    isMockFirestoreEnabled,
-    getMockFirestoreUserId,
-    getFirestoreDebounceOverrideMs,
-} from '../../test-flags';
+import { getFirestoreDebounceOverrideMs } from '../../test-flags';
 import { generateSecureId } from '../crypto';
 import { signInWithGoogle, signOutWithGoogle } from './auth-helper';
 import { useToastStore } from '@store/useToastStore';
@@ -109,12 +108,28 @@ const DEFAULT_CONFIG: Required<FirestoreSyncConfig> = {
 };
 
 /**
+ * What the composition root (src/app/sync/createSync.ts) installs: the
+ * backend factory and, for the mock backend, the synthesized auth session
+ * that replaces Firebase auth in E2E/dev. The manager itself never reads
+ * the `__VERSICLE_MOCK_*` flags — backend selection is exclusively the
+ * composition root's job (boundary rule 9).
+ */
+export interface SyncBackendSelection {
+    factory: SyncBackendFactory;
+    mockSession?: { uid: string; email: string };
+}
+
+/**
 * Singleton service managing Firestore sync via y-fire.
 */
 class FirestoreSyncManager {
     private static instance: FirestoreSyncManager | null = null;
 
-    private fireProvider: FireProvider | null = null;
+    private connection: SyncConnection | null = null;
+    private backendSelection: SyncBackendSelection = {
+        factory: (uid) => new FirestoreBackend(uid),
+    };
+    private backend: SyncBackend | null = null;
     private config: Required<FirestoreSyncConfig>;
     private currentUser: User | null = null;
     private status: FirestoreSyncStatus = 'disconnected';
@@ -151,15 +166,32 @@ class FirestoreSyncManager {
     }
 
     /**
+     * Install the backend selection (composition root only — see
+     * src/app/sync/createSync.ts).
+     */
+    setBackendSelection(selection: SyncBackendSelection): void {
+        this.backendSelection = selection;
+        this.backend = null;
+    }
+
+    /** The C3 backend bound to the authenticated uid (cached per uid). */
+    private getBackend(uid: string): SyncBackend {
+        if (!this.backend || this.backend.uid !== uid) {
+            this.backend = this.backendSelection.factory(uid);
+        }
+        return this.backend;
+    }
+
+    /**
      * Initialize the sync manager.
      * Sets up auth state listener and auto-connects when authenticated.
      */
     async initialize(): Promise<void> {
-        // Support for Mock Firestore (Testing)
-        if (isMockFirestoreEnabled()) {
-            logger.info('Mock mode detected. Simulating auth and connection.');
-            const mockUid = getMockFirestoreUserId();
-            const mockUser = { uid: mockUid, email: `${mockUid}@example.com` } as User;
+        // Mock backend selected (E2E/dev): simulate auth and connect.
+        const mockSession = this.backendSelection.mockSession;
+        if (mockSession) {
+            logger.info('Mock backend selected. Simulating auth and connection.');
+            const mockUser = { uid: mockSession.uid, email: mockSession.email } as User;
             void this.handleAuthStateChange(mockUser);
             return;
         }
@@ -203,47 +235,6 @@ class FirestoreSyncManager {
         });
 
         logger.debug('Manager initialized');
-    }
-
-    /**
-     * Pre-flight validation: Check if the workspace has been tombstoned.
-     * Returns true if workspace is safe to sync, false if tombstoned.
-     */
-    private async validateWorkspaceIsAlive(uid: string, workspaceId: string): Promise<boolean> {
-        const isMock = isMockFirestoreEnabled();
-        if (isMock) {
-            // Check both metadata list and document snapshot
-            const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
-            const workspaces: WorkspaceMetadata[] = JSON.parse(raw);
-            const ws = workspaces.find(w => w.workspaceId === workspaceId);
-            if (ws && ws.deletedAt) return false;
-
-            const snapshotStr = localStorage.getItem('versicle_mock_firestore_snapshot') || '{}';
-            const snapshot = JSON.parse(snapshotStr);
-            const path = `users/${uid}/versicle/${workspaceId}`;
-            if (snapshot[path]?.isDeleted) return false;
-
-            return true;
-        }
-
-        const db = getFirestoreDb();
-        if (!db) return true; // Fail-safe (let it pass to allow offline queuing if config is missing)
-
-        const docRef = doc(db, `users/${uid}/versicle/${workspaceId}`);
-        try {
-            const snapshot = await getDoc(docRef);
-            if (snapshot.exists()) {
-                const data = snapshot.data();
-                if (data?.isDeleted === true) {
-                    return false; // Tombstone found
-                }
-            }
-            return true; // Doc missing or not deleted
-        } catch (error) {
-            logger.error('Failed to validate workspace state', error);
-            // If offline, let it pass to allow offline queuing
-            return true;
-        }
     }
 
     /**
@@ -305,8 +296,10 @@ class FirestoreSyncManager {
             return;
         }
 
+        const backend = this.getBackend(uid);
+
         // Check for Tombstone BEFORE connecting
-        const isAlive = await this.validateWorkspaceIsAlive(uid, workspaceId);
+        const isAlive = await backend.isWorkspaceAlive(workspaceId);
 
         if (!isAlive) {
             logger.warn(`Sync aborted: Workspace ${workspaceId} is tombstoned.`);
@@ -317,7 +310,7 @@ class FirestoreSyncManager {
             throw new WorkspaceDeletedError();
         }
 
-        if (this.fireProvider) {
+        if (this.connection) {
             const currentApp = getFirebaseApp();
             if (currentApp !== this.currentApp) {
                 logger.debug('Firebase app changed, reconnecting...');
@@ -343,24 +336,7 @@ class FirestoreSyncManager {
             // Non-blocking: proceed with sync even if checkpoint fails
         }
 
-        const isMock = isMockFirestoreEnabled();
-
-        let app = getFirebaseApp();
-        if (!app) {
-            if (isMock) {
-                // Use dummy app for mock provider
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                app = {} as any;
-            } else {
-                logger.error('Firebase app not available');
-                this.setStatus('error');
-                return;
-            }
-        }
-
         const maxWaitTime = getFirestoreDebounceOverrideMs() || this.config.maxWaitFirestoreTime;
-
-        const path = `users/${uid}/versicle/${workspaceId}`;
 
         await waitForYjsSync();
         // merge-defaults hydration guarantees `books` is always present
@@ -369,141 +345,47 @@ class FirestoreSyncManager {
 
         if (isCleanClient) {
             logger.info('Clean client detected. Checking for cloud data...');
-            this.performCleanSync(path, maxWaitTime, app!, isMock).catch(err => {
+            this.performCleanSync(backend, workspaceId, maxWaitTime).catch(err => {
                 logger.error('Clean sync failed:', err);
                 this.setStatus('error');
             });
         } else {
-            this.connectFireProviderNormal(path, maxWaitTime, app!, isMock);
+            this.connectFireProviderNormal(backend, workspaceId, maxWaitTime);
         }
     }
 
-    private async performCleanSync(path: string, maxWaitTime: number, app: FirebaseApp, isMock: boolean): Promise<void> {
+    private async performCleanSync(backend: SyncBackend, workspaceId: string, maxWaitTime: number): Promise<void> {
         this.setStatus('connecting');
         const toast = useToastStore.getState().showToast;
 
         try {
-            if (!isMock) {
-                const db = getFirestoreDb();
-                if (!db) throw new Error('Firestore not initialized');
-
-                // Check main document for snapshot/state vector
-                const docRef = doc(db, path);
-                const docSnap = await getDoc(docRef);
-                const hasMainDocData = docSnap.exists() && (
-                    docSnap.data()?.content ||
-                    docSnap.data()?.stateVector ||
-                    docSnap.data()?.snapshotBase64
-                );
-
-                // Check updates collection in case compaction hasn't run yet
-                const updatesQ = query(collection(db, path, 'updates'), limit(1));
-                const updatesSnap = await getDocs(updatesQ);
-
-                if (!hasMainDocData && updatesSnap.empty) {
-                    logger.info('No cloud data found. Client is officially the first device.');
-                    this.connectFireProviderNormal(path, maxWaitTime, app, isMock);
-                    return;
-                }
-            } else {
-                const mockDataStr = localStorage.getItem('versicle_mock_firestore_snapshot');
-                if (!mockDataStr) {
-                    logger.info('[Mock] No cloud data found. Client is officially the first device.');
-                    this.connectFireProviderNormal(path, maxWaitTime, app, isMock);
-                    return;
-                }
-                try {
-                    const mockData = JSON.parse(mockDataStr);
-                    if (!mockData[path] || !mockData[path].snapshotBase64) {
-                        logger.info('[Mock] No cloud data found for path. Client is explicitly clean.');
-                        this.connectFireProviderNormal(path, maxWaitTime, app, isMock);
-                        return;
-                    }
-                } catch (e) {
-                    logger.error('Failed to parse mock data', e);
-                }
+            const hasCloudData = await backend.probeHasData(workspaceId);
+            if (!hasCloudData) {
+                logger.info('No cloud data found. Client is officially the first device.');
+                this.connectFireProviderNormal(backend, workspaceId, maxWaitTime);
+                return;
             }
 
             logger.info('Cloud data found. Initiating temporary Y.Doc sync...');
             toast('Syncing library from cloud...', 'info');
 
-            const tempDoc = new Y.Doc();
-
-            await new Promise<void>((resolve) => {
-                let resolved = false;
-
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                let tempProvider: any = null;
-
-                const syncHandler = (isSynced: boolean) => {
-                    if (isSynced && !resolved) {
-                        logger.info('Received sync complete event from temp provider.');
-                        resolved = true;
-                        clearTimeout(timeout);
-                        if (tempProvider) tempProvider.off('sync', syncHandler);
-                        resolve();
-                    }
-                };
-
-                const timeout = setTimeout(() => {
-                    if (!resolved) {
-                        logger.warn('Clean sync timeout reached. Proceeding.');
-                        resolved = true;
-                        if (tempProvider) tempProvider.off('sync', syncHandler);
-                        resolve();
-                    }
-                }, 15000);
-
-                const providerConfig = {
-                    firebaseApp: app,
-                    ydoc: tempDoc,
-                    path,
-                    maxWaitTime: maxWaitTime,
-                    maxUpdatesThreshold: this.config.maxUpdatesThreshold
-                };
-
-                try {
-                    if (isMock) {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        tempProvider = new MockFireProvider(providerConfig as any);
-                    } else {
-                        tempProvider = new FireProvider(providerConfig);
-                    }
-                    tempProvider.on('sync', syncHandler);
-                } catch (e) {
-                    logger.error('Failed to connect temp provider:', e);
-                    if (!resolved) {
-                        clearTimeout(timeout);
-                        resolved = true;
-                        resolve();
-                    }
-                }
-
-                // Expose to outer scope for cleanup if it doesn't resolve inside
-                if (tempProvider) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    (tempDoc as any)._tempProvider = tempProvider;
-                }
+            // Legacy clean-sync behavior: a connect failure or timeout
+            // resolves with whatever synced (treated as "remote empty").
+            const downloaded = await downloadWorkspaceState(backend, workspaceId, {
+                maxWaitTimeMs: maxWaitTime,
+                maxUpdatesThreshold: this.config.maxUpdatesThreshold,
+                timeoutMs: 15000,
+                onAttachError: 'resolve',
             });
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const tempProvider = (tempDoc as any)._tempProvider;
-            if (tempProvider) {
-                try {
-                    tempProvider.destroy();
-                } catch (e) {
-                    logger.error('Error destroying temporary provider', e);
-                }
-            }
             logger.info('Applying downloaded cloud data to main Y.Doc...');
-            const stateVector = Y.encodeStateAsUpdate(tempDoc);
-            Y.applyUpdate(getYDoc(), stateVector);
+            Y.applyUpdate(getYDoc(), downloaded);
 
             logger.info('Clean sync complete. Connecting main provider...');
             toast('Sync complete!', 'success');
 
             // Connect the main provider now that the initial load is done
-            this.connectFireProviderNormal(path, maxWaitTime, app, isMock);
+            this.connectFireProviderNormal(backend, workspaceId, maxWaitTime);
 
         } catch (error) {
             logger.error('Failed clean sync:', error);
@@ -512,31 +394,19 @@ class FirestoreSyncManager {
         }
     }
 
-    private connectFireProviderNormal(path: string, maxWaitTime: number, app: FirebaseApp, isMock: boolean): void {
+    private connectFireProviderNormal(backend: SyncBackend, workspaceId: string, maxWaitTime: number): void {
         this.setStatus('connecting');
 
-        const providerConfig = {
-            firebaseApp: app,
-            ydoc: getYDoc(),
-            path,
-            maxWaitTime: maxWaitTime,
-            maxUpdatesThreshold: this.config.maxUpdatesThreshold
-        };
-
         try {
-            // Use MockFireProvider for testing when flag is set
-            if (isMock) {
-                logger.debug('Using MockFireProvider (test mode)');
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                this.fireProvider = new MockFireProvider(providerConfig as any) as unknown as FireProvider;
-            } else {
-                this.fireProvider = new FireProvider(providerConfig);
-            }
-            this.currentApp = app;
+            const connection = backend.connect(getYDoc(), workspaceId, {
+                maxWaitTimeMs: maxWaitTime,
+                maxUpdatesThreshold: this.config.maxUpdatesThreshold,
+            });
+            this.connection = connection;
+            this.currentApp = getFirebaseApp();
 
-            // Setup new y-cinder error event listeners
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            this.fireProvider.on('connection-error', (event: any) => {
+            // Transport error events, normalized by the backend adapter
+            connection.on('connection-error', (event) => {
                 logger.error('Firestore connection error:', event);
                 this.setStatus('error');
 
@@ -545,8 +415,7 @@ class FirestoreSyncManager {
                 }
             });
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            this.fireProvider.on('sync-failure', (error: any) => {
+            connection.on('sync-failure', (error) => {
                 logger.error('Firestore sync failure after max retries:', error);
                 this.setStatus('error');
                 if (isPermissionDeniedEvent(error)) {
@@ -556,8 +425,7 @@ class FirestoreSyncManager {
                 }
             });
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            this.fireProvider.on('save-rejected', (event: any) => {
+            connection.on('save-rejected', (event) => {
                 logger.error('Firestore save rejected:', event);
                 this.setStatus('error');
 
@@ -570,8 +438,8 @@ class FirestoreSyncManager {
                 }
             });
 
-            // y-fire connects automatically
-            logger.info(`Connected to path: ${path}`);
+            // The provider connects automatically in the background
+            logger.info(`Connected to workspace: ${workspaceId}`);
             this.setStatus('connected');
 
         } catch (error) {
@@ -581,17 +449,17 @@ class FirestoreSyncManager {
     }
 
     /**
-     * Disconnect y-fire provider
+     * Disconnect the backend connection
      */
     private disconnectFireProvider(): void {
-        if (this.fireProvider) {
+        if (this.connection) {
             try {
-                this.fireProvider.destroy();
+                this.connection.destroy();
                 logger.debug('Provider destroyed');
             } catch (error) {
                 logger.error('Error destroying provider:', error);
             }
-            this.fireProvider = null;
+            this.connection = null;
         }
         this.setStatus('disconnected');
     }
@@ -679,23 +547,8 @@ class FirestoreSyncManager {
             schemaVersion: CURRENT_SCHEMA_VERSION,
         };
 
-        const isMock = isMockFirestoreEnabled();
-
-        if (isMock) {
-            // Store workspace metadata in localStorage for mock mode
-            const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
-            const workspaces: WorkspaceMetadata[] = JSON.parse(raw);
-            workspaces.push(metadata);
-            localStorage.setItem('__VERSICLE_WORKSPACES__', JSON.stringify(workspaces));
-            logger.info(`[Mock] Created workspace: ${name} (${workspaceId})`);
-        } else {
-            const db = getFirestoreDb();
-            if (!db) throw new Error('Firestore not initialized');
-            const metaRef = doc(db, `users/${user.uid}/workspaces/${workspaceId}`);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await setDoc(metaRef, metadata as any);
-            logger.info(`Created workspace: ${name} (${workspaceId})`);
-        }
+        await this.getBackend(user.uid).createWorkspace(metadata);
+        logger.info(`Created workspace: ${name} (${workspaceId})`);
 
         // Update active workspace
         useSyncStore.getState().setActiveWorkspaceId(workspaceId);
@@ -723,9 +576,10 @@ class FirestoreSyncManager {
 
         logger.info(`Switching workspace: ${currentWorkspaceId} → ${targetWorkspaceId}`);
         const toast = useToastStore.getState().showToast;
+        const backend = this.getBackend(user.uid);
 
         // Step 0: Pre-flight validation
-        const isAlive = await this.validateWorkspaceIsAlive(user.uid, targetWorkspaceId);
+        const isAlive = await backend.isWorkspaceAlive(targetWorkspaceId);
         if (!isAlive) {
             toast('Cannot switch: This workspace has been deleted.', 'error');
             throw new WorkspaceDeletedError();
@@ -749,77 +603,17 @@ class FirestoreSyncManager {
             logger.info('Downloading remote workspace state...');
             toast('Downloading workspace data...', 'info');
 
-            const isMock = isMockFirestoreEnabled();
-            const app = getFirebaseApp();
-
-            if (!app && !isMock) {
-                throw new Error('Firebase app not available');
-            }
-
-            const targetPath = `users/${user.uid}/versicle/${targetWorkspaceId}`;
-            const tempDoc = new Y.Doc();
-
             const maxWaitTime = getFirestoreDebounceOverrideMs() || 2000;
 
-            const remoteBlob = await new Promise<Uint8Array>((resolve, reject) => {
-                let resolved = false;
-
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                let tempProvider: any;
-
-                const syncHandler = (isSynced: boolean) => {
-                    if (isSynced && !resolved) {
-                        logger.info('Received sync complete event from temp workspace provider.');
-                        resolved = true;
-                        clearTimeout(timeout);
-                        if (tempProvider) tempProvider.off('sync', syncHandler);
-                        resolve(Y.encodeStateAsUpdate(tempDoc));
-                    }
-                };
-
-                const timeout = setTimeout(() => {
-                    if (!resolved) {
-                        logger.warn('Workspace sync timeout reached. Assuming empty or unreachable remote.');
-                        resolved = true;
-                        if (tempProvider) tempProvider.off('sync', syncHandler);
-                        resolve(Y.encodeStateAsUpdate(tempDoc));
-                    }
-                }, 15000);
-
-                const providerConfig = {
-                    firebaseApp: app || ({} as FirebaseApp),
-                    ydoc: tempDoc,
-                    path: targetPath,
-                    maxWaitTime,
-                    maxUpdatesThreshold: this.config.maxUpdatesThreshold,
-                };
-
-                try {
-                    if (isMock) {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        tempProvider = new MockFireProvider(providerConfig as any);
-                    } else {
-                        tempProvider = new FireProvider(providerConfig);
-                    }
-                    tempProvider.on('sync', syncHandler);
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    (tempDoc as any)._tempProvider = tempProvider;
-                } catch (e) {
-                    if (!resolved) {
-                        clearTimeout(timeout);
-                        resolved = true;
-                        reject(e);
-                    }
-                }
+            // Legacy switch behavior: a synchronous connect failure rejects
+            // (routed to the non-destructive catch below); a timeout resolves
+            // with whatever synced.
+            const remoteBlob = await downloadWorkspaceState(backend, targetWorkspaceId, {
+                maxWaitTimeMs: maxWaitTime,
+                maxUpdatesThreshold: this.config.maxUpdatesThreshold,
+                timeoutMs: 15000,
+                onAttachError: 'reject',
             });
-
-            // Cleanup temp provider
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const tempProvider = (tempDoc as any)._tempProvider;
-            if (tempProvider) {
-                try { tempProvider.destroy(); } catch (e) { logger.error('Error destroying temp provider', e); }
-            }
-            tempDoc.destroy();
 
             // Step 5: Apply & Reload
             logger.info('Applying remote state and reloading...');
@@ -858,27 +652,8 @@ class FirestoreSyncManager {
         const user = this.getCurrentUser();
         if (!user) return [];
 
-        const isMock = isMockFirestoreEnabled();
-
-        if (isMock) {
-            const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
-            const workspaces: WorkspaceMetadata[] = JSON.parse(raw);
-            return workspaces.filter(ws => !ws.deletedAt);
-        }
-
-        const db = getFirestoreDb();
-        if (!db) return [];
-
-        try {
-            const workspacesRef = collection(db, `users/${user.uid}/workspaces`);
-            const snapshot = await getDocs(workspacesRef);
-            return snapshot.docs
-                .map(d => d.data() as WorkspaceMetadata)
-                .filter(ws => !ws.deletedAt); // Filter out tombstoned workspaces
-        } catch (error) {
-            logger.error('Failed to list workspaces:', error);
-            return [];
-        }
+        // Tombstoned workspaces are filtered by the backend.
+        return this.getBackend(user.uid).listWorkspaces();
     }
 
     /**
@@ -889,74 +664,26 @@ class FirestoreSyncManager {
         const user = this.getCurrentUser();
         if (!user) throw new Error('Must be authenticated to delete workspace');
 
-        const isMock = isMockFirestoreEnabled();
+        const backend = this.getBackend(user.uid);
 
-        if (isMock) {
-            const uid = user.uid;
-            // Mock Deletion logic: update localStorage
-            const raw = localStorage.getItem('__VERSICLE_WORKSPACES__') || '[]';
-            const workspaces: WorkspaceMetadata[] = JSON.parse(raw);
-            const updated = workspaces.map(ws =>
-                ws.workspaceId === workspaceId ? { ...ws, deletedAt: Date.now() } : ws
-            );
-            localStorage.setItem('__VERSICLE_WORKSPACES__', JSON.stringify(updated));
+        // Legacy real/mock divergence preserved as backend data, not
+        // branches — see LegacyDeleteBehavior (unified by P4-6).
+        if (backend.legacyDeleteBehavior.destroyConnectionFirst) {
+            // Terminate the active connection to prevent resurrection
+            this.destroy();
+        }
 
-            // Mock tombstone in snapshot storage
-            const mockDataStr = localStorage.getItem('versicle_mock_firestore_snapshot') || '{}';
-            const mockData = JSON.parse(mockDataStr);
-            const path = `users/${uid}/versicle/${workspaceId}`;
-            mockData[path] = { isDeleted: true, deletedAt: Date.now() };
-            localStorage.setItem('versicle_mock_firestore_snapshot', JSON.stringify(mockData));
+        await backend.deleteWorkspace(workspaceId);
 
-            logger.info(`[Mock] Workspace deleted and tombstoned: ${workspaceId}`);
-
-            // Only clear if it was active
+        // Sever local tie
+        if (backend.legacyDeleteBehavior.severActiveUnconditionally) {
+            useSyncStore.getState().setActiveWorkspaceId(null);
+        } else {
             const activeWorkspaceId = useSyncStore.getState().activeWorkspaceId;
             if (activeWorkspaceId === workspaceId) {
                 useSyncStore.getState().setActiveWorkspaceId(null);
             }
-            return;
         }
-
-        const db = getFirestoreDb();
-        if (!db) throw new Error('Firestore not initialized');
-
-        const uid = user.uid;
-
-        // 1. Terminate active connection to prevent resurrection
-        this.destroy();
-
-        // 2. Reclaim Storage: Recursively delete the updates subcollection
-        // (This happens background, but we await the batches)
-        const updatesRef = collection(db, `users/${uid}/versicle/${workspaceId}/updates`);
-        let isDeleting = true;
-
-        while (isDeleting) {
-            const q = query(updatesRef, limit(500));
-            const snapshot = await getDocs(q);
-
-            if (snapshot.size === 0) {
-                isDeleting = false;
-                break;
-            }
-
-            const batch = writeBatch(db);
-            snapshot.docs.forEach((docSnap) => {
-                batch.delete(docSnap.ref);
-            });
-            await batch.commit();
-        }
-
-        // 3. Plant Tombstone on the root document
-        const rootDocRef = doc(db, `users/${uid}/versicle/${workspaceId}`);
-        await setDoc(rootDocRef, { isDeleted: true, deletedAt: Date.now() }, { merge: true });
-
-        // 4. Update Metadata Index (Filter it out from future lists)
-        const metaDocRef = doc(db, `users/${uid}/workspaces`, workspaceId);
-        await setDoc(metaDocRef, { deletedAt: Date.now() }, { merge: true });
-
-        // 5. Sever Local Tie
-        useSyncStore.getState().setActiveWorkspaceId(null);
 
         logger.info(`Workspace deleted and tombstoned: ${workspaceId}`);
     }
@@ -1009,10 +736,9 @@ class FirestoreSyncManager {
         if (this.currentUser) return this.currentUser;
 
         // Fallback for HMR / Dev mode where singleton state might be lost
-        const isMock = isMockFirestoreEnabled();
-        if (isMock) {
-            const mockUid = getMockFirestoreUserId();
-            this.currentUser = { uid: mockUid, email: `${mockUid}@example.com` } as User;
+        const mockSession = this.backendSelection.mockSession;
+        if (mockSession) {
+            this.currentUser = { uid: mockSession.uid, email: mockSession.email } as User;
             return this.currentUser;
         }
 

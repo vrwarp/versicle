@@ -4,7 +4,11 @@
 
 /**
  * Firestore metadata for a workspace.
- * Path: users/{uid}/versicle_meta/workspaces/{workspaceId}
+ * Path: users/{uid}/workspaces/{workspaceId} (the replicated doc itself
+ * lives at users/{uid}/versicle/{workspaceId}).
+ * Validated at the backend read boundary by `workspaceMetadataSchema`
+ * (src/domains/sync/backend/SyncBackend.ts) — OBSERVE mode until the
+ * telemetry review gate.
  */
 export interface WorkspaceMetadata {
     workspaceId: string;    // Randomly generated (e.g., ws_abc123)
