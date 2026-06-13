@@ -22,7 +22,7 @@ test('Journey Preroll Test', async ({ page }) => {
 
   // Open Settings
   console.log('Opening TTS Settings...');
-  await page.getByTestId('tts-settings-tab-btn').click({ force: true });
+  await utils.switchAudioPanelView(page, 'settings');
 
   // Enable Preroll
   console.log('Enabling Preroll...');
@@ -48,9 +48,7 @@ test('Journey Preroll Test', async ({ page }) => {
   // Wait a brief moment for the bottom sheet animation to finish on mobile
   await page.waitForTimeout(1000);
 
-  const settingsBtn = page.getByTestId('tts-settings-tab-btn');
-  await settingsBtn.waitFor({ state: 'visible' });
-  await settingsBtn.click({ force: true });
+  await utils.switchAudioPanelView(page, 'settings');
 
   const prerollSwitchPersisted = page.getByLabel('Announce Chapter Titles');
 
@@ -62,7 +60,7 @@ test('Journey Preroll Test', async ({ page }) => {
   console.log('Settings persistence verified.');
 
   // Go back to queue
-  await page.getByTestId('tts-queue-tab-btn').click({ force: true });
+  await utils.switchAudioPanelView(page, 'queue');
 
   // Close Audio Deck
   await page.keyboard.press('Escape');

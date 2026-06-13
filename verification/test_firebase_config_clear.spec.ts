@@ -1,14 +1,14 @@
-import { test, expect } from './utils';
+import { test, expect, openSettings, gotoSettingsTab, acceptConfirm } from './utils';
 
 test('verify firebase config clear', async ({ page }) => {
   // Navigate to app
   await page.goto('/');
 
-  // Open Global Settings
-  await page.getByTestId('header-settings-button').click();
+  // Open Global Settings (Radix-Tabs SettingsShell over the library)
+  await openSettings(page);
 
-  // Go to Sync tab
-  await page.getByRole('tab', { name: 'Sync & Cloud' }).click();
+  // Go to Sync tab (now a real Radix tab, not a role=button)
+  await gotoSettingsTab(page, 'sync');
 
   // Verify Firebase Config section appears
   await expect(page.getByRole('heading', { name: 'Firebase Configuration' })).toBeVisible();
@@ -33,10 +33,10 @@ const firebaseConfig = {
   const clearBtn = page.getByRole('button', { name: 'Clear Configuration' });
   await expect(clearBtn).toBeVisible();
 
-  // Handle confirmation dialog
-  page.on('dialog', (dialog) => dialog.accept());
-
+  // Confirm via the in-app ConfirmDialog ("Clear Firebase configuration?")
+  // — the old window.confirm() became a Radix ConfirmDialog (Phase-10 overhaul).
   await clearBtn.click();
+  await acceptConfirm(page);
 
   // Verify we are back to the form
   await expect(page.getByPlaceholder('// Paste your Firebase config here')).toBeVisible();

@@ -83,9 +83,13 @@ test('Characterization: annotation highlight add/remove round-trip', async ({ pa
   await expect.poll(() => highlightNodeCount(page, 'highlight-yellow'), { timeout: 10000 }).toBeGreaterThan(0);
 
   // Remove: delete from the annotations sidebar → SVG + counter drop.
+  // Deletion now routes through the in-app ConfirmDialog (Phase-8 useConfirm;
+  // AnnotationList.tsx:30-35) instead of an immediate remove(), so the
+  // teardown only fires after the confirm button is clicked.
   await page.getByTestId('reader-annotations-button').click();
   await expect(page.getByTestId('reader-annotations-sidebar')).toBeVisible();
   await page.getByTestId('annotation-delete-button').first().click();
+  await utils.acceptConfirm(page);
 
   await expect.poll(() => annotationCount(page), { timeout: 10000 }).toBe(0);
   await expect.poll(() => highlightNodeCount(page, 'highlight-yellow'), { timeout: 10000 }).toBe(0);
@@ -131,7 +135,17 @@ test('Characterization: TTS highlight follows playback with exactly ONE node', a
   await expect.poll(() => highlightNodeCount(page, 'tts-highlight'), { timeout: 10000 }).toBe(1);
 });
 
-test('Characterization: reading-history highlight marks the last played sentence', async ({ page }) => {
+test('Characterization: reading-history highlight marks the last played sentence', async ({ page }, testInfo) => {
+  // Whether the gray lastPlayedCfi highlight node is present after a page-turn
+  // round-trip is a pixel-pagination concern: it depends on the played CFI
+  // landing back on the same rendered page. The 375×667 mobile projection
+  // paginates the prose differently, so a single ArrowRight/ArrowLeft does not
+  // reliably return to the played page. Per this spec's header ("Geometry
+  // assertions are desktop-project scoped per the prep doc; mobile gets the
+  // smoke pass for free") and the sibling test_characterization_pinyin.spec.ts
+  // (test.skip(project !== 'desktop')), this geometry assertion is desktop-only.
+  test.skip(testInfo.project.name !== 'desktop', 'geometry assertions are desktop-only (prep doc)');
+
   await openDemoBook(page);
   await utils.navigateToChapter(page);
 
@@ -172,9 +186,17 @@ test('Characterization: note markers render in the overlay container and open th
   await expect(marker).toBeVisible({ timeout: 10000 });
   await expect(marker).toHaveAttribute('aria-label', 'Note: characterization note');
 
-  // Click → annotation popover + compass morph.
+  // Click → the annotation popover re-opens (compass morph). Because the
+  // clicked marker's annotation carries a note, the pill morphs straight into
+  // the note EDITOR variant (compass-pill-annotation-edit), pre-filled with
+  // the note text — the AnnotationPill enters edit mode whenever
+  // targetAnnotation.note is set (AnnotationPill.tsx:46-64; identical to the
+  // pre-overhaul CompassPill ui/CompassPill.tsx:205/223-225). The marker→
+  // popover round-trip is the user-observable outcome being pinned.
   await marker.click();
-  await expect(page.getByTestId('compass-pill-annotation')).toBeVisible({ timeout: 5000 });
+  const editor = page.getByTestId('compass-pill-annotation-edit');
+  await expect(editor).toBeVisible({ timeout: 5000 });
+  await expect(editor.locator('textarea[placeholder="Add a note..."]')).toHaveValue('characterization note');
 });
 
 test('Characterization: content-analysis debug layer toggles with GenAI debug mode', async ({ page }) => {

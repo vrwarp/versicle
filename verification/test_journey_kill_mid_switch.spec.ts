@@ -51,6 +51,7 @@ async function openAppPage(context: BrowserContext, pause?: PausePoint): Promise
 
 async function openSyncSettings(page: Page): Promise<void> {
   await page.getByTestId("header-settings-button").click();
+  await page.getByRole("tab", { name: "Sync & Cloud" }).scrollIntoViewIfNeeded().catch(() => {});
   await page.getByRole("tab", { name: "Sync & Cloud" }).click();
 }
 

@@ -369,3 +369,105 @@ export function getReaderFrame(page: Page): Frame | null {
   }
   return null;
 }
+
+/**
+ * Accept the in-app confirmation dialog (the Phase-8 ConfirmHost Modal).
+ *
+ * The overhaul replaced the legacy `window.confirm(...)` calls — which a spec
+ * caught via `page.on('dialog', d => d.accept())` — with a Radix
+ * `ConfirmDialog` (src/components/ui/ConfirmDialog.tsx). Destructive flows
+ * (e.g. deleting an annotation, src/components/reader/AnnotationList.tsx:30-35)
+ * now `await useConfirm()` and only proceed once this button is clicked, so
+ * the native-dialog listener never fires. Waits for the dialog, then clicks
+ * its confirm affordance.
+ */
+export async function acceptConfirm(page: Page) {
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('confirm-dialog-confirm').click();
+}
+
+/** Open Global Settings from the library header and wait for the tablist. */
+export async function openSettings(page: Page) {
+  await page.getByTestId('header-settings-button').click();
+  await expect(page.getByRole('tablist', { name: 'Settings sections' })).toBeVisible({ timeout: 10000 });
+}
+
+/**
+ * Navigate to a specific settings tab and confirm it is selected.
+ * id ∈ general|tts|genai|sync|devices|dictionary|recovery|diagnostics|data
+ */
+export async function gotoSettingsTab(page: Page, id: string) {
+  // On the mobile (375x667) vertical tablist the lower tabs (data/recovery/
+  // diagnostics) sit below the fold — scroll before clicking.
+  await page.getByTestId(`settings-tab-${id}`).scrollIntoViewIfNeeded().catch(() => {});
+  await page.getByTestId(`settings-tab-${id}`).click();
+  await expect(page.getByTestId(`settings-tab-${id}`)).toHaveAttribute('aria-selected', 'true');
+}
+
+/**
+ * Open the audio deck and switch to its Settings view. The "Settings" footer tab
+ * (tts-settings-tab-btn) lives in the Sheet footer and is often below the fold,
+ * so it must be scrolled into view before clicking.
+ */
+export async function openAudioSettings(page: Page) {
+  await page.getByTestId('reader-audio-button').click();
+  await expect(page.getByTestId('tts-panel')).toBeVisible();
+  const btn = page.getByTestId('tts-settings-tab-btn');
+  await btn.scrollIntoViewIfNeeded();
+  // On the mobile (375px) Sheet the scrollable tts-queue body overlaps the
+  // footer tab's centerpoint, so Playwright's actionability check reports
+  // "tts-queue intercepts pointer events" on the (visible, enabled, stable)
+  // button. The footer tab is a real affordance; force past the centerpoint.
+  await btn.click({ force: true });
+  await expect(page.getByText('Voice & Pace')).toBeVisible();
+}
+
+/**
+ * Switch the (already-open) Audio Deck Sheet between its "Up Next" and "Settings" views.
+ * The view-toggle buttons live in the Sheet footer below the fold, so scroll into view first.
+ */
+export async function switchAudioPanelView(page: Page, view: 'queue' | 'settings') {
+  const testId = view === 'settings' ? 'tts-settings-tab-btn' : 'tts-queue-tab-btn';
+  const btn = page.getByTestId(testId);
+  await btn.waitFor({ state: 'visible' });
+  await btn.scrollIntoViewIfNeeded();
+  // Force past the mobile Sheet's tts-queue centerpoint interception (see openAudioSettings).
+  await btn.click({ force: true });
+}
+
+/**
+ * Close the Global Settings overlay (SettingsShell) and wait for the Radix Dialog
+ * backdrop to fully detach. Closing is a history navigation, so the ModalOverlay
+ * lingers one frame; failing to await it leaves the backdrop intercepting the next
+ * click on library content. Safe to call when settings is already closed.
+ */
+export async function closeSettings(page: Page) {
+  const closeBtn = page.getByTestId('settings-close-button');
+  if (await closeBtn.count()) {
+    await closeBtn.click({ force: true }).catch(() => {});
+  }
+  await expect(page.getByRole('tablist', { name: 'Settings sections' })).not.toBeVisible({ timeout: 10000 });
+}
+
+/**
+ * Wait until the active reader engine reports ready. Replaces the removed
+ * `window.rendition` global (Phase 6 caged epubjs behind the ReaderEngine port;
+ * readiness now lives on window.__versicleTest.reader). Pass {locations:true} to
+ * also wait for the locations index (epubjs book.locations.total() > 0).
+ */
+export async function waitForReaderReady(page: Page, opts: { locations?: boolean } = {}) {
+  await page.waitForFunction(
+    () => window.__versicleTest?.reader?.isReady?.() === true,
+    null,
+    { timeout: 30000 },
+  );
+  if (opts.locations) {
+    await page
+      .waitForFunction(
+        () => (window.__versicleTest?.reader?.locationsTotal?.() ?? 0) > 0,
+        null,
+        { timeout: 30000 },
+      )
+      .catch(() => {});
+  }
+}

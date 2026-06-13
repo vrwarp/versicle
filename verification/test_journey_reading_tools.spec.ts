@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook, captureScreenshot, navigateToChapter, getReaderFrame } from "./utils";
+import { resetApp, ensureLibraryWithBook, captureScreenshot, navigateToChapter, getReaderFrame, waitForPersistedWrites } from "./utils";
 import type { Frame } from "@playwright/test";
 
 async function waitForReaderFrame(page: Page): Promise<Frame> {
@@ -136,6 +136,11 @@ test("journey reading tools", async ({ page }) => {
   await captureScreenshot(page, "tools_2_play_started");
 
   // 3. Reload Page (Persistence Check)
+  // Drain the debounced Yjs→IndexedDB write first: the annotation is created
+  // synchronously in the store but its persist is debounced (~200ms y-idb), so a
+  // reload before the flush tears the page down with the annotation unpersisted —
+  // it never reapplies and the sidebar is empty after reload.
+  await waitForPersistedWrites(page);
   console.log("Reloading page to check highlight persistence...");
   await page.reload();
 

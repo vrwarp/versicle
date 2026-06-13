@@ -5,7 +5,8 @@ test('Journey Lexicon CSV Import/Export', async ({ page }) => {
   // 1. Reset App and Open Settings
   await utils.resetApp(page);
 
-  // Open Global Settings
+  // Open Global Settings (Radix-Tabs SettingsShell): the Dictionary section is a
+  // real tab (role="tab"); "Manage Rules" inside it opens the Lexicon Manager.
   await page.getByTestId('header-settings-button').click();
   await page.getByRole('tab', { name: 'Dictionary' }).click();
   await page.getByRole('button', { name: 'Manage Rules' }).click();
@@ -24,12 +25,13 @@ test('Journey Lexicon CSV Import/Export', async ({ page }) => {
   const downloadPath = await download.path();
   expect(downloadPath).toBeTruthy();
 
-  // 3. Import Sample CSV (using the downloaded file)
-  // Handle the confirmation dialog
-  page.on('dialog', (dialog) => dialog.accept());
-
-  // Upload the file
+  // 3. Import Sample CSV (using the downloaded file).
+  // The import "replace existing rules?" prompt is now the in-app ConfirmDialog
+  // (useConfirm in LexiconManager), not a native window.confirm — so the old
+  // page.on('dialog', d => d.accept()) handler never fires. Upload the file,
+  // then accept the in-app confirm to let the import proceed.
   await page.locator('input[data-testid="lexicon-import-input"]').setInputFiles(downloadPath!);
+  await utils.acceptConfirm(page);
 
   // 4. Verify rules are added
   await expect(page.getByText('Dr.', { exact: true }).first()).toBeVisible();

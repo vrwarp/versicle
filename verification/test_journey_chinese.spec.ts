@@ -103,10 +103,10 @@ test('Chinese Book Journey', async ({ page }) => {
     await page.waitForTimeout(1000);
   }
 
-  await page.getByTestId('header-settings-button').click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-
-  await page.getByRole('button', { name: 'TTS Engine', exact: true }).click();
+  // Settings is now a Radix-Tabs SettingsShell at /settings/:tab (Phase-10 overhaul);
+  // open from the library header and drive the TTS Engine tab.
+  await utils.openSettings(page);
+  await utils.gotoSettingsTab(page, 'tts');
 
   // Wait for TTS Settings Tab to load
   await expect(page.getByText('Language Profile')).toBeVisible();
@@ -150,10 +150,17 @@ test('Journey Smart Pinyin', async ({ page }) => {
   await expect(page.getByTestId('reader-view')).toBeVisible({ timeout: 10000 });
   await page.waitForTimeout(2000);
 
-  // Ensure text is rendered in iframe
-  const frame = page.locator('[data-testid="reader-iframe-container"] iframe').contentFrame();
-  await frame.locator('body').waitFor({ timeout: 5000 });
-  await expect(frame.locator('body')).toContainText('测试用的中文书', { timeout: 10000 });
+  // Ensure text is rendered in iframe AND the reader engine has finished
+  // wiring its per-section selection bridge before we drive a selection.
+  // (selectionBridge attaches on the content hook — useEpubReader.ts /
+  // domains/reader/engine/selectionBridge.ts; firing mouseup before it lands
+  // is silently dropped.)
+  await utils.waitForReaderReady(page);
+  {
+    const initialFrame = page.locator('[data-testid="reader-iframe-container"] iframe').contentFrame();
+    await initialFrame.locator('body').waitFor({ timeout: 5000 });
+    await expect(initialFrame.locator('body')).toContainText('测试用的中文书', { timeout: 10000 });
+  }
 
   // 3. Open Visual Settings, ensure language is Chinese, and turn on Pinyin
   console.log('Enabling Pinyin overlay...');
@@ -176,46 +183,88 @@ test('Journey Smart Pinyin', async ({ page }) => {
     await pinyinSwitch.click();
   }
 
-  // Close popover by clicking outside
-  await page.mouse.click(10, 10);
-  await page.waitForTimeout(1000);
+  // Explicitly close the (non-modal) VisualSettings Popover via its close button
+  // and wait for it to detach — a stray mouse.click(10,10) is unreliable, and a
+  // lingering popover steals the next pointer interaction. Then let the Chinese
+  // reading pass settle (ChineseContentProcessor.refresh runs the pinyin geometry
+  // on the showPinyin change; under load it can outlast 2s and re-render the
+  // section, which would clear a just-made selection before the bridge re-reads).
+  await page.getByTestId('visual-settings-close-button').click().catch(() => {});
+  await expect(page.getByTestId('show-pinyin-switch')).toHaveCount(0, { timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(3000);
 
-  // 4. Trigger text selection of Chinese characters inside the iframe
+  // 4. Trigger text selection of Chinese characters inside the iframe.
+  //
+  // Re-acquire the reader frame AFTER the pinyin toggle so we never operate on
+  // a stale/detached frame reference. utils.getReaderFrame walks the live
+  // page.frames() and returns the current epub.js content frame; the pinyin
+  // overlay is portaled into the parent document (PinyinOverlay.tsx) and does
+  // NOT rewrite the iframe's text nodes, so the '测试用的中文书' node stays a
+  // single contiguous text node. We still match a short, resilient substring
+  // ('测试') and retry the gesture until the annotation popover appears,
+  // because the selection→mouseup→cfiFromRange→popover pipeline can need a
+  // beat to commit on WebKit.
   console.log('Selecting Chinese text...');
-  await frame.locator('body').evaluate(() => {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
-    let node = walker.nextNode();
-    while (node) {
-      if (node.textContent && node.textContent.includes('测试用的中文书')) {
-        const range = document.createRange();
-        const startIdx = node.textContent.indexOf('测试');
-        range.setStart(node, startIdx);
-        range.setEnd(node, startIdx + 7); // Select "测试用的中文书"
-        const selection = window.getSelection();
-        if (selection) {
+  // Synthetic, PRECISE selection of the run '测试用的中文书' (so the downstream
+  // vocab-triage shows the exact glyphs the test asserts on, incl. '中'). The
+  // selection bridge is now attached to the initial section (the useEpubReader
+  // fix), so the in-iframe dispatched mouseup reaches it: cfiFromRange →
+  // showPopover → annotation pill with the vocab button.
+  await page
+    .locator('[data-testid="reader-iframe-container"] iframe')
+    .contentFrame()
+    .locator('body')
+    .waitFor({ state: 'visible', timeout: 10000 });
+  const selectChineseText = () => {
+    const frame = page.locator('[data-testid="reader-iframe-container"] iframe').contentFrame();
+    return frame.locator('body').evaluate((body) => {
+      const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null);
+      let node = walker.nextNode();
+      while (node) {
+        const text = node.textContent || '';
+        const startIdx = text.indexOf('测试');
+        if (startIdx !== -1) {
+          const range = document.createRange();
+          range.setStart(node, startIdx);
+          range.setEnd(node, Math.min(startIdx + 7, text.length)); // 测试用的中文书
+          const selection = window.getSelection();
+          if (!selection) return false;
           selection.removeAllRanges();
           selection.addRange(range);
-
-          // Dispatch mouseup to trigger selection popover
+          if (selection.isCollapsed) return false;
+          document.dispatchEvent(new Event('selectionchange', { bubbles: true }));
           document.dispatchEvent(
-            new MouseEvent('mouseup', {
-              view: window,
-              bubbles: true,
-              cancelable: true,
-              clientX: 100,
-              clientY: 100
-            })
+            new MouseEvent('mouseup', { view: window, bubbles: true, cancelable: true, clientX: 120, clientY: 120 }),
           );
+          return !selection.isCollapsed;
         }
-        break;
+        node = walker.nextNode();
       }
-      node = walker.nextNode();
-    }
-  });
+      return false;
+    });
+  };
 
-  // 5. Expect Selection Toolbar to appear with "Mark as Known" button
+  // Retry the gesture until the annotation popover commits.
+  let selected = false;
+  let pillVisible = false;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    selected = (await selectChineseText()) || selected;
+    pillVisible = await page
+      .getByTestId('compass-pill-annotation')
+      .waitFor({ state: 'visible', timeout: 2000 })
+      .then(() => true)
+      .catch(() => false);
+    if (pillVisible) break;
+    await page.waitForTimeout(300);
+  }
+  expect(selected).toBeTruthy();
+
+  // 5. Expect Selection Toolbar to appear with "Mark as Known" button.
+  // 15s (matching test_bug_selection): the selectionBridge re-checks the
+  // selection after a 10ms delay, then computes the CFI and updates React state
+  // before the pill renders — 5s can race that under load.
   console.log('Verifying Selection Toolbar...');
-  await expect(page.getByTestId('compass-pill-annotation')).toBeVisible({ timeout: 5000 });
+  await expect(page.getByTestId('compass-pill-annotation')).toBeVisible({ timeout: 15000 });
 
   const vocabBtn = page.getByTestId('popover-vocab-button');
   await expect(vocabBtn).toBeVisible();

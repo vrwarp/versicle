@@ -14,12 +14,11 @@ test('Journey Lexicon Test', async ({ page }) => {
   // Wait for book to load
   await page.waitForTimeout(2000);
 
-  // Open Audio Deck
-  console.log('Opening Audio Deck...');
-  await page.getByTestId('reader-audio-button').click();
-
-  // Switch to Settings
-  await page.getByRole('button', { name: 'Settings' }).click({ force: true });
+  // Open Audio Deck and switch to its Settings view.
+  // The deck is a right-side Radix Sheet; its "Settings" footer tab
+  // (tts-settings-tab-btn) sits below the fold and must be scrolled into view.
+  console.log('Opening Audio Deck Settings...');
+  await utils.openAudioSettings(page);
 
   // Open Lexicon Manager
   console.log('Opening Pronunciation Lexicon...');

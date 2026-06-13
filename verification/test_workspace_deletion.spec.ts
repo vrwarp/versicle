@@ -1,4 +1,4 @@
-import { test, expect } from "./utils";
+import { test, expect, openSettings, acceptConfirm } from "./utils";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
@@ -36,8 +36,10 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
   await page.goto(finalBaseURL);
   await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 15000 });
 
-  // Go to Sync Settings
-  await page.getByTestId("header-settings-button").click();
+  // Go to Sync Settings. Settings is now the Radix-Tabs SettingsShell at /settings/:tab
+  // (opened as a route-modal over the library); tabs are real role="tab" triggers.
+  await openSettings(page);
+  await page.getByRole("tab", { name: "Sync & Cloud" }).scrollIntoViewIfNeeded().catch(() => {});
   await page.getByRole("tab", { name: "Sync & Cloud" }).click();
 
   // In mock mode, sync is auto-enabled without pasting config
@@ -62,6 +64,7 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
   console.log(`Workspace ID: ${wsId}`);
 
   // Add some data (Lexicon rule)
+  await page.getByRole("tab", { name: "Dictionary" }).scrollIntoViewIfNeeded().catch(() => {});
   await page.getByRole("tab", { name: "Dictionary" }).click();
   await page.getByRole("button", { name: "Manage Rules" }).click();
   await page.getByTestId("lexicon-add-rule-btn").click();
@@ -72,6 +75,7 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
 
   // Close Lexicon & go back to Sync & Cloud
   await page.getByTestId("lexicon-close-btn").click();
+  await page.getByRole("tab", { name: "Sync & Cloud" }).scrollIntoViewIfNeeded().catch(() => {});
   await page.getByRole("tab", { name: "Sync & Cloud" }).click();
 
   // Create a second workspace so we can delete the first one.
@@ -89,12 +93,19 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
 
   const deleteBtn = wsItem.locator("svg.lucide-trash-2").locator("xpath=ancestor::button[1]");
 
-  // Handle confirm dialog
-  page.once("dialog", (dialog) => {
-    console.log(`DIALOG: ${dialog.message()}`);
-    dialog.accept();
-  });
-  await deleteBtn.click({ force: true });
+  // On mobile (375x667) the workspace list sits below the Sync panel fold, so the
+  // trash button is off-viewport. A forced click skips Playwright's scroll-into-view,
+  // so the tap would never land and the confirm dialog would never open — scroll it
+  // into view first, THEN force past any overlap.
+  await deleteBtn.scrollIntoViewIfNeeded();
+
+  // Delete now confirms through the in-app ConfirmDialog (useConfirm → ConfirmHost),
+  // not window.confirm. The old page.on('dialog', …) never fires; drive the dialog's
+  // own confirm button instead. The delete is danger:true, so the confirm label is "Delete".
+  // dispatchEvent fires the React onClick directly, immune to mobile viewport/
+  // overlap positioning (a force-click at a covered centerpoint silently no-ops).
+  await deleteBtn.dispatchEvent("click");
+  await acceptConfirm(page);
   await page.waitForTimeout(1000);
 
   try {

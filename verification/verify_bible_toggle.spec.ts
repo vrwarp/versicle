@@ -14,6 +14,7 @@ test("verify bible toggle settings tab", async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeVisible();
 
   // Go to Dictionary tab
+  await page.getByRole("tab", { name: "Dictionary" }).scrollIntoViewIfNeeded().catch(() => {});
   await page.getByRole("tab", { name: "Dictionary" }).click();
   await page.waitForTimeout(1000);
 

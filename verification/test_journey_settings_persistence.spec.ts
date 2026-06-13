@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook, captureScreenshot } from "./utils";
+import { resetApp, ensureLibraryWithBook, captureScreenshot, openAudioSettings } from "./utils";
 
 test("settings persistence", async ({ page }) => {
   console.log("Starting Settings Persistence Journey...");
@@ -11,12 +11,12 @@ test("settings persistence", async ({ page }) => {
   await expect(page).toHaveURL(/.*\/read\/.*/);
   await page.waitForTimeout(2000);
 
-  // 1. Open Audio Panel
+  // 1. Open Audio Panel and switch to its Settings view.
+  // The audio deck is a right-side Radix Sheet; its "Settings" footer tab
+  // (tts-settings-tab-btn) sits below the fold, so it must be scrolled into
+  // view before clicking — openAudioSettings handles that.
   console.log("Opening Audio Panel...");
-  await page.getByTestId("reader-audio-button").click();
-
-  // Switch to Settings
-  await page.click("button:has-text('Settings')", { force: true });
+  await openAudioSettings(page);
 
   // 2. Toggle "Announce Chapter Titles" (Enable)
   console.log("Toggling Announce Chapter Titles (Enable)...");
@@ -47,10 +47,8 @@ test("settings persistence", async ({ page }) => {
   // 4. Verify Persistence
   console.log("Verifying Persistence...");
 
-  // Open Audio Panel again
-  await page.getByTestId("reader-audio-button").click();
-  // Switch to Settings
-  await page.click("button:has-text('Settings')", { force: true });
+  // Open Audio Panel again and switch back to its Settings view.
+  await openAudioSettings(page);
 
   const finalSwitch = page.getByText("Announce Chapter Titles", { exact: true }).locator("xpath=..").getByRole("switch");
   await expect(finalSwitch).toHaveAttribute("aria-checked", expectedState);

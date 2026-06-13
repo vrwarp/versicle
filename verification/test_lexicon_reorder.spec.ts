@@ -8,6 +8,7 @@ test("lexicon reorder", async ({ page }) => {
   await page.getByTestId("header-settings-button").click();
 
   // Go to Dictionary tab
+  await page.getByRole("tab", { name: "Dictionary" }).scrollIntoViewIfNeeded().catch(() => {});
   await page.getByRole("tab", { name: "Dictionary" }).click();
 
   // Open Manage Rules
@@ -62,6 +63,7 @@ test("lexicon reorder", async ({ page }) => {
 
   // Check again
   await page.getByTestId("header-settings-button").click();
+  await page.getByRole("tab", { name: "Dictionary" }).scrollIntoViewIfNeeded().catch(() => {});
   await page.getByRole("tab", { name: "Dictionary" }).click();
   await page.getByRole("button", { name: "Manage Rules" }).click();
 

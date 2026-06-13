@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect } from './utils';
+import { test, expect, openSettings, gotoSettingsTab } from './utils';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -53,9 +53,12 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   // Clear data
   await pageA.goto('/');
   await pageA.evaluate(async () => {
-    // Release IDB locks via the typed test API (DEV/VITE_E2E builds).
-    await window.__versicleTest?.disconnectYjs?.();
-    await window.__versicleTest?.closeDb?.();
+    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__ === 'function') {
+      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__();
+    }
+    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__ === 'function') {
+      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__();
+    }
     const dbs = await window.indexedDB.databases();
     for (const db of dbs) {
       if (db.name) {
@@ -148,14 +151,24 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   await pageB.goto('/');
   await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 15000 });
 
-  await pageB.getByTestId('header-settings-button').click();
-  await pageB.waitForTimeout(1000);
-  await pageB.getByRole('tab', { name: 'Sync & Cloud' }).click();
+  // Settings is now a Radix-Tabs SettingsShell at /settings/:tab (Phase-10 overhaul);
+  // the old role=button "Sync & Cloud" tab is now a real Radix tab.
+  await openSettings(pageB);
+  await gotoSettingsTab(pageB, 'sync');
 
   await expect(pageB.getByTestId('sync-halt-warning')).toBeVisible({ timeout: 20000 });
   await pageB.getByRole('button', { name: 'Switch' }).click();
 
   await expect(pageB.getByText('Finalize Workspace Switch?')).toBeVisible({ timeout: 15000 });
+
+  // The staged-swap reloads land back on /settings/sync, so the Radix
+  // SettingsShell dialog re-opens UNDER the app-level confirmation modal and
+  // makes that sibling modal inert — its overlay intercepts the "Yes, Finalize"
+  // click. Escape closes the settings dialog (its Escape handler fires beneath
+  // the plain confirmation overlay) and navigates back to the library, so the
+  // confirmation button becomes interactable and no settings backdrop lingers.
+  await pageB.keyboard.press('Escape');
+  await expect(pageB.getByRole('tablist', { name: 'Settings sections' })).not.toBeVisible({ timeout: 10000 });
   await pageB.getByRole('button', { name: 'Yes, Finalize' }).click();
 
   await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 30000 });
@@ -204,12 +217,36 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   await pageB.waitForTimeout(1000);
 
   const restoreFilePath = path.resolve(__dirname, 'alice.epub');
+  // The ContentMissingDialog mounts the hidden restore input lazily; wait for it to
+  // attach before supplying the file (deterministic wait, not a fixed sleep).
+  await pageB.locator("[data-testid='restore-file-input']").waitFor({ state: 'attached', timeout: 15000 });
   await pageB.setInputFiles('data-testid=restore-file-input', restoreFilePath);
   await pageB.waitForTimeout(3000);
 
   // The offload overlay clears once the re-supplied epub finishes re-ingesting (slow on
   // WebKit under full-suite load).
   await expect(offloadIndicator).not.toBeVisible({ timeout: 45000 });
+
+  // The ContentMissingDialog is a Radix Dialog; its bg-black/50 backdrop lingers for an
+  // animation frame after the dialog closes on successful restore and intercepts the
+  // next card click (the §0 backdrop-interception signature). Wait for that SPECIFIC
+  // dialog (and its hidden restore input) to detach before re-clicking the card to open
+  // the reader. A global `div.bg-black/50.backdrop-blur-sm` count is too broad — the same
+  // class is the overlay of EVERY Radix Modal/Dialog (the SettingsShell, ConfirmDialog,
+  // etc.), so it false-positives on any other open dialog. These are deterministic waits
+  // on the elements, not fixed sleeps.
+  await pageB.locator("[data-testid='restore-file-input']").waitFor({ state: 'detached', timeout: 15000 }).catch(() => {});
+  await expect(pageB.getByRole('dialog', { name: 'Content Missing' })).toHaveCount(0, { timeout: 15000 });
+  // The earlier staged workspace-switch reloads land back on /settings/sync, so the
+  // SettingsShell route-modal can still be open over the library; its open bg-black/50
+  // overlay intercepts the card click. Land on a clean library route with no open Radix
+  // dialog overlay before re-opening the reader.
+  await pageB.keyboard.press('Escape').catch(() => {});
+  if (pageB.url().includes('/settings')) {
+    await pageB.goto('/');
+    await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 15000 });
+  }
+  await expect(pageB.locator("div[data-state='open'].bg-black\\/50")).toHaveCount(0, { timeout: 10000 });
   await bookCardAlice.click();
   await expect(pageB.getByTestId('reader-iframe-container')).toBeVisible({ timeout: 10000 });
 
@@ -232,9 +269,12 @@ test('Offload Status Hydration', async ({ browser }) => {
 
   await pageA.goto('/');
   await pageA.evaluate(async () => {
-    // Release IDB locks via the typed test API (DEV/VITE_E2E builds).
-    await window.__versicleTest?.disconnectYjs?.();
-    await window.__versicleTest?.closeDb?.();
+    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__ === 'function') {
+      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__();
+    }
+    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__ === 'function') {
+      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__();
+    }
     const dbs = await window.indexedDB.databases();
     for (const db of dbs) {
       if (db.name) {
@@ -293,14 +333,22 @@ test('Offload Status Hydration', async ({ browser }) => {
   await pageB.goto('/');
   await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 15000 });
 
-  await pageB.getByTestId('header-settings-button').click();
-  await pageB.waitForTimeout(1000);
-  await pageB.getByRole('tab', { name: 'Sync & Cloud' }).click();
+  // SettingsShell Radix tabs (Phase-10): Sync & Cloud is now a real Radix tab.
+  await openSettings(pageB);
+  await gotoSettingsTab(pageB, 'sync');
 
   await expect(pageB.getByTestId('sync-halt-warning')).toBeVisible({ timeout: 20000 });
   await pageB.getByRole('button', { name: 'Switch' }).click();
 
   await expect(pageB.getByText('Finalize Workspace Switch?')).toBeVisible({ timeout: 15000 });
+
+  // The staged-swap reloads land back on /settings/sync, so the Radix
+  // SettingsShell dialog re-opens UNDER the app-level confirmation modal and
+  // makes that sibling modal inert — its overlay intercepts the "Yes, Finalize"
+  // click. Escape closes the settings dialog (its Escape handler fires beneath
+  // the plain confirmation overlay) so the confirmation button is interactable.
+  await pageB.keyboard.press('Escape');
+  await expect(pageB.getByRole('tablist', { name: 'Settings sections' })).not.toBeVisible({ timeout: 10000 });
   await pageB.getByRole('button', { name: 'Yes, Finalize' }).click();
 
   await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 30000 });
@@ -338,8 +386,9 @@ test('Offline Resilience Test', async ({ browser }) => {
   await page.goto('/');
   await expect(page.getByTestId('library-view')).toBeVisible({ timeout: 15000 });
 
-  await page.getByTestId('header-settings-button').click();
-  await page.getByRole('tab', { name: 'Dictionary' }).click();
+  // SettingsShell Radix tabs (Phase-10): open the Dictionary tab, then Manage Rules.
+  await openSettings(page);
+  await gotoSettingsTab(page, 'dictionary');
   await page.getByRole('button', { name: 'Manage Rules' }).click();
   await page.getByTestId('lexicon-add-rule-btn').click();
   await page.getByTestId('lexicon-input-original').fill('OfflineTest');
@@ -356,8 +405,9 @@ test('Offline Resilience Test', async ({ browser }) => {
 
   await expect(page.getByTestId('library-view')).toBeVisible({ timeout: 10000 });
 
-  await page.getByTestId('header-settings-button').click();
-  await page.getByRole('tab', { name: 'Dictionary' }).click();
+  // Re-open the Dictionary tab after reload to verify the rule persisted.
+  await openSettings(page);
+  await gotoSettingsTab(page, 'dictionary');
   await page.getByRole('button', { name: 'Manage Rules' }).click();
 
   await expect(page.getByText('OfflineTest')).toBeVisible({ timeout: 5000 });

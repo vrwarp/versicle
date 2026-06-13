@@ -89,6 +89,21 @@ async function scanSurface(
   // Per-rule ratchet: fixed baseline findings must stay fixed.
   if (opts.expectAbsentRules?.length) {
     const regressed = results.violations.filter((v) => opts.expectAbsentRules!.includes(v.id));
+    if (regressed.length) {
+      // console.warn survives the suite's log suppression — dump the offending
+      // node(s) so the regressed landmark/frame node is identifiable in-suite
+      // (axe attachments land in the container's unmounted /app/test-results).
+      console.warn(
+        `[a11y-regressed] ${surface}\n` +
+          regressed
+            .map(
+              (v) =>
+                `  ${v.id}: ` +
+                v.nodes.map((n) => `${JSON.stringify(n.target)} ${n.html}`).join('\n    '),
+            )
+            .join('\n'),
+      );
+    }
     expect(
       regressed.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.length })),
       `regressed fixed-baseline axe rules on ${surface}`
@@ -120,6 +135,16 @@ test('a11y scan: reader surface', { tag: '@a11y' }, async ({ page }, testInfo) =
   await expect
     .poll(() => utils.getReaderFrame(page) !== null, { timeout: 15000 })
     .toBe(true);
+
+  // Scan the SETTLED reader surface, not a mid-mount frame. The reader route is
+  // React.lazy (epubjs is a lazy chunk, Phase 8); under full-suite CPU load the
+  // Suspense fallback / first paint briefly leaves one node outside a landmark
+  // before the chrome finishes mounting. Wait for the lazy chunk + network to go
+  // idle and the reader header (a banner landmark) to be present. 'region' stays
+  // in expectAbsentRules below, so a PERSISTENT regression still fails — this only
+  // makes the scan trigger deterministic on the actual surface.
+  await page.waitForLoadState('networkidle');
+  await expect(page.getByTestId('reader-header')).toBeVisible();
 
   // Phase 6 fixed findings (see header): titled iframe + interactive
   // note-marker overlay. 'region' joined with Phase 8: the CompassPill
