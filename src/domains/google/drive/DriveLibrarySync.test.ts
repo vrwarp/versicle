@@ -124,6 +124,19 @@ describe('DriveLibrarySync', () => {
     });
   });
 
+  describe('downloadAsFile', () => {
+    it('downloads the blob and wraps it in a File named after the Drive entry', async () => {
+      const { sync, client, addBook } = makeHarness();
+      const file = await sync.downloadAsFile('file-1', 'Fred Sanders - The Holy Spirit.epub');
+      expect(client.downloadFile).toHaveBeenCalledWith('file-1', expect.anything());
+      expect(file).toBeInstanceOf(File);
+      expect(file.name).toBe('Fred Sanders - The Holy Spirit.epub');
+      expect(file.type).toBe('application/epub+zip');
+      // It does NOT import -- the caller routes the File to a bookId-targeted restore.
+      expect(addBook).not.toHaveBeenCalled();
+    });
+  });
+
   describe('importFile', () => {
     it('downloads and hands a File to the library port', async () => {
       const { sync, client, addBook } = makeHarness();
