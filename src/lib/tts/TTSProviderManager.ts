@@ -5,7 +5,9 @@ import { CapacitorTTSProvider } from './providers/CapacitorTTSProvider';
 import { asLocaleAware, asVoiceDownloadable, resolveDescriptor } from './providers/registry';
 import type { ProviderBuildContext } from './providers/registry';
 import { Capacitor } from '@capacitor/core';
-import type { PlaybackBackend } from './engine/PlaybackBackend';
+import type { PlaybackBackend, TTSProviderEvents } from './engine/PlaybackBackend';
+// Re-exported for the existing importers (tests, providers).
+export type { TTSProviderEvents };
 import type { AudioSink } from './engine/AudioSink';
 import { AudioElementPlayer } from './AudioElementPlayer';
 
@@ -18,34 +20,6 @@ import { AudioElementPlayer } from './AudioElementPlayer';
  */
 export type ProviderBuildContextSource = (providerId: string) => Omit<ProviderBuildContext, 'sink'>;
 
-/**
- * Interface defining the events emitted by the TTSProviderManager.
- */
-export interface TTSProviderEvents {
-    /** Triggered when playback starts. */
-    onStart: () => void;
-    /** Triggered when playback completes successfully. */
-    onEnd: () => void;
-    /**
-     * Triggered when an error occurs DURING playback (after play() resolved).
-     * Failures to start playback reject from {@link TTSProviderManager.play}
-     * instead (single failure path, 5a-PR2) — they never arrive here.
-     * @param error The error object or message.
-     */
-    onError: (error: unknown) => void;
-    /**
-     * Triggered periodically during playback with the current timestamp.
-     * @param currentTime The current playback position in seconds.
-     */
-    onTimeUpdate: (currentTime: number) => void;
-    /**
-     * Triggered during voice download progress.
-     * @param voiceId The ID of the voice being downloaded.
-     * @param percent The progress percentage (0-100).
-     * @param status A status message.
-     */
-    onDownloadProgress: (voiceId: string, percent: number, status: string) => void;
-}
 
 /**
  * Manages the lifecycle and selection of Text-to-Speech providers: a dumb holder

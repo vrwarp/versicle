@@ -2,11 +2,12 @@
  * Boundary-enforcement ruleset (Phase 0 of plan/overhaul/README.md).
  *
  * This encodes the master plan §2 boundary rules (the C12 layering &
- * worker-purity contract) as far as they map onto TODAY'S layout
- * (types/ lib/ db/ store/ hooks/ components/ workers/). The repo
- * currently violates most of them, so EVERY rule is severity "warn"
- * (ratchet model, master plan §4 rule 3): the current violation counts
- * are frozen in .dependency-cruiser-baseline.json and may only go down.
+ * worker-purity contract). End state (P9): every rule whose count
+ * reached zero is severity "error"; the two named legacy ratchets
+ * (lib-not-to-store, worker-no-state-typegraph) stay "warn" with their
+ * counts frozen in .dependency-cruiser-baseline.json (decrease-only).
+ * The rule -> enforcement table lives in
+ * plan/overhaul/prep/phase9-close.md §3.
  *
  *   - regenerate baseline:  node scripts/depcruise-baseline.mjs
  *   - ratchet check:        node scripts/depcruise-baseline.mjs --check
@@ -18,18 +19,19 @@ module.exports = {
   forbidden: [
     {
       name: 'no-circular',
-      severity: 'warn',
+      severity: 'error',
       comment:
         'Circular dependencies (full graph, type imports included). ' +
-        'The LD-1 hub (types/db.ts importing lib/tts) died in P1; the ' +
-        'shim itself met its P9 deletion deadline ' +
-        '(see plan/overhaul/analysis/layering-deps.md LD-1/LD-2).',
+        'P0 baseline 117 -> 0: the LD-1 hub died in P1, the stranglers ' +
+        'took the runtime cycles, and P9 killed the last type-only cycle ' +
+        '(TTSProviderEvents moved to engine/PlaybackBackend.ts). At ERROR ' +
+        'with zero exceptions since P9.',
       from: {},
       to: { circular: true },
     },
     {
       name: 'no-circular-runtime',
-      severity: 'warn',
+      severity: 'error',
       comment:
         'Circular dependencies in the RUNTIME graph (cycles consisting ' +
         'only of non-type-only edges). These are the order-sensitive ones ' +
@@ -47,11 +49,12 @@ module.exports = {
     },
     {
       name: 'types-imports-nothing',
-      severity: 'warn',
+      severity: 'error',
       comment:
         'types/ is the L0 layer: it may not import any other internal ' +
         'module (master plan §2 rule 1 — kernel imports nothing). ' +
-        'At ZERO since P1 dissolved the LD-1 hub; the db.ts shim is gone (P9).',
+        'At ZERO since P1 dissolved the LD-1 hub; the db.ts shim is gone ' +
+        'and the rule flipped to ERROR (P9).',
       from: { path: '^src/types' },
       to: { path: '^src', pathNot: '^src/types' },
     },
@@ -84,16 +87,18 @@ module.exports = {
     },
     {
       name: 'lib-not-to-components',
-      severity: 'warn',
+      severity: 'error',
       comment:
         'lib/ must not import UI (components/ or layouts/): low-level ' +
-        'services may not know about presentation.',
+        'services may not know about presentation. At ERROR since P9 ' +
+        '(count was 0).',
       from: { path: '^src/lib' },
       to: { path: '^src/(components|layouts)' },
     },
     // `db-not-to-store` was retired at Phase 3 exit (P3-12): src/db/** is
     // deleted (the wipe's dynamic store/sync imports — the rule's last
     // violation — became the data/wipe.ts hook registry, D9).
+    // `components-not-to-db` followed at P9: vacuous since the same deletion.
     {
       name: 'data-no-upward',
       severity: 'error',
@@ -124,16 +129,6 @@ module.exports = {
         path: '^src/(store|hooks|components|layouts|app)',
         pathNot: '^src/store/yjs-provider\\.ts$',
       },
-    },
-    {
-      name: 'components-not-to-db',
-      severity: 'warn',
-      comment:
-        'components/ and layouts/ must not import db/ internals — UI goes ' +
-        'through stores/hooks/services. src/db/** was deleted at Phase 3 ' +
-        'exit, so this is vacuously 0; the rule itself is a P9 deletion.',
-      from: { path: '^src/(components|layouts)' },
-      to: { path: '^src/db' },
     },
     {
       name: 'ui-imports-kernel-only',

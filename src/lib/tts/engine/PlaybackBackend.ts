@@ -15,11 +15,38 @@
  * The production implementation is {@link TTSProviderManager}. Tests use `FakePlaybackBackend`.
  */
 import type { ITTSProvider, TTSVoice } from '../providers/types';
-// Type-only import — erased at runtime, so this does NOT pull TTSProviderManager (and its
-// Capacitor dependency) into a worker bundle.
-import type { TTSProviderEvents } from '../TTSProviderManager';
 
-export type { TTSProviderEvents };
+/**
+ * Interface defining the events emitted by the playback backend (the
+ * production implementation is TTSProviderManager). Declared HERE — the
+ * consumer side of the seam — so the engine/manager edge is one-directional
+ * (P9: the last full-graph import cycle was this type's old home).
+ */
+export interface TTSProviderEvents {
+    /** Triggered when playback starts. */
+    onStart: () => void;
+    /** Triggered when playback completes successfully. */
+    onEnd: () => void;
+    /**
+     * Triggered when an error occurs DURING playback (after play() resolved).
+     * Failures to start playback reject from {@link TTSProviderManager.play}
+     * instead (single failure path, 5a-PR2) — they never arrive here.
+     * @param error The error object or message.
+     */
+    onError: (error: unknown) => void;
+    /**
+     * Triggered periodically during playback with the current timestamp.
+     * @param currentTime The current playback position in seconds.
+     */
+    onTimeUpdate: (currentTime: number) => void;
+    /**
+     * Triggered during voice download progress.
+     * @param voiceId The ID of the voice being downloaded.
+     * @param percent The progress percentage (0-100).
+     * @param status A status message.
+     */
+    onDownloadProgress: (voiceId: string, percent: number, status: string) => void;
+}
 
 /**
  * The command surface `PlaybackController` invokes on the audio backend. A worker proxy and
