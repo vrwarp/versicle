@@ -356,6 +356,11 @@ Manages integration with the native Android Backup Service.
     *   **Filtering**: Filters logs based on `VITE_LOG_LEVEL` or environment (Info in Dev, Warn in Prod).
     *   **Legacy**: The singleton `Logger` class is deprecated in favor of functional factory usage.
 
+#### Backup Service (`src/lib/BackupService.ts`)
+*   **Goal**: Enable complete user data export and import natively and across platforms.
+*   **Logic**: Uses a V2 Backup Manifest. Captures the entire Yjs CRDT state as a base64-encoded binary snapshot, allowing preservation of vector clocks and deterministic restore merging. Also bundles static IDB metadata (Ghost Books) and binary EPUB files into a ZIP using `JSZip`.
+*   **Trade-offs**: Creates large zip files depending on the number of books, leading to temporary memory pressure during creation and potential slow imports.
+
 #### Performance: Hot Paths (`src/lib/cfi-utils.ts`)
 *   **Goal**: Minimize latency during heavy text segmentation and rendering operations.
 *   **Logic**:
@@ -707,8 +712,8 @@ State is managed using **Zustand** with specialized strategies for different dat
     *   **Why**: Enables "Send to Device" features and provides visibility into the sync network.
 *   **`useReaderStore`**: (Conceptual Facade) Aggregates ephemeral UI state (`useReaderUIStore`) and persistent settings (`usePreferencesStore`) for easier component consumption.
 *   **`useReaderUIStore` (Local/Ephemeral)**:
-    *   **Goal**: Manage transient UI state for the Reading Room.
-    *   **Logic**: Tracks loading state, Table of Contents (TOC), immersive mode, and holds callbacks (`playFromSelection`, `jumpToLocation`) to allow the React UI to control the underlying Reader instance.
+    *   **Goal**: Manage transient UI state for the Reading Room. Works as a transient React bridging layer to external systems.
+    *   **Logic**: Tracks loading state, `compassState` (for annotation targets and visual variants), Table of Contents (TOC), immersive mode, and holds callbacks (`playFromSelection`, `jumpToLocation`) to allow the React UI to control the underlying Reader instance.
 *   **`useToastStore` (Local/Ephemeral)**:
     *   **Goal**: Provide global toast notifications.
     *   **Logic**: Manages visibility, message, type (info, success, error) and duration for standard non-blocking system messages like database quota errors.

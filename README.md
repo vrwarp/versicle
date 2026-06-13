@@ -23,6 +23,7 @@
 *   **Language**: TypeScript 5.9.3
 *   **Testing**: Vitest 4.0.16
 *   **Linting**: ESLint 9.39.2
+*   **Git Hooks**: Husky 9.1.7
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (github:vrwarp/zustand-middleware-yjs#master)
 *   **Sync**: `y-cinder` (github:vrwarp/y-cinder#main / Firestore 11.10.0) + Android Backup Service + Google Drive API
 *   **Storage**: IndexedDB (via `idb`)
