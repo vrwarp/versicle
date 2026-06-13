@@ -33,7 +33,7 @@ export interface EpubJsBookLike {
 }
 
 /** Build-environment gate, injectable for tests (prod path is untestable otherwise). */
-export interface SecurityEnv {
+interface SecurityEnv {
   dev: boolean;
   e2e: boolean;
 }

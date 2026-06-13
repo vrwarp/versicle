@@ -2,7 +2,7 @@ import type { TTSQueueItem } from '~types/tts';
 import { flightRecorder } from './TTSFlightRecorder';
 
 
-export type PlaybackStateSnapshot = {
+type PlaybackStateSnapshot = {
     queue: ReadonlyArray<TTSQueueItem>;
     /** Changes iff the queue's content identity changed (feeds PlaybackSnapshot.queueId). */
     queueId: string;

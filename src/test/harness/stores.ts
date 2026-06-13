@@ -33,7 +33,7 @@ export function resetStore<S>(store: HarnessStore<S>): void {
 }
 
 /** Restore several stores at once. */
-export function resetStores(...stores: Array<HarnessStore<unknown>>): void {
+function resetStores(...stores: Array<HarnessStore<unknown>>): void {
   for (const store of stores) resetStore(store);
 }
 

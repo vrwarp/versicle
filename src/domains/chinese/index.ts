@@ -19,11 +19,9 @@ import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import {
   ChineseContentProcessor,
   type ChineseReadingHooks,
-  type ChineseReadingPrefs,
 } from './engine/ChineseContentProcessor';
 
-export type { ChineseReadingHooks, ChineseReadingPrefs };
-export type { PinyinPosition } from './types';
+export type { ChineseReadingHooks };
 export { HAN_RE } from './engine/PinyinGeometryEngine';
 
 /** Handle returned by {@link registerChineseReading}. */

@@ -123,7 +123,7 @@ export interface StaticStructure {
  * Essential metadata for displaying the book in the library (including offloaded state).
  * Stored in 'books'.
  */
-export interface Book {
+interface Book {
   /** Unique identifier for the book (UUID). */
   id: string;
   /** The title of the book. */
@@ -159,7 +159,7 @@ export interface Book {
  * Metadata related to the original file and ingestion process.
  * Stored in 'book_sources'.
  */
-export interface BookSource {
+interface BookSource {
   /** The unique identifier of the book (FK). */
   bookId: string;
   /** The original filename of the EPUB file. */
@@ -188,7 +188,7 @@ export interface BookSource {
  * Mutable user data like progress, current location, and status.
  * Stored in 'book_states'.
  */
-export interface BookState {
+interface BookState {
   /** The unique identifier of the book (FK). */
   bookId: string;
   /** Timestamp when the book was last opened. */
@@ -217,7 +217,7 @@ export interface BookState {
  */
 export type BookMetadata = Book & Partial<BookSource> & Partial<BookState>;
 
-export interface TableAdaptation {
+interface TableAdaptation {
   rootCfi: string; // The EPUB CFI key for the table block
   text: string;    // The generated spoken-word adaptation
 }

@@ -42,7 +42,7 @@ const logger = createLogger('Wipe');
  * is the Phase 6 dictionary index (rebuildable static content, but a wipe
  * must still leave nothing behind).
  */
-export const APP_DATABASES: readonly string[] = [
+const APP_DATABASES: readonly string[] = [
   'versicle-yjs',
   'versicle-yjs-staging',
   'EpubLibraryDB',
@@ -50,7 +50,7 @@ export const APP_DATABASES: readonly string[] = [
 ];
 
 /** Exact localStorage keys owned by the app (persisted zustand stores). */
-export const APP_LOCAL_STORAGE_KEYS: readonly string[] = [
+const APP_LOCAL_STORAGE_KEYS: readonly string[] = [
   'tts-storage',
   'sync-storage',
   'genai-storage',
@@ -72,7 +72,7 @@ export const APP_LOCAL_STORAGE_KEYS: readonly string[] = [
  *
  * Only these are removed — never the whole origin's localStorage.
  */
-export const APP_LOCAL_STORAGE_PREFIXES: readonly string[] = [
+const APP_LOCAL_STORAGE_PREFIXES: readonly string[] = [
   'versicle',
   '__VERSICLE_',
   'mockGenAI',

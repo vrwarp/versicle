@@ -37,13 +37,13 @@ import type View from 'epubjs/types/managers/view';
  * runtime property of Rendition. The engine reaches in for the overlay
  * container (geometry portals) and the per-view Contents list.
  */
-export interface RenditionManager {
+interface RenditionManager {
   container: HTMLElement;
   getContents(): Contents[];
 }
 
 /** A rendered view with the annotations SVG pane epub.js attaches to it. */
-export type ViewWithPane = View & {
+type ViewWithPane = View & {
   pane?: { element: SVGElement };
 };
 
@@ -64,7 +64,7 @@ export type RenditionInternals = Omit<Rendition, 'getContents' | 'views'> & {
  * navigation onto spine items during unpack (present at runtime, undeclared
  * upstream).
  */
-export type SpineSection = Section & {
+type SpineSection = Section & {
   label?: string;
 };
 

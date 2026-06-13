@@ -142,55 +142,6 @@ export interface UserOverrides {
 }
 
 /**
- * Chronological reading logs.
- * Store: 'user_journey' (Key: id (Auto))
- */
-export interface UserJourneyStep {
-  /** Auto-incrementing ID or UUID. */
-  id?: number | string;
-  /** The book ID. */
-  bookId: string;
-  /** Start timestamp. */
-  startTimestamp: number;
-  /** End timestamp. */
-  endTimestamp: number;
-  /** Duration in seconds. */
-  duration: number;
-  /** The CFI range covered. */
-  cfiRange: string;
-  /** Type of session. */
-  type: 'visual' | 'tts' | 'scroll' | 'page';
-}
-
-/**
- * AI summaries and analysis (Synced due to high compute cost).
- * Store: 'user_ai_inference' (Key: `${bookId}-${sectionId}`)
- */
-export interface UserAiInference {
-  /** Composite key. */
-  id: string;
-  bookId: string;
-  sectionId: string;
-  /** The rootCfi marking the beginning of the references section, if any. */
-  referenceStartCfi?: string;
-  /** Accessibility layers (e.g. Table Adaptations). */
-  accessibilityLayers: {
-    type: 'table-adaptation' | 'image-description';
-    rootCfi: string;
-    content: string;
-  }[];
-  /** Section summary. */
-  summary?: string;
-  /** Extracted structure (footnotes, etc). */
-  structure?: {
-    title?: string;
-    footnoteMatches: string[];
-  };
-  /** Generation timestamp. */
-  generatedAt: number;
-}
-
-/**
  * Represents a user annotation (highlight or note) within a book.
  */
 export interface Annotation {
@@ -243,15 +194,6 @@ export interface LexiconRule {
 }
 
 export type ReadingEventType = 'tts' | 'scroll' | 'page';
-
-/**
- * Represents the major and minor version of the store slice,
- * allowing backwards-incompatible migrations.
- */
-export interface StoreVersion {
-  major: number;
-  minor: number;
-}
 
 /**
  * Represents the reading history of a book.

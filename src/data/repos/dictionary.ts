@@ -23,7 +23,7 @@ import { createLogger } from '@lib/logger';
 const logger = createLogger('DictDB');
 
 export const DICT_DB_NAME = 'versicle-dict';
-export const DICT_DB_VERSION = 1;
+const DICT_DB_VERSION = 1;
 
 /** The compiled cedict.json tuple: [pinyin, definitions]. */
 export type DictEntryTuple = [string, string];

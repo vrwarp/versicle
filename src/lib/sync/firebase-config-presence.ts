@@ -43,13 +43,6 @@ export const getFirebaseConfig = (): FirebaseConfig | null => {
 };
 
 /**
- * Check if Firebase config has all required fields filled
- */
-export const isFirebaseConfigValid = (config: FirebaseConfigSettings): boolean => {
-    return !!(config.apiKey && config.authDomain && config.projectId && config.appId);
-};
-
-/**
  * Check if Firebase is configured (all required fields present)
  */
 export const isFirebaseConfigured = (): boolean => {

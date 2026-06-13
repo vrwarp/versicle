@@ -6,7 +6,7 @@
  */
 import { initializeApp } from 'firebase/app';
 import type { FirebaseApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import type { Auth } from 'firebase/auth';
 import {
     getFirestore,
@@ -25,8 +25,7 @@ import { createLogger } from '../logger';
 // lib-not-to-store ratchet stays at its pre-split count).
 import { getFirebaseConfig } from './firebase-config-presence';
 import type { FirebaseConfigSettings } from './firebase-config-presence';
-export { getFirebaseConfig, isFirebaseConfigValid, isFirebaseConfigured } from './firebase-config-presence';
-export type { FirebaseConfig } from './firebase-config-presence';
+export { isFirebaseConfigured } from './firebase-config-presence';
 
 const logger = createLogger('Firebase');
 
@@ -34,7 +33,6 @@ const logger = createLogger('Firebase');
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let firestore: Firestore | null = null;
-let googleProvider: GoogleAuthProvider | null = null;
 let currentConfigHash: string | null = null;
 
 /**
@@ -51,7 +49,6 @@ export const resetFirebase = (): void => {
     app = null;
     auth = null;
     firestore = null;
-    googleProvider = null;
     currentConfigHash = null;
     logger.info('Reset - will reinitialize on next use');
 };
@@ -97,7 +94,6 @@ export const initializeFirebase = (): boolean => {
             firestore = getFirestore(app);
         }
 
-        googleProvider = new GoogleAuthProvider();
         currentConfigHash = newConfigHash;
 
         logger.info('Initialized successfully');
@@ -130,20 +126,5 @@ export const getFirebaseAuth = (): Auth | null => {
 export const getFirestoreDb = (): Firestore | null => {
     if (!firestore) initializeFirebase();
     return firestore;
-};
-
-/**
- * Get the Google Auth Provider
- */
-export const getGoogleProvider = (): GoogleAuthProvider | null => {
-    if (!googleProvider) initializeFirebase();
-    return googleProvider;
-};
-
-/**
- * Check if Firebase is initialized and ready
- */
-export const isFirebaseInitialized = (): boolean => {
-    return app !== null && auth !== null && firestore !== null;
 };
 

@@ -394,8 +394,3 @@ export function getTtsController(): TtsController {
     }
     return instance;
 }
-
-/** Test-only: drop the singleton so the next getTtsController() builds fresh. */
-export function resetTtsControllerForTests(): void {
-    instance = null;
-}

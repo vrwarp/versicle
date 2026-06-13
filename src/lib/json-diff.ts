@@ -1,4 +1,4 @@
-export type DiffType = 'added' | 'removed' | 'modified' | 'unchanged';
+type DiffType = 'added' | 'removed' | 'modified' | 'unchanged';
 
 export interface DiffNode {
   key: string;

@@ -13,7 +13,7 @@ import type { SyncCheckpointRow } from '../rows/app';
 const logger = createLogger('CheckpointsRepo');
 
 /** Rolling cap on unprotected checkpoints (the prune skips protected rows). */
-export const CHECKPOINT_LIMIT = 10;
+const CHECKPOINT_LIMIT = 10;
 
 class CheckpointsRepo {
   /**

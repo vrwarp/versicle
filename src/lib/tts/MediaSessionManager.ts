@@ -42,16 +42,6 @@ export interface MediaSessionCallbacks {
 }
 
 /**
- * Represents the current state of playback.
- */
-export interface PlaybackState {
-  playbackState: 'playing' | 'paused' | 'none';
-  playbackSpeed?: number;
-  position?: number;
-  duration?: number;
-}
-
-/**
  * Wrapper for the Media Session API to integrate browser media controls.
  * Allows controlling playback from hardware keys, notification center, or lock screen.
  * Handles both Native (Capacitor) and Web environments.

@@ -41,9 +41,7 @@ export const bookLocationsRowSchema = z.looseObject({
   bookId: z.string().min(1),
   locations: z.string(),
 });
-export type BookLocationsRow = z.infer<typeof bookLocationsRowSchema>;
-
-export const timepointSchema = z.looseObject({
+const timepointSchema = z.looseObject({
   timeSeconds: z.number(),
   charIndex: z.number(),
   type: z.string().optional(),
@@ -80,7 +78,7 @@ export type CacheAudioBlobRow = {
 };
 
 /** The persisted TTS playback queue item (embedded in `cache_session_state`). */
-export const ttsQueueItemSchema = z.looseObject({
+const ttsQueueItemSchema = z.looseObject({
   text: z.string(),
   cfi: z.string().nullable(),
   title: z.string().optional(),
@@ -103,7 +101,7 @@ export type CacheSessionStateRow = {
   updatedAt: number;
 };
 
-export const citationMarkerSchema = z.looseObject({
+const citationMarkerSchema = z.looseObject({
   cfi: z.string(),
   markerText: z.string(),
   super: z.boolean(),
@@ -159,11 +157,15 @@ export type TableImageRow = {
  * pre-existing books. `extractionVersion` is the invalidation stamp:
  * rows below the current extraction version are re-extracted.
  */
-export const searchTextSectionSchema = z.looseObject({
+const searchTextSectionSchema = z.looseObject({
   href: z.string(),
   title: z.string(),
   text: z.string(),
 });
+/**
+ * @public C1 row contract: no parse call site yet — kept exported as the
+ * drift-guard anchor (`_SearchTextSchemaMatches` below pins it to the type).
+ */
 export const cacheSearchTextRowSchema = z.looseObject({
   bookId: z.string().min(1),
   extractionVersion: z.number(),

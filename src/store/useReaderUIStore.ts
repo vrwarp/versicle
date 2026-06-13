@@ -3,7 +3,7 @@ import type { NavigationItem } from '~types/book';
 
 import type { Annotation } from '~types/user-data';
 
-export interface CompassState {
+interface CompassState {
     variant?: 'active' | 'summary' | 'compact' | 'annotation' | 'sync-alert' | 'audio-triage' | 'vocab-triage';
     targetAnnotation?: Annotation;
 }
@@ -15,7 +15,7 @@ export interface CompassState {
  * (it previously lived in the synced useAnnotationStore and leaked screen
  * coordinates to other devices).
  */
-export interface AnnotationPopoverState {
+interface AnnotationPopoverState {
     visible: boolean;
     x: number;
     y: number;

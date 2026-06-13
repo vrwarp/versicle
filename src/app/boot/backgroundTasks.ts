@@ -118,20 +118,11 @@ const REINGEST_DEFER_KEY = 'versicle_reingest_defer';
 /** Idle delay before the wave starts scanning (stays off the boot path). */
 const REINGEST_START_DELAY_MS = 10_000;
 
-export function isReingestDeferred(): boolean {
+function isReingestDeferred(): boolean {
   try {
     return localStorage.getItem(REINGEST_DEFER_KEY) === '1';
   } catch {
     return false;
-  }
-}
-
-export function setReingestDeferred(deferred: boolean): void {
-  try {
-    if (deferred) localStorage.setItem(REINGEST_DEFER_KEY, '1');
-    else localStorage.removeItem(REINGEST_DEFER_KEY);
-  } catch {
-    // localStorage unavailable — the wave simply runs.
   }
 }
 

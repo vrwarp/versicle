@@ -120,8 +120,3 @@ export function wireGoogleDomain(): void {
     }),
   );
 }
-
-/** Test-only: allow re-wiring after holder resets. */
-export function resetGoogleWiringForTesting(): void {
-  wired = false;
-}

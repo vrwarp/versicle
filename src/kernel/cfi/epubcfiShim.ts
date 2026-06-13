@@ -22,7 +22,7 @@ export interface ParsedCfiPoint {
 }
 
 /** Parse a CFI string into an epubjs CFI object. Throws on invalid input. */
-export function parseCfiPoint(cfi: string): ParsedCfiPoint {
+function parseCfiPoint(cfi: string): ParsedCfiPoint {
     return new EpubCFI(cfi) as unknown as ParsedCfiPoint;
 }
 

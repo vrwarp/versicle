@@ -56,7 +56,7 @@ interface LibraryViewState {
   books: LibraryBook[];
 }
 
-export const useLibraryViewStore = create<LibraryViewState>()(() => ({ books: [] }));
+const useLibraryViewStore = create<LibraryViewState>()(() => ({ books: [] }));
 
 /**
  * Resolves the progress for a book using the "Local Priority > Global Recent"
@@ -105,7 +105,7 @@ const caches = {
 };
 
 /** Recompute the projection from the input stores' CURRENT state. Idempotent and cheap on no-ops. */
-export function recomputeLibraryView(): void {
+function recomputeLibraryView(): void {
   const books = useBookStore.getState().books;
   const libraryState = useLibraryStore.getState();
   const staticMetadata = libraryState.staticMetadata || {};
@@ -251,7 +251,7 @@ let started = false;
  * Start the input-store subscriptions (idempotent). Lazily invoked by the
  * first `useAllBooks()` render — no module-scope side effects (rule 8).
  */
-export function ensureLibraryViewStarted(): void {
+function ensureLibraryViewStarted(): void {
   if (started) return;
   started = true;
   recomputeLibraryView();

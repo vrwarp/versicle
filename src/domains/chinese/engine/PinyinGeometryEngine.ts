@@ -46,11 +46,6 @@ export function getPinyin(text: string): string[] {
   return pinyinFn(text, { type: 'array', toneType: 'symbol' });
 }
 
-/** Test seam: reset the lazy module cache. */
-export function __resetPinyinForTests(): void {
-  pinyinFn = null;
-}
-
 /**
  * Collect the Han text nodes of a section document (the walker half of the
  * legacy pass): text nodes containing at least one Han code point, skipping

@@ -58,7 +58,7 @@ export interface ProviderBuildContext {
     sink?: AudioSink;
 }
 
-export type ProviderKind = 'device' | 'wasm' | 'cloud';
+type ProviderKind = 'device' | 'wasm' | 'cloud';
 
 export interface ProviderDescriptor {
     /** Stable provider id ('local' stays an alias for the device pair until 5b). */
@@ -136,7 +136,7 @@ export const PROVIDERS = [
 ] as const satisfies readonly ProviderDescriptor[];
 
 /** Every registered descriptor id (the post-5b id space, incl. webspeech/capacitor). */
-export type RegisteredProviderId = (typeof PROVIDERS)[number]['id'];
+type RegisteredProviderId = (typeof PROVIDERS)[number]['id'];
 
 /**
  * The PERSISTED provider-id union (`useTTSSettingsStore.providerId`, settings UI

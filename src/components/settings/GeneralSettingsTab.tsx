@@ -3,7 +3,7 @@ import { ThemeSelector } from '../ThemeSelector';
 import { Button } from '../ui/Button';
 import { ImportProgressUI } from '../library/ImportProgressUI';
 
-export type ThemeType = 'light' | 'dark' | 'sepia';
+type ThemeType = 'light' | 'dark' | 'sepia';
 
 export interface GeneralSettingsTabProps {
     // Theme

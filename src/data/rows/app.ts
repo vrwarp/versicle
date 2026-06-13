@@ -117,7 +117,11 @@ export const APP_METADATA_KEYS = {
   audioSizeBackfillV25: 'audio-size-backfill-v25',
 } as const;
 
-/** One `schemaHistory` entry: a versionchange upgrade that ran to completion. */
+/**
+ * One `schemaHistory` entry: a versionchange upgrade that ran to completion.
+ * @public C1 row contract: no parse call site yet — kept exported as the
+ * drift-guard anchor (`_HistorySchemaMatches` below pins it to the type).
+ */
 export const schemaHistoryEntrySchema = z.looseObject({
   from: z.number(),
   to: z.number(),
@@ -131,7 +135,7 @@ export type SchemaHistoryEntry = { from: number; to: number; at: number };
  * stop mid-store); binary fields are elided to
  * `{ __binary: <ctor>, byteLength }` descriptors.
  */
-export const legacyRecoveryStoreCaptureSchema = z.looseObject({
+const legacyRecoveryStoreCaptureSchema = z.looseObject({
   store: z.string(),
   rowCount: z.number(),
   capturedCount: z.number(),
@@ -144,7 +148,11 @@ export type LegacyRecoveryStoreCapture = {
   rowsJSON: string;
 };
 
-/** The `legacy-recovery-v25` record (straggler guard, D7 step 1). */
+/**
+ * The `legacy-recovery-v25` record (straggler guard, D7 step 1).
+ * @public C1 row contract: no parse call site yet — kept exported as the
+ * drift-guard anchor (`_RecoverySchemaMatches` below pins it to the type).
+ */
 export const legacyRecoveryRecordSchema = z.looseObject({
   capturedAt: z.number(),
   fromVersion: z.number(),

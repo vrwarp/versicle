@@ -23,4 +23,3 @@ export const backupManifestEnvelopeSchema = z.looseObject({
   staticManifests: z.array(z.looseObject({ bookId: z.string() })).optional(),
   locations: z.array(z.looseObject({ bookId: z.string() })).optional(),
 });
-export type BackupManifestEnvelope = z.infer<typeof backupManifestEnvelopeSchema>;

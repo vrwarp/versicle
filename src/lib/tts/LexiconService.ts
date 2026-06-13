@@ -21,11 +21,9 @@
 import { useLexiconStore } from '@store/useLexiconStore';
 import { waitForYjsSync } from '@store/yjs-provider';
 import type { LexiconRule } from '~types/user-data';
-import { lexiconApplier, processInitialisms } from './LexiconApplier';
+import { lexiconApplier } from './LexiconApplier';
 import { LexiconAssembler, type CompiledLexicon } from './LexiconEngine';
 
-// Re-exported for back-compat; the implementation now lives in the (yjs-free) LexiconApplier.
-export { processInitialisms };
 export type { CompiledLexicon };
 
 /**

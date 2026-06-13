@@ -6,18 +6,11 @@
  * createWorkerEngineClient / tts.worker.ts). The handle satisfies the {@link TtsEngine}
  * interface, so TtsController/useAudioCommands call sites are unchanged.
  *
- * The in-process builder ({@link getInProcessAudioPlayer}) exists for unit-testing the engine
- * class directly (a real Worker can't run under jsdom). It is the ONE place that pulls the
- * main-thread-only deps (`createZustandEngineContext`, `TTSProviderManager`,
- * `PlatformIntegration`) — keeping them out of the engine modules is what makes the engine
- * graph worker-importable.
+ * (The in-process builder that lived here for unit tests died in the P9 knip
+ * sweep: engine suites construct PlaybackController through the
+ * FakeEngineContext / parityHostDb ports directly.)
  */
-import { PlaybackController } from '@lib/tts/engine/PlaybackController';
 import type { TtsEngine } from '@lib/tts/engine/TtsEngine';
-import { createZustandEngineContext } from './createZustandEngineContext';
-import { TTSProviderManager } from '@lib/tts/TTSProviderManager';
-import { storeProviderBuildContext } from './providerBuildContext';
-import { PlatformIntegration } from '@lib/tts/PlatformIntegration';
 import { WorkerEngineHandle } from './WorkerEngineHandle';
 
 let instance: TtsEngine | null = null;
@@ -35,24 +28,3 @@ export function getAudioPlayer(): TtsEngine {
     return instance!;
 }
 
-let inProcessInstance: PlaybackController | null = null;
-
-/**
- * Build (and cache) an in-process `PlaybackController` wired to the live stores + real backend.
- * For unit tests that exercise the engine class directly, where a Web Worker isn't available.
- */
-export function getInProcessAudioPlayer(): PlaybackController {
-    if (!inProcessInstance) {
-        inProcessInstance = PlaybackController.createWithContext(
-            createZustandEngineContext(),
-            (events) => new TTSProviderManager(events, undefined, storeProviderBuildContext),
-            (events) => new PlatformIntegration(events),
-        );
-    }
-    return inProcessInstance;
-}
-
-/** Test-only: drop the cached in-process instance so the next build is fresh. */
-export function resetInProcessAudioPlayerForTests(): void {
-    inProcessInstance = null;
-}

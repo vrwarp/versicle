@@ -169,8 +169,3 @@ export function getDictionaryService(): DictionaryService {
   singleton ??= new DictionaryService();
   return singleton;
 }
-
-/** Test seam. */
-export function __resetDictionaryServiceForTests(): void {
-  singleton = null;
-}

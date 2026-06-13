@@ -116,7 +116,7 @@ export function syncedDataMapIsEmpty(doc: Y.Doc, def: SyncedStoreDef): boolean {
 
 // ─── The three-tier registry (docs + completeness surface) ──────────────────
 
-export type StoreTier = 'synced' | 'local-persisted' | 'ephemeral';
+type StoreTier = 'synced' | 'local-persisted' | 'ephemeral';
 
 export interface StoreRegistryEntry {
   /** Module basename under src/store/ (also the hook name). */

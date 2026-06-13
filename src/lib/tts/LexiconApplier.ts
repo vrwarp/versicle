@@ -61,12 +61,12 @@ export const INITIALISMS_SYSTEM_RULE: LexiconRule = Object.freeze({
 });
 
 /** Per-call options for the appliers. */
-export interface ApplyLexiconOptions {
+interface ApplyLexiconOptions {
     /** Run the initialisms system rule first (default true — legacy behavior). */
     initialisms?: boolean;
 }
 
-export class LexiconApplier {
+class LexiconApplier {
     // Fast path cache for stable rule arrays (O(1) lookup).
     private compiledRulesCache = new WeakMap<ReadonlyArray<LexiconRule>, CompiledLexiconRule[]>();
     // Secondary cache for individual compiled rules, to avoid expensive regex re-compilation

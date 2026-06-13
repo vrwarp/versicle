@@ -10,7 +10,7 @@
 import type { PiperRuntime, PiperGenerateRequest, PiperGenerateResult } from './PiperRuntime';
 
 /** A minimal RIFF/WAVE header — enough for stitchWavs and blob-type assertions. */
-export function tinyWavBlob(): Blob {
+function tinyWavBlob(): Blob {
     const wavHeader = new Uint8Array([
         0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00,
         0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20,

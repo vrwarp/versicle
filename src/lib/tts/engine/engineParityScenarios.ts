@@ -44,7 +44,7 @@ export interface ParitySnapshot {
 }
 
 /** A seeded cache_tts_preparation sentence row (bookContent.getTTSPreparation). */
-export interface ParitySentence {
+interface ParitySentence {
     text: string;
     cfi: string;
     /** Raw extraction indices — the currency of skip masks (detectContentSkipMask). */
@@ -52,21 +52,21 @@ export interface ParitySentence {
 }
 
 /** A seeded section row (bookContent.getSections). */
-export interface ParitySection {
+interface ParitySection {
     sectionId: string;
     title?: string;
     characterCount?: number;
 }
 
 /** The analysis payload pushed by host.pushAnalysisSuccess (snapshot + fetched row). */
-export interface ParityAnalysisSeed {
+interface ParityAnalysisSeed {
     generatedAt: number;
     referenceStartCfi?: string;
     tableAdaptations?: Array<{ rootCfi: string; text: string }>;
 }
 
 /** The genAI settings slice the engine reads (subset of GenAISettingsSnapshot). */
-export interface ParityGenAISeed {
+interface ParityGenAISeed {
     isEnabled: boolean;
     isContentAnalysisEnabled?: boolean;
     isTableAdaptationEnabled?: boolean;
@@ -74,7 +74,7 @@ export interface ParityGenAISeed {
 }
 
 /** Book metadata fields the engine reads on restore/resume. */
-export interface ParityBookMetadataSeed {
+interface ParityBookMetadataSeed {
     title?: string;
     author?: string;
     lastPlayedCfi?: string;

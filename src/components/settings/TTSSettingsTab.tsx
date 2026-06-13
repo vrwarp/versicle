@@ -16,12 +16,7 @@ import {
 } from '@lib/tts/providers/registry';
 import { getDefaultMinSentenceLength } from '@store/useTTSSettingsStore';
 
-// Re-export TTSVoice + the registry-derived id unions for consumers
-export type { TTSVoice };
-export type { TTSProviderId, TTSApiKeyProviderId };
-/** @deprecated Renamed — use {@link TTSApiKeyProviderId} (registry-derived). */
-export type TTSApiKeyProvider = TTSApiKeyProviderId;
-export type BackgroundAudioMode = 'silence' | 'noise' | 'off';
+type BackgroundAudioMode = 'silence' | 'noise' | 'off';
 
 export interface TTSSettingsTabProps {
     /** Currently active language profile (from store, driven by book context) */

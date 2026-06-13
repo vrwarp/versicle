@@ -17,7 +17,7 @@
  *    the migration interceptor while a backup restore reloads the page).
  */
 
-export const BOOT_PHASES = [
+const BOOT_PHASES = [
   'interceptMigration',
   'openDB',
   'startYjsPersistence',
@@ -44,7 +44,7 @@ export interface PendingWorkspaceMigration {
 
 export type BootHaltReason = 'restoring-backup' | 'applying-staged-switch';
 
-export interface BootContext {
+interface BootContext {
   /** Surface a human-readable boot progress message (loading screen). */
   setStatusMessage(message: string): void;
   /**
@@ -71,7 +71,7 @@ export interface BootTask {
   run(ctx: BootContext): void | Promise<void>;
 }
 
-export type BootResult =
+type BootResult =
   | { status: 'ready'; pendingMigration: PendingWorkspaceMigration | null }
   | { status: 'halted'; reason: BootHaltReason };
 
@@ -90,11 +90,6 @@ export function registerBootTask(phase: BootPhase, task: BootTask): void {
   }
   tasks.push(task);
   registry.set(phase, tasks);
-}
-
-/** Test seam: clear the registry so suites can compose their own sequences. */
-export function clearBootTasksForTests(): void {
-  registry.clear();
 }
 
 export interface RunBootOptions {

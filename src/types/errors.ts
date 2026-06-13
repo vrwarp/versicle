@@ -37,7 +37,11 @@
  * ingestion) happens in later phases — this module only defines the contract.
  */
 
-/** Runtime registry of the code namespaces. Append-only. */
+/**
+ * Runtime registry of the code namespaces. Append-only.
+ * @public C10 contract surface: the `AppErrorNamespace` union derives from
+ * this tuple — kept exported as the append-only registry of namespaces.
+ */
 export const APP_ERROR_NAMESPACES = [
   'APP',
   'DB',

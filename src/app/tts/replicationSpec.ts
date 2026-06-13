@@ -27,7 +27,7 @@ import type { TTSSettingsData } from '@lib/tts/engine/EngineContext';
  * `getState()` snapshots carry action functions; a JSON round-trip drops those, leaving the
  * plain data the engine reads.
  */
-export function plain<T>(value: T): T {
+function plain<T>(value: T): T {
     return JSON.parse(JSON.stringify(value));
 }
 

@@ -30,7 +30,7 @@ const SettingsShellLazy = lazy(() =>
 );
 
 /** Shared route-chunk fallback — the boot spinner, reused. */
-export function RouteFallback() {
+function RouteFallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
       <div

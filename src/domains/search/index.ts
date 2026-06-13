@@ -8,11 +8,11 @@
  */
 export {
   SearchSession,
-  type SearchEngineFactory,
-  type SearchEngineHandle,
+  
+  
   type SearchEngineProtocol,
-  type SearchTextSource,
-  type IndexOutcome,
+  
+  
 } from './SearchSession';
 export { createWorkerSearchEngineFactory } from './workerFactory';
-export { findRangeForOffset, resolveResultCfi } from './offsetRange';
+export {  resolveResultCfi } from './offsetRange';

@@ -339,7 +339,7 @@ const clearHusksAndRetireDualWrite = (doc: Y.Doc): void => {
  * fleet's staggered releases produced (library frozen at 8); v9 and every
  * future bump write `meta.schemaVersion` only.
  */
-export const LAST_DUAL_WRITTEN_SCHEMA_VERSION = 8;
+const LAST_DUAL_WRITTEN_SCHEMA_VERSION = 8;
 
 /**
  * The ordered migration registry. `from: 3` exists because v3 was a pure

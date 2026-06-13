@@ -79,7 +79,7 @@ function getActualInkHeight(element: HTMLElement, textToMeasure = "M", win: Wind
  * Samples the dominant font size of a single document/chapter and adds it to the global accumulator.
  * Uses an early exit to avoid end-of-chapter footnotes.
  */
-export function accumulateChapterStyles(doc: Document, win: Window, accumulator: StyleAccumulator): void {
+function accumulateChapterStyles(doc: Document, win: Window, accumulator: StyleAccumulator): void {
   const paragraphs = Array.from(doc.querySelectorAll('p, div.paragraph, div.bodytext, div.calibre1'));
   if (paragraphs.length === 0) return;
 
@@ -124,7 +124,7 @@ export function accumulateChapterStyles(doc: Document, win: Window, accumulator:
 /**
  * Evaluates the global accumulator to find the mathematically dominant style.
  */
-export function calculateDominantStyle(accumulator: StyleAccumulator): { fontSize: number; lineHeight: number } | null {
+function calculateDominantStyle(accumulator: StyleAccumulator): { fontSize: number; lineHeight: number } | null {
   if (accumulator.size === 0) return null;
 
   let dominantSize = 0;

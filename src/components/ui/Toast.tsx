@@ -4,7 +4,7 @@ import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
 import { Button } from './Button';
 
 /** Visual variant — structurally identical to the store's ToastType. */
-export type ToastVariant = 'info' | 'error' | 'success';
+type ToastVariant = 'info' | 'error' | 'success';
 
 export interface ToastProps {
   message: string;

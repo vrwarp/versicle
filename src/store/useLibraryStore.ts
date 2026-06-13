@@ -3,8 +3,6 @@ import type { BookMetadata } from '~types/book';
 import type { BatchImportSummary } from '@domains/library/ports';
 import { useBookStore } from './useBookStore';
 
-export type { BatchImportSummary };
-
 /**
  * The library UI PROJECTION (Phase 7 §D — shrunk from the 841-line workflow
  * store). Transient, local-only state that components render:

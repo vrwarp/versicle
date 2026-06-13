@@ -15,7 +15,7 @@ import { sanitizeMetadata } from '@lib/sanitizer';
  * Logs warnings for missing required fields.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function validateBookMetadata(data: any): data is BookMetadata {
+function validateBookMetadata(data: any): data is BookMetadata {
   if (!data || typeof data !== 'object') {
     console.warn('DB Validation: Invalid record (not an object)', data);
     return false;

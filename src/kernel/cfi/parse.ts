@@ -87,19 +87,19 @@ export interface CfiStepToken {
 }
 
 /** The `!` indirection separator between document levels. */
-export interface CfiIndirectionToken {
+interface CfiIndirectionToken {
     kind: 'indirection';
 }
 
 /** A `:N[assertion]` character-offset terminal. */
-export interface CfiOffsetToken {
+interface CfiOffsetToken {
     kind: 'offset';
     value: number;
     assertion?: string;
 }
 
 /** A top-level `,` separating the parent / start / end components of a range CFI. */
-export interface CfiRangeCommaToken {
+interface CfiRangeCommaToken {
     kind: 'rangeComma';
 }
 

@@ -84,7 +84,7 @@ export type ToastType = Parameters<ReturnType<typeof useToastStore.getState>['sh
 // --- Ports (grouped by concern) ---
 
 /** TTS user settings + the active language (read/write). */
-export interface TTSConfigPort {
+interface TTSConfigPort {
     /** The language currently driving voice/segmentation selection. */
     getActiveLanguage(): string;
     /** Update the active language (e.g. when the book's language changes). */
@@ -96,7 +96,7 @@ export interface TTSConfigPort {
 }
 
 /** The classification result for one content group, as returned by content-type detection. */
-export interface ContentTypeDetectionResult {
+interface ContentTypeDetectionResult {
     classifications: { id: string; type: ContentType }[];
     justification: string;
     agreedWithHeuristic: boolean;
@@ -138,7 +138,7 @@ export interface GenAIPort {
 }
 
 /** Per-book reading progress and completed-range history. */
-export interface ReadingStatePort {
+interface ReadingStatePort {
     getProgress(bookId: string): Progress;
     updateTTSProgress(bookId: string, queueIndex: number, sectionIndex: number): void;
     addCompletedRange(bookId: string, cfiRange: string, type?: ReadingEventType): void;
@@ -186,12 +186,12 @@ export interface AnnotationPort {
 }
 
 /** User-facing transient notifications. */
-export interface NotificationPort {
+interface NotificationPort {
     showToast(message: string, type?: ToastType): void;
 }
 
 /** Reader UI coordination (highlighting the active section as it plays). */
-export interface ReaderUIPort {
+interface ReaderUIPort {
     setCurrentSection(title: string, sectionId: string): void;
 }
 
@@ -206,7 +206,7 @@ export interface ReaderUIPort {
  * rule edit reaches the engine (S15) — the controller drops its handle and refetches on the
  * next sentence.
  */
-export interface LexiconPort {
+interface LexiconPort {
     getCompiled(bookId: string | undefined, language: string): Promise<CompiledLexicon>;
     getBibleLexiconPreference(bookId: string): Promise<'on' | 'off' | 'default'>;
     /** Fires on any lexicon-affecting change (rule CRUD, bible flag). Returns unsubscribe. */
@@ -218,7 +218,7 @@ export interface LexiconPort {
  * audio-output `PlatformPort` introduced in Phase 3 — this port is only about *which*
  * platform we're on and one-shot native capability prompts.
  */
-export interface PlatformInfoPort {
+interface PlatformInfoPort {
     /** 'web' | 'ios' | 'android'. */
     getPlatform(): string;
     isNativePlatform(): boolean;

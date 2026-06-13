@@ -19,7 +19,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
 import type { WorkspaceMetadata } from '~types/workspace';
 
-export interface SyncBackendConnection {
+interface SyncBackendConnection {
   /** Detach and flush; the workspace doc must be durable afterwards. */
   disconnect(): Promise<void> | void;
   /**
@@ -38,14 +38,14 @@ export interface SyncBackendConnection {
  * lastSyncTime-from-flush). The C3 event cases pin both backends to this
  * one surface so mock/real drift becomes a red CI.
  */
-export type SyncConnectionEventName =
+type SyncConnectionEventName =
   | 'connection-error'
   | 'sync-failure'
   | 'save-rejected'
   | 'corrupted-document'
   | 'saved';
 
-export const SYNC_CONNECTION_ERROR_EVENTS = [
+const SYNC_CONNECTION_ERROR_EVENTS = [
   'connection-error',
   'sync-failure',
   'save-rejected',
@@ -131,7 +131,7 @@ export interface SyncBackendContractHarness {
   dispose?(): Promise<void> | void;
 }
 
-export interface SyncBackendContractCapabilities {
+interface SyncBackendContractCapabilities {
   /** Realtime doc replication is testable in this environment. */
   connect: boolean;
   /**

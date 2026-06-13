@@ -1,7 +1,7 @@
 import React from 'react';
 import { ReaderOverlay } from '@domains/reader/ui/ReaderOverlay';
 
-export interface MarkerPosition {
+interface MarkerPosition {
   id: string;
   cfi: string;
   top: number;

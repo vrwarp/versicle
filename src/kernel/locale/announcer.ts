@@ -13,7 +13,7 @@
  */
 import { resolveMessage, type MessageInput } from './messages';
 
-export interface Announcement {
+interface Announcement {
   /** Monotonic id — lets the live region re-announce identical text. */
   id: number;
   /** Resolved display text. */

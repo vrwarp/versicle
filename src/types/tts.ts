@@ -45,18 +45,6 @@ export interface TTSQueueItem {
 }
 
 /**
- * Persisted TTS state for session restoration.
- */
-export interface TTSState {
-  /** The book ID this state belongs to. */
-  bookId: string;
-  /** The current playback queue. */
-  queue: TTSQueueItem[];
-  /** Timestamp of last update. */
-  updatedAt: number;
-}
-
-/**
  * Lightweight persisted TTS position for frequent updates.
  */
 export interface TTSPosition {
@@ -70,27 +58,3 @@ export interface TTSPosition {
   updatedAt: number;
 }
 
-/**
- * Pre-extracted text content for TTS, allowing playback without rendering.
- */
-export interface TTSContent {
-  /** Composite key: `${bookId}-${sectionId}` */
-  id: string;
-
-  /** Foreign key to Books store */
-  bookId: string;
-
-  /** The href/id of the spine item (e.g., "text/chapter01.xhtml") */
-  sectionId: string;
-
-  /** Ordered list of sentences for this section */
-  sentences: {
-    /** The raw or sanitized text to speak */
-    text: string;
-
-    /** * The CFI range for highlighting.
-     * Generated during ingestion relative to the root of the spine item.
-     */
-    cfi: string;
-  }[];
-}

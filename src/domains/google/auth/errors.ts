@@ -20,36 +20,6 @@ export class GoogleAuthRequiredError extends AppError {
   }
 }
 
-/**
- * The user (or Google) definitively revoked access. The ONLY error class
- * that justifies clearing persisted connection state.
- */
-export class GoogleAuthRevokedError extends AppError {
-  constructor(serviceId: string) {
-    super(`Google ${serviceId} access was revoked.`, {
-      code: 'GOOGLE_AUTH_REVOKED',
-      context: { serviceId },
-    });
-    this.name = 'GoogleAuthRevokedError';
-  }
-}
-
-/**
- * Transient failure (popup blocked, offline, 5xx). Leaves all persisted
- * state alone — the pre-Phase-7 manager force-disconnected on these (GG-2).
- */
-export class GoogleAuthTransientError extends AppError {
-  constructor(serviceId: string, cause?: unknown) {
-    super(`Google ${serviceId} sign-in failed transiently.`, {
-      code: 'GOOGLE_AUTH_TRANSIENT',
-      context: { serviceId },
-      cause,
-      retryable: true,
-    });
-    this.name = 'GoogleAuthTransientError';
-  }
-}
-
 /** Unknown service id — fails locally instead of at Google's server (GG-6). */
 export class GoogleUnknownServiceError extends AppError {
   constructor(serviceId: string) {

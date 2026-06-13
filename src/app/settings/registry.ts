@@ -125,7 +125,7 @@ export const SETTINGS_PANELS: readonly SettingsPanel[] = [
 const PANEL_IDS = new Set<string>(SETTINGS_PANELS.map((p) => p.id));
 
 /** Default tab for `/settings` and unknown deep-link params. */
-export const DEFAULT_SETTINGS_TAB: SettingsTabId = 'general';
+const DEFAULT_SETTINGS_TAB: SettingsTabId = 'general';
 
 /** Resolve a route param to a registered tab id (unknown → general). */
 export function resolveSettingsTab(param: string | undefined): SettingsTabId {

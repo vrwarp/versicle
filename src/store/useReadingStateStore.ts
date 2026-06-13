@@ -30,7 +30,7 @@ type PerDeviceProgress = Record<string, Record<string, UserProgress>>;
 /**
  * Represents a single update to the reading session history.
  */
-export type SessionUpdate = {
+type SessionUpdate = {
     range: string;
     type?: ReadingEventType;
     label?: string;

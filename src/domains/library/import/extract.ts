@@ -45,10 +45,10 @@ import { validateZipSignature } from './validate';
 
 const logger = createLogger('Ingestion');
 
-export type ExtractDepth = 'metadata' | 'full';
+type ExtractDepth = 'metadata' | 'full';
 
 /** One spine item's plain text — the persisted search corpus (§F searchText). */
-export interface SearchTextSection {
+interface SearchTextSection {
   href: string;
   title: string;
   text: string;

@@ -20,18 +20,7 @@ export {
     parseCfiTokens,
     serializeCfiTokens,
 } from './parse';
-export type {
-    CfiRangeData,
-    PreprocessedRoot,
-    CfiToken,
-    CfiStepToken,
-    CfiOffsetToken,
-    CfiIndirectionToken,
-    CfiRangeCommaToken,
-} from './parse';
-
 export {
-    CFI_STEP_SEPARATORS,
     cfiContains,
     cfiContainsParsed,
     getParentCfi,
@@ -43,10 +32,10 @@ export { mergeCfiSlow, generateCfiRange, mergeCfiRanges, tryFastMergeCfi } from 
 export { generateEpubCfi } from './generate';
 
 export { groupSegmentsByRoot, attributeMarkersToGroups } from './group';
-export type { CfiGroup, CfiSegment } from './group';
+export type { CfiGroup } from './group';
 
 export { snapCfiToSentence } from './snap';
 export type { CfiRangeResolver } from './snap';
 
-export { CfiComparator, parseCfiPoint, tryParseCfiPoint, cfiFromRange } from './epubcfiShim';
+export { CfiComparator, tryParseCfiPoint } from './epubcfiShim';
 export type { ParsedCfiPoint } from './epubcfiShim';

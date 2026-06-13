@@ -13,7 +13,7 @@ const logger = createLogger('TTS-Utils');
 
 // Consumption types live in the types layer since 5c-PR4 (the engine →
 // extractor reverse type-import died); re-exported for ingestion-side callers.
-export type { SentenceNode, ExtractionResult, CitationMarker };
+export type { SentenceNode, ExtractionResult,  };
 
 /**
  * Version of the sentence-extraction algorithm, stamped onto newly written

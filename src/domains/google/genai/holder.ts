@@ -36,8 +36,3 @@ export function getGenAIClient(): GenAIClient {
   // Not memoized: a later wireGoogle/setGenAIClient still wins.
   return instance ?? notConfiguredClient;
 }
-
-/** Test-only: drop the singleton so suites can re-wire. */
-export function resetGenAIClientForTesting(): void {
-  instance = null;
-}

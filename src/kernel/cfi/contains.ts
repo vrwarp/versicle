@@ -20,7 +20,7 @@ import type { CfiToken, PreprocessedRoot } from './parse';
  * the string): child step (`/`), indirection (`!`), assertion bracket (`[`),
  * range component (`,`), or character offset (`:`).
  */
-export const CFI_STEP_SEPARATORS: ReadonlyArray<string> = ['/', '!', '[', ',', ':'];
+const CFI_STEP_SEPARATORS: ReadonlyArray<string> = ['/', '!', '[', ',', ':'];
 
 /**
  * True when `child` is `parent` itself or a structural descendant of it

@@ -210,7 +210,7 @@ const DEPRECATED_STORES = [
  * the EPUB; capturing multi-MB binaries would blow the size cap for zero
  * recovery value — binary fields are elided even in captured stores).
  */
-export const LEGACY_USER_DATA_STORES = [
+const LEGACY_USER_DATA_STORES = [
   'books', 'book_states', 'annotations', 'lexicon',
   'reading_history', 'reading_list',
   'user_inventory', 'user_reading_list', 'user_progress',

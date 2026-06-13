@@ -18,7 +18,7 @@ import { GenAIInvalidResponseError } from '../errors';
 import { SchemaType, type GenAIClient } from '../contract';
 
 /** Single-variant union today (matches ~types/content-analysis). */
-export type DetectedContentType = 'reference' | 'main';
+type DetectedContentType = 'reference' | 'main';
 
 export interface ReferenceDetectionNode {
   id: string;

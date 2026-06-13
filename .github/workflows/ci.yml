@@ -47,6 +47,11 @@ jobs:
         # Fails on production deps with licenses outside the GPL-3.0-compatible
         # allowlist and on incomplete third-party/inventory.json entries.
         run: npm run licenses:check
+      - name: Dead-code gate (knip)
+        # P9 deletion audit made the tree knip-clean: unused files, exports,
+        # types, and dependencies fail the build. Intentional keeps carry an
+        # explicit ignore + reason in knip.jsonc (or a @public JSDoc tag).
+        run: npm run knip
 
   test:
     name: Vitest (shard ${{ matrix.shard }}/2)

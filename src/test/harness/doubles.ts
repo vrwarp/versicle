@@ -19,7 +19,7 @@ import type { LibraryPersistence } from '@domains/library/ports';
  * members, and re-mapping strips the class's nominal (private-member)
  * identity so plain object literals can satisfy `Partial<PublicOf<T>>`.
  */
-export type PublicOf<T> = { [K in keyof T]: T[K] };
+type PublicOf<T> = { [K in keyof T]: T[K] };
 
 export type BookContentShape = PublicOf<typeof bookContent>;
 

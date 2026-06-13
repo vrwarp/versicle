@@ -1,0 +1,82 @@
+// knip configuration (P9 deletion audit — plan/overhaul/README.md §5 P9).
+//
+// Run: `npx knip` (wired into ci.yml "quality" job). The tree is expected to
+// be CLEAN: anything knip would flag is either deleted or carries an explicit
+// ignore HERE, with its reason. Do not add untracked ignores in source files.
+//
+// Vite/vitest/playwright entry discovery comes from knip's built-in plugins
+// (index.html → src/main.tsx, vitest.config.ts includes, playwright.config.ts
+// testDir). Everything listed below is the part knip cannot see.
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        // vite-plugin-pwa injectManifest service-worker entry
+        // (vite.config.ts: srcDir 'src', filename 'sw.ts').
+        "src/sw.ts",
+        // Worker entries constructed via `new Worker(new URL(...))`.
+        "src/workers/*.ts",
+        // Operator tooling invoked via npm scripts, CI steps, or documented
+        // workflows (scripts/README.md): codemods, fixture capture, baseline
+        // generators, gates. Not imported by the app by design.
+        "scripts/*.{mjs,cjs,ts}",
+        // Playwright runtime-injected helpers: addInitScript / evaluate
+        // payloads and fixture builders loaded by path string, not import
+        // (verification/utils.ts and the spec files reference them).
+        "verification/*.{js,cjs}",
+        // The runtime-graph dependency-cruiser config: loaded by
+        // depcruise-baseline.mjs via a config option, invisible to the
+        // import graph (the main .dependency-cruiser.cjs is auto-detected
+        // by knip's plugin).
+        ".dependency-cruiser.runtime.cjs",
+        // domains/sync published surface (master plan §2 rule 3: other
+        // domains import a domain ONLY via its index.ts). Zero cross-domain
+        // consumers exist today — app/ composes sync via subpath imports
+        // (the composition root's privilege) — but the barrel IS the
+        // domain's contract surface and stays. Entry status keeps knip from
+        // reporting it (entry-file exports are public by definition).
+        "src/domains/sync/index.ts"
+      ],
+      "project": ["src/**/*.{ts,tsx}", "scripts/**", "verification/**"],
+      // NOTE: third-party/piper (vendored piper runtime, fetched at runtime
+      // by URL — no import edge by design, C12) is simply outside `project`.
+      "ignore": [
+        // Ambient declaration files: compile-time only (tsconfig include),
+        // never imported — assets.d.ts (Vite asset modules), opencc-js.d.ts
+        // (untyped dependency), epubjs-epubcfi.d.ts (the quarantined
+        // submodule's types, see src/kernel/cfi/epubcfiShim.ts).
+        "src/types/*.d.ts"
+      ],
+      "ignoreDependencies": [
+        // Capacitor NATIVE plugin: registered by `npx cap sync` from
+        // package.json, no JS import by design — it injects the
+        // --safe-area-inset-* CSS variables consumed in src/index.css.
+        "@capacitor-community/safe-area",
+        // CSS-pipeline imports knip does not parse: src/index.css does
+        // `@import "tailwindcss"` / `@import "tw-animate-css"` (Tailwind v4
+        // via @tailwindcss/postcss).
+        "tailwindcss",
+        "tw-animate-css"
+      ]
+    },
+    // Vendored forks (packages/*/PROVENANCE.md): src/ stays diff-minimal
+    // against upstream by design — unused upstream exports are NOT pruned
+    // (same policy as the eslint ignore block). The first-party contract
+    // suites in test/contract ARE analyzed.
+    "packages/y-cinder": {
+      // src/** ignored as vendored fork source (this also makes the
+      // @firebase/* unlisted-dependency findings moot: upstream y-fire
+      // imports the scoped subpackages of the `firebase` umbrella peer).
+      // src/merge-worker.ts is NOT an orphan — it is bundled into
+      // generated/merge-worker-blob.ts by the fork's scripts/bundle-worker.js
+      // (see src/merge-utils.ts header) — but ignored with the rest of src.
+      "ignore": ["src/**", "test/unit/**", "test/utils/**"]
+    },
+    // (y-idb and zustand-middleware-yjs need no ignores: their vendored
+    // src/ resolves through package.json exports and knip's hint engine
+    // confirmed nothing is reported there.)
+    "packages/y-idb": {},
+    "packages/zustand-middleware-yjs": {}
+  }
+}

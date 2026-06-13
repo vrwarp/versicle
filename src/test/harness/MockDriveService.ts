@@ -1,7 +1,7 @@
 
 import type { DriveFile } from '@domains/google';
 
-export class MockDriveService {
+class MockDriveService {
     private files: Map<string, DriveFile> = new Map();
     private fileContents: Map<string, Blob> = new Map();
 

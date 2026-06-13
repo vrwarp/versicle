@@ -91,7 +91,7 @@ export const normalizeAbsoluteToRem = (cssValue: string): string | null => {
  * Programmatically injects CSS into a document in a CSP-compliant way.
  * Prefers Adopted Stylesheets if supported, falling back to rule insertion.
  */
-export const safeInjectStyles = (doc: Document, css: string, styleId: string) => {
+const safeInjectStyles = (doc: Document, css: string, styleId: string) => {
   try {
     // 1. Try Adopted Stylesheets (Modern & CSP-friendly)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

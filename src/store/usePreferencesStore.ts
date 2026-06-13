@@ -8,7 +8,7 @@ import { getDeviceId } from '@lib/device-id';
  * Phase 2 (Yjs Migration): This store is wrapped with yjs() middleware.
  * All preferences are synced across devices automatically.
  */
-export interface FontProfile {
+interface FontProfile {
     fontSize: number;
     lineHeight: number;
 }

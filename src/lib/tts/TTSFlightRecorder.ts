@@ -19,7 +19,7 @@ import type { FlightEventSource, FlightEvent, FlightSnapshot } from '~types/flig
  * persisted snapshots are shared through IndexedDB.
  */
 
-export type ContextProvider = () => {
+type ContextProvider = () => {
     bookId: string | null;
     sectionIndex: number;
     currentIndex: number;

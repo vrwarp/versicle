@@ -49,7 +49,7 @@ export type DestinationId =
  *  - 'remote-code'   executable code (NONE at HEAD — Phase 5a vendored
  *                    onnxruntime; the cdnjs entry died with it)
  */
-export type EgressDataClass =
+type EgressDataClass =
   | 'book-content'
   | 'book-derived'
   | 'metadata'
@@ -67,7 +67,7 @@ export type EgressDataClass =
  *  - 'oauth'               the OAuth consent screen is the gate
  *  - 'provider-selection'  choosing the provider in settings is the gate
  */
-export type EgressConsent =
+type EgressConsent =
   | 'none'
   | 'per-book'
   | 'per-action'

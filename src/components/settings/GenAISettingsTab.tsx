@@ -9,7 +9,7 @@ import { Download } from 'lucide-react';
 import type { ContentType } from '~types/content-analysis';
 import { formatTime } from '@kernel/locale/format';
 
-export interface GenAILog {
+interface GenAILog {
     id: string;
     timestamp: number;
     type: string;

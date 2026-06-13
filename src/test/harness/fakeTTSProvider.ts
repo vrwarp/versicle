@@ -70,7 +70,3 @@ export class FakeTTSProvider implements ITTSProvider {
     this.emit({ type: 'end' });
   }
 }
-
-export function makeTTSProviderDouble(options: FakeTTSProviderOptions = {}): FakeTTSProvider {
-  return new FakeTTSProvider(options);
-}

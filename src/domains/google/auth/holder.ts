@@ -28,8 +28,3 @@ export function getGoogleAuthClient(): GoogleAuthClient {
   }
   return instance;
 }
-
-/** Test-only: drop the singleton so suites can re-wire. */
-export function resetGoogleAuthClientForTesting(): void {
-  instance = null;
-}

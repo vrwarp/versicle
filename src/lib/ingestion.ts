@@ -15,12 +15,9 @@
  * mutex-guarded — D6 stays paid).
  */
 export {
-  validateBookMetadata,
   sanitizeString,
   getSanitizedBookMetadata,
-  type SanitizationResult,
 } from '@domains/library/import/metadata';
 
 export { validateZipSignature } from '@domains/library/import/validate';
 
-export { extractCoverPalette } from './cover-palette';

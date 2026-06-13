@@ -19,14 +19,6 @@ export interface WorkspaceMetadata {
 }
 
 /**
- * Internal Firestore representation of the root Yjs document
- */
-export interface YjsRootDocument {
-    isDeleted?: boolean; // The explicit tombstone flag
-    deletedAt?: number;
-}
-
-/**
  * Migration status state machine.
  * Stored in localStorage to survive page reloads.
  *
@@ -39,7 +31,7 @@ export interface YjsRootDocument {
  * untouched, so an old client mid-switch across an app update still
  * resolves.
  */
-export type MigrationStatus =
+type MigrationStatus =
     | 'STAGED'
     | 'AWAITING_CONFIRMATION'
     | 'RESTORING_BACKUP';

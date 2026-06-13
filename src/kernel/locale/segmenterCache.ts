@@ -27,11 +27,3 @@ export function getCachedSegmenter(locale: string = 'en'): Intl.Segmenter | unde
     }
     return cache.get(locale);
 }
-
-/**
- * Clears the segmenter cache.
- * Useful for testing or memory management if needed.
- */
-export function clearSegmenterCache(): void {
-    cache.clear();
-}

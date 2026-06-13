@@ -11,7 +11,7 @@ import { useToastStore } from '@store/useToastStore';
 import type { ToastType } from '@store/useToastStore';
 import { resolveMessage, isMessageKey } from '@kernel/locale/messages';
 
-export interface CapturedToast {
+interface CapturedToast {
   /** Resolved display string (keys resolve through the catalog). */
   message: string;
   /** The catalog key, when the call site passed one. */

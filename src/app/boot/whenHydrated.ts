@@ -25,7 +25,7 @@ import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
 
-export async function whenHydrated(timeoutMs = 8000): Promise<void> {
+async function whenHydrated(timeoutMs = 8000): Promise<void> {
   // 1. IDB load complete (existing gate; resolves immediately without persistence).
   await waitForYjsSync(timeoutMs);
 

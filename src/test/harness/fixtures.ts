@@ -33,7 +33,7 @@ export function makeBookMetadata(
   };
 }
 
-export function makeTTSQueueItem(overrides: Partial<TTSQueueItem> = {}): TTSQueueItem {
+function makeTTSQueueItem(overrides: Partial<TTSQueueItem> = {}): TTSQueueItem {
   return {
     text: 'A test sentence for the queue.',
     cfi: 'epubcfi(/6/2!/4/2)',

@@ -35,7 +35,7 @@
 import { openDB } from 'idb';
 
 /** Literal on purpose (see header): must match the app DB it impersonates. */
-export const FIXTURE_DB_NAME = 'EpubLibraryDB';
+const FIXTURE_DB_NAME = 'EpubLibraryDB';
 
 function bytes(...values: number[]): ArrayBuffer {
   return Uint8Array.from(values).buffer;

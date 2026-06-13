@@ -5,7 +5,7 @@ import { PasswordInput } from '../ui/PasswordInput';
 import { Button } from '../ui/Button';
 import { Loader2, Trash2 } from 'lucide-react';
 
-export interface FirebaseConfig {
+interface FirebaseConfig {
     apiKey: string;
     authDomain: string;
     projectId: string;

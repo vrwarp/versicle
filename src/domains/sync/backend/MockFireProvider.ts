@@ -51,7 +51,7 @@ interface MockStorageData {
  * snapshot write to localStorage, which is its equivalent of a committed
  * Firestore save.
  */
-export interface MockSaveRejectedEvent {
+interface MockSaveRejectedEvent {
     code: 'permission-denied' | 'document-too-large' | 'max-retries-exceeded';
     sizeBytes?: number;
     error?: Error;

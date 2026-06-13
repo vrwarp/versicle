@@ -10,7 +10,7 @@
 import type { LexiconRule } from '~types/user-data';
 
 /** The raw shape of one Bible rule as stored in bible-lexicon.json. */
-export interface RawBibleRule {
+interface RawBibleRule {
     original: string;
     replacement: string;
     isRegex?: boolean;

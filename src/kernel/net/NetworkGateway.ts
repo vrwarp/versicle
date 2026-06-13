@@ -41,7 +41,7 @@ import {
 } from './errors';
 
 /** Consent context attached by the call site. */
-export interface EgressConsentContext {
+interface EgressConsentContext {
   /** The book whose content/derived data this call would transmit. */
   bookId?: string;
   /** True when an explicit user gesture drove this exact call. */

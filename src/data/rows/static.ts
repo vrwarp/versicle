@@ -39,13 +39,13 @@ export const binaryValueSchema = z.custom<ArrayBuffer | Blob>(
   { message: 'Expected ArrayBuffer or Blob' },
 );
 
-export const perceptualPaletteSchema = z.looseObject({
+const perceptualPaletteSchema = z.looseObject({
   standout: z.number(),
   background: z.number(),
   deltaE: z.number(),
 });
 
-export const navigationItemSchema: z.ZodType<NavigationItem> = z.lazy(() =>
+const navigationItemSchema: z.ZodType<NavigationItem> = z.lazy(() =>
   z.looseObject({
     id: z.string(),
     href: z.string(),
@@ -110,7 +110,7 @@ export type StaticResourceRow = {
   epubBlob: ArrayBuffer | Blob;
 };
 
-export const spineItemSchema = z.looseObject({
+const spineItemSchema = z.looseObject({
   id: z.string(),
   characterCount: z.number(),
   index: z.number(),
@@ -146,8 +146,6 @@ export const backupStaticManifestRowSchema = z.looseObject({
   // sanitizeManifestRow decides what survives.
   coverBlob: z.unknown().optional(),
 });
-export type BackupStaticManifestRow = z.infer<typeof backupStaticManifestRowSchema>;
-
 // ── Compile-time drift guards ──────────────────────────────────────────────
 // (types/ may not import src/data — types-imports-nothing stays 0 — so the
 // assertions live here, on the data side.) Three pins per store:
