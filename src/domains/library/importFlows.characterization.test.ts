@@ -439,6 +439,73 @@ describe('import flows characterization', () => {
     });
   });
 
+  describe('ghost restore from cloud (ContentMissing -> Drive)', () => {
+    // The ghost the user sees in the screenshot: synced inventory metadata,
+    // NO local content (=> no static metadata). Its sourceFilename is the
+    // ORIGINAL import name, which differs from the Drive filename -- the dialog
+    // surfaced the cloud match via fuzzy title-containment, not an exact name.
+    const seedGhost = () =>
+      useBookStore.setState({
+        books: {
+          'ghost-1': makeInventoryItem({
+            bookId: 'ghost-1',
+            title: 'The Holy Spirit: An Introduction',
+            author: 'Fred Sanders',
+            sourceFilename: 'the-holy-spirit.epub',
+          }),
+        },
+      });
+
+    // The downloaded Drive copy: a different filename AND embedded metadata
+    // that does not EXACTLY match the synced ghost (here the subtitle is absent
+    // from the EPUB's own <dc:title> -- equally reproduced by a user-edited
+    // title or an author-format difference like "Sanders, Fred").
+    const driveFile = () => epubFile('Fred Sanders - The Holy Spirit- An Introduction.epub');
+    const cloudMeta = { title: 'The Holy Spirit', author: 'Fred Sanders' };
+
+    it('REGRESSION: targeting the ghost by bookId (the fixed cloud path) attaches the binary to THAT book -- no duplicate, ghost resolved, synced metadata preserved', async () => {
+      const { orchestrator } = makeOrchestrator(
+        { getManifest: vi.fn(async () => undefined) },
+        { meta: cloudMeta },
+      );
+      seedGhost();
+
+      // The fix downloads the blob then calls restore(book.id, file) -- the
+      // same bookId-targeted path "Select File" already uses.
+      await orchestrator.restore('ghost-1', driveFile());
+
+      // Exactly one inventory entry: the binary attached to the existing ghost.
+      expect(Object.keys(useBookStore.getState().books)).toEqual(['ghost-1']);
+      // Ghost resolved -- it now has local static metadata.
+      expect(useLibraryStore.getState().staticMetadata['ghost-1']).toBeDefined();
+      // The user's synced title is preserved (not clobbered by the EPUB's).
+      expect(useBookStore.getState().books['ghost-1']?.title).toBe(
+        'The Holy Spirit: An Introduction',
+      );
+    });
+
+    it('characterizes the BUG: the generic importer (importFile + replace, no bookId) re-matches by filename then title and, on a mismatch, creates a duplicate and leaves the ghost unresolved', async () => {
+      const { orchestrator } = makeOrchestrator({}, { meta: cloudMeta });
+      seedGhost();
+
+      // What ContentMissingDialog used to do: hand the downloaded File to the
+      // generic importer with onDuplicate:'replace' (no bookId). It re-discovers
+      // the target by filename (!= sourceFilename => miss) then by exact
+      // title+author (subtitle differs => miss), so it imports a NEW book.
+      const result = await orchestrator.importFile(driveFile(), { onDuplicate: 'replace' });
+
+      expect(result.status).toBe('imported'); // a brand-new book, not 'replaced'
+      const ids = Object.keys(useBookStore.getState().books);
+      expect(ids).toHaveLength(2); // <- the duplicate
+      expect(ids).toContain('ghost-1');
+      // The ghost the user clicked is STILL a ghost (no static metadata)...
+      expect(useLibraryStore.getState().staticMetadata['ghost-1']).toBeUndefined();
+      // ...while the freshly-imported duplicate received the content instead.
+      const newId = ids.find((id) => id !== 'ghost-1')!;
+      expect(useLibraryStore.getState().staticMetadata[newId]).toBeDefined();
+    });
+  });
+
   describe('reprocess (D6: same-book overlap is impossible)', () => {
     it('routes through the queue, updates the palette, refreshes the projection', async () => {
       const reprocess = vi.fn(async () => ({

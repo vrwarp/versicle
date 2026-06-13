@@ -76,16 +76,21 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
         setIsCloudRestoring(true);
         setReconnectError(null);
         try {
-            // we bypass the parent onRestore and go direct to ScannerService -> Library
-            // or we could fetch blob and pass to onRestore(new File(...))
-            // Let's use ScannerService as it encapsulates the download
+            // Download the cloud copy, then restore it onto THIS ghost via the
+            // same bookId-targeted path as "Select File" (onRestore ->
+            // controller.restoreBook(book.id, file)). Handing the File to the
+            // generic importer instead re-matched the binary by filename then
+            // title+author and -- when the Drive filename or the EPUB's embedded
+            // metadata differed from the synced ghost -- imported a duplicate and
+            // left the ghost unresolved.
             // User gesture: interactive token acquisition (the deleted façade's default).
-            await getDriveLibrarySync().importFile(cloudMatch.id, cloudMatch.name, { overwrite: true }, { interactive: true });
-            onOpenChange(false);
+            const file = await getDriveLibrarySync().downloadAsFile(cloudMatch.id, cloudMatch.name, { interactive: true });
+            await onRestore(file);
         } catch (error) {
             console.error(error);
-            // Toast handled by service usually, but let's be safe
-            setReconnectError('Failed to download from cloud.');
+            // Toast handled by the parent restore handler; surface download
+            // failures (which happen before onRestore) inline as a fallback.
+            setReconnectError('Failed to restore from cloud.');
         } finally {
             setIsCloudRestoring(false);
         }

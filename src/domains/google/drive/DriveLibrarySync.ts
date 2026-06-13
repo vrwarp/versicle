@@ -76,6 +76,24 @@ export class DriveLibrarySync {
     }
   }
 
+  /**
+   * Download a Drive file and wrap it in a File named after the Drive entry.
+   * The ContentMissing restore flow uses this directly so it can hand the File
+   * to the bookId-targeted restore path (attaching the binary to the EXACT
+   * ghost the user clicked) rather than the book-agnostic importer, which
+   * re-discovers the target by filename/title and duplicates the entry on a
+   * mismatch.
+   */
+  async downloadAsFile(
+    fileId: string,
+    fileName: string,
+    opts: DriveRequestOptions = { interactive: true },
+  ): Promise<File> {
+    this.log.info(`Downloading file: ${fileName} (${fileId})`);
+    const blob = await this.ports.client.downloadFile(fileId, opts);
+    return new File([blob], fileName, { type: 'application/epub+zip' });
+  }
+
   /** Download a Drive file and import it into the library. */
   async importFile(
     fileId: string,
@@ -84,9 +102,7 @@ export class DriveLibrarySync {
     opts: DriveRequestOptions = { interactive: true },
   ): Promise<void> {
     try {
-      this.log.info(`Downloading file: ${fileName} (${fileId})`);
-      const blob = await this.ports.client.downloadFile(fileId, opts);
-      const file = new File([blob], fileName, { type: 'application/epub+zip' });
+      const file = await this.downloadAsFile(fileId, fileName, opts);
       this.log.info(`Importing file to library: ${fileName}`);
       await this.ports.library.addBook(file, options);
     } catch (error) {
