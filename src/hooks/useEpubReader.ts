@@ -344,11 +344,19 @@ export function useEpubReader(
         newRendition.hooks.content.register(injectExtras);
         newRendition.hooks.content.register(attachListeners);
 
-        // Manually trigger extras for initially loaded content. epubjs types
-        // getContents() as Contents (singular) but it returns an array at
-        // runtime — asserted to the runtime shape, not `any`.
+        // Manually run BOTH content hooks for already-loaded content. The
+        // content.register() hooks only fire for content loaded AFTER
+        // registration, so the initial section (rendered before this runs) needs
+        // both run by hand. Previously only injectExtras was — so the selection
+        // bridge was never attached to the FIRST section, and text selection /
+        // the annotation popover silently did nothing until the reader turned a
+        // page (load a new section). Books whose content is the first section
+        // (e.g. short single-chapter books) never got selection at all.
+        // epubjs types getContents() as Contents (singular) but it returns an
+        // array at runtime — asserted to the runtime shape, not `any`.
         (newRendition.getContents() as unknown as Contents[]).forEach((contents) => {
           injectExtras(contents);
+          attachListeners(contents);
         });
 
       } catch (err) {
