@@ -105,7 +105,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
             isRegex: editingRule.isRegex,
             matchType: editingRule.matchType || (editingRule.isRegex ? 'regex' : 'ignore_case'),
             bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
-            applyBeforeGlobal: editingRule.applyBeforeGlobal
+            applyBeforeGlobal: editingRule.applyBeforeGlobal,
+            language: editingRule.language
         });
 
         setIsAdding(false);
@@ -145,6 +146,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                     matchType: editingRule.matchType || (editingRule.isRegex ? 'regex' : 'ignore_case'),
                     bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
                     applyBeforeGlobal: editingRule.applyBeforeGlobal,
+                    language: editingRule.language,
                     created: 0,
                     order: 0
                 } as LexiconRule];
@@ -172,6 +174,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                     matchType: editingRule.matchType || (editingRule.isRegex ? 'regex' : 'ignore_case'),
                     bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
                     applyBeforeGlobal: editingRule.applyBeforeGlobal,
+                    language: editingRule.language,
                     created: 0,
                     // Preserve order if replacing, else append (simplified)
                     order: idx >= 0 ? rulesToApply[idx].order : rulesToApply.length
@@ -265,8 +268,10 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                         original: r.original,
                         replacement: r.replacement,
                         isRegex: r.isRegex,
+                        matchType: r.matchType,
                         bookId: scope === 'book' ? (currentBookId || undefined) : undefined,
-                        applyBeforeGlobal: r.applyBeforeGlobal
+                        applyBeforeGlobal: r.applyBeforeGlobal,
+                        language: r.language
                     });
                 }
             }
@@ -411,6 +416,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                                 <div className="flex items-center gap-2">
                                                     <label className="text-xs font-medium text-muted-foreground">Lang:</label>
                                                     <select
+                                                        aria-label="Rule language"
+                                                        data-testid="lexicon-rule-language-select"
                                                         className="h-7 text-xs rounded border border-input bg-transparent px-2 py-1"
                                                         value={editingRule.language || ''}
                                                         onChange={e => setEditingRule({ ...editingRule, language: e.target.value || undefined })}
@@ -538,6 +545,8 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                                 <div className="flex items-center gap-2">
                                     <label className="text-xs font-medium text-muted-foreground">Lang:</label>
                                     <select
+                                        aria-label="Rule language"
+                                        data-testid="lexicon-rule-language-select"
                                         className="h-7 text-xs rounded border border-input bg-transparent px-2 py-1"
                                         value={editingRule?.language || ''}
                                         onChange={e => setEditingRule({ ...editingRule, language: e.target.value || undefined })}

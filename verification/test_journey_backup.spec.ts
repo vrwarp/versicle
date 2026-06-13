@@ -25,8 +25,9 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   await expect(page.getByTestId("reader-iframe-container")).toBeVisible({ timeout: 15000 });
 
   // 2. Add a Lexicon rule from the reader's Settings overlay.
-  // The reader gear (reader-settings-button) navigates to /settings, rendering the
-  // SettingsShell overlay OVER the library; the Dictionary tab hosts "Manage Rules".
+  // The reader gear (reader-settings-button) nests Settings under
+  // /read/:id/settings, so the reader stays mounted behind the overlay and the
+  // Dictionary tab's "Manage Rules" reaches the book-aware Lexicon Manager.
   await page.waitForTimeout(1000);
 
   await page.getByTestId("reader-settings-button").click({ force: true });

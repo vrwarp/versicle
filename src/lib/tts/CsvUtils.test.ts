@@ -83,7 +83,26 @@ c,d,true`;
         const csv = `original,replacement
 a,b`;
         const result = LexiconCSV.parse(csv);
-        expect(result[0]).toEqual({ original: 'a', replacement: 'b', isRegex: false, matchType: 'ignore_case', applyBeforeGlobal: false });
+        expect(result[0]).toEqual({ original: 'a', replacement: 'b', isRegex: false, matchType: 'ignore_case', applyBeforeGlobal: false, language: undefined });
+    });
+
+    it('should parse an optional language column (5th)', () => {
+        const csv = `original,replacement,isRegex,applyBeforeGlobal,language
+a,b,ignore_case,false,en
+c,d,regex,true,zh
+e,f,ignore_case,false,`; // empty language -> undefined (all languages)
+
+        const result = LexiconCSV.parse(csv);
+        expect(result[0].language).toBe('en');
+        expect(result[1].language).toBe('zh');
+        expect(result[2].language).toBeUndefined();
+    });
+
+    it('should treat a missing language column as undefined (legacy 4-column)', () => {
+        const csv = `original,replacement,isRegex,applyBeforeGlobal
+a,b,ignore_case,false`;
+        const result = LexiconCSV.parse(csv);
+        expect(result[0].language).toBeUndefined();
     });
 
     it('should handle newlines inside quoted strings', () => {
@@ -143,9 +162,9 @@ Line 2","Replacement",false`;
 
       const csv = LexiconCSV.generate(rules);
       const lines = csv.split('\n');
-      expect(lines[0]).toBe('original,replacement,isRegex,applyBeforeGlobal');
-      expect(lines[1]).toBe('"hello","hi",ignore_case,false');
-      expect(lines[2]).toBe('"Dr.","Doctor",regex,false');
+      expect(lines[0]).toBe('original,replacement,isRegex,applyBeforeGlobal,language');
+      expect(lines[1]).toBe('"hello","hi",ignore_case,false,');
+      expect(lines[2]).toBe('"Dr.","Doctor",regex,false,');
     });
 
     it('should escape quotes in values', () => {
@@ -165,6 +184,24 @@ Line 2","Replacement",false`;
         const csv = LexiconCSV.generate(rules);
         // Note: The new parser/generator might handle this differently, but for now we expect a single string containing the newline
         expect(csv).toContain('"Line 1\nLine 2","R",ignore_case,false');
+    });
+
+    it('should emit the per-rule language in the trailing column', () => {
+        const rules: LexiconRule[] = [
+            { id: '1', original: '你好', replacement: 'ni hao', isRegex: false, matchType: 'ignore_case', language: 'zh', created: 0 }
+        ];
+        const csv = LexiconCSV.generate(rules);
+        expect(csv.split('\n')[1]).toBe('"你好","ni hao",ignore_case,false,zh');
+    });
+
+    it('should round-trip the per-rule language through generate + parse', () => {
+        const rules: LexiconRule[] = [
+            { id: '1', original: 'a', replacement: 'b', isRegex: false, matchType: 'ignore_case', language: 'en', created: 0 },
+            { id: '2', original: 'c', replacement: 'd', isRegex: true, matchType: 'regex', created: 0 } // no language
+        ];
+        const parsed = LexiconCSV.parse(LexiconCSV.generate(rules));
+        expect(parsed[0].language).toBe('en');
+        expect(parsed[1].language).toBeUndefined();
     });
   });
 });

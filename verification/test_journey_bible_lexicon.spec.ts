@@ -38,13 +38,11 @@ test('Journey Bible Lexicon Test', async ({ page }) => {
   //
   // The per-book ("This Book") scope only renders while a book is the active
   // reader context (LexiconManager reads currentBookId from useReaderUIStore,
-  // which the reader sets on mount and clears on unmount). The reader header's
-  // settings button now navigates to the /settings route, which renders the
-  // SettingsShell OVER the *library* (sibling route to /read/:id) — that
-  // unmounts the reader and clears currentBookId, so the Lexicon Manager opened
-  // from there shows only the "Global" scope. Open it instead from the Audio
-  // Deck (a Sheet inside the reader), which keeps the book context alive so the
-  // "This Book" override is reachable.
+  // which the reader sets on mount and clears on unmount). The Audio Deck (a
+  // Sheet inside the reader) keeps the book context alive, so it is a reliable
+  // entry point for the per-book override. (The reader header's settings button
+  // also preserves the book context now that settings nest under
+  // /read/:id/settings — see test_journey_reader_settings_lexicon.spec.ts.)
   console.log('Opening Audio Deck > Settings > Manage Pronunciation Rules...');
   await utils.openAudioSettings(page);
   await page.getByText('Manage Pronunciation Rules').click();

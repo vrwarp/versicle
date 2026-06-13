@@ -16,8 +16,8 @@
  *   handler pops the URL and the overlay closes; overlays INSIDE panels
  *   (e.g. the reading-list dialog) keep their own guards and win first.
  */
-import React, { Suspense, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { Suspense, useCallback, useMemo } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import {
@@ -50,28 +50,47 @@ function PanelFallback() {
 export const SettingsShell: React.FC = () => {
   const { tab } = useParams<{ tab: string }>();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const activeTab = resolveSettingsTab(tab);
+
+  // The shell mounts at either the top-level /settings/:tab (overlay on the
+  // library) or nested under the reader at /read/:id/settings/:tab (overlay on
+  // the live book). Derive the base from the URL so tab hops and cold-close
+  // stay within the mount that opened us — bouncing a reader-nested overlay to
+  // /settings would unmount ReaderShell and drop the "This Book" lexicon scope.
+  const { settingsBase, underlayPath } = useMemo(() => {
+    const marker = pathname.indexOf('/settings');
+    if (marker < 0) {
+      return { settingsBase: '/settings', underlayPath: '/' };
+    }
+    return {
+      settingsBase: pathname.slice(0, marker + '/settings'.length),
+      underlayPath: pathname.slice(0, marker) || '/',
+    };
+  }, [pathname]);
 
   const close = useCallback(() => {
     // In-app open pushed a history entry — back restores the previous
-    // location (library, notes or reader). Cold deep-link lands on the
-    // library instead of exiting the app.
+    // location (library, notes or reader). Cold deep-link lands on the route
+    // beneath the overlay (the reader for a nested mount, otherwise the
+    // library) instead of exiting the app.
     const historyIdx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
     if (historyIdx > 0) {
       navigate(-1);
     } else {
-      navigate('/', { replace: true });
+      navigate(underlayPath, { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, underlayPath]);
 
   const selectTab = useCallback(
     (value: string) => {
       // `replace`: tab hops are one overlay session — back closes settings,
       // it does not replay the tab tour (matches the old dialog's local
-      // tab state).
-      navigate(`/settings/${value as SettingsTabId}`, { replace: true });
+      // tab state). Keep the current base so a reader-nested overlay stays
+      // nested (preserving the book context) instead of jumping to /settings.
+      navigate(`${settingsBase}/${value as SettingsTabId}`, { replace: true });
     },
-    [navigate],
+    [navigate, settingsBase],
   );
 
   return (

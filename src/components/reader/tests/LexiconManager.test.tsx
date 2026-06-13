@@ -1,5 +1,7 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { LexiconManager } from '../LexiconManager';
+import { LexiconService } from '@lib/tts/LexiconService';
+import { useReaderUIStore } from '@store/useReaderUIStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock DB and other dependencies
@@ -141,6 +143,44 @@ describe('LexiconManager', () => {
     await waitFor(() => {
       expect(exportFile).toHaveBeenCalled();
     });
+  });
+
+  it('persists the per-rule language selection on save (regression: language was dropped)', async () => {
+    const saveRule = vi.mocked(LexiconService.getInstance().saveRule);
+
+    render(<LexiconManager open={true} onOpenChange={vi.fn()} />);
+
+    fireEvent.click(await screen.findByTestId('lexicon-add-rule-btn'));
+    fireEvent.change(screen.getByTestId('lexicon-input-original'), { target: { value: 'ChineseWord' } });
+    fireEvent.change(screen.getByTestId('lexicon-input-replacement'), { target: { value: 'Replaced' } });
+    fireEvent.change(screen.getByTestId('lexicon-rule-language-select'), { target: { value: 'zh' } });
+    fireEvent.click(screen.getByTestId('lexicon-save-rule-btn'));
+
+    await waitFor(() => {
+      expect(saveRule).toHaveBeenCalledWith(expect.objectContaining({
+        original: 'ChineseWord',
+        replacement: 'Replaced',
+        language: 'zh',
+      }));
+    });
+  });
+
+  it('shows the "This Book" scope tab only when a book context is active', async () => {
+    // With no active book the per-book scope is hidden...
+    const { unmount } = render(<LexiconManager open={true} onOpenChange={vi.fn()} />);
+    await screen.findByTestId('lexicon-add-rule-btn');
+    expect(screen.queryByRole('tab', { name: 'This Book' })).toBeNull();
+    unmount();
+
+    // ...and reachable once a book is the active reader context (which the
+    // nested /read/:id/settings route now preserves while settings is open).
+    useReaderUIStore.setState({ currentBookId: 'book1' });
+    try {
+      render(<LexiconManager open={true} onOpenChange={vi.fn()} />);
+      expect(await screen.findByRole('tab', { name: 'This Book' })).toBeInTheDocument();
+    } finally {
+      useReaderUIStore.setState({ currentBookId: null });
+    }
   });
 
   it('should call exportFile when download sample button is clicked', async () => {

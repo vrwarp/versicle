@@ -19,7 +19,7 @@
  * phase exit criterion the prep doc puts a wc -l gate on.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Outlet, useParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
@@ -172,6 +172,12 @@ export const ReaderShell: React.FC = () => {
 
                 <ReaderHighlightsStyles currentTheme={currentTheme} />
             </div>
+
+            {/* Settings opened from the reader nests at /read/:id/settings/:tab
+                and mounts here (SettingsShell is a portaled Modal, so the slot
+                placement is incidental). Keeping it inside ReaderShell is what
+                preserves the book context behind the overlay. */}
+            <Outlet />
         </ReaderCommandsProvider>
     );
 };
