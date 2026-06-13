@@ -117,6 +117,7 @@ docker run --rm \
   --ipc=host \
   -v "$(pwd)/verification/screenshots:/app/verification/screenshots" \
   -e BASE_URL=http://localhost:5173 \
+  -e CI=1 \
   $DEBUG_ENV \
   versicle-verify "${PASSTHROUGH_ARGS[@]}"
 

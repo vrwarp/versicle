@@ -2,8 +2,11 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './verification',
-  /* Maximum time one test can run for. */
-  timeout: 30000,
+  /* Maximum time one test can run for.
+   * 90s (was 30s): the multi-device sync journeys (two browser contexts, mock
+   * Firestore, staged workspace switch with its own 60s in-test waits) legitimately
+   * run >30s under full-suite parallel load. A real hang still fails — just later. */
+  timeout: 90000,
   expect: {
     timeout: 10000,
   },
