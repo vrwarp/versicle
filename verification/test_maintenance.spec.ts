@@ -16,8 +16,9 @@ test("orphan repair", async ({ page }) => {
   console.log("Injecting orphans...");
   await page.evaluate(async () => {
     return new Promise<void>((resolve) => {
-      // Use version 24 (current)
-      const req = window.indexedDB.open("EpubLibraryDB", 24);
+      // Open at the app's current version (no explicit version: a hardcoded
+      // number rotted at every schema bump  14 VersionError against newer DBs).
+      const req = window.indexedDB.open("EpubLibraryDB");
       req.onsuccess = (e: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
         const db = e.target.result;
         // Target active stores for maintenance
@@ -87,8 +88,7 @@ test("orphan repair", async ({ page }) => {
   console.log("Verifying cleanup...");
   const orphansExist = await page.evaluate(async () => {
     return new Promise<boolean>((resolve) => {
-      // Use version 24
-      const req = window.indexedDB.open("EpubLibraryDB", 24);
+      const req = window.indexedDB.open("EpubLibraryDB");
       req.onsuccess = (e: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
         const db = e.target.result;
         const tx = db.transaction(["static_resources", "cache_render_metrics"], "readonly");

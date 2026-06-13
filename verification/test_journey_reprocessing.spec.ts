@@ -22,7 +22,7 @@ test("verify reprocessing interstitial", async ({ page }) => {
   for (let i = 0; i < 10; i++) {
     bookId = await page.evaluate((title) => {
       return new Promise<string | null>((resolve) => {
-        const req = indexedDB.open("EpubLibraryDB", 24);
+        const req = indexedDB.open("EpubLibraryDB");
         req.onsuccess = (e: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
           const db = e.target.result;
           console.log("IndexedDB EpubLibraryDB opened successfully. Object stores:", Array.from(db.objectStoreNames));
@@ -60,7 +60,7 @@ test("verify reprocessing interstitial", async ({ page }) => {
   // Update the book version to 0
   await page.evaluate((id) => {
     return new Promise<boolean>((resolve) => {
-      const req = indexedDB.open("EpubLibraryDB", 24);
+      const req = indexedDB.open("EpubLibraryDB");
       req.onsuccess = (e: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
         const db = e.target.result;
         const tx = db.transaction("static_manifests", "readwrite");
@@ -108,7 +108,7 @@ test("verify reprocessing interstitial", async ({ page }) => {
   // 5. Verify metadata update
   const newVersion = await page.evaluate((id) => {
     return new Promise<number>((resolve) => {
-      const req = indexedDB.open("EpubLibraryDB", 24);
+      const req = indexedDB.open("EpubLibraryDB");
       req.onsuccess = (e: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
         const db = e.target.result;
         const tx = db.transaction("static_manifests", "readonly");

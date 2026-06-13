@@ -1,32 +1,42 @@
 # TESTING.md — the canonical testing document
 
 This is the ONE authoritative description of how Versicle is verified. Other
-documents (`AGENTS.md`, `README.md`, `verification/README.md`) point here
-instead of duplicating commands; if any of them disagrees with this file,
-this file wins — fix the other one. The program rules that govern testing
-live in `plan/overhaul/README.md` §4 ("Program rules"); the relevant ones are
-restated at the bottom of this document.
+documents point here instead of duplicating commands: `AGENTS.md` is
+GENERATED from this file's local-gate table (`npm run docs:generate`; the
+drift gate in `src/app/docs/docs.test.ts` fails `npm test` if they diverge),
+and `README.md`/`verification/README.md` link here. If any hand-written
+document disagrees with this file, this file wins — fix the other one. The
+program rules that govern testing live in `plan/overhaul/README.md` §4
+("Program rules"); the relevant ones are restated at the bottom of this
+document.
 
 Every command below (except the Docker and CI lanes, which are cited from
-their scripts/workflows) was run against the tree as of 2026-06-10.
+their scripts/workflows) was run against the tree as of 2026-06-12.
 
 ## The local gate (run before every PR)
 
 | Check | Command | Expectation |
 |---|---|---|
-| Lint | `npm run lint` | clean (warnings allowed — see ratchet model) |
-| Typecheck (app + tests + e2e) | `npx tsc -b` | clean |
+| Lint | `npm run lint` | 0 errors (warnings are ratchets being burned down) |
+| Typecheck (app + tests + e2e + packages) | `npx tsc -b` | clean |
 | Unit/integration tests | `npm test` (= `npx vitest run`) | green |
 | Production build | `npm run build` | succeeds |
 | Dependency boundaries | `npm run depcruise:check` | counts ≤ baseline |
-| Worker-chunk purity | `npm run check:worker-chunk` | zero forbidden sources |
+| Lint-debt ratchet | `npm run lintdebt:check` | counts match `lint-debt-allowlist.json` |
+| Dead code | `npm run knip` | zero findings |
+| Worker-chunk + bundle checks | `npm run check:worker-chunk` | all five checks pass |
+| Single-instance deps | `npm run check:single-instance` | one physical copy each |
 | License gate | `npm run licenses:check` | clean |
 | Coverage (when touching/moving tests) | `npm run coverage` | totals ≥ `coverage-baseline.json` |
 
 CI (`.github/workflows/ci.yml`) runs the same set on every PR and on pushes
 to `antigravity`/`main`: a quality job (lint, `tsc -b`, depcruise ratchet,
-license gate), vitest in two shards, and build + worker-chunk purity. Node
-comes from `.nvmrc`; CI installs with `npm ci` only.
+lint-debt ratchet, license gate, knip), vitest in two shards, and build +
+worker-chunk purity (with the pinned-release dictionary compile, cached).
+Node comes from `.nvmrc`; CI installs with `npm ci` only.
+`check:single-instance` is local-only today (it pins one physical install of
+yjs/zustand/lib0/firebase; the lockfile makes it deterministic, and the
+runtime complement `single-yjs-instance.test.ts` runs in every vitest job).
 
 ## Unit & integration tests (vitest)
 
@@ -49,9 +59,14 @@ comes from `.nvmrc`; CI installs with `npm ci` only.
   npx vitest run --shard=1/2          # what CI does, two shards
   ```
 
-- **State of the suite (2026-06-10):** 258 files — 256 passed, 2 skipped
-  (the emulator-gated suites, below); 1905 tests — 1876 passed, 23 skipped,
-  6 todo; ~80 s wall clock.
+- **State of the suite (2026-06-12, Phase 9 close):** 307 files — 305
+  passed, 2 skipped (the emulator-gated suites, below); 3,103 tests — 3,063
+  passed, 37 skipped, 3 todo; ~80 s wall clock. The growth over the Phase 0
+  baseline (258 files) is the contract tier (fork/provider/backend/repo/
+  engine contract suites), captured-fixture suites (Y.Doc eras v1–v8,
+  tts-storage blobs, IDB v18/v24), and seeded fuzz/perf/property
+  companions — see `plan/overhaul/prep/phase9-close.md` §4 for the
+  reconciliation.
 
 ### The shared test harness (`src/test/harness/`)
 
@@ -90,27 +105,48 @@ runs `tsc -b` too, so a build is also a full typecheck.
 ## Lint
 
 `npm run lint` (`eslint .`, flat config in `eslint.config.js`). Rule levels
-follow the **ratchet model** (see below):
+follow the **ratchet model** (see below). The boundary bans established by
+the overhaul are at **error** with their carve-outs named in the config:
+path-alias imports, `idb`-import + `'readwrite'`-literal bans outside
+`src/data/`, runtime `epubjs` outside the reader engine, raw
+`fetch`/XHR/sendBeacon outside `src/kernel/net/`, native
+`alert`/`confirm`/`prompt`, window `keydown` listeners outside the shortcut
+service, `toLocale*` outside `kernel/locale`, toast imports outside the
+sync presentation subscriber, and `vi.mock` in the engine/provider/data
+directories. Notable levels:
 
 - `@typescript-eslint/consistent-type-imports` — **error** (worker-purity
   contract C12: a missing `type` keyword can pull store code into the TTS
   worker chunk).
-- `import/no-cycle` — **warn** (runtime cycles exist; the depcruise baseline
-  is the authoritative counter).
-- `jsx-a11y` recommended preset — **warn**, downgraded wholesale. Do not
-  silently re-upgrade individual rules while violations exist.
+- `import/no-cycle` — **warn** as a fast in-editor signal; the depcruise
+  `no-circular`/`no-circular-runtime` rules (both **error**, both at 0) are
+  the authoritative gate.
+- `jsx-a11y` recommended preset — **error** for the Phase 8 directories
+  (`components/ui/`, `app/settings/`, `app/shortcuts/`, the pill feature
+  dirs); **warn** everywhere else. Do not silently re-upgrade individual
+  rules while violations exist; flip a directory only at zero warnings.
+- `as any` / `: any` / `eslint-disable` counts are ratcheted separately by
+  `npm run lintdebt:check` against `lint-debt-allowlist.json` (one justified
+  entry per file; counts only decrease — `npm run lintdebt:update` locks a
+  decrease in).
 
-## Dependency boundaries (dependency-cruiser) — the warn/ratchet model
+## Dependency boundaries (dependency-cruiser) — the ratchet model
 
-`.dependency-cruiser.cjs` encodes the Phase 0 boundary rules (no-circular,
-lib-not-to-store, db-not-to-store, components-not-to-db, types-imports-
-nothing, worker-no-state-typegraph, …). All rules are severity **warn**
-because the repo currently violates them; the violation counts are frozen in
-`.dependency-cruiser-baseline.json` and may only go **down**.
+`.dependency-cruiser.cjs` encodes the boundary rules of master plan §2.
+At the Phase 9 end state most rules are at **error with zero violations**
+(`no-circular`, `no-circular-runtime` — measured on the runtime-only graph
+`.dependency-cruiser.runtime.cjs` — `types-imports-nothing`,
+`kernel-imports-nothing`, `data-no-upward`, `domains-no-store`,
+`lib-not-to-components`, `ui-imports-kernel-only`). Two legacy-geography
+counters remain severity **warn** with frozen baselines in
+`.dependency-cruiser-baseline.json` that may only go **down**:
+`lib-not-to-store` (19) and `worker-no-state-typegraph` (16). The full
+rule→enforcement table lives in `architecture.md` §3 and
+`plan/overhaul/prep/phase9-close.md` §3.
 
 ```bash
-npm run depcruise          # full report (exits 0; rules are warn)
-npm run depcruise:check    # FAILS if any rule's count exceeds the baseline
+npm run depcruise          # full report
+npm run depcruise:check    # FAILS on any error-rule hit or count above baseline
 npm run depcruise:baseline # regenerate after paying down violations; commit it
 ```
 
@@ -120,19 +156,39 @@ the phase that establishes that boundary. Never flip a rule to error while
 the repo violates it, and never increase a baselined count — pay violations
 down or don't touch the boundary.
 
-## Worker-chunk purity check
+## Worker-chunk + bundle checks
 
 ```bash
 npm run check:worker-chunk                 # vite build + scan
 npm run check:worker-chunk -- --skip-build # reuse an existing dist/
 ```
 
-`scripts/check-worker-chunk.mjs` builds the production bundle, walks the TTS
-worker chunk's full import closure via sourcemaps, and fails if any original
-source is `zustand`, `yjs`, or `src/store/` — the emitted-artifact ground
-truth behind the `import type` lint and depcruise rules. If it fails, find
-the leaked value-import (`ANALYZE=true vite build` renders treemaps to
-`stats.html`/`stats-worker.html`); do not weaken the script.
+`scripts/check-worker-chunk.mjs` builds the production bundle and runs five
+emitted-artifact assertions:
+
+1. **Worker purity (C12):** the TTS worker chunk's full import closure
+   (via sourcemaps) contains no `zustand`, `yjs`, or `src/store/` source —
+   the ground truth behind the `import type` lint and depcruise rules.
+2. **Prod mock purity (rule 9):** no MockBackend / MockFireProvider /
+   MockGenAIClient source in ANY production chunk.
+3. **Lazy-lexicon purity (P5c):** the Bible lexicon JSON stays out of the
+   entry chunk.
+4. **Entry-chunk budget (P8):** firebase/genai/epubjs stay out of the entry
+   chunk; gzip sizes ratchet against `bundle-baseline.json`.
+5. **PWA shell (P8):** single manifest with installability fields; the SW
+   precache and runtime-caching expectations hold.
+
+If a check fails, find the leaked value-import (`ANALYZE=true vite build`
+renders treemaps to `stats.html`/`stats-worker.html`); do not weaken the
+script.
+
+## Single-instance check
+
+`npm run check:single-instance` (`scripts/assert-single-instance.cjs`) fails
+unless exactly one physical copy of `yjs`, `zustand`, `lib0`, and the
+firebase SDK is installed — the vendored workspace forks declare them as
+peer dependencies, and a second copy silently breaks `instanceof` checks
+inside the Yjs middleware. Run it whenever dependencies change.
 
 ## Coverage + baseline
 
@@ -140,8 +196,9 @@ the leaked value-import (`ANALYZE=true vite build` renders treemaps to
 npm run coverage   # vitest run --coverage (v8); summary + coverage/coverage-summary.json
 ```
 
-The Phase 0 totals are pinned in `coverage-baseline.json` (lines 65.3%,
-statements 64.04%, functions 58.65%, branches 56.08% at capture). **The
+The committed floor is `coverage-baseline.json`, re-pinned UPWARD at the
+Phase 9 close (lines 75.49%, statements 74.29%, functions 69.89%, branches
+65.50% — about ten points above the Phase 0 capture on every metric). **The
 baseline never decreases** (program rule 8): any PR that deletes or moves
 tests must re-run `npm run coverage` and show the totals did not drop;
 when coverage legitimately moves, regenerate the file and explain the delta
@@ -157,11 +214,12 @@ is reachable**, so the default `npx vitest run` stays green without one:
 - `src/lib/sync/security-rules.test.ts` — pins `firestore.rules` +
   `storage.rules` (the BYO-Firebase deploy artifacts wired in
   `firebase.json`).
-- `src/lib/sync/syncBackendContract.emulator.test.ts` — the SyncBackend
-  contract suite (C3, skeleton) against real Firestore under the repo's
-  rules. Its sibling `syncBackendContract.mock.test.ts` runs the same
-  behavioral spec against the mock backend on every `npm test` — one spec,
-  N transports, same pattern as `engineParityScenarios`.
+- `src/lib/sync/syncBackendContract.emulator.test.ts` — the C3 SyncBackend
+  contract suite (shared spec: `syncBackendContract.ts`, including the
+  workspace-purge cases) against real Firestore under the repo's rules. Its
+  sibling `syncBackendContract.mock.test.ts` runs the same behavioral spec
+  against the mock backend on every `npm test` — one spec, N transports,
+  same pattern as `engineParityScenarios`.
 
 Running them (requires Java; ports come from `firebase.json` — Firestore
 8080, Auth 9099, Storage 9199):
@@ -178,10 +236,11 @@ npx firebase-tools emulators:start --only firestore,storage,auth \
 npx vitest run src/lib/sync/security-rules.test.ts
 ```
 
-Verified 2026-06-10: 2 files, 23 passed + 4 todo (the todos are realtime
-`connect` cases that need the full y-cinder FireProvider — they land with
-P4's backend extraction). Whenever `firestore.rules`/`storage.rules` change,
-this suite must run against the emulator before merge.
+Last verified against a live emulator 2026-06-10 (the suites have grown
+since — the P4 purge cases and the y-cinder realtime provider landed; the
+suite self-skips without an emulator, so a local run requires the command
+above). Whenever `firestore.rules`/`storage.rules` change, this suite must
+run against the emulator before merge.
 
 ## E2E suite (Playwright in Docker)
 
@@ -219,12 +278,17 @@ not performance — raising a timeout is a last resort.
 
 **Honest caveats (know what a green run proves):** every page gets
 `verification/tts-polyfill.js` (a mock Web Speech engine — no real TTS
-provider runs in E2E) and `window.__VERSICLE_SANITIZATION_DISABLED__ = true`
-(the XSS sanitizer is NOT exercised end-to-end); sync journeys run against
-`MockFireProvider`, not real Firestore (the emulator suites above cover the
-rules); screenshots are captured for humans — there are no
-`toHaveScreenshot()` golden assertions yet. Fixing these is on the master
-plan (sanitization-ON journeys, visual goldens: §7 test strategy).
+provider runs in E2E). The sanitizer is disabled by default via the
+`sanitizationDisabled` fixture option in `verification/utils.ts` (the
+legacy whole-suite default); the P6 overlay/pinyin characterization specs
+opt back onto the REAL sanitize path with
+`test.use({ sanitizationDisabled: false })`, so the sanitizer IS exercised
+end-to-end, but only where a spec opts in — most journeys still run with it
+off (an honest open item in the program close-out). Sync journeys
+run against `MockFireProvider`, not real Firestore (the emulator suites
+above cover the rules); screenshots are captured for humans — there are no
+`toHaveScreenshot()` golden assertions (visual goldens from master plan §7
+were never built; an honest open item in the program close-out).
 
 **In CI** the Docker E2E lane is deliberately **not** a PR gate: it runs
 nightly + on `workflow_dispatch` via `.github/workflows/e2e-verification.yml`
@@ -233,7 +297,8 @@ screenshots uploaded as artifacts.
 
 ## Accessibility scans (three layers)
 
-1. **Lint:** `eslint-plugin-jsx-a11y` recommended at warn (ratchet; see Lint).
+1. **Lint:** `eslint-plugin-jsx-a11y` recommended — error for the Phase 8
+   directories, warn elsewhere (ratchet; see Lint).
 2. **Component tests:** `vitest-axe` via the harness —
    `expect(await view.axe()).toHaveNoViolations()` (or `runAxe(container)`);
    opt-in per test, registered by `src/test/harness/axe.ts`.
@@ -292,10 +357,15 @@ follow:
 | `src/test/fuzz-utils.ts` | Seeded PRNG for `*.fuzz.test.ts` |
 | `src/test-api.ts` | `window.__versicleTest` (DEV/VITE_E2E only) |
 | `tsconfig.test.json` / `tsconfig.e2e.json` | Test/e2e typecheck projects (in `tsc -b`) |
-| `.dependency-cruiser.cjs` + `.dependency-cruiser-baseline.json` | Boundary rules (warn) + frozen counts |
-| `coverage-baseline.json` | Phase 0 coverage totals (never decrease) |
-| `scripts/check-worker-chunk.mjs` | Worker-chunk purity assertion |
+| `.dependency-cruiser.cjs` + `.dependency-cruiser-baseline.json` | Boundary rules (mostly error) + frozen ratchet counts |
+| `.dependency-cruiser.runtime.cjs` | Runtime-only graph (for `no-circular-runtime`) |
+| `coverage-baseline.json` | Coverage floor (never decreases; re-pinned at P9) |
+| `scripts/check-worker-chunk.mjs` | Worker-chunk purity + bundle/PWA assertions (five checks) |
 | `scripts/depcruise-baseline.mjs` | Ratchet regenerate/check |
+| `scripts/lint-debt-ratchet.mjs` + `lint-debt-allowlist.json` | `any`/`eslint-disable` ratchet + justified rest |
+| `scripts/assert-single-instance.cjs` | One physical yjs/zustand/lib0/firebase install |
+| `knip.jsonc` | Dead-code gate config (`npm run knip`; intentional keeps carry reasons) |
+| `src/app/docs/` | Generated-docs renderers + drift gate (`npm run docs:generate`) |
 | `playwright.config.ts` + `verification/` | E2E projects + journey specs, utils, polyfills |
 | `run_verification.sh` / `jules_run_verification.sh` | Dockerized E2E runner (+ sudo wrapper) |
 | `firebase.json` + `firestore.rules` + `storage.rules` | Emulator config + the rules under test |

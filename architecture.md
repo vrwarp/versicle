@@ -1,794 +1,251 @@
+<!-- GENERATED FILE — do not edit by hand. -->
+<!-- Rendered by src/app/docs/registryDocs.ts from the live registries. -->
+<!-- Drift-gated by src/app/docs/docs.test.ts: a plain `npm test` fails when -->
+<!-- this file disagrees with the registries. Regenerate: npm run docs:generate -->
+
 # Versicle Architecture
 
-> **⚠️ Stale — read `plan/overhaul/README.md` first (banner added
-> 2026-06-10).** This document describes the PRE-overhaul architecture and
-> has drifted from the tree in places. The current architectural direction —
-> target module geography, boundary rules, contract registry, and the
-> phase-by-phase roadmap — is the master plan at `plan/overhaul/README.md`.
-> This document will be regenerated from the registries in Phase 9; until
-> then treat it as historical background, and do not invest in updating it
-> piecemeal. For how to verify changes, see `TESTING.md`.
+Versicle is a local-first, privacy-centric EPUB reader and audiobook player
+that runs entirely in the browser (or as a Capacitor hybrid app). User data
+lives in a Yjs CRDT persisted to IndexedDB and optionally synced through the
+owner's own Firebase project (BYO-Firebase); books, caches, and derived
+content live in IndexedDB; heavy work (TTS synthesis, search, extraction)
+runs client-side, much of it in workers.
 
-## 1. High-Level Overview
+This document describes the **end state of the 2026 overhaul program**
+(plan/overhaul/README.md — phases 0–9, PROGRAM COMPLETE). It is generated
+from the code's own registries, so it cannot drift: the structure below IS
+what the gates enforce. History and rationale live in the master plan; how
+to verify changes lives in `TESTING.md`.
 
-Versicle is a **Local-First**, **Privacy-Centric** EPUB reader and audiobook player that runs entirely in the browser (or as a Hybrid Mobile App via Capacitor).
+## 1. Module map (the modular-monolith geography, as built)
 
-### Core Design Principles
+Layers L0–L4 only depend downward (enforced — see §3). Replacement code
+landed at its final address during the strangler phases; `lib/` is the
+honest residual: the audio domain and a set of app services whose internals
+were rebuilt in place without the (pure-motion) relocation to
+`domains/audio/` — see the close-out notes in the master plan.
 
-1.  **Store-First (Local-First) Architecture**:
-    *   **Why**: To enable seamless offline functionality, instant UI updates, and conflict-free data synchronization without a central server.
-    *   **How**: The application uses **Yjs** (CRDTs) as the single source of truth for all user data (reading progress, library inventory, annotations).
-        *   **Zustand Middleware**: State changes in the UI (`useLibraryStore`, `useReadingStateStore`) are automatically mapped to Yjs documents via `zustand-middleware-yjs`.
-        *   **Persistence**: The Yjs document is persisted to **IndexedDB** (`y-indexeddb`) for offline access.
-    *   **Trade-off**: The initial load (hydration) involves reading the Yjs binary from IndexedDB, which scales with dataset size.
-
-2.  **Heavy Client-Side Logic**:
-    *   **Why**: To avoid server costs and maintain privacy. Features typically done on a backend (Text-to-Speech segmentation, Full-Text Indexing, File Parsing) are moved to the client.
-    *   **How**:
-        *   **Search**: Uses a **Web Worker** running a custom `SearchEngine` with **RegExp** scanning to find text in memory.
-        *   **TTS**: Uses client-side logic (`TextSegmenter`) with JIT refinement to split text into sentences and caches audio segments locally (`TTSCache`).
-        *   **Ingestion**: Parses EPUB files directly in the browser using `epub.js` and a custom **Offscreen Renderer** for accurate text extraction.
-        *   **Yield Strategy**: Implements a **Time-Budgeted Yield Strategy** (pauses every 16ms) to keep the main thread responsive during heavy parsing.
-    *   **Trade-off**: Higher memory and CPU usage on the client device. Large books may take seconds to index for search or parse for ingestion.
-
-3.  **Hybrid Text-to-Speech (TTS) & GenAI**:
-    *   **Why**: To balance quality, cost, and offline availability.
-    *   **How**:
-        *   **Local**: Uses the Web Speech API (OS native) or local WASM models (Piper) for free, offline reading.
-        *   **Cloud**: Integrates with Google/OpenAI for high-quality neural voices.
-        *   **Table Teleprompter**: Uses Multimodal GenAI to "see" data tables and convert them into natural speech (narrative flow).
-    *   **Stability**: The system implements a "Let It Crash" philosophy for worker management to ensure resilience.
-
-### User Interface: The "Three Rooms"
-
-The UI is organized into three distinct operational modes to reduce cognitive load:
-1.  **The Reading Room**: The distraction-free reading interface, controlled via `VisualSettings` (fonts, themes, layout).
-2.  **The Listening Room**: The audio experience, managed by `UnifiedAudioPanel` (playback, speed, voice selection).
-3.  **The Engine Room**: Global configuration, handled by `GlobalSettingsDialog` (data management, API keys, advanced imports).
-
-## 2. System Architecture Diagram
-
-```mermaid
-graph TD
-    subgraph Frontend [React UI]
-        App[App.tsx]
-        Library[LibraryView]
-        Reader[ReaderView]
-        VisualSettings[VisualSettings]
-        AudioPanel[UnifiedAudioPanel]
-        GlobalSettings[GlobalSettingsDialog]
-        useEpub[useEpubReader Hook]
-    end
-
-    subgraph State [Zustand Stores]
-        ReaderStore[useReaderStore]
-        TTSStore[useTTSStore]
-        LibStore[useLibraryStore]
-        BookStore[useBookStore]
-        AnnotStore[useAnnotationStore]
-        VocabularyStore[useVocabularyStore]
-        GenAIStore[useGenAIStore]
-        ContentAnalysisStore[useContentAnalysisStore]
-        BackNav[useBackNavigationStore]
-        UIStore[useUIStore]
-        SyncStore[useSyncStore]
-        DeviceStore[useDeviceStore]
-        GoogleStore[useGoogleServicesStore]
-    end
-
-    subgraph DataLayer [Data & Sync]
-        SyncMesh[SyncMesh / DeviceId]
-        YjsProvider[YjsProvider]
-        Middleware[zustand-middleware-yjs]
-        YDoc[Y.Doc CRDT]
-        FireSync[FirestoreSyncManager]
-        FireProvider[y-fire]
-        AndroidBackup[AndroidBackupService]
-        Checkpoint[CheckpointService]
-        Inspector[CheckpointInspector]
-        MigrationState[MigrationStateService]
-        DriveScanner[DriveScannerService]
-        GoogleAuth[GoogleIntegrationManager]
-    end
-
-    subgraph Core [Core Services]
-        APS[AudioPlayerService (Main Thread)]
-        Pipeline[AudioContentPipeline]
-        Ingestion[ingestion.ts]
-        BatchIngestion[batch-ingestion.ts]
-        SearchClient[SearchClient]
-        Backup[BackupService]
-        Export[ExportImportService]
-        Maint[MaintenanceService]
-        GenAI[GenAIService]
-        CostEst[CostEstimator]
-        TaskRunner[cancellable-task-runner.ts]
-        MediaSession[MediaSessionManager]
-        ServiceWorker[ServiceWorker]
-        ChineseTextProcessor[ChineseTextProcessor]
-    end
-
-    subgraph TTS [TTS Subsystem]
-        PSM[PlaybackStateManager]
-        Segmenter[TextSegmenter]
-        Lexicon[LexiconService]
-        TTSCache[TTSCache]
-        Sync[SyncEngine]
-        Providers[ITTSProvider]
-        Piper[PiperProvider]
-        PiperUtils[piper-utils.ts]
-        BG[BackgroundAudio]
-        TaskSeq[TaskSequencer]
-    end
-
-    subgraph Workers [Web Workers]
-        SearchWorker[search.worker.ts]
-        SearchEngine[SearchEngine]
-        PiperWorker[piper_worker.js]
-    end
-
-    subgraph Storage [IndexedDB]
-        DBService[DBService]
-        StaticStores[Static & Resources]
-        UserStores[User Data & Progress]
-        CacheStores[Cache & Tables]
-        AppStores[Checkpoints, Logs & Flight Snapshots]
-        YDB[versicle-yjs]
-    end
-
-    App --> Library
-    App --> Reader
-    Reader --> VisualSettings
-    Reader --> AudioPanel
-    Reader --> GlobalSettings
-    Reader --> useEpub
-    useEpub --> ChineseTextProcessor
-    Library --> ServiceWorker
-
-    VisualSettings --> ReaderStore
-    AudioPanel --> TTSStore
-    GlobalSettings --> UIStore
-    GlobalSettings --> SyncStore
-    GlobalSettings --> Export
-
-    TTSStore --> APS
-    Library --> LibStore
-
-    LibStore <--> Middleware
-    ReaderStore <--> Middleware
-    DeviceStore <--> Middleware
-
-    Middleware <--> YDoc
-    YDoc <--> YjsProvider
-    YjsProvider <--> YDB
-    YjsProvider --> FireSync
-    FireSync --> FireProvider
-    FireSync --> Checkpoint
-    FireSync --> MigrationState
-    MigrationState --> SyncStore
-    DeviceStore --> SyncMesh
-    LibStore --> AndroidBackup
-    GlobalSettings --> Inspector
-    Inspector --> Checkpoint
-    GlobalSettings --> DriveScanner
-    DriveScanner --> GoogleAuth
-    GlobalSettings --> GoogleAuth
-    GlobalSettings --> GoogleStore
-    GoogleStore --> GoogleAuth
-
-    LibStore --> DBService
-    LibStore --> Ingestion
-    LibStore --> BatchIngestion
-    LibStore --> Backup
-    LibStore --> Maint
-
-    APS --> Pipeline
-    APS --> PSM
-    Pipeline --> GenAI
-    Pipeline --> GenAIStore
-    Pipeline --> ContentAnalysisStore
-    Pipeline --> DBService
-
-    APS --> Providers
-    APS --> Segmenter
-    APS --> Lexicon
-    APS --> TTSCache
-    APS --> Sync
-    APS --> Piper
-    APS --> CostEst
-    APS --> BG
-    APS --> MediaSession
-    APS --> TaskSeq
-
-    Piper --> PiperUtils
-    PiperUtils --> PiperWorker
-
-    Reader --> SearchClient
-    SearchClient --> SearchWorker
-    SearchWorker --> SearchEngine
-
-    GenAIStore --> GenAI
-
-    Ingestion --> DBService
-    TTSCache --> DBService
-
-    DBService --> StaticStores
-    DBService --> UserStores
-    DBService --> CacheStores
-    DBService --> AppStores
+```
+packages/                  # vendored forks as npm workspaces (peer-dep singletons; see check:single-instance)
+  zustand-middleware-yjs/  # P2 fork surgeries: syncedKeys, merge-defaults hydration, scopedDiff, api.yjs
+  y-idb/                   # P3 fork: flush(), writeSnapshot(), readSnapshot(), durable `synced`
+  y-cinder/                # P9 vendoring: Firestore Yjs provider, `saved` flush events
+src/
+  kernel/                  # L0 — imports nothing internal (admission: zero deps + ≥2 consumers, C12)
+    cfi/                   # canonical CFI algebra — parse, contains, group, merge, locale-aware sentence snap
+    diagnostics/           # flight-recorder ring-buffer core (namespaced buffers per subsystem)
+    locale/                # typed MessageKey catalog, cached Intl formatters, LiveAnnouncer, uiLocale
+    net/                   # NetworkGateway + egress destination registry + generated-CSP renderer
+  data/                    # L1 — the ONLY IndexedDB subsystem (rule 2; see src/data/README.md)
+  store/                   # L2 — three-tier store registry + Y.Doc provider (see src/store/README.md)
+  domains/                 # L3 — vertical feature modules (rule 3; see src/domains/README.md)
+    chinese/               # pinyin geometry engine, dictionary (separate versicle-dict IDB), vocabulary
+    google/                # GoogleAuthClient (per-service tokens), DriveClient, GenAIClient + per-feature zod modules
+    library/               # ImportOrchestrator job queue, LibraryService (keyed mutex), SHA-256 identity, reingest driver
+    reader/                # ReaderEngine port (EpubJsEngine = sole epubjs importer), overlays, session recorder
+    search/                # SearchSession over the search worker + persisted searchText repo
+    sync/                  # SyncBackend port (Firestore or Mock), SyncOrchestrator, workspaces, typed SyncEvent bus
+  lib/                     # legacy-geography keepers — incl. the AUDIO domain at lib/tts/ (engine, providers, pipeline) and app services (Backup, Maintenance, ingestion, sanitizer)
+  app/                     # L4 — composition root: bootstrap + boot tasks, CRDT migration coordinator, routes, settings registry, controllers, port adapters, repositories
+  components/              # React UI by feature area (library, reader, settings, sync, chinese, ui design system)
+  hooks/                   # shared React hooks (useEpubReader + reader/sync/TTS hooks)
+  layouts/                 # RootLayout — the router shell (toasts/confirm/announcer live ABOVE the route gate)
+  types/                   # L0 types layer — db.ts dissolved by domain (P1); types-imports-nothing at 0
+  assets/                  # static imports (icons, images)
+  test/                    # vitest setup + typed harness + fixtures (see TESTING.md)
+  verification/            # in-vitest characterization ports of two E2E journeys (drive sync, background crash)
+  workers/                 # worker entries (search, TTS) — import closures asserted by the worker-chunk check
+  main.tsx                 # thin entry — installs the test API (DEV/E2E), mounts <App/>
+  App.tsx                  # boot-state rendering + router gate over app/routes.tsx
+  sw.ts                    # service worker — workbox precache, runtime caching, SKIP_WAITING handshake
+  test-api.ts              # window.__versicleTest page-side seams (DEV/VITE_E2E builds only)
 ```
 
-## 3. Detailed Module Reference
-
-### Data Layer (`src/db/`)
-
-The data layer is built on **IndexedDB** using the `idb` library. It is accessed primarily through the `DBService` singleton, which provides a high-level API for all storage operations.
-
-#### `src/db/DBService.ts`
-The main database abstraction layer. It handles error wrapping (converting DOM errors to typed application errors like `StorageFullError`), transaction management, and debouncing for frequent writes.
-
-**Key Stores (Schema v24):**
-*   **Domain 1: Static (Immutable/Heavy)** - *Managed by DBService*
-    *   `static_manifests`: Lightweight metadata (Title, Author, Cover Thumbnail) for listing books.
-    *   `static_resources`: The raw binary EPUB files (Blobs). This is the heaviest store.
-    *   `static_structure`: Synthetic TOC and Spine Items derived during ingestion.
-*   **Domain 2: User (Mutable/Syncable)** - *Managed by Yjs*
-    *   **Yjs Exclusive**: `user_inventory` (Books), `user_progress` (Reading State), `user_reading_list` (Shadow Inventory), `user_annotations`, and `user_overrides` (Lexicon Rules) are managed **exclusively** by Yjs stores. `DBService` only reads/writes static data.
-    *   **IDB Local/Hybrid**:
-        *   `static_manifests`: Used as a local index for offline access, but the "Truth" is in Yjs.
-    *   **Deprecated/Replaced**:
-        *   `user_journey`: **(Removed)** Granular reading history sessions are no longer stored in IDB.
-        *   `user_ai_inference`: **(Replaced)** Expensive AI-derived data is now handled by the synced `useContentAnalysisStore` (Yjs).
-*   **Domain 3: Cache (Transient/Regenerable)**
-    *   `cache_table_images`: Snapshot images of complex tables (`webp`) for teleprompter/visual preservation. Indexed by `bookId` and `sectionId`.
-    *   `cache_audio_blobs`: Generated TTS audio segments.
-    *   `cache_render_metrics`: Layout calculation results.
-    *   `cache_session_state`: Playback queue persistence.
-    *   `cache_tts_preparation`: Staging area for TTS text extraction.
-*   **Domain 4: App (Sync Infrastructure & Diagnostics)**
-    *   `checkpoints`: Snapshot backups of the Yjs document state.
-    *   `sync_log`: Audit trail for sync events.
-    *   `app_metadata`: Ephemeral app-wide configuration data.
-    *   `flight_snapshots`: "Black box" data recorders (Zustand state snapshots) captured for post-mortem debugging of intermittent issues.
-
-**Key Functions:**
-*   **`offloadBook(id)`**: Deletes the large binary EPUB from `static_resources` and cached assets but keeps all `User` domain data (Progress, Annotations) and `user_reading_list` entry.
-    *   *Trade-off*: User must re-import the *exact same file* to read again.
-*   **`importBookWithId(id, file)`**: Special ingestion mode for restoring "Ghost Books" (books that exist in Yjs inventory but are missing local files). It bypasses new ID generation to match the existing Yjs record.
-    *   **Logic**: Parses the new file but *forces* the internal IDs (Book ID, Spine Items, Batches) to match the provided ID, ensuring the new binary seamlessly reconnects with existing Yjs progress/annotations. It explicitly rewrites all internal references in the extracted data structures to align with the target ID before ingestion. Does NOT write `user_inventory`.
-*   **`deleteBook(id)`**: Cleans up all `static_` and `cache_` stores (Heavy Data) and removes the synced `Content Analysis` (AI data) but deliberately *leaves* the critical `user_` data (Inventory, Progress, Annotations) in the Yjs document. This allows for a "Soft Delete" where the user can restore the book later (Ghost Book) without losing their place. The UI merges the Yjs inventory with IDB static metadata via `useLibraryStore` to display these "Ghost Books" seamlessly.
-*   **`ingestBook(data)`**: Performs a "Static Only" write. It persists the heavy immutable data (`static_manifests`, `static_resources`) to IDB but relies on the caller (Zustand) to update the Yjs `user_inventory`.
-*   **`addBook(file)`**: Pure ingestion pipeline that extracts data and delegates to `ingestBook`. It only writes to `static_` and `cache_` stores. Does NOT write `user_inventory` (handled by caller).
-*   **`getOffloadedStatus(bookIds)`**: Returns a Map indicating whether the binary resource for each book exists locally or has been offloaded.
-*   **`getAvailableResourceIds()`**: Returns a Set of all book IDs that have binary content locally (NOT offloaded).
-
-#### `src/store/useDeviceStore.ts` (Sync Mesh)
-*   **Goal**: Provide visibility into the synchronization network and enable "Send to Device" features.
-*   **Logic**:
-    *   **Stable Identity**: `device-id.ts` generates and persists a stable UUID in `localStorage` to identify the current node.
-    *   **Heartbeat**: `useDeviceStore` maintains a Yjs Map of active devices, updating the `lastActive` timestamp with a 5-minute throttle (`HEARTBEAT_THROTTLE_MS`) to prevent excessive CRDT updates.
-    *   **Peer Discovery**: Automatically parses User Agent strings (via `ua-parser-js`) to provide human-readable device names (e.g., "Chrome on Windows").
-
-#### `src/lib/batch-ingestion.ts` (Batch Ingestion)
-*   **Goal**: Handle bulk import of books, including ZIP archives containing multiple EPUBs.
-*   **Logic**:
-    *   **Recursive Extraction**: Uses `JSZip` to extract EPUBs from uploaded ZIP files.
-    *   **Progress Tracking**: Provides granular callbacks for both upload/extraction progress and individual book ingestion status.
-    *   **Error Isolation**: A failure in one book (e.g., corruption) does not fail the entire batch.
-*   **Trade-offs**:
-    *   **Memory Pressure**: Loading a large ZIP file (e.g., 500MB+) entirely into memory (ArrayBuffer) for extraction can cause tab crashes on memory-constrained mobile devices.
-    *   **Main Thread Blocking**: While `JSZip` is async, large decompression tasks can still cause frame drops or UI jank during the extraction phase.
-
-#### `src/lib/csv.ts` (CSV Import/Export)
-*   **Goal**: Provide interoperability with Goodreads and other reading trackers.
-*   **Logic**:
-    *   **Universal Format**: Exports reading lists using standard Goodreads headers (Title, Author, ISBN, My Rating, Exclusive Shelf, Date Read).
-    *   **Filename Fallback Strategy**: When importing, the system attempts to resolve missing filenames using a priority cascade:
-        1.  Explicit `Filename` column (Versicle native export).
-        2.  `isbn-{ISBN}`.
-        3.  `{Title}-{Author}` (Sanitized).
-    *   **Trade-off**: Importing from generic CSVs (Goodreads) relies on "Ghost Books" creation; the user must manually import the matching EPUB file later to read it.
-
-#### Hardening: Validation & Sanitization (`src/db/validators.ts` & `src/db/DBService.ts`)
-*   **Goal**: Prevent database corruption and XSS attacks.
-*   **Logic**:
-    *   **Quota Management (`DBService.ts`)**: Explicitly handles `QuotaExceededError` (including legacy code 22) and wraps it in a typed `StorageFullError` for UI handling, prompting the user to offload books.
-    *   **Sanitization (`validators.ts`)**: Delegates to `DOMPurify` to strip HTML tags from metadata.
-    *   **Safe Mode**: A specialized UI state (`SafeModeView`) triggered by critical database initialization failures in `App.tsx`. It provides a last-resort "Factory Reset" option (`deleteDB`) to recover the application from a corrupted state without requiring user technical knowledge.
-
-### Sync & Cloud (`src/lib/sync/`)
-
-Versicle implements a strategy combining **Real-Time Sync** (via Firestore) for cross-device activity and **Native Backup** (via Android) for data safety.
-
-#### `FirestoreSyncManager`
-*   **Goal**: Provides real-time cloud sync as a secondary remote overlay.
-*   **Logic**: Uses `y-cinder` (a custom `y-fire` fork) to manage the connection. `y-indexeddb` remains the primary source of truth for offline availability.
-
-#### `CheckpointService.ts` (The Moral Layer)
-*   **Goal**: Prevent data loss during complex sync merges by creating "Safety Snapshots".
-*   **Logic**:
-    *   **Destructive Restore**: Clears all existing shared types (Map, Array, XmlText) in the Yjs document before applying the binary snapshot to ensure a clean state.
-    *   **Before Sync**: Automatically creates a `pre-sync` checkpoint immediately before connecting to Firestore.
-    *   **Rotation**: Maintains a rolling buffer of the last 10 checkpoints.
-
-#### `MigrationStateService.ts` (Workspace Context Migration)
-*   **Goal**: Manages the state machine bridging page reloads during workspace context switches, safely delaying normal sync boot sequences while a migration is in-flight.
-*   **Logic**:
-    *   **localStorage State**: Persists migration states (`AWAITING_CONFIRMATION`, `RESTORING_BACKUP`) and tracking details (target workspace, backup checkpoint ID) to `localStorage`, protecting state across browser reloads.
-    *   **Boot Blocking**: Integrates into the app boot sequence; when `getState()` reports an in-flight migration (`AWAITING_CONFIRMATION` or `RESTORING_BACKUP`), standard Yjs/Firestore sync initialization is halted until the migration concludes or fails.
-*   **Trade-offs**: Heavily relies on browser `localStorage`. If a user manually clears local data mid-migration, the client could be left in an inconsistent workspace state.
-
-#### `FirestoreSyncManager.ts` (Real-Time Cloud)
-Provides a "Cloud Overlay" for real-time synchronization.
-
-*   **Logic**:
-    *   **Hybrid Auth**: Supports both Web (`signInWithPopup`/`getRedirectResult`) and Native Android (`FirebaseAuthentication` plugin) flows for Google Sign-In.
-    *   **Cloud Overlay**: Acts as a secondary sync provider. `y-indexeddb` remains the primary source of truth, while Firestore relays updates to other devices.
-    *   **Hook Integration**: The synchronization logic is exposed to the UI via `useFirestoreSync` (initializes `FirestoreSyncManager`, provides sign-in/out, and manages subscription lifecycles) and `useSyncStore` (tracks connection and auth status), decoupling the UI components from the underlying provider instance.
-    *   **Y-Fire**: Uses `y-cinder` (a custom `y-fire` fork) to sync Yjs updates incrementally to Firestore (`users/{uid}/versicle/{env}`).
-    *   **Pre-Sync Checkpoint**: Automatically creates a "pre-sync" checkpoint via `CheckpointService` immediately before connecting to the provider, ensuring a safe fallback state exists before merging remote changes (Destructive Restore protection).
-    *   **Sync Toasts (`useSyncToasts`)**: Provides UI awareness of remote activity by subscribing directly to `useReadingStateStore` and comparing serialized state.
-        *   **Logic**: It detects significant remote reading progress (jumps > 5% or completion) and emits throttled global toasts (max 1 per book per minute) to notify the user.
-        *   **Trade-off**: The hook relies on stringifying the entire `progress` dictionary (`JSON.stringify`) on every state change to perform its diff, which introduces a CPU cost that scales `O(N)` with the user's reading history.
-    *   **Clean Client Sync**: When an entirely empty client connects (a device with zero books), it delays applying changes to the main `yDoc`. It creates a temporary `Y.Doc` to fetch the entire cloud snapshot (`performCleanSync`), and only applies the `stateVector` locally once the complete dataset is downloaded. This prevents the UI from rendering incomplete data states.
-    *   **Configurable Debounce**: Implements `maxWaitFirestoreTime` (default 2000ms) and `maxUpdatesThreshold` (default 50) to balance cost vs. latency.
-    *   **Environment Aware**: Writes to `dev` bucket in development and `main` in production to prevent test data pollution.
-    *   **Authenticated**: Sync only occurs when the user is signed in via Firebase Auth.
-    *   **Mock Mode**: Includes a `MockFireProvider` (in `drivers/`) for integration testing without a real Firebase project, allowing full E2E sync testing in CI.
-*   **Trade-offs**:
-    *   **Complexity**: Requires maintaining a Firestore project.
-
-#### `AndroidBackupService.ts` (Cold Path)
-Manages integration with the native Android Backup Service.
-
-*   **Logic**:
-    *   **Payload File**: Periodically writes a `backup_payload.json` file to the app's internal data directory.
-    *   **Native Handoff**: The Android OS automatically backs up this file to the user's Google Drive (if enabled in Android settings).
-*   **Trade-off**: Restore is all-or-nothing and handled by the OS during app installation/restore.
-
-#### `CheckpointInspector.ts` (Forensic Layer)
-*   **Goal**: Provide deep visibility into binary checkpoints for debugging and support.
-*   **Logic**:
-    *   **Hydration**: Hydrates a binary checkpoint blob into a temporary `Y.Doc`.
-    *   **Deep Diff (`src/lib/json-diff.ts`)**: Converts both the live document and the checkpoint to JSON and performs a recursive object difference (Added, Removed, Modified).
-    *   **Dynamic Discovery**: Iterates over `doc.share` keys to dynamically discover and deserialize map/array types, handling `AbstractType` hydration issues.
-*   **Trade-off**: High CPU and memory cost (full document serialization). Strictly on-demand.
-
-### Core Logic & Services (`src/lib/`)
-
-#### Logging (`src/lib/logger.ts`)
-*   **Goal**: Provide environment-aware logging with context isolation.
-*   **Logic**:
-    *   **Scoped Loggers**: Uses `createLogger('Namespace')` to create isolated logger instances.
-    *   **Filtering**: Filters logs based on `VITE_LOG_LEVEL` or environment (Info in Dev, Warn in Prod).
-    *   **Legacy**: The singleton `Logger` class is deprecated in favor of functional factory usage.
-
-#### Performance: Hot Paths (`src/lib/cfi-utils.ts`)
-*   **Goal**: Minimize latency during heavy text segmentation and rendering operations.
-*   **Logic**:
-    *   **Fast Merge ("Point + Point")**: `tryFastMergeCfi` uses optimistic string manipulation to merge sibling CFIs directly. It detects if two CFIs share a common parent prefix (up to the last slash) and simply joins the leaf components (e.g., `/1` and `/2` -> `/1,/2`) without full parsing or regeneration.
-    *   **Optimistic Append**: `mergeCfiRanges` assumes sequential reading patterns. It checks if the new range follows the last existing range to perform an O(1) merge, avoiding O(N) re-sorting.
-    *   **Heuristic Fallback**: If the fast path fails (complex structure/nesting), it gracefully falls back to the standard, slower implementation.
-*   **Verification**:
-    *   **Fuzz Testing**: The optimization is verified using seeded Fuzz tests (`cfi-utils.fuzz.test.ts`) that generate random CFI inputs and assert that the Fast Path output matches the Slow Path reference implementation.
-
-#### Ingestion (`src/lib/ingestion.ts` & `src/lib/offscreen-renderer.ts`)
-Handles the complex task of importing an EPUB file.
-
-*   **`extractBookData(file)`**:
-    1.  **Validation**: Enforces strict ZIP signature check (`PK\x03\x04`).
-    2.  **Offscreen Rendering**: Uses a hidden `iframe` (via `offscreen-renderer.ts`).
-        *   **Time-Budgeted Yield Strategy**: Explicitly checks `performance.now()` and yields to the main thread every 16ms (1 frame) to prevent freezing the UI during heavy parsing.
-    3.  **Fingerprinting**: Generates a **"3-Point Fingerprint"** (Head 4KB + Metadata + Tail 4KB) using a `cheapHash` function for O(1) duplicate detection.
-    4.  **Adaptive Contrast**: Generates a **Cover Palette** via `cover-palette.ts`.
-        *   **Logic**: Uses **Weighted K-Means Clustering** (manual implementation) on the cover image to extract dominant colors. It prioritizes colors based on spatial distribution (corners vs. center) to ensure UI elements don't clash with key visual areas.
-
-#### Batch Ingestion (`src/lib/batch-ingestion.ts`)
-*   **Goal**: Allow users to import large collections of EPUBs simultaneously via ZIP archives, bypassing tedious one-by-one file selection.
-*   **Logic**: Uses `JSZip` (`extractEpubsFromZip`) to recursively scan the archive for `.epub` extensions and extract them as distinct `File` objects for standard ingestion processing.
-*   **Trade-offs**: Processing massive ZIP files entirely in the browser consumes significant RAM, risking memory exhaustion or tab crashes on low-end mobile devices.
-
-#### Entity Resolution (`src/lib/entity-resolution.ts`)
-*   **Goal**: Deterministically match reading list entries to library books when their primary filenames differ.
-*   **Logic**:
-    *   **Normalization Pipeline**: Processes metadata (title/author) through a strict sequence: stripping file extensions, removing parenthetical/bracketed text, replacing structural punctuation with spaces, removing quotes, and nullifying generic "unknown author" strings.
-    *   **Match Key Generation**: Combines normalized title and author, intelligently stripping author prefixes from titles (a common pattern in filename-derived metadata) to generate a unified, comparable string.
-*   **Trade-off**: Hardcoded heuristics may strip overly aggressively on non-standard metadata formats or edge-case titles, leading to false positives or missed matches.
-
-#### Service Worker Image Serving (`src/lib/serviceWorkerUtils.ts`)
-*   **Goal**: Prevent memory leaks caused by `URL.createObjectURL`.
-*   **Logic**:
-    *   **URL Scheme**: Uses `/__versicle__/covers/:bookId`.
-    *   **Interception**: A **Service Worker** intercepts these requests, fetches the cover blob from IndexedDB (`static_manifests`), and responds directly.
-
-#### Generative AI (`src/lib/genai/GenAIService.ts`)
-*   **Goal**: Provide AI-driven content analysis and adaptation.
-*   **Logic**:
-    *   **Smart Rotation**: Implements a `executeWithRetry` strategy that shuffles between models (e.g., `gemini-2.5-flash-lite`, `gemini-2.5-flash`) to mitigate `429 RESOURCE_EXHAUSTED` errors and maximize free tier usage.
-    *   **Thinking Budget**: `generateTableAdaptations` utilizes a configurable `thinkingBudget` (default 512 tokens) to allow the model to "reason" about complex table layouts (headers vs. data cells) before generating the narrative JSON.
-    *   **Content Detection**: `detectContentTypes` analyzes text samples to classify semantic structures. It identifies the boundary of the references section and stores it as a single `referenceStartCfi` string in `SectionAnalysis`, replacing the deprecated granular `semanticMap`/`contentTypes` arrays to save space. All content after this CFI is uniformly mapped as 'reference'.
-    *   **Structure Generation**: `generateTOCForBatch` uses GenAI to infer meaningful section titles when the EPUB metadata is lacking.
-*   **Fuzzy Matching (`textMatching.ts`)**: Uses a robust fuzzy matching algorithm to locate LLM-generated snippets back in the original source text for accurate CFI targeting.
-    *   **Strategy**: Tries Exact Match -> Case-Insensitive Match -> **Flexible Whitespace Regex** (matches varying newlines/spaces) to handle LLM formatting quirks.
-
-#### Search (`src/lib/search.ts` & `src/workers/search.worker.ts`)
-Implements full-text search off the main thread.
-
-*   **Logic**: Uses a **RegExp** scanning approach over in-memory text via `SearchEngine` class. The engine is exposed directly within `src/workers/search.worker.ts` via `Comlink.expose(engine)` to allow off-main-thread text parsing and prevent UI freezing.
-    *   **Batching & Offloading**: `SearchClient` sends sections to the worker in batches. To prevent blocking the main thread, XML parsing is offloaded to the Web Worker via `supportsXmlParsing()`.
-    *   **Extraction Strategy**: First attempts to extract raw XML directly from the EPUB archive (`book.archive.getBlob`) for speed. If this fails, it falls back to the `epub.js` rendering pipeline (`book.load()`), which is slower but resolves external resources.
-*   **Trade-off**: The index is **transient** (in-memory only) and rebuilt on demand.
-
-#### Chinese Language Support (`src/lib/chinese/` & `src/components/reader/PinyinOverlay.tsx`)
-*   **Goal**: Provide native support for Chinese readers, including on-the-fly conversion to Traditional Chinese and dynamic Pinyin pronunciation overlays.
-*   **Logic**:
-    *   **In-Place Mutation (`opencc-js`)**: Uses a `TreeWalker` to scan all text nodes within the rendered EPUB DOM. If Traditional Chinese is enabled, it mutates the `nodeValue` of the text nodes in place, avoiding structural changes that would break `epub.js` CFI mapping.
-    *   **Ephemeral Geometry Collection (`pinyinPositions`)**: For Pinyin (`pinyin-pro`), it creates a `Range` for each individual Chinese character to calculate its exact bounding rectangle (`getBoundingClientRect()`).
-    *   **Smart Pinyin Filtering**: Integrates with `useVocabularyStore` during the geometry collection phase to selectively skip calculations and rendering for characters the user has marked as "known".
-    *   **Overlay Rendering (`PinyinOverlay.tsx`)**: Uses `React.createPortal` to render the Pinyin text into a transparent overlay layer *inside* the `epub.js` scroll container. This ensures the Pinyin scrolls in lockstep with the native text at 60fps without altering the underlying DOM structure, preserving text selection and TTS compatibility.
-*   **Trade-offs**: Calculating `getBoundingClientRect` for every character forces synchronous layout reflows, which can penalize chapter loading performance on slower devices.
-
-#### Backup Strategy (`src/lib/BackupService.ts` & `src/lib/sync/ExportImportService.ts`)
-Versicle employs a dual-strategy for data safety, distinguishing between "Hard Reset" backups and "Portable" exports.
-
-*   **Full/Light Backup (`BackupService` V2)**:
-    *   **Goal**: Complete system state preservation ("Hard Reset"). Transitioned away from V1 JSON exports which lost CRDT context. Supports "Light" backups (JSON manifest only) and "Full" backups (ZIP archive including EPUB files).
-    *   **Logic**:
-        *   **Snapshot**: Captures the entire Yjs document state as a binary update (`Y.encodeStateAsUpdate(yDoc)`) encoded to base64. Also captures static metadata, semantic trees, and cache data (like locations) from IndexedDB. Full backups optimize payload size by explicitly ignoring offloaded books.
-        *   **Restore**: Implements a destructive restore. It explicitly clears the existing `yjsPersistence` data via `yjsPersistence.clearData()` to prevent merge conflicts before creating a fresh isolated Y.Doc and applying the binary snapshot update. This ensures the restored state is an exact replica of the backup. Re-writes all extracted `static_manifests` and `cache_render_metrics`. For ZIPs, it directly inserts missing blobs into `static_resources` and clears their offloaded status.
-    *   **Trade-off**: Restore is destructive; any changes made since the backup are lost. Requires app reload to pick up new state.
-*   **Export/Import (`ExportImportService`)**:
-    *   **Goal**: Data portability and merging between devices.
-    *   **Logic**:
-        *   **Format**: Serializes library state into a human-readable JSON format.
-        *   **Restore**: Merges the imported data into the current Yjs document using `yDoc.transact`. It handles conflicts using a "Last Write Wins" (LWW) or Union strategy depending on the data type (e.g., merging annotations vs overwriting book metadata).
-    *   **Trade-off**: Does not preserve full CRDT history or vector clocks.
-*   **Notes Export (`src/lib/export-notes.ts`)**:
-    *   **Goal**: Enable users to easily extract annotations from books for external use.
-    *   **Logic**: Generates raw Markdown string payloads combining highlight text and user notes. Facilitates both direct Blob download via `URL.createObjectURL` and Clipboard API copy functionality.
-
-#### Diagnostics & Recovery (`src/types/db.ts`)
-*   **Flight Data Recorders (`flight_snapshots`)**:
-    *   **Goal**: Enable post-mortem debugging of intermittent issues (like premature chapter advances) by capturing "Black Box" snapshots of application state.
-    *   **Logic**: Captures a deep copy of the active Yjs document and Zustand store states (via manual trigger in the Diagnostics UI or automatic anomaly detection). Stored persistently in IDB (`flight_snapshots`) to survive app restarts.
-    *   **Trade-off**: Snapshots can be large and are retained locally, requiring manual cleanup via the Maintenance UI to prevent unbounded storage growth over time.
-
-#### Cloud Library (`src/lib/drive/`)
-Integrates with Google Drive to provide a cloud-based library.
-
-*   **`DriveScannerService.ts` (The Brain)**:
-    *   **Goal**: Manage high-level sync logic and state.
-    *   **Logic**:
-        *   **Heuristic Sync**: To save API quota, it checks if the remote folder's `viewedByMeTime` is more recent than the local `lastScanTime` (`shouldAutoSync`). If not, it skips the expensive scan. If the Cloud Index is empty, it bypasses the heuristic and forces a full folder scan.
-        *   **Folder Scanning (`scanAndIndex`)**: Scans for EPUB files by querying the `linkedFolderId` explicitly using `DriveService.listFilesRecursive`. It optimizes memory by mapping the heavy API `DriveFile` responses to lightweight indexing objects (`DriveFileIndex` via `mapToDriveFileIndex`) before persisting them in `useDriveStore`.
-        *   **Diffing (`checkForNewFiles`)**: Compares the lightweight Cloud Index (`useDriveStore`) against the Local Library (`useBookStore` inventory via filenames) to identify "New" files available for import.
-        *   **Direct Store Access**: Reads directly from `useDriveStore` and `useLibraryStore` to manage state and trigger imports.
-*   **`DriveService.ts` (The Muscle)**:
-    *   **Goal**: Handle low-level API interactions.
-    *   **Logic**:
-        *   **Resilience**: Implements automatic **Token Refresh** and **Retry Logic** for 401 Unauthorized errors.
-        *   **Abstraction**: Wraps standard `fetch` calls with auth headers managed by `GoogleIntegrationManager`.
-*   **Trade-offs**:
-    *   **API Quotas**: Heavy scanning can hit Google Drive API rate limits. The system mitigates this with the heuristic check.
-
-#### Google Integration (`src/lib/google/GoogleIntegrationManager.ts`)
-*   **Goal**: Abstract authentication complexity across Web and Android platforms.
-*   **Logic**:
-    *   **Dual Strategy**:
-        *   **Web**: Uses Google Identity Services (GIS) for pop-up based auth.
-        *   **Android**: Uses `@capgo/capacitor-social-login` (patched) for native system-level sign-in, supporting `login_hint` and account selection.
-    *   **Token Management**: Handles token refresh automatically, retrying failed requests (e.g., 401s in `DriveService`) with a fresh token.
-    *   **Service Isolation**: Manages connections for 'drive' and 'sync' (Firestore) independently, allowing users to opt-in to specific features.
-
-#### `src/lib/MaintenanceService.ts`
-*   **Goal**: Perform database hygiene and remove orphaned data.
-*   **Logic**:
-    *   **Orphan Detection**: Scans `static_resources` (files), `cache_render_metrics` (locations), and `cache_tts_preparation` (TTS prep) for keys that no longer exist in the Yjs `user_inventory` (`useBookStore`).
-    *   **Post-Migration Role**: After the Yjs migration, this service strictly manages IDB `static_` and `cache_` stores to clean up orphaned binary data. It leaves `user_` data entirely to Yjs/Firestore sync.
-    *   **Orphan Pruning**: Prunes files (`static_resources`), locations (`cache_render_metrics`), and TTS Prep (`cache_tts_preparation`) that no longer have a matching parent book ID in `useBookStore`.
-    *   **Metadata Regeneration**: Can re-import books from their binary blobs (`regenerateAllMetadata`) to refresh Yjs metadata if the schema changes, using `DBService.importBookWithId`.
-
-#### Cancellable Task Runner (`src/lib/cancellable-task-runner.ts`)
-*   **Goal**: Solve the "Zombie Promise" problem in React `useEffect` hooks.
-*   **Logic**: Uses a **Generator** pattern (`function*`) to yield Promises. Calling `cancel()` throws a `CancellationError` into the generator.
-
-#### Audio Player Utility (`src/lib/tts/AudioElementPlayer.ts`)
-*   **Goal**: Provide a robust wrapper around the HTML5 Audio element.
-*   **Logic**:
-    *   **Lifecycle Management**: Abstracts the creation and revocation of Blob URLs (`URL.createObjectURL` / `revokeObjectURL`) to prevent memory leaks.
-    *   **Unified Interface**: key interface for playing both Blob assets (local TTS) and remote URLs (Cloud TTS).
-
-#### Sync Mesh (`src/store/useDeviceStore.ts` & `src/lib/device-id.ts`)
-*   **Goal**: Provide visibility into the synchronization network and enable "Send to Device" features.
-*   **Logic**:
-    *   **Stable Identity**: `device-id.ts` generates and persists a stable UUID in `localStorage` to identify the current node.
-    *   **Heartbeat**: `useDeviceStore` maintains a Yjs Map of active devices, updating the `lastActive` timestamp with a 5-minute throttle.
-    *   **Metadata**: Automatically parses User Agent strings (via `ua-parser-js`) to provide human-readable device names (e.g., "Chrome on Windows").
-
----
-
-### TTS Subsystem (`src/lib/tts/`)
-
-#### `src/lib/tts/AudioPlayerService.ts` (Main Thread Orchestrator)
-The central hub for TTS operations. It runs on the **Main Thread** and coordinates the various subsystems (Pipeline, Providers, State). It does **NOT** run in a worker.
-
-*   **Logic**:
-    *   **Concurrency**: Uses `TaskSequencer` (`enqueue`) to serialize public methods (play, pause) to prevent race conditions during rapid UI interaction.
-    *   **State Restoration**: Implements `sessionRestored` logic to seamlessly resume playback position and state (including queue) after an app restart.
-    *   **Optimistic Playback**: Integrates with `AudioContentPipeline` using asynchronous callbacks (`onMaskFound`, `onAdaptationsFound`) to update the active queue with GenAI insights (skips, table narrations) *while* playback is already in progress.
-    *   **Background Audio**: Explicitly manages background playback via `engageBackgroundMode`, ensuring metadata and audio focus are correctly handled on mobile.
-    *   **Battery Guard**: On Android, explicitly checks for and warns about aggressive battery optimization (`checkBatteryOptimization`) via `@capawesome-team/capacitor-android-battery-optimization`. If enabled, it prompts the user to disable it to prevent the OS from killing the background service.
-    *   **Delegation**: Offloads heavy content loading to `AudioContentPipeline`, provider management to `TTSProviderManager`, and state logic to `PlaybackStateManager`.
-
-#### `src/lib/tts/SyncEngine.ts`
-*   **Goal**: Manage synchronization between audio playback time and text highlighting (Karaoke effect).
-*   **Logic**:
-    *   **Mapping**: Maps audio timepoints received from TTS providers to the active text segment to trigger real-time highlighting in the UI.
-    *   **Alignment**: Uses an `AlignmentData` array generated by cloud/local providers (e.g., Piper phonemize data or cloud API alignment data) to determine the exact character/word offset for the current playback time.
-*   **Trade-off**: Requires providers to support and emit alignment data. Providers without alignment data fallback to generic sentence-level highlighting based on estimated durations.
-
-#### `src/lib/tts/TTSProviderManager.ts`
-*   **Goal**: Abstract the differences between Native and Web TTS engines.
-*   **Logic**:
-    *   **Platform Detection**: Automatically selects `CapacitorTTSProvider` on native devices and `WebSpeechProvider` on the web.
-    *   **Fallback Strategy**: Automatically falls back to the local Web Speech engine if a cloud/native provider fails.
-    *   **Event Normalization**: Unifies disparate provider events (boundaries, errors, completion) into a consistent `TTSProviderEvents` interface.
-
-#### `src/lib/tts/providers/BaseCloudProvider.ts` (Provider Architecture)
-*   **Goal**: Standardize common behavior across TTS providers to prevent code duplication.
-*   **Logic**:
-    *   **Shared Infrastructure**: Implements the core logic for **Caching** (`TTSCache`), **Cost Tracking** (`CostEstimator`), and **Audio Playback** (`AudioElementPlayer`).
-    *   **Inheritance**:
-        *   **Cloud Providers**: `OpenAIProvider`, `GoogleTTSProvider`, and `LemonFoxProvider` extend this to inherit caching and cost logic.
-        *   **Piper (Local)**: `PiperProvider` *also* extends `BaseCloudProvider`. Despite being local, it leverages the same caching/playback infrastructure, ensuring a consistent experience across all neural voices.
-
-#### `src/lib/tts/TaskSequencer.ts`
-*   **Goal**: Prevent race conditions in async audio operations.
-*   **Logic**:
-    *   **Queue**: Maintains a promise chain (`pendingPromise`). It internally catches and logs errors on this chain to prevent the queue from stalling permanently.
-    *   **Serialization**: Ensures tasks like `play()`, `pause()`, and `loadSection()` run sequentially, preventing "Double Play" or invalid state transitions.
-    *   **Unifying Promises**: The `enqueue()` method explicitly returns the unhandled `resultPromise` so the caller can correctly await or catch task-specific rejections without breaking the sequencer's internal chain.
-*   **Trade-offs**:
-    *   **Head-of-Line Blocking**: A single slow operation (e.g., a network timeout) will block all subsequent playback actions.
-
-#### `src/lib/tts/CostEstimator.ts`
-*   **Goal**: Track and estimate usage costs for Cloud TTS providers.
-*   **Logic**:
-    *   **Session Tracking**: Uses a transient Zustand store (`useCostStore`) to track characters processed in the current session.
-    *   **Estimation**: Applies per-character pricing models (e.g., $0.000016/char for Google WaveNet).
-
-#### `src/lib/tts/TableAdaptationProcessor.ts`
-*   **Goal**: Integrate AI-generated narrative adaptations for complex tables into the playback queue.
-*   **Logic**:
-    *   **Caching**: Checks `dbService.getContentAnalysis` for existing adaptations to avoid redundant API calls.
-    *   **Extraction**: Identifies tables that actually exist in the current section by comparing against `dbService.getTableImages`.
-    *   **Matching**: Uses robust CFI prefix matching in `mapSentencesToAdaptations` to identify which raw sentences in the TTS queue belong to an adapted table block, replacing them dynamically.
-    *   **Optimization**: Pre-filters and pre-parses table image CFIs via `preprocessTableRoots` to avoid redundant string manipulation and parsing in the hot loop.
-*   **Trade-off**: High reliance on exact CFI structure; buggy or non-standard CFIs generated by `epub.js` can cause mismatching or skipped adaptations.
-
-#### `src/lib/tts/AudioContentPipeline.ts`
-The Data Pipeline for TTS.
-
-*   **Goal**: Decouple "Content Loading" from "Playback Readiness", and orchestrate data preparation.
-*   **Logic (Optimistic Playback)**:
-    *   **Orchestration**: It acts as the central coordinator for text processing before playback. It leverages `TextSegmenter` for sentence extraction, `LexiconService` for pronunciation overrides, and `TableAdaptationProcessor` for integrating AI-generated table descriptions.
-    1.  **Immediate Return**: Returns a raw, playable queue immediately after basic extraction.
-    2.  **Background Analysis**: Fires "fire-and-forget" asynchronous tasks (`detectContentSkipMask`, `processTableAdaptations`) to analyze content using GenAI.
-        *   **Grouping**: `groupSentencesByRoot` clusters sentences by their **Root CFI** (common ancestor) before GenAI analysis. This ensures the LLM receives logical blocks (e.g., an entire table row or aside) rather than fragmented sentences, improving classification accuracy.
-        *   **Dynamic Scope Expansion**: If a new sentence is an ancestor of the current group (e.g., a `div` wrapping a `p`), the logic expands the group's scope to the ancestor's level. This ensures that subsequent descendants of the ancestor are correctly included in the same semantic block.
-        *   **Optimization**: Pre-filters table images by `sectionId` and batch-processes their CFIs via `preprocessTableRoots` to avoid redundant parsing and reduce lookup complexity during sentence grouping.
-    3.  **Dynamic Updates**: Updates the *active* queue while it plays via callbacks (`onMaskFound`, `onAdaptationsFound`).
-        *   **Table Injection**: `TableAdaptationProcessor.mapSentencesToAdaptations` matches raw sentences to AI-generated table narratives using CFI prefix matching, replacing the raw data cells with a natural language summary in real-time.
-    4.  **Memoization**: Caches merged abbreviations (`getMergedAbbreviations`) to ensure reference stability, allowing `TextSegmenter` to skip redundant `Set` creation in hot loops.
-
-#### `src/lib/tts/TextSegmenter.ts`
-*   **Goal**: Robustly split text into sentences and handle abbreviations.
-*   **Logic**:
-    *   **Reactive Segmentation (`refineSegments`)**: Allows re-segmenting text on the fly based on changing abbreviation rules (e.g., toggling "Bible Mode" abbreviations) without re-ingesting the book.
-    *   **Manual Backward Scan**: `mergeText` uses a manual character scan loop via `charCodeAt` (bypassing `trimEnd()` and regex) to find the merge point, reducing expensive string allocations in tight loops.
-    *   **Zero-Allocation Scanning (`TextScanningTrie`)**: Uses a specialized Trie implementation that operates on character codes.
-        *   **Strategy**: Uses static `Uint8Array` lookup tables (`PUNCTUATION_FLAGS`, `WHITESPACE_FLAGS`) for O(1) character classification, bypassing conditional logic.
-        *   **Performance**: Instead of allocating new strings with `.toLowerCase()`, it performs manual ASCII case folding (checking range 65-90 and adding 32) during traversal. This enables allocation-free matching of abbreviations in hot loops.
-    *   **Segmenter Cache**: Caches `Intl.Segmenter` instances via `segmenter-cache` to avoid the heavy cost of instantiating locale data repeatedly.
-    *   **Optimization**: Uses `tryFastMergeCfi` to merge CFIs optimistically via string manipulation.
-*   **Trade-offs**:
-    *   **Maintenance**: The manual character scanning logic is more complex and brittle than standard regex or `String.trim()`, requiring careful regression testing.
-
-#### `src/lib/tts/PlaybackStateManager.ts`
-Manages the virtual playback timeline.
-
-*   **Goal**: Abstract the complexity of skipped items and dynamic replacements.
-*   **Logic**:
-    *   **Virtualized Timeline**: Maintains a queue where items can be marked `isSkipped` without being removed.
-
-#### `src/lib/tts/LexiconService.ts`
-*   **Goal**: Manage pronunciation rules for TTS, handling book-specific and global overrides.
-*   **Logic**:
-    *   **Traceability**: `applyLexiconWithTrace` returns a step-by-step log of text transformations, enabling users to debug which rule caused a specific pronunciation change.
-    *   **Performance (WeakMap Cache)**: Caches compiled `RegExp` objects keyed by the *reference* of the rules array in a `WeakMap`. This avoids re-compiling regexes for every sentence while ensuring memory is freed when rule sets change.
-    *   **Layered Application**: Applies rules in a strict order: Book Specific (High Priority) -> Global -> Bible Rules (if enabled) -> Book Specific (Low Priority).
-    *   **Bible Lexicon**: Injects a specialized set of rules (`BIBLE_LEXICON_RULES`) for Bible citations (e.g., "Gen 1:1") if enabled for the book.
-
-#### `src/lib/tts/SyncEngine.ts` (Audio Synchronization)
-*   **Goal**: Efficiently map audio playback time to text segments for highlighting.
-*   **Logic**:
-    *   **Optimized Forward Scan**: Uses a stateful cursor (`currentIdx`) to optimize the common case of continuous playback. It searches forward from the last known position, making typical updates effectively O(1).
-    *   **Highlight Emission**: Triggers `onHighlight` callbacks only when the active segment actually changes, preventing unnecessary React re-renders in the UI.
-*   **Trade-offs**:
-    *   **State Management**: Requires strict lifecycle management. The stateful cursor must be manually reset (`currentIdx = -1`) on seeks or chapter changes to prevent incorrect alignment, as the engine assumes forward progression by default.
-
-#### `src/lib/tts/processors/Sanitizer.ts`
-*   **Goal**: Clean raw text before segmentation to improve TTS quality.
-*   **Logic**:
-    *   **Regex Operations**: Removes non-narrative artifacts like page numbers, URLs (keeping domain), and citations (numeric/author-year).
-    *   **Efficiency**: Uses pre-compiled global regexes to minimize overhead during heavy processing.
-
-#### HTML Sanitization (`src/lib/sanitizer.ts`)
-*   **Goal**: Prevent XSS and ensure safe rendering of EPUB content.
-*   **Logic**:
-    *   **Library**: Uses `DOMPurify` with strict configuration.
-    *   **Hardening**:
-        *   **Reverse Tabnabbing**: Automatically adds `rel="noopener noreferrer"` to all `target="_blank"` links via a hook.
-        *   **CSS Isolation**: Explicitly strips `<link>` tags pointing to external domains to prevent style injection attacks.
-    *   **Metadata**: `sanitizeMetadata` strips *all* HTML tags to ensure plain text for titles and authors.
-
-#### `BackgroundAudio.ts`
-*   **Goal**: Ensure the app process remains active on Android/iOS when the screen is off.
-*   **Logic**: Plays a silent (or white noise) audio loop in the background to prevent the OS from killing the suspended app.
-
-#### `src/lib/tts/providers/PiperProvider.ts` (Local Neural TTS)
-*   **Goal**: High-quality, offline TTS using Piper voices (WASM).
-*   **Logic**:
-    *   **Worker Offloading**: Offloads the heavy OnnxRuntime inference to a dedicated Web Worker (`piper_worker.js`) via `piper-utils` to prevent blocking the Main Thread. The worker is patched via `scripts/patch_piper_worker.js` to enable hardware acceleration using the WebGPU execution provider (`ort.webgpu.min.js`) with a `wasm` fallback.
-    *   **Transactional Download**: Implements a robust "Download -> Verify -> Cache" strategy.
-        1.  Downloads model and config to memory.
-        2.  Verifies integrity by running a test inference.
-        3.  Only commits to the cache if verification succeeds.
-    *   **Input Sanitization**: Splits long inputs into smaller chunks to prevent WASM memory exhaustion/crashes.
-
-#### `src/lib/tts/providers/LemonFoxProvider.ts` (Cloud Neural)
-*   **Goal**: Provide a cost-effective alternative to OpenAI/Google with similar quality.
-*   **Logic**:
-    *   **API Compatibility**: Mimics the OpenAI API structure (`/v1/audio/speech`) but points to LemonFox endpoints.
-    *   **Static Voices**: Hardcoded list of supported voices (e.g., "Heart", "Bella") mapped to the provider ID.
-
-#### `src/lib/tts/providers/CapacitorTTSProvider.ts`
-*   **Logic**: Uses `queueStrategy: 1` to preload the next utterance into the OS buffer while the current one plays.
-
-#### `src/lib/tts/PlatformIntegration.ts`
-*   **Goal**: Consolidate OS-level media interactions.
-*   **Logic**:
-    *   **Media Session**: Wraps `MediaSessionManager` to handle Lock Screen controls (Play/Pause/Seek) and update metadata/artwork.
-    *   **Background Audio**: Manages a silent/noise audio loop via `BackgroundAudio` to prevent the Android OS from suspending the app process when the screen is off.
-    *   **Lifecycle**: Automatically starts/stops the background loop based on playback state (`playing` -> start, `paused` -> stop with debounce).
-
-#### `src/lib/tts/CsvUtils.ts` (Lexicon I/O)
-*   **Goal**: Enable import/export of Lexicon rules and abbreviations.
-*   **Logic**:
-    *   **Library**: Uses `PapaParse` for robust CSV handling.
-    *   **Format**: Handles standard CSV escaping (RFC 4180) for rules containing commas or quotes.
-
----
-
-### State Management (`src/store/`)
-
-State is managed using **Zustand** with specialized strategies for different data types.
-
-*   **`useBookStore` (Synced)**:
-    *   **Goal**: Manages the synchronized **User Inventory**.
-    *   **Logic**: Backed by Yjs Map. Holds the `__schemaVersion` atomic key and the `books` inventory state synchronized via Yjs. This store was created to decouple heavy synchronized state from transient local UI state.
-*   **`useReadingListStore` (Synced)**:
-    *   **Goal**: Functions as a **"Shadow Inventory"**.
-    *   **Logic**: Tracks book status (Read, Reading, Want to Read) and Rating independently of the file existence. Persists even if the book file is offloaded or deleted.
-*   **`useTTSStore`**:
-    *   **Goal**: Manage TTS configuration and playback state.
-    *   **Logic**:
-        *   **Background Mode**: Configures `backgroundAudioMode` ('silence', 'noise', 'off') and `whiteNoiseVolume` to keep the app alive on mobile.
-        *   **Preroll**: Manages `prerollEnabled` for chapter announcements.
-        *   **Bible**: Toggles `isBibleLexiconEnabled` (default: true) for specialized pronunciation and synchronizes this state with `LexiconService`.
-        *   **Voice Downloads**: Manages the download lifecycle (`isDownloading`, `downloadProgress`, `downloadStatus`, `downloadingVoiceId`) for local Piper voice models, listening to real-time events emitted by `AudioPlayerService`.
-        *   **Persistence**: Uses `persist` middleware to save user preferences (speed, voice, provider keys) to `localStorage`.
-*   **`usePreferencesStore` (Synced but Isolated)**:
-    *   **Goal**: Sync user preferences (theme, font size) across devices, but allow each device to maintain its own unique configuration.
-    *   **Logic**:
-        *   **Yjs Keying**: Uses `preferences/${deviceId}` as the key in the Yjs document.
-        *   **Why**: This ensures that changing the theme on your phone doesn't accidentally change the theme on your tablet, while still backing up the settings to the cloud.
-*   **`useSyncStore` (`src/lib/sync/hooks/useSyncStore.ts`)**:
-    *   **Goal**: Track connection and auth status for Firebase/Firestore sync.
-    *   **Logic**: Decouples the UI components from the underlying `FirestoreSyncManager` provider instance.
-*   **`useReadingStateStore` (Per-Device Sync)**:
-    *   **Strategy**: Uses a nested map structure (`bookId -> deviceId -> Progress`) in Yjs.
-    *   **Why**: To prevent overwriting reading positions when switching between devices (e.g., preventing a phone at 10% from overwriting a tablet at 80% during a sync race).
-    *   **Aggregation**: The UI selector uses a **Local Priority > Global Recent** strategy. It prefers the local device's progress if available; otherwise, it falls back to the most recently updated progress from any device in the mesh.
-    *   **Session Merging**: Implements a "Smart Merge" strategy that aggregates reading updates of the same type (e.g., `page` vs `chapter`) into a single `ReadingSession` if they occur within 20 minutes (`MERGE_TIME_WINDOW`). This prevents history spam while preserving granular session data.
-    *   **Pruning**: Automatically prunes reading history when it exceeds `MAX_READING_SESSIONS` (500), removing the oldest `HISTORY_PRUNE_SIZE` (200) entries to maintain Yjs document performance.
-*   **`useDeviceStore` (Sync Mesh)**:
-    *   **Strategy**: Maintains a Yjs Map of active devices in the mesh.
-    *   **Logic**:
-        *   **User Agent Parsing**: Uses `ua-parser-js` (`UAParser`) to automatically generate human-readable device names (e.g., "Chrome on Windows") upon registration.
-        *   **Heartbeat Throttling**: Updates the `lastActive` timestamp with a 5-minute throttle (`HEARTBEAT_THROTTLE_MS`) to prevent excessive CRDT updates while maintaining online status visibility.
-    *   **Why**: Enables "Send to Device" features and provides visibility into the sync network.
-*   **`useReaderStore`**: (Conceptual Facade) Aggregates ephemeral UI state (`useReaderUIStore`) and persistent settings (`usePreferencesStore`) for easier component consumption.
-*   **`useReaderUIStore` (Local/Ephemeral)**:
-    *   **Goal**: Manage transient UI state for the Reading Room.
-    *   **Logic**: Tracks loading state, Table of Contents (TOC), immersive mode, and holds callbacks (`playFromSelection`, `jumpToLocation`) to allow the React UI to control the underlying Reader instance.
-*   **`useToastStore` (Local/Ephemeral)**:
-    *   **Goal**: Provide global toast notifications.
-    *   **Logic**: Manages visibility, message, type (info, success, error) and duration for standard non-blocking system messages like database quota errors.
-*   **`useUIStore` (Local/Ephemeral)**:
-    *   **Goal**: Manage global modal and application lock states.
-    *   **Logic**: Controls global settings visibility and critical flags like `obsoleteLock` which forces the application into `ObsoleteLockView` when cloud schema versions misalign.
-*   **`useLocalHistoryStore` (Local/Persisted)**:
-    *   **Goal**: Optimize startup performance by tracking the "Last Read Book" locally.
-    *   **Logic**: Stores the ID of the last open book in `localStorage`. This allows the app to immediately resume the correct book on launch without waiting to iterate through the potentially large, synced `user_progress` Yjs map.
-*   **`useGenAIStore` (Local/Persisted)**:
-    *   **Goal**: Manage AI configuration, API keys, and usage tracking.
-    *   **Logic**:
-        *   **Persistence**: Stored in `localStorage` via `persist` middleware.
-        *   **Usage Tracking**: Tracks token usage and estimated cost for the current session.
-        *   **Logging**: Maintains a rolling buffer of the last 100 debug logs (`GenAILogEntry`) for troubleshooting. Each log is linked by a generated `correlationId` and contextualized with `bookId` and `sectionId` to trace full request/response lifecycles.
-*   **`useVocabularyStore` (Synced)**:
-    *   **Goal**: Track known Chinese characters to filter out unnecessary Pinyin annotations.
-    *   **Logic**: Uses a Yjs map to sync a dictionary of `knownCharacters`. Integrates with `useEpubReader.ts` during the ephemeral geometry collection phase to selectively skip characters based on the synced known state ("Smart Pinyin Filtering").
-    *   **Trade-offs**: A large dictionary of known characters will marginally increase the Yjs document size and memory usage.
-*   **`useLexiconStore` (Synced)**:
-    *   **Goal**: Synchronize pronunciation rules across devices.
-    *   **Logic**:
-        *   **Rules**: Stored in a Yjs Map (`lexicon`).
-        *   **Ordering**: Rules have an explicit `order` field to ensure deterministic application order.
-        *   **Settings**: Stores book-specific preferences (e.g., enable Bible Lexicon) in a nested map.
-*   **`yjs-provider.ts` (Deterministic Migration)**:
-    *   **Goal**: Ensure backwards compatibility across schema changes.
-    *   **Logic**:
-        *   **Atomic Key**: Uses `__schemaVersion` as an atomic key (via `disableYText` and `atomicKeys`) to prevent `Y.Text` overhead and ensure integer stability.
-        *   **Sequential Upgrade**: Implements `runMigrationsImpl` which runs strictly deterministic Zustand state transformations to upgrade the local schema (e.g., pruning legacy reading history for `v2`, bumping to `v4`). Because transforms are identical across clients, Yjs LWW merges concurrent upgrades safely.
-*   **`useContentAnalysisStore` (Synced)**:
-    *   **Goal**: Sync expensive AI artifacts (Table Adaptations) across devices.
-    *   **Logic**: Maps `${bookId}/${sectionId}` to a `SectionAnalysis` object containing the teleprompter scripts. It also stores `referenceStartCfi` to define the boundary where references begin, replacing deprecated granular arrays (like semantic maps) to save space.
-    *   **Trade-off**: Large analysis objects (e.g., from books with many tables) increase the Yjs document size, potentially causing higher latency during initial sync/hydration.
-*   **`useBackNavigationStore` (Local Only)**:
-    *   **Goal**: Solve the "Back Button Hell" on Android where multiple components (Router, Modals, Menus) compete for the hardware back action.
-    *   **Logic**: Implements a **Priority Queue** (Modal > UI > Default). Components register handlers with a priority, and the store executes only the highest-priority handler.
-    *   **Trade-off**: Requires strict lifecycle management. If a component fails to unregister its handler on unmount (zombie handler), it can permanently hijack the back button and trap the user.
-*   **`useLibraryStore` (Local Only)**:
-    *   **Strategy**: Manages transient and local-only state like `isImporting` flags and **Static Metadata** (covers, file hashes) which are too heavy for Yjs. Its `books` property has been fully migrated to `useBookStore`.
-    *   **The "Ghost Book" Pattern**: The UI merges Synced Inventory (Yjs) with Local Static Metadata (IDB). It merges these to support "Ghost Books" - books where the heavy local file is offloaded/deleted, but the user's progress and metadata remain in the Yjs CRDT.
-    *   **Smart Ingestion**: When importing a file (`addBook`), the store uses "Smart Matching" to explicitly check if the new file's metadata (Title + Author) matches an existing "Ghost Book" in the synced inventory. If found, it links the new binary file to the existing Yjs record instead of creating a duplicate entry.
-*   **`useGoogleServicesStore` (Local Only)**:
-    *   **Goal**: Manage connection state for Google APIs (Drive, Sync) and persist user preferences.
-    *   **Logic**: Tracks which services are actively connected and stores client IDs. Used to coordinate the authentication flow via `GoogleIntegrationManager`.
-
-#### History Management
-*   **Architecture Evolution**: The Yjs `UndoManager` and related granular history tracking components (e.g., `useHistoryStore`, `HistorySettingsTab`) have been intentionally **removed** to reduce complexity and performance overhead.
-*   **Current Strategy**: The application now relies exclusively on the Checkpoint system (`CheckpointService`) for gross state recovery (Last 10 sync states), abandoning granular intra-session undo/redo capabilities.
-
-#### Selector Optimization (`src/store/selectors.ts`)
-*   **Goal**: Ensure smooth UI scrolling (60fps) by preventing unnecessary re-renders in the main `LibraryView`.
-*   **Logic**:
-    *   **The `useAllBooks` Hot Path**: This selector executes frequently (e.g., on every page turn due to `progressMap` updates). Any dependencies within this selector (like `readingListEntries` or fallback defaults, e.g., `{}`) must maintain strict referential stability (using `useMemo` for fallbacks) to prevent triggering expensive O(N) recalculations.
-    *   **Phase 1 (Base Book Memoization)**: Merges heavy static metadata (covers, titles) into book objects. Memoized on `books` + `staticMetadata` (rare changes).
-    *   **Phase 2 (Progress Merge)**: Merges frequent updates (Reading Progress) into the Base Books using **Reference Stability**.
-        *   *Array Item Memoization*: Reuses the *same* book object reference from the previous render if only the progress changed but the book identity/metadata is stable, allowing `React.memo` components to skip updates.
-*   **Trade-offs**:
-    *   **Complexity**: Requires manual management of dependency arrays and object identity, making the code harder to maintain than simple selectors.
-    *   **Stale Data Risk**: If a dependency is missed, the UI will not update even if the store changes.
-
-### Hardening & Safety Rails
-
-*   **Database Resilience**: `DBService` wraps `QuotaExceededError` into a unified `StorageFullError` for consistent UI handling.
-*   **Safe Mode**: If critical database initialization fails, the app boots into `SafeModeView`, providing a "Factory Reset" (`deleteDB`) option to unblock the user.
-*   **Workspace Migration Locks**: Safely halts background synchronization operations via `MigrationStateService` when transitioning between cloud workspaces to prevent split-brain states or data corruption. Recovery UI (`CriticalMigrationFailureView`) catches unhandled exceptions to rollback state safely.
-*   **Schema Quarantine (`ObsoleteLockView`)**: When the application detects a remote document with a higher `__schemaVersion` than the current app (`CURRENT_SCHEMA_VERSION = 5`), it renders `ObsoleteLockView` to lock the UI permanently.
-    *   **Why**: Prevents a down-level client from inadvertently overwriting or corrupting newer data structures introduced by an updated app version.
-    *   **Trade-off**: The user is completely locked out of the app until they update to the latest version.
-*   **Service Worker**: The app verifies `waitForServiceWorkerController` on launch to ensure image serving infrastructure is active, failing fast if the SW is broken.
-*   **Battery Guard**: Explicitly checks Android battery optimization settings via `@capawesome-team/capacitor-android-battery-optimization` (`checkBatteryOptimization`) and warns the user if they are likely to interfere with background playback.
-*   **Transactional Voice Download**: `PiperProvider` prevents corrupt voice models by ensuring files are downloaded and verified in memory before writing to persistent storage.
-*   **Input Sanitization**: All text inputs to the WASM TTS engine are sanitized and chunked to prevent memory access violations or worker crashes.
-*   **Process Protection**: `PlatformIntegration` runs a silent audio loop during playback to prevent Android "Phantom Process Killers" from terminating the app in the background.
-
-### UI Layer
-
-#### Mobile Integration
-*   **Safe Area**: Uses `@capacitor-community/safe-area`.
-*   **Media Session**: Managed via `MediaSessionManager` with support for artwork cropping.
+Other repo roots:
+
+| Path | What it is |
+| --- | --- |
+| `packages/` | vendored forks as npm workspaces (peer-dep singletons; see check:single-instance) |
+| `verification/` | Playwright journey suite (Docker lane; see TESTING.md) |
+| `scripts/` | operator tooling: gates, generators, codemods, fixture capture (scripts/README.md) |
+| `third-party/` | vendored runtime artifacts (piper) + the license inventory |
+| `docs/adr/` | architecture decision records (i18n strategy, android-backup) |
+| `plan/overhaul/` | the overhaul program: master plan, analyses, prep docs, close-out |
+
+## 2. The contract registry (C1–C12)
+
+The program's governing artifact (plan/overhaul/proposals/contract-first.md;
+operating rules in the master plan §3). A contract version bump requires a
+matching contract-suite change in the same PR. Everything not in this table
+is an internal and may be rewritten at will.
+
+| Id | Contract | Home | Validation / versioning | Pinned by |
+| --- | --- | --- | --- | --- |
+| C1 | IndexedDB storage schema | `src/data/schema.ts` | zod rows in src/data/rows/; append-only versioned migration registry (DB v26) | `src/data/migrations.test.ts`, `src/data/connection.test.ts`, `src/data/__fixtures__/schema-fixtures.ts` |
+| C2 | CRDT document schema | `src/store/registry.ts`, `src/app/migrations.ts` | syncedKeys whitelist + merge-defaults hydration; coordinator chain at v9; doc-level quarantine on the meta map | `src/store/__tests__/crdt-contract/fixtures-manifest.test.ts`, `src/store/__tests__/crdt-contract/fixtures-hydration.test.ts`, `src/store/__tests__/crdt-contract/migrations.test.ts`, `src/test/fixtures/ydoc/manifest.json` |
+| C3 | Sync transport (SyncBackend) | `src/domains/sync/backend/SyncBackend.ts` | one behavioral spec, two transports (mock on every run, Firestore emulator gated); observe-mode zod on inbound docs | `src/lib/sync/syncBackendContract.ts`, `src/lib/sync/syncBackendContract.mock.test.ts`, `src/lib/sync/syncBackendContract.emulator.test.ts` |
+| C4 | TTS engine RPC | `src/lib/tts/engine/TtsEngine.ts`, `src/lib/tts/engine/WorkerTtsEngine.ts` | single monotonic PlaybackSnapshot{seq} channel; 23 parity scenarios × 2 transports | `src/lib/tts/engine/engineParityScenarios.ts`, `src/lib/tts/engine/engineParity.inprocess.test.ts`, `src/lib/tts/engine/engineParity.worker.test.ts` |
+| C5 | TTS provider plugin interface | `src/lib/tts/providers/types.ts`, `src/lib/tts/providers/registry.ts` | ProviderDescriptor registry (6 providers); reject-only play(), typed ProviderPlaybackError | `src/lib/tts/providers/describeProviderContract.ts` |
+| C6 | Store/selector public API | `src/store/registry.ts`, `src/store/yjs-provider.ts` | three declared tiers; synced stores created only via defineSyncedStore; generated README | `src/store/__tests__/registry.test.ts` |
+| C7 | Reader engine port | `src/domains/reader/engine/ReaderEngine.ts` | renderer-agnostic port; EpubJsEngine is the sole runtime epubjs importer (lint error) | `src/domains/reader/engine/ReaderEngine.contract.test.ts` |
+| C8 | Ingestion artifact contract | `src/lib/ingestion/sentence-extraction.ts`, `src/domains/library/import/extract.ts` | raw-at-rest extraction v3; CFI-comparison fixtures gate any extractionVersion bump; one extractBook() | `src/lib/ingestion/sentence-extraction.test.ts`, `src/lib/ingestion/extractSentences.test.ts`, `src/domains/library/import/extract.test.ts`, `src/domains/library/reingest.test.ts` |
+| C9 | External egress contract | `src/kernel/net/destinations.ts`, `src/kernel/net/NetworkGateway.ts` | 9 destinations with data class/consent/timeout; CSP GENERATED from the registry (scripts/generate-csp.mjs) | `src/kernel/net/csp.test.ts`, `src/kernel/net/NetworkGateway.test.ts` |
+| C10 | Error contract | `src/types/errors.ts`, `src/app/errors/presentError.ts` | AppError taxonomy; append-only code namespaces; presentError is the one user-facing mapper | `src/types/errors.test.ts` |
+| C11 | Boot contract | `src/app/bootstrap.ts`, `src/app/boot/registerBootTasks.ts` | 8 phases, sequential awaited tasks; halt() for migration confirmation; SafeMode on throw | `src/App_Boot.test.tsx`, `src/App_MigrationFailure.test.tsx`, `src/App_SW_Wait.test.tsx`, `src/App_Capacitor.test.tsx` |
+| C12 | Layering & worker-purity contract | `.dependency-cruiser.cjs`, `.dependency-cruiser.runtime.cjs`, `eslint.config.js` | compile-time direction via tsc -b project references; emitted-artifact ground truth via the five-check build gate | `scripts/check-worker-chunk.mjs`, `scripts/depcruise-baseline.mjs`, `scripts/assert-single-instance.cjs`, `src/store/__tests__/crdt-contract/single-yjs-instance.test.ts` |
+
+## 3. Boundary rules and their enforcement (master plan §2, end state)
+
+Levels: **error** = CI-blocking, zero undocumented exceptions; **ratchet** =
+warn-severity with a frozen baseline that may only decrease; **process** =
+review/test-enforced. Source audit: plan/overhaul/prep/phase9-close.md §3.
+
+| # | Rule | Enforcement | Level | Named exceptions / residuals |
+| --- | --- | --- | --- | --- |
+| 1 | kernel/ imports nothing internal; admission = zero deps + ≥2 consumers | depcruise `kernel-imports-nothing` + `types-imports-nothing`, both error at 0 | error | `~types` is the one sanctioned dependency (named in the rule itself) |
+| 2 | All IndexedDB via data/ repos; readwrite + `idb` banned elsewhere | eslint `idb`-import ban (prod AND tests) + `readwrite`-literal syntactic ban, error; depcruise `data-no-upward` error at 0; the write-gate's synchronous-callback API structurally bans intra-transaction awaits | error | none — schema fixtures live inside src/data/__fixtures__/ |
+| 3 | Domain services import kernel+data+own module+other domains' index only, never store/ | depcruise `domains-no-store` error at 0 | error | ONE carve-out: store/yjs-provider.ts for the relocated CheckpointService/Inspector live Y.Doc handles |
+| 4 | Domain ui/ reads via published hooks; writes via services/controllers | store-registry README + projection-port pattern (libraryViewStore et al.); review-enforced | process | no mechanical lint (a setter-import ban cannot tell reads from writes); residual ~70 `.getState()` sites outside store/+app/ are event-handler reads + injected port handles |
+| 5 | `getState()` outside store/+app/ is an error | structural, via the import graph: `domains-no-store` error at 0; `lib-not-to-store` ratchet 54→19 frozen edges | error + ratchet | the 19 baseline-frozen lib/ edges (legacy geography: lib/tts engine context, LexiconService, BackupService, …) |
+| 6 | Worker import closure free of zustand/yjs/store | check:worker-chunk check 1 (emitted-chunk closure) in the build gate; `consistent-type-imports` error; depcruise `no-circular` + `no-circular-runtime` error at 0 | error + ratchet | `worker-no-state-typegraph` stays a ratchet at 16 type-only edges (hazard meter; the chunk check is the hard floor) |
+| 7 | All egress via NetworkGateway.egress(); CSP generated from the registry | syntactic fetch/XHR/sendBeacon bans at error; CSP rendered by scripts/generate-csp.mjs; registry==CSP pinned by csp.test.ts | error | ONE carve-out: src/kernel/net/** (the gateway itself); tests share it |
+| 8 | epubjs only in the reader engine; synthesis SDKs only in providers; singletons only in app/; no module-scope side effects outside bootstrap | runtime-epubjs import ban at error (type-only legal) with named carve-outs; piper vendored behind PiperRuntime; C11 entry-gate boot tests | error | three named epubjs carve-outs (engine dir incl. offscreen/, kernel epubcfiShim, library extract.ts per C8); singleton/side-effect halves rest on the C11 contract + review |
+| 9 | Mock seams reachable only from the composition root behind DEV/VITE_E2E | check:worker-chunk check 2: no MockBackend/MockFireProvider/MockGenAIClient source in ANY production chunk | error | none |
+| 10 | TS project references per layer + all test code typechecked | `tsc -b` solution build: app + test + e2e + node + 3 vendored packages | partial | per-LAYER references NOT implemented (`composite` forces declaration emit, conflicting with the bundler-mode posture); dependency DIRECTION is enforced by the depcruise error rules instead — documented exception |
+
+Ratchet counters (live, from the committed baselines): dependency-cruiser
+total **35** (`lib-not-to-store` 19 + `worker-no-state-typegraph` 16; every other rule at
+error/0), lint-debt allowlist **20** `any`-sites +
+**25** disables (`lint-debt-allowlist.json`), coverage
+floor `coverage-baseline.json`, bundle budget `bundle-baseline.json`.
+
+## 4. Persisted formats (the format-change chain)
+
+The CRDT document schema is at **v9** (`CURRENT_SCHEMA_VERSION`,
+src/store/yjs-provider.ts). The coordinator chain (src/app/migrations.ts —
+checkpoint before, atomic transactional bump, loud-fail to SafeMode):
+
+| Step | Transform |
+| --- | --- |
+| v1 → v2 | `pruneInvalidReadingSessions` |
+| v2 → v4 | *(pure version bump)* |
+| v3 → v4 | *(pure version bump)* |
+| v4 → v5 | `backfillFontProfiles` |
+| v5 → v6 | `migrateV5toV6` |
+| v6 → v7 | `canonicalizeVocabularyKeys` |
+| v7 → v8 | `linkReadingListEntries` |
+| v8 → v9 | `clearHusksAndRetireDualWrite` |
+
+The IndexedDB schema (`EpubLibraryDB`) is at **v26** (`DB_VERSION`,
+src/data/schema.ts). Versioned registry steps past the v24 baseline
+(append-only; released steps are persisted format):
+
+| Step | Transform |
+| --- | --- |
+| v25 | `migrateToV25` |
+| v26 | `migrateToV26` |
+
+localStorage (zustand/persist) stores:
+
+| Store | Key |
+| --- | --- |
+| `useSyncStore` | `sync-storage` |
+| `useTTSSettingsStore` | `tts-settings` |
+| `useDriveStore` | `drive-config-storage` |
+| `useGoogleServicesStore` | `google-services-storage` |
+| `useGenAIStore` | `genai-storage` |
+| `useLocalHistoryStore` | `local-history-storage` |
+
+Backups are manifest **v3** (validate-before-destroy, pre-restore
+checkpoint — src/lib/BackupService.ts; round-trip suite
+src/lib/BackupService.roundtrip.test.ts). The Chinese dictionary lives in
+its own `versicle-dict` IndexedDB (src/domains/chinese/dictionary/).
+
+## 5. Boot sequence (C11)
+
+`src/app/bootstrap.ts` owns the order; subsystems register tasks via the
+manifest `src/app/boot/registerBootTasks.ts` (the one file that may import
+subsystem boot modules). Phases, in order:
+
+| # | Phase | What runs |
+| --- | --- | --- |
+| 1 | `interceptMigration` | workspace-migration interceptor — may halt boot for user confirmation or apply a staged swap |
+| 2 | `openDB` | open EpubLibraryDB through the versioned migration registry (v26) |
+| 3 | `startYjsPersistence` | y-idb persistence for the workspace Y.Doc (no module-scope boot) |
+| 4 | `whenHydrated` | IDB load + per-store hydration handles; static-metadata projection hydrates |
+| 5 | `migrations` | CRDT migration coordinator — checkpoint, transform, atomic bump (target v9) |
+| 6 | `syncInit` | sync orchestration (skipped while a migration awaits user confirmation) |
+| 7 | `deviceRegistration` | TTS engine init + device-mesh registration |
+| 8 | `backgroundTasks` | device heartbeat, Drive auto-scan, audio-cache eviction, re-ingest wave, social login |
+
+A task throw routes to SafeModeView; `ctx.halt()` stops the sequence (used
+while a backup restore or staged workspace swap needs the page). Wipe hooks
+(`src/data/wipe.ts`) are registered at manifest time so `wipeAllData()`
+can stop the sync and Yjs writers it cannot import.
+
+## 6. Network egress (C9)
+
+Every destination the app may contact, from
+`src/kernel/net/destinations.ts` (the CSP is generated from this table —
+`npm run generate:csp`; `src/kernel/net/csp.test.ts` pins registry==CSP):
+
+| Id | Hosts | Via | Data class | Consent | Timeout | Offline |
+| --- | --- | --- | --- | --- | --- | --- |
+| `gemini` | generativelanguage.googleapis.com | gateway | book-content | per-book | 60000 ms | fail |
+| `google-tts` | texttospeech.googleapis.com | gateway | book-content | provider-selection | 30000 ms | fail |
+| `openai-tts` | api.openai.com | gateway | book-content | provider-selection | 30000 ms | fail |
+| `lemonfox-tts` | api.lemonfox.ai | gateway | book-content | provider-selection | 30000 ms | fail |
+| `hf-piper-catalog` | huggingface.co | gateway | metadata | provider-selection | 30000 ms | cache-fallback |
+| `hf-piper-models` | huggingface.co, cdn-lfs.huggingface.co, cdn-lfs-us-1.huggingface.co | gateway | binary-asset | provider-selection | unbounded (abortable) | fail |
+| `drive` | www.googleapis.com | gateway | binary-asset | oauth | unbounded (abortable) | fail |
+| `google-oauth` | accounts.google.com | sdk | auth | oauth | unbounded (abortable) | fail |
+| `firebase` | firestore.googleapis.com, identitytoolkit.googleapis.com, securetoken.googleapis.com, www.googleapis.com, firebasestorage.googleapis.com, *.firebaseio.com | sdk | book-derived | oauth | unbounded (abortable) | fail |
+
+`via: 'sdk'` rows (firebase, OAuth plugins) own their HTTP inside an SDK:
+their hosts feed the CSP but calls cannot route through `egress()`.
+
+## 7. Settings surface
+
+`src/app/settings/registry.ts` — every tab is deep-linkable as
+`/settings/:tab`; panels lazy-load on first activation:
+
+| Tab | Order | Label key | Danger |
+| --- | --- | --- | --- |
+| `general` | 10 | `settings.tab.general` |  |
+| `tts` | 20 | `settings.tab.tts` |  |
+| `genai` | 30 | `settings.tab.genai` |  |
+| `sync` | 40 | `settings.tab.sync` |  |
+| `devices` | 50 | `settings.tab.devices` |  |
+| `dictionary` | 60 | `settings.tab.dictionary` |  |
+| `recovery` | 70 | `settings.tab.recovery` |  |
+| `diagnostics` | 80 | `settings.tab.diagnostics` |  |
+| `data` | 90 | `settings.tab.data` | yes |
+
+## 8. TTS providers (C5)
+
+`src/lib/tts/providers/registry.ts` — the settings UI, id unions, and
+construction all derive from this registry:
+
+| Id | Name | Kind | API key | Platforms | Capabilities |
+| --- | --- | --- | --- | --- | --- |
+| `webspeech` | Web Speech (Local) | device | no | web | — |
+| `capacitor` | System Speech (Local) | device | no | native | — |
+| `piper` | Piper (High Quality Local) | wasm | no | all | downloadable voices, locale-aware |
+| `google` | Google Cloud TTS | cloud | yes | all | — |
+| `openai` | OpenAI | cloud | yes | all | — |
+| `lemonfox` | LemonFox.ai | cloud | yes | all | — |
+
+## 9. State stores
+
+9 synced (CRDT user data), 6 local-persisted
+(localStorage), 7 ephemeral — declared in
+`src/store/registry.ts` and documented in the generated
+`src/store/README.md` (tier semantics, Y.Map bindings, hydration modes).
+
+## 10. How this app is verified
+
+`TESTING.md` is the one authoritative testing document (local gate, CI
+lanes, Docker E2E, emulator suites, ratchet model). The test strategy's
+spine is the contract tier: every dual-implementation seam in §2 carries a
+shared behavioral spec run against all implementations.

@@ -1,29 +1,44 @@
-# Library
+# lib/ — the honest legacy-geography residual
 
-This directory contains the core business logic of the application, designed to be independent of the React UI components where possible.
+Business logic that predates the overhaul's vertical-domain geography and
+was rebuilt **in place** rather than relocated (relocation is pure motion
+with no behavioral payoff — see `src/domains/README.md` and the master-plan
+close-out). Every boundary rule still applies here by path-specific lint
+and dependency-cruiser rules; the `lib-not-to-store` ratchet (19 frozen
+edges) is this directory's debt meter.
 
-## Directories
+## The audio domain
 
-*   **`tts/`**: Contains the complete Text-to-Speech architecture, including the Audio Player Service, Providers (WebSpeech, Cloud), caching, and text segmentation.
+*   **`tts/`** — the complete TTS architecture (Phase 5 rebuild): the
+    engine (`tts/engine/` — PlaybackController, QueueModel, parity-tested
+    on both transports), the provider registry (`tts/providers/` — see its
+    README), LexiconEngine, SectionQueueBuilder, TextSegmenter, TTSCache,
+    platform/media-session integration. App-side adapters: `src/app/tts/`.
 
-## Files
+## Services
 
-### Ingestion
-*   **`ingestion.ts`**: Manages the import process for EPUB files. It utilizes `epub.js` to parse the book content, extracts metadata (title, author) and the cover image, and generates a Book object for the database.
-    *   `ingestion.test.ts`: Unit tests for ingestion logic (mocked).
-    *   `ingestion.integration.test.ts`: Integration tests verifying parsing of real files.
+*   **`BackupService.ts`** — manifest-v3 backups: validate-before-destroy,
+    pre-restore checkpoint (round-trip suite alongside).
+*   **`MaintenanceService.ts`** — orphan scan/repair over the data repos.
+*   **`ingestion.ts` + `ingestion/`** — EPUB import parsing and the C8
+    sentence-extraction artifact (`ingestion/sentence-extraction.ts`,
+    extraction v3, raw-at-rest).
+*   **`sanitizer.ts`** — the sanitize-at-serialize XSS boundary (strips
+    remote EPUB resources; CSP is the second layer).
+*   **`search-engine.ts`** — the escaped-literal scan engine hosted by
+    `workers/search.worker.ts`; the session/UI side lives in
+    `src/domains/search/`.
+*   **`sync/`** — firebase config/presence helpers + the C3 SyncBackend
+    contract suites (mock + emulator); the sync domain itself is
+    `src/domains/sync/`.
+*   **`genai/`** — text-matching helpers for GenAI features; clients live
+    in `src/domains/google/`.
+*   **`reader/`** — title resolution helpers for the reader.
 
-### Search
-*   **`search.ts`**: The main entry point for the search feature on the main thread. It instantiates the Web Worker and manages the message passing protocol (requests/responses) for search queries.
-    *   `search.test.ts`: Unit tests for the search client.
-    *   `search.repro.test.ts`: Regression tests for specific search bugs.
-*   **`search-engine.ts`**: The logic that runs inside the Web Worker. It wraps the `FlexSearch` library to build indexes and execute queries against book content.
-    *   `search-engine.test.ts`: Unit tests for the search engine.
+## Utilities
 
-### Text Processing
-*   **`tts.ts`**: Contains the `extractSentences` function and related logic for parsing DOM nodes into speakable text segments.
-    *   `tts.test.ts`: Unit tests for sentence extraction and processing.
-
-### Utilities
-*   **`utils.ts`**: General purpose utility functions, including the `cn` helper for merging Tailwind classes.
-    *   `utils.test.ts`: Unit tests for utility functions.
+Small single-purpose modules: `utils.ts` (incl. the `cn` Tailwind merge
+helper), `crypto.ts`, `csv.ts`, `device-id.ts`, `language-utils.ts`,
+`logger.ts`, `cover-palette.ts`, `entity-resolution.ts`, `json-diff.ts`,
+`cancellable-task-runner.ts`, `export.ts`/`export-notes.ts`,
+`serviceWorkerUtils.ts`, `constants.ts`.

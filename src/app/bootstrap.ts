@@ -17,7 +17,7 @@
  *    the migration interceptor while a backup restore reloads the page).
  */
 
-const BOOT_PHASES = [
+export const BOOT_PHASES = [
   'interceptMigration',
   'openDB',
   'startYjsPersistence',
