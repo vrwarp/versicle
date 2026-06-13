@@ -89,8 +89,7 @@ export const useLexiconStore = create<LexiconState>()(
             }),
 
             deleteRule: (id) => set((state) => {
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { [id]: removed, ...remainingRules } = state.rules;
+                const { [id]: _removed, ...remainingRules } = state.rules;
                 return { rules: remainingRules };
             }),
 

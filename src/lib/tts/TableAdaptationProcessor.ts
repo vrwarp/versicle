@@ -85,8 +85,8 @@ export class TableAdaptationProcessor {
                 const bookTitle = bookMetadata?.title || 'Unknown Book';
                 const structure = await this.ctx.content.getBookStructure(bookId);
                 const sectionMap = new Map<string, string>();
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const findSectionTitle = (items: { href: string, title?: string, subitems?: any[] }[]) => {
+                type TocLikeItem = { href: string; title?: string; subitems?: TocLikeItem[] };
+                const findSectionTitle = (items: TocLikeItem[]) => {
                     for (const item of items) {
                         if (item.href && item.href.split('#')[0] === sectionId) {
                             sectionMap.set(sectionId, item.title || 'Unknown Section');

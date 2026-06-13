@@ -177,8 +177,7 @@ export class WebSpeechProvider implements ITTSProvider {
   playEarcon(type: 'bookmark_captured' | 'bookmark_failed'): void {
       // Fallback for WebSpeechProvider (which doesn't use AudioElementPlayer)
       // This will just play the earcon without ducking the native Web Speech API volume
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) return;
       if (!this.audioContext) {
           this.audioContext = new AudioContextClass();

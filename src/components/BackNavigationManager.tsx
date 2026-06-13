@@ -119,8 +119,7 @@ export const BackNavigationManager = () => {
         });
 
         return () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            listenerPromise.then((l: any) => l.remove());
+            listenerPromise.then((l: { remove: () => void }) => l.remove());
         };
     }, [navigate, executeHandler]);
 

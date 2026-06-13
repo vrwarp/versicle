@@ -51,7 +51,7 @@ if (typeof window !== 'undefined') {
         store = {};
       },
       length: 0,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       key: (_index: number) => null,
     };
   })();

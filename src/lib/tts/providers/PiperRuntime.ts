@@ -54,6 +54,24 @@ export interface PiperGenerateResult {
     duration: number;
 }
 
+/**
+ * The vendored piper_worker.js message protocol (legacy shape, kept
+ * verbatim — see third-party/piper/PROVENANCE.md). All fields optional:
+ * each `kind` populates its own subset.
+ */
+interface PiperWorkerMessage {
+    kind?: 'fetch' | 'stderr' | 'output' | 'error' | 'complete' | 'isAlive';
+    url?: string;
+    blob?: Blob;
+    loaded?: number;
+    total?: number;
+    message?: string;
+    requestId?: number;
+    file?: Blob;
+    duration?: number;
+    error?: unknown;
+}
+
 interface PendingRequest {
     id: number;
     resolve(result: PiperGenerateResult): void;
@@ -303,7 +321,8 @@ export class PiperRuntime {
     private ensureWorker(): Worker {
         if (this.worker) return this.worker;
         const worker = new Worker(this.assetsBaseUrl + 'piper_worker.js');
-        worker.onmessage = (event: MessageEvent) => this.handleWorkerMessage(event.data);
+        worker.onmessage = (event: MessageEvent<PiperWorkerMessage>) =>
+            this.handleWorkerMessage(event.data);
         worker.onerror = (e) => {
             console.error('Piper Worker Error', e);
             this.terminateWorker(new Error('Piper worker crashed during generation'));
@@ -312,16 +331,15 @@ export class PiperRuntime {
         return worker;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private handleWorkerMessage(data: any): void {
+    private handleWorkerMessage(data: PiperWorkerMessage): void {
         const current = this.pending;
         switch (data?.kind) {
             case 'fetch': {
                 // The worker streams asset/model fetch progress and hands the final
                 // blob back for main-thread reuse (legacy protocol, kept verbatim).
-                if (data.blob) this.assetBlobs[data.url] = data.blob;
+                if (data.blob && data.url !== undefined) this.assetBlobs[data.url] = data.blob;
                 if (current?.onProgress) {
-                    const progress = data.blob ? 1 : data.total ? data.loaded / data.total : 0;
+                    const progress = data.blob ? 1 : data.total ? (data.loaded ?? 0) / data.total : 0;
                     current.onProgress(Math.round(progress * 100));
                 }
                 break;
@@ -335,7 +353,9 @@ export class PiperRuntime {
                 // Stale-request guard: a late reply for a superseded request is dropped.
                 if (data.requestId !== undefined && data.requestId !== current.id) return;
                 this.pending = null;
-                current.resolve({ file: data.file, duration: data.duration });
+                // The worker always sends both on 'output'; defaults keep the
+                // typed protocol honest without changing the legacy behavior.
+                current.resolve({ file: data.file ?? new Blob(), duration: data.duration ?? 0 });
                 break;
             }
             case 'error': {

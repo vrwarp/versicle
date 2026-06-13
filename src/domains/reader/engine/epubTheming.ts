@@ -92,29 +92,27 @@ export const normalizeAbsoluteToRem = (cssValue: string): string | null => {
  * Prefers Adopted Stylesheets if supported, falling back to rule insertion.
  */
 const safeInjectStyles = (doc: Document, css: string, styleId: string) => {
+  // Tagged sheets: the styleId expando lets re-injection replace in place.
+  type VersicleSheet = CSSStyleSheet & { _versicle_id?: string };
   try {
-    // 1. Try Adopted Stylesheets (Modern & CSP-friendly)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((doc as any).adoptedStyleSheets && typeof (window as any).CSSStyleSheet !== 'undefined') {
+    // 1. Try Adopted Stylesheets (Modern & CSP-friendly). The iframe doc may
+    // predate the API, so the property stays optional (duck-typed, no
+    // instanceof: cross-realm objects fail main-realm constructor checks).
+    const adoptable = doc as Document & { adoptedStyleSheets?: VersicleSheet[] };
+    if (adoptable.adoptedStyleSheets && typeof window.CSSStyleSheet !== 'undefined') {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sheets = [...((doc as any).adoptedStyleSheets || [])];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const existingIndex = sheets.findIndex((s: any) => s._versicle_id === styleId);
+        const sheets: VersicleSheet[] = [...(adoptable.adoptedStyleSheets || [])];
+        const existingIndex = sheets.findIndex((s) => s._versicle_id === styleId);
 
         if (existingIndex !== -1) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (sheets[existingIndex] as any).replaceSync(css);
+          sheets[existingIndex].replaceSync(css);
           return;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const newSheet = new (window as any).CSSStyleSheet();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (newSheet as any)._versicle_id = styleId;
+        const newSheet: VersicleSheet = new window.CSSStyleSheet();
+        newSheet._versicle_id = styleId;
         newSheet.replaceSync(css);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (doc as any).adoptedStyleSheets = [...sheets, newSheet];
+        adoptable.adoptedStyleSheets = [...sheets, newSheet];
         return;
       } catch {
         // Fallback to legacy injection
@@ -389,21 +387,24 @@ export function injectContentExtras(
 
   // Normalize CSS OM to map absolute units to relative REM based on 16pt=1rem baseline
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const processRule = (rule: any) => {
-      if (rule && rule.style) {
-        if (rule.style.fontSize) {
-          const newFontSize = normalizeAbsoluteToRem(rule.style.fontSize);
-          if (newFontSize) rule.style.fontSize = newFontSize;
+    // Duck-typed (NOT instanceof): the rules come from the epub IFRAME's
+    // realm, so main-realm constructor checks would always be false.
+    const processRule = (rule: CSSRule) => {
+      const styled = rule as CSSRule & { style?: CSSStyleDeclaration };
+      if (styled && styled.style) {
+        if (styled.style.fontSize) {
+          const newFontSize = normalizeAbsoluteToRem(styled.style.fontSize);
+          if (newFontSize) styled.style.fontSize = newFontSize;
         }
-        if (rule.style.lineHeight) {
-          const newLineHeight = normalizeAbsoluteToRem(rule.style.lineHeight);
-          if (newLineHeight) rule.style.lineHeight = newLineHeight;
+        if (styled.style.lineHeight) {
+          const newLineHeight = normalizeAbsoluteToRem(styled.style.lineHeight);
+          if (newLineHeight) styled.style.lineHeight = newLineHeight;
         }
       }
-      if (rule && rule.cssRules) {
-        for (let i = 0; i < rule.cssRules.length; i++) {
-          processRule(rule.cssRules[i]);
+      const grouped = rule as CSSRule & { cssRules?: CSSRuleList };
+      if (grouped && grouped.cssRules) {
+        for (let i = 0; i < grouped.cssRules.length; i++) {
+          processRule(grouped.cssRules[i]);
         }
       }
     };
@@ -427,9 +428,8 @@ export function injectContentExtras(
 
   // Normalize inline styles
   try {
-    const styledElements = doc.querySelectorAll('[style]');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    styledElements.forEach((el: any) => {
+    const styledElements = doc.querySelectorAll<HTMLElement>('[style]');
+    styledElements.forEach((el) => {
       if (el.style.fontSize) {
         const newFontSize = normalizeAbsoluteToRem(el.style.fontSize);
         if (newFontSize) el.style.fontSize = newFontSize;

@@ -17,6 +17,8 @@
     "check:worker-chunk": "node scripts/check-worker-chunk.mjs",
     "check:single-instance": "node scripts/assert-single-instance.cjs",
     "knip": "knip",
+    "lintdebt:check": "node scripts/lint-debt-ratchet.mjs --check",
+    "lintdebt:update": "node scripts/lint-debt-ratchet.mjs --update",
     "licenses:generate": "node scripts/generate-third-party-notices.mjs",
     "licenses:check": "node scripts/license-gate.mjs",
     "generate:csp": "node scripts/generate-csp.mjs",

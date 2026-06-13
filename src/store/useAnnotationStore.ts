@@ -125,7 +125,6 @@ export const createAnnotationStore = () => create<AnnotationState>()(
 
       remove: (id) => {
         set((state) => {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { [id]: _removed, ...remaining } = state.annotations;
           return { annotations: remaining };
         });

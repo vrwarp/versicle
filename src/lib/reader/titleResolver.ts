@@ -62,7 +62,6 @@ export const resolveSyntheticPreference = (book: Partial<UserInventoryItem> | nu
   if (book.useSyntheticToc !== undefined) {
     return book.useSyntheticToc;
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const syntheticToc = (book as any).syntheticToc;
+  const syntheticToc = (book as { syntheticToc?: unknown[] }).syntheticToc;
   return !!(syntheticToc && syntheticToc.length > 0);
 };

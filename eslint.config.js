@@ -194,6 +194,22 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       // a11y baseline (Phase 0): recommended preset, everything at warn.
       ...downgradeToWarn(jsxA11y.flatConfigs.recommended.rules),
+      // P9 disable-counter ratchet: deliberate non-use is expressed by the
+      // `_` naming convention (and rest-destructuring key omission), not by
+      // eslint-disable comments — the lint-debt ratchet counts disables
+      // (scripts/lint-debt-ratchet.mjs) and they may only decrease.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          args: 'all',
+          argsIgnorePattern: '^_',
+          caughtErrors: 'all',
+          caughtErrorsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },

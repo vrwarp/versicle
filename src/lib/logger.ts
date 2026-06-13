@@ -15,10 +15,9 @@ interface ImportMetaEnv {
   readonly DEV: boolean;
 }
 
-// Helper to access env safely
+// Helper to access env safely (worker/node contexts may lack import.meta.env)
 const getEnv = (): ImportMetaEnv => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (import.meta as any).env || { DEV: false };
+  return (import.meta as { env?: ImportMetaEnv }).env || { DEV: false };
 };
 
 const shouldLog = (level: LogLevel): boolean => {
@@ -38,29 +37,25 @@ class ScopedLogger {
     this.namespace = namespace;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  debug = (message: string, ...args: any[]) => {
+  debug = (message: string, ...args: unknown[]) => {
     if (shouldLog('debug')) {
       console.debug(`[${this.namespace}]`, message, ...args);
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  info = (message: string, ...args: any[]) => {
+  info = (message: string, ...args: unknown[]) => {
     if (shouldLog('info')) {
       console.info(`[${this.namespace}]`, message, ...args);
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  warn = (message: string, ...args: any[]) => {
+  warn = (message: string, ...args: unknown[]) => {
     if (shouldLog('warn')) {
       console.warn(`[${this.namespace}]`, message, ...args);
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  error = (message: string, ...args: any[]) => {
+  error = (message: string, ...args: unknown[]) => {
     if (shouldLog('error')) {
       console.error(`[${this.namespace}]`, message, ...args);
     }

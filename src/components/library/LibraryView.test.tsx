@@ -92,7 +92,7 @@ vi.mock('../ui/Select', () => ({
 }));
 
 vi.mock('@store/useReadingStateStore', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     const getProgress = (_bookId: string) => {
         // This will be overridden in tests that need custom progress
         return null;
@@ -102,7 +102,7 @@ vi.mock('@store/useReadingStateStore', () => {
         {
             getState: vi.fn().mockReturnValue({
                 progress: {},
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                 
                 getProgress: (_bookId: string) => null
             }),
             setState: vi.fn(),

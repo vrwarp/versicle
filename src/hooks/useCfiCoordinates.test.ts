@@ -19,7 +19,7 @@ describe('useCfiCoordinates', () => {
 
   const engineStub = {
     getOverlayContainer: () => container,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     getRangeRects: (_cfi: string): RangeRects | null => {
       if (!rectsByCall || rectsByCall.length === 0) return null;
       return {

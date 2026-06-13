@@ -204,7 +204,6 @@ export function useReaderController(
       setCurrentSection(title, sectionId);
     },
     onTocLoaded: (newToc) => useReaderUIStore.getState().setToc(newToc),
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     onSelection: (cfiRange, range, _contents) => {
       try {
         // Pre-flight check: ensure range is valid and has dimensions
@@ -228,7 +227,6 @@ export function useReaderController(
         logger.warn('Selection measurement failed (likely DOM mutation)', e);
       }
     },
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     onBookLoaded: (_book) => {
       // Indexing is now deferred until search is opened
     },

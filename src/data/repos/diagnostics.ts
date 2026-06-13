@@ -58,7 +58,6 @@ class DiagnosticsRepo {
     const all = await db.getAll('flight_snapshots');
     return all
       .sort((a, b) => b.createdAt - a.createdAt)
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       .map(({ eventsJSON: _unused, ...meta }) => meta);
   }
 

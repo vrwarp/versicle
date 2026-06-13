@@ -335,8 +335,7 @@ export async function extractBook(file: File, opts: ExtractBookOptions): Promise
       description: preamble.rawDescription,
       addedAt: Date.now(),
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const check = getSanitizedBookMetadata(candidateMetadata as any);
+    const check = getSanitizedBookMetadata(candidateMetadata);
     if (check) {
       candidateMetadata.title = check.sanitized.title;
       candidateMetadata.author = check.sanitized.author;

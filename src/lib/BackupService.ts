@@ -42,8 +42,9 @@ export interface BackupManifestV2 {
   locations: BookLocations[];
 
   // === Human-Readable Payload (Passive Artifact) ===
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  semanticData?: Partial<any>; // Using any to avoid importing SyncManifest since it's just a passive export
+  // Untyped on purpose: a passive export — typing it would re-import the
+  // sync manifest shape for no behavior.
+  semanticData?: Record<string, unknown>;
 }
 
 /**
@@ -76,8 +77,9 @@ export interface BackupManifestV3 {
   locations: BookLocations[];
 
   // === Human-Readable Payload (Passive Artifact) ===
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  semanticData?: Partial<any>; // Using any to avoid importing SyncManifest since it's just a passive export
+  // Untyped on purpose: a passive export — typing it would re-import the
+  // sync manifest shape for no behavior.
+  semanticData?: Record<string, unknown>;
 }
 
 /** Any backup manifest this client can restore. */

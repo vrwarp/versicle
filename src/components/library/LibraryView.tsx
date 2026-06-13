@@ -110,13 +110,13 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
 
   // Check for reprocessing request from navigation state
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const state = location.state as any;
-    if (state && state.reprocessBookId) {
+    const state = location.state as { reprocessBookId?: string } | null;
+    const reprocessBookId = state?.reprocessBookId;
+    if (reprocessBookId) {
       // Clear state to prevent reopening on reload/navigation
       window.history.replaceState({}, document.title);
       // Defer state update to avoid triggering cascading renders
-      setTimeout(() => setReprocessingBookId(state.reprocessBookId), 0);
+      setTimeout(() => setReprocessingBookId(reprocessBookId), 0);
     }
   }, [location.state]);
 

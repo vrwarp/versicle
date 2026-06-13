@@ -191,7 +191,13 @@ class TTSFlightRecorder {
 
 export const flightRecorder = new TTSFlightRecorder();
 
+declare global {
+  interface Window {
+    /** Debug handle: inspect/export the TTS flight recorder from devtools. */
+    __ttsFlightRecorder?: TTSFlightRecorder;
+  }
+}
+
 if (typeof window !== 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__ttsFlightRecorder = flightRecorder;
+    window.__ttsFlightRecorder = flightRecorder;
 }

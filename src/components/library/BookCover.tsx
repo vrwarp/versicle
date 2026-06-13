@@ -7,7 +7,7 @@ import { Cloud, CloudDownload, MoreVertical } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { BookActionMenu } from './BookActionMenu';
 import { coverUrl } from '@data/covers';
-import type { BookMetadata } from '~types/book';
+import type { CoverBook } from './BookActionMenu';
 
 function unpackColor(packed: number): string {
     const { r, g, b } = unpackColorToRGB(packed);
@@ -15,12 +15,12 @@ function unpackColor(packed: number): string {
 }
 
 interface BookCoverProps {
-    book: BookMetadata;
+    book: CoverBook;
     /** Whether this is a Ghost Book (metadata synced but file not present locally) */
     isGhostBook?: boolean;
-    onDelete: (book: BookMetadata) => void;
-    onOffload: (book: BookMetadata) => void;
-    onRestore: (book: BookMetadata) => void;
+    onDelete: (book: CoverBook) => void;
+    onOffload: (book: CoverBook) => void;
+    onRestore: (book: CoverBook) => void;
 }
 
 export const BookCover: React.FC<BookCoverProps & { showActions?: boolean }> = React.memo(({ book, isGhostBook = false, onDelete, onOffload, onRestore, showActions = true }) => {

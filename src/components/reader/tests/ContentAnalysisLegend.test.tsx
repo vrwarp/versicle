@@ -86,20 +86,20 @@ describe('ContentAnalysisLegend', () => {
         })
       );
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     render(<ContentAnalysisLegend engine={makeEngine()} />);
     expect(screen.queryByText('Debug Panel')).toBeNull();
   });
 
   it('renders correctly when debug mode is enabled', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     render(<ContentAnalysisLegend engine={makeEngine()} />);
     expect(screen.getByText('GenAI Debug Panel')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('epubcfi(...)')).toBeInTheDocument();
   });
 
   it('toggles expansion', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     render(<ContentAnalysisLegend engine={makeEngine()} />);
 
     // Initially expanded
@@ -117,7 +117,7 @@ describe('ContentAnalysisLegend', () => {
   });
 
   it('updates CFI input on selection', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     render(<ContentAnalysisLegend engine={makeEngine()} />);
 
     // Simulate selection event
@@ -136,7 +136,7 @@ describe('ContentAnalysisLegend', () => {
   });
 
   it('updates rendition on manual CFI input', async () => {
-     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      
      render(<ContentAnalysisLegend engine={makeEngine()} />);
      const input = screen.getByPlaceholderText('epubcfi(...)');
 
@@ -168,7 +168,7 @@ describe('ContentAnalysisLegend', () => {
     global.URL.createObjectURL = mockCreateObjectURL;
 
     // Render
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     render(<ContentAnalysisLegend engine={makeEngine()} />);
 
     // Wait for images to load (wait for "Table Images" text)

@@ -45,7 +45,7 @@ export const DiagnosticsTab: React.FC = () => {
     };
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+         
         loadSnapshots();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);

@@ -131,8 +131,7 @@ export class AuthSession {
         this.currentUser = auth.currentUser;
         return this.currentUser;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (e) {
+    } catch {
       // Ignore if Firebase isn't initialized yet
     }
 

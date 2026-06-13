@@ -154,7 +154,13 @@ export class PlaybackController implements TtsEngine {
 
                     logger.error("TTS Provider Error", error);
                     this.setStatus('stopped');
-                    this.notifyError("Playback Error: " + (error?.message || "Unknown error"));
+                    // Providers reject with Error instances OR plain
+                    // { message } shapes (the provider contract pins both) —
+                    // read .message structurally, never via instanceof.
+                    const message = (error as { message?: unknown } | null | undefined)?.message;
+                    this.notifyError(
+                        "Playback Error: " +
+                        (typeof message === 'string' && message ? message : "Unknown error"));
                 });
             },
             onTimeUpdate: (currentTime) => {

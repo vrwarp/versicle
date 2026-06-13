@@ -60,8 +60,7 @@ export const BookNotesBlock: React.FC<BookNotesBlockProps> = ({ group, onNavigat
             >
                 <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-14 shrink-0 shadow-sm rounded overflow-hidden relative border border-border/50 bg-muted flex items-center justify-center">
-                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                        {book ? <BookCover book={book as any} onDelete={() => { }} onOffload={() => { }} onRestore={() => { }} showActions={false} /> : <BookOpen className="w-6 h-6 text-muted-foreground/30" />}
+                        {book ? <BookCover book={book} onDelete={() => { }} onOffload={() => { }} onRestore={() => { }} showActions={false} /> : <BookOpen className="w-6 h-6 text-muted-foreground/30" />}
                         <div className="absolute inset-0 bg-black/10 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                             <BookOpen className="text-white w-4 h-4" />
                         </div>

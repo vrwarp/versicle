@@ -21,7 +21,7 @@
  * src/domains/chinese/engine/.
  */
 import { useState, useEffect, useRef } from 'react';
-import type { Book, Rendition } from 'epubjs';
+import type { Book, Contents, Rendition } from 'epubjs';
 import { bookContent } from '@data/repos/bookContent';
 import type { BookMetadata, NavigationItem } from '~types/book';
 import { EpubJsEngine, createEpubJsBook } from '@domains/reader/engine/EpubJsEngine';
@@ -160,8 +160,7 @@ export function useEpubReader(
   useEffect(() => {
     if (!bookId || !viewerRef.current) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const loadBookGenerator = function* (currentBookId: string): Generator<Promise<any> | any, void, any> {
+    const loadBookGenerator = function* (currentBookId: string): Generator<unknown, void, unknown> {
       setIsLoading(true);
       setError(null);
       setIsReady(false);
@@ -243,7 +242,9 @@ export function useEpubReader(
         newRendition.spread('none');
 
         // Load navigation
-        const nav = yield newBook.loaded.navigation;
+        // The runner resumes the generator with the awaited yield value; the
+        // navigation shape is asserted where it is received (was `any`).
+        const nav = (yield newBook.loaded.navigation) as { toc: NavigationItem[] };
         const tocItems = nav.toc;
         setToc(tocItems);
         if (optionsRef.current.onTocLoaded) {
@@ -325,16 +326,14 @@ export function useEpubReader(
         // Per-content-load pipeline (extras → selection, legacy order; the
         // Chinese pass rides the ENGINE's contentRendered seam now and is
         // registered by the app controller — Phase 6 §7, PR-10).
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const injectExtras = (contents: any) => {
+        const injectExtras = (contents: Contents) => {
           injectContentExtras(contents, {
             viewMode: optionsRef.current.viewMode,
             reapplyForcedStyles: () => applyStylesRef.current(),
           });
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const attachListeners = (contents: any) => {
+        const attachListeners = (contents: Contents) => {
           attachSelectionBridge(contents, (cfi, range, c) => {
             if (optionsRef.current.onSelection) {
               optionsRef.current.onSelection(cfi, range, c);
@@ -345,9 +344,10 @@ export function useEpubReader(
         newRendition.hooks.content.register(injectExtras);
         newRendition.hooks.content.register(attachListeners);
 
-        // Manually trigger extras for initially loaded content
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ((newRendition as any).getContents() as any[]).forEach((contents: any) => {
+        // Manually trigger extras for initially loaded content. epubjs types
+        // getContents() as Contents (singular) but it returns an array at
+        // runtime — asserted to the runtime shape, not `any`.
+        (newRendition.getContents() as unknown as Contents[]).forEach((contents) => {
           injectExtras(contents);
         });
 

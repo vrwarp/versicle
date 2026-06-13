@@ -228,8 +228,7 @@ export abstract class BaseCloudProvider implements ITTSProvider {
    * Routes through `NetworkGateway.egress()` (Phase 7 §I): subclasses name the
    * registry destination their synthesis endpoint belongs to.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  protected async fetchAudio(destinationId: DestinationId, url: string, body: any, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<Blob> {
+  protected async fetchAudio(destinationId: DestinationId, url: string, body: unknown, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<Blob> {
     const response = await egress(destinationId, url, {
       method: 'POST',
       headers: {

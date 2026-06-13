@@ -199,8 +199,7 @@ export class AudioElementPlayer implements AudioSink {
    */
   private ensureAudioContext() {
     if (!this.audioContext) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
       if (Ctx) {
         this.audioContext = new Ctx();
         this.gainNode = this.audioContext.createGain();

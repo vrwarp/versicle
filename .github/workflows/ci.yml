@@ -43,6 +43,11 @@ jobs:
         # exits 0; the check fails only if a rule's violation count exceeds
         # the committed baseline (.dependency-cruiser-baseline.json).
         run: npm run depcruise:check
+      - name: Lint-debt ratchet (any / eslint-disable)
+        # P9 ratchet: production `as any` / `: any` / eslint-disable counts
+        # may only decrease; the irreducible rest is justified per entry in
+        # lint-debt-allowlist.json.
+        run: npm run lintdebt:check
       - name: License gate
         # Fails on production deps with licenses outside the GPL-3.0-compatible
         # allowlist and on incomplete third-party/inventory.json entries.

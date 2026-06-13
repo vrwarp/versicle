@@ -14,29 +14,29 @@ import { sanitizeMetadata } from '@lib/sanitizer';
  * Validates if an object conforms to the BookMetadata interface.
  * Logs warnings for missing required fields.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function validateBookMetadata(data: any): data is BookMetadata {
+function validateBookMetadata(data: unknown): data is BookMetadata {
   if (!data || typeof data !== 'object') {
     console.warn('DB Validation: Invalid record (not an object)', data);
     return false;
   }
 
+  const rec = data as Record<string, unknown>;
   const missingFields: string[] = [];
 
-  if (typeof data.id !== 'string' || data.id.trim() === '') {
+  if (typeof rec.id !== 'string' || rec.id.trim() === '') {
     missingFields.push('id');
   }
 
   // Ingestion sets default title/author, but we should strictly check they exist as strings
-  if (typeof data.title !== 'string') {
+  if (typeof rec.title !== 'string') {
     missingFields.push('title');
   }
 
-  if (typeof data.author !== 'string') {
+  if (typeof rec.author !== 'string') {
     missingFields.push('author');
   }
 
-  if (typeof data.addedAt !== 'number') {
+  if (typeof rec.addedAt !== 'number') {
     missingFields.push('addedAt');
   }
 
@@ -80,8 +80,7 @@ export interface SanitizationResult {
  * @param data - The raw data to sanitize.
  * @returns SanitizationResult or null.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getSanitizedBookMetadata(data: any): SanitizationResult | null {
+export function getSanitizedBookMetadata(data: unknown): SanitizationResult | null {
   if (!validateBookMetadata(data)) return null;
 
   const modifications: string[] = [];

@@ -43,8 +43,9 @@ class CheckpointsRepo {
       };
 
       const tx = db.transaction('checkpoints', 'readwrite');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const id = await tx.store.add(checkpoint as any);
+      // autoIncrement key: IDB assigns `id` at add-time, so the insert shape
+      // legitimately lacks it — asserted to the row type, not `any`.
+      const id = await tx.store.add(checkpoint as SyncCheckpointRow);
 
       // Supersede older protected checkpoints: only one migration can be in
       // flight at a time, so only the newest protected checkpoint stays pinned.

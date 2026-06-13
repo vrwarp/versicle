@@ -217,7 +217,7 @@ describe('flip wave 4: annotations (merge-defaults + scopedDiff)', () => {
   const creator = (set: (p: Partial<AnnState>) => void, get: () => AnnState): AnnState => ({
     annotations: {},
     remove: (id) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       const { [id]: _removed, ...remaining } = get().annotations;
       set({ annotations: remaining });
     },

@@ -239,8 +239,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
   playEarcon(type: 'bookmark_captured' | 'bookmark_failed'): void {
       // Fallback for CapacitorTTSProvider
       // Similar to WebSpeechProvider, ducks other audio if we have an AudioContext, but native TTS volume cannot be easily ducked this way
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) return;
       if (!this.audioContext) {
           this.audioContext = new AudioContextClass();

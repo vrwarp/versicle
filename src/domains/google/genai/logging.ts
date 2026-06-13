@@ -16,8 +16,7 @@ export interface GenAILogEntry {
   timestamp: number;
   type: 'request' | 'response' | 'error';
   method: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload: any;
+  payload: unknown;
   bookTitle?: string;
   sectionTitle?: string;
   correlationId?: string;

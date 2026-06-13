@@ -57,8 +57,7 @@ export async function snapCfiToSentence(
         // Lifecycle safety check for raw Books: ensure the instance is valid.
         // Prevents crash during reader destruction if called late. Injected
         // resolvers handle this themselves by resolving null.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (!source || (looksLikeBook(source) && !(source as any).spine)) {
+        if (!source || (looksLikeBook(source) && !(source as { spine?: unknown }).spine)) {
             console.warn('snapCfiToSentence: Book instance is destroyed or invalid. Returning raw CFI.');
             return cfi;
         }

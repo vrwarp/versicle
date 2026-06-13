@@ -66,8 +66,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
       }
       const data = await response.json();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      this.voices = (data.voices || []).map((v: any) => ({
+      this.voices = (data.voices || []).map((v: { name: string; ssmlGender: string; languageCodes: string[] }) => ({
           id: v.name, // Use name directly as ID (e.g., "en-US-Standard-A")
           name: `${v.name} (${v.ssmlGender})`,
           lang: v.languageCodes[0],
@@ -124,8 +123,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
     // Parse timepoints if any
     let alignment: Timepoint[] | undefined = undefined;
     if (data.timepoints) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        alignment = data.timepoints.map((tp: any) => ({
+        alignment = data.timepoints.map((tp: { timeSeconds: number }) => ({
             timeSeconds: tp.timeSeconds,
             charIndex: 0,
             type: 'mark'

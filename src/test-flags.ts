@@ -41,6 +41,8 @@ declare global {
     __VERSICLE_FIRESTORE_DEBOUNCE_MS__?: number;
     /** Park the staged workspace swap at this point (kill-mid-switch E2E). */
     __VERSICLE_SWAP_PAUSE__?: SwapPausePoint;
+    /** E2E sanitization kill-switch (DEV/VITE_E2E builds only — see epubSecurity). */
+    __VERSICLE_SANITIZATION_DISABLED__?: boolean;
   }
 }
 
@@ -67,4 +69,9 @@ export function getFirestoreDebounceOverrideMs(): number | undefined {
 /** The armed swap pause point, or undefined (production: always undefined). */
 export function getSwapPausePoint(): SwapPausePoint | undefined {
   return typeof window !== 'undefined' ? window.__VERSICLE_SWAP_PAUSE__ : undefined;
+}
+
+/** True when the E2E suite disabled sanitize-at-serialize (perf kill-switch). */
+export function isSanitizationDisabled(): boolean {
+  return typeof window !== 'undefined' && window.__VERSICLE_SANITIZATION_DISABLED__ === true;
 }

@@ -92,10 +92,9 @@ export const SmartLinkDialog: React.FC<SmartLinkDialogProps> = ({ open, onOpenCh
 
                 setMappings(validMappings);
                 setSelectedMappings(new Set(validMappings.map(m => m.readingListFilename)));
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            } catch (err: any) {
+            } catch (err) {
                 console.error("Failed to generate mappings:", err);
-                setError(err.message || "An error occurred while matching books.");
+                setError(err instanceof Error && err.message ? err.message : "An error occurred while matching books.");
             } finally {
                 setIsLoading(false);
             }

@@ -48,7 +48,7 @@ describe('TaskSequencer', () => {
 
         try {
             await p1;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+         
         } catch (_e) {
             // caller can catch the error
         }

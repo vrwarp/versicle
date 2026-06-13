@@ -54,12 +54,12 @@ export function useImportJumpPrompt(opts: {
     // If we have metadata, no saved CFI (never opened), but have progress
     // (from import), and haven't prompted yet. And current position is
     // effectively start.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const meta = metadataRef.current as any;
-    if (meta && !meta.currentCfi && meta.progress > 0 && !hasPromptedForImport.current && bookId) {
+    const meta = metadataRef.current as { currentCfi?: string; progress?: number } | null | undefined;
+    const importedProgress = meta?.progress ?? 0;
+    if (meta && !meta.currentCfi && importedProgress > 0 && !hasPromptedForImport.current && bookId) {
       // We only trigger if we are at the start (percentage ~0)
       if (percentage < 0.01) {
-        setImportJumpTarget(meta.progress);
+        setImportJumpTarget(importedProgress);
         setShowImportJumpDialog(true);
         hasPromptedForImport.current = true;
         // SKIP SAVING PROGRESS this time to avoid overwriting the imported progress with 0

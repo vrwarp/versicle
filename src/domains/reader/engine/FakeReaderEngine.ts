@@ -251,7 +251,6 @@ export class FakeReaderEngine implements ReaderEngine {
 
   // --- selection ------------------------------------------------------------
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   selectRange(_cfiRange: string): void {
     /* no live selection in the fake */
   }

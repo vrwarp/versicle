@@ -83,8 +83,7 @@ export const useBookStore = create<BookState>()(
 
             removeBook: (id) =>
                 set((state) => {
-                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                    const { [id]: removed, ...remain } = state.books;
+                    const { [id]: _removed, ...remain } = state.books;
                     return { books: remain };
                 }),
 

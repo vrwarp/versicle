@@ -84,7 +84,6 @@ export class FakePlaybackBackend implements PlaybackBackend {
         this.providerIds.push(providerId);
         this.currentProviderId = providerId;
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     setProvider(_provider: ITTSProvider): void {
         // no-op for tests
     }
@@ -111,8 +110,7 @@ export class FakePlaybackBackend implements PlaybackBackend {
     fireEnd() {
         this.events.onEnd();
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    fireError(error: any) {
+    fireError(error: unknown) {
         this.events.onError(error);
     }
     fireTimeUpdate(currentTime: number) {

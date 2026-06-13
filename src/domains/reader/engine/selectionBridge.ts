@@ -27,11 +27,10 @@ export function attachSelectionBridge(contents: Contents, onSelection: Selection
   const doc = contents.document;
   if (!doc) return;
 
-  // Prevent duplicate listeners
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((contents as any)._listenersAttached) return;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (contents as any)._listenersAttached = true;
+  // Prevent duplicate listeners (typed expando on the epubjs Contents)
+  const flagged = contents as Contents & { _listenersAttached?: boolean };
+  if (flagged._listenersAttached) return;
+  flagged._listenersAttached = true;
 
   // Prevent default context menu (especially for Android)
   doc.addEventListener('contextmenu', (e: Event) => {

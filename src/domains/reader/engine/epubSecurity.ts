@@ -20,6 +20,7 @@
  * `false`, preserving its existing no-bypass behavior.
  */
 import { sanitizeContent } from '@lib/sanitizer';
+import { isSanitizationDisabled } from '../../../test-flags';
 
 /** Structural slice of an epub.js Book that carries the serialize hook. */
 export interface EpubJsBookLike {
@@ -72,12 +73,7 @@ export function registerSanitizeHook(
   serialize.register((html: string) => {
     // E2E performance kill-switch — DEV/VITE_E2E builds only, opted-in
     // paths only. Unreachable in production by construction.
-    if (
-      bypassReachable &&
-      typeof window !== 'undefined' &&
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (window as any).__VERSICLE_SANITIZATION_DISABLED__
-    ) {
+    if (bypassReachable && isSanitizationDisabled()) {
       return html;
     }
     return sanitizeContent(html);

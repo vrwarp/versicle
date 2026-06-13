@@ -32,8 +32,7 @@ export interface TTSProviderEvents {
      * instead (single failure path, 5a-PR2) — they never arrive here.
      * @param error The error object or message.
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    onError: (error: any) => void;
+    onError: (error: unknown) => void;
     /**
      * Triggered periodically during playback with the current timestamp.
      * @param currentTime The current playback position in seconds.

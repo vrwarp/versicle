@@ -137,7 +137,6 @@ export const useDeviceStore = create<DeviceState>()(
 
             deleteDevice: (deviceId) =>
                 set((state) => {
-                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     const { [deviceId]: _removed, ...rest } = state.devices;
                     return { devices: rest };
                 }),
