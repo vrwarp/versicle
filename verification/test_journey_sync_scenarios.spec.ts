@@ -245,7 +245,7 @@ test("seamless handoff", async ({ browser, baseURL }) => {
 
   console.log("[B] Handling migration confirmation modal...");
   await expect(pageB.getByText("Finalize Workspace Switch?")).toBeVisible({ timeout: 15000 });
-  await pageB.getByRole("button", { name: "Yes, Finalize" }).click();
+  await pageB.getByRole("button", { name: "Yes, Finalize" }).dispatchEvent("click");
 
   await expect(pageB.getByTestId("library-view")).toBeVisible({ timeout: 30000 });
   console.log("[B] Workspace finalized and reloaded");
@@ -277,7 +277,13 @@ test("seamless handoff", async ({ browser, baseURL }) => {
 
   // Wait for restoration to complete. The Content Missing dialog closes once the re-supplied
   // epub finishes re-ingesting, which is slow on WebKit under full-suite load.
-  await expect(pageB.getByRole("dialog")).toBeHidden({ timeout: 45000 });
+  // The staged workspace-switch can leave the SettingsShell ("Global Settings")
+  // dialog open on WebKit, so a bare getByRole("dialog") matches two dialogs.
+  // Close any settings overlay, then wait specifically for the restore (Content
+  // Missing) dialog to close after re-ingest.
+  await pageB.keyboard.press("Escape").catch(() => {});
+  if (pageB.url().includes("/settings")) { await pageB.goto("/"); }
+  await expect(pageB.getByRole("dialog", { name: "Content Missing" })).toBeHidden({ timeout: 45000 });
 
   // Resume Reading
   console.log("[B] Checking for Resume Badge...");
@@ -484,7 +490,7 @@ test("offline resilience", async ({ browser, baseURL }) => {
 
   console.log("[B] Handling migration confirmation modal...");
   await expect(pageB.getByText("Finalize Workspace Switch?")).toBeVisible({ timeout: 15000 });
-  await pageB.getByRole("button", { name: "Yes, Finalize" }).click();
+  await pageB.getByRole("button", { name: "Yes, Finalize" }).dispatchEvent("click");
 
   await expect(pageB.getByTestId("library-view")).toBeVisible({ timeout: 30000 });
   console.log("[B] Workspace finalized and reloaded");

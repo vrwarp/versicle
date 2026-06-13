@@ -64,7 +64,9 @@ if (typeof window !== 'undefined') {
     const events: Array<{ status: string; index: number }> = [];
     let lastStatus: string | null = null;
     const waitFor = async (predicate: () => boolean, label: string) => {
-      const deadline = Date.now() + 10000;
+      // 30s: WebKit's worker/Comlink round-trip is markedly slower than Chromium,
+      // so the play-cycle snapshot events take longer to cross the boundary.
+      const deadline = Date.now() + 30000;
       while (!predicate()) {
         if (Date.now() > deadline) throw new Error(`timed out waiting for ${label} (saw: ${JSON.stringify(events)})`);
         await new Promise((r) => setTimeout(r, 50));
@@ -82,7 +84,14 @@ if (typeof window !== 'undefined') {
         ],
         0,
       );
-      const queue = await client.engine.getQueue();
+      // Poll getQueue: setQueue's command ack can resolve before the worker has
+      // applied the queue to the state getQueue reads (the round-trip is slower on
+      // WebKit), so a single read right after setQueue can race to 0.
+      let queue = await client.engine.getQueue();
+      for (let i = 0; i < 40 && queue.length !== 2; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+        queue = await client.engine.getQueue();
+      }
 
       // Drive a full play cycle. Provider start/end events are injected via the same
       // dispatch path the real main-thread backend uses.

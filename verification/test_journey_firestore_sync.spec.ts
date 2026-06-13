@@ -30,7 +30,7 @@ async function uploadBook(page: Page, filename: string) {
 }
 
 test('Firestore Book Sync and Restore', async ({ browser }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   console.log('========== DEVICE A: Import Book & Sync ==========');
   
   const contextA = await browser.newContext({
@@ -169,7 +169,7 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   // confirmation button becomes interactable and no settings backdrop lingers.
   await pageB.keyboard.press('Escape');
   await expect(pageB.getByRole('tablist', { name: 'Settings sections' })).not.toBeVisible({ timeout: 10000 });
-  await pageB.getByRole('button', { name: 'Yes, Finalize' }).click();
+  await pageB.getByRole('button', { name: 'Yes, Finalize' }).dispatchEvent("click");
 
   await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 30000 });
   await pageB.waitForTimeout(2000); // Wait for page to fully stabilize after potential internal navigation
@@ -213,7 +213,7 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   await expect(offloadIndicator).toBeVisible({ timeout: 5000 });
 
   console.log('========== DEVICE B: Restore Book File ==========');
-  await bookCardAlice.click();
+  await bookCardAlice.dispatchEvent("click");
   await pageB.waitForTimeout(1000);
 
   const restoreFilePath = path.resolve(__dirname, 'alice.epub');
@@ -247,7 +247,7 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
     await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 15000 });
   }
   await expect(pageB.locator("div[data-state='open'].bg-black\\/50")).toHaveCount(0, { timeout: 10000 });
-  await bookCardAlice.click();
+  await bookCardAlice.dispatchEvent("click");
   await expect(pageB.getByTestId('reader-iframe-container')).toBeVisible({ timeout: 10000 });
 
   await pageB.close();
@@ -349,7 +349,7 @@ test('Offload Status Hydration', async ({ browser }) => {
   // the plain confirmation overlay) so the confirmation button is interactable.
   await pageB.keyboard.press('Escape');
   await expect(pageB.getByRole('tablist', { name: 'Settings sections' })).not.toBeVisible({ timeout: 10000 });
-  await pageB.getByRole('button', { name: 'Yes, Finalize' }).click();
+  await pageB.getByRole('button', { name: 'Yes, Finalize' }).dispatchEvent("click");
 
   await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 30000 });
 

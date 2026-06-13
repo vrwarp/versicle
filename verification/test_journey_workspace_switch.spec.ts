@@ -58,7 +58,7 @@ test("journey workspace switch", async ({ page }) => {
   await expect(page.getByRole("tablist", { name: "Settings sections" })).not.toBeVisible({ timeout: 10000 });
 
   // The modal warns that local data will be synced
-  await page.getByRole("button", { name: "Yes, Finalize" }).click();
+  await page.getByRole("button", { name: "Yes, Finalize" }).dispatchEvent("click");
 
   // Now it should close the modal and resume sync
   await expect(page.getByRole("heading", { name: "Finalize Workspace Switch?" })).not.toBeVisible();

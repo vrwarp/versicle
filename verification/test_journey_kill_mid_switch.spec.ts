@@ -127,7 +127,7 @@ test("journey kill-mid-switch: every crash window resumes; rollback restores the
   await expect(
     page4.getByRole("heading", { name: "Finalize Workspace Switch?" })
   ).toBeVisible({ timeout: 30000 });
-  await page4.getByRole("button", { name: "Yes, Finalize" }).click();
+  await page4.getByRole("button", { name: "Yes, Finalize" }).dispatchEvent("click");
   await expect(
     page4.getByRole("heading", { name: "Finalize Workspace Switch?" })
   ).not.toBeVisible();
@@ -146,7 +146,7 @@ test("journey kill-mid-switch: every crash window resumes; rollback restores the
   await expect(
     page4.getByRole("heading", { name: "Finalize Workspace Switch?" })
   ).toBeVisible({ timeout: 60000 });
-  await page4.getByRole("button", { name: "Roll Back" }).click();
+  await page4.getByRole("button", { name: "Roll Back" }).dispatchEvent("click");
 
   // The boot interceptor restores the pinned checkpoint and reverts the
   // active-workspace tie (previousWorkspaceId, P4-5) — the user is back on

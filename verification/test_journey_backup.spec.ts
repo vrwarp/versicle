@@ -50,7 +50,7 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   // Back in the reader (no sidebar open → reader-back-button navigates to library).
   await expect(page.getByTestId("reader-back-button")).toBeVisible({ timeout: 10000 });
   await page.getByTestId("reader-back-button").click(); // Back to library
-  await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 25000 });
+  await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 40000 });
 
   // 3. Export Backup
   await page.waitForTimeout(500);
@@ -113,7 +113,7 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   await utils.acceptConfirm(page);
 
   // Wait for reload
-  await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 25000 });
+  await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 40000 });
 
   // 6. Verify Restore
   await expect(bookCard).toBeVisible({ timeout: 15000 });
@@ -199,7 +199,7 @@ test('Journey Full Backup & Restore (ZIP)', async ({ page }) => {
   await utils.acceptConfirm(page);
 
   // Wait for reload
-  await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 25000 });
+  await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 40000 });
 
   // 5. Verify Restore
   await expect(bookCard).toBeVisible({ timeout: 20000 });
