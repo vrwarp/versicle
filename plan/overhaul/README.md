@@ -12,6 +12,42 @@ shippable and user data is never half-migrated), land each rebuilt subsystem in 
 boundaries), and govern the whole program with the *contract-first* registry (every boundary
 versioned, runtime-validated, and pinned by a contract test suite).
 
+> ## **PROGRAM COMPLETE (2026-06-12)**
+>
+> All ten phases (0–9) are landed on this branch; Phase 9 closed with the deletion/ratchet audit (`prep/phase9-close.md`), CRDT v9 (the LAST format change), the registry-generated docs (`architecture.md`, `AGENTS.md`, the kernel/data/store/domains READMEs — drift-gated in `npm test` via `src/app/docs/docs.test.ts`; regenerate with `npm run docs:generate`), and the agent-loop verification gate (rule 10): the documented PR-gate sequence was executed end-to-end in a fresh shell from the regenerated docs alone.
+>
+> **The scoreboard** (analysis tree `3b0cfcff` → close):
+>
+> | Metric | Start | Close |
+> |---|---|---|
+> | Phases landed | — | 10/10 (P0–P9) |
+> | Program commits | — | 182 |
+> | Verified criticals retired | 0/26 | **26/26** |
+> | Vitest | 1,805 tests | **3,103 tests / 307 files** (reconciliation vs the ~110-file sketch: `prep/phase9-close.md` §4) |
+> | dependency-cruiser violations | 207 | **35** (`lib-not-to-store` 19 + `worker-no-state-typegraph` 16; every other rule at **error/0**) |
+> | Import cycles (full graph / runtime) | 117 / 33 | **0 / 0** (both rules at error) |
+> | Production `as any`/`: any` | 138 | **20** (justified per file in `lint-debt-allowlist.json`) |
+> | eslint-disable directives | 245 | **25** (same allowlist) |
+> | Coverage (lines/stmts/funcs/branches) | 65.30 / 64.04 / 58.65 / 56.08 | **75.49 / 74.29 / 69.89 / 65.50** (floor re-pinned) |
+> | Playwright journeys | — | 78 spec files (typechecked in `tsc -b`; Docker-lane execution is hand-off item 1) |
+>
+> **God files deleted** (size at decomposition): `types/db.ts` (the god type hub, P1) · `DBService` façade + all of `src/db/**` (P3) · `FirestoreSyncManager.ts` 1,046 (P4) · `AudioPlayerService.ts` 1,218 (P5b) · `AudioContentPipeline.ts` (P5c) · `bible-lexicon.ts` 2,899-line TS module → lazy JSON (P5c) · `ReaderView.tsx` 1,402 → `ReaderShell` 177 (P6) · `GlobalSettingsDialog.tsx` 742 (P8) · `CompassPill.tsx` 830 (P8) · `lib/search.ts` module singleton (P7/P6 close). Decomposed in place: `useEpubReader.ts` 1,006 → 479 over named modules.
+>
+> **Format-change chain, fully landed** (rule 4 — never more than one in flight): backup manifest v3 (P0) → CRDT v6 (P2) → IDB v25 (P3) → `tts-storage` v3 → `tts-settings` v1 (P5b) → CRDT v7 vocabulary canonicalization (P6) → CRDT v8 reading-list FK + IDB v26 search-text store (P7) → **CRDT v9 husk-clear + dual-write retirement (P9, the program's terminal bump)**. P8 shipped zero format changes (its slot was released — the font rename is read-time normalization).
+>
+> **The honest not-done list — the operator's hand-off checklist:**
+>
+> 1. **Docker E2E lane**: the 78-journey Playwright suite was never executed in the agent environments (no Docker). Run `./run_verification.sh` (desktop+mobile), then `--project=webkit`, then `--grep @a11y`; the P6 chinese/pinyin characterization specs, kill-mid-switch, six-overlay, and deep-link journeys are the priority list (P6 §Follow-ups).
+> 2. **On-device QA pass** (P5 exit checklist): Android + iOS Safari — lock screen, background keep-alive, cloud→local fallback, dragnet gesture, gapless Capacitor handoff.
+> 3. **BYO-Firebase manual checks**: deploy the rewritten `firestore.rules`/`storage.rules` to a real project and verify the version-gated rules-lockout prompt. (The emulator-gated suites themselves WERE re-verified live at this close — 37 passed + 1 todo incl. the purge cases and the y-cinder realtime provider; what remains manual is the real-project deploy + lockout-prompt journey.)
+> 4. **Release-engineering windows (rule 4 aftercare)**: verify CRDT v9's straggler path in the wild; decide `app_metadata['legacy-recovery-v25']` retention (size-capped); retire the legacy `tts-storage` localStorage key + the accepted `'local'` provider alias once fleet telemetry is silent; `sync_log` (dead store, schema frozen ▲16) and the SW legacy-`books` cover fallback ride the NEXT IDB bump (v27) — deliberately not folded into v9.
+> 5. **Known flakes**: the fork-contract "two-doc concurrent merges" scopedDiff-tripwire microtask flush (pre-existing, spun-off task owns root cause); `SettingsShell` replace-navigation can exceed findByText's default timeout under heavy parallel load (passes in isolation; observed once at this close).
+> 6. **Residual ratchets** (floors, only decrease): `lib-not-to-store` 19, `worker-no-state-typegraph` 16, lint-debt 20/25, jsx-a11y at error only for the P8 directories (rest warn). Rule 4 (domain-ui writes) stays process-enforced; rule 10 per-layer TS references is a documented exception (depcruise enforces direction).
+> 7. **Never built** (from §7's end-state sketch): visual goldens (~10); sanitization-ON remains per-spec opt-in in E2E. Open absorption candidate: `App_SW_Wait.test.tsx` → `App_Boot` fold-in.
+> 8. **Unowned stretch items**: VocabularyVault surface (CH-10), ChineseReadingSettings extraction, zh locale-aware sentence-snap flip (recorder passes 'en' until the Docker chinese journeys run), MaintenanceService all-store orphan coverage, `TableAdaptationProcessor`'s inline TOC lookup → `findTocItem`, audio-domain relocation to `domains/audio/` (pure motion, documented in `src/domains/README.md`).
+>
+> **Phase 9 status (2026-06-12): DONE** — knip sweep (CI gate, tree clean), lint-debt ratchet to the justified floor, boundary end-state audit (ten rules; cycles to 0/0, four flips to error), CRDT v9, the P1/P3/P5 shim deletions at their named deadlines, deferred-work sweep across every prep-doc §Follow-ups, test-landscape reconciliation + coverage re-pin, registry-generated docs + the agent-loop gate, and this close-out. Per-item records: `prep/phase9-close.md`.
+
 > **Phase 0 status (2026-06-10): DONE** — all eleven hotfix PRs and the trustworthy-harness work (single vitest config, typechecked tests, CI gate, depcruise + coverage ratchets, worker-chunk check, emulator suites, typed harness + test API, a11y baselines, license gate, `TESTING.md`/`AGENTS.md` rewrite, i18n ADR `docs/adr/0001-i18n-strategy.md`) are landed on this branch.
 >
 > **Phase 1 status (2026-06-10): DONE** — verified dead-code deletion (~2,350 LOC + assets; 4 of the proposal's items vetoed by the audit in `prep/phase1-deletions.md`), `types/db.ts` dissolved into six acyclic domain modules (shim deadline P9), C10 `AppError` taxonomy, `src/app/` composition layer (engine host-adapters, repositories), C11 bootstrap sequencer with entry-gate boot tests (`App.tsx` 375→90 lines; Yjs persistence out of module scope), path aliases codemodded repo-wide (1,069 imports; lint-enforced). Ratchets: lib→store 54→36, db→store 4→1 (named residual: `db/wipe.ts`, P3), types-imports-nothing 0, full-graph cycles 117→66. Runtime cycles (33, honest measure) are deliberately untouched — pure motion preserves cycles; they fall with the P2/P4/P5 stranglers.

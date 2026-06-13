@@ -236,11 +236,13 @@ npx firebase-tools emulators:start --only firestore,storage,auth \
 npx vitest run src/lib/sync/security-rules.test.ts
 ```
 
-Last verified against a live emulator 2026-06-10 (the suites have grown
-since — the P4 purge cases and the y-cinder realtime provider landed; the
-suite self-skips without an emulator, so a local run requires the command
-above). Whenever `firestore.rules`/`storage.rules` change, this suite must
-run against the emulator before merge.
+Last verified against a live emulator 2026-06-12 (the program close): 2
+files, 37 passed + 1 todo — including the P4 purge cases and the y-cinder
+realtime provider. The emulator's gRPC stream can hiccup on a cold start
+(`RESOURCE_EXHAUSTED` on a Listen stream → "client is offline"); a retry
+is legitimate for that signature. Whenever
+`firestore.rules`/`storage.rules` change, this suite must run against the
+emulator before merge.
 
 ## E2E suite (Playwright in Docker)
 

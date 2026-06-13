@@ -1078,3 +1078,28 @@ decreases; vitest file count trends toward the P9 target (this phase nets: −5 
   warn→error flips P7 establishes (fetch ban, kernel-imports-nothing for `kernel/net`,
   domains-never-import-state for the three new domains) are P9's zero-exception audit
   surface.
+
+## Follow-ups (ledger reconciliation, appended 2026-06-12 at the program close)
+
+The Phase 7 close recorded its landing notes in the README status banner and
+left this document without the §Follow-ups section the banner cites — fixed
+here at the P9 docs item so the deferred-work ledger has no dangling
+references. Reconciliation of everything this document handed forward:
+
+- **CRDT v8 (renumbered reading-list FK linker)** — LANDED post-merge
+  (`{from: 7, to: 8}` in `src/app/migrations.ts`); v9 (husk-clear +
+  dual-write retirement) landed in P9 as the program's terminal bump.
+- **P8 provisions** (destination registry → strict CSP flip, generated CSP
+  copies, settings-registry import surface) — consumed by P8 as planned.
+- **P6 provisions** (SearchSession via ReaderShell, sanitizer
+  remote-blocking, navigate-by-CFI on the engine port) — consumed by P6 /
+  the post-P6 SearchPanel adoption (`lib/search.ts` deleted).
+- **P9 deletion-audit inputs** — verified at the P9 ratchet item: the
+  §Execution-order deleted-artifacts list is gone from the tree; the P7
+  warn→error flips (fetch ban, kernel-imports-nothing, domains-no-store)
+  audited at zero exceptions (phase9-close.md §3).
+- **Still open at program close** (carried into the master plan's hand-off
+  list): `SentenceExtractor` remains at `lib/ingestion/` (the
+  `domains/library/ingestion/` relocation was dropped as pure motion);
+  `TableAdaptationProcessor`'s inline TOC-title lookup was never folded
+  into the shared `findTocItem` path.

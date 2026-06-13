@@ -114,3 +114,82 @@ intermittently fails `vitest run` with an unhandled scopedDiff-tripwire error
 from a post-test microtask flush (recorded at the P8 close as pre-existing;
 file untouched since P2). It surfaced once during this item's gate runs and
 passed on re-run; the existing spun-off task owns the root cause.
+
+## 6. Registry-generated docs + the agent-loop gate (`p9-docs-and-close`)
+
+The rule-10 payoff. `src/app/docs/registryDocs.ts` renders `architecture.md`,
+`AGENTS.md`, and the kernel/data/domains READMEs from the LIVE registries
+(egress destinations, provider descriptors, settings panels, store tiers,
+boot phases, both migration registries, the committed ratchet baselines);
+`src/app/docs/docs.test.ts` is the drift gate inside the normal `npm test`
+run — authored module maps must equal the filesystem, every C1–C12 and
+boundary-rule file pointer must exist, generated files must byte-equal the
+rendering, and AGENTS.md must contain every TESTING.md gate command
+verbatim plus the Jules README preamble rule as a frozen constant.
+`npm run docs:generate` regenerates (the store README keeps its own
+REGEN_STORE_DOCS gate). The architecture stale banner is dead.
+
+**What lied (found while regenerating; all fixed at the source):**
+
+1. `architecture.md` — the entire document described the pre-overhaul
+   architecture (banner said so; replaced wholesale by the generated one).
+2. `AGENTS.md` — named `src/db/db.ts` (deleted in P3) as the schema home,
+   "currently 24" as the DB version (26), and an alias list missing
+   `@data/ @domains/ @kernel/`; its PR-gate list omitted the
+   lintdebt/knip/single-instance gates entirely.
+3. The five E2E spec sites it governed (`test_maintenance`,
+   `test_journey_reprocessing`) still opened `EpubLibraryDB` at hardcoded
+   version 24 — a latent `VersionError` against the v26 database; the
+   hand-update instruction had rotted at BOTH the v25 and v26 bumps. Fixed
+   by opening without an explicit version; the instruction class is
+   retired from the generated AGENTS.md.
+4. `TESTING.md` — claimed all depcruise rules were warn (eight are error
+   at 0), jsx-a11y warn wholesale (error for the P8 dirs), suite state
+   258 files/1,905 tests (307/3,103), the Phase-0 coverage numbers as the
+   floor (re-pinned ~10 pts higher), and that every E2E page runs
+   sanitization-off unconditionally (per-spec fixture since P6).
+5. `tsconfig.e2e.json` — the "keep the two in sync" alias map had drifted
+   from `tsconfig.app.json` (three aliases missing); now asserted equal by
+   the gate instead of trusted to a comment.
+6. `src/README.md` / `src/lib/README.md` — pre-P1 fossils (`src/db/`,
+   `lib/search.ts`, FlexSearch, `tts.ts`); rewritten.
+7. The master plan's P7 banner cited a `prep/phase7-library-google.md`
+   §Follow-ups section that never existed — a reconciliation section was
+   appended so the deferred-work ledger has no dangling references.
+
+**Agent-loop verification (rule 10):** in a fresh `env -i` shell (HOME +
+node PATH only), the eleven documented gate commands from the regenerated
+AGENTS.md were executed in order, exactly as written: `npm run lint`,
+`npx tsc -b`, `npm test`, `npm run build`, `npm run depcruise:check`,
+`npm run lintdebt:check`, `npm run knip`, `npm run check:worker-chunk`,
+`npm run check:single-instance`, `npm run licenses:check`,
+`npm run coverage` — **all eleven exit 0**; coverage
+75.60/74.42/70.15/65.59 ≥ the committed floor on every metric. No command
+required knowledge outside the documents.
+
+## 7. Final acceptance (program close, 2026-06-12)
+
+- `npm ci` from a deleted `node_modules` — clean; `check:single-instance`
+  and `licenses:check` green on the fresh tree.
+- FULL vitest from the clean install: 307 files (305 passed + 2
+  emulator-skipped), 3,103 tests (3,063 passed / 37 skipped / 3 todo).
+- Named suites individually: backup round-trip
+  (`src/lib/BackupService.roundtrip.test.ts`) green; boot entry gates
+  (`App_Boot`, `App_MigrationFailure`, `App_SW_Wait`, `App_Capacitor` — 21
+  tests) green; engine parity both transports (61 tests) green; migration
+  fixtures (`crdt-contract/` v1–v8 eras + quarantine, `data/migrations`
+  IDB v18/v24→v26, tts-storage blobs, reading-list linker — 103 tests)
+  green.
+- §5 flake update: the scoped-diff tripwire surfaced TWICE consecutively
+  on the first full runs after `npm ci` (cold vitest cache shifts worker
+  timing), then green; isolated runs are always green. Signal for the
+  owning spun-off task: the repro likes a cold cache.
+- Out-of-environment items are the master plan close-out banner's hand-off
+  list (Docker E2E lane, on-device QA, BYO-Firebase live checks,
+  release-window aftercare).
+- Emulator-gated suites re-verified LIVE at the close (firebase-tools
+  15.20.0, emulators:exec per the TESTING.md command): security-rules +
+  syncBackendContract.emulator — 2 files, 37 passed + 1 todo. First
+  attempt hit a cold-start emulator gRPC hiccup (RESOURCE_EXHAUSTED on a
+  Listen stream → one "client is offline" failure); clean on retry — the
+  signature is documented in TESTING.md.
