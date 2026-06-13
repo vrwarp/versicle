@@ -37,6 +37,10 @@
             debugEl.style.fontSize = '12px';
             debugEl.style.pointerEvents = 'none';
             debugEl.setAttribute('data-testid', 'tts-debug');
+            // Decorative test-harness readout (never shipped to users). Hide it
+            // from the a11y tree so the reader-surface axe scan does not count it
+            // as an unlandmarked 'region' node once TTS has been exercised.
+            debugEl.setAttribute('aria-hidden', 'true');
             document.body.appendChild(debugEl);
         }
         return debugEl;

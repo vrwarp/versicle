@@ -1,12 +1,15 @@
 import React from 'react';
-import type { BookMetadata } from '../../types/db';
+import type { BookMetadata } from '~types/book';
 import { BookOpen, Cloud, MoreVertical, CloudDownload } from 'lucide-react';
-import { useToastStore } from '../../store/useToastStore';
-import { cn } from '../../lib/utils';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useToastStore } from '@store/useToastStore';
+import { cn } from '@lib/utils';
+import { useReaderUIStore } from '@store/useReaderUIStore';
 import { Progress } from '../ui/Progress';
 import { BookActionMenu } from './BookActionMenu';
-import { unpackColorToRGB } from '../../lib/cover-palette';
+import { unpackColorToRGB } from '@lib/cover-palette';
+import { coverUrl } from '@data/covers';
+import { formatBytes } from '@kernel/locale/format';
+import { formatReadingTime } from './readingTime';
 
 function unpackColor(packed: number): string {
     const { r, g, b } = unpackColorToRGB(packed);
@@ -27,27 +30,6 @@ interface BookListItemProps {
     onRestore: (book: BookMetadata) => void;
 }
 
-const formatFileSize = (bytes?: number): string => {
-    if (bytes === undefined) return '';
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-};
-
-const formatDuration = (chars?: number): string => {
-    if (!chars) return '';
-    const minutes = Math.ceil(chars / (180 * 5));
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-
-    if (hours > 0) {
-        return `${hours}h ${remainingMinutes}m`;
-    }
-    return `${minutes}m`;
-}
-
 /**
  * Displays a book item in a list view format.
  * Includes thumbnail, title, author, progress, and action menu.
@@ -64,7 +46,7 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
     // This prevents ~1000 selectors running on every store update.
     const progressPercent = book.progress ? Math.round(book.progress * 100) : 0;
 
-    const displayUrl = book.coverUrl || (book.coverBlob ? `/__versicle__/covers/${book.id}` : null);
+    const displayUrl = book.coverUrl || (book.coverBlob ? coverUrl(book.id) : null);
 
     const gradientStyle = React.useMemo(() => {
         if (!book.coverPalette || book.coverPalette.length !== 5) return undefined;
@@ -101,8 +83,8 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
         onOpen(book);
     };
 
-    const durationString = book.totalChars ? formatDuration(book.totalChars) : null;
-    const sizeString = formatFileSize(book.fileSize);
+    const durationString = formatReadingTime(book.totalChars);
+    const sizeString = book.fileSize === undefined ? '' : formatBytes(book.fileSize);
 
     return (
         <div className="px-4 py-2" data-testid={`book-list-item-${book.id}`}>
@@ -165,11 +147,12 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
 
                 {/* Info */}
                 <div className="flex-1 min-w-0 flex flex-col justify-center">
-                    <h3 className="text-sm font-semibold truncate text-foreground pr-2" title={book.title}>
+                    {/* lang: book-sourced text carries the CONTENT language (i18n ADR §3) */}
+                    <h3 lang={book.language} className="text-sm font-semibold truncate text-foreground pr-2" title={book.title}>
                         {book.title}
                     </h3>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 truncate">
-                        <span className="truncate max-w-[150px]">{book.author}</span>
+                        <span lang={book.language} className="truncate max-w-[150px]">{book.author}</span>
 
                         {progressPercent > 0 && (
                             <>

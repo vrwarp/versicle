@@ -11,6 +11,7 @@ This directory contains reusable UI components, serving as the design system for
 *   **`Input.tsx`**: A styled HTML input element for text entry.
 *   **`Label.tsx`**: A semantic label component for form controls.
 *   **`Modal.tsx`**: A higher-level wrapper around `Dialog`, providing a standardized layout with Title, Description, Content, and Footer.
+*   **`PillShell.tsx`**: The dumb pill chrome primitive (geometry, blur, border, progress underlay) left behind by the Phase 8 CompassPill dissolution — feature pills in `reader/pills/`, `sync/`, and `chinese/` compose it. No store imports (the `ui-imports-kernel-only` boundary holds this directory to kernel-level deps).
 *   **`Popover.tsx`**: A floating content popover triggered by a button or element, used for menus and settings.
 *   **`Select.tsx`**: A dropdown selection component for choosing one value from a list.
 *   **`Sheet.tsx`**: A side drawer component that slides in from the edge of the screen, used for the Audio Panel and TOC.

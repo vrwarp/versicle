@@ -1,13 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
-import { cn } from '../../lib/utils';
-import { computeDiff, type DiffNode } from '../../lib/json-diff';
+import { cn } from '@lib/utils';
+import { computeDiff, type DiffNode } from '@lib/json-diff';
 
 interface JsonDiffViewerProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  oldValue: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  newValue: any;
+  oldValue: unknown;
+  newValue: unknown;
   className?: string;
 }
 

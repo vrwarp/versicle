@@ -1,10 +1,10 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ContentAnalysisLegend } from '../ContentAnalysisLegend';
-import { useGenAIStore } from '../../../store/useGenAIStore';
-import { useReaderUIStore } from '../../../store/useReaderUIStore';
-import { dbService } from '../../../db/DBService';
-import React from 'react';
+import { EpubJsEngine } from '@domains/reader/engine/EpubJsEngine';
+import { useGenAIStore } from '@store/useGenAIStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { bookContent } from '@data/repos/bookContent';
 
 // Mock Lucide icons
 vi.mock('lucide-react', () => ({
@@ -18,18 +18,18 @@ vi.mock('lucide-react', () => ({
 }));
 
 // Mock Store
-vi.mock('../../../store/useGenAIStore', () => ({
+vi.mock('@store/useGenAIStore', () => ({
   useGenAIStore: vi.fn(),
 }));
 
 // Mock Reader Store
-vi.mock('../../../store/useReaderUIStore', () => ({
+vi.mock('@store/useReaderUIStore', () => ({
   useReaderUIStore: vi.fn(),
 }));
 
-// Mock DBService
-vi.mock('../../../db/DBService', () => ({
-  dbService: {
+// Mock the bookContent repo (the DBService carve)
+vi.mock('@data/repos/bookContent', () => ({
+  bookContent: {
     getTableImages: vi.fn(),
   },
 }));
@@ -42,11 +42,24 @@ describe('ContentAnalysisLegend', () => {
     display: vi.fn(),
     getRange: vi.fn(),
     getContents: vi.fn(),
+    hooks: { content: { register: vi.fn() } },
     annotations: {
         add: vi.fn(),
         remove: vi.fn(),
     }
   };
+
+  // Engine port over the same rendition double: the suite keeps pinning the
+  // raw epub.js call shapes (display/getRange/annotations) THROUGH the port.
+  const makeEngine = () =>
+    new EpubJsEngine({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      book: {} as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rendition: mockRendition as any,
+      container: document.createElement('div'),
+      locationsReady: Promise.resolve(),
+    });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -73,21 +86,21 @@ describe('ContentAnalysisLegend', () => {
         })
       );
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(<ContentAnalysisLegend rendition={mockRendition as any} />);
+     
+    render(<ContentAnalysisLegend engine={makeEngine()} />);
     expect(screen.queryByText('Debug Panel')).toBeNull();
   });
 
   it('renders correctly when debug mode is enabled', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(<ContentAnalysisLegend rendition={mockRendition as any} />);
+     
+    render(<ContentAnalysisLegend engine={makeEngine()} />);
     expect(screen.getByText('GenAI Debug Panel')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('epubcfi(...)')).toBeInTheDocument();
   });
 
   it('toggles expansion', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(<ContentAnalysisLegend rendition={mockRendition as any} />);
+     
+    render(<ContentAnalysisLegend engine={makeEngine()} />);
 
     // Initially expanded
     expect(screen.getByText('Current CFI')).toBeInTheDocument();
@@ -104,12 +117,12 @@ describe('ContentAnalysisLegend', () => {
   });
 
   it('updates CFI input on selection', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(<ContentAnalysisLegend rendition={mockRendition as any} />);
+     
+    render(<ContentAnalysisLegend engine={makeEngine()} />);
 
     // Simulate selection event
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const onSelected = mockRendition.on.mock.calls.find((call: any[]) => call[0] === 'selected')[1];
+    const onSelected = mockRendition.on.mock.calls.find((call: any[]) => call[0] === 'selected')![1];
 
     mockRendition.getRange.mockReturnValue({ toString: () => 'Selected Text' });
 
@@ -123,8 +136,8 @@ describe('ContentAnalysisLegend', () => {
   });
 
   it('updates rendition on manual CFI input', async () => {
-     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-     render(<ContentAnalysisLegend rendition={mockRendition as any} />);
+      
+     render(<ContentAnalysisLegend engine={makeEngine()} />);
      const input = screen.getByPlaceholderText('epubcfi(...)');
 
      mockRendition.display.mockResolvedValue(undefined);
@@ -148,15 +161,15 @@ describe('ContentAnalysisLegend', () => {
         cfi: 'epubcfi(/6/10)',
         imageBlob: new Blob([''], { type: 'image/webp' })
     };
-    (dbService.getTableImages as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([mockImage]);
+    (bookContent.getTableImages as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([mockImage]);
 
     // Mock URL.createObjectURL
     const mockCreateObjectURL = vi.fn().mockReturnValue('blob:http://localhost/uuid');
     global.URL.createObjectURL = mockCreateObjectURL;
 
     // Render
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render(<ContentAnalysisLegend rendition={mockRendition as any} />);
+     
+    render(<ContentAnalysisLegend engine={makeEngine()} />);
 
     // Wait for images to load (wait for "Table Images" text)
     // The text is "Table Images (1)"

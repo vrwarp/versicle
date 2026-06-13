@@ -1,31 +1,64 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mockDriveService } from '../lib/drive/MockDriveService';
-import { DriveScannerService } from '../lib/drive/DriveScannerService';
-import { useDriveStore } from '../store/useDriveStore';
-import { useBookStore } from '../store/useBookStore';
+import { mockDriveService } from '@test/harness/MockDriveService';
+import {
+    DriveLibrarySync,
+    getDriveLibrarySync,
+    setDriveLibrarySync,
+    resetDriveHoldersForTesting,
+} from '@domains/google';
+import { useDriveStore } from '@store/useDriveStore';
+import { useBookStore } from '@store/useBookStore';
 
-// Mock the real DriveService with our functional mock
-vi.mock('../lib/drive/DriveService', () => ({
-    DriveService: {
-        listFolders: (parentId?: string) => mockDriveService.listFolders(parentId),
-        getFolderMetadata: (folderId: string) => mockDriveService.getFolderMetadata(folderId),
-        listFiles: (parentId: string, mimeType?: string) => mockDriveService.listFiles(parentId, mimeType),
-        listFilesRecursive: (parentId: string, mimeType?: string) => mockDriveService.listFilesRecursive(parentId, mimeType),
-        downloadFile: (fileId: string) => mockDriveService.downloadFile(fileId),
+// Phase 7: Drive imports flow through the library port the composition root
+// wires to the ImportOrchestrator (app/google/wireGoogle.ts). The port is
+// captured here so the journeys assert the CONTRACT the scanner drives.
+const mockLibraryAddBook = vi.fn<(file: File, options?: { overwrite?: boolean }) => Promise<unknown>>()
+    .mockResolvedValue(undefined);
+
+// Phase 7/P9: the journeys drive the composed DriveLibrarySync (the
+// DriveScannerService facade is deleted) — wire one here over the
+// functional MockDriveService (the harness double is DriveClient-shaped)
+// + the REAL stores.
+function wireMockDriveSync(): void {
+    resetDriveHoldersForTesting();
+    setDriveLibrarySync(new DriveLibrarySync({
+        client: {
+            listFilesRecursive: (parentId, mimeType) => mockDriveService.listFilesRecursive(parentId, mimeType),
+            getFolderMetadata: (folderId) => mockDriveService.getFolderMetadata(folderId),
+            downloadFile: (fileId) => mockDriveService.downloadFile(fileId),
+        },
+        driveIndex: {
+            getLinkedFolderId: () => useDriveStore.getState().linkedFolderId,
+            getLastScanTime: () => useDriveStore.getState().lastScanTime,
+            getIndex: () => useDriveStore.getState().index,
+            setScanning: (isScanning) => useDriveStore.getState().setScanning(isScanning),
+            setScannedFiles: (files) => useDriveStore.getState().setScannedFiles(files),
+        },
+        library: {
+            addBook: (file, options) => mockLibraryAddBook(file, options),
+            getLibraryFilenames: () =>
+                new Set(Object.values(useBookStore.getState().books).map((b) => b.sourceFilename)),
+        },
+        hasConnectedBefore: () => true,
+    }));
+}
+
+// Mock the DB layer to prevent actual IndexedDB calls during import
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
+        getBookStructure: vi.fn().mockResolvedValue({}),
+        getOffloadedStatus: vi.fn().mockResolvedValue(new Map()),
+        getAvailableResourceIds: vi.fn().mockResolvedValue(new Set()),
     }
 }));
 
-// Mock DBService to prevent actual IndexedDB calls during import
-vi.mock('../db/DBService', () => ({
-    dbService: {
-        addBook: vi.fn().mockResolvedValue({ bookId: 'mock-id', title: 'Mocked Title', author: 'Mocked Author', schemaVersion: '1.0' }),
-        getBookStructure: vi.fn().mockResolvedValue({}),
-        getContentAnalysis: vi.fn().mockResolvedValue({}),
+vi.mock('@app/repositories/BookRepository', () => ({
+    bookRepository: {
         getBookMetadata: vi.fn().mockResolvedValue({}),
-        getBookIdByFilename: vi.fn().mockResolvedValue(undefined),
-        importBookWithId: vi.fn().mockResolvedValue({ bookId: 'mock-id', title: 'Mocked Title', author: 'Mocked Author', schemaVersion: '1.0' }),
-        getOffloadedStatus: vi.fn().mockResolvedValue(new Map()),
+        getBookMetadataBulk: vi.fn().mockResolvedValue([]),
+        getBookIdByFilename: vi.fn().mockReturnValue(undefined),
+        deleteBook: vi.fn().mockResolvedValue(undefined),
     }
 }));
 
@@ -45,6 +78,7 @@ describe('Google Drive Sync & Import E2E', () => {
         vi.spyOn(console, 'error').mockImplementation(() => {});
         vi.clearAllMocks();
         mockDriveService.reset();
+        wireMockDriveSync();
 
         // Reset stores
         useDriveStore.setState({
@@ -85,8 +119,8 @@ describe('Google Drive Sync & Import E2E', () => {
 
         useDriveStore.getState().setLinkedFolder(folderId, 'Sync Folder');
 
-        // Manual trigger via DriveScannerService
-        await DriveScannerService.scanAndIndex();
+        // Manual trigger via the wired DriveLibrarySync
+        await getDriveLibrarySync().scanAndIndex();
 
         const index = useDriveStore.getState().index;
         expect(index).toHaveLength(1);
@@ -95,7 +129,7 @@ describe('Google Drive Sync & Import E2E', () => {
 
         // Add another file and sync again
         mockDriveService.addFile('file-2', 'Book B.epub', 'application/epub+zip', folderId, 'content');
-        await DriveScannerService.scanAndIndex();
+        await getDriveLibrarySync().scanAndIndex();
 
         const updatedIndex = useDriveStore.getState().index;
         expect(updatedIndex).toHaveLength(2);
@@ -111,21 +145,19 @@ describe('Google Drive Sync & Import E2E', () => {
 
         // Setup Link & Scan
         useDriveStore.getState().setLinkedFolder(folderId, 'Import Folder');
-        await DriveScannerService.scanAndIndex();
+        await getDriveLibrarySync().scanAndIndex();
 
         // Verify it's in the index
         const indexFile = useDriveStore.getState().index.find(f => f.id === fileId);
         expect(indexFile).toBeDefined();
 
         // Perform Import
-        await DriveScannerService.importFile(fileId, 'New Adventure.epub');
+        await getDriveLibrarySync().importFile(fileId, 'New Adventure.epub', undefined, { interactive: true });
 
-        const { dbService } = await import('../db/DBService');
-        // Expect addBook to be called
-        expect(dbService.addBook).toHaveBeenCalledWith(
+        // Expect the library port (the orchestrator in production) to receive the file.
+        expect(mockLibraryAddBook).toHaveBeenCalledWith(
             expect.objectContaining({ name: 'New Adventure.epub' }),
-            expect.anything(),
-            expect.anything()
+            undefined
         );
     });
 
@@ -141,7 +173,7 @@ describe('Google Drive Sync & Import E2E', () => {
         mockDriveService.addFile(fileId, bookTitle, 'application/epub+zip', folderId, 'spooky content');
 
         useDriveStore.getState().setLinkedFolder(folderId, 'Ghost Folder');
-        await DriveScannerService.scanAndIndex();
+        await getDriveLibrarySync().scanAndIndex();
 
         // 2. Simulate Ghost Book scenario:
         // Populate useBookStore with the "Ghost Book"
@@ -167,17 +199,14 @@ describe('Google Drive Sync & Import E2E', () => {
         const match = useDriveStore.getState().findFile(bookTitle, bookTitle);
         expect(match).toBeDefined();
 
-        await DriveScannerService.importFile(match!.id, match!.name, { overwrite: true });
+        await getDriveLibrarySync().importFile(match!.id, match!.name, { overwrite: true }, { interactive: true });
 
-        const { dbService } = await import('../db/DBService');
-
-        // Since the book exists in store (matched by filename), and overwrite is true,
-        // useLibraryStore calls dbService.importBookWithId to preserve the ID
-        expect(dbService.importBookWithId).toHaveBeenCalledWith(
-            ghostBookId,
+        // Since the book exists in store (matched by filename), and overwrite is
+        // true, the scanner asks the library port to replace in place — the
+        // orchestrator's replace flow preserves the existing id (ghostBookId).
+        expect(mockLibraryAddBook).toHaveBeenCalledWith(
             expect.objectContaining({ name: bookTitle }),
-            expect.anything(),
-            expect.anything()
+            expect.objectContaining({ overwrite: true })
         );
     });
 
@@ -191,12 +220,12 @@ describe('Google Drive Sync & Import E2E', () => {
         mockDriveService.addFile(fileId, 'Corrupt.epub', 'application/epub+zip', folderId, 'content');
 
         useDriveStore.getState().setLinkedFolder(folderId, 'My Books');
-        await DriveScannerService.scanAndIndex();
+        await getDriveLibrarySync().scanAndIndex();
 
         // Sabotage the mock
         mockDriveService.deleteFileContent(fileId);
 
-        await expect(DriveScannerService.importFile(fileId, 'Corrupt.epub'))
+        await expect(getDriveLibrarySync().importFile(fileId, 'Corrupt.epub', undefined, { interactive: true }))
             .rejects.toThrow('File content not found');
     });
 });

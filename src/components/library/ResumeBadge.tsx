@@ -1,13 +1,14 @@
 import React, { useMemo } from 'react';
 
-import { useDeviceStore } from '../../store/useDeviceStore';
-import { getDeviceId } from '../../lib/device-id';
+import { useDeviceStore } from '@store/useDeviceStore';
+import { getDeviceId } from '@lib/device-id';
 import { DeviceIcon } from '../devices/DeviceIcon';
 import { Button } from '../ui/Button';
 
 interface ResumeBadgeProps {
   bookId: string;
-  allProgress?: Record<string, { percentage: number; currentCfi: string; lastRead: number }>;
+  /** Per-device progress map (UserProgress-shaped: currentCfi optional). */
+  allProgress?: Record<string, { percentage: number; currentCfi?: string; lastRead: number }>;
   onResumeClick: (deviceId: string, cfi: string) => void;
 }
 

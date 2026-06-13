@@ -17,7 +17,82 @@ const ttsPolyfillContent = fs.readFileSync(ttsPolyfillPath, 'utf8');
 const idbProbePath = path.resolve(__dirname, '_idb_probe.js');
 const idbProbeContent = fs.existsSync(idbProbePath) ? fs.readFileSync(idbProbePath, 'utf8') : '';
 
-export const test = base.extend<Record<string, never>, { _suppressLogs: void }>({
+// Record<never, never> (no keys) rather than Record<string, never>: the latter's
+// string index signature intersects the worker-fixture types and collapses
+// `_suppressLogs` to `never`, rejecting the fixture tuple below.
+/**
+ * The typed page-side test API installed by src/test-api.ts (DEV and
+ * VITE_E2E builds only). Mirrored here because tsconfig.e2e.json does not
+ * include src/.
+ */
+interface VersicleTestApi {
+  flushPersistence(): Promise<void>;
+  resetApp(): Promise<void>;
+  disconnectYjs(): Promise<void>;
+  closeDb(): Promise<void>;
+  /**
+   * GenAI mock seam (Phase 7): swaps the composition-root GenAIClient for a
+   * mock primed with the fixture (replaces the deleted
+   * `localStorage.mockGenAIResponse` production seam). Runtime-settable —
+   * call after boot/reload, before triggering the AI feature under test.
+   */
+  genai: {
+    setMock(fixture: { response?: unknown; error?: string; delayMs?: number }): void;
+    /** Toggles the GenAI content-analysis debug mode (P6 overlay characterization seam). */
+    setDebugMode(enabled: boolean): void;
+  };
+  /**
+   * Seeds a content-analysis result for one section (P6 entry gate) so the
+   * debug-highlight layer renders without a real GenAI round-trip.
+   */
+  seedContentAnalysis(
+    bookId: string,
+    sectionId: string,
+    payload: { referenceStartCfi: string },
+  ): void;
+  /**
+   * TTS playback commands (Phase 9): the typed replacement for the
+   * play/pause half of the deleted `window.useTTSStore` main.tsx shim.
+   * State reads go through `window.useTTSPlaybackStore` directly.
+   */
+  tts: {
+    play(): void;
+    pause(): void;
+  };
+  /**
+   * Typed reader predicates over the live ReaderEngine (Phase 6 §2b) — the
+   * named replacements for the exact `window.rendition` /
+   * `__reader_added_annotations_count` polls this suite used to do. All
+   * methods are safe before a reader mounts (null/0/false).
+   */
+  reader: {
+    isReady(): boolean;
+    currentCfi(): string | null;
+    currentHref(): string | null;
+    locationsTotal(): number;
+    hasManager(): boolean;
+    highlightCount(layer: 'annotation' | 'tts' | 'history' | 'debug' | 'search'): number;
+    next(): Promise<void>;
+    prev(): Promise<void>;
+    display(target: string): Promise<void>;
+  };
+}
+
+declare global {
+  interface Window {
+    __versicleTest?: VersicleTestApi;
+  }
+}
+
+export const test = base.extend<{ sanitizationDisabled: boolean }, { _suppressLogs: void }>({
+  // Sanitization kill-switch injected before app boot. Historically forced ON
+  // for the whole suite (the documented honesty gap: CFIs are computed
+  // post-sanitize in both pipelines, but the suite measured them with
+  // sanitization off). The P6 characterization specs opt OUT via
+  // `test.use({ sanitizationDisabled: false })` so overlay/pinyin geometry is
+  // pinned against the REAL sanitize path; existing specs keep the legacy
+  // default until the Phase 6 engine work retires the flag.
+  sanitizationDisabled: [true, { option: true }],
   // Worker-scoped: runs once per worker process (not per test).
   // Patches console.log/info/debug to noop so spec-file log calls are
   // silent by default. Set DEBUG_PAGE_LOGS=1 to restore them.
@@ -44,7 +119,7 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
   // renderer ("Target crashed"). The shared per-worker browser avoids that churn.
   // Trace-on-first-retry is handled by playwright.config.ts (use.trace).
 
-  page: async ({ page }, use, testInfo) => {
+  page: async ({ page, sanitizationDisabled }, use, testInfo) => {
     page.setDefaultTimeout(10000);
     page.setDefaultNavigationTimeout(10000);
 
@@ -57,7 +132,9 @@ export const test = base.extend<Record<string, never>, { _suppressLogs: void }>(
       await page.addInitScript({ content: idbProbeContent });
     }
     await page.addInitScript({ content: ttsPolyfillContent });
-    await page.addInitScript({ content: 'window.__VERSICLE_SANITIZATION_DISABLED__ = true;' });
+    if (sanitizationDisabled) {
+      await page.addInitScript({ content: 'window.__VERSICLE_SANITIZATION_DISABLED__ = true;' });
+    }
 
     await use(page);
 
@@ -106,26 +183,44 @@ export async function resetApp(page: Page) {
   await page.reload();
 
   await page.evaluate(async () => {
-    // Disconnect Yjs to release IDB locks
-    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__ === 'function') {
-      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__DISCONNECT_YJS__();
+    // Unregister Service Workers (with timeout — WebKit's unregister() can hang indefinitely)
+    const unregisterServiceWorkers = async () => {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await Promise.race([
+            registration.unregister(),
+            new Promise<void>(resolve => setTimeout(resolve, 2000)),
+          ]);
+        }
+      }
+    };
+
+    // Preferred path: the typed test API (DEV/VITE_E2E builds). Its resetApp
+    // delegates to the app's own wipeAllData() — flush + close every writer,
+    // delete both app databases, clear Versicle-owned localStorage and caches.
+    const api = window.__versicleTest;
+    if (api?.resetApp) {
+      await unregisterServiceWorkers();
+      try {
+        await api.resetApp();
+      } catch (err) {
+        // wipeAllData throws when a deletion is blocked by another holder;
+        // surface it but let the reload below proceed (legacy behavior).
+        console.warn(`__versicleTest.resetApp reported: ${err}`);
+      }
+      localStorage.clear();
+      return;
     }
+
+    // Legacy fallback (builds where resetApp is unavailable).
+    // Disconnect Yjs to release IDB locks
+    await api?.disconnectYjs?.();
 
     // Disconnect main DB connection to release IndexedDB locks
-    if (typeof (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__ === 'function') {
-      await (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__CLOSE_DB__();
-    }
+    await api?.closeDb?.();
 
-    // Unregister Service Workers (with timeout — WebKit's unregister() can hang indefinitely)
-    if ('serviceWorker' in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      for (const registration of registrations) {
-        await Promise.race([
-          registration.unregister(),
-          new Promise<void>(resolve => setTimeout(resolve, 2000)),
-        ]);
-      }
-    }
+    await unregisterServiceWorkers();
 
     // Clear DBs
     const dbs = await window.indexedDB.databases();
@@ -174,13 +269,28 @@ export async function resetApp(page: Page) {
  * Both flush asynchronously and cannot be guaranteed to commit during page teardown, so a
  * `page.reload()` issued immediately after a write tears the page down with the bytes still
  * buffered — and the state is gone after reload. Tests that assert "X survives a reload" must
- * let those windows drain first (the in-SPA navigation tests already wait ~1s "to persist").
+ * let those windows drain first.
  *
- * The wait comfortably exceeds the longest debounce (500ms) plus write time; once the test
- * goes idle here no new writes are issued, so the timers fire and the queued writes complete.
+ * Deterministic path: `window.__versicleTest.flushPersistence()` (src/test-api.ts,
+ * installed in DEV/VITE_E2E builds) forces both queues to flush NOW and resolves when the
+ * transactions have committed — no timing knowledge duplicated here. The 1500ms sleep
+ * remains only as a fallback for stale builds without the API, so a mismatched app build
+ * degrades to the old slow-but-safe behavior instead of flaking.
  */
 export async function waitForPersistedWrites(page: Page) {
-  await page.waitForTimeout(1500);
+  const flushed = await page.evaluate(async () => {
+    const api = window.__versicleTest;
+    if (!api?.flushPersistence) return false;
+    await api.flushPersistence();
+    return true;
+  });
+  if (!flushed) {
+    console.warn(
+      'waitForPersistedWrites: window.__versicleTest.flushPersistence unavailable ' +
+      '(app built without DEV/VITE_E2E?) — falling back to the legacy 1500ms sleep.'
+    );
+    await page.waitForTimeout(1500);
+  }
 }
 
 export async function ensureLibraryWithBook(page: Page) {
@@ -258,4 +368,106 @@ export function getReaderFrame(page: Page): Frame | null {
     }
   }
   return null;
+}
+
+/**
+ * Accept the in-app confirmation dialog (the Phase-8 ConfirmHost Modal).
+ *
+ * The overhaul replaced the legacy `window.confirm(...)` calls — which a spec
+ * caught via `page.on('dialog', d => d.accept())` — with a Radix
+ * `ConfirmDialog` (src/components/ui/ConfirmDialog.tsx). Destructive flows
+ * (e.g. deleting an annotation, src/components/reader/AnnotationList.tsx:30-35)
+ * now `await useConfirm()` and only proceed once this button is clicked, so
+ * the native-dialog listener never fires. Waits for the dialog, then clicks
+ * its confirm affordance.
+ */
+export async function acceptConfirm(page: Page) {
+  await expect(page.getByTestId('confirm-dialog')).toBeVisible({ timeout: 10000 });
+  await page.getByTestId('confirm-dialog-confirm').click();
+}
+
+/** Open Global Settings from the library header and wait for the tablist. */
+export async function openSettings(page: Page) {
+  await page.getByTestId('header-settings-button').click();
+  await expect(page.getByRole('tablist', { name: 'Settings sections' })).toBeVisible({ timeout: 10000 });
+}
+
+/**
+ * Navigate to a specific settings tab and confirm it is selected.
+ * id ∈ general|tts|genai|sync|devices|dictionary|recovery|diagnostics|data
+ */
+export async function gotoSettingsTab(page: Page, id: string) {
+  // On the mobile (375x667) vertical tablist the lower tabs (data/recovery/
+  // diagnostics) sit below the fold — scroll before clicking.
+  await page.getByTestId(`settings-tab-${id}`).scrollIntoViewIfNeeded().catch(() => {});
+  await page.getByTestId(`settings-tab-${id}`).click();
+  await expect(page.getByTestId(`settings-tab-${id}`)).toHaveAttribute('aria-selected', 'true');
+}
+
+/**
+ * Open the audio deck and switch to its Settings view. The "Settings" footer tab
+ * (tts-settings-tab-btn) lives in the Sheet footer and is often below the fold,
+ * so it must be scrolled into view before clicking.
+ */
+export async function openAudioSettings(page: Page) {
+  await page.getByTestId('reader-audio-button').click();
+  await expect(page.getByTestId('tts-panel')).toBeVisible();
+  const btn = page.getByTestId('tts-settings-tab-btn');
+  await btn.scrollIntoViewIfNeeded();
+  // On the mobile (375px) Sheet the scrollable tts-queue body overlaps the
+  // footer tab's centerpoint, so Playwright's actionability check reports
+  // "tts-queue intercepts pointer events" on the (visible, enabled, stable)
+  // button. The footer tab is a real affordance; force past the centerpoint.
+  await btn.click({ force: true });
+  await expect(page.getByText('Voice & Pace')).toBeVisible();
+}
+
+/**
+ * Switch the (already-open) Audio Deck Sheet between its "Up Next" and "Settings" views.
+ * The view-toggle buttons live in the Sheet footer below the fold, so scroll into view first.
+ */
+export async function switchAudioPanelView(page: Page, view: 'queue' | 'settings') {
+  const testId = view === 'settings' ? 'tts-settings-tab-btn' : 'tts-queue-tab-btn';
+  const btn = page.getByTestId(testId);
+  await btn.waitFor({ state: 'visible' });
+  await btn.scrollIntoViewIfNeeded();
+  // Force past the mobile Sheet's tts-queue centerpoint interception (see openAudioSettings).
+  await btn.click({ force: true });
+}
+
+/**
+ * Close the Global Settings overlay (SettingsShell) and wait for the Radix Dialog
+ * backdrop to fully detach. Closing is a history navigation, so the ModalOverlay
+ * lingers one frame; failing to await it leaves the backdrop intercepting the next
+ * click on library content. Safe to call when settings is already closed.
+ */
+export async function closeSettings(page: Page) {
+  const closeBtn = page.getByTestId('settings-close-button');
+  if (await closeBtn.count()) {
+    await closeBtn.click({ force: true }).catch(() => {});
+  }
+  await expect(page.getByRole('tablist', { name: 'Settings sections' })).not.toBeVisible({ timeout: 10000 });
+}
+
+/**
+ * Wait until the active reader engine reports ready. Replaces the removed
+ * `window.rendition` global (Phase 6 caged epubjs behind the ReaderEngine port;
+ * readiness now lives on window.__versicleTest.reader). Pass {locations:true} to
+ * also wait for the locations index (epubjs book.locations.total() > 0).
+ */
+export async function waitForReaderReady(page: Page, opts: { locations?: boolean } = {}) {
+  await page.waitForFunction(
+    () => window.__versicleTest?.reader?.isReady?.() === true,
+    null,
+    { timeout: 30000 },
+  );
+  if (opts.locations) {
+    await page
+      .waitForFunction(
+        () => (window.__versicleTest?.reader?.locationsTotal?.() ?? 0) > 0,
+        null,
+        { timeout: 30000 },
+      )
+      .catch(() => {});
+  }
 }

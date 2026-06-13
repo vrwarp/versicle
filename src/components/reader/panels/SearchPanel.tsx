@@ -1,55 +1,78 @@
+/**
+ * SearchPanel — the reader's in-book search sidebar, on the Phase 7 §F
+ * SearchSession (the post-merge reader adoption; the `searchClient` module
+ * singleton died with it).
+ *
+ * Indexing feeds from the PERSISTED corpus (cache_search_text): no epubjs
+ * Book, no spine walking, no DOM parsing here. Books imported before the
+ * corpus store existed come back 'no-text' — the panel then runs ONE
+ * reprocess through the ImportOrchestrator queue (mutex-guarded; the §F
+ * "lazily on first search" population) and retries. Results are
+ * per-occurrence (`DetailedSearchResult`): clicking one hands the full
+ * result to `onNavigate`, which lands on the EXACT match with a temporary
+ * highlight (app/reader/searchNavigation).
+ */
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Book } from 'epubjs';
 import { Input } from '../../ui/Input';
 import { Button } from '../../ui/Button';
 import { Search, Loader2, X } from 'lucide-react';
-import { cn } from '../../../lib/utils';
-import { searchClient, type SearchResult } from '../../../lib/search';
-import { useToastStore } from '../../../store/useToastStore';
-import { createLogger } from '../../../lib/logger';
+import { cn } from '@lib/utils';
+import type { SearchSession } from '@domains/search';
+import type { DetailedSearchResult } from '~types/search';
+import { useImportController } from '@app/library/useImportController';
+import { useToastStore } from '@store/useToastStore';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('SearchPanel');
 
 export interface SearchPanelProps {
     bookId: string | undefined;
-    book: Book | null;
-    onNavigate: (href: string, query: string) => void;
+    /** The reader-session search surface (owned by the reader controller). */
+    session: SearchSession;
+    /** Land the reader on the exact occurrence. */
+    onNavigate: (result: DetailedSearchResult) => void;
 }
 
 export const SearchPanel: React.FC<SearchPanelProps> = ({
     bookId,
-    book,
+    session,
     onNavigate
 }) => {
     // Search State
     const [searchQuery, setSearchQuery] = useState('');
     const [activeSearchQuery, setActiveSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+    const [searchResults, setSearchResults] = useState<DetailedSearchResult[]>([]);
+    const [truncated, setTruncated] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
 
     // Indexing State
     const [isIndexing, setIsIndexing] = useState(false);
-    const [indexingProgress, setIndexingProgress] = useState(0);
 
     const { showToast } = useToastStore();
+    const importController = useImportController();
 
     useEffect(() => {
-        if (!bookId || !book) return;
-        if (searchClient.isIndexed(bookId)) return;
+        if (!bookId || session.isIndexed(bookId)) return;
 
         let mounted = true;
+        setIsIndexing(true);
 
-        const performIndexing = async () => {
-            if (!mounted) return;
-            setIsIndexing(true);
+        const prepare = async () => {
             try {
-                await searchClient.indexBook(book, bookId, (progress) => {
-                    if (mounted) {
-                        setIndexingProgress(Math.round(progress * 100));
-                    }
-                });
+                let outcome = await session.index(bookId);
+                if (outcome === 'no-text') {
+                    // Pre-corpus book (imported before the cache_search_text
+                    // store existed): one reprocess through the orchestrator
+                    // queue repopulates the persisted text, then indexing
+                    // retries — the §F "lazily on first search" path.
+                    await importController.reprocessBook(bookId);
+                    outcome = await session.index(bookId);
+                }
+                if (outcome === 'no-text' && mounted) {
+                    showToast('Search is unavailable for this book', 'error');
+                }
             } catch (e) {
-                logger.error("Indexing failed", e);
+                logger.error('Indexing failed', e);
             } finally {
                 if (mounted) {
                     setIsIndexing(false);
@@ -57,12 +80,12 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
             }
         };
 
-        performIndexing();
+        void prepare();
 
         return () => {
             mounted = false;
         };
-    }, [bookId, book]);
+    }, [bookId, session, importController, showToast]);
 
     const requestCounter = React.useRef(0);
 
@@ -77,13 +100,15 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
         // Clear previous results while searching to prevent stale data from showing
         // before the new search completes.
         setSearchResults([]);
+        setTruncated(false);
 
         try {
-            const results = await searchClient.search(capturedQuery, bookId);
+            const batch = await session.search(bookId, capturedQuery);
             // Re-verify after async operation
             if (currentReq === requestCounter.current) {
                 setActiveSearchQuery(capturedQuery);
-                setSearchResults(results);
+                setSearchResults(batch.results);
+                setTruncated(batch.truncated);
                 setIsSearching(false);
             }
         } catch (e) {
@@ -94,7 +119,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                 setIsSearching(false);
             }
         }
-    }, [searchQuery, bookId, showToast]);
+    }, [searchQuery, bookId, session, showToast]);
 
     return (
         <div data-testid="reader-search-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 flex flex-col">
@@ -145,20 +170,16 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                     <div className="mt-3 space-y-1">
                         <div className="flex justify-between text-xs text-muted-foreground">
                             <span>Indexing book...</span>
-                            <span>{indexingProgress}%</span>
                         </div>
+                        {/* Indeterminate: corpus-fed indexing has no per-spine
+                            progress stream (the old % bar tracked DOM parsing
+                            the session no longer does). */}
                         <div
                             className="h-1.5 bg-secondary rounded-full overflow-hidden w-full"
                             role="progressbar"
-                            aria-valuenow={indexingProgress}
-                            aria-valuemin={0}
-                            aria-valuemax={100}
                             aria-label="Indexing progress"
                         >
-                            <div
-                                className="h-full bg-primary transition-all duration-300 ease-in-out"
-                                style={{ width: `${indexingProgress}%` }}
-                            />
+                            <div className="h-full bg-primary w-full animate-pulse" />
                         </div>
                     </div>
                 )}
@@ -169,20 +190,27 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                 ) : (
                     <ul className="space-y-4">
                         {searchResults.map((result, idx) => (
-                            <li key={idx} className="border-b border-border pb-2 last:border-0">
+                            <li key={`${result.href}-${result.charOffset}-${idx}`} className="border-b border-border pb-2 last:border-0">
                                 <Button
                                     variant="ghost"
                                     data-testid={`search-result-${idx}`}
                                     className="text-left w-full h-auto p-2 block items-start justify-start font-normal"
-                                    onClick={() => onNavigate(result.href, activeSearchQuery)}
+                                    onClick={() => onNavigate(result)}
                                 >
-                                    <p className="text-xs text-muted-foreground mb-1">Result {idx + 1}</p>
+                                    <p className="text-xs text-muted-foreground mb-1">
+                                        {result.sectionTitle ? `${result.sectionTitle} · ` : ''}Result {idx + 1}
+                                    </p>
                                     <p className="text-sm text-foreground line-clamp-3 whitespace-normal break-words">
                                         {result.excerpt}
                                     </p>
                                 </Button>
                             </li>
                         ))}
+                        {truncated && searchResults.length > 0 && (
+                            <li className="text-center text-muted-foreground text-xs" role="status">
+                                Showing the first {searchResults.length} matches
+                            </li>
+                        )}
                         {searchResults.length === 0 && activeSearchQuery && !isSearching && (
                             <div className="text-center text-muted-foreground text-sm" role="status" aria-live="polite">No results found</div>
                         )}

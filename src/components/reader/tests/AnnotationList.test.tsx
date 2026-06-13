@@ -1,7 +1,7 @@
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AnnotationList } from '../AnnotationList';
-import { useAnnotationStore } from '../../../store/useAnnotationStore';
+import { ConfirmHost } from '@components/ui/ConfirmDialog';
+import { useAnnotationStore } from '@store/useAnnotationStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('lucide-react', () => ({
@@ -12,7 +12,7 @@ vi.mock('lucide-react', () => ({
 
 describe('AnnotationList', () => {
   beforeEach(() => {
-    useAnnotationStore.setState({ annotations: [] });
+    useAnnotationStore.setState({ annotations: {} });
     vi.clearAllMocks();
   });
 
@@ -50,19 +50,22 @@ describe('AnnotationList', () => {
     expect(onNavigateMock).toHaveBeenCalledWith('cfi1');
   });
 
-  it('should delete annotation', () => {
+  it('should delete annotation', async () => {
     const deleteAnnotationMock = vi.fn();
     const annotations = [
       { id: '1', bookId: 'b1', cfiRange: 'cfi1', text: 'Annotation 1', type: 'highlight', color: 'yellow', created: Date.now() },
     ];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useAnnotationStore.setState({ annotations: annotations as any, remove: deleteAnnotationMock });
-    window.confirm = vi.fn(() => true);
 
-    render(<AnnotationList onNavigate={vi.fn()} />);
+    // Phase 8 §D: deletion confirms through the ConfirmDialog.
+    render(<><ConfirmHost /><AnnotationList onNavigate={vi.fn()} /></>);
 
     fireEvent.click(screen.getByTitle('Delete'));
-    expect(deleteAnnotationMock).toHaveBeenCalledWith('1');
+    fireEvent.click(await screen.findByTestId('confirm-dialog-confirm'));
+    await waitFor(() => {
+      expect(deleteAnnotationMock).toHaveBeenCalledWith('1');
+    });
   });
 
   it('should edit note', () => {

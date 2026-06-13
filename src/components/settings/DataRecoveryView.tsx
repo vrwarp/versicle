@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import * as Y from 'yjs';
-import { IndexeddbPersistence } from 'y-idb';
+import { readSnapshot } from '@data/snapshot/YjsSnapshotService';
 import { Button } from '../ui/Button';
-import { createLogger } from '../../lib/logger';
+import { createLogger } from '@lib/logger';
 import { Download, RefreshCw, AlertCircle } from 'lucide-react';
-import { exportFile } from '../../lib/export';
+import { exportFile } from '@lib/export';
+import { useToastStore } from '@store/useToastStore';
 
 const logger = createLogger('DataRecoveryView');
 
@@ -19,20 +20,18 @@ export const DataRecoveryView: React.FC = () => {
         setRawData(null);
 
         try {
-            // Create isolated Y.Doc and Persistence
+            // P4-7/P9 retarget: read the persisted state through the data
+            // layer's snapshot primitive (one merged update via the
+            // exclusive write gate) instead of hand-rolling a third temp
+            // IndexeddbPersistence('versicle-yjs') dance — the layout
+            // knowledge lives in exactly one module (the y-idb fork).
+            const update = await readSnapshot();
+            if (!update) {
+                throw new Error("The local 'versicle-yjs' database holds no data.");
+            }
+
             const tempDoc = new Y.Doc();
-            const tempPersistence = new IndexeddbPersistence('versicle-yjs', tempDoc);
-
-            await new Promise<void>((resolve, reject) => {
-                const timeoutTimer = setTimeout(() => {
-                    reject(new Error("Timeout waiting for IndexedDB to sync."));
-                }, 10000);
-
-                tempPersistence.once('synced', () => {
-                    clearTimeout(timeoutTimer);
-                    resolve();
-                });
-            });
+            Y.applyUpdate(tempDoc, update);
 
             // Extract all root types (assuming maps and arrays)
             const extractedData: Record<string, unknown> = {};
@@ -55,8 +54,6 @@ export const DataRecoveryView: React.FC = () => {
             setRawData(extractedData);
             setStatus('success');
 
-            // Cleanup
-            tempPersistence.destroy();
             tempDoc.destroy();
 
         } catch (err: unknown) {
@@ -79,7 +76,7 @@ export const DataRecoveryView: React.FC = () => {
             });
         } catch (e) {
             logger.error('Failed to download raw data', e);
-            alert('Failed to download data.');
+            useToastStore.getState().showToast('data.downloadRecovery.failed', 'error');
         }
     };
 

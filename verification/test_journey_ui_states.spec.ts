@@ -1,12 +1,15 @@
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook, captureScreenshot } from "./utils";
+import { resetApp, ensureLibraryWithBook, captureScreenshot, openSettings, gotoSettingsTab } from "./utils";
 
+// Settings became a Radix-Tabs SettingsShell at /settings/:tab. Each tab is a real
+// role="tab" inside the "Settings sections" tablist (testid settings-tab-<id>), no
+// longer a role=button sidebar entry. The content panel heading per tab is unchanged.
 const tabs = [
-  { tabId: "General", buttonText: "General", contentText: "Advanced Import" },
-  { tabId: "TTS", buttonText: "TTS Engine", contentText: "Provider Configuration" },
-  { tabId: "GenAI", buttonText: "Generative AI", contentText: "Generative AI Configuration" },
-  { tabId: "Dictionary", buttonText: "Dictionary", contentText: "Pronunciation Lexicon" },
-  { tabId: "Data", buttonText: "Data Management", contentText: "Backup & Restore" },
+  { tabId: "General", tabKey: "general", contentText: "Advanced Import" },
+  { tabId: "TTS", tabKey: "tts", contentText: "Provider Configuration" },
+  { tabId: "GenAI", tabKey: "genai", contentText: "Generative AI Configuration" },
+  { tabId: "Dictionary", tabKey: "dictionary", contentText: "Pronunciation Lexicon" },
+  { tabId: "Data", tabKey: "data", contentText: "Backup & Restore" },
 ];
 
 for (const tab of tabs) {
@@ -15,15 +18,9 @@ for (const tab of tabs) {
     await resetApp(page);
     await ensureLibraryWithBook(page);
 
-    // Open Settings
-    await expect(page.getByTestId("header-settings-button")).toBeVisible();
-    await page.getByTestId("header-settings-button").click();
-
-    // Wait for dialog
-    await expect(page.getByRole("dialog")).toBeVisible();
-
-    // Click Tab
-    await page.getByRole("button", { name: tab.buttonText, exact: true }).click();
+    // Open Settings (Radix tablist) and activate the target tab.
+    await openSettings(page);
+    await gotoSettingsTab(page, tab.tabKey);
 
     // Verify Content (Heading)
     await expect(page.getByRole("heading", { name: tab.contentText })).toBeVisible();

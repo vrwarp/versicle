@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { LexiconCSV, SimpleListCSV } from './CsvUtils';
-import type { LexiconRule } from '../../types/db';
+import type { LexiconRule } from '~types/user-data';
 
 describe('LexiconCSV', () => {
   describe('parse', () => {

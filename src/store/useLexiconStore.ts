@@ -1,8 +1,21 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
-import type { LexiconRule } from '../types/db';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
+import type { LexiconRule } from '~types/user-data';
 import { v4 as uuidv4 } from 'uuid';
+
+/**
+ * Replication declaration (aggregated by src/store/registry.ts).
+ * Flipped to merge-defaults + scopedDiff in flip wave 2 (phase2-fork-surgery.md
+ * §2.6 #4): small user data, low write rate, two keys. No top-level canaries
+ * existed (the per-entry `r.order || 0` guards below are NOT hydration
+ * fallbacks and stay).
+ */
+export const LEXICON_STORE_DEF: SyncedStoreDef<'rules' | 'settings'> = {
+    name: 'lexicon',
+    syncedKeys: ['rules', 'settings'],
+    hydration: 'merge-defaults',
+    scopedDiff: true,
+};
 
 export interface LexiconState {
     // === SYNCED STATE (Yjs Map 'lexicon') ===
@@ -32,9 +45,8 @@ export interface LexiconState {
 }
 
 export const useLexiconStore = create<LexiconState>()(
-    yjs(
-        yDoc,
-        'lexicon',
+    defineSyncedStore(
+        LEXICON_STORE_DEF,
         (set) => ({
             rules: {},
             settings: {},
@@ -77,8 +89,7 @@ export const useLexiconStore = create<LexiconState>()(
             }),
 
             deleteRule: (id) => set((state) => {
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { [id]: removed, ...remainingRules } = state.rules;
+                const { [id]: _removed, ...remainingRules } = state.rules;
                 return { rules: remainingRules };
             }),
 
@@ -106,7 +117,6 @@ export const useLexiconStore = create<LexiconState>()(
                     }
                 }
             }))
-        }),
-        getYjsOptions()
+        })
     )
 );

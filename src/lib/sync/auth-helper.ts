@@ -1,4 +1,3 @@
-
 import {
     GoogleAuthProvider,
     signInWithCredential,
@@ -8,13 +7,14 @@ import {
 } from 'firebase/auth';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 import { getFirebaseAuth } from './firebase-config';
-import { googleIntegrationManager } from '../google/GoogleIntegrationManager';
-import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
+import { getGoogleAuthClient, GOOGLE_SERVICES, type GoogleServiceId } from '@domains/google';
+import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 
 /**
- * Sign in with Google using a hybrid approach:
- * - On Native (Android/iOS): Uses native Google Sign-In via @capgo/capacitor-social-login.
- * - On Web: Uses @capgo/capacitor-social-login (which uses GIS).
+ * Sign in with Google via the GoogleAuthClient's `connect('identity')`
+ * (Phase 7 §G, GG-13): the client returns the FULL credential — idToken for
+ * Firebase, accessToken as fallback — so this module no longer drives a
+ * parallel SocialLogin.login flow with its own copy of the scope list.
  */
 export const signInWithGoogle = async (): Promise<UserCredential | undefined | void> => {
     const auth = getFirebaseAuth();
@@ -22,28 +22,8 @@ export const signInWithGoogle = async (): Promise<UserCredential | undefined | v
         throw new Error("Firebase not initialized");
     }
 
-    // Unite the flow if possible, or keep separate if needed for specific logic.
-    // SocialLogin works on both.
-
-    // We want the 'identity' service scopes
-    // We can use googleIntegrationManager to 'connect' but that returns accessToken.
-    // For Firebase Auth, we prefer idToken if available, or accessToken.
-
-    // Let's use SocialLogin directly to get the full result
     try {
-        const result = await SocialLogin.login({
-            provider: 'google',
-            options: {
-                scopes: ['email', 'profile', 'openid'] // Standard scopes for login
-            }
-        });
-
-        if (result.result.responseType === 'offline') {
-            throw new Error("Offline login not supported for Firebase Auth");
-        }
-
-        const idToken = result.result.idToken;
-        const accessToken = result.result.accessToken?.token;
+        const { idToken, accessToken } = await getGoogleAuthClient().connect('identity');
 
         if (idToken) {
             // Create Firebase credential using the Google ID Token
@@ -56,7 +36,6 @@ export const signInWithGoogle = async (): Promise<UserCredential | undefined | v
         } else {
             throw new Error("No tokens returned from Google Sign-In");
         }
-
     } catch (error) {
         console.error("Google Sign-In failed", error);
         throw error;
@@ -65,16 +44,20 @@ export const signInWithGoogle = async (): Promise<UserCredential | undefined | v
 
 /**
  * Sign out from Google:
- * - On Native: Signs out from Native plugin + Firebase.
- * - On Web: Signs out from Firebase.
- * - ALWAYS: Clears Google Services Store and disconnects services.
+ * - Disconnects every connected service through the GoogleAuthClient
+ *   (clears cached tokens + the persisted "has connected before" hints).
+ * - ALWAYS: clears the Google services store, platform sign-out, Firebase
+ *   sign-out.
  */
 export const signOutWithGoogle = async (auth: Auth): Promise<void> => {
-    // 1. Disconnect all services (Revoke tokens if possible)
+    // 1. Disconnect all services (revoke tokens if possible)
     try {
+        const client = getGoogleAuthClient();
         const connectedServices = useGoogleServicesStore.getState().connectedServices;
         for (const serviceId of connectedServices) {
-            await googleIntegrationManager.disconnectService(serviceId);
+            if (serviceId in GOOGLE_SERVICES) {
+                await client.disconnect(serviceId as GoogleServiceId);
+            }
         }
     } catch (e) {
         console.warn("Failed to disconnect services during signout", e);

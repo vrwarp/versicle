@@ -19,7 +19,7 @@ test('Abbreviation Settings Verification', async ({ page }) => {
 
   // 2. Switch to Dictionary Tab
   console.log('Switching to Dictionary Tab...');
-  await page.getByRole('button', { name: 'Dictionary' }).click();
+  await page.getByRole('tab', { name: 'Dictionary' }).click();
 
   // 3. Verify TTS/Abbreviation settings are visible
   await expect(page.getByRole('heading', { name: 'Abbreviations', exact: true })).toBeVisible({ timeout: 5000 });

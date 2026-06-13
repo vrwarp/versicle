@@ -1,7 +1,8 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { Progress } from '../ui/Progress';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { Button } from '../ui/Button';
+import { useLibraryStore } from '@store/useLibraryStore';
 import { useShallow } from 'zustand/react/shallow';
 
 export const ImportProgressUI: React.FC = () => {
@@ -10,16 +11,70 @@ export const ImportProgressUI: React.FC = () => {
     importProgress,
     importStatus,
     uploadProgress,
-    uploadStatus
+    uploadStatus,
+    batchImportSummary,
+    clearBatchImportSummary
   } = useLibraryStore(useShallow(state => ({
     isImporting: state.isImporting,
     importProgress: state.importProgress,
     importStatus: state.importStatus,
     uploadProgress: state.uploadProgress,
-    uploadStatus: state.uploadStatus
+    uploadStatus: state.uploadStatus,
+    batchImportSummary: state.batchImportSummary,
+    clearBatchImportSummary: state.clearBatchImportSummary
   })));
 
-  if (!isImporting) return null;
+  if (!isImporting) {
+    // After a batch import completes, surface the per-file outcome summary
+    // (imported / skipped duplicates / failed with reasons) until dismissed.
+    if (!batchImportSummary) return null;
+    const { imported, skipped, failed } = batchImportSummary;
+
+    return (
+      <div
+        className="mt-4 w-full p-4 rounded-lg border bg-muted/30 text-left space-y-2"
+        data-testid="batch-import-summary"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-medium text-foreground" role="status" aria-live="polite">
+            Import complete: {imported} imported, {skipped.length} duplicates skipped, {failed.length} failed
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearBatchImportSummary}
+            aria-label="Dismiss import summary"
+          >
+            Dismiss
+          </Button>
+        </div>
+
+        {skipped.length > 0 && (
+          <details className="text-sm text-muted-foreground">
+            <summary className="cursor-pointer">Skipped duplicates ({skipped.length})</summary>
+            <ul className="list-disc pl-5 mt-1 space-y-0.5">
+              {skipped.map((filename, index) => (
+                <li key={`${filename}-${index}`}>{filename}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+
+        {failed.length > 0 && (
+          <details className="text-sm text-destructive" open>
+            <summary className="cursor-pointer">Failed files ({failed.length})</summary>
+            <ul className="list-disc pl-5 mt-1 space-y-0.5">
+              {failed.map(({ filename, reason }, index) => (
+                <li key={`${filename}-${index}`}>
+                  <span className="font-medium">{filename}</span>: {reason}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center space-y-3 mt-4 w-full p-4">

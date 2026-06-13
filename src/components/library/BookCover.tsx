@@ -1,12 +1,13 @@
 import React from 'react';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import 'react-lazy-load-image-component/src/effects/blur.css';
-import { cn } from '../../lib/utils';
-import { getOptimizedTextColor, unpackColorToRGB } from '../../lib/cover-palette';
+import { cn } from '@lib/utils';
+import { getOptimizedTextColor, unpackColorToRGB } from '@lib/cover-palette';
 import { Cloud, CloudDownload, MoreVertical } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { BookActionMenu } from './BookActionMenu';
-import type { BookMetadata } from '../../types/db';
+import { coverUrl } from '@data/covers';
+import type { CoverBook } from './BookActionMenu';
 
 function unpackColor(packed: number): string {
     const { r, g, b } = unpackColorToRGB(packed);
@@ -14,18 +15,18 @@ function unpackColor(packed: number): string {
 }
 
 interface BookCoverProps {
-    book: BookMetadata;
+    book: CoverBook;
     /** Whether this is a Ghost Book (metadata synced but file not present locally) */
     isGhostBook?: boolean;
-    onDelete: (book: BookMetadata) => void;
-    onOffload: (book: BookMetadata) => void;
-    onRestore: (book: BookMetadata) => void;
+    onDelete: (book: CoverBook) => void;
+    onOffload: (book: CoverBook) => void;
+    onRestore: (book: CoverBook) => void;
 }
 
 export const BookCover: React.FC<BookCoverProps & { showActions?: boolean }> = React.memo(({ book, isGhostBook = false, onDelete, onOffload, onRestore, showActions = true }) => {
     // If book.coverUrl is set (external URL), use it.
     // Otherwise, if we have a blob (local), use the SW route.
-    const displayUrl = book.coverUrl || (book.coverBlob ? `/__versicle__/covers/${book.id}` : null);
+    const displayUrl = book.coverUrl || (book.coverBlob ? coverUrl(book.id) : null);
 
     const [imageError, setImageError] = React.useState(false);
 

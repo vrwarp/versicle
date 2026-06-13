@@ -20,5 +20,12 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    // Fixture capture (Phase 2): runs under plain `node` (type stripping);
+    // included here so the script and its imports stay typechecked by
+    // `tsc -b` like the rest of the node-side tooling.
+    "scripts/capture-ydoc-fixture.ts"
+  ]
 }

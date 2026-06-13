@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { useAnnotationStore } from '../store/useAnnotationStore';
-import type { UserAnnotation } from '../types/db';
+import { useAnnotationStore } from '@store/useAnnotationStore';
+import type { UserAnnotation } from '~types/user-data';
 
 export interface BookAnnotationGroup {
     bookId: string;

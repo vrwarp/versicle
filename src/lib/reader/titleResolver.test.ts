@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { matchPaths, findTocItem, resolveSyntheticPreference } from './titleResolver';
-import type { NavigationItem, UserInventoryItem } from '../../types/db';
+import type { NavigationItem } from '~types/book';
+import type { UserInventoryItem } from '~types/user-data';
 
 describe('titleResolver', () => {
   describe('matchPaths', () => {
@@ -111,7 +112,9 @@ describe('titleResolver', () => {
     });
 
     it('falls back to true if useSyntheticToc is undefined and syntheticToc contains items', () => {
-      const book: Partial<UserInventoryItem> = {
+      // syntheticToc is not part of UserInventoryItem; the resolver reads it
+      // dynamically off whatever book-shaped object it receives.
+      const book: Partial<UserInventoryItem> & { syntheticToc?: unknown[] } = {
         useSyntheticToc: undefined,
         syntheticToc: [{ id: '1', label: 'AI Title', href: 'ch1.html' }]
       };
@@ -119,7 +122,7 @@ describe('titleResolver', () => {
     });
 
     it('falls back to false if useSyntheticToc is undefined and syntheticToc is empty or missing', () => {
-      const bookEmpty: Partial<UserInventoryItem> = {
+      const bookEmpty: Partial<UserInventoryItem> & { syntheticToc?: unknown[] } = {
         useSyntheticToc: undefined,
         syntheticToc: []
       };

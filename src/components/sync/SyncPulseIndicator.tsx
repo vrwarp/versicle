@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
-import { cn } from '../../lib/utils';
-import { useSyncStore } from '../../lib/sync/hooks/useSyncStore';
-import type { FirestoreSyncStatus } from '../../lib/sync/FirestoreSyncManager';
+import { cn } from '@lib/utils';
+import { useSyncStore } from '@store/useSyncStore';
+import type { FirestoreSyncStatus } from '~types/sync';
+import { formatTime } from '@kernel/locale/format';
 
 /**
  * Sync Pulse Indicator
@@ -56,7 +57,7 @@ export const SyncPulseIndicator: React.FC<SyncPulseIndicatorProps> = ({
     const titleText = useMemo(() => {
         if (isError) return `Sync Error`; // Detailed error not in store currently
         if (status === 'connected') {
-            const timeStr = lastSyncTime ? new Date(lastSyncTime).toLocaleTimeString() : 'Just now';
+            const timeStr = lastSyncTime ? formatTime(lastSyncTime) : 'Just now';
             return `Synced (Last: ${timeStr})`;
         }
         if (status === 'connecting') return 'Syncing...';

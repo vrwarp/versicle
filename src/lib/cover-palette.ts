@@ -1,5 +1,5 @@
 
-import type { PerceptualPalette } from '../types/db';
+import type { PerceptualPalette } from '~types/book';
 
 // --- Weighted K-Means Clustering Utils ---
 

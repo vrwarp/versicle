@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { Laptop, Smartphone, Globe, Edit2, Trash2, Copy, Check, X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import type { DeviceInfo, DeviceProfile } from '../../types/device';
-import { cn } from '../../lib/utils'; // Assuming utils exists, or I'll use inline classes
+import type { DeviceInfo, DeviceProfile } from '~types/device';
+import { cn } from '@lib/utils'; // Assuming utils exists, or I'll use inline classes
+import { formatRelativeTime } from '@kernel/locale/format';
 
 interface DeviceListProps {
     devices: DeviceInfo[];
@@ -77,13 +78,9 @@ const DeviceItem = ({ device, isCurrent, onRename, onDelete, onClone }: DeviceIt
         return 'bg-muted-foreground/30'; // Offline
     };
 
-    const formatLastActive = (lastActive: number) => {
-        const diff = now - lastActive;
-        if (diff < 60 * 1000) return 'Just now';
-        if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)}m ago`;
-        if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / 3600000)}h ago`;
-        return new Date(lastActive).toLocaleDateString();
-    };
+    // The mixed-locale chimera ("5m ago" beside a system-locale date) died
+    // here: ONE locale-aware formatter renders the whole range (Phase 8 §F).
+    const formatLastActive = (lastActive: number) => formatRelativeTime(lastActive, now);
 
     return (
         <div className={cn(

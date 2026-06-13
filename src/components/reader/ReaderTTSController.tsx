@@ -1,13 +1,13 @@
-import React, { useEffect, useRef } from 'react';
-import type { Rendition } from 'epubjs';
-import { useTTSStore } from '../../store/useTTSStore';
+import type React from 'react';
+import { useEffect } from 'react';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useShallow } from 'zustand/react/shallow';
+import { useAudioCommands } from '@app/tts/useAudioCommands';
+import { useReaderEngine } from '@domains/reader/ui/ReaderCommands';
+import { useTtsPlaybackShortcuts } from '@app/shortcuts/readerShortcuts';
 
 interface ReaderTTSControllerProps {
-  rendition: Rendition | null;
   viewMode: string;
-  onNext: () => void;
-  onPrev: () => void;
 }
 
 /**
@@ -17,194 +17,86 @@ interface ReaderTTSControllerProps {
  *
  * Handles:
  * 1. Highlighting the current sentence (activeCfi)
- * 2. Keyboard navigation during TTS (currentIndex)
+ * 2. Keyboard navigation during TTS (KeyboardShortcutService registrations)
  * 3. Visibility reconciliation (syncing visual state when returning to foreground)
  */
 export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
-  rendition,
-  viewMode,
-  onNext,
-  onPrev
+  viewMode
 }) => {
-  // We subscribe to these changing values here, so ReaderView doesn't have to.
+  // The live engine rides the ReaderCommands context (Phase 6 §5a) —
+  // null while the book loads, exactly like the prop it replaced.
+  const engine = useReaderEngine();
+  // We subscribe to these changing values here, so the shell doesn't have to.
   // Use shallow comparison for primitive values to avoid unnecessary re-renders
-  const { activeCfi, currentIndex, status, queue, jumpTo } = useTTSStore(useShallow(state => ({
+  const { activeCfi, status } = useTTSPlaybackStore(useShallow(state => ({
     activeCfi: state.activeCfi,
-    currentIndex: state.currentIndex,
-    status: state.status,
-    queue: state.queue,
-    jumpTo: state.jumpTo
+    status: state.status
   })));
 
-  // Select actions individually or use shallow to prevent new object creation on every render
-  const { play, pause, stop } = useTTSStore(useShallow(state => ({
-    play: state.play,
-    pause: state.pause,
-    stop: state.stop
-  })));
+  // Engine commands come from the TtsController facade (stable identities).
+  const { play, pause, stop, jumpTo } = useAudioCommands();
 
   // --- TTS Highlighting & Sync ---
   useEffect(() => {
-    if (!rendition || !activeCfi || status === 'stopped') return;
+    if (!engine || !activeCfi || status === 'stopped') return;
+    const highlights = engine.highlights;
 
     const syncVisuals = () => {
       // Non-blocking display call
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (rendition as any).display(activeCfi).catch((err: unknown) => {
+      engine.display(activeCfi).catch((err: unknown) => {
         console.warn("[TTS] Sync skipped", err);
       });
 
-      try {
-        // Manual DOM sweep to kill orphaned TTS highlights.
-        // epub.js occasionally orphans nested SVG annotations if inject() runs multiple times or visibilty races occur.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const views = (rendition as any).views();
-        if (views) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            views.forEach((view: any) => {
-                if (view.pane && view.pane.element) {
-                    const orphaned = view.pane.element.querySelectorAll('g.tts-highlight');
-                    orphaned.forEach((node: Element) => node.remove());
-                }
-            });
-        }
-      } catch (e) {
-        console.warn("[TTS] Manual DOM cleanup failed", e);
-      }
-
-      // Add highlight using 'highlight' type. We now rely on manual cleanup to prevent duplicates.
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (rendition as any).annotations.add('highlight', activeCfi, {}, () => {
+      // Add via the manager: it runs the (formerly triplicated) orphaned-SVG
+      // sweep first, then adds exactly one 'tts' highlight for the CFI.
+      highlights.add('tts', activeCfi, {
+        onClick: () => {
           // Click handler for TTS highlight
-        }, 'tts-highlight');
-      } catch (e) {
-        console.warn("[TTS] Highlight failed", e);
-      }
+        },
+      });
     };
 
     if (document.visibilityState === 'visible') {
       syncVisuals();
     }
 
-    // Remove highlight when activeCfi changes
+    // Remove highlight when activeCfi changes (manager re-sweeps).
     return () => {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (rendition as any).annotations.remove(activeCfi, 'highlight');
-
-        // Failsafe dom-sweep
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const views = (rendition as any).views();
-        if (views) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            views.forEach((view: any) => {
-                if (view.pane && view.pane.element) {
-                    const orphaned = view.pane.element.querySelectorAll('g.tts-highlight');
-                    orphaned.forEach((node: Element) => node.remove());
-                }
-            });
-        }
-      } catch { /* ignore removal errors */ }
+      highlights.remove('tts', activeCfi);
     };
-  }, [activeCfi, viewMode, rendition, status]);
+  }, [activeCfi, viewMode, engine, status]);
 
   // --- Visibility Reconciliation ---
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && rendition) {
+      if (document.visibilityState === 'visible' && engine) {
         // We just came back to foreground.
         // Fetch the latest state directly from the store to avoid stale closure issues.
-        const { activeCfi: freshCfi, status: freshStatus } = useTTSStore.getState();
+        const { activeCfi: freshCfi, status: freshStatus } = useTTSPlaybackStore.getState();
 
         if (!freshCfi || freshStatus === 'stopped') return;
 
         // Sync visual state regardless of view mode (paginated or scrolled)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (rendition as any).display(freshCfi).catch((err: unknown) => console.warn("Reconciliation failed", err));
+        engine.display(freshCfi).catch((err: unknown) => console.warn("Reconciliation failed", err));
 
-        // Ensure highlight is present
-        try {
-          // Remove any existing highlight first (just in case)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rendition as any).annotations.remove(freshCfi, 'highlight');
-
-          // Manual DOM sweep
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const views = (rendition as any).views();
-          if (views) {
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-             views.forEach((v: any) => {
-                 if (v.pane && v.pane.element) {
-                     const orphans = v.pane.element.querySelectorAll('g.tts-highlight');
-                     orphans.forEach((n: Element) => n.remove());
-                 }
-             });
-          }
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (rendition as any).annotations.add('highlight', freshCfi, {}, () => { }, 'tts-highlight');
-        } catch (e) { console.warn("Reconciliation highlight failed", e); }
+        // Ensure the highlight is present: remove-then-add through the
+        // manager (each side runs the orphan sweep) so a background queue
+        // advance always ends with exactly one live node.
+        engine.highlights.remove('tts', freshCfi);
+        engine.highlights.add('tts', freshCfi, { onClick: () => { } });
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, [rendition, viewMode]);
+  }, [engine, viewMode]);
 
-  // --- Keyboard Navigation ---
-  // Use a ref to access the latest state in the event listener without re-binding it constantly.
-  // This prevents removing/adding the listener on every sentence change.
-  const stateRef = useRef({ status, currentIndex, queue, play, pause, stop });
-  useEffect(() => {
-    stateRef.current = { status, currentIndex, queue, play, pause, stop };
-  }, [status, currentIndex, queue, play, pause, stop]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      ) {
-        return;
-      }
-
-      const { status: currentStatus, currentIndex: idx, queue: q, play: doPlay, pause: doPause, stop: doStop } = stateRef.current;
-
-      if (e.key === 'ArrowLeft') {
-        if (currentStatus === 'playing' || currentStatus === 'paused') {
-          if (idx > 0) jumpTo(idx - 1);
-        } else {
-          onPrev();
-        }
-      }
-      if (e.key === 'ArrowRight') {
-        if (currentStatus === 'playing' || currentStatus === 'paused') {
-          if (idx < q.length - 1) jumpTo(idx + 1);
-        } else {
-          onNext();
-        }
-      }
-      if (e.key === ' ' || e.code === 'Space') {
-        if (currentStatus === 'playing') {
-          e.preventDefault();
-          doPause();
-        } else if (currentStatus === 'paused') {
-          e.preventDefault();
-          doPlay();
-        }
-      }
-      if (e.key === 'Escape') {
-        if (currentStatus === 'playing' || currentStatus === 'paused') {
-          e.preventDefault();
-          doStop();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [jumpTo, onPrev, onNext]);
+  // --- Keyboard Navigation (Phase 8 §E) ---
+  // The window keydown registry + interim gating predicate died here: the
+  // sentence jumps / Space play-pause / Escape stop are 'tts-active'-scope
+  // registrations on the KeyboardShortcutService (live while
+  // playing|paused). The repeat/input/Space-on-control/Escape-overlay
+  // policies are the service's built-ins, byte-identical to the hotfix.
+  useTtsPlaybackShortcuts({ play, pause, stop, jumpTo });
 
   return null;
 };

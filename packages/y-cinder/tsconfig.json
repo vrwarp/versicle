@@ -1,0 +1,28 @@
+{
+  // Composite project for the vendored fork's library source. Referenced from
+  // the root tsconfig.json solution so `tsc -b` typechecks the package and the
+  // app consumes its declarations (emitted to dist-types/, gitignored) while
+  // Vite/vitest consume src/ directly. Deliberately NOT extending the app
+  // config, and deliberately strict:false: the fork's own tsconfig compiles
+  // this source with strict off, and keeping the compiler surface identical
+  // keeps the vendor diff at zero (see PROVENANCE.md). New fork-surgery code
+  // should still be written strict-clean.
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "strict": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "./src",
+    "outDir": "./dist-types",
+    "tsBuildInfoFile": "./dist-types/tsconfig.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

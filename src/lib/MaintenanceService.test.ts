@@ -1,19 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MaintenanceService } from './MaintenanceService';
+import { bookContent } from '@data/repos/bookContent';
 
 // --- Mocks ---
 
 const mockUpdateBook = vi.fn();
 const mockGetState = vi.fn();
 
-vi.mock('../store/useBookStore', () => ({
+vi.mock('@store/useBookStore', () => ({
     useBookStore: {
         getState: () => mockGetState(),
         subscribe: vi.fn()
     },
 }));
 
-vi.mock('../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     useTTSStore: {
         getState: () => ({
             sentenceStarters: [],
@@ -25,15 +26,37 @@ vi.mock('../store/useTTSStore', () => ({
 const mockGetBookFile = vi.fn();
 const mockImportBookWithId = vi.fn();
 
-vi.mock('../db/DBService', () => ({
-    dbService: {
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getBookFile: (...args: unknown[]) => mockGetBookFile(...args),
-        importBookWithId: (...args: unknown[]) => mockImportBookWithId(...args),
+        ingest: vi.fn(),
+        listManifests: vi.fn(),
+        putManifests: vi.fn(),
+        scanOrphans: vi.fn(),
+        pruneOrphans: vi.fn(),
     },
 }));
 
-vi.mock('../db/db', () => ({
-    getDB: vi.fn(),
+vi.mock('@data/repos/searchText', () => ({
+    searchTextRepo: { put: vi.fn() },
+}));
+
+// Phase 7: BookImportService died — regeneration runs extract → retarget →
+// overwrite ingest. The legacy mock seam is preserved by adapting its
+// {title, author, coverPalette} payloads into extraction shapes.
+vi.mock('@domains/library', () => ({
+    extractBook: async (...args: unknown[]) => {
+        const manifest = await mockImportBookWithId(...args);
+        return {
+            manifest,
+            resource: { bookId: 'pending', epubBlob: new Blob(['x']) },
+            structure: { bookId: 'pending', toc: [], spineItems: [] },
+            ttsContentBatches: [],
+            tableBatches: [],
+            searchText: { extractionVersion: 3, sections: [] },
+        };
+    },
+    retargetExtraction: (extraction: unknown) => extraction,
 }));
 
 describe('MaintenanceService', () => {
@@ -197,6 +220,66 @@ describe('MaintenanceService', () => {
                 sourceFilename: 'b2.epub',
             }));
             consoleErrorSpy.mockRestore();
+        });
+    });
+
+    describe('regression: corrupt {} coverBlob repair (pre-v3 backup restores)', () => {
+        const REPAIR_FLAG = 'versicle_cover_blob_repair_v1';
+
+        function setupDb(manifests: Record<string, unknown>[]) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            vi.mocked(bookContent.listManifests).mockResolvedValue(manifests as any);
+            return {
+                putMock: vi.mocked(bookContent.putManifests),
+                listMock: vi.mocked(bookContent.listManifests),
+            };
+        }
+
+        beforeEach(() => {
+            localStorage.removeItem(REPAIR_FLAG);
+        });
+
+        it('strips non-binary coverBlob values and leaves healthy rows alone', async () => {
+            const healthyCover = new ArrayBuffer(4);
+            const { putMock } = setupDb([
+                { bookId: 'corrupt', title: 'Corrupt', coverBlob: {} },
+                { bookId: 'healthy-buffer', title: 'Healthy', coverBlob: healthyCover },
+                { bookId: 'healthy-blob', title: 'Healthy Blob', coverBlob: new Blob([new Uint8Array([1])]) },
+                { bookId: 'no-cover', title: 'No Cover' },
+            ]);
+
+            const repaired = await service.repairCorruptCoverBlobs();
+
+            expect(repaired).toBe(1);
+            expect(putMock).toHaveBeenCalledTimes(1);
+            const writtenRows = putMock.mock.calls[0][0];
+            expect(writtenRows).toHaveLength(1);
+            expect(writtenRows[0].bookId).toBe('corrupt');
+            expect('coverBlob' in writtenRows[0]).toBe(false);
+        });
+
+        it('is a no-op (no write) when nothing is corrupt', async () => {
+            const { putMock } = setupDb([
+                { bookId: 'healthy', title: 'Healthy', coverBlob: new ArrayBuffer(4) },
+                { bookId: 'no-cover', title: 'No Cover' },
+            ]);
+
+            const repaired = await service.repairCorruptCoverBlobs();
+
+            expect(repaired).toBe(0);
+            expect(putMock).not.toHaveBeenCalled();
+        });
+
+        it('repairCorruptCoverBlobsOnce only scans once per device', async () => {
+            const { listMock } = setupDb([
+                { bookId: 'corrupt', title: 'Corrupt', coverBlob: {} },
+            ]);
+
+            await service.repairCorruptCoverBlobsOnce();
+            await service.repairCorruptCoverBlobsOnce();
+
+            expect(listMock).toHaveBeenCalledTimes(1);
+            expect(localStorage.getItem(REPAIR_FLAG)).toBe('1');
         });
     });
 });

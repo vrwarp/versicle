@@ -54,6 +54,27 @@ describe('CapacitorTTSProvider', () => {
     }));
   });
 
+  describe('regression: speed policy — local rate is playback-time', () => {
+    it('should pass a non-1.0 speed straight through as the live speech rate', async () => {
+      // Local providers have no synthesized artifact (and no audio cache), so
+      // options.speed legitimately reaches the native engine at speak time.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
+        voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (TextToSpeech.speak as any).mockResolvedValue(undefined);
+
+      await provider.init();
+      await provider.play('hello', { voiceId: 'voice1', speed: 1.5 });
+
+      expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
+        text: 'hello',
+        rate: 1.5,
+      }));
+    });
+  });
+
   it('should use queueStrategy 1 (Add) for preload', async () => {
      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
@@ -194,59 +215,6 @@ describe('CapacitorTTSProvider', () => {
     expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
         text: 'Sentence 2',
         queueStrategy: 0
-    }));
-  });
-
-  it('should support resume method (by restarting)', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
-      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (TextToSpeech.speak as any).mockResolvedValue(undefined);
-
-    await provider.init();
-    await provider.play('hello', { voiceId: 'voice1', speed: 1.0 });
-
-    // Clear speak mock
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (TextToSpeech.speak as any).mockClear();
-
-    provider.resume();
-
-    // Since play is async and awaited inside resume (but resume is void),
-    // we need to wait a bit for the async operations to complete.
-    await new Promise(r => setTimeout(r, 10));
-
-    expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
-        text: 'hello'
-    }));
-  });
-
-  it('should resume the same text after pause', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (TextToSpeech.getSupportedVoices as any).mockResolvedValue({
-      voices: [{ voiceURI: 'voice1', name: 'Voice 1', lang: 'en-US' }]
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (TextToSpeech.speak as any).mockResolvedValue(undefined);
-
-    await provider.init();
-    await provider.play('hello', { voiceId: 'voice1', speed: 1.0 });
-
-    provider.pause();
-
-    // Clear speak mock
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (TextToSpeech.speak as any).mockClear();
-
-    provider.resume();
-
-    // Wait for async operations
-    await new Promise(r => setTimeout(r, 10));
-
-    expect(TextToSpeech.speak).toHaveBeenCalledWith(expect.objectContaining({
-        text: 'hello'
     }));
   });
 

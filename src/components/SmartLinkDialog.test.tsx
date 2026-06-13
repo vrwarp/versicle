@@ -1,17 +1,20 @@
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SmartLinkDialog } from './SmartLinkDialog';
-import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
-import { useReadingListStore } from '../store/useReadingListStore';
-import { useBookStore } from '../store/useBookStore';
-import { useGenAIStore } from '../store/useGenAIStore';
-import { genAIService } from '../lib/genai/GenAIService';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
+import { useReadingListStore } from '@store/useReadingListStore';
+import { useBookStore } from '@store/useBookStore';
+import { useGenAIStore } from '@store/useGenAIStore';
+import { mapReadingListToLibrary } from '@domains/google/genai/features/libraryMapping';
 
-// Mock dependencies
-vi.mock('../store/useReadingListStore');
-vi.mock('../store/useBookStore');
-vi.mock('../store/useGenAIStore');
-vi.mock('../lib/genai/GenAIService');
+// Mock dependencies (P9: the GenAIService façade is deleted — the dialog
+// deep-imports the libraryMapping feature module and the domain client).
+vi.mock('@store/useReadingListStore');
+vi.mock('@store/useBookStore');
+vi.mock('@store/useGenAIStore');
+vi.mock('@domains/google', () => ({ getGenAIClient: vi.fn(() => ({})) }));
+vi.mock('@domains/google/genai/features/libraryMapping', () => ({
+    mapReadingListToLibrary: vi.fn(),
+}));
 
 describe('SmartLinkDialog', () => {
     let mockAddEntry: Mock;
@@ -61,7 +64,7 @@ describe('SmartLinkDialog', () => {
             selector({ isEnabled: true })
         );
 
-        (genAIService.mapReadingListToLibrary as Mock).mockResolvedValue([
+        (mapReadingListToLibrary as Mock).mockResolvedValue([
             { readingListFilename: 'unmapped_entry_1', libraryBookId: 'unmapped_book_1' }
         ]);
     });
@@ -72,7 +75,7 @@ describe('SmartLinkDialog', () => {
         expect(screen.getByText('Smart Link Books')).toBeInTheDocument();
 
         await waitFor(() => {
-            expect(genAIService.mapReadingListToLibrary).toHaveBeenCalledTimes(1);
+            expect(mapReadingListToLibrary).toHaveBeenCalledTimes(1);
         });
 
         // The mapped books should appear in the dialog
@@ -82,7 +85,7 @@ describe('SmartLinkDialog', () => {
 
     it('displays error message if GenAI service fails', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-        (genAIService.mapReadingListToLibrary as Mock).mockRejectedValue(new Error('AI Error'));
+        (mapReadingListToLibrary as Mock).mockRejectedValue(new Error('AI Error'));
 
         render(<SmartLinkDialog open={true} onOpenChange={vi.fn()} />);
 
@@ -107,7 +110,7 @@ describe('SmartLinkDialog', () => {
 
     it('applies selected mappings and updates stores', async () => {
         // Need to reset the resolved value because it was changed in a previous test
-        (genAIService.mapReadingListToLibrary as Mock).mockResolvedValue([
+        (mapReadingListToLibrary as Mock).mockResolvedValue([
             { readingListFilename: 'unmapped_entry_1', libraryBookId: 'unmapped_book_1' }
         ]);
 

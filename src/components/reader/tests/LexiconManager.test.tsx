@@ -1,15 +1,14 @@
-import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { LexiconManager } from '../LexiconManager';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock DB and other dependencies
-vi.mock('../../../lib/tts/LexiconService', () => {
+vi.mock('@lib/tts/LexiconService', () => {
   const mockService = {
     getRules: vi.fn().mockResolvedValue([]),
     saveRule: vi.fn().mockResolvedValue(undefined),
     deleteRule: vi.fn().mockResolvedValue(undefined),
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     applyLexicon: vi.fn((text, _rules) => text),
     getBibleLexiconPreference: vi.fn().mockResolvedValue('default'),
     setBibleLexiconPreference: vi.fn().mockResolvedValue(undefined),
@@ -21,7 +20,7 @@ vi.mock('../../../lib/tts/LexiconService', () => {
   };
 });
 
-vi.mock('../../../lib/tts/AudioPlayerService', () => ({
+vi.mock('@lib/tts/AudioPlayerService', () => ({
   AudioPlayerService: {
     getInstance: () => ({
       preview: vi.fn(),
@@ -50,7 +49,7 @@ vi.mock('../../store/useReaderUIStore', () => ({
 }));
 
 // Mock export
-vi.mock('../../../lib/export', () => ({
+vi.mock('@lib/export', () => ({
   exportFile: vi.fn(),
 }));
 
@@ -125,7 +124,7 @@ describe('LexiconManager', () => {
   });
 
   it('should call exportFile when export button is clicked', async () => {
-    const { exportFile } = await import('../../../lib/export');
+    const { exportFile } = await import('@lib/export');
     render(
       <LexiconManager
         open={true}
@@ -145,7 +144,7 @@ describe('LexiconManager', () => {
   });
 
   it('should call exportFile when download sample button is clicked', async () => {
-    const { exportFile } = await import('../../../lib/export');
+    const { exportFile } = await import('@lib/export');
     render(
       <LexiconManager
         open={true}

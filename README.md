@@ -130,53 +130,58 @@ npm run dev
 npm run build
 ```
 
-### Testing
+#### Self-hosting and the Content-Security-Policy
 
-#### Unit Tests (Vitest)
+The CSP is **strict** (no `https:` wildcard since Phase 8) and **generated**
+from the egress destination registry (`src/kernel/net/destinations.ts`). The
+committed `nginx.conf` carries the generated policy; the vite preview headers
+and the build-time `index.html` meta tag render it from the same source, and
+`src/kernel/net/csp.test.ts` fails CI if any copy drifts.
+
+If you self-host with your **own Firebase project**: the policy enumerates
+the standard `*.googleapis.com` / `*.firebaseio.com` endpoints, and Firebase
+auth is proxied same-origin via `/__/auth/` (see `nginx.conf`). A custom
+`authDomain` contacted *directly* (not through that proxy) is not in the
+generated policy — keep the proxy, or extend the registry and regenerate the
+committed copy:
+
 ```bash
-# Run all tests
-vitest run
-
-# Run specific test file
-npx vitest src/lib/ingestion.test.ts
+npm run generate:csp   # rewrites nginx.conf from the registry
 ```
 
-#### Linting
+Remote images inside EPUBs are stripped at sanitize time (privacy: no
+tracking pixels) and additionally blocked by the strict `img-src` — book
+covers and embedded EPUB resources are unaffected (they are local
+blob/data URLs).
+
+### Testing
+
+**`TESTING.md` is the canonical testing document** — all commands below and
+more (typechecking, boundary/coverage ratchets, the emulator-gated suites,
+a11y scans) are specified and kept current there.
+
 ```bash
-npm run lint
+npm test                                   # unit/integration tests (vitest)
+npx vitest run src/lib/ingestion.test.ts   # a single test file
+npm run lint                               # eslint
+npx tsc -b                                 # typecheck (app + tests + e2e)
 ```
 
 #### Android Tests (Docker)
-We use Docker to run Android unit tests in a consistent environment.
+```bash
+docker build -t versicle-android -f Dockerfile.android .
+docker run --rm versicle-android
+```
 
-1.  **Build the Image**:
-    ```bash
-    docker build -t versicle-android -f Dockerfile.android .
-    ```
+#### Verification Suite (Playwright E2E, Docker)
+The end-to-end suite is Playwright specs in `verification/*.spec.ts`, run
+hermetically in Docker:
 
-2.  **Run Tests**:
-    ```bash
-    docker run --rm versicle-android
-    ```
-
-#### Verification Suite (Docker)
-We use Docker to run end-to-end tests in a consistent environment using Playwright.
-
-1.  **Build the Image**:
-    ```bash
-    docker build -t versicle-verification -f Dockerfile.verification .
-    ```
-
-2.  **Run All Tests**:
-    ```bash
-    docker run --rm versicle-verification
-    ```
-
-3.  **Run Specific Verification Script**:
-    ```bash
-    # Run a specific verification script (e.g., layout test)
-    docker run --rm versicle-verification /app/verification/test_journey_reading.py
-    ```
+```bash
+./run_verification.sh                                      # desktop + mobile projects
+./run_verification.sh verification/test_journey_reading.spec.ts
+./run_verification.sh --help                               # full usage
+```
 
 ## Contributing
 
@@ -189,9 +194,10 @@ Versicle integrates a compiled and optimized key-value version of the **[CC-CEDI
 
 The CC-CEDICT database is licensed under the **[Creative Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/)**. In accordance with the ShareAlike terms, our custom-compiled offline JSON database (`public/dict/cedict.json`) and polyphone-merged adaptations are distributed under the same license terms.
 
-### PT Sans Narrow (Modified for Pinyin Support)
-Versicle bundles a modified version of the **[PT Sans Narrow](https://fonts.google.com/specimen/PT+Sans+Narrow)** font family (Regular & Bold), originally created by **[ParaType](https://www.paratype.com/)** (Alexandra Korolkova, Olga Umpeleva, and Vladimir Yefimov) under the **[SIL Open Font License 1.1](https://openfontlicense.org/)**.
+### Versicle Sans Narrow (Modified for Pinyin Support)
+Versicle bundles **Versicle Sans Narrow** (Regular & Bold, `public/fonts/VersicleSansNarrow-*.ttf`), a Modified Version of the **[PT Sans Narrow](https://fonts.google.com/specimen/PT+Sans+Narrow)** font family originally created by **[ParaType](https://www.paratype.com/)** (Alexandra Korolkova, Olga Umpeleva, and Vladimir Yefimov) under the **[SIL Open Font License 1.1](https://openfontlicense.org/)**.
 
 **Modifications**:
-- Lacking native support for Hanyu Pinyin characters with tone marks, we programmatically injected the missing 3rd-tone (caron/hacek) composite glyphs (**`ǎ`**, **`ǐ`**, **`ǒ`**, **`ǔ`**, **`ǚ`**) into the local TrueType font binaries (`public/fonts/PT_Sans-Narrow-Web-*.ttf`) using Python `fonttools` to perfectly align and center the caron accent (`caron`) over their respective base vowel glyphs (`a`, `dotlessi`, `o`, `u`, `udieresis`).
+- Lacking native support for Hanyu Pinyin characters with tone marks, we programmatically injected the missing 3rd-tone (caron/hacek) composite glyphs (**`ǎ`**, **`ǐ`**, **`ǒ`**, **`ǔ`**, **`ǚ`**) into the local TrueType font binaries using Python `fonttools` to perfectly align and center the caron accent (`caron`) over their respective base vowel glyphs (`a`, `dotlessi`, `o`, `u`, `udieresis`).
+- Per OFL-1.1's Reserved Font Name condition, the Modified Version is renamed **Versicle Sans Narrow** (name table + filenames; `scripts/build-pinyin-font.py`). The ParaType copyright and full OFL license text remain embedded in the font's name table; full provenance lives in `third-party/inventory.json`.
 

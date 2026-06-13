@@ -2,10 +2,31 @@
   "files": [],
   "references": [
     {
+      "path": "./packages/zustand-middleware-yjs"
+    },
+    {
+      "path": "./packages/zustand-middleware-yjs/tsconfig.test.json"
+    },
+    {
+      "path": "./packages/y-idb/tsconfig.test.json"
+    },
+    {
+      "path": "./packages/y-cinder"
+    },
+    {
+      "path": "./packages/y-cinder/tsconfig.test.json"
+    },
+    {
       "path": "./tsconfig.app.json"
     },
     {
       "path": "./tsconfig.node.json"
+    },
+    {
+      "path": "./tsconfig.test.json"
+    },
+    {
+      "path": "./tsconfig.e2e.json"
     }
   ]
 }

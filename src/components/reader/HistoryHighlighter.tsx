@@ -1,11 +1,12 @@
-import React from 'react';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
+import type React from 'react';
+import { useReadingStateStore } from '@store/useReadingStateStore';
 import { useHistoryHighlights } from './useHistoryHighlights';
 import { useShallow } from 'zustand/react/shallow';
+import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
 
 interface HistoryHighlighterProps {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rendition: any;
+    /** The shared highlight manager — the ONLY path to epub.js annotations. */
+    highlights: HighlightLayerManager | null;
     isRenditionReady: boolean;
     bookId: string | null;
     isPlaying: boolean;
@@ -16,7 +17,7 @@ interface HistoryHighlighterProps {
  * Isolates high-frequency progress updates from the main ReaderView to prevent re-renders.
  */
 export const HistoryHighlighter: React.FC<HistoryHighlighterProps> = ({
-    rendition,
+    highlights,
     isRenditionReady,
     bookId,
     isPlaying
@@ -31,7 +32,7 @@ export const HistoryHighlighter: React.FC<HistoryHighlighterProps> = ({
     }));
 
     useHistoryHighlights(
-        rendition,
+        highlights,
         isRenditionReady,
         bookId,
         currentCfi,

@@ -1,7 +1,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { TextScanningTrie } from './TextScanningTrie';
-import { SeededRandom, DEFAULT_FUZZ_SEED } from '../../test/fuzz-utils';
+import { SeededRandom, DEFAULT_FUZZ_SEED } from '@test/fuzz-utils';
 
 describe('TextScanningTrie Fuzz Testing', () => {
     const prng = new SeededRandom(DEFAULT_FUZZ_SEED);

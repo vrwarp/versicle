@@ -1,6 +1,7 @@
-import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { Toast } from './Toast';
+import { ToastHost } from '../ToastHost';
+import { useToastStore } from '@store/useToastStore';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 // Mock Lucide icons
@@ -11,7 +12,7 @@ vi.mock('lucide-react', () => ({
     X: () => <span data-testid="icon-x" />,
 }));
 
-describe('Toast', () => {
+describe('Toast (presentational item, Phase 8 §D)', () => {
     beforeEach(() => {
         vi.useFakeTimers();
     });
@@ -20,163 +21,126 @@ describe('Toast', () => {
         vi.useRealTimers();
     });
 
-    it('renders with correct role and aria-live for info type', () => {
-        render(
-            <Toast
-                message="Info message"
-                isVisible={true}
-                type="info"
-                onClose={() => {}}
-            />
-        );
-
-        const toast = screen.getByRole('status');
-        expect(toast).toBeInTheDocument();
-        expect(toast).toHaveAttribute('aria-live', 'polite');
+    it('renders the message with the type icon', () => {
+        render(<Toast message="Info message" type="info" onClose={() => {}} />);
         expect(screen.getByText('Info message')).toBeInTheDocument();
+        expect(screen.getByTestId('icon-info')).toBeInTheDocument();
+        expect(screen.getByTestId('toast')).toHaveAttribute('data-toast-type', 'info');
     });
 
-    it('renders with correct role and aria-live for success type', () => {
-        render(
-            <Toast
-                message="Success message"
-                isVisible={true}
-                type="success"
-                onClose={() => {}}
-            />
-        );
-
-        const toast = screen.getByRole('status');
-        expect(toast).toBeInTheDocument();
-        expect(toast).toHaveAttribute('aria-live', 'polite');
+    it('carries NO live-region semantics of its own (the host owns the persistent regions)', () => {
+        render(<Toast message="Success message" type="success" onClose={() => {}} />);
+        expect(screen.queryByRole('status')).toBeNull();
+        expect(screen.queryByRole('alert')).toBeNull();
     });
 
-    it('renders with correct role and aria-live for error type', () => {
-        render(
-            <Toast
-                message="Error message"
-                isVisible={true}
-                type="error"
-                onClose={() => {}}
-            />
-        );
-
-        const toast = screen.getByRole('alert');
-        expect(toast).toBeInTheDocument();
-        expect(toast).toHaveAttribute('aria-live', 'assertive');
-    });
-
-    it('calls onClose after duration', () => {
+    it('auto-dismisses after its duration', () => {
         const onClose = vi.fn();
-        render(
-            <Toast
-                message="Test"
-                isVisible={true}
-                duration={3000}
-                onClose={onClose}
-            />
-        );
-
+        render(<Toast message="bye" duration={3000} onClose={onClose} />);
+        act(() => { vi.advanceTimersByTime(2999); });
         expect(onClose).not.toHaveBeenCalled();
-        act(() => {
-            vi.advanceTimersByTime(3000);
-        });
-        expect(onClose).toHaveBeenCalled();
+        act(() => { vi.advanceTimersByTime(1); });
+        expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it('pauses timer on hover', () => {
+    it('never dismisses with duration 0 / Infinity (persistent toast)', () => {
         const onClose = vi.fn();
-        render(
-            <Toast
-                message="Test"
-                isVisible={true}
-                duration={3000}
-                onClose={onClose}
-            />
-        );
-
-        const toast = screen.getByRole('status');
-
-        // Advance 1s
-        act(() => {
-            vi.advanceTimersByTime(1000);
-        });
+        render(<Toast message="stay" duration={0} onClose={onClose} />);
+        act(() => { vi.advanceTimersByTime(60_000); });
         expect(onClose).not.toHaveBeenCalled();
+    });
 
-        // Mouse enter (pause)
+    it('pauses the timer on hover and restarts in full on leave', () => {
+        const onClose = vi.fn();
+        render(<Toast message="hover me" duration={3000} onClose={onClose} />);
+        const toast = screen.getByTestId('toast');
+
+        act(() => { vi.advanceTimersByTime(2000); });
         fireEvent.mouseEnter(toast);
-
-        // Advance 5s (should still be open)
-        act(() => {
-            vi.advanceTimersByTime(5000);
-        });
+        act(() => { vi.advanceTimersByTime(10_000); });
         expect(onClose).not.toHaveBeenCalled();
 
-        // Mouse leave (resume)
         fireEvent.mouseLeave(toast);
-
-        // Advance 3s (should close now)
-        act(() => {
-            vi.advanceTimersByTime(3000);
-        });
-        expect(onClose).toHaveBeenCalled();
+        act(() => { vi.advanceTimersByTime(3000); });
+        expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it('does not render when isVisible is false', () => {
-        render(
-            <Toast
-                message="Test"
-                isVisible={false}
-                onClose={() => {}}
-            />
-        );
-
-        expect(screen.queryByRole('status')).not.toBeInTheDocument();
-        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    });
-
-    it('resets pause state when re-shown after hiding', () => {
+    it('pauses on focus-within (keyboard users get the same grace as hover)', () => {
         const onClose = vi.fn();
+        render(<Toast message="focus me" duration={3000} onClose={onClose} />);
 
-        const { rerender } = render(
-            <Toast
-                message="First Toast"
-                isVisible={true}
-                onClose={onClose}
-                duration={3000}
-            />
-        );
+        const dismiss = screen.getByRole('button', { name: 'Dismiss notification' });
+        fireEvent.focus(dismiss);
+        act(() => { vi.advanceTimersByTime(10_000); });
+        expect(onClose).not.toHaveBeenCalled();
 
-        // Hover to pause
-        const toast = screen.getByRole('status');
-        fireEvent.mouseEnter(toast);
+        fireEvent.blur(dismiss, { relatedTarget: document.body });
+        act(() => { vi.advanceTimersByTime(3000); });
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
 
-        // Hide toast (simulating close)
-        rerender(
-            <Toast
-                message="First Toast"
-                isVisible={false}
-                onClose={onClose}
-                duration={3000}
-            />
-        );
+    it('dismiss button calls onClose', () => {
+        const onClose = vi.fn();
+        render(<Toast message="close me" onClose={onClose} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Dismiss notification' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+});
 
-        // Show new toast (simulating new message)
-        rerender(
-            <Toast
-                message="Second Toast"
-                isVisible={true}
-                onClose={onClose}
-                duration={3000}
-            />
-        );
+describe('ToastHost (queue stack above the router gate)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        useToastStore.setState({ toasts: [] });
+    });
 
-        // Advance time by 3500ms. If bug exists (isPaused stuck at true), onClose will NOT be called.
+    afterEach(() => {
+        vi.useRealTimers();
+        useToastStore.setState({ toasts: [] });
+    });
+
+    it('renders PERSISTENT live regions even with zero toasts (a11y item 10)', () => {
+        render(<ToastHost />);
+        expect(screen.getByRole('status')).toBeInTheDocument();
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+
+    it('routes errors into the assertive alert region, the rest into the polite status region', () => {
+        render(<ToastHost />);
         act(() => {
-            vi.advanceTimersByTime(3500);
+            useToastStore.getState().showToast('saved!', 'success');
+            useToastStore.getState().showToast('broke!', 'error');
         });
+        expect(screen.getByRole('status')).toHaveTextContent('saved!');
+        expect(screen.getByRole('alert')).toHaveTextContent('broke!');
+    });
 
-        // Expectation: onClose SHOULD be called because new toast should not be paused.
-        expect(onClose).toHaveBeenCalled();
+    it('stacks multiple toasts instead of overwriting', () => {
+        render(<ToastHost />);
+        act(() => {
+            useToastStore.getState().showToast('first');
+            useToastStore.getState().showToast('second');
+        });
+        expect(screen.getAllByTestId('toast')).toHaveLength(2);
+    });
+
+    it('dismissing one toast leaves the others', () => {
+        render(<ToastHost />);
+        act(() => {
+            useToastStore.getState().showToast('first');
+            useToastStore.getState().showToast('second');
+        });
+        fireEvent.click(screen.getAllByRole('button', { name: 'Dismiss notification' })[0]);
+        expect(screen.getAllByTestId('toast')).toHaveLength(1);
+        expect(screen.getByText('second')).toBeInTheDocument();
+    });
+
+    describe('regression: boot-time toasts were dropped (container below the router gate)', () => {
+        it('a toast fired BEFORE the host mounts renders after mount', () => {
+            // Fire while nothing is mounted (pre-`ready` boot phase).
+            useToastStore.getState().showToast('boot warning', 'error', 0);
+
+            render(<ToastHost />);
+            expect(screen.getByText('boot warning')).toBeInTheDocument();
+        });
     });
 });

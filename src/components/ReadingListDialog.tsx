@@ -3,13 +3,14 @@ import { Modal, ModalContent } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Dialog } from './ui/Dialog';
 import { Checkbox } from './ui/Checkbox';
-import { useReadingListStore } from '../store/useReadingListStore';
-import type { ReadingListEntry } from '../types/db';
+import { useReadingListStore } from '@store/useReadingListStore';
+import type { ReadingListEntry } from '~types/user-data';
 import { ArrowUpDown, Trash2, Edit2, Download, ArrowUp, ArrowDown, BookOpen, Wand2 } from 'lucide-react';
 import { EditReadingListEntryDialog } from './EditReadingListEntryDialog';
-import { exportFile } from '../lib/export';
-import { useGenAIStore } from '../store/useGenAIStore';
-import { genAIService } from '../lib/genai/GenAIService';
+import { exportFile } from '@lib/export';
+import { formatDate } from '@kernel/locale/format';
+import { useGenAIStore } from '@store/useGenAIStore';
+import { getGenAIClient } from '@domains/google';
 import { SmartLinkDialog } from './SmartLinkDialog';
 
 interface ReadingListDialogProps {
@@ -56,7 +57,7 @@ const ReadingListRow = React.memo(({ entry, isSelected, onToggleSelection, onEdi
                 {entry.rating ? '★'.repeat(entry.rating) : <span className="text-muted-foreground">-</span>}
             </td>
             <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                {new Date(entry.lastUpdated).toLocaleDateString()}
+                {formatDate(entry.lastUpdated)}
             </td>
             <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
@@ -97,8 +98,8 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
     const [isSmartLinkOpen, setIsSmartLinkOpen] = useState(false);
     const isGenAIEnabled = useGenAIStore(state => state.isEnabled);
 
-    // Using genAIService to check if any provider is configured (API Key or mock)
-    const canUseGenAI = isGenAIEnabled && genAIService.isConfigured();
+    // The domain client reports whether any provider is configured (API key or mock).
+    const canUseGenAI = isGenAIEnabled && getGenAIClient().isConfigured();
 
     // No need for useEffect -> refreshEntries, store is reactive
 

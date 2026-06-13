@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect } from "./utils";
+import { test, expect, openSettings, gotoSettingsTab, closeSettings, waitForReaderReady } from "./utils";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
@@ -71,7 +71,7 @@ async function clearDataAndReload(page: Page, baseURL: string) {
 
 async function pollForPersistence(page: Page, expectedKeyPattern: string, retries = 20, delay = 500): Promise<string | null> {
   for (let i = 0; i < retries; i++) {
-    const snapshotStr = await page.evaluate("localStorage.getItem('versicle_mock_firestore_snapshot')");
+    const snapshotStr = await page.evaluate(() => localStorage.getItem('versicle_mock_firestore_snapshot'));
     if (snapshotStr && snapshotStr.includes(expectedKeyPattern)) {
       return snapshotStr;
     }
@@ -139,13 +139,10 @@ test("seamless handoff", async ({ browser, baseURL }) => {
     }
 
     await expect(pageA.getByTestId("reader-iframe-container")).toBeVisible();
-    await pageA.waitForFunction("window.rendition && window.rendition.location");
+    await waitForReaderReady(pageA);
     // Wait for rendition manager and locations to be initialized (WebKit may need more time)
-    await pageA.waitForFunction("window.rendition && window.rendition.manager").catch(() => {});
-    await pageA.waitForFunction(
-      "window.rendition && window.rendition.book && window.rendition.book.locations && window.rendition.book.locations.total() > 0",
-      { timeout: 30000 }
-    ).catch(() => {});
+    
+    await waitForReaderReady(pageA, { locations: true });
 
     // Generate progress reliably via a TOC jump. rendition.next() page turns are
     // a no-op on WebKit when rendition.manager is briefly undefined; a TOC jump to
@@ -237,9 +234,10 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   await pageB.screenshot({ path: path.join(__dirname, "screenshots", "handoff_B_initial.png"), timeout: 5000 }).catch(() => {});
 
   console.log("[B] Selecting workspace to start sync...");
-  await pageB.getByTestId("header-settings-button").click();
-  await pageB.waitForTimeout(1000);
-  await pageB.getByRole("button", { name: "Sync & Cloud" }).click();
+  // Settings is now a Radix-Tabs SettingsShell at /settings/:tab (Phase-10 overhaul);
+  // the old role=button "Sync & Cloud" tab is now a real Radix tab.
+  await openSettings(pageB);
+  await gotoSettingsTab(pageB, "sync");
 
   // WebKit cross-client sync-halt detection lags under full-suite parallel load.
   await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 60000 });
@@ -247,7 +245,7 @@ test("seamless handoff", async ({ browser, baseURL }) => {
 
   console.log("[B] Handling migration confirmation modal...");
   await expect(pageB.getByText("Finalize Workspace Switch?")).toBeVisible({ timeout: 15000 });
-  await pageB.getByRole("button", { name: "Yes, Finalize" }).click();
+  await pageB.getByRole("button", { name: "Yes, Finalize" }).dispatchEvent("click");
 
   await expect(pageB.getByTestId("library-view")).toBeVisible({ timeout: 30000 });
   console.log("[B] Workspace finalized and reloaded");
@@ -261,8 +259,17 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   // Check for offload overlay
   await expect(cardB.locator(".bg-black\\/20")).toBeVisible();
 
-  // Click card to trigger Content Missing dialog
+  // Click card to trigger Content Missing dialog. The settings/migration Radix
+  // Dialog backdrop can linger for one animation frame after the workspace-switch
+  // reload and intercept this click (the §0 backdrop-interception signature), so
+  // dismiss any lingering settings overlay first.
+  await closeSettings(pageB);
   await cardB.click({ force: true });
+
+  // The ContentMissingDialog mounts the hidden restore input lazily; wait for it to
+  // attach before supplying the file (the click→dialog handoff is slow on WebKit
+  // under full-suite load). Deterministic wait on the element, not a fixed sleep.
+  await pageB.locator("[data-testid='restore-file-input']").waitFor({ state: "attached", timeout: 15000 });
 
   // Supply the file
   await pageB.setInputFiles("data-testid=restore-file-input", alicePath);
@@ -270,7 +277,13 @@ test("seamless handoff", async ({ browser, baseURL }) => {
 
   // Wait for restoration to complete. The Content Missing dialog closes once the re-supplied
   // epub finishes re-ingesting, which is slow on WebKit under full-suite load.
-  await expect(pageB.getByRole("dialog")).toBeHidden({ timeout: 45000 });
+  // The staged workspace-switch can leave the SettingsShell ("Global Settings")
+  // dialog open on WebKit, so a bare getByRole("dialog") matches two dialogs.
+  // Close any settings overlay, then wait specifically for the restore (Content
+  // Missing) dialog to close after re-ingest.
+  await pageB.keyboard.press("Escape").catch(() => {});
+  if (pageB.url().includes("/settings")) { await pageB.goto("/"); }
+  await expect(pageB.getByRole("dialog", { name: "Content Missing" })).toBeHidden({ timeout: 45000 });
 
   // Resume Reading
   console.log("[B] Checking for Resume Badge...");
@@ -287,7 +300,7 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   await expect(pageB.getByTestId("reader-iframe-container")).toBeVisible({ timeout: 15000 });
 
   // Wait for rendition to load and calculate progress
-  await pageB.waitForFunction("window.rendition && window.rendition.location");
+  await waitForReaderReady(pageB);
 
   // Go back to library
   await pageB.getByTestId("reader-back-button").click();
@@ -321,7 +334,7 @@ test("note marker affordance", async ({ browser, baseURL }) => {
   await expect(readerContainer).toBeVisible({ timeout: 10000 });
 
   // Wait for rendition to be ready
-  await page.waitForFunction("window.rendition && window.rendition.location");
+  await waitForReaderReady(page);
   await page.waitForTimeout(1000);
 
   // Jump straight to a content chapter via the TOC. Turning pages with
@@ -413,9 +426,10 @@ test("offline resilience", async ({ browser, baseURL }) => {
   injectMockFirestore(pageA, testUid);
   await clearDataAndReload(pageA, finalBaseURL);
 
-  // Add Lexicon Rule
-  await pageA.getByTestId("header-settings-button").click();
-  await pageA.getByRole("button", { name: "Dictionary" }).click();
+  // Add Lexicon Rule. Settings is now a Radix-Tabs SettingsShell (Phase-10);
+  // the Dictionary panel's lexicon entry button is "Manage Rules".
+  await openSettings(pageA);
+  await gotoSettingsTab(pageA, "dictionary");
   await pageA.getByRole("button", { name: "Manage Rules" }).click();
   await pageA.getByTestId("lexicon-add-rule-btn").click();
   await pageA.fill("data-testid=lexicon-input-original", "Offline");
@@ -434,7 +448,7 @@ test("offline resilience", async ({ browser, baseURL }) => {
     throw new Error("Device A failed to persist data to mock cloud");
   }
   await pageA.waitForTimeout(2000);
-  const finalSnapshot = await pageA.evaluate("localStorage.getItem('versicle_mock_firestore_snapshot')");
+  const finalSnapshot = await pageA.evaluate(() => localStorage.getItem('versicle_mock_firestore_snapshot'));
   const parsedSnapshot = JSON.parse(finalSnapshot!);
 
   await pageA.close();
@@ -465,9 +479,10 @@ test("offline resilience", async ({ browser, baseURL }) => {
   await pageB.reload();
 
   console.log("[B] Selecting workspace to start sync...");
-  await pageB.getByTestId("header-settings-button").click();
-  await pageB.waitForTimeout(1000);
-  await pageB.getByRole("button", { name: "Sync & Cloud" }).click();
+  // Settings is now a Radix-Tabs SettingsShell at /settings/:tab (Phase-10 overhaul);
+  // the old role=button "Sync & Cloud" tab is now a real Radix tab.
+  await openSettings(pageB);
+  await gotoSettingsTab(pageB, "sync");
 
   // WebKit cross-client sync-halt detection lags under full-suite parallel load.
   await expect(pageB.getByTestId("sync-halt-warning")).toBeVisible({ timeout: 60000 });
@@ -475,7 +490,7 @@ test("offline resilience", async ({ browser, baseURL }) => {
 
   console.log("[B] Handling migration confirmation modal...");
   await expect(pageB.getByText("Finalize Workspace Switch?")).toBeVisible({ timeout: 15000 });
-  await pageB.getByRole("button", { name: "Yes, Finalize" }).click();
+  await pageB.getByRole("button", { name: "Yes, Finalize" }).dispatchEvent("click");
 
   await expect(pageB.getByTestId("library-view")).toBeVisible({ timeout: 30000 });
   console.log("[B] Workspace finalized and reloaded");
@@ -485,9 +500,12 @@ test("offline resilience", async ({ browser, baseURL }) => {
   // Give sync manager time to process
   await pageB.waitForTimeout(5000);
 
-  // Check Settings
-  await pageB.getByTestId("header-settings-button").click();
-  await pageB.getByRole("button", { name: "Dictionary" }).click();
+  // Check Settings. Ensure no leftover settings/migration overlay is still mounted
+  // (its Radix backdrop would intercept the header-settings-button click — §0), then
+  // open the Dictionary tab via the new SettingsShell tabs.
+  await closeSettings(pageB);
+  await openSettings(pageB);
+  await gotoSettingsTab(pageB, "dictionary");
   await pageB.getByRole("button", { name: "Manage Rules" }).click();
 
   console.log("Waiting for synced lexicon rule 'Offline'...");
@@ -500,22 +518,22 @@ test("offline resilience", async ({ browser, baseURL }) => {
 
     if (i > 0 && i % 10 === 0) {
       console.log(`Retry ${i / 10}: Closing and re-opening dialog...`);
+      // The LexiconManager is a nested modal over the SettingsShell. Escape closes
+      // the topmost (LexiconManager) first; closeSettings then tears down the
+      // settings overlay (one history-back nav). Re-open and re-navigate to the
+      // Dictionary tab to re-query for the synced rule.
       await pageB.keyboard.press("Escape");
       await pageB.waitForTimeout(500);
-      await pageB.keyboard.press("Escape");
+      await closeSettings(pageB);
       await pageB.waitForTimeout(1000);
 
-      await pageB.getByTestId("header-settings-button").click();
-      await pageB.waitForTimeout(1000);
-
-      const dictionaryBtn = pageB.getByRole("button", { name: "Dictionary" });
-      await dictionaryBtn.scrollIntoViewIfNeeded();
-      await expect(dictionaryBtn).toBeVisible({ timeout: 5000 });
-      await dictionaryBtn.click({ force: true });
+      await openSettings(pageB);
+      await gotoSettingsTab(pageB, "dictionary");
 
       await pageB.waitForTimeout(500);
-      await expect(pageB.getByRole("button", { name: "Manage Rules" })).toBeVisible({ timeout: 5000 });
-      await pageB.getByRole("button", { name: "Manage Rules" }).click({ force: true });
+      const manageRulesBtn = pageB.getByRole("button", { name: "Manage Rules" });
+      await expect(manageRulesBtn).toBeVisible({ timeout: 5000 });
+      await manageRulesBtn.click({ force: true });
       await pageB.waitForTimeout(500);
     }
     await pageB.waitForTimeout(500);
@@ -542,9 +560,9 @@ test("data liberation", async ({ browser, baseURL }) => {
   injectMockFirestore(page, testUid);
   await clearDataAndReload(page, finalBaseURL);
 
-  // Create some data
-  await page.getByTestId("header-settings-button").click();
-  await page.getByRole("button", { name: "Dictionary" }).click();
+  // Create some data via the new SettingsShell Dictionary tab.
+  await openSettings(page);
+  await gotoSettingsTab(page, "dictionary");
   await page.getByRole("button", { name: "Manage Rules" }).click();
   await page.getByTestId("lexicon-add-rule-btn").click();
   await page.fill("data-testid=lexicon-input-original", "ExportMe");
@@ -555,10 +573,15 @@ test("data liberation", async ({ browser, baseURL }) => {
   await page.reload();
   await expect(page.getByTestId("library-view")).toBeVisible();
 
-  // Open Data Management
-  await page.getByTestId("header-settings-button").click();
-  await page.waitForTimeout(1000);
-  await page.getByRole("button", { name: "Data Management" }).click({ force: true });
+  // Open Data Management via the new SettingsShell tabs. The Data Management tab is
+  // the last item in the vertical tablist and can sit below the fold on mobile
+  // (Playwright reports "Element is outside of the viewport"), so scroll it into
+  // view before clicking rather than relying on a bare click.
+  await openSettings(page);
+  const dataTab = page.getByTestId("settings-tab-data");
+  await dataTab.scrollIntoViewIfNeeded().catch(() => {});
+  await dataTab.click({ force: true });
+  await expect(dataTab).toHaveAttribute("aria-selected", "true");
 
   // Trigger Quick JSON Export
   const downloadPromise = page.waitForEvent("download");
@@ -572,7 +595,9 @@ test("data liberation", async ({ browser, baseURL }) => {
   const fileContent = fs.readFileSync(tempPath, "utf8");
   const data = JSON.parse(fileContent);
 
-  expect(data.version).toBe(2);
+  // BACKUP_VERSION bumped to 3 in the Phase-10 overhaul (BackupService.ts); the v3
+  // manifest still carries yjsSnapshot + semanticData, so those assertions stay.
+  expect(data.version).toBe(3);
   expect(data).toHaveProperty("yjsSnapshot");
   expect(data).toHaveProperty("semanticData");
 

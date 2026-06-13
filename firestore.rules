@@ -1,39 +1,85 @@
 rules_version = '2';
+
+// Versicle Firestore security rules (BYO-Firebase).
+//
+// Deploy with: firebase deploy --only firestore:rules,storage
+// (see firebase.json; storage.rules covers the Cloud Storage snapshot blobs).
+//
+// Paths in use (derived from src/lib/sync/FirestoreSyncManager.ts and the
+// y-cinder FireProvider):
+//   users/{uid}/workspaces/{workspaceId}            workspace metadata index
+//   users/{uid}/versicle/{workspaceId}              workspace root doc (snapshot
+//                                                   pointer, version counter, tombstone)
+//   users/{uid}/versicle/{workspaceId}/updates/*    incremental Yjs updates
+//   users/{uid}/versicle/{workspaceId}/history/*    compacted history segments
+//   users/{uid}/versicle/{workspaceId}/maintenance/* clock-skew probe docs
+//   users/{uid}/versicle/{workspaceId}/metadata/*   compaction lock (lock_compaction)
+//
+// Tombstone invariant: once a workspace root doc carries isDeleted == true, no
+// data may be written into that workspace again (no resurrection, no zombie
+// updates/history/locks). Cleanup (deletes of subcollection docs) stays allowed
+// so residual data can still be purged.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper to check if a workspace is tombstoned
-    function isTombstoned(userId, workspaceId) {
-      return get(/databases/$(database)/documents/users/$(userId)/versicle/$(workspaceId)).data.isDeleted == true;
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
     }
 
-    match /users/{userId}/versicle/{workspaceId} {
-      // Allow read so pre-flight check works
-      allow read: if request.auth != null && request.auth.uid == userId;
-      
-      // Prevent any updates to the root document if it's already a tombstone, 
-      // UNLESS the operation is explicitly planting the tombstone (initial delete).
-      // Or if the document doesn't exist yet.
-      allow write: if request.auth != null && request.auth.uid == userId && 
-                   (!resource.exists || resource.data.isDeleted != true || request.resource.data.isDeleted == true);
-      
-      match /updates/{updateId} {
-        // Prevent writing new updates to a tombstoned workspace
-        allow write: if request.auth != null && request.auth.uid == userId && 
-                     (!exists(/databases/$(database)/documents/users/$(userId)/versicle/$(workspaceId)) || 
-                      !isTombstoned(userId, workspaceId));
-        // Allow read for sync
-        allow read: if request.auth != null && request.auth.uid == userId;
-      }
+    // True when the workspace root doc exists and is tombstoned.
+    function workspaceTombstoned(userId, workspaceId) {
+      return exists(/databases/$(database)/documents/users/$(userId)/versicle/$(workspaceId))
+        && get(/databases/$(database)/documents/users/$(userId)/versicle/$(workspaceId))
+             .data.get('isDeleted', false) == true;
     }
 
-    // Workspace Metadata (Workspaces list)
+    // Workspace metadata index (list/create/soft-delete flags).
     match /users/{userId}/workspaces/{workspaceId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isOwner(userId);
     }
 
-    // Default catch-all for other user data
-    match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    // Workspace root document.
+    match /users/{userId}/versicle/{workspaceId} {
+      allow read: if isOwner(userId);
+      // A document that does not exist yet cannot be tombstoned.
+      allow create: if isOwner(userId);
+      // Once tombstoned, the only legal update re-asserts the tombstone
+      // (idempotent deleteWorkspace retry); everything else — including
+      // un-deleting or writing snapshot/version data — is denied.
+      allow update: if isOwner(userId) && (
+        resource.data.get('isDeleted', false) != true
+        || (
+          request.resource.data.get('isDeleted', false) == true
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['isDeleted', 'deletedAt'])
+        )
+      );
+      // Deleting a tombstoned root doc would erase the tombstone and allow
+      // resurrection, so it is denied.
+      allow delete: if isOwner(userId)
+        && resource.data.get('isDeleted', false) != true;
+    }
+
+    // Workspace subcollections written by y-cinder: updates, history,
+    // maintenance, metadata (compaction lock). One depth-1 block covers them
+    // all; nothing in the app writes deeper paths.
+    match /users/{userId}/versicle/{workspaceId}/{collectionId}/{docId} {
+      allow read: if isOwner(userId);
+      // No new data may enter a tombstoned workspace.
+      allow create, update: if isOwner(userId)
+        && !workspaceTombstoned(userId, workspaceId);
+      // Cleanup of residual data in a tombstoned workspace must stay possible.
+      allow delete: if isOwner(userId);
+    }
+
+    // Owner-scoped catch-all for any other (legacy/future) user-scoped data.
+    // The explicit collection guards keep this from overlapping the blocks
+    // above — without them, Firestore's any-rule-allows semantics would let
+    // this block silently neuter the tombstone denials.
+    match /users/{userId}/{collectionId}/{document=**} {
+      allow read, write: if isOwner(userId)
+        && collectionId != 'versicle'
+        && collectionId != 'workspaces';
     }
   }
 }

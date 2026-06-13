@@ -11,9 +11,9 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   // lags the store on WebKit. waitForFunction(fn, arg, options) — the timeout is
   // the THIRD positional arg, so pass `undefined` for arg or it is ignored.
   const waitPlaying = () =>
-    page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().isPlaying === true, undefined, { timeout: 30000 });
+    page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().isPlaying === true, undefined, { timeout: 30000 });
   const waitPaused = () =>
-    page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().isPlaying === false, undefined, { timeout: 15000 });
+    page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().isPlaying === false, undefined, { timeout: 15000 });
 
   console.log('Starting Audio Bookmarking Journey...');
   await utils.resetApp(page);
@@ -33,7 +33,7 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   // SECURE SYNC: Wait for the TTS engine to actually load the new chapter's text
   console.log('Waiting for TTS queue synchronization...');
   await page.waitForFunction(() => {
-    const queue = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().queue;
+    const queue = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().queue;
     return queue.length > 0;
   }, undefined, { timeout: 15000 });
   await page.waitForTimeout(500); // Allow state to fully settle
@@ -101,22 +101,23 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   console.log('Testing Global Inbox...');
 
   // Create a second bookmark to exercise the Global Inbox. Part 1 already validates
-  // the real UI pause→play gesture; here we drive pause/play through the TTS store
-  // actions instead of the compass-pill buttons. Under the heavy IndexedDB contention
-  // of the full parallel WebKit run, the compass-pill button can lag the store state
-  // (React re-render delay), making a UI click flaky — the store actions exercise the
-  // same Dragnet capture path deterministically (the pause/play below already do this).
+  // the real UI pause→play gesture; here we drive pause/play through the typed
+  // test-api TTS commands instead of the compass-pill buttons. Under the heavy
+  // IndexedDB contention of the full parallel WebKit run, the compass-pill button
+  // can lag the store state (React re-render delay), making a UI click flaky —
+  // `__versicleTest.tts` routes through the same TtsController/Dragnet capture
+  // path deterministically (the pause/play below already do this).
   await page.evaluate(() => {
-    const tts = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState();
-    if (!tts.isPlaying) tts.play();
+    const playing = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().isPlaying;
+    if (!playing) window.__versicleTest?.tts.play();
   });
   await waitPlaying();
 
   // Pause then Play within the Dragnet window (≤5s) to capture the second bookmark.
-  await page.evaluate(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().pause());
+  await page.evaluate(() => window.__versicleTest?.tts.pause());
   await waitPaused();
   await page.waitForTimeout(300);
-  await page.evaluate(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().play());
+  await page.evaluate(() => window.__versicleTest?.tts.play());
   await waitPlaying();
 
   // Wait for the second bookmark to appear

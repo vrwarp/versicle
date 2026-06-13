@@ -1,5 +1,5 @@
-import React from 'react';
-import { useSyncToasts } from '../../lib/sync/hooks/useSyncToasts';
+import type React from 'react';
+import { useSyncToasts } from '@hooks/useSyncToasts';
 
 /**
  * Headless component that activates sync toast notifications.

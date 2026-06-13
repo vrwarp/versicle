@@ -1,23 +1,25 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useGenAIStore } from '../../store/useGenAIStore';
-import { useContentAnalysisStore } from '../../store/useContentAnalysisStore';
+import { useGenAIStore } from '@store/useGenAIStore';
+import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
 import { useShallow } from 'zustand/react/shallow';
 import { X, Copy, ChevronRight, ChevronDown, RotateCcw, Loader2, FileText } from 'lucide-react';
-import { TYPE_COLORS } from '../../types/content-analysis';
-import type { ContentType } from '../../types/content-analysis';
-import type { Rendition } from 'epubjs';
-import { useToastStore } from '../../store/useToastStore';
-import { dbService } from '../../db/DBService';
-import type { TableImage } from '../../types/db';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { reprocessBook } from '../../lib/ingestion';
+import { TYPE_COLORS } from '~types/content-analysis';
+import type { ContentType } from '~types/content-analysis';
+import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
+import { useToastStore } from '@store/useToastStore';
+import { bookContent } from '@data/repos/bookContent';
+import type { TableImage } from '~types/cache';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useImportController } from '@app/library/useImportController';
 import { ContentAnalysisReport } from './ContentAnalysisReport';
+import { formatBytes } from '@kernel/locale/format';
+import { useConfirm } from '../ui/ConfirmDialog';
 
 interface ContentAnalysisLegendProps {
-    rendition?: Rendition | null;
+    engine?: ReaderEngine | null;
 }
 
-export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ rendition }) => {
+export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ engine }) => {
     const { isDebugModeEnabled, setDebugModeEnabled } = useGenAIStore(
         useShallow((state) => ({
             isDebugModeEnabled: state.isDebugModeEnabled,
@@ -30,6 +32,8 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
     const [isExpanded, setIsExpanded] = useState(true);
     const [isReportOpen, setIsReportOpen] = useState(false);
     const showToast = useToastStore(state => state.showToast);
+    const importController = useImportController();
+    const confirm = useConfirm();
     const [isReprocessing, setIsReprocessing] = useState(false);
 
     // Table Images Carousel State
@@ -91,7 +95,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
             // Let's rely on the fact that we replace the state below.
 
             try {
-                const images = await dbService.getTableImages(currentBookId);
+                const images = await bookContent.getTableImages(currentBookId);
                 if (isMounted && images) {
                     setTableImages(images);
 
@@ -129,48 +133,30 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
     }, []);
 
 
-    // Listen for selection changes in the reader
+    // Listen for selection changes in the reader (engine event bus)
     useEffect(() => {
-        if (!rendition || !isDebugModeEnabled) return;
+        if (!engine || !isDebugModeEnabled) return;
 
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const handleSelected = (cfiRange: string, _contents: unknown) => {
-            setCfiInput(cfiRange);
-
-            // Get text content
-            try {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const range = (rendition as any).getRange(cfiRange);
-                if (range) {
-                    setMergedContent(range.toString());
-                }
-            } catch (e) {
-                console.warn("Failed to get range for CFI", e);
-            }
-        };
-
-        rendition.on('selected', handleSelected);
-
-        return () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (rendition as any).off('selected', handleSelected);
-        };
-    }, [rendition, isDebugModeEnabled]);
+        return engine.subscribe((event) => {
+            if (event.type !== 'selected') return;
+            setCfiInput(event.cfiRange);
+            setMergedContent(event.range.toString());
+        });
+    }, [engine, isDebugModeEnabled]);
 
     const handleCfiChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const newCfi = e.target.value;
         setCfiInput(newCfi);
 
-        if (!rendition || !newCfi) return;
+        if (!engine || !newCfi) return;
 
         try {
             // Display the location
-            await rendition.display(newCfi);
+            await engine.display(newCfi);
 
             // Try to select it visually
             // getting range from cfi
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const range = (rendition as any).getRange(newCfi);
+            const range = engine.getRenderedRange(newCfi);
             if (range) {
                 setMergedContent(range.toString());
 
@@ -184,12 +170,10 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                 // This is the main window selection, but reader is in iframe
 
                 // We need to access the iframe's selection
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const contents = (rendition as any).getContents();
+                const contents = engine.getContentViews();
                 if (contents && contents.length > 0) {
                     // Iterate through contents to find where the range belongs (or just try all)
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    contents.forEach((content: any) => {
+                    contents.forEach((content) => {
                         const contentDoc = content.document;
                         const contentWin = content.window;
                         if (contentDoc && contentWin) {
@@ -200,8 +184,8 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                             // Let's try to add it to selection.
                             try {
                                 const sel = contentWin.getSelection();
-                                sel.removeAllRanges();
-                                sel.addRange(range);
+                                sel?.removeAllRanges();
+                                sel?.addRange(range);
                             } catch {
                                 // Ignore mismatch errors
                             }
@@ -230,46 +214,43 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
     };
 
     const jumpToTable = (cfi: string) => {
-        rendition?.display(cfi);
+        engine?.display(cfi);
         setCfiInput(cfi);
         setHighlightedCfi(cfi);
     };
 
-    // Manage highlight lifecycle
+    // Manage highlight lifecycle (manager 'debug' layer, temp class)
     useEffect(() => {
-        if (!rendition || !highlightedCfi) return;
+        if (!engine || !highlightedCfi) return;
+        const highlights = engine.highlights;
 
-        try {
-            // @ts-expect-error annotations untyped
-            rendition.annotations.add('highlight', highlightedCfi, {}, null, 'temp-table-highlight', {
+        highlights.add('debug', highlightedCfi, {
+            className: 'temp-table-highlight',
+            onClick: null,
+            styles: {
                 fill: 'yellow',
                 backgroundColor: 'rgba(255, 255, 0, 0.3)',
                 fillOpacity: '0.3',
                 mixBlendMode: 'multiply'
-            });
-        } catch (e) {
-            console.warn("Failed to add highlight", e);
-        }
+            },
+        });
 
         return () => {
-            try {
-                // @ts-expect-error annotations untyped
-                rendition.annotations.remove(highlightedCfi, 'highlight');
-            } catch (e) {
-                console.warn("Failed to remove highlight", e);
-            }
+            highlights.remove('debug', highlightedCfi);
         };
-    }, [rendition, highlightedCfi]);
+    }, [engine, highlightedCfi]);
 
     const handleReprocess = async () => {
         if (!currentBookId) return;
-        if (!window.confirm("Reprocess this book? This will re-extract all text and images. The page will reload.")) {
+        if (!(await confirm({ titleKey: 'reader.reprocess.title', bodyKey: 'reader.reprocess.body', confirmKey: 'common.continue' }))) {
             return;
         }
 
         setIsReprocessing(true);
         try {
-            await reprocessBook(currentBookId);
+            // Through the ImportOrchestrator queue (mutex-guarded) — the
+            // lib/ingestion.reprocessBook delegate died with this re-point.
+            await importController.reprocessBook(currentBookId);
             window.location.reload();
         } catch (e) {
             console.error("Reprocessing failed", e);
@@ -399,7 +380,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
                                                 {img.cfi}
                                             </div>
                                             <div className="flex justify-between items-center text-[9px] text-muted-foreground">
-                                                <span>{(img.imageBlob.size / 1024).toFixed(1)} KB</span>
+                                                <span>{formatBytes(img.imageBlob.size)}</span>
                                             </div>
                                             {adaptationText && (
                                                 <div className="mt-1 p-1 bg-muted/50 rounded border border-border/50 text-[8px] max-h-16 overflow-y-auto leading-tight" title={adaptationText}>
@@ -432,7 +413,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ re
             <ContentAnalysisReport
                 isOpen={isReportOpen}
                 onClose={() => setIsReportOpen(false)}
-                rendition={rendition}
+                engine={engine}
             />
         </div>
     );

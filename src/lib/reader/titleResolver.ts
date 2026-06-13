@@ -1,4 +1,5 @@
-import type { NavigationItem, UserInventoryItem } from '../../types/db';
+import type { NavigationItem } from '~types/book';
+import type { UserInventoryItem } from '~types/user-data';
 
 /**
  * Compares two path strings resiliently:
@@ -61,7 +62,6 @@ export const resolveSyntheticPreference = (book: Partial<UserInventoryItem> | nu
   if (book.useSyntheticToc !== undefined) {
     return book.useSyntheticToc;
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const syntheticToc = (book as any).syntheticToc;
+  const syntheticToc = (book as { syntheticToc?: unknown[] }).syntheticToc;
   return !!(syntheticToc && syntheticToc.length > 0);
 };

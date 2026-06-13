@@ -1,5 +1,5 @@
-import { dbService } from '../../db/DBService';
-import type { CachedSegment } from '../../types/db';
+import { audioCache } from '@data/repos/audioCache';
+import type { CacheAudioBlob } from '~types/cache';
 import type { Timepoint } from './providers/types';
 
 /**
@@ -11,15 +11,22 @@ export class TTSCache {
    * Generates a deterministic key for the cache based on synthesis parameters.
    * Uses SHA-256 hashing.
    *
+   * The key is deliberately speed-independent: audio is always synthesized at 1.0
+   * and the playback rate is applied at the audio sink, so one cached blob serves
+   * every playback speed. (Entries written by older builds included the speed in
+   * the key; those simply miss and are regenerated — the cache is regenerable.)
+   *
+   * The trailing `|1` is the retired `pitch` parameter's slot: the param was always
+   * defaulted (vestige noted at Phase 5a), so it was removed from the signature with
+   * the hash input kept byte-identical — existing cache entries keep hitting. The
+   * golden-key regression test (TTSCache.test.ts) pins this.
+   *
    * @param text - The text content.
    * @param voiceId - The ID of the voice used.
-   * @param speed - The playback speed.
-   * @param pitch - The pitch setting (default 1.0).
-   * @param lexiconHash - Hash of the current lexicon rules (default '').
    * @returns A Promise that resolves to the hex string hash key.
    */
-  async generateKey(text: string, voiceId: string, speed: number, pitch: number = 1.0, lexiconHash: string = ''): Promise<string> {
-    const data = `${text}|${voiceId}|${speed}|${pitch}|${lexiconHash}`;
+  async generateKey(text: string, voiceId: string): Promise<string> {
+    const data = `${text}|${voiceId}|1`;
     const encoder = new TextEncoder();
     const dataBuffer = encoder.encode(data);
     const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
@@ -28,13 +35,14 @@ export class TTSCache {
   }
 
   /**
-   * Retrieves a cached segment if it exists and updates its last accessed time.
+   * Retrieves a cached segment if it exists and updates its last accessed time
+   * (debounced inside the repo).
    *
    * @param key - The cache key.
-   * @returns A Promise that resolves to the CachedSegment or undefined if not found.
+   * @returns A Promise that resolves to the CacheAudioBlob row or undefined if not found.
    */
-  async get(key: string): Promise<CachedSegment | undefined> {
-    return await dbService.getCachedSegment(key);
+  async get(key: string): Promise<CacheAudioBlob | undefined> {
+    return await audioCache.getSegment(key);
   }
 
   /**
@@ -46,6 +54,6 @@ export class TTSCache {
    * @returns A Promise that resolves when the segment is stored.
    */
   async put(key: string, audio: ArrayBuffer, alignment?: Timepoint[]): Promise<void> {
-    await dbService.cacheSegment(key, audio, alignment);
+    await audioCache.putSegment(key, audio, alignment);
   }
 }

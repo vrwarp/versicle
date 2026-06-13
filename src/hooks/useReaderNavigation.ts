@@ -1,19 +1,25 @@
 import { useEffect, useRef } from 'react';
 
 interface UseReaderNavigationProps {
-    rendition: unknown;
     readerViewMode: 'paginated' | 'scrolled';
-    handlePrev: () => void;
-    handleNext: () => void;
     scrollWrapperRef: React.RefObject<HTMLDivElement | null>;
     viewerRef: React.RefObject<HTMLDivElement | null>;
 }
 
+/**
+ * Reader-area wheel + touch navigation (scrolled mode).
+ *
+ * Phase 8 §E: the KEYBOARD half of this hook — one of the two overlapping
+ * window keydown registries, including the P0 interim TTS-status
+ * predicate ("Interim mitigation until the Phase 8
+ * KeyboardShortcutService replaces both") — was deleted. Page-turn keys
+ * are now `useReaderPageTurnShortcuts` registrations on the
+ * KeyboardShortcutService (src/app/shortcuts/), where scope stacking
+ * replaces the cross-registry peeking; the engine's iframe keydown stream
+ * feeds the same service via `useReaderEngineKeyBridge`.
+ */
 export function useReaderNavigation({
-    rendition,
     readerViewMode,
-    handlePrev,
-    handleNext,
     scrollWrapperRef,
     viewerRef
 }: UseReaderNavigationProps) {
@@ -68,54 +74,4 @@ export function useReaderNavigation({
             wrapper.removeEventListener('touchend', handleTouchEnd);
         };
     }, [readerViewMode, scrollWrapperRef, viewerRef]);
-
-    // Keyboard navigation (Left/Right Arrows)
-    useEffect(() => {
-        const handleKeyDown = (e: Event) => {
-            const keyboardEvent = e as KeyboardEvent;
-
-            // Prevent holding the key down from spamming page turns
-            if (keyboardEvent.repeat) return;
-
-            // Ignore keypresses if the user is typing in an input field (like the Search or Notes panel)
-            const target = keyboardEvent.target as Element;
-            if (
-                target &&
-                (target.tagName === 'INPUT' ||
-                    target.tagName === 'TEXTAREA' ||
-                    (target as HTMLElement).isContentEditable)
-            ) {
-                return;
-            }
-
-            if (keyboardEvent.key === 'ArrowLeft') {
-                if (keyboardEvent.cancelable) {
-                    keyboardEvent.preventDefault();
-                }
-                handlePrev();
-            } else if (keyboardEvent.key === 'ArrowRight') {
-                if (keyboardEvent.cancelable) {
-                    keyboardEvent.preventDefault();
-                }
-                handleNext();
-            }
-        };
-
-        // 1. Listen on the parent window (active when clicking menus, buttons, HUD)
-        window.addEventListener('keydown', handleKeyDown);
-
-        // 2. Listen on the iframe via the epubjs rendition (active when clicking the book text)
-        if (rendition) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (rendition as any).on('keydown', handleKeyDown);
-        }
-
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            if (rendition) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (rendition as any).off('keydown', handleKeyDown);
-            }
-        };
-    }, [rendition, handlePrev, handleNext]);
 }

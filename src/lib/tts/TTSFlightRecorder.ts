@@ -1,20 +1,25 @@
 import { v4 as uuid } from 'uuid';
-import { getDB } from '../../db/db';
-import type { 
-    FlightEventSource, 
-    FlightEvent, 
-    FlightSnapshot 
-} from '../../types/db';
-
-const MAX_EVENTS = 2000;
-const MAX_STRING_LEN = 80;
-const MAX_SNAPSHOTS = 10;
+import { diagnostics } from '@data/repos/diagnostics';
+import { RingRecorder } from '@kernel/diagnostics/ringRecorder';
+import type { FlightEventSource, FlightEvent, FlightSnapshot } from '~types/flight-recorder';
 
 /**
- * Lightweight ring-buffer based event tracer for the TTS subsystem.
+ * TTSFlightRecorder — the audio domain's named flight recorder.
+ *
+ * Since 5b-PR4 the generic ring-buffer core lives in
+ * src/kernel/diagnostics/ringRecorder.ts (N7: zero internal deps; further
+ * consumers arrive in P6/P7); this wrapper owns everything TTS-specific —
+ * the playback-context provider, the premature-chapter-advance anomaly
+ * heuristic, and snapshot persistence (IndexedDB via the diagnostics repo;
+ * works in both the worker and the main thread).
+ *
+ * Each JS context (main thread, TTS worker) has its own module instance; the
+ * production engine runs in the worker, so its live buffer is exported over
+ * the engine handle (TtsEngine.exportDiagnostics — the S9 fix), while the
+ * persisted snapshots are shared through IndexedDB.
  */
 
-export type ContextProvider = () => {
+type ContextProvider = () => {
     bookId: string | null;
     sectionIndex: number;
     currentIndex: number;
@@ -26,19 +31,19 @@ export type ContextProvider = () => {
     nextItemSkipped?: boolean | undefined;
 };
 
-/**
- * Lightweight ring-buffer based event tracer for the TTS subsystem.
- */
+/** The live-buffer export served over the engine handle (S9). */
+export interface FlightRecorderExport {
+    stats: { eventCount: number; capacity: number; oldestWall: number | null };
+    events: FlightEvent[];
+}
+
 class TTSFlightRecorder {
-    private buffer: FlightEvent[] = [];
-    private seq = 0;
-    private head = 0;
-    private full = false;
+    private ring = new RingRecorder<FlightEventSource>();
     private contextProvider: ContextProvider | null = null;
 
     /**
      * Optional callback invoked synchronously when an anomaly is detected,
-     * BEFORE the snapshot is taken. This allows the caller (AudioPlayerService)
+     * BEFORE the snapshot is taken. This allows the caller (the engine)
      * to emit detailed diagnostic events that get captured in the snapshot.
      */
     onAnomalyDetected: ((currentIndex: number, queueLen: number) => void) | null = null;
@@ -50,35 +55,9 @@ class TTSFlightRecorder {
 
     /** Record an event. Hot path — must be fast. */
     record(src: FlightEventSource, ev: string, data?: Record<string, string | number | boolean | null | undefined>) {
-        const event: FlightEvent = {
-            seq: this.seq++,
-            ts: performance.now(),
-            wall: Date.now(),
-            src,
-            ev,
-        };
+        this.ring.record(src, ev, data);
 
-        if (data) {
-            const d: Record<string, string | number | boolean | null | undefined> = {};
-            for (const key in data) {
-                const val = data[key];
-                d[key] = typeof val === 'string' && val.length > MAX_STRING_LEN
-                    ? val.slice(0, MAX_STRING_LEN)
-                    : val;
-            }
-            event.d = d;
-        }
-
-        if (this.full) {
-            this.buffer[this.head] = event;
-        } else {
-            this.buffer.push(event);
-        }
-
-        this.head = (this.head + 1) % MAX_EVENTS;
-        if (this.head === 0 && !this.full) this.full = true;
-
-        // Anomaly detection
+        // Anomaly detection (TTS-specific heuristic; stays out of the kernel core)
         if (ev === 'playNext') {
             // Check if it's an anomaly (chapter advance far from end)
             if (data && typeof data.index === 'number' && typeof data.queueLen === 'number' && data.hasNext === false) {
@@ -97,29 +76,22 @@ class TTSFlightRecorder {
 
     /** Export events in chronological order. */
     export(): FlightEvent[] {
-        if (!this.full) return this.buffer.slice();
-        return [
-            ...this.buffer.slice(this.head),
-            ...this.buffer.slice(0, this.head)
-        ];
+        return this.ring.export();
     }
 
     /** Get buffer stats for the UI. */
     getStats(): { eventCount: number; capacity: number; oldestWall: number | null } {
-        const events = this.export();
-        return {
-            eventCount: events.length,
-            capacity: MAX_EVENTS,
-            oldestWall: events[0]?.wall ?? null
-        };
+        return this.ring.getStats();
+    }
+
+    /** The live-buffer export served over the engine handle (S9). */
+    exportForHandle(): FlightRecorderExport {
+        return { stats: this.getStats(), events: this.export() };
     }
 
     /** Clear the live buffer. */
     clear() {
-        this.buffer = [];
-        this.head = 0;
-        this.full = false;
-        this.seq = 0;
+        this.ring.clear();
     }
 
     // ─── Snapshot API ───
@@ -162,12 +134,7 @@ class TTSFlightRecorder {
     /** List all saved snapshots (metadata only). */
     async listSnapshots(): Promise<Omit<FlightSnapshot, 'eventsJSON'>[]> {
         try {
-            const db = await getDB();
-            const all = await db.getAll('flight_snapshots');
-            return all
-                .sort((a, b) => b.createdAt - a.createdAt)
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                .map(({ eventsJSON: _unused, ...meta }: FlightSnapshot) => meta);
+            return await diagnostics.listSnapshots();
         } catch (e) {
             console.error('[FlightRecorder] Failed to list snapshots', e);
             return [];
@@ -177,8 +144,7 @@ class TTSFlightRecorder {
     /** Load a full snapshot by ID. */
     async getSnapshot(id: string): Promise<FlightSnapshot | null> {
         try {
-            const db = await getDB();
-            return await db.get('flight_snapshots', id) ?? null;
+            return await diagnostics.getSnapshot(id);
         } catch {
             return null;
         }
@@ -203,43 +169,35 @@ class TTSFlightRecorder {
     /** Delete a snapshot by ID. */
     async deleteSnapshot(id: string): Promise<void> {
         try {
-            const db = await getDB();
-            await db.delete('flight_snapshots', id);
+            await diagnostics.deleteSnapshot(id);
         } catch { /* best effort */ }
     }
 
     /** Delete all saved snapshots. */
     async clearSnapshots(): Promise<void> {
         try {
-            const db = await getDB();
-            await db.clear('flight_snapshots');
+            await diagnostics.clearSnapshots();
         } catch { /* best effort */ }
     }
 
     // ─── Internal ───
 
     private async saveSnapshot(snap: FlightSnapshot) {
-        const db = await getDB();
-        const tx = db.transaction('flight_snapshots', 'readwrite');
-        const store = tx.objectStore('flight_snapshots');
-
-        const all = await store.getAll() as FlightSnapshot[];
-        if (all.length >= MAX_SNAPSHOTS) {
-            all.sort((a: FlightSnapshot, b: FlightSnapshot) => a.createdAt - b.createdAt);
-            const excess = all.length - MAX_SNAPSHOTS + 1;
-            for (let i = 0; i < excess; i++) {
-                await store.delete(all[i].id);
-            }
-        }
-
-        await store.put(snap);
-        await tx.done;
+        // Persistence (incl. the MAX_SNAPSHOTS prune in one gated txn) lives
+        // in the diagnostics repo (P3-9).
+        await diagnostics.saveSnapshot(snap);
     }
 }
 
 export const flightRecorder = new TTSFlightRecorder();
 
+declare global {
+  interface Window {
+    /** Debug handle: inspect/export the TTS flight recorder from devtools. */
+    __ttsFlightRecorder?: TTSFlightRecorder;
+  }
+}
+
 if (typeof window !== 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__ttsFlightRecorder = flightRecorder;
+    window.__ttsFlightRecorder = flightRecorder;
 }

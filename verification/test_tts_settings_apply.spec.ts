@@ -1,5 +1,4 @@
-import { test, expect } from "./utils";
-import { captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter } from "./utils";
+import { test, expect, captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter, openAudioSettings, switchAudioPanelView } from "./utils";
 
 test("tts speed setting applies", async ({ page }) => {
   console.log("Starting Speed Setting Test...");
@@ -13,14 +12,9 @@ test("tts speed setting applies", async ({ page }) => {
   // Navigate to chapter
   await navigateToChapter(page);
 
-  // Open TTS Panel
-  await page.getByTestId("reader-audio-button").click();
-  await expect(page.getByTestId("tts-panel")).toBeVisible();
-
-  // Go to Settings tab
+  // Open TTS Panel and switch to its Settings view (footer tab is off-viewport)
   console.log("Opening TTS settings...");
-  await page.getByRole("button", { name: "Settings" }).click({ force: true });
-  await expect(page.getByText("Voice & Pace")).toBeVisible();
+  await openAudioSettings(page);
 
   // Find the speed slider
   const speedSlider = page.locator("[data-testid='tts-speed-slider']");
@@ -44,8 +38,11 @@ test("tts speed setting applies", async ({ page }) => {
     await captureScreenshot(page, "speed_setting_section");
   }
 
-  // Go back to Queue and start playback
-  await page.getByRole("button", { name: "Up Next" }).click({ force: true });
+  // Go back to Queue and start playback. The footer "Up Next" tab sits below the
+  // mobile Sheet fold AND its centerpoint is overlapped by the scrollable settings
+  // body (div.p-6...overflow-y-auto intercepts pointer events), so a plain click is
+  // intercepted. Route through the helper, which scrolls + force-clicks past the overlap.
+  await switchAudioPanelView(page, "queue");
   await expect(page.getByTestId("tts-queue-item-0")).toBeVisible({ timeout: 5000 });
 
   // Start playback
@@ -78,13 +75,8 @@ test("tts voice selection persists", async ({ page }) => {
   // Navigate to chapter
   await navigateToChapter(page);
 
-  // Open TTS Panel
-  await page.getByTestId("reader-audio-button").click();
-  await expect(page.getByTestId("tts-panel")).toBeVisible();
-
-  // Go to Settings
-  await page.getByRole("button", { name: "Settings" }).click({ force: true });
-  await page.waitForTimeout(500);
+  // Open TTS Panel and switch to its Settings view (footer tab is off-viewport)
+  await openAudioSettings(page);
 
   // Find voice selector
   const voiceSection = page.getByText("Voice & Pace");
@@ -116,11 +108,8 @@ test("tts voice selection persists", async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId("reader-back-button")).toBeVisible({ timeout: 10000 });
 
-  // Re-open settings
-  await page.getByTestId("reader-audio-button").click();
-  await expect(page.getByTestId("tts-panel")).toBeVisible();
-  await page.getByRole("button", { name: "Settings" }).click({ force: true });
-  await page.waitForTimeout(500);
+  // Re-open settings (footer tab is off-viewport)
+  await openAudioSettings(page);
 
   await captureScreenshot(page, "voice_selection_after_reload");
   console.log("Voice Selection Persistence Test Completed!");

@@ -1,0 +1,145 @@
+{
+  "$comment": "Captured Y.Doc fixtures (phase2-fork-surgery.md §4). Files are reviewed artifacts, never regenerated in CI; src/store/__tests__/crdt-contract/fixtures-manifest.test.ts pins sha256 agreement. See README.md.",
+  "fixtures": {
+    "v1": {
+      "era": 1,
+      "file": "v1.update.bin",
+      "sha256": "fd8256ef58d648b8578cd0b9a40f24bd177be9e9baffa45388fd70823edfd667",
+      "method": "writer-ytext-fallback",
+      "fidelityNote": "FALLBACK fidelity (§4.2): Y.Text-encoded with the CURRENT yjs library, not captured through a historical-era worktree. Y.Text items are real; era-specific struct layout is approximated. See README.md for the worktree procedure.",
+      "generator": "scripts/capture-ydoc-fixture.ts",
+      "generatorSha": "fff7f6366164cdf180eb087f2746a05be5a506a5",
+      "capturedAt": "2026-06-12T16:14:15.563Z",
+      "contentChecklist": [
+        "library.__schemaVersion === 1",
+        "library.books: 2 books (one CJK title)",
+        "progress: 2 devices, one INVALID session (startTime: \"corrupt\")",
+        "annotations: 2 annotations",
+        "preferences/<dev-a|dev-b>: scalar prefs WITHOUT fontProfiles",
+        "reading-list.entries: 3, NONE carrying bookId (exact-filename match, fuzzy title+author match, orphan — the v8 linker inputs)",
+        "vocabulary.knownCharacters: 3; lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
+        "strings are Y.Text (pre-v4 era)"
+      ]
+    },
+    "v2": {
+      "era": 2,
+      "file": "v2.update.bin",
+      "sha256": "7e7828d539016b5a9b89b854d432544a718068eeddcd5e747459fee7a4c92f2d",
+      "method": "writer-ytext-fallback",
+      "fidelityNote": "FALLBACK fidelity (§4.2): Y.Text-encoded with the CURRENT yjs library, not captured through a historical-era worktree. Y.Text items are real; era-specific struct layout is approximated. See README.md for the worktree procedure.",
+      "generator": "scripts/capture-ydoc-fixture.ts",
+      "generatorSha": "fff7f6366164cdf180eb087f2746a05be5a506a5",
+      "capturedAt": "2026-06-12T16:14:15.618Z",
+      "contentChecklist": [
+        "library.__schemaVersion === 2",
+        "library.books: 2 books (one CJK title)",
+        "progress: 2 devices, sessions valid",
+        "annotations: 2 annotations",
+        "preferences/<dev-a|dev-b>: scalar prefs WITHOUT fontProfiles",
+        "reading-list.entries: 3, NONE carrying bookId (exact-filename match, fuzzy title+author match, orphan — the v8 linker inputs)",
+        "vocabulary.knownCharacters: 3; lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
+        "strings are Y.Text (pre-v4 era)"
+      ]
+    },
+    "v4": {
+      "era": 4,
+      "file": "v4.update.bin",
+      "sha256": "a2dfd31115f49025e5dec32b817e0a17dd31712287bf649ee02308d42ce849f4",
+      "method": "writer-current-mapping",
+      "fidelityNote": "Full fidelity: plain-JSON-into-Y-types via the vendored middleware mapping (v4+ encoding is exactly this).",
+      "generator": "scripts/capture-ydoc-fixture.ts",
+      "generatorSha": "fff7f6366164cdf180eb087f2746a05be5a506a5",
+      "capturedAt": "2026-06-12T16:14:15.673Z",
+      "contentChecklist": [
+        "library.__schemaVersion === 4",
+        "library.books: 2 books (one CJK title)",
+        "progress: 2 devices, sessions valid",
+        "annotations: 2 annotations + stale top-level popover key",
+        "preferences/<dev-a|dev-b>: scalar prefs WITHOUT fontProfiles",
+        "reading-list.entries: 3, NONE carrying bookId (exact-filename match, fuzzy title+author match, orphan — the v8 linker inputs)",
+        "vocabulary.knownCharacters: 3; lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
+        "strings are plain (disableYText era)"
+      ]
+    },
+    "v5": {
+      "era": 5,
+      "file": "v5.update.bin",
+      "sha256": "32eda14ddb0fc81880b878aac1c49eca39a8a9e94ebf773510bee7f54ca7998a",
+      "method": "writer-current-mapping",
+      "fidelityNote": "Full fidelity: plain-JSON-into-Y-types via the vendored middleware mapping (v4+ encoding is exactly this).",
+      "generator": "scripts/capture-ydoc-fixture.ts",
+      "generatorSha": "fff7f6366164cdf180eb087f2746a05be5a506a5",
+      "capturedAt": "2026-06-12T16:14:15.723Z",
+      "contentChecklist": [
+        "library.__schemaVersion === 5",
+        "library.books: 2 books (one CJK title)",
+        "progress: 2 devices, sessions valid",
+        "annotations: 2 annotations + stale top-level popover key",
+        "preferences/<dev-a|dev-b>: scalar prefs + fontProfiles",
+        "reading-list.entries: 3, NONE carrying bookId (exact-filename match, fuzzy title+author match, orphan — the v8 linker inputs)",
+        "vocabulary.knownCharacters: 3; lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
+        "strings are plain (disableYText era)"
+      ]
+    },
+    "v6": {
+      "era": 6,
+      "file": "v6.update.bin",
+      "sha256": "c1c8a10700b3275efc57c24c42a3b2496e0dc8d70fbbee3e315908cff4d12d2a",
+      "method": "writer-current-mapping",
+      "fidelityNote": "Full fidelity: plain-JSON-into-Y-types via the vendored middleware mapping (v4+ encoding is exactly this).",
+      "generator": "scripts/capture-ydoc-fixture.ts",
+      "generatorSha": "fff7f6366164cdf180eb087f2746a05be5a506a5",
+      "capturedAt": "2026-06-12T16:14:15.772Z",
+      "contentChecklist": [
+        "library.__schemaVersion === 6",
+        "library.books: 2 books (one CJK title)",
+        "progress: 2 devices, sessions valid",
+        "annotations: 2 annotations",
+        "preferences/<dev-a|dev-b>: scalar prefs + fontProfiles (husks) + folded preferences map + meta.schemaVersion=6",
+        "reading-list.entries: 3, NONE carrying bookId (exact-filename match, fuzzy title+author match, orphan — the v8 linker inputs)",
+        "vocabulary.knownCharacters: 4 TRADITIONAL keys incl. the 紅/红 duplicate pair (v7 min-merge); lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
+        "strings are plain (disableYText era)"
+      ]
+    },
+    "v7": {
+      "era": 7,
+      "file": "v7.update.bin",
+      "sha256": "51a0aa1e9a05af001ebf91adbe392aac91fecb566bcd2d77e6765b912ebbf92b",
+      "method": "writer-current-mapping",
+      "fidelityNote": "Full fidelity: plain-JSON-into-Y-types via the vendored middleware mapping (v4+ encoding is exactly this).",
+      "generator": "scripts/capture-ydoc-fixture.ts",
+      "generatorSha": "fff7f6366164cdf180eb087f2746a05be5a506a5",
+      "capturedAt": "2026-06-12T16:14:15.821Z",
+      "contentChecklist": [
+        "library.__schemaVersion === 7",
+        "library.books: 2 books (one CJK title)",
+        "progress: 2 devices, sessions valid",
+        "annotations: 2 annotations",
+        "preferences/<dev-a|dev-b>: scalar prefs + fontProfiles (husks) + folded preferences map + meta.schemaVersion=7",
+        "reading-list.entries: 3, NONE carrying bookId (exact-filename match, fuzzy title+author match, orphan — the v8 linker inputs)",
+        "vocabulary.knownCharacters: 3 CANONICAL simplified keys (the v7 output, duplicate pair min-merged); lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
+        "strings are plain (disableYText era)"
+      ]
+    },
+    "v8": {
+      "era": 8,
+      "file": "v8.update.bin",
+      "sha256": "84d27f42a93a897836946c4de08e59702da1d636509c4d1a8e376f3045089535",
+      "method": "writer-current-mapping",
+      "fidelityNote": "Full fidelity: plain-JSON-into-Y-types via the vendored middleware mapping (v4+ encoding is exactly this).",
+      "generator": "scripts/capture-ydoc-fixture.ts",
+      "generatorSha": "b9ab5db4b3686059b95832a483dc6d0b4a2bb682",
+      "capturedAt": "2026-06-12T22:55:29.119Z",
+      "contentChecklist": [
+        "library.__schemaVersion === 8",
+        "library.books: 2 books (one CJK title)",
+        "progress: 2 devices, sessions valid",
+        "annotations: 2 annotations",
+        "preferences/<dev-a|dev-b>: scalar prefs + fontProfiles (husks) + folded preferences map + meta.schemaVersion=8 (all carrying activeContext — the v9 prune input)",
+        "reading-list.entries: 3, exact + fuzzy matches LINKED (the v8 output), orphan unlinked",
+        "vocabulary.knownCharacters: 3 CANONICAL simplified keys (the v7 output, duplicate pair min-merged); lexicon: 2 rules + 1 settings; contentAnalysis: 1 section (tableAdaptations); devices: 2",
+        "strings are plain (disableYText era)"
+      ]
+    }
+  }
+}

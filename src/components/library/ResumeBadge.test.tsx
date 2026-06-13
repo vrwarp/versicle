@@ -1,19 +1,18 @@
-import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ResumeBadge } from './ResumeBadge';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useReadingStateStore } from '@store/useReadingStateStore';
 
 // Mock getDeviceId to simulate current device
-vi.mock('../../lib/device-id', () => ({
+vi.mock('@lib/device-id', () => ({
   getDeviceId: () => 'device-1',
 }));
 
-vi.mock('../../store/useReadingStateStore', () => ({
+vi.mock('@store/useReadingStateStore', () => ({
   useReadingStateStore: vi.fn(),
 }));
 
-vi.mock('../../store/useDeviceStore', () => ({
+vi.mock('@store/useDeviceStore', () => ({
   useDeviceStore: vi.fn((selector) => {
     // Return a dummy devices object for selector
     if (selector) return selector({ devices: { 'device-2': { id: 'device-2', name: 'Other Device' } } });

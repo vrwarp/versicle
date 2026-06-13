@@ -1,10 +1,11 @@
 import React from 'react';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
-import { MigrationStateService } from '../../lib/sync/MigrationStateService';
-import { CheckpointService } from '../../lib/sync/CheckpointService';
-import { getFirestoreSyncManager } from '../../lib/sync/FirestoreSyncManager';
-import { createLogger } from '../../lib/logger';
+import { MigrationStateService } from '@domains/sync/workspaces/MigrationStateService';
+import { clearStagedState } from '@domains/sync/workspaces/stagedSwap';
+import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
+import { getSyncOrchestratorAsync } from '@app/sync/createSync';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('WorkspaceMigrationConfirm');
 
@@ -39,9 +40,17 @@ export const WorkspaceMigrationConfirmModal: React.FC<WorkspaceMigrationConfirmM
                 logger.warn('Failed to delete backup checkpoint:', e);
             }
 
-            // Initialize sync with the new workspace
-            const manager = getFirestoreSyncManager();
-            manager.initialize();
+            // Drop the staging database — the switch is finalized, so the
+            // crash-resume buffer (§D4) is no longer needed. Best-effort:
+            // the next stage write clears junk anyway.
+            try {
+                await clearStagedState();
+            } catch (e) {
+                logger.warn('Failed to clear staged switch state:', e);
+            }
+
+            // Start sync with the new workspace
+            void getSyncOrchestratorAsync().then(orchestrator => orchestrator.start());
 
             onResolved();
         } catch (e) {

@@ -1,15 +1,48 @@
 import { renderHook, act } from '@testing-library/react';
 import { useCfiCoordinates } from './useCfiCoordinates';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import type { ReaderEngine, ReaderEngineEvent, RangeRects } from '@domains/reader/engine/ReaderEngine';
 
+/**
+ * Phase 6: the geometry hook consumes the ReaderEngine port
+ * (getRangeRects/getOverlayContainer/subscribe) instead of reaching into the
+ * rendition. The stub below maps the legacy fixture data (range rects +
+ * iframe offsets 10/20) onto the port so every pre-port placement assertion
+ * survives unchanged.
+ */
 describe('useCfiCoordinates', () => {
-  let mockRendition: unknown;
-  let mockIframe: unknown;
+  const IFRAME_OFFSET = { top: 10, left: 20 };
+  let rectsByCall: Array<{ top: number; right: number }> | null;
+  let container: HTMLElement | null;
+  let listeners: Array<(e: ReaderEngineEvent) => void>;
   let resizeObserverCallback: ResizeObserverCallback;
+
+  const engineStub = {
+    getOverlayContainer: () => container,
+     
+    getRangeRects: (_cfi: string): RangeRects | null => {
+      if (!rectsByCall || rectsByCall.length === 0) return null;
+      return {
+        rects: rectsByCall as unknown as DOMRect[],
+        iframeOffset: IFRAME_OFFSET,
+      };
+    },
+    subscribe: (listener: (e: ReaderEngineEvent) => void) => {
+      listeners.push(listener);
+      return () => {
+        listeners = listeners.filter((l) => l !== listener);
+      };
+    },
+  } as unknown as ReaderEngine;
+
+  const emitRelocated = () => {
+    listeners.forEach((l) =>
+      l({ type: 'relocated' } as unknown as ReaderEngineEvent),
+    );
+  };
 
   beforeEach(() => {
     vi.useFakeTimers();
-    // Stub requestAnimationFrame to use setTimeout so we can control it with fake timers
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
       return window.setTimeout(() => cb(0), 0) as unknown as number;
     });
@@ -17,23 +50,10 @@ describe('useCfiCoordinates', () => {
       window.clearTimeout(id as number);
     });
 
-    mockIframe = {
-      offsetTop: 10,
-      offsetLeft: 20
-    };
+    rectsByCall = null;
+    container = document.createElement('div');
+    listeners = [];
 
-    mockRendition = {
-      manager: {
-        container: {
-          querySelector: vi.fn().mockReturnValue(mockIframe)
-        }
-      },
-      getRange: vi.fn(),
-      on: vi.fn(),
-      off: vi.fn()
-    };
-
-    // Capture the resize observer callback
     window.ResizeObserver = class {
       constructor(cb: ResizeObserverCallback) {
         resizeObserverCallback = cb;
@@ -50,30 +70,27 @@ describe('useCfiCoordinates', () => {
     vi.restoreAllMocks();
   });
 
-  it('should return empty coordinates if rendition is null', () => {
+  it('should return empty coordinates if engine is null', () => {
     const { result } = renderHook(() => useCfiCoordinates(null, ['epubcfi(/2/2/2)']));
     act(() => { vi.runAllTimers(); });
     expect(result.current).toEqual([]);
   });
 
-  it('should return empty coordinates if rendition manager is missing', () => {
-    const mockEmptyRendition = { on: vi.fn(), off: vi.fn() };
-    const { result } = renderHook(() => useCfiCoordinates(mockEmptyRendition as unknown, ['epubcfi(/2/2/2)']));
+  it('should return empty coordinates if the overlay container is missing', () => {
+    container = null;
+    const { result } = renderHook(() => useCfiCoordinates(engineStub, ['epubcfi(/2/2/2)']));
     act(() => { vi.runAllTimers(); });
     expect(result.current).toEqual([]);
   });
 
   it('should correctly calculate coordinates based on iframe offsets and range rects', () => {
-    const mockRects = [
+    rectsByCall = [
       { top: 100, right: 150 },
       { top: 120, right: 180 }
     ];
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
-      getClientRects: () => mockRects
-    });
 
     const cfis = ['epubcfi(/2/2/2)'];
-    const { result } = renderHook(() => useCfiCoordinates(mockRendition, cfis));
+    const { result } = renderHook(() => useCfiCoordinates(engineStub, cfis));
     act(() => { vi.runAllTimers(); });
 
     expect(result.current).toEqual([
@@ -85,49 +102,25 @@ describe('useCfiCoordinates', () => {
     ]);
   });
 
-  it('should skip calculation if getRange throws', () => {
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockImplementation(() => {
-      throw new Error("Invalid CFI");
-    });
-    
-    const { result } = renderHook(() => useCfiCoordinates(mockRendition, ['epubcfi(/bad)']));
+  it('should skip calculation when the engine resolves no rects (off-screen CFI)', () => {
+    rectsByCall = null;
+    const { result } = renderHook(() => useCfiCoordinates(engineStub, ['epubcfi(/bad)']));
     act(() => { vi.runAllTimers(); });
     expect(result.current).toEqual([]);
   });
 
-  it('should skip calculation if getClientRects returns empty', () => {
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
-      getClientRects: () => []
-    });
-    
-    const { result } = renderHook(() => useCfiCoordinates(mockRendition, ['epubcfi(/empty)']));
-    act(() => { vi.runAllTimers(); });
-    expect(result.current).toEqual([]);
-  });
+  it('should recalculate coordinates when the relocated event fires', () => {
+    rectsByCall = [{ top: 100, right: 150 }];
 
-  it('should recalculate coordinates when relocated event fires', () => {
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
-      getClientRects: () => [{ top: 100, right: 150 }]
-    });
-
-    const { result } = renderHook(() => useCfiCoordinates(mockRendition, ['epubcfi(/2/2/2)']));
+    const { result } = renderHook(() => useCfiCoordinates(engineStub, ['epubcfi(/2/2/2)']));
     act(() => { vi.runAllTimers(); });
-    
+
     expect(result.current).toEqual([{ cfi: 'epubcfi(/2/2/2)', top: 110, left: 170 }]);
 
     // Relocate moves the element
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
-      getClientRects: () => [{ top: 200, right: 250 }]
-    });
-
+    rectsByCall = [{ top: 200, right: 250 }];
     act(() => {
-      // Find the relocated handler
-      const mockCalls = (mockRendition as { on: { mock: { calls: unknown[][] } } }).on.mock.calls;
-      const relocateCall = mockCalls.find((c: unknown[]) => c[0] === 'relocated');
-      expect(relocateCall).toBeDefined();
-      if (relocateCall) {
-          (relocateCall[1] as () => void)();
-      }
+      emitRelocated();
       vi.runAllTimers();
     });
 
@@ -135,20 +128,15 @@ describe('useCfiCoordinates', () => {
   });
 
   it('should recalculate coordinates when ResizeObserver fires', () => {
-        (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
-      getClientRects: () => [{ top: 100, right: 150 }]
-    });
+    rectsByCall = [{ top: 100, right: 150 }];
 
-    const { result } = renderHook(() => useCfiCoordinates(mockRendition, ['epubcfi(/2/2/2)']));
+    const { result } = renderHook(() => useCfiCoordinates(engineStub, ['epubcfi(/2/2/2)']));
     act(() => { vi.runAllTimers(); });
-    
+
     expect(result.current).toEqual([{ cfi: 'epubcfi(/2/2/2)', top: 110, left: 170 }]);
 
     // Container resizes, causing layout shift
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
-      getClientRects: () => [{ top: 150, right: 180 }]
-    });
-
+    rectsByCall = [{ top: 150, right: 180 }];
     act(() => {
       resizeObserverCallback([], {} as unknown as ResizeObserver);
       vi.runAllTimers();
@@ -158,23 +146,19 @@ describe('useCfiCoordinates', () => {
   });
 
   it('should recalculate coordinates when a dependency changes', () => {
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
-      getClientRects: () => [{ top: 100, right: 150 }]
-    });
+    rectsByCall = [{ top: 100, right: 150 }];
 
     let fontSize = 100;
     const { result, rerender } = renderHook(
-      (props) => useCfiCoordinates(mockRendition, ['epubcfi(/2/2/2)'], [props.fontSize]),
+      (props) => useCfiCoordinates(engineStub, ['epubcfi(/2/2/2)'], [props.fontSize]),
       { initialProps: { fontSize } }
     );
     act(() => { vi.runAllTimers(); });
-    
+
     expect(result.current).toEqual([{ cfi: 'epubcfi(/2/2/2)', top: 110, left: 170 }]);
 
     // Font size changes layout
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
-      getClientRects: () => [{ top: 250, right: 300 }]
-    });
+    rectsByCall = [{ top: 250, right: 300 }];
 
     // Re-render with new font size
     fontSize = 150;
@@ -183,15 +167,13 @@ describe('useCfiCoordinates', () => {
 
     expect(result.current).toEqual([{ cfi: 'epubcfi(/2/2/2)', top: 260, left: 320 }]);
   });
-  
-  it('should not update state unnecessarily if coordinates have not changed', () => {
-    (mockRendition as { getRange: unknown }).getRange = vi.fn().mockReturnValue({
-      getClientRects: () => [{ top: 100, right: 150 }]
-    });
 
-    const { result } = renderHook(() => useCfiCoordinates(mockRendition, ['epubcfi(/2/2/2)']));
+  it('should not update state unnecessarily if coordinates have not changed', () => {
+    rectsByCall = [{ top: 100, right: 150 }];
+
+    const { result } = renderHook(() => useCfiCoordinates(engineStub, ['epubcfi(/2/2/2)']));
     act(() => { vi.runAllTimers(); });
-    
+
     const initialCoords = result.current;
 
     act(() => {

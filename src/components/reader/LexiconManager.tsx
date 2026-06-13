@@ -1,16 +1,17 @@
 import { useState, useRef, useMemo } from 'react';
-import { LexiconService } from '../../lib/tts/LexiconService';
-import { useLexiconStore } from '../../store/useLexiconStore';
-import { AudioPlayerService } from '../../lib/tts/AudioPlayerService';
-import type { LexiconRule } from '../../types/db';
+import { LexiconService } from '@lib/tts/LexiconService';
+import { useLexiconStore } from '@store/useLexiconStore';
+import { useAudioCommands } from '@app/tts/useAudioCommands';
+import type { LexiconRule } from '~types/user-data';
 import { Plus, Trash2, Save, X, Download, Upload, ArrowUp, ArrowDown, Play, RefreshCw, CornerDownRight } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Dialog as UiDialog } from '../ui/Dialog';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
-import { useBookStore } from '../../store/useBookStore';
-import { LEXICON_SAMPLE_CSV } from '../../lib/tts/lexiconSample';
-import { LexiconCSV } from '../../lib/tts/CsvUtils';
-import { exportFile } from '../../lib/export';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useBookStore } from '@store/useBookStore';
+import { LEXICON_SAMPLE_CSV } from '@lib/tts/lexiconSample';
+import { LexiconCSV } from '@lib/tts/CsvUtils';
+import { exportFile } from '@lib/export';
+import { useConfirm } from '../ui/ConfirmDialog';
 
 interface LexiconManagerProps {
     /** Whether the dialog is open. */
@@ -32,6 +33,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     const [editingRule, setEditingRule] = useState<Partial<LexiconRule> | null>(null);
     const [isAdding, setIsAdding] = useState(false);
     const lexiconService = LexiconService.getInstance();
+    const audio = useAudioCommands();
 
     const currentBookId = useReaderUIStore(state => state.currentBookId);
     const inventory = useBookStore(state => currentBookId ? state.books[currentBookId] : undefined);
@@ -43,6 +45,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
     const [testOutput, setTestOutput] = useState('');
     const [testTrace, setTestTrace] = useState<{ rule: LexiconRule, before: string, after: string }[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const confirm = useConfirm();
 
     // Subscribe to store
     const rulesMap = useLexiconStore(state => state.rules);
@@ -201,7 +204,7 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
         }
 
         if (textToPlay) {
-            AudioPlayerService.getInstance().preview(textToPlay);
+            audio.preview(textToPlay);
         }
     };
 
@@ -242,7 +245,13 @@ export function LexiconManager({ open, onOpenChange, initialTerm }: LexiconManag
                     rulesToDelete = all.filter(r => r.bookId === currentBookId);
                 }
 
-                if (!window.confirm(`${rulesToDelete.length} entries will be replaced with ${newRules.length} new entries. Continue?`)) {
+                const proceed = await confirm({
+                    titleKey: 'lexicon.import.replace.title',
+                    bodyKey: 'lexicon.import.replace.body',
+                    params: { oldCount: rulesToDelete.length, newCount: newRules.length },
+                    confirmKey: 'common.continue',
+                });
+                if (!proceed) {
                     if (fileInputRef.current) fileInputRef.current.value = '';
                     return;
                 }

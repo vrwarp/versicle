@@ -1,0 +1,76 @@
+/**
+ * Kernel-boundary invariants (phase5-tts-strangler.md §5c.4):
+ *
+ *  1. `epubjs/src/epubcfi` is imported by EXACTLY ONE module — the kernel's
+ *     typed shim (src/kernel/cfi/epubcfiShim.ts). The `@ts-expect-error`'d
+ *     epubjs internals are quarantined there; everything else uses the
+ *     kernel's typed surface.
+ *  2. src/kernel/** imports nothing internal outside src/kernel/** except
+ *     ~types (master plan §2 rule 1 — belt to the dependency-cruiser
+ *     `kernel-imports-nothing` braces; this one also covers non-test files
+ *     that depcruise excludes). ~types is the one sanctioned dependency:
+ *     itself a zero-dep layer, it carries the C10 append-only AppError code
+ *     union that kernel/net's typed NET_* errors extend (Phase 7 §I).
+ *
+ * Source-scan style follows the worker-chunk / single-instance checks: assert
+ * the tree, not a convention.
+ */
+import { describe, it, expect } from 'vitest';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
+
+const SRC = join(__dirname, '..', '..');
+const SHIM = 'kernel/cfi/epubcfiShim.ts';
+
+function walk(dir: string, out: string[] = []): string[] {
+    for (const entry of readdirSync(dir)) {
+        const p = join(dir, entry);
+        if (statSync(p).isDirectory()) {
+            walk(p, out);
+        } else if (/\.(ts|tsx)$/.test(entry) && !entry.endsWith('.d.ts')) {
+            out.push(p);
+        }
+    }
+    return out;
+}
+
+describe('CFI kernel boundary', () => {
+    it('only the kernel shim imports epubjs/src/epubcfi', () => {
+        const offenders: string[] = [];
+        for (const file of walk(SRC)) {
+            const rel = relative(SRC, file).replaceAll('\\', '/');
+            if (rel === SHIM) continue;
+            const text = readFileSync(file, 'utf8');
+            if (/from\s+['"]epubjs\/src\/epubcfi['"]/.test(text) || /import\(['"]epubjs\/src\/epubcfi['"]\)/.test(text)) {
+                offenders.push(rel);
+            }
+        }
+        expect(offenders, 'epubjs/src/epubcfi is quarantined to the kernel shim — use src/kernel/cfi instead').toEqual([]);
+    });
+
+    it('src/kernel production modules import nothing internal outside src/kernel (~types excepted)', () => {
+        const offenders: string[] = [];
+        for (const file of walk(join(SRC, 'kernel'))) {
+            const rel = relative(SRC, file).replaceAll('\\', '/');
+            // Test files are out of scope (matches the depcruise exclude): the
+            // admission rule governs the production dependency graph; suites may
+            // pull fixtures/helpers from anywhere (e.g. group.test.ts drives the
+            // grouper through @lib/ingestion/sentence-extraction).
+            if (/\.test\.tsx?$/.test(rel)) continue;
+            const text = readFileSync(file, 'utf8');
+            for (const m of text.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
+                const spec = m[1];
+                // ~types is the ONE sanctioned internal dependency (see header).
+                const internal =
+                    spec.startsWith('@app') || spec.startsWith('@components') || spec.startsWith('@data') ||
+                    spec.startsWith('@domains') || spec.startsWith('@hooks') || spec.startsWith('@lib') ||
+                    spec.startsWith('@store') || spec.startsWith('@workers') ||
+                    spec.startsWith('@test') ||
+                    // relative escape above the kernel root (e.g. ../../lib/…)
+                    /^(\.\.\/)+(app|components|data|domains|hooks|lib|store|test|workers)(\/|$)/.test(spec);
+                if (internal) offenders.push(`${rel} → ${spec}`);
+            }
+        }
+        expect(offenders, 'kernel admission rule: zero internal imports beyond ~types').toEqual([]);
+    });
+});

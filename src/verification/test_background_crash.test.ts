@@ -1,6 +1,6 @@
 
 import { describe, it, vi, beforeEach } from 'vitest';
-import { dbService } from '../lib/tts/../../db/DBService';
+import { bookContent } from '@data/repos/bookContent';
 
 // Mock dependencies BEFORE importing the service
 
@@ -10,7 +10,7 @@ vi.mock('@capawesome-team/capacitor-android-battery-optimization', () => ({
   },
 }));
 
-vi.mock('../store/useTTSStore', () => ({
+vi.mock('@store/useTTSStore', () => ({
     useTTSStore: {
         getState: vi.fn().mockReturnValue({
             customAbbreviations: [],
@@ -40,23 +40,23 @@ vi.mock('@jofr/capacitor-media-session', () => ({
     }
 }));
 
-// Mock DBService
-vi.mock('../db/DBService', () => ({
-  dbService: {
-    getTTSContent: vi.fn(),
-    getContentAnalysis: vi.fn(),
-    getBookMetadata: vi.fn(),
-    getTTSState: vi.fn(),
-    saveTTSState: vi.fn(),
-    updatePlaybackState: vi.fn(),
+// Mock the bookContent repo (the DBService carve)
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
+    getTTSPreparation: vi.fn(),
     getSections: vi.fn(),
-    saveTTSPosition: vi.fn(),
-    saveReferenceStartCfi: vi.fn(),
-  },
+    }
+}));
+vi.mock('@data/repos/playbackCache', () => ({
+    playbackCache: {
+    getSession: vi.fn(),
+    saveQueue: vi.fn(),
+    savePauseTime: vi.fn(),
+    }
 }));
 
 // Mock LexiconService
-vi.mock('../lib/tts/LexiconService', () => ({
+vi.mock('@lib/tts/LexiconService', () => ({
   LexiconService: {
     getInstance: vi.fn().mockReturnValue({
         getRules: vi.fn().mockResolvedValue([]),
@@ -67,7 +67,7 @@ vi.mock('../lib/tts/LexiconService', () => ({
 }));
 
 // Mock WebSpeechProvider and CapacitorTTSProvider
-vi.mock('../lib/tts/providers/CapacitorTTSProvider', () => {
+vi.mock('@lib/tts/providers/CapacitorTTSProvider', () => {
   // Return a class or a constructor function
   return {
       CapacitorTTSProvider: class {
@@ -85,14 +85,14 @@ vi.mock('../lib/tts/providers/CapacitorTTSProvider', () => {
 });
 
 // Now import the service
-import { AudioPlayerService } from '../lib/tts/AudioPlayerService';
+import { getAudioPlayer } from '@app/tts/mainThreadAudioPlayer';
 
 describe('AudioPlayerService Background Crash Prevention', () => {
-  let service: AudioPlayerService;
+  let service: ReturnType<typeof getAudioPlayer>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = AudioPlayerService.getInstance();
+    service = getAudioPlayer();
   });
 
   it('should NOT stop playback state during autoPlay transition', async () => {
@@ -101,14 +101,14 @@ describe('AudioPlayerService Background Crash Prevention', () => {
     const sectionId1 = 'sec1';
     const sectionId2 = 'sec2';
 
-    vi.spyOn(dbService, 'getSections').mockResolvedValue([
+    vi.spyOn(bookContent, 'getSections').mockResolvedValue([
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         { sectionId: sectionId1, characterCount: 100 } as any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         { sectionId: sectionId2, characterCount: 100 } as any
     ]);
 
-    vi.spyOn(dbService, 'getTTSContent').mockImplementation(async (bid, sid) => {
+    vi.spyOn(bookContent, 'getTTSPreparation').mockImplementation(async (_bid, sid) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (sid === sectionId1) return { sentences: [{ text: 'Sentence 1', cfi: 'cfi1' }] } as any;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -116,10 +116,6 @@ describe('AudioPlayerService Background Crash Prevention', () => {
         return null;
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(dbService, 'getBookMetadata').mockResolvedValue({ title: 'Book Title', author: 'Author' } as any);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.spyOn(dbService, 'getContentAnalysis').mockResolvedValue({ structure: { title: 'Chapter Title' } } as any);
 
     // Initialize
     service.setBookId(bookId);

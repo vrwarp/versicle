@@ -67,7 +67,7 @@ const { mockRemoveEntry, mockUpsertEntry } = vi.hoisted(() => ({
     mockUpsertEntry: vi.fn()
 }));
 
-vi.mock('../store/useReadingListStore', () => ({
+vi.mock('@store/useReadingListStore', () => ({
     useReadingListStore: Object.assign(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (selector: any) => selector ? selector({

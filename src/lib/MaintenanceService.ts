@@ -1,10 +1,14 @@
-import { getDB } from '../db/db';
-import { useBookStore } from '../store/useBookStore';
-import { dbService } from '../db/DBService';
-import { useTTSStore } from '../store/useTTSStore';
+import { useBookStore } from '@store/useBookStore';
+import { bookContent } from '@data/repos/bookContent';
+import { extractBook, retargetExtraction } from '@domains/library';
+import { searchTextRepo } from '@data/repos/searchText';
+import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { createLogger } from './logger';
 
 const logger = createLogger('MaintenanceService');
+
+/** localStorage flag marking the one-time corrupt-coverBlob repair as complete. */
+const COVER_BLOB_REPAIR_FLAG = 'versicle_cover_blob_repair_v1';
 
 /**
  * Service to handle database maintenance and integrity checks.
@@ -15,6 +19,63 @@ const logger = createLogger('MaintenanceService');
  */
 export class MaintenanceService {
   /**
+   * One-time boot repair for cover images corrupted by pre-v3 backup restores
+   * (JSON.stringify turned binary coverBlobs into `{}`, and restore blind-put
+   * those rows over healthy local manifests).
+   *
+   * Guarded by a localStorage flag so the scan only runs once per device.
+   * The underlying repair is idempotent, so re-running after a wipe is safe.
+   */
+  async repairCorruptCoverBlobsOnce(): Promise<void> {
+    let alreadyDone = false;
+    try {
+      alreadyDone = localStorage.getItem(COVER_BLOB_REPAIR_FLAG) === '1';
+    } catch {
+      // localStorage unavailable; fall through and run the (idempotent) repair
+    }
+    if (alreadyDone) return;
+
+    const repaired = await this.repairCorruptCoverBlobs();
+    if (repaired > 0) {
+      logger.info(`Repaired ${repaired} corrupt cover blob(s) left by past backup restores`);
+    }
+
+    try {
+      localStorage.setItem(COVER_BLOB_REPAIR_FLAG, '1');
+    } catch {
+      // localStorage unavailable; repair will re-run (and no-op) next boot
+    }
+  }
+
+  /**
+   * Scans static_manifests for non-binary coverBlob values (the `{}` left
+   * behind when pre-v3 backups serialized ArrayBuffers through JSON) and
+   * removes them so covers regenerate from the EPUB. Idempotent.
+   *
+   * @returns The number of repaired manifest rows.
+   */
+  async repairCorruptCoverBlobs(): Promise<number> {
+    const manifests = await bookContent.listManifests();
+
+    const corrupt = manifests.filter(m => {
+      const cover: unknown = m.coverBlob;
+      return cover !== undefined && cover !== null
+        && !(cover instanceof Blob) && !(cover instanceof ArrayBuffer);
+    });
+
+    if (corrupt.length === 0) {
+      return 0;
+    }
+
+    for (const manifest of corrupt) {
+      delete manifest.coverBlob;
+    }
+    await bookContent.putManifests(corrupt);
+
+    return corrupt.length;
+  }
+
+  /**
    * Scans the database for orphaned records (files, cache data without a parent book).
    *
    * @returns A Promise resolving to an object containing the counts of orphaned records found.
@@ -24,36 +85,11 @@ export class MaintenanceService {
     locations: number;
     tts_prep: number;
   }> {
-    const db = await getDB();
-
     // Use Yjs store as source of truth for valid book IDs
     const books = useBookStore.getState().books;
     const bookIds = new Set(Object.keys(books));
 
-    // Check files (static_resources)
-    const resourceKeys = await db.getAllKeys('static_resources');
-    const orphanedFiles = resourceKeys.filter((k) => !bookIds.has(k.toString()));
-
-    // Check locations (cache_render_metrics)
-    const metricKeys = await db.getAllKeys('cache_render_metrics');
-    const orphanedLocations = metricKeys.filter((k) => !bookIds.has(k.toString()));
-
-    // Check TTS Prep (cache_tts_preparation)
-    let orphanedPrep = 0;
-    const prepStore = db.transaction('cache_tts_preparation').objectStore('cache_tts_preparation');
-    let prepCursor = await prepStore.openCursor();
-    while (prepCursor) {
-      if (!bookIds.has(prepCursor.value.bookId)) {
-        orphanedPrep++;
-      }
-      prepCursor = await prepCursor.continue();
-    }
-
-    return {
-      files: orphanedFiles.length,
-      locations: orphanedLocations.length,
-      tts_prep: orphanedPrep
-    };
+    return bookContent.scanOrphans(bookIds);
   }
 
   /**
@@ -62,51 +98,11 @@ export class MaintenanceService {
    * @returns A Promise that resolves when the pruning process is complete.
    */
   async pruneOrphans(): Promise<void> {
-    const db = await getDB();
-
     // Use Yjs store as source of truth
     const books = useBookStore.getState().books;
     const bookIds = new Set(Object.keys(books));
 
-    const tx = db.transaction(
-      ['static_resources', 'cache_render_metrics', 'cache_tts_preparation'],
-      'readwrite'
-    );
-
-    // BOLT OPTIMIZATION: Batch delete operations to avoid sequential await within IndexedDB transactions
-    const deletePromises: Promise<void>[] = [];
-
-    // Prune files (static_resources)
-    const filesStore = tx.objectStore('static_resources');
-    const fileKeys = await filesStore.getAllKeys();
-    for (const key of fileKeys) {
-      if (!bookIds.has(key.toString())) {
-        deletePromises.push(filesStore.delete(key));
-      }
-    }
-
-    // Prune locations (cache_render_metrics)
-    const locationsStore = tx.objectStore('cache_render_metrics');
-    const locationKeys = await locationsStore.getAllKeys();
-    for (const key of locationKeys) {
-      if (!bookIds.has(key.toString())) {
-        deletePromises.push(locationsStore.delete(key));
-      }
-    }
-
-    // Prune TTS Prep (cache_tts_preparation)
-    const prepStore = tx.objectStore('cache_tts_preparation');
-    let prepCursor = await prepStore.openCursor();
-    while (prepCursor) {
-      if (!bookIds.has(prepCursor.value.bookId)) {
-        deletePromises.push(prepCursor.delete());
-      }
-      prepCursor = await prepCursor.continue();
-    }
-
-    await Promise.all(deletePromises);
-
-    await tx.done;
+    await bookContent.pruneOrphans(bookIds);
   }
 
   /**
@@ -124,7 +120,7 @@ export class MaintenanceService {
 
     for (const bookId of bookIds) {
       try {
-        const fileBlob = await dbService.getBookFile(bookId);
+        const fileBlob = await bookContent.getBookFile(bookId);
         if (fileBlob) {
           // Extract filename from the stored File object if available
           const blobFilename = fileBlob instanceof File ? fileBlob.name : undefined;
@@ -138,16 +134,34 @@ export class MaintenanceService {
           const file = new File([fileBlob], knownFilename || 'book.epub', { type: 'application/epub+zip' });
 
           // Get current settings for extraction
-          const { sentenceStarters, sanitizationEnabled } = useTTSStore.getState();
+          const { sanitizationEnabled } = useTTSSettingsStore.getState();
 
           onProgress(current, total, `Regenerating ${books[bookId].title}...`);
 
-          const manifest = await dbService.importBookWithId(bookId, file, {
-            abbreviations: [],
-            alwaysMerge: [],
-            sentenceStarters,
-            sanitizationEnabled
+          // Phase 7: BookImportService died with the orchestrator cutover —
+          // regeneration is extract → retarget-onto-existing-id → overwrite
+          // ingest (+ the search corpus that rides every ingest, §F).
+          const extraction = retargetExtraction(
+            await extractBook(file, { depth: 'full', extraction: { sanitizationEnabled } }),
+            bookId,
+          );
+          await bookContent.ingest(
+            {
+              bookId,
+              manifest: extraction.manifest,
+              resource: extraction.resource,
+              structure: extraction.structure,
+              ttsContentBatches: extraction.ttsContentBatches,
+              tableBatches: extraction.tableBatches,
+            },
+            'overwrite',
+          );
+          await searchTextRepo.put({
+            bookId,
+            extractionVersion: extraction.searchText.extractionVersion,
+            sections: extraction.searchText.sections,
           });
+          const manifest = extraction.manifest;
 
           // If no filename was found from the blob or inventory, construct one from metadata
           const sourceFilename = knownFilename || `${manifest.title} - ${manifest.author}.epub`;

@@ -1,41 +1,53 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React from 'react';
+/**
+ * ReaderControlBar — the variant ROUTER over the Phase 8 §C pill feature
+ * components. Renders the REAL pills against mocked stores: the routing
+ * priorities, annotation action plumbing and navigation are the unit under
+ * test. Absorbs (rule 8) the sync-alert/summary assertions of the deleted
+ * ui/CompassPill.test.tsx + ui/CompassPill_Accessibility.test.tsx, and
+ * pins the §C focus-survives-morph regression (a11y item 8 — the
+ * key={variant} remount is gone).
+ */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ReaderControlBar } from '../ReaderControlBar';
 
 // Hoisted mocks for selectors
-const { mockUseBook, mockUseLastReadBook, mockUseCurrentDeviceProgress } = vi.hoisted(() => {
+const { mockUseBook, mockUseLastReadBook, mockUseCurrentDeviceProgress, mockUseRemoteProgress } = vi.hoisted(() => {
   return {
     mockUseBook: vi.fn(),
     mockUseLastReadBook: vi.fn(),
     mockUseCurrentDeviceProgress: vi.fn(),
+    mockUseRemoteProgress: vi.fn(),
   };
 });
 
 // Mock stores and hooks
 const mockUseAnnotationStore = vi.fn();
-const mockUseTTSStore = vi.fn();
+const mockUseTTSPlaybackStore = vi.fn();
 const mockUseReaderUIStore = vi.fn();
-const mockUseReadingStateStore = vi.fn();
+const mockUseReadingStateStore = Object.assign(vi.fn(), {
+  getState: undefined as (() => unknown) | undefined,
+  setState: undefined as ((state: unknown) => unknown) | undefined,
+  subscribe: undefined as ((listener: unknown) => unknown) | undefined,
+});
 const mockUseLibraryStore = vi.fn();
 const mockUseToastStore = vi.fn();
 const mockUseNavigate = vi.fn();
 
-// Fix paths
-vi.mock('../../../store/useAnnotationStore', () => ({
+vi.mock('@store/useAnnotationStore', () => ({
   useAnnotationStore: (selector: unknown) => mockUseAnnotationStore(selector),
 }));
 
-vi.mock('../../../store/useTTSStore', () => ({
-  useTTSStore: (selector: unknown) => mockUseTTSStore(selector),
+vi.mock('@store/useTTSPlaybackStore', () => ({
+  useTTSPlaybackStore: (selector: unknown) => mockUseTTSPlaybackStore(selector),
 }));
 
-vi.mock('../../../store/useReaderUIStore', () => ({
+vi.mock('@store/useReaderUIStore', () => ({
   useReaderUIStore: (selector: unknown) => mockUseReaderUIStore(selector),
 }));
 
-vi.mock('../../../store/useReadingStateStore', () => ({
+vi.mock('@store/useReadingStateStore', () => ({
   useReadingStateStore: Object.assign(
     (selector: unknown) => mockUseReadingStateStore(selector),
     {
@@ -49,17 +61,21 @@ vi.mock('../../../store/useReadingStateStore', () => ({
 }));
 
 // Mock selectors
-vi.mock('../../../store/selectors', () => ({
+vi.mock('@store/libraryViewStore', () => ({
   useBook: (id: any) => mockUseBook(id),
   useLastReadBook: () => mockUseLastReadBook(),
   useAllBooks: vi.fn(),
 }));
 
-vi.mock('../../../store/useLibraryStore', () => ({
+vi.mock('@store/useLibraryStore', () => ({
   useLibraryStore: (selector: unknown) => mockUseLibraryStore(selector),
 }));
 
-vi.mock('../../../store/useToastStore', () => ({
+vi.mock('@store/useBookStore', () => ({
+  useBookStore: (selector: any) => selector({ books: {} }),
+}));
+
+vi.mock('@store/useToastStore', () => ({
   useToastStore: (selector: unknown) => mockUseToastStore(selector),
 }));
 
@@ -69,6 +85,21 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('zustand/react/shallow', () => ({
   useShallow: (selector: any) => selector
+}));
+
+vi.mock('@hooks/useRemoteProgress', () => ({
+  useRemoteProgress: (bookId: any) => mockUseRemoteProgress(bookId),
+}));
+
+vi.mock('@hooks/useSectionDuration', () => ({
+  useSectionDuration: () => ({ timeRemaining: 5, progress: 50 }),
+}));
+
+vi.mock('@app/tts/useAudioCommands', () => ({
+  useAudioCommands: () => ({
+    play: vi.fn(),
+    pause: vi.fn(),
+  }),
 }));
 
 // Mock LexiconManager
@@ -83,18 +114,18 @@ vi.mock('../LexiconManager', () => ({
   )
 }));
 
-// Mock CompassPill
-vi.mock('../../ui/CompassPill', () => ({
-  CompassPill: ({ variant, onClick, onAnnotationAction, progress }: any) => (
-    <div data-testid={`compass-pill-${variant}`} data-progress={progress} onClick={onClick}>
-      {variant}
-      <button onClick={() => onAnnotationAction && onAnnotationAction('color', 'yellow')}>Color</button>
-      <button onClick={() => onAnnotationAction && onAnnotationAction('note', 'test note')}>Note</button>
-      <button onClick={() => onAnnotationAction && onAnnotationAction('pronounce')}>Pronounce</button>
-    </div>
-  ),
-  ActionType: {}
-}));
+const readerUIState = (overrides: Record<string, unknown> = {}) => ({
+  immersiveMode: false,
+  toc: [],
+  currentSectionTitle: null,
+  currentSectionId: null,
+  currentBookId: null,
+  compassState: {},
+  resetCompassState: vi.fn(),
+  popover: { visible: false, text: 'selected text', cfiRange: 'cfi' },
+  hidePopover: vi.fn(),
+  ...overrides,
+});
 
 describe('ReaderControlBar', () => {
   beforeEach(() => {
@@ -104,25 +135,22 @@ describe('ReaderControlBar', () => {
     mockUseBook.mockReturnValue(null);
     mockUseLastReadBook.mockReturnValue(null);
     mockUseCurrentDeviceProgress.mockReturnValue(null);
+    mockUseRemoteProgress.mockReturnValue(null);
 
     // Default store states
     mockUseAnnotationStore.mockImplementation((selector: any) => selector({
-      popover: { visible: false, text: 'selected text', cfiRange: 'cfi' },
       add: vi.fn(),
       update: vi.fn(),
-      hidePopover: vi.fn(),
+      remove: vi.fn(),
     }));
-    mockUseTTSStore.mockImplementation((selector: any) => selector({
+    mockUseTTSPlaybackStore.mockImplementation((selector: any) => selector({
       queue: [],
       isPlaying: false,
-      play: vi.fn(),
+      status: 'stopped',
+      currentIndex: 0,
     }));
-    mockUseReaderUIStore.mockImplementation((selector: any) => selector({
-      immersiveMode: false,
-      currentSectionTitle: null,
-      currentBookId: null,
-      resetCompassState: vi.fn(),
-    }));
+    // Popover state moved to the ephemeral reader UI store (popover-desync hotfix).
+    mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState()));
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({ progress: {} }));
     mockUseReadingStateStore.getState = vi.fn().mockReturnValue({
       progress: {},
@@ -139,84 +167,59 @@ describe('ReaderControlBar', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders annotation variant when popover is visible', () => {
-    mockUseAnnotationStore.mockImplementation((selector: any) => selector({
-      popover: { visible: true },
-      add: vi.fn(),
-      hidePopover: vi.fn(),
-    }));
+  it('renders the annotation pill when the popover is visible', () => {
+    mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
+      popover: { visible: true, text: 'selected text', cfiRange: 'cfi' },
+    })));
     render(<ReaderControlBar />);
     expect(screen.getByTestId('compass-pill-annotation')).toBeInTheDocument();
   });
 
-  it('renders active variant when currentBookId is present (Reader Active)', () => {
-    // Setup current book
-    mockUseReaderUIStore.mockImplementation((selector: any) => selector({
-      immersiveMode: false,
+  it('renders the active audio pill when currentBookId is present (Reader Active)', () => {
+    mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
       currentSectionTitle: 'Chapter 1',
       currentBookId: '123',
-      resetCompassState: vi.fn(),
-    }));
-
-    // Mock useBook for the current book
+    })));
     mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
-
-    // Mock progress for calculating percentage
     mockUseCurrentDeviceProgress.mockImplementation((id) => id === '123' ? { percentage: 0.5 } : null);
 
     render(<ReaderControlBar />);
-    const pill = screen.getByTestId('compass-pill-active');
-    expect(pill).toBeInTheDocument();
-    expect(pill).toHaveAttribute('data-progress', '50');
+    expect(screen.getByTestId('compass-pill-active')).toBeInTheDocument();
+    // The book progress override reaches the pill's progress underlay (50%).
+    expect(screen.getByTestId('compass-pill-progress-bar')).toHaveStyle({ width: '50%' });
   });
 
-  it('renders compact variant when immersive mode is on', () => {
-    mockUseReaderUIStore.mockImplementation((selector: any) => selector({
+  it('renders the compact audio pill when immersive mode is on', () => {
+    mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
       immersiveMode: true,
       currentSectionTitle: 'Chapter 1',
       currentBookId: '123',
-      resetCompassState: vi.fn(),
-    }));
-
+    })));
     mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
-
     mockUseCurrentDeviceProgress.mockImplementation((id) => id === '123' ? { percentage: 0.75 } : null);
 
     render(<ReaderControlBar />);
-    const pill = screen.getByTestId('compass-pill-compact');
-    expect(pill).toBeInTheDocument();
-    expect(pill).toHaveAttribute('data-progress', '75');
+    expect(screen.getByTestId('compass-pill-compact')).toBeInTheDocument();
   });
 
-  it('renders summary variant when on home and has last read book', () => {
-    // Setup Last Read Book
+  it('renders the summary pill when on home with a last-read book (absorbed: descriptive aria-label)', () => {
     mockUseLastReadBook.mockReturnValue({ bookId: '123', id: '123', title: 'Book 123' });
-
-    mockUseReaderUIStore.mockImplementation((selector: any) => selector({
-      immersiveMode: false,
-      currentSectionTitle: null,
-      currentBookId: null,
-    }));
-
-    // Mock progress
     mockUseCurrentDeviceProgress.mockImplementation((id) => id === '123' ? { percentage: 0.25 } : null);
 
     render(<ReaderControlBar />);
 
     const pill = screen.getByTestId('compass-pill-summary');
     expect(pill).toBeInTheDocument();
-    expect(pill).toHaveAttribute('data-progress', '25');
+    expect(pill).toHaveAttribute('role', 'button');
+    expect(pill).toHaveAttribute(
+      'aria-label',
+      'Continue reading Book 123, Continue Reading, 25% complete',
+    );
+    expect(screen.getByText('25% complete')).toBeInTheDocument();
   });
 
-  it('navigates to book when clicking summary pill', () => {
+  it('navigates to the book when clicking the summary pill', () => {
     mockUseLastReadBook.mockReturnValue({ bookId: '123', id: '123', title: 'Book 1' });
-
-    mockUseReaderUIStore.mockImplementation((selector: any) => selector({
-      immersiveMode: false,
-      currentSectionTitle: null,
-      currentBookId: null,
-    }));
-
     mockUseCurrentDeviceProgress.mockImplementation((id) => id === '123' ? { percentage: 0.25 } : null);
 
     render(<ReaderControlBar />);
@@ -224,29 +227,54 @@ describe('ReaderControlBar', () => {
     expect(mockUseNavigate).toHaveBeenCalledWith('/read/123');
   });
 
-  it('handles annotation actions', () => {
+  it('renders the sync-alert pill with remote-progress copy and dismisses it (absorbed)', () => {
+    mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
+      currentBookId: '123',
+    })));
+    mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
+    mockUseRemoteProgress.mockReturnValue({
+      deviceId: 'phone-1',
+      deviceName: 'Phone',
+      percentage: 0.45,
+      cfi: 'epubcfi(/6/4!/4/2)',
+    });
+
+    render(<ReaderControlBar />);
+
+    const pill = screen.getByTestId('compass-pill-sync-alert');
+    expect(pill).toBeInTheDocument();
+    expect(screen.getByText('Pick up from Phone?')).toBeInTheDocument();
+    expect(screen.getByText('Jump to 45%')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Pick up from Phone?. Jump to 45%' }),
+    ).toBeInTheDocument();
+
+    // Dismiss → the alert is replaced by the active pill (priority falls through)
+    fireEvent.click(screen.getByLabelText('Dismiss update'));
+    expect(screen.queryByTestId('compass-pill-sync-alert')).not.toBeInTheDocument();
+    expect(screen.getByTestId('compass-pill-active')).toBeInTheDocument();
+  });
+
+  it('handles annotation actions through the real pill buttons', () => {
     const add = vi.fn();
     const hidePopover = vi.fn();
     const showToast = vi.fn();
 
     mockUseAnnotationStore.mockImplementation((selector: any) => selector({
-      popover: { visible: true, text: 'selected text', cfiRange: 'cfi' },
       add,
-      hidePopover,
     }));
-    mockUseReaderUIStore.mockImplementation((selector: any) => selector({
-      immersiveMode: false,
+    mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
       currentBookId: '123',
-      resetCompassState: vi.fn(),
-    }));
-
+      popover: { visible: true, text: 'selected text', cfiRange: 'cfi' },
+      hidePopover,
+    })));
     mockUseToastStore.mockImplementation((selector: any) => selector({
       showToast
     }));
 
     render(<ReaderControlBar />);
 
-    fireEvent.click(screen.getByText('Color'));
+    fireEvent.click(screen.getByTestId('popover-color-yellow'));
     expect(add).toHaveBeenCalledWith({
       type: 'highlight',
       color: 'yellow',
@@ -257,19 +285,47 @@ describe('ReaderControlBar', () => {
     expect(hidePopover).toHaveBeenCalled();
   });
 
-  it('opens LexiconManager when pronounce action is triggered', () => {
+  it('opens LexiconManager when the pronounce action is triggered', () => {
     const hidePopover = vi.fn();
-    mockUseAnnotationStore.mockImplementation((selector: any) => selector({
+    mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
       popover: { visible: true, text: 'Desolate', cfiRange: 'cfi' },
-      add: vi.fn(),
       hidePopover,
-    }));
+    })));
 
     render(<ReaderControlBar />);
 
     expect(screen.queryByTestId('lexicon-manager-mock')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('Pronounce'));
+    fireEvent.click(screen.getByTestId('popover-fix-pronunciation-button'));
     expect(screen.getByTestId('lexicon-manager-mock')).toBeInTheDocument();
     expect(hidePopover).toHaveBeenCalled();
+  });
+
+  describe('regression: focus survives the variant morph (a11y item 8)', () => {
+    it('moves focus into the new pill when the focused control unmounts on morph', () => {
+      // Start in annotation mode with focus on a toolbar button.
+      mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
+        currentBookId: '123',
+        popover: { visible: true, text: 'selected text', cfiRange: 'cfi' },
+      })));
+      mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
+
+      const { rerender } = render(<ReaderControlBar />);
+      const copyButton = screen.getByTestId('popover-copy-button');
+      copyButton.focus();
+      expect(document.activeElement).toBe(copyButton);
+
+      // Morph: popover closes → active audio pill replaces the toolbar.
+      mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
+        currentBookId: '123',
+        currentSectionTitle: 'Chapter 1',
+      })));
+      rerender(<ReaderControlBar />);
+
+      const pill = screen.getByTestId('compass-pill-active');
+      expect(pill).toBeInTheDocument();
+      // Focus did NOT fall to <body>: the router restored it into the pill.
+      expect(document.activeElement).not.toBe(document.body);
+      expect(pill.contains(document.activeElement)).toBe(true);
+    });
   });
 });

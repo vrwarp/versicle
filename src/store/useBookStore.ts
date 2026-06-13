@@ -1,7 +1,22 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
-import type { UserInventoryItem } from '../types/db';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
+import type { UserInventoryItem } from '~types/user-data';
+
+/**
+ * Replication declaration (aggregated by src/store/registry.ts).
+ * Y.Map 'library' — matches the existing data structure for 'books'.
+ * Flipped to merge-defaults + scopedDiff in flip wave 4 (phase2-fork-surgery.md
+ * §2.6 #8): the inventory — highest user-data criticality, flipped after the
+ * pattern was proven on six stores. Its four `state.books || {}` fallbacks
+ * (plus selectors.ts and the FirestoreSyncManager clean-client check) were
+ * deleted as the flip canaries.
+ */
+export const LIBRARY_STORE_DEF: SyncedStoreDef<'books'> = {
+    name: 'library',
+    syncedKeys: ['books'],
+    hydration: 'merge-defaults',
+    scopedDiff: true,
+};
 
 /**
  * State interface for the Book store (Synced).
@@ -11,7 +26,10 @@ import type { UserInventoryItem } from '../types/db';
  */
 interface BookState {
     // === SYNCED STATE (persisted to Yjs) ===
-    /** Schema version marker. Must be an atomicKey to prevent Y.Text overhead. */
+    /**
+     * Schema version marker (implicitly synced; the middleware's poison pill
+     * and the migration coordinator's dual-write read/write it on this map).
+     */
     __schemaVersion: number;
     /** Map of user inventory items (book metadata + user data), keyed by Book ID. */
     books: Record<string, UserInventoryItem>;
@@ -44,9 +62,8 @@ interface BookState {
 }
 
 export const useBookStore = create<BookState>()(
-    yjs(
-        yDoc,
-        'library', // Share name 'library' to match existing data structure for 'books'
+    defineSyncedStore(
+        LIBRARY_STORE_DEF,
         (set) => ({
             __schemaVersion: 1, // Default for empty/new documents
             books: {},
@@ -55,28 +72,25 @@ export const useBookStore = create<BookState>()(
 
             updateBook: (id, updates) =>
                 set((state) => {
-                    const currentBooks = state.books || {};
-                    if (!currentBooks[id]) return state;
+                    if (!state.books[id]) return state;
                     return {
                         books: {
-                            ...currentBooks,
-                            [id]: { ...currentBooks[id], ...updates }
+                            ...state.books,
+                            [id]: { ...state.books[id], ...updates }
                         }
                     };
                 }),
 
             removeBook: (id) =>
                 set((state) => {
-                    const currentBooks = state.books || {};
-                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                    const { [id]: removed, ...remain } = currentBooks;
+                    const { [id]: _removed, ...remain } = state.books;
                     return { books: remain };
                 }),
 
             addBook: (book) =>
                 set((state) => ({
                     books: {
-                        ...(state.books || {}),
+                        ...state.books,
                         [book.bookId]: book
                     }
                 })),
@@ -90,12 +104,11 @@ export const useBookStore = create<BookState>()(
 
                     return {
                         books: {
-                            ...(state.books || {}),
+                            ...state.books,
                             ...booksMap
                         }
                     };
                 })
-        }),
-        getYjsOptions({ atomicKeys: ['__schemaVersion'] })
+        })
     )
 );

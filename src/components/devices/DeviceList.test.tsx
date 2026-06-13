@@ -1,8 +1,7 @@
-import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { DeviceList } from './DeviceList';
 import { describe, it, expect, vi } from 'vitest';
-import type { DeviceInfo } from '../../types/device';
+import type { DeviceInfo } from '~types/device';
 
 describe('DeviceList', () => {
     const mockOnRename = vi.fn();

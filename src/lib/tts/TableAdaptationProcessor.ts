@@ -1,12 +1,22 @@
-import { dbService } from '../../db/DBService';
-import { useGenAIStore } from '../../store/useGenAIStore';
-import { genAIService } from '../genai/GenAIService';
-import { EpubCFI } from 'epubjs';
-import { parseCfiRange, type PreprocessedRoot } from '../cfi-utils';
-import type { SentenceNode } from '../tts';
+import {
+    parseCfiRange, stripCfiWrapper, cfiContains, CfiComparator, tryParseCfiPoint,
+    type ParsedCfiPoint,
+} from '@kernel/cfi';
+import type { SentenceNode } from '~types/tts-content';
+import type { EngineContext } from './engine/EngineContext';
+import { ensureGenAIReady } from './genaiReady';
 
 export class TableAdaptationProcessor {
     private tableAnalysisPromises = new Map<string, Promise<void>>();
+    private readonly ctx: EngineContext;
+
+    /**
+     * @param ctx The engine context. Required (no default) so this module never statically
+     *   imports the Zustand-backed context, keeping the engine graph worker-importable.
+     */
+    constructor(ctx: EngineContext) {
+        this.ctx = ctx;
+    }
     /**
      * Retrieves cached table adaptations from DB or triggers GenAI detection if missing.
      * Replaces `AudioContentPipeline.processTableAdaptations`.
@@ -23,15 +33,13 @@ export class TableAdaptationProcessor {
         }
 
         const promise = (async () => {
-            const genAISettings = useGenAIStore.getState();
-
             try {
                 // Ensure we have sentences
                 if (!sentences || sentences.length === 0) return;
                 const targetSentences = sentences;
 
             // 1. Check DB for existing adaptations
-            const analysis = await dbService.getContentAnalysis(bookId, sectionId);
+            const analysis = await this.ctx.contentAnalysis.getContentAnalysis(bookId, sectionId);
             const existingAdaptations = new Map<string, string>(
                 analysis?.tableAdaptations?.map(a => {
                     const range = parseCfiRange(a.rootCfi);
@@ -49,7 +57,7 @@ export class TableAdaptationProcessor {
 
             // 2. Identify tables that actually exist in the current section
             // Normalizing legacy Range CFIs (e.g. from buggy cfiFromRange) to their Point CFI parents
-            const tableImages = await dbService.getTableImages(bookId);
+            const tableImages = await this.ctx.content.getTableImages(bookId);
             const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId).map(img => {
                 const range = parseCfiRange(img.cfi);
                 return {
@@ -65,27 +73,20 @@ export class TableAdaptationProcessor {
 
             if (workSet.length === 0) return;
 
-            // 4. Check if GenAI is configured
-            const canUseGenAI = genAISettings.isEnabled && (genAIService.isConfigured() || !!genAISettings.apiKey || (typeof localStorage !== 'undefined' && !!localStorage.getItem('mockGenAIResponse')));
-            if (!canUseGenAI) return;
-
-            // Ensure service is configured
-            if (!genAIService.isConfigured() && genAISettings.apiKey) {
-                genAIService.configure(genAISettings.apiKey, 'gemini-1.5-flash');
-            }
-
-            if (genAIService.isConfigured()) {
+            // 4. Check if GenAI is enabled + configured (the ONE gate — 5c-PR2;
+            // configures from the stored key, DEV/E2E-gated mock seam)
+            if (await ensureGenAIReady(this.ctx.genAI)) {
                 const nodes = workSet.map(img => ({
                     rootCfi: img.cfi,
                     imageBlob: img.imageBlob
                 }));
 
-                const bookMetadata = await dbService.getBookMetadata(bookId);
+                const bookMetadata = await this.ctx.book.getMetadata(bookId);
                 const bookTitle = bookMetadata?.title || 'Unknown Book';
-                const structure = await dbService.getBookStructure(bookId);
+                const structure = await this.ctx.content.getBookStructure(bookId);
                 const sectionMap = new Map<string, string>();
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const findSectionTitle = (items: { href: string, title?: string, subitems?: any[] }[]) => {
+                type TocLikeItem = { href: string; title?: string; subitems?: TocLikeItem[] };
+                const findSectionTitle = (items: TocLikeItem[]) => {
                     for (const item of items) {
                         if (item.href && item.href.split('#')[0] === sectionId) {
                             sectionMap.set(sectionId, item.title || 'Unknown Section');
@@ -98,16 +99,17 @@ export class TableAdaptationProcessor {
                 if (structure && structure.toc) findSectionTitle(structure.toc);
                 const sectionTitle = sectionMap.get(sectionId) || 'Unknown Section';
 
-                const results = await genAIService.generateTableAdaptations(nodes, 512, { bookTitle, sectionTitle });
+                // bookId rides to the egress consent gate (P9 threading).
+                const results = await this.ctx.genAI.generateTableAdaptations(nodes, 512, { bookId, bookTitle, sectionTitle });
 
                 // 5. Update DB
-                await dbService.saveTableAdaptations(bookId, sectionId, results.map(r => ({
+                await this.ctx.contentAnalysis.saveTableAdaptations(bookId, sectionId, results.map(r => ({
                     rootCfi: r.cfi,
                     text: r.adaptation
                 })));
 
                 // 6. Notify listeners with updated full set
-                const updatedAnalysis = await dbService.getContentAnalysis(bookId, sectionId);
+                const updatedAnalysis = await this.ctx.contentAnalysis.getContentAnalysis(bookId, sectionId);
                 const finalAdaptations = new Map<string, string>(
                     updatedAnalysis?.tableAdaptations?.map(a => [a.rootCfi, a.text]) || []
                 );
@@ -151,88 +153,66 @@ export class TableAdaptationProcessor {
         const parsedRoots = tableRoots.map(root => {
             const range = parseCfiRange(root);
             // If it's a range, use the parent (common ancestor) for prefix matching.
-            // If it's a point/path, use it directly.
-            // Strip epubcfi() wrapper for raw comparison if needed, but parseCfiRange handles format.
-            // We use the full string representation of the parent/path for comparison.
+            // If it's a point/path, use it directly (kernel stripCfiWrapper replaces
+            // the hand-rolled wrapper stripping — phase5 §5c.4).
             let cleanRoot = root;
-            let rangeStart: string | null = null;
-            let rangeEnd: string | null = null;
 
-            let parsedRangeStart: EpubCFI | null = null;
-            let parsedRangeEnd: EpubCFI | null = null;
+            let parsedRangeStart: ParsedCfiPoint | null = null;
+            let parsedRangeEnd: ParsedCfiPoint | null = null;
 
             if (range && range.parent) {
-                // Reconstruct parent CFI string: epubcfi(parent)
-                // But wait, parseCfiRange returns 'parent' as the path inside.
+                // parseCfiRange returns 'parent' as the path inside the wrapper.
                 cleanRoot = range.parent;
-                rangeStart = range.fullStart;
-                rangeEnd = range.fullEnd;
-                try {
-                    parsedRangeStart = new EpubCFI(rangeStart);
-                    parsedRangeEnd = new EpubCFI(rangeEnd);
-                } catch (e) {
-                    console.warn('Failed to parse range start/end for table adaptation', e);
+                parsedRangeStart = tryParseCfiPoint(range.fullStart);
+                parsedRangeEnd = tryParseCfiPoint(range.fullEnd);
+                if (!parsedRangeStart || !parsedRangeEnd) {
+                    console.warn('Failed to parse range start/end for table adaptation');
+                    parsedRangeStart = null;
+                    parsedRangeEnd = null;
                 }
             } else {
-                // Strip wrapper manually if not a range or simple path
-                if (cleanRoot.startsWith('epubcfi(')) {
-                    cleanRoot = cleanRoot.slice(8);
-                }
-                if (cleanRoot.endsWith(')')) {
-                    cleanRoot = cleanRoot.slice(0, -1);
-                }
-            }
-            // Normalize: remove trailing ')' if present from lazy regex or range structure
-            if (cleanRoot.endsWith(')')) {
-                cleanRoot = cleanRoot.slice(0, -1);
+                cleanRoot = stripCfiWrapper(cleanRoot);
             }
 
             return { original: root, clean: cleanRoot, parsedRangeStart, parsedRangeEnd };
         });
 
-        const cfiComparer = new EpubCFI();
+        const cfiComparer = new CfiComparator();
 
         // Iterate through all sentences and check if they belong to any known table root
         for (let i = 0; i < sentences.length; i++) {
             const sentence = sentences[i];
             if (!sentence.cfi) continue;
 
-            let cleanCfi = sentence.cfi;
-            if (cleanCfi.startsWith('epubcfi(')) {
-                cleanCfi = cleanCfi.slice(8);
-            }
-            if (cleanCfi.endsWith(')')) {
-                cleanCfi = cleanCfi.slice(0, -1);
-            }
+            const cleanCfi = stripCfiWrapper(sentence.cfi);
 
             // Lazy-parse the sentence CFI only if needed
-            let parsedSentenceCfi: EpubCFI | null = null;
+            let parsedSentenceCfi: ParsedCfiPoint | null = null;
 
             // Check if this sentence is a child of any known table adaptation root.
             const match = parsedRoots.find(({ clean, parsedRangeStart, parsedRangeEnd }) => {
-                // Check for prefix match with valid separator boundary
-                // Include ',' for range handling
-                const isPrefixMatch = cleanCfi.startsWith(clean) &&
-                    (cleanCfi.length === clean.length || ['/', '!', '[', ':', ','].includes(cleanCfi[clean.length]));
-
-                if (!isPrefixMatch) return false;
+                // Prefix match at a step boundary via the kernel's canonical
+                // cfiContains (THE separator set — this site already carried all
+                // five separators; it now shares the one implementation).
+                if (!cfiContains(clean, cleanCfi)) return false;
 
                 // If the table root is a range (e.g. encompasses multiple siblings), verify strictly within bounds.
                 // This prevents false positives where siblings of the table share the same parent prefix.
                 if (parsedRangeStart && parsedRangeEnd) {
+                    if (!parsedSentenceCfi) {
+                        parsedSentenceCfi = tryParseCfiPoint(sentence.cfi);
+                    }
+                    if (!parsedSentenceCfi) {
+                        // Unparseable sentence CFI: skip rather than risk swallowing whole chapters.
+                        return false;
+                    }
                     try {
-                        if (!parsedSentenceCfi) {
-                            parsedSentenceCfi = new EpubCFI(sentence.cfi);
-                        }
-                        // @ts-expect-error epubjs compare accepts EpubCFI objects despite strict types
                         const afterStart = cfiComparer.compare(parsedSentenceCfi, parsedRangeStart) >= 0;
-                        // @ts-expect-error epubjs compare accepts EpubCFI objects despite strict types
                         const beforeEnd = cfiComparer.compare(parsedSentenceCfi, parsedRangeEnd) <= 0;
                         return afterStart && beforeEnd;
                     } catch (e) {
                         console.warn('Failed to compare CFIs for table range check', e);
-                        // Fallback to prefix match if comparison fails (safer than skipping?)
-                        // Or safer to skip? Safer to skip to avoid swallowing whole chapters.
+                        // Safer to skip than to swallow whole chapters.
                         return false;
                     }
                 }
@@ -260,28 +240,5 @@ export class TableAdaptationProcessor {
         }
 
         return result;
-    }
-
-    /**
-     * Efficiently preprocesses table images into block roots for grouping,
-     * avoiding redundant CFI parsing.
-     */
-    public preprocessTableRoots(images: { cfi: string }[]): PreprocessedRoot[] {
-        return images.map(img => {
-            const range = parseCfiRange(img.cfi);
-            if (range && range.parent) {
-                return {
-                    original: `epubcfi(\${range.parent})`,
-                    clean: range.parent
-                };
-            } else {
-                let clean = img.cfi;
-                if (clean.startsWith('epubcfi(')) clean = clean.slice(8, -1);
-                return {
-                    original: img.cfi,
-                    clean
-                };
-            }
-        }).sort((a, b) => b.clean.length - a.clean.length);
     }
 }

@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { extractBookData } from './ingestion';
+import { extractBook } from '@domains/library/import/extract';
+
+// Re-pointed at PR-L1/L2 (phase7): the deleted extractBookData delegate.
+const extractBookData = (file: File) => extractBook(file, { depth: 'full' });
 import imageCompression from 'browser-image-compression';
 
 // Mock dependencies
@@ -50,7 +53,7 @@ class MockOffscreenCanvas {
 (global as any).OffscreenCanvas = MockOffscreenCanvas;
 
 // Mock extractContentOffscreen
-vi.mock('./offscreen-renderer', () => ({
+vi.mock('@domains/reader/engine/offscreen/offscreen-renderer', () => ({
   extractContentOffscreen: vi.fn().mockResolvedValue({
     chapters: [
       {

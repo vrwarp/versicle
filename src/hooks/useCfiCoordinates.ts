@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { Rendition } from 'epubjs';
+import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 
 export interface CfiCoordinate {
   cfi: string;
@@ -8,14 +8,22 @@ export interface CfiCoordinate {
 }
 
 /**
- * A hook to calculate and track the coordinates of an array of CFIs in an EPUB.js Rendition.
- * 
- * @param rendition The EPUB.js Rendition instance.
- * @param cfis An array of CFI strings to measure.
+ * The shared measured-portal primitive (Phase 6 §4 "MeasuredOverlay"): maps
+ * CFIs to overlay-container coordinates through the ReaderEngine port
+ * (`getRangeRects` = rendered range rects + iframe stacking offsets) and
+ * re-measures on relocation, container resize, and explicit dependency
+ * changes. Consumers portal the results via ReaderOverlay.
+ *
+ * Placement semantics preserved from the pre-port hook: the point is the
+ * bottom-right of the LAST client rect (markers sit at the end of the last
+ * highlighted line).
+ *
+ * @param engine The ReaderEngine port (null while the book loads).
+ * @param cfis CFI strings to measure.
  * @param dependencies Optional triggers that force a re-measurement (e.g., font size changes).
  */
 export function useCfiCoordinates(
-  rendition: Rendition | null,
+  engine: ReaderEngine | null,
   cfis: string[],
   dependencies: unknown[] = []
 ): CfiCoordinate[] {
@@ -23,81 +31,54 @@ export function useCfiCoordinates(
   const resizeRaf = useRef<number | null>(null);
 
   const calculateCoordinates = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (!rendition || !(rendition as any).manager) {
+    if (!engine || !engine.getOverlayContainer()) {
       setCoords(prev => prev.length === 0 ? prev : []);
       return;
     }
 
     const newCoords: CfiCoordinate[] = [];
-    
-    // 1. Determine Iframe Offsets
-    // In EPUB.js, the manager container holds the iframes.
-    // Coordinates from getBoundingClientRect inside an iframe are relative to the viewport.
-    // However, when we portal out, we need them relative to the manager container.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const iframe = (rendition as any).manager.container?.querySelector('iframe');
-    const iframeOffsetTop = iframe?.offsetTop || 0;
-    const iframeOffsetLeft = iframe?.offsetLeft || 0;
 
     cfis.forEach(cfi => {
-      try {
-        // 2. Extract Range
-        // getRange may throw if the CFI is not on the currently rendered page.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const range = (rendition as any).getRange(cfi);
-        if (!range) return;
+      // getRangeRects may return null if the CFI is not on the currently
+      // rendered page (range generation failed / off-screen).
+      const measured = engine.getRangeRects(cfi);
+      if (!measured || measured.rects.length === 0) return;
 
-        // 3. Get Client Rects
-        // We use getClientRects() because highlights can span multiple lines.
-        // We want to place the marker at the end of the highlight.
-        const rects = range.getClientRects();
-        if (rects.length === 0) return;
+      // Position at the bottom-right of the last line of the highlight.
+      const lastRect = measured.rects[measured.rects.length - 1];
 
-        // 4. Position at the bottom-right of the last line of the highlight
-        const lastRect = rects[rects.length - 1];
-        
-        newCoords.push({
-          cfi,
-          // Position at the end of the last rect
-          top: lastRect.top + iframeOffsetTop,
-          left: lastRect.right + iframeOffsetLeft
-        });
-      } catch {
-        // CFI is likely off-screen or range generation failed
-      }
+      newCoords.push({
+        cfi,
+        top: lastRect.top + measured.iframeOffset.top,
+        left: lastRect.right + measured.iframeOffset.left
+      });
     });
 
     // Only update state if coordinates have actually changed to prevent render loops
     setCoords(prev => {
       if (prev.length !== newCoords.length) return newCoords;
-      const hasChanged = newCoords.some((c, i) => 
+      const hasChanged = newCoords.some((c, i) =>
         c.cfi !== prev[i].cfi || c.top !== prev[i].top || c.left !== prev[i].left
       );
       return hasChanged ? newCoords : prev;
     });
-  }, [rendition, cfis]);
+  }, [engine, cfis]);
 
   // Handle relocation (page turns)
   useEffect(() => {
-    if (!rendition) return;
+    if (!engine) return;
 
-    const handleRelocated = () => {
-      calculateCoordinates();
-    };
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (rendition as any).on('relocated', handleRelocated);
-    return () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (rendition as any).off('relocated', handleRelocated);
-    };
-  }, [rendition, calculateCoordinates]);
+    return engine.subscribe((event) => {
+      if (event.type === 'relocated') {
+        calculateCoordinates();
+      }
+    });
+  }, [engine, calculateCoordinates]);
 
   // Handle window resizing or container changes
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (!rendition || !(rendition as any).manager || !(rendition as any).manager.container) return;
+    const container = engine?.getOverlayContainer();
+    if (!container) return;
 
     const observer = new ResizeObserver(() => {
       if (resizeRaf.current) cancelAnimationFrame(resizeRaf.current);
@@ -106,14 +87,13 @@ export function useCfiCoordinates(
       });
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    observer.observe((rendition as any).manager.container);
-    
+    observer.observe(container);
+
     return () => {
       observer.disconnect();
       if (resizeRaf.current) cancelAnimationFrame(resizeRaf.current);
     };
-  }, [rendition, calculateCoordinates]);
+  }, [engine, calculateCoordinates]);
 
   // Trigger recalculation on dependency changes
   useEffect(() => {

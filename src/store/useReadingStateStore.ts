@@ -1,12 +1,11 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
-import type { UserProgress, ReadingEventType, ReadingSession } from '../types/db';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
+import type { UserProgress, ReadingEventType, ReadingSession } from '~types/user-data';
 import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
-import { getDeviceId } from '../lib/device-id';
-import { mergeCfiRanges } from '../lib/cfi-utils';
+import { getDeviceId } from '@lib/device-id';
+import { mergeCfiRanges } from '@kernel/cfi';
 
 const MAX_READING_SESSIONS = 500;
 const HISTORY_PRUNE_SIZE = 200;
@@ -31,7 +30,7 @@ type PerDeviceProgress = Record<string, Record<string, UserProgress>>;
 /**
  * Represents a single update to the reading session history.
  */
-export type SessionUpdate = {
+type SessionUpdate = {
     range: string;
     type?: ReadingEventType;
     label?: string;
@@ -119,13 +118,30 @@ export const getMostRecentProgress = (bookProgress: Record<string, UserProgress>
 };
 
 /**
+ * Replication declaration (aggregated by src/store/registry.ts).
+ * Flipped to merge-defaults + scopedDiff LAST (flip wave 5,
+ * phase2-fork-surgery.md §2.6 #9): the hottest write path — every page turn
+ * writes here — flipped only after the pattern was proven on the other
+ * eight stores and verified against selectors.perf.test.ts. The only
+ * deleted canary was the selectors.ts `progressMapRaw || {}` memo; the
+ * per-book `state.progress[bookId] || {}` guards in the actions below are
+ * SECOND-LEVEL guards for a legitimately absent book (census ▲5), not
+ * hydration fallbacks — they stay.
+ */
+export const PROGRESS_STORE_DEF: SyncedStoreDef<'progress'> = {
+    name: 'progress',
+    syncedKeys: ['progress'],
+    hydration: 'merge-defaults',
+    scopedDiff: true,
+};
+
+/**
  * Zustand store for reading progress and state.
  * Wrapped with yjs() middleware for automatic CRDT synchronization.
  */
 export const useReadingStateStore = create<ReadingState>()(
-    yjs(
-        yDoc,
-        'progress',
+    defineSyncedStore(
+        PROGRESS_STORE_DEF,
         (set, get) => ({
             // Synced state (per-device structure)
             progress: {},
@@ -432,8 +448,7 @@ export const useReadingStateStore = create<ReadingState>()(
             reset: () => set({
                 progress: {},
             })
-        }),
-        getYjsOptions()
+        })
     )
 );
 

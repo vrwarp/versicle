@@ -2,9 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vite
 import { OpenAIProvider } from './OpenAIProvider';
 import type { TTSOptions } from './types';
 
-vi.mock('../AudioElementPlayer');
-vi.mock('../TTSCache');
-vi.mock('../CostEstimator');
+// No module mocks (vi.mock is banned in providers/ since 5a-PR2): these tests only
+// exercise init/getVoices/fetchAudioData, which never touch the sink or the cache.
 
 describe('OpenAIProvider', () => {
   let provider: OpenAIProvider;
@@ -87,14 +86,12 @@ describe('OpenAIProvider', () => {
           model: 'tts-1',
           input: 'Hello world',
           voice: 'alloy',
-          speed: 1.0,
           response_format: 'mp3'
         })
       }));
 
       expect(result).toEqual({
         audio: mockBlob,
-        isNative: false,
         alignment: undefined
       });
     });
@@ -108,6 +105,23 @@ describe('OpenAIProvider', () => {
 
       // @ts-expect-error - protected
       await expect(provider.fetchAudioData('text', options)).rejects.toThrow('TTS API Error: 401 Unauthorized');
+    });
+  });
+
+  describe('regression: speed policy — synthesis always at 1.0', () => {
+    it('does not send speed even for a non-1.0 playback speed', async () => {
+      const mockBlob = new Blob(['audio data'], { type: 'audio/mp3' });
+      (global.fetch as Mock).mockResolvedValue({
+        ok: true,
+        blob: () => Promise.resolve(mockBlob),
+      });
+
+      // @ts-expect-error - protected
+      await provider.fetchAudioData('Hello world', { voiceId: 'alloy', speed: 1.5 });
+
+      const body = JSON.parse((global.fetch as Mock).mock.calls[0][1].body);
+      expect(body.speed).toBeUndefined();
+      expect(JSON.stringify(body)).not.toContain('1.5');
     });
   });
 });

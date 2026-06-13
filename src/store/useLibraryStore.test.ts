@@ -1,399 +1,115 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { createLibraryStore } from './useLibraryStore';
-import { useBookStore } from './useBookStore';
-import type { BookMetadata } from '../types/db';
-import { CURRENT_BOOK_VERSION } from '../lib/constants';
+/**
+ * Projection-store pins (Phase 7 §D). The WORKFLOW assertions of the
+ * pre-cutover suite live on:
+ *  - import/duplicate/replace/ghost/batch/restore →
+ *    src/domains/library/importFlows.characterization.test.ts;
+ *  - the five race invariants →
+ *    src/domains/library/LibraryService.invariants.test.ts.
+ * What remains here is the projection contract the UI renders.
+ */
+import { describe, it, expect, beforeEach } from 'vitest';
+import { useLibraryStore } from './useLibraryStore';
+import { makeBookMetadata } from '@test/harness';
 
-// Mock DBService
-const mockDBService = {
-  getLibrary: vi.fn(),
-  addBook: vi.fn(),
-  deleteBook: vi.fn(),
-  ingestBook: vi.fn(),
-  offloadBook: vi.fn(),
-  restoreBook: vi.fn(),
-  getBookMetadata: vi.fn(),
-  getOffloadedStatus: vi.fn().mockResolvedValue(new Map()),
-  getBookIdByFilename: vi.fn(),
-  importBookWithId: vi.fn(),
-};
-
-// Mock DBService methods
-vi.mock('../lib/db', () => ({
-  dbService: mockDBService,
-}));
-
-// Mock zustand persistence
-vi.mock('zustand/middleware', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('zustand/middleware')>();
-  return {
-    ...actual,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    persist: (config: any) => (set: any, get: any, api: any) => config(set, get, api),
-  };
-});
-
-// Mock ingestion
-vi.mock('../lib/ingestion', () => ({
-  extractBookData: vi.fn(),
-  extractBookMetadata: vi.fn().mockResolvedValue({ title: 'Test Book', author: 'Test Author', description: 'Desc', fileHash: 'hash' }),
-}));
-
-// Mock batch ingestion
-vi.mock('../lib/batch-ingestion', () => ({
-  processBatchImport: vi.fn(),
-}));
-
-// Mock AudioPlayerService
-vi.mock('../lib/tts/AudioPlayerService', () => ({
-  AudioPlayerService: {
-    getInstance: () => ({
-      subscribe: vi.fn(),
-    }),
-  },
-}));
-
-// Mock TTS Store (referenced in addBooks)
-vi.mock('./useTTSStore', () => ({
-  useTTSStore: {
-    getState: () => ({
-      sentenceStarters: [],
-      sanitizationEnabled: false
-    })
-  }
-}));
-
-
-describe('useLibraryStore', () => {
-  const mockFile = new File([''], 'test.epub', { type: 'application/epub+zip' });
-  const mockBook: BookMetadata = {
-    id: 'test-id',
-    title: 'Test Book',
-    author: 'Test Author',
-    addedAt: 1000,
-    bookId: 'test-id',
-    description: 'Desc',
-    filename: 'test.epub',
-    fileHash: 'hash',
-    fileSize: 100,
-    totalChars: 1000,
-    version: 1,
-    lastRead: 0,
-    progress: 0,
-    currentCfi: '',
-    lastPlayedCfi: '',
-    isOffloaded: false,
-  };
-
-  let useLibraryStore: ReturnType<typeof createLibraryStore>;
-  const mockExtractBookMetadata = vi.fn();
-
+describe('useLibraryStore (UI projection)', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockExtractBookMetadata.mockResolvedValue({ title: 'New Book', author: 'Author' });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useLibraryStore = createLibraryStore(mockDBService as any);
     useLibraryStore.setState({
       staticMetadata: {},
-      isLoading: false,
+      offloadedBookIds: new Set<string>(),
+      isHydrating: false,
+      hasHydrated: false,
+      isImporting: false,
+      importProgress: 0,
+      importStatus: '',
+      uploadProgress: 0,
+      uploadStatus: '',
+      batchImportSummary: null,
       error: null,
-      sortOrder: 'last_read',
     });
-    useBookStore.setState({ books: {} });
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it('has the projection initial state', () => {
+    const s = useLibraryStore.getState();
+    expect(s.staticMetadata).toEqual({});
+    expect(s.offloadedBookIds.size).toBe(0);
+    expect(s.isImporting).toBe(false);
+    expect(s.batchImportSummary).toBeNull();
+    expect(s.error).toBeNull();
   });
 
-  it('should have initial state', () => {
-    const state = useLibraryStore.getState();
-    const bookState = useBookStore.getState();
-    expect(bookState.books).toEqual({});
-    expect(state.isLoading).toBe(false);
+  it('static metadata is per-key: set/remove never touch other keys', () => {
+    const s = useLibraryStore.getState();
+    s.setStaticMetadata('a', makeBookMetadata({ id: 'a' }));
+    s.setStaticMetadata('b', makeBookMetadata({ id: 'b' }));
+    s.removeStaticMetadata('a');
+
+    const next = useLibraryStore.getState().staticMetadata;
+    expect(next['a']).toBeUndefined();
+    expect(next['b']).toBeDefined();
   });
 
-  it('should add a book calling dbService', async () => {
-    // Mock successful add - returns StaticBookManifest
-    const mockManifest = {
-      bookId: 'test-id',
-      title: 'Test Book',
-      author: 'Test Author',
-      fileHash: 'hash',
-      fileSize: 100,
-      totalChars: 1000,
-      schemaVersion: 1,
-      coverPalette: [1, 2, 3, 4, 5]
+  it('the offloaded set only supports per-key deltas (I-5 is structural)', () => {
+    const s = useLibraryStore.getState();
+    s.markOffloaded('x');
+    s.markOffloaded('y');
+    s.unmarkOffloaded('x');
+
+    const set = useLibraryStore.getState().offloadedBookIds;
+    expect(set.has('x')).toBe(false);
+    expect(set.has('y')).toBe(true);
+  });
+
+  it('regression: no-op writes preserve references (render stability)', () => {
+    const s = useLibraryStore.getState();
+    const meta = makeBookMetadata({ id: 'a' });
+    s.setStaticMetadata('a', meta);
+    s.markOffloaded('x');
+
+    const staticBefore = useLibraryStore.getState().staticMetadata;
+    const offloadedBefore = useLibraryStore.getState().offloadedBookIds;
+
+    // Same-value writes and misses must not produce new references.
+    useLibraryStore.getState().setStaticMetadata('a', meta);
+    useLibraryStore.getState().removeStaticMetadata('missing');
+    useLibraryStore.getState().markOffloaded('x');
+    useLibraryStore.getState().unmarkOffloaded('missing');
+
+    expect(useLibraryStore.getState().staticMetadata).toBe(staticBefore);
+    expect(useLibraryStore.getState().offloadedBookIds).toBe(offloadedBefore);
+  });
+
+  it('import progress projection transitions and clears', () => {
+    const s = useLibraryStore.getState();
+    s.setError('stale error');
+    s.importStarted();
+
+    let now = useLibraryStore.getState();
+    expect(now.isImporting).toBe(true);
+    expect(now.error).toBeNull();
+
+    s.setImportProgress(40, 'Importing 1 of 2: a.epub');
+    s.setUploadProgress(80, 'Processing books.zip...');
+    now = useLibraryStore.getState();
+    expect(now.importProgress).toBe(40);
+    expect(now.uploadStatus).toBe('Processing books.zip...');
+
+    s.importFinished();
+    now = useLibraryStore.getState();
+    expect(now.isImporting).toBe(false);
+    expect(now.importProgress).toBe(0);
+    expect(now.importStatus).toBe('');
+  });
+
+  it('regression: batch summary surfaces per-file outcomes and is dismissable (P0 D1 shape preserved)', () => {
+    const summary = {
+      imported: 2,
+      skipped: ['dup.epub'],
+      failed: [{ filename: 'bad.zip', reason: 'corrupted' }],
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(mockDBService.addBook).mockResolvedValue(mockManifest as any);
+    useLibraryStore.getState().setBatchImportSummary(summary);
+    expect(useLibraryStore.getState().batchImportSummary).toEqual(summary);
 
-    await useLibraryStore.getState().addBook(mockFile);
-
-    expect(mockDBService.addBook).toHaveBeenCalledWith(mockFile, expect.anything(), expect.anything());
-
-    // State should be updated via Yjs sync (book added to store)
-    const state = useLibraryStore.getState();
-    const bookState = useBookStore.getState();
-    expect(bookState.books['test-id']).toBeDefined();
-    expect(bookState.books['test-id'].coverPalette).toEqual([1, 2, 3, 4, 5]);
-    expect(state.isLoading).toBe(false);
-  });
-
-  it('should handle add book error', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => { });
-    const error = new Error('Add failed');
-    vi.mocked(mockDBService.addBook).mockRejectedValue(error);
-
-    await expect(useLibraryStore.getState().addBook(mockFile)).rejects.toThrow('Add failed');
-
-    const state = useLibraryStore.getState();
-    // Store sets a generic error message for UI
-    expect(state.error).toBe('Failed to import book.');
-    expect(state.isLoading).toBe(false);
-  });
-
-  it('should detect duplicate book and throw error if not overwriting', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => { });
-    vi.mocked(mockDBService.getBookIdByFilename).mockResolvedValue('existing-id');
-
-    await expect(useLibraryStore.getState().addBook(mockFile)).rejects.toThrow('A book with the filename "test.epub" already exists.');
-
-    expect(mockDBService.getBookIdByFilename).toHaveBeenCalledWith('test.epub');
-    expect(mockDBService.addBook).not.toHaveBeenCalled();
-  });
-
-  it('should overwrite duplicate book if requested', async () => {
-    vi.mocked(mockDBService.getBookIdByFilename).mockResolvedValue('existing-id');
-    vi.mocked(mockDBService.deleteBook).mockResolvedValue(undefined);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(mockDBService.addBook).mockResolvedValue({ bookId: 'new-id', title: 'New', author: 'A', schemaVersion: 1 } as any);
-
-    // Initial state with existing book
-    // Initial state with existing book using public API
-    const existingBook = {
-      bookId: 'existing-id',
-      sourceFilename: 'test.epub',
-      title: 'Old',
-      author: 'Old',
-      addedAt: 500,
-      lastInteraction: 500,
-      status: 'unread',
-      tags: []
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useBookStore.getState().addBook(existingBook as any);
-
-    // Mock importBookWithId to successful manifest
-    const mockManifest = { bookId: 'existing-id', title: 'New', author: 'A', schemaVersion: 1 };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(mockDBService.importBookWithId).mockResolvedValue(mockManifest as any);
-
-    await useLibraryStore.getState().addBook(mockFile, { overwrite: true });
-
-    // Since book is in store, we don't call DB getBookIdByFilename
-    // expect(mockDBService.getBookIdByFilename).toHaveBeenCalledWith('test.epub');
-    // We NO LONGER delete the book on overwrite
-    expect(mockDBService.deleteBook).not.toHaveBeenCalled();
-    // We call importBookWithId instead
-    expect(mockDBService.importBookWithId).toHaveBeenCalled();
-
-    // Verify state
-    const bookState = useBookStore.getState();
-    // ID should remain the same
-    expect(bookState.books['existing-id']).toBeDefined();
-  });
-
-  it('should remove a book calling dbService', async () => {
-    // Setup initial state
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    useBookStore.setState({ books: { 'test-id': { ...mockBook, lastInteraction: 1000, tags: [], status: 'unread' } as any } });
-
-    vi.mocked(mockDBService.deleteBook).mockResolvedValue(undefined);
-
-    await useLibraryStore.getState().removeBook('test-id');
-
-    expect(mockDBService.deleteBook).toHaveBeenCalledWith('test-id');
-    const bookState = useBookStore.getState();
-    expect(bookState.books['test-id']).toBeUndefined();
-  });
-
-  it('should hydrate static metadata from DB', async () => {
-    // Setup book in Yjs state first
-    useBookStore.setState({
-      books: {
-        'test-id': {
-          bookId: 'test-id',
-          title: 'Test',
-          author: 'Author',
-          addedAt: 1000,
-          status: 'unread',
-          tags: [],
-          lastInteraction: 1000
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any
-      }
-    });
-
-    // Mock DBService to return static metadata
-    vi.mocked(mockDBService.getLibrary).mockResolvedValue([mockBook]);
-    vi.mocked(mockDBService.getBookMetadata).mockResolvedValue(mockBook);
-
-    await useLibraryStore.getState().hydrateStaticMetadata();
-
-    expect(mockDBService.getBookMetadata).toHaveBeenCalledWith('test-id');
-    const state = useLibraryStore.getState();
-    expect(state.staticMetadata['test-id']).toBeDefined();
-  });
-
-  it('should force hydrate static metadata from DB even if already in state when requested', async () => {
-    // Setup book in Yjs state first
-    useBookStore.setState({
-      books: {
-        'test-id': {
-          bookId: 'test-id',
-          title: 'Test',
-          author: 'Author',
-          addedAt: 1000,
-          status: 'unread',
-          tags: [],
-          lastInteraction: 1000
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any
-      }
-    });
-
-    // Populate staticMetadata with an outdated version
-    useLibraryStore.setState({
-      staticMetadata: {
-        'test-id': {
-          ...mockBook,
-          version: 1
-        }
-      }
-    });
-
-    const updatedBook = {
-      ...mockBook,
-      version: CURRENT_BOOK_VERSION
-    };
-
-    // Mock DBService to return the updated static metadata
-    vi.mocked(mockDBService.getBookMetadata).mockResolvedValue(updatedBook);
-
-    // Call standard hydrateStaticMetadata() -> should NOT overwrite because already in state
-    await useLibraryStore.getState().hydrateStaticMetadata();
-    expect(useLibraryStore.getState().staticMetadata['test-id']?.version).toBe(1);
-
-    // Call hydrateStaticMetadata with forceBookIds -> should overwrite
-    await useLibraryStore.getState().hydrateStaticMetadata(['test-id']);
-    expect(useLibraryStore.getState().staticMetadata['test-id']?.version).toBe(CURRENT_BOOK_VERSION);
-  });
-
-  it('should update and persist sort order (moved to preferences)', () => {
-    // This functionality has been moved to usePreferencesStore
-  });
-
-  it('should use batch addBooks when importing multiple files', async () => {
-    const mockFiles = [
-      new File([''], 'book1.epub'),
-      new File([''], 'book2.epub')
-    ];
-
-    const mockManifests = [
-      { manifest: { bookId: 'b1', title: 'Book 1', author: 'A', fileSize: 0, coverPalette: [1, 2, 3, 4, 5] }, sourceFilename: 'book1.epub' },
-      { manifest: { bookId: 'b2', title: 'Book 2', author: 'B', fileSize: 0, coverPalette: [6, 7, 8, 9, 10] }, sourceFilename: 'book2.epub' }
-    ];
-
-    // Mock processBatchImport to return successful manifests
-    const { processBatchImport } = await import('../lib/batch-ingestion');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(processBatchImport).mockResolvedValue({ successful: mockManifests, failed: [] } as any);
-
-    // Spy on addBooks
-    const addBooksSpy = vi.spyOn(useBookStore.getState(), 'addBooks');
-    const addBookSpy = vi.spyOn(useBookStore.getState(), 'addBook');
-
-    await useLibraryStore.getState().addBooks(mockFiles);
-
-    expect(processBatchImport).toHaveBeenCalled();
-
-    // Check that batch method was called once
-    expect(addBooksSpy).toHaveBeenCalledTimes(1);
-    // Check that individual add method was NOT called (optimization)
-    expect(addBookSpy).not.toHaveBeenCalled();
-
-    // Check args
-    const calledArgs = addBooksSpy.mock.calls[0][0];
-    expect(calledArgs).toHaveLength(2);
-    expect(calledArgs[0].bookId).toBe('b1');
-    expect(calledArgs[1].bookId).toBe('b2');
-
-    // Verify state update
-    const bookState = useBookStore.getState();
-    expect(bookState.books['b1']).toBeDefined();
-    expect(bookState.books['b1'].coverPalette).toEqual([1, 2, 3, 4, 5]);
-    expect(bookState.books['b2']).toBeDefined();
-    expect(bookState.books['b2'].coverPalette).toEqual([6, 7, 8, 9, 10]);
-  });
-
-  describe('removeBook predictability', () => {
-    it('removes offloadedBookIds on removeBook', async () => {
-      // First, set up the store with a book and offloaded state
-      useLibraryStore.setState({
-        staticMetadata: {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          'book1': { id: 'book1', version: 1, addedAt: 100 } as any
-        },
-        offloadedBookIds: new Set(['book1'])
-      });
-
-      useBookStore.setState({
-        books: {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          'book1': { bookId: 'book1', title: 'Test', author: 'Author' } as any
-        }
-      });
-
-      expect(useLibraryStore.getState().offloadedBookIds.has('book1')).toBe(true);
-
-      await useLibraryStore.getState().removeBook('book1');
-
-      const state = useLibraryStore.getState();
-      expect(state.staticMetadata['book1']).toBeUndefined();
-      expect(state.offloadedBookIds.has('book1')).toBe(false);
-    });
-  });
-
-  it('should not change reference of staticMetadata and offloadedBookIds if nothing changes', async () => {
-    // Setup book in Yjs state first
-    useBookStore.setState({
-      books: {
-        'test-id': {
-          bookId: 'test-id',
-          title: 'Test',
-          author: 'Author',
-          addedAt: 1000,
-          status: 'unread',
-          tags: [],
-          lastInteraction: 1000
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any
-      }
-    });
-
-    // Mock DBService to return empty metadata/offloaded
-    vi.mocked(mockDBService.getBookMetadata).mockResolvedValue(undefined);
-    vi.mocked(mockDBService.getOffloadedStatus).mockResolvedValue(new Map());
-
-    const initialMetadataRef = useLibraryStore.getState().staticMetadata;
-    const initialOffloadedRef = useLibraryStore.getState().offloadedBookIds;
-
-    await useLibraryStore.getState().hydrateStaticMetadata();
-
-    const state = useLibraryStore.getState();
-    expect(state.staticMetadata).toBe(initialMetadataRef);
-    expect(state.offloadedBookIds).toBe(initialOffloadedRef);
+    useLibraryStore.getState().clearBatchImportSummary();
+    expect(useLibraryStore.getState().batchImportSummary).toBeNull();
   });
 });
-

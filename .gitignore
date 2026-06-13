@@ -13,6 +13,10 @@ dev-dist
 dist-ssr
 *.local
 
+# tsc -b declaration output of workspace packages (composite projects)
+packages/*/dist-types/
+packages/*/dist-types-test/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -31,7 +35,6 @@ verification/screenshots/
 # Android SDK
 android-sdk/
 cmdline-tools.zip
-public/piper/
 venv/
 
 # Test output
@@ -44,3 +47,16 @@ playwright-report/
 
 # Flight recorder exports
 **/Export flight_anomaly_*.json
+
+# Bundle analyzer output (ANALYZE=true vite build)
+stats.html
+stats-worker.html
+
+# Compiled CC-CEDICT artifacts — built by `npm run compile-dict` (CI) from
+# the release pinned in scripts/cedict.lock.json; never committed
+# (Phase 6 PR-12, plan/overhaul/prep/phase6-reader-engine.md §7.6).
+public/dict/cedict.json
+public/dict/cedict.meta.json
+
+# scratch dir used by ad-hoc tooling
+.tmp/

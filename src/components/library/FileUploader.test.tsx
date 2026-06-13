@@ -1,32 +1,46 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
-import React from 'react';
 import { FileUploader } from './FileUploader';
-import { useLibraryStore } from '../../store/useLibraryStore';
-import { useToastStore } from '../../store/useToastStore';
-import { validateZipSignature } from '../../lib/ingestion';
-import { DuplicateBookError } from '../../types/errors';
+import { useLibraryStore } from '@store/useLibraryStore';
+import { useToastStore } from '@store/useToastStore';
+import { validateZipSignature } from '@lib/ingestion';
+import { DuplicateBookError } from '~types/errors';
 
 // Mock dependencies
-vi.mock('../../store/useLibraryStore');
-vi.mock('../../store/useToastStore');
-vi.mock('../../lib/ingestion', () => ({
+vi.mock('@store/useLibraryStore');
+vi.mock('@store/useToastStore');
+vi.mock('@lib/ingestion', () => ({
   validateZipSignature: vi.fn(),
 }));
 
+// Phase 7: import workflows live on the shared controller, not the store.
+const { mockAddBook, mockAddBooks, mockReplaceFile } = vi.hoisted(() => ({
+  mockAddBook: vi.fn(),
+  mockAddBooks: vi.fn(),
+  mockReplaceFile: vi.fn(),
+}));
+vi.mock('@app/library/useImportController', () => {
+  const controller = {
+    importFile: mockAddBook,
+    importFiles: mockAddBooks,
+    replaceFile: mockReplaceFile,
+  };
+  return { useImportController: () => controller, libraryController: controller };
+});
+
 describe('FileUploader', () => {
-  const mockAddBook = vi.fn();
   const mockShowToast = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAddBook.mockResolvedValue({ status: 'imported', bookId: 'x' });
+    mockReplaceFile.mockResolvedValue({ status: 'replaced', bookId: 'x' });
 
-    // Default mock implementation
+    // Default store projection
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useLibraryStore as any).mockReturnValue({
-      addBook: mockAddBook,
-      isImporting: false,
-      addBooks: vi.fn(),
+    (useLibraryStore as any).mockImplementation((selector: any) => {
+      const state = { isImporting: false, importStatus: '', importProgress: 0, uploadProgress: 0, uploadStatus: '', batchImportSummary: null };
+      return selector ? selector(state) : state;
     });
 
     // Mock useToastStore
@@ -76,11 +90,9 @@ describe('FileUploader', () => {
 
   it('should show loading state', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useLibraryStore as any).mockReturnValue({
-      addBook: mockAddBook,
-      isImporting: true,
-      importStatus: 'Importing books...',
-      importProgress: 10,
+    (useLibraryStore as any).mockImplementation((selector: any) => {
+      const state = { isImporting: true, importStatus: 'Importing books...', importProgress: 10, uploadProgress: 0, uploadStatus: '', batchImportSummary: null };
+      return selector ? selector(state) : state;
     });
 
     render(<FileUploader />);
@@ -169,9 +181,9 @@ describe('FileUploader', () => {
   });
 
   it('should show replacement dialog when DuplicateBookError occurs', async () => {
-    // Mock addBook to throw DuplicateBookError on first call, succeed on second
+    // importFile throws DuplicateBookError (the controller contract);
+    // the dialog confirmation then calls replaceFile.
     mockAddBook.mockRejectedValueOnce(new DuplicateBookError("test.epub"));
-    mockAddBook.mockResolvedValueOnce(undefined); // Second call succeeds
 
     const { container } = render(<FileUploader />);
     const input = container.querySelector('input[type="file"]');
@@ -193,9 +205,9 @@ describe('FileUploader', () => {
     const replaceBtn = screen.getByTestId('confirm-replace');
     fireEvent.click(replaceBtn);
 
-    // 5. Expect addBook to be called again with overwrite: true
+    // 5. Expect the Replace-dialog confirmation to call the controller's replaceFile
     await waitFor(() => {
-      expect(mockAddBook).toHaveBeenCalledWith(file, { overwrite: true });
+      expect(mockReplaceFile).toHaveBeenCalledWith(file);
     });
 
     // 6. Expect toast success

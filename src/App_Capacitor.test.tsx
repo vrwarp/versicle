@@ -1,25 +1,23 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import { render, act } from '@testing-library/react';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, beforeEach } from 'vitest';
 import { Capacitor } from '@capacitor/core';
-import { AudioPlayerService } from './lib/tts/AudioPlayerService';
 
 // Mock dependencies
-vi.mock('./db/db', () => ({
-  getDB: vi.fn().mockResolvedValue({}),
+vi.mock('./data/connection', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./data/connection')>()),
+  getConnection: vi.fn().mockResolvedValue({}),
+  closeConnection: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('./components/library/LibraryView', () => ({
   LibraryView: () => <div>LibraryView</div>,
 }));
-vi.mock('./components/reader/ReaderView', () => ({
-  ReaderView: () => <div>ReaderView</div>,
+vi.mock('./components/reader/ReaderShell', () => ({
+  ReaderShell: () => <div>ReaderView</div>,
 }));
 vi.mock('./components/ThemeSynchronizer', () => ({
   ThemeSynchronizer: () => null,
-}));
-vi.mock('./components/GlobalSettingsDialog', () => ({
-  GlobalSettingsDialog: () => null,
 }));
 vi.mock('./components/ui/ToastContainer', () => ({
   ToastContainer: () => null,
@@ -37,14 +35,6 @@ vi.mock('@capacitor/core', () => ({
     isNativePlatform: vi.fn(),
   },
 }));
-vi.mock('./lib/tts/AudioPlayerService', () => ({
-  AudioPlayerService: {
-    getInstance: vi.fn().mockReturnValue({
-      pause: vi.fn(),
-      subscribe: vi.fn(),
-    }),
-  },
-}));
 vi.mock('./store/useToastStore', () => {
   const showToastMock = vi.fn();
   const useToastStoreMock = (selector: any) => selector({ showToast: showToastMock });
@@ -56,6 +46,9 @@ vi.mock('./store/useReaderUIStore', () => ({
   useReaderUIStore: (selector: any) => selector({
     immersiveMode: false,
     currentSectionTitle: null,
+    // Popover state moved here from useAnnotationStore (popover-desync hotfix)
+    popover: { visible: false },
+    hidePopover: vi.fn(),
   }),
 }));
 
@@ -82,16 +75,14 @@ vi.mock('./store/useLibraryStore', () => ({
   }),
 }));
 
-vi.mock('./store/selectors', () => ({
+vi.mock('./store/libraryViewStore', () => ({
   useAllBooks: vi.fn().mockReturnValue([]),
   useBook: vi.fn(),
 }));
 
 vi.mock('./store/useAnnotationStore', () => ({
   useAnnotationStore: (selector: any) => selector({
-    popover: { visible: false },
     addAnnotation: vi.fn(),
-    hidePopover: vi.fn(),
   }),
 }));
 
@@ -147,8 +138,4 @@ describe('App Capacitor Initialization', () => {
     });
   });
 
-  it('should attempt to initialize player service', () => {
-    // Just to use the import
-    expect(AudioPlayerService).toBeDefined();
-  });
 });

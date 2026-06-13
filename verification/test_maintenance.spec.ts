@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook } from "./utils";
+import { resetApp, ensureLibraryWithBook, openSettings, acceptConfirm } from "./utils";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import * as fs from "fs";
@@ -16,8 +16,9 @@ test("orphan repair", async ({ page }) => {
   console.log("Injecting orphans...");
   await page.evaluate(async () => {
     return new Promise<void>((resolve) => {
-      // Use version 24 (current)
-      const req = window.indexedDB.open("EpubLibraryDB", 24);
+      // Open at the app's current version (no explicit version: a hardcoded
+      // number rotted at every schema bump → VersionError against newer DBs).
+      const req = window.indexedDB.open("EpubLibraryDB");
       req.onsuccess = (e: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
         const db = e.target.result;
         // Target active stores for maintenance
@@ -40,21 +41,26 @@ test("orphan repair", async ({ page }) => {
     });
   });
 
-  // Open Settings
+  // Open Settings (Phase-10 SettingsShell route over the library). The bare
+  // "Settings" accessible name is now ambiguous — it also matches the audio
+  // deck's footer Settings tab — so drive the header button by test-id and
+  // wait for the real Radix tablist via the shared helper.
   console.log("Opening Settings...");
-  await page.getByRole("button", { name: "Settings" }).click();
+  await openSettings(page);
 
-  // Go to Data Management Tab
-  await page.getByRole("button", { name: "Data Management" }).click();
-
-  // Set dialog handler BEFORE clicking
-  page.on("dialog", async (dialog) => {
-    await dialog.accept();
-  });
+  // Go to Data Management Tab (a real Radix role="tab" in the SettingsShell).
+  await page.getByRole("tab", { name: "Data Management" }).scrollIntoViewIfNeeded().catch(() => {});
+  await page.getByRole("tab", { name: "Data Management" }).click();
 
   // Click "Check & Repair Database"
   console.log("Running Repair...");
   await page.getByRole("button", { name: "Check & Repair Database" }).click();
+
+  // The maintenance panel no longer uses window.confirm() — it renders an
+  // in-app ConfirmDialog (useConfirm → ConfirmHost). A page.on('dialog', …)
+  // handler would hang forever (no native dialog fires); accept by clicking
+  // the dialog's confirm button so pruneOrphans() actually runs.
+  await acceptConfirm(page);
 
   // Wait for result text
   console.log("Waiting for completion...");
@@ -72,7 +78,7 @@ test("orphan repair", async ({ page }) => {
 
     await successMsg.scrollIntoViewIfNeeded();
     await expect(successMsg).toBeVisible();
-  } catch {
+  } catch (e) {
     // Capture screenshot on failure
     const screenshotsDir = path.resolve(__dirname, "screenshots");
     if (!fs.existsSync(screenshotsDir)) {
@@ -87,8 +93,7 @@ test("orphan repair", async ({ page }) => {
   console.log("Verifying cleanup...");
   const orphansExist = await page.evaluate(async () => {
     return new Promise<boolean>((resolve) => {
-      // Use version 24
-      const req = window.indexedDB.open("EpubLibraryDB", 24);
+      const req = window.indexedDB.open("EpubLibraryDB");
       req.onsuccess = (e: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => {
         const db = e.target.result;
         const tx = db.transaction(["static_resources", "cache_render_metrics"], "readonly");

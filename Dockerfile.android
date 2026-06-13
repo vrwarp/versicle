@@ -43,6 +43,10 @@ RUN npm ci
 # Copy the rest of the project
 COPY . .
 
+# Compiled dictionary (Phase 6 PR-12: cedict.json left git; build it from
+# the pinned release when the context does not already carry it).
+RUN test -f public/dict/cedict.json || npm run compile-dict
+
 # Build web assets
 RUN npm run build
 

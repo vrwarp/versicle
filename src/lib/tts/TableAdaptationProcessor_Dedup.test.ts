@@ -1,26 +1,42 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createZustandEngineContext } from '@app/tts/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
-import { dbService } from '../../db/DBService';
+import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
 
-vi.mock('../../db/DBService', () => ({
-    dbService: {
-        getContentAnalysis: vi.fn(),
+// ContentAnalysisRepository.getContentAnalysis is synchronous, but these tests
+// (written when it was async) install async implementations; the processor
+// tolerates the returned promise. Keep runtime behaviour identical and give
+// the mock an async-shaped view of the method for the type checker.
+const getContentAnalysisAsyncMock = contentAnalysisRepository.getContentAnalysis as unknown as (
+    bookId: string,
+    sectionId: string,
+) => Promise<unknown>;
+
+vi.mock('@data/repos/bookContent', () => ({
+    bookContent: {
         getTableImages: vi.fn().mockResolvedValue([]),
-        saveTableAdaptations: vi.fn(),
-        getBookMetadata: vi.fn().mockResolvedValue({}),
         getBookStructure: vi.fn().mockResolvedValue(null),
     }
 }));
 
-vi.mock('../genai/GenAIService', () => ({
-    genAIService: {
-        isConfigured: vi.fn(() => false),
-        configure: vi.fn(),
-        generateTableAdaptations: vi.fn().mockResolvedValue([]),
+vi.mock('@app/repositories/ContentAnalysisRepository', () => ({
+    contentAnalysisRepository: {
+        getContentAnalysis: vi.fn(),
+        saveReferenceStartCfi: vi.fn(),
+        markAnalysisLoading: vi.fn(),
+        markAnalysisError: vi.fn(),
+        saveTableAdaptations: vi.fn(),
+        clearAll: vi.fn(),
     }
 }));
 
-vi.mock('../../store/useGenAIStore', () => ({
+vi.mock('@app/repositories/BookRepository', () => ({
+    bookRepository: {
+        getBookMetadata: vi.fn().mockResolvedValue({}),
+    }
+}));
+
+vi.mock('@store/useGenAIStore', () => ({
     useGenAIStore: {
         getState: vi.fn(() => ({
             isEnabled: true,
@@ -35,7 +51,7 @@ describe('TableAdaptationProcessor - Deduplication (Vulnerability 3)', () => {
     let processor: TableAdaptationProcessor;
 
     beforeEach(() => {
-        processor = new TableAdaptationProcessor();
+        processor = new TableAdaptationProcessor(createZustandEngineContext());
         vi.clearAllMocks();
     });
 
@@ -46,7 +62,7 @@ describe('TableAdaptationProcessor - Deduplication (Vulnerability 3)', () => {
         // Track how many times the inner logic actually executes
         let executionCount = 0;
 
-        vi.mocked(dbService.getContentAnalysis).mockImplementation(async () => {
+        vi.mocked(getContentAnalysisAsyncMock).mockImplementation(async () => {
             executionCount++;
             // Block the first call so we can fire a second one while it's in-flight
             if (executionCount === 1) {
@@ -74,7 +90,7 @@ describe('TableAdaptationProcessor - Deduplication (Vulnerability 3)', () => {
     it('should allow a second call after the first one completes', async () => {
         let executionCount = 0;
 
-        vi.mocked(dbService.getContentAnalysis).mockImplementation(async () => {
+        vi.mocked(getContentAnalysisAsyncMock).mockImplementation(async () => {
             executionCount++;
             return { tableAdaptations: [] } as never;
         });
@@ -94,7 +110,7 @@ describe('TableAdaptationProcessor - Deduplication (Vulnerability 3)', () => {
     it('should deduplicate per section — different sections run independently', async () => {
         let executionCount = 0;
 
-        vi.mocked(dbService.getContentAnalysis).mockImplementation(async () => {
+        vi.mocked(getContentAnalysisAsyncMock).mockImplementation(async () => {
             executionCount++;
             return { tableAdaptations: [] } as never;
         });
@@ -114,7 +130,7 @@ describe('TableAdaptationProcessor - Deduplication (Vulnerability 3)', () => {
 
     it('should clean up the promise map even if the inner logic throws', async () => {
         const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        vi.mocked(dbService.getContentAnalysis).mockRejectedValue(new Error('DB Error'));
+        vi.mocked(contentAnalysisRepository.getContentAnalysis).mockRejectedValue(new Error('DB Error'));
 
         const sentences = [{ text: 'test', cfi: 'cfi1' }];
         const callback = vi.fn();
@@ -123,10 +139,10 @@ describe('TableAdaptationProcessor - Deduplication (Vulnerability 3)', () => {
         await processor.processTableAdaptations('book1', 'section1', sentences, callback);
 
         // The map should be cleaned up, so a second call should start fresh
-        vi.mocked(dbService.getContentAnalysis).mockResolvedValue({ tableAdaptations: [] } as never);
+        vi.mocked(contentAnalysisRepository.getContentAnalysis).mockResolvedValue({ tableAdaptations: [] } as never);
 
         let secondExecuted = false;
-        vi.mocked(dbService.getContentAnalysis).mockImplementation(async () => {
+        vi.mocked(getContentAnalysisAsyncMock).mockImplementation(async () => {
             secondExecuted = true;
             return { tableAdaptations: [] } as never;
         });

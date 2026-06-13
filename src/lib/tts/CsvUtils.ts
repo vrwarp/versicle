@@ -1,4 +1,4 @@
-import type { LexiconRule } from '../../types/db';
+import type { LexiconRule } from '~types/user-data';
 import Papa from 'papaparse';
 
 /**

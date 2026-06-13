@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, act } from '@testing-library/react';
 import React from 'react';
 import { LibraryView } from './LibraryView';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useLibraryStore } from '@store/useLibraryStore';
 import { MemoryRouter } from 'react-router-dom';
 
 // NOTE: Even though LibraryView doesn't currently use react-window,
@@ -34,14 +34,9 @@ describe('LibraryView Performance', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useLibraryStore.setState({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            books: [{ id: '1', title: 'B1' } as any],
             isLoading: false,
             error: null,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            fetchBooks: vi.fn().mockResolvedValue(undefined) as any,
             isImporting: false,
-            viewMode: 'grid', // Ensure grid mode to test virtualization if it were there
         });
 
         // Mock dimensions

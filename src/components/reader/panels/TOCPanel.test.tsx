@@ -1,8 +1,7 @@
-import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { TOCPanel, TOCPanelProps } from './TOCPanel';
-import type { NavigationItem } from 'epubjs';
+import { TOCPanel, type TOCPanelProps } from './TOCPanel';
+import type { NavigationItem } from '~types/book';
 
 // Mock the ReadingHistoryPanel since it has complex dependencies
 vi.mock('../ReadingHistoryPanel', () => ({
@@ -39,7 +38,7 @@ describe('TOCPanel', () => {
         tocProgress: null,
         onEnhanceTOC: vi.fn(),
         bookId: 'test-book',
-        rendition: undefined,
+        engine: undefined,
         historyTick: 0,
         onHistoryNavigate: vi.fn()
     };

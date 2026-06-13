@@ -11,7 +11,7 @@ test('Generative AI Settings Tab Test', async ({ page }) => {
   await page.getByLabel('Settings').first().click();
 
   // 4. Check for "Generative AI" tab
-  const genaiTab = page.getByRole('button', { name: 'Generative AI' });
+  const genaiTab = page.getByRole('tab', { name: 'Generative AI' });
   await expect(genaiTab).toBeVisible();
 
   // 5. Click tab

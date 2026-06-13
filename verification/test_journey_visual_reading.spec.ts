@@ -114,7 +114,7 @@ test("journey visual reading", async ({ page }) => {
 
   // Capture CFI before navigation
   const cfiBefore = await page.evaluate(
-    "window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'"
+    "window.__versicleTest?.reader?.currentCfi() ?? 'null'"
   );
 
   // --- Test Next Page (Compass Pill) in Immersive Mode ---
@@ -128,7 +128,7 @@ test("journey visual reading", async ({ page }) => {
   await page.waitForTimeout(3000); // Wait for page turn animation/render
 
   let cfiAfter = await page.evaluate(
-    "window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'"
+    "window.__versicleTest?.reader?.currentCfi() ?? 'null'"
   );
 
   // Re-fetch frame as it might be detached/replaced
@@ -145,12 +145,12 @@ test("journey visual reading", async ({ page }) => {
       await page.mouse.click(immTapXRight, immTapY);
       await page.waitForTimeout(3000);
       cfiAfter = await page.evaluate(
-        "window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'"
+        "window.__versicleTest?.reader?.currentCfi() ?? 'null'"
       );
 
       if (cfiBefore === cfiAfter) {
         // Last resort manual next check to confirm engine isn't completely frozen
-        await page.evaluate("window.rendition.next()");
+        await page.evaluate("window.__versicleTest?.reader?.next()");
         await page.waitForTimeout(3000);
         expect(cfiBefore).not.toBe(cfiAfter);
       }
@@ -165,7 +165,7 @@ test("journey visual reading", async ({ page }) => {
   await page.waitForTimeout(3000);
 
   let cfiPrev = await page.evaluate(
-    "window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'"
+    "window.__versicleTest?.reader?.currentCfi() ?? 'null'"
   );
 
   if (cfiPrev === cfiAfter) {
@@ -173,7 +173,7 @@ test("journey visual reading", async ({ page }) => {
     await page.mouse.click(immTapXLeft, immTapY);
     await page.waitForTimeout(3000);
     cfiPrev = await page.evaluate(
-      "window.rendition && window.rendition.location && window.rendition.location.start ? window.rendition.location.start.cfi : 'null'"
+      "window.__versicleTest?.reader?.currentCfi() ?? 'null'"
     );
 
     expect(cfiPrev).not.toBe(cfiAfter);

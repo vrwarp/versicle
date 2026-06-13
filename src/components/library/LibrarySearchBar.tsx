@@ -2,8 +2,8 @@ import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Search, X } from 'lucide-react';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
-import { cn } from '../../lib/utils';
-import { useDebounce } from '../../hooks/useDebounce';
+import { cn } from '@lib/utils';
+import { useDebounce } from '@hooks/useDebounce';
 
 interface LibrarySearchBarProps {
   onQueryChange: (debouncedQuery: string) => void;

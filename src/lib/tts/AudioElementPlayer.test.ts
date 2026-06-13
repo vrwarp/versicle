@@ -15,6 +15,7 @@ describe('AudioElementPlayer', () => {
       currentTime: 0,
       volume: 1,
       playbackRate: 1,
+      defaultPlaybackRate: 1,
       ontimeupdate: null,
       onended: null,
       onerror: null,
@@ -76,6 +77,16 @@ describe('AudioElementPlayer', () => {
   it('should set playback rate', () => {
     player.setRate(1.5);
     expect(mockAudio.playbackRate).toBe(1.5);
+  });
+
+  describe('regression: speed policy — rate survives source loads', () => {
+    it('pins defaultPlaybackRate so the media load algorithm cannot reset the rate', () => {
+      player.setRate(1.5);
+      // The load algorithm resets playbackRate to defaultPlaybackRate when a new
+      // src is assigned; pinning both keeps the rate across sentence loads.
+      expect(mockAudio.playbackRate).toBe(1.5);
+      expect(mockAudio.defaultPlaybackRate).toBe(1.5);
+    });
   });
 
   it('should handle time updates', () => {

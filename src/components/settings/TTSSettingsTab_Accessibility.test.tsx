@@ -1,13 +1,12 @@
-import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { TTSSettingsTab, TTSSettingsTabProps } from './TTSSettingsTab';
+import { TTSSettingsTab, type TTSSettingsTabProps } from './TTSSettingsTab';
 import { describe, it, expect, vi } from 'vitest';
 
 describe('TTSSettingsTab Accessibility', () => {
     const defaultProps: TTSSettingsTabProps = {
         activeLanguage: 'en',
-        profiles: { en: { voiceId: 'voice1', rate: 1.0, pitch: 1.0, volume: 1.0 } },
-        providerId: 'local',
+        profiles: { en: { voiceId: 'voice1', rate: 1.0, minSentenceLength: 36 } },
+        providerId: 'webspeech',
         onProviderChange: vi.fn(),
         apiKeys: {},
         onApiKeyChange: vi.fn(),
@@ -42,7 +41,6 @@ describe('TTSSettingsTab Accessibility', () => {
 
         // Find the char count text
         const lengthText = screen.getByText('36 chars');
-        // @ts-expect-error fix
         expect(lengthText).toHaveAttribute('role', 'status');
         expect(lengthText).toHaveAttribute('aria-live', 'polite');
     });

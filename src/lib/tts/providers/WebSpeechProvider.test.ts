@@ -105,8 +105,7 @@ describe('WebSpeechProvider', () => {
               id: 'Voice 1',
               name: 'Voice 1',
               lang: 'en-US',
-              provider: 'local',
-              originalVoice: rawVoices[0]
+              provider: 'local'
           }]);
       });
   });
@@ -140,7 +139,7 @@ describe('WebSpeechProvider', () => {
           expect(callback).toHaveBeenCalledWith({ type: 'end' });
       });
 
-      it('should handle errors', async () => {
+      it('rejects a failure to start through the promise ONLY (single-shot, 5a-PR2)', async () => {
           const rawVoices = [{ name: 'Voice 1', lang: 'en-US' }];
           mockSynth.getVoices.mockReturnValue(rawVoices);
           await provider.init();
@@ -153,9 +152,35 @@ describe('WebSpeechProvider', () => {
           const errorEvent = { error: 'some error' };
           if (mockUtterance.onerror) mockUtterance.onerror(errorEvent);
 
-          // Expect promise rejection
-          await expect(playPromise).rejects.toEqual(errorEvent);
-          expect(callback).toHaveBeenCalledWith({ type: 'error', error: errorEvent });
+          // The rejection is the one and only signal for a start failure — the
+          // pre-5a emit+reject double-signal fed the fallback double-fire (S2).
+          await expect(playPromise).rejects.toThrow('SpeechSynthesisError: some error');
+          expect(callback).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+      });
+
+      it('emits mid-playback failures (after start) as an error event', async () => {
+          const rawVoices = [{ name: 'Voice 1', lang: 'en-US' }];
+          mockSynth.getVoices.mockReturnValue(rawVoices);
+          await provider.init();
+
+          const callback = vi.fn();
+          provider.on(callback);
+
+          const playPromise = provider.play('text', { voiceId: 'Voice 1', speed: 1.0 });
+          if (mockUtterance.onstart) mockUtterance.onstart();
+          await playPromise;
+
+          const errorEvent = { error: 'audio-hardware', type: 'error' };
+          if (mockUtterance.onerror) mockUtterance.onerror(errorEvent);
+
+          expect(callback).toHaveBeenCalledWith({
+              type: 'error',
+              error: {
+                  error: 'audio-hardware',
+                  message: 'SpeechSynthesisError: audio-hardware',
+                  type: 'error',
+              },
+          });
       });
   });
 
@@ -171,25 +196,20 @@ describe('WebSpeechProvider', () => {
           expect(mockSynth.pause).toHaveBeenCalled();
       });
 
-      it('resume should restart synthesis if paused (workaround)', async () => {
-          // Ensure voices are loaded so play() doesn't block
+      it('dispose cancels synthesis and detaches listeners (no events after dispose)', async () => {
           mockSynth.getVoices.mockReturnValue([{ name: 'Voice 1', lang: 'en-US' }]);
           await provider.init();
 
-          // Setup state to simulate previous play
+          const events: string[] = [];
+          provider.on((e) => events.push(e.type));
+
+          provider.dispose();
+          expect(mockSynth.cancel).toHaveBeenCalled();
+
+          // Driving the (now-detached) provider must not reach the listener.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (provider as any).lastText = 'test text';
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (provider as any).lastOptions = { voiceId: 'Voice 1', speed: 1.0 };
-
-          mockSynth.paused = true;
-          provider.resume();
-
-          // resume() triggers play() which is async. We need to wait a tick.
-          await new Promise(resolve => setTimeout(resolve, 10));
-
-          // Current implementation re-calls play(), which calls speak()
-          expect(mockSynth.speak).toHaveBeenCalled();
+          (provider as any).emit({ type: 'start' });
+          expect(events).toEqual([]);
       });
   });
 });

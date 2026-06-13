@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { useLibraryStore } from '../../store/useLibraryStore';
-import { useToastStore } from '../../store/useToastStore';
-import { type BookMetadata } from '../../types/db';
+import { useToastStore } from '@store/useToastStore';
+import { useImportController } from '@app/library/useImportController';
+import type { BookMetadata } from '~types/book';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
-import { createLogger } from '../../lib/logger';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('DeleteBookDialog');
 
@@ -16,7 +16,7 @@ interface DeleteBookDialogProps {
 }
 
 export const DeleteBookDialog: React.FC<DeleteBookDialogProps> = ({ isOpen, onClose, book }) => {
-    const removeBook = useLibraryStore(state => state.removeBook);
+    const { removeBook } = useImportController();
     const showToast = useToastStore(state => state.showToast);
     const [isDeleting, setIsDeleting] = useState(false);
 

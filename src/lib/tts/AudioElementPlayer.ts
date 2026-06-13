@@ -1,12 +1,15 @@
 
 import { playEarconOscillators } from './earcons';
+import type { AudioSink } from './engine/AudioSink';
 
 /**
  * Wrapper around the HTML5 Audio element to handle playback of Blobs and URLs.
  * Provides a consistent interface for controlling playback, volume, and rate,
  * and abstracts away the URL.createObjectURL/revokeObjectURL lifecycle.
+ *
+ * This is the production main-thread implementation of {@link AudioSink}.
  */
-export class AudioElementPlayer {
+export class AudioElementPlayer implements AudioSink {
   private audio: HTMLAudioElement;
   private onTimeUpdateCallback: ((time: number) => void) | null = null;
   private onEndedCallback: (() => void) | null = null;
@@ -122,9 +125,16 @@ export class AudioElementPlayer {
   /**
    * Sets the playback rate.
    *
+   * Pins both `defaultPlaybackRate` and `playbackRate`: the media load algorithm
+   * resets `playbackRate` to `defaultPlaybackRate` whenever a new source is loaded,
+   * so setting both makes the rate survive subsequent `src` assignments. Rate is a
+   * playback-time-only parameter — audio is always synthesized at 1.0 and sped
+   * up/slowed down here at the sink.
+   *
    * @param rate - The playback speed (e.g., 1.0 for normal speed).
    */
   public setRate(rate: number) {
+    this.audio.defaultPlaybackRate = rate;
     this.audio.playbackRate = rate;
   }
 
@@ -189,8 +199,7 @@ export class AudioElementPlayer {
    */
   private ensureAudioContext() {
     if (!this.audioContext) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
       if (Ctx) {
         this.audioContext = new Ctx();
         this.gainNode = this.audioContext.createGain();

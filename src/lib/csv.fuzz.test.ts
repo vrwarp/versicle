@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { exportReadingListToCSV, parseReadingListCSV } from './csv';
-import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '../test/fuzz-utils';
-import type { ReadingListEntry } from '../types/db';
+import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '@test/fuzz-utils';
+import type { ReadingListEntry } from '~types/user-data';
 
 describe('CSV Parsing Fuzzing', () => {
     const SEED = DEFAULT_FUZZ_SEED;
@@ -93,7 +93,7 @@ describe('CSV Parsing Fuzzing', () => {
                     author: 'Author' + rng.nextElement(specialCharacters) + 'Name',
                     percentage: 0.5,
                     lastUpdated: Date.now(),
-                    status: 'reading' as const
+                    status: 'currently-reading' as const
                 }];
 
                 try {
@@ -175,7 +175,7 @@ describe('CSV Parsing Fuzzing', () => {
                     author: 'Author',
                     percentage: 0.5,
                     lastUpdated: Date.now(),
-                    status: 'reading' as const
+                    status: 'currently-reading' as const
                 }];
 
                 try {
@@ -202,7 +202,7 @@ describe('CSV Parsing Fuzzing', () => {
                 author: rng.nextString(500),
                 percentage: 0.5,
                 lastUpdated: Date.now(),
-                status: 'reading' as const
+                status: 'currently-reading' as const
             }];
 
             const csv = exportReadingListToCSV(entries);
@@ -235,7 +235,7 @@ describe('CSV Parsing Fuzzing', () => {
                     author: 'Author',
                     percentage,
                     lastUpdated: Date.now(),
-                    status: 'reading' as const
+                    status: 'currently-reading' as const
                 }];
 
                 try {

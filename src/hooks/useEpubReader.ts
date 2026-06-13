@@ -1,173 +1,52 @@
+/**
+ * useEpubReader — the reader LIFECYCLE hook (Phase 6 §5,
+ * prep/phase6-reader-engine.md PR-4 "useEpubReader dissolves").
+ *
+ * After the split this file owns exactly one concern: the cancellable
+ * load/teardown pipeline (fetch blob → epub.js book → rendition → engine
+ * port → display → events) plus the React state mirroring it. The former
+ * inline subsystems live in their named modules:
+ *
+ *  - presentation        → @domains/reader/engine/epubTheming
+ *  - selection pipeline  → @domains/reader/engine/selectionBridge
+ *  - locations cache     → @domains/reader/engine/locations (D7 guards)
+ *  - Chinese content     → @domains/chinese (Phase 6 §7, PR-10): the
+ *                          dependency is INVERTED — this hook has zero
+ *                          chinese imports; the app controller registers
+ *                          `registerChineseReading(engine, …)` against the
+ *                          engine's contentRendered/contentDestroyed seam.
+ *
+ * Characterization suites (Sanitization/Security/Selection/Theming) pin
+ * through this surface; the pinyin suite moved with the feature to
+ * src/domains/chinese/engine/.
+ */
 import { useState, useEffect, useRef } from 'react';
-import ePub, { type Book, type Rendition, type Location, type NavigationItem } from 'epubjs';
-import { dbService } from '../db/DBService';
-import type { BookMetadata } from '../types/db';
-import { sanitizeContent } from '../lib/sanitizer';
-import { runCancellable, CancellationError } from '../lib/cancellable-task-runner';
-import { createLogger } from '../lib/logger';
-import { usePreferencesStore } from '../store/usePreferencesStore';
-import { useBookStore } from '../store/useBookStore';
-import { findTocItem } from '../lib/reader/titleResolver';
+import type { Book, Contents, Rendition } from 'epubjs';
+import { bookContent } from '@data/repos/bookContent';
+import type { BookMetadata, NavigationItem } from '~types/book';
+import { EpubJsEngine, createEpubJsBook } from '@domains/reader/engine/EpubJsEngine';
+import type { ReaderEngine, EngineLocation } from '@domains/reader/engine/ReaderEngine';
+import { setActiveReaderEngine } from '@domains/reader/engine/activeEngineRegistry';
 import {
-  toTraditional,
-  getPinyin,
-  ensureOpenCC,
-  ensurePinyin
-} from '../lib/chinese/ChineseTextProcessor';
+  registerSanitizeHook,
+  observeAndPatchSandbox,
+  type EpubJsBookLike,
+} from '@domains/reader/engine/epubSecurity';
+import {
+  applyReaderTheme,
+  injectContentExtras,
+  registerBaseThemes,
+  type ReaderThemeSpec,
+} from '@domains/reader/engine/epubTheming';
+import { attachSelectionBridge } from '@domains/reader/engine/selectionBridge';
+import { initializeLocations } from '@domains/reader/engine/locations';
+import { internals } from '@domains/reader/engine/epubjsInternals';
+import { runCancellable, CancellationError } from '@lib/cancellable-task-runner';
+import { createLogger } from '@lib/logger';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import { findTocItem } from '@lib/reader/titleResolver';
 
 const logger = createLogger('useEpubReader');
-
-/**
- * Patches an iframe's sandbox attribute to ensure allow-scripts and allow-same-origin are present.
- * This is required for event handling in strict environments like WebKit.
- */
-const patchIframeSandbox = (iframe: HTMLIFrameElement) => {
-  const sandbox = iframe.getAttribute('sandbox') || '';
-  const tokens = new Set(sandbox.split(/\s+/).filter(Boolean));
-
-  tokens.add('allow-scripts');
-  tokens.add('allow-same-origin');
-
-  const newValue = Array.from(tokens).join(' ');
-  // Only set if different to avoid infinite MutationObserver loops
-  if (newValue !== sandbox) {
-    iframe.setAttribute('sandbox', newValue);
-  }
-};
-
-const STATIC_READER_STYLES = `
-`;
-
-/**
- * Normalizes absolute CSS lengths to rem units based on a 16pt (1rem) standard.
- * Conversion table assumes:
- * 16pt = 1rem
- * 1px = 0.046875rem
- * 1in = 4.5rem
- * 1cm = 1.771875rem
- * 1mm = 0.1771875rem
- * 1pc = 0.75rem
- * 1Q = 0.044296875rem
- */
-const normalizeAbsoluteToRem = (cssValue: string): string | null => {
-  if (!cssValue) return null;
-
-  const namedMap: Record<string, string> = {
-    'xx-small': '0.5625rem',
-    'x-small': '0.625rem',
-    'small': '0.8125rem',
-    'medium': '1rem',
-    'large': '1.125rem',
-    'x-large': '1.5rem',
-    'xx-large': '2rem'
-  };
-
-  const lowerValue = cssValue.toLowerCase().trim();
-  if (namedMap[lowerValue]) return namedMap[lowerValue];
-
-  const unitMap: Record<string, number> = {
-    'pt': 1 / 16,
-    'px': 0.046875,
-    'in': 4.5,
-    'cm': 1.771875,
-    'mm': 0.1771875,
-    'pc': 0.75,
-    'q': 0.044296875
-  };
-
-  const match = lowerValue.match(/^([\d.]+)(pt|px|in|cm|mm|pc|q)$/);
-  if (match) {
-    const val = parseFloat(match[1]);
-    const unit = match[2];
-    if (!isNaN(val) && unitMap[unit]) {
-      const remVal = val * unitMap[unit];
-      // Round to 5 decimal places to avoid floating point anomalies like 1.5000000000000002rem
-      return `${Math.round(remVal * 100000) / 100000}rem`;
-    }
-  }
-
-  return null;
-};
-
-/**
- * Programmatically injects CSS into a document in a CSP-compliant way.
- * Prefers Adopted Stylesheets if supported, falling back to rule insertion.
- */
-const safeInjectStyles = (doc: Document, css: string, styleId: string) => {
-  try {
-    // 1. Try Adopted Stylesheets (Modern & CSP-friendly)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((doc as any).adoptedStyleSheets && typeof (window as any).CSSStyleSheet !== 'undefined') {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sheets = [...((doc as any).adoptedStyleSheets || [])];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const existingIndex = sheets.findIndex((s: any) => s._versicle_id === styleId);
-
-        if (existingIndex !== -1) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (sheets[existingIndex] as any).replaceSync(css);
-          return;
-        }
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const newSheet = new (window as any).CSSStyleSheet();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (newSheet as any)._versicle_id = styleId;
-        newSheet.replaceSync(css);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (doc as any).adoptedStyleSheets = [...sheets, newSheet];
-        return;
-      } catch {
-        // Fallback to legacy injection
-      }
-    }
-
-    // 2. Programmatic Rule Insertion (Bypasses most inline-style CSP filters)
-    let style = doc.getElementById(styleId) as HTMLStyleElement;
-    if (!style) {
-      style = doc.createElement('style');
-      style.id = styleId;
-      doc.head.appendChild(style);
-    }
-
-    const sheet = style.sheet;
-    if (sheet) {
-      // Clear rules
-      while (sheet.cssRules.length > 0) {
-        sheet.deleteRule(0);
-      }
-      // Split into individual blocks
-      const rules = css.split(/}\s*/).filter(r => r.trim()).map(r => r + '}');
-      for (const rule of rules) {
-        try {
-          sheet.insertRule(rule, sheet.cssRules.length);
-        } catch {
-          // Skip rules that fail parsing in this browser
-        }
-      }
-      return;
-    }
-
-    // 3. Desperate Fallback (Likely to fail CSP but works in legacy non-CSP envs)
-    style.textContent = css;
-  } catch {
-    // Execution failure
-  }
-};
-
-/**
- * Recursive helper to resolve a section title from the Table of Contents (ToC).
- *
- * It attempts to find a matching ToC item for the given HREF using the following precedence:
- * 1. Exact match of the full HREF.
- * 2. Match of the file path (ignoring fragments/anchors).
- *
- * This fallback is necessary because spine items often only contain the file path (e.g., "chapter1.html"),
- * while ToC items may point to specific anchors (e.g., "chapter1.html#section1").
- * Matching by file path allows us to associate a generic file with its parent ToC entry (e.g., the Chapter title).
- */
-
 
 /**
  * Configuration options for the EpubReader hook.
@@ -187,8 +66,8 @@ export interface EpubReaderOptions {
   lineHeight: number;
   /** Whether to force font settings and override book styles. */
   shouldForceFont: boolean;
-  /** Callback when location changes. */
-  onLocationChange?: (location: Location, percentage: number, chapterTitle: string, sectionId: string) => void;
+  /** Callback when location changes (ReaderEngine port location shape). */
+  onLocationChange?: (location: EngineLocation, percentage: number, chapterTitle: string, sectionId: string) => void;
   /** Callback when TOC is loaded. */
   onTocLoaded?: (toc: NavigationItem[]) => void;
   /** Callback when text is selected. */
@@ -199,9 +78,6 @@ export interface EpubReaderOptions {
   onClick?: (event: MouseEvent) => void;
   /** Callback when an error occurs. */
   onError?: (error: string) => void;
-  /** Callback when pinyin positions are calculated. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onPinyinPositionsUpdate?: (positions: any[]) => void;
   /** Optional: Initial CFI location to start reading at. Overrides metadata.currentCfi. */
   initialLocation?: string;
   /** Optional: Book metadata. If not provided, some features like initial location inference may be limited. */
@@ -212,10 +88,11 @@ export interface EpubReaderOptions {
  * Result returned by the EpubReader hook.
  */
 export interface EpubReaderResult {
-  /** The epub.js Book instance. */
-  book: Book | null;
-  /** The epub.js Rendition instance. */
-  rendition: Rendition | null;
+  /**
+   * The ReaderEngine port (contract C7) — the ONLY surface components and
+   * panels consume. Non-null once the book is rendered.
+   */
+  engine: ReaderEngine | null;
   /** Whether the book is fully ready for interaction. */
   isReady: boolean;
   /** Whether the book's location registry (CFI <-> Percentage) is fully generated */
@@ -244,8 +121,10 @@ export function useEpubReader(
   viewerRef: React.RefObject<HTMLElement>,
   options: EpubReaderOptions
 ): EpubReaderResult {
-  const [book, setBook] = useState<Book | null>(null);
-  const [rendition, setRendition] = useState<Rendition | null>(null);
+  // No raw `Book` leaves this hook: the ReaderEngine port is the only public
+  // surface (the SearchPanel Book passthrough died with the SearchSession
+  // adoption; `bookRef` below is hook-internal lifecycle plumbing).
+  const [engine, setEngine] = useState<ReaderEngine | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [areLocationsReady, setAreLocationsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -255,13 +134,13 @@ export function useEpubReader(
 
   const bookRef = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | null>(null);
+  const engineRef = useRef<EpubJsEngine | null>(null);
   const prevSize = useRef({ width: 0, height: 0 });
   const resizeRaf = useRef<number | null>(null);
   const applyStylesRef = useRef<() => void>(() => { });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const processChineseContentRef = useRef<(contents: any) => Promise<void>>(async () => { });
   const { forceTraditionalChinese, showPinyin, pinyinSize } = usePreferencesStore();
-  const sandboxObserverRef = useRef<MutationObserver | null>(null);
+  /** Disconnects the shared sandbox-patching observer (epubSecurity). */
+  const sandboxObserverRef = useRef<(() => void) | null>(null);
 
   // Use a ref for options to access latest values in event listeners without re-binding
   const optionsRef = useRef(options);
@@ -281,8 +160,7 @@ export function useEpubReader(
   useEffect(() => {
     if (!bookId || !viewerRef.current) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const loadBookGenerator = function* (currentBookId: string): Generator<Promise<any> | any, void, any> {
+    const loadBookGenerator = function* (currentBookId: string): Generator<unknown, void, unknown> {
       setIsLoading(true);
       setError(null);
       setIsReady(false);
@@ -290,7 +168,7 @@ export function useEpubReader(
 
       try {
         // Phase 2: Get file blob from static resources only. Metadata comes from props (Store).
-        const fileData = yield dbService.getBookFile(currentBookId);
+        const fileData = yield bookContent.getBookFile(currentBookId);
 
         if (!fileData) {
           throw new Error('Book file not found');
@@ -305,25 +183,15 @@ export function useEpubReader(
           bookRef.current.destroy();
         }
 
-        const newBook = ePub(fileData as ArrayBuffer);
+        const newBook = createEpubJsBook(fileData as ArrayBuffer);
 
-        // SECURITY: Register a serialization hook to sanitize HTML content before it's rendered.
-        // This prevents XSS attacks from malicious scripts in EPUB files.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if ((newBook.spine as any).hooks?.serialize) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (newBook.spine as any).hooks.serialize.register((html: string) => {
-            // Optimization: Allow disabling sanitization in E2E tests for performance
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            if ((window as any).__VERSICLE_SANITIZATION_DISABLED__) {
-              return html;
-            }
-            return sanitizeContent(html);
-          });
-        }
+        // SECURITY: sanitize-at-serialize via the shared epubSecurity module
+        // (one implementation for the live reader AND offscreen ingestion).
+        // The live reader is the one path allowed to honor the E2E
+        // sanitization kill-switch — and only in DEV/VITE_E2E builds.
+        registerSanitizeHook(newBook as unknown as EpubJsBookLike, { allowTestBypass: true });
 
         bookRef.current = newBook;
-        setBook(newBook);
 
         if (optionsRef.current.onBookLoaded) {
           optionsRef.current.onBookLoaded(newBook);
@@ -341,74 +209,50 @@ export function useEpubReader(
 
         // Cleanup old observer if any
         if (sandboxObserverRef.current) {
-          sandboxObserverRef.current.disconnect();
+          sandboxObserverRef.current();
         }
 
-        // Manually ensure allow-scripts is present to fix event handling in strict environments (like WebKit)
-        // We patch sandbox attribute manually via MutationObserver to catch dynamically created iframes
-        // and react to any attribute resets by epubjs.
-        const observer = new MutationObserver((mutations) => {
-          mutations.forEach(mutation => {
-            if (mutation.type === 'childList') {
-              mutation.addedNodes.forEach(node => {
-                const element = node as HTMLElement;
-                if (element.tagName === 'IFRAME') {
-                  patchIframeSandbox(element as HTMLIFrameElement);
-                } else if (element.querySelectorAll) {
-                  const iframes = element.querySelectorAll('iframe');
-                  iframes.forEach(patchIframeSandbox);
-                }
-              });
-            } else if (mutation.type === 'attributes' && mutation.target.nodeName === 'IFRAME') {
-              patchIframeSandbox(mutation.target as HTMLIFrameElement);
-            }
-          });
-        });
-
+        // Manually ensure allow-scripts is present to fix event handling in
+        // strict environments (like WebKit) — shared epubSecurity observer
+        // (patches existing iframes immediately and any epubjs re-creates).
         if (viewerRef.current) {
-          observer.observe(viewerRef.current, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['sandbox']
-          });
-          sandboxObserverRef.current = observer;
+          sandboxObserverRef.current = observeAndPatchSandbox(viewerRef.current);
         }
 
-        // Also patch immediately all existing iframes
-        viewerRef.current?.querySelectorAll('iframe').forEach(patchIframeSandbox);
-        setRendition(newRendition);
+        // The ReaderEngine port over the live book/rendition pair (Phase 6
+        // §2 "under-the-shell adapter"): constructed before display so its
+        // content hook (contentRendered + titled iframe) sees the first
+        // section. The deferred locationsReady resolves below when the
+        // registry is loaded or generated.
+        let resolveLocationsReady!: () => void;
+        const locationsReadyPromise = new Promise<void>((resolve) => {
+          resolveLocationsReady = resolve;
+        });
+        const newEngine = new EpubJsEngine({
+          book: newBook,
+          rendition: newRendition,
+          container: viewerRef.current!,
+          locationsReady: locationsReadyPromise,
+        });
+        engineRef.current = newEngine;
+        setEngine(newEngine);
+        setActiveReaderEngine(newEngine);
 
         // Disable spreads
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (newRendition as any).spread('none');
+        newRendition.spread('none');
 
         // Load navigation
-        const nav = yield newBook.loaded.navigation;
+        // The runner resumes the generator with the awaited yield value; the
+        // navigation shape is asserted where it is received (was `any`).
+        const nav = (yield newBook.loaded.navigation) as { toc: NavigationItem[] };
         const tocItems = nav.toc;
         setToc(tocItems);
         if (optionsRef.current.onTocLoaded) {
           optionsRef.current.onTocLoaded(tocItems);
         }
 
-        // Register themes
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const themes = newRendition.themes as any;
-        themes.register('light', {
-          'body': { 'background': '#ffffff !important', 'color': '#000000 !important' },
-          'p, div, span, h1, h2, h3, h4, h5, h6': { 'color': 'inherit !important', 'background': 'transparent !important' },
-          'a': { 'color': '#0000ee !important' }
-        });
-        themes.register('dark', {
-          'body': { 'background': '#1a1a1a !important', 'color': '#f5f5f5 !important' },
-          'p, div, span, h1, h2, h3, h4, h5, h6': { 'color': 'inherit !important', 'background': 'transparent !important' },
-          'a': { 'color': '#6ab0f3 !important' }
-        });
-        themes.register('sepia', {
-          'body': { 'background': '#f4ecd8 !important', 'color': '#5b4636 !important' },
-          'p, div, span, h1, h2, h3, h4, h5, h6': { 'color': 'inherit !important', 'background': 'transparent !important' },
-          'a': { 'color': '#0000ee !important' }
-        });
+        // Register built-in themes (epubTheming module)
+        registerBaseThemes(newRendition);
 
         // Display at saved location or start
         const startLocation = optionsRef.current.initialLocation || meta?.currentCfi || undefined;
@@ -419,342 +263,100 @@ export function useEpubReader(
 
         setIsReady(true);
 
-        // Location Generation
-        const updateProgress = () => {
-          // Force a location check to sync progress
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const currentLocation = (newRendition as any).location;
-          if (currentLocation && currentLocation.start) {
-            const cfi = currentLocation.start.cfi;
-            let percentage = 0;
-            try {
-              percentage = newBook.locations.percentageFromCfi(cfi);
-            } catch {
-              // ignore
-            }
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const item = newBook.spine.get(currentLocation.start.href) as any;
-            let title = item ? (item.label || 'Chapter') : 'Unknown';
-            const sectionId = item ? item.href : '';
-
-            // Improve title resolution
-            if (item) {
-              const useSynthetic = optionsRef.current.metadata?.useSyntheticToc;
-              const tocSource = (useSynthetic && optionsRef.current.metadata?.syntheticToc)
-                ? optionsRef.current.metadata.syntheticToc
-                : tocItems;
-              const betterItem = findTocItem(tocSource, item.href);
-              if (betterItem) {
-                title = betterItem.label;
-              }
-            }
-
-            if (optionsRef.current.onLocationChange) {
-              optionsRef.current.onLocationChange(currentLocation, percentage, title, sectionId);
-            }
-          }
-        };
-
-        const savedLocations = yield dbService.getLocations(currentBookId);
-        if (savedLocations) {
-          newBook.locations.load(savedLocations.locations);
-          setAreLocationsReady(true);
-          updateProgress();
-        } else {
-          // Generate in background
-          newBook.locations.generate(1000).then(async () => {
-            const locationStr = newBook.locations.save();
-            await dbService.saveLocations(currentBookId, locationStr);
-            setAreLocationsReady(true);
-            updateProgress();
-          });
-        }
-        yield newBook.ready;
-
-        // Event Listeners
-        newRendition.on('relocated', (location: Location) => {
-          const cfi = location.start.cfi;
-          let percentage = 0;
-          try {
-            percentage = newBook.locations.percentageFromCfi(cfi);
-          } catch {
-            // ignore
-          }
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const item = newBook.spine.get(location.start.href) as any;
-          let title = item ? (item.label || 'Chapter') : 'Unknown';
-          const sectionId = item ? item.href : '';
+        // Location reporting through the engine port: identical title
+        // resolution to the legacy relocated handler (spine label →
+        // 'Chapter'/'Unknown' → findTocItem improvement), the percentage
+        // comes pre-computed on the EngineLocation (D4: ONE
+        // resolveLocationInfo path).
+        const reportLocation = (location: EngineLocation) => {
+          const section = newEngine.resolveSection(location.sectionHref);
+          let title = section ? (section.label || 'Chapter') : 'Unknown';
+          const sectionId = section ? section.href : '';
 
           // Improve title resolution
-          if (item) {
+          if (section) {
             const useSynthetic = optionsRef.current.metadata?.useSyntheticToc;
             const tocSource = (useSynthetic && optionsRef.current.metadata?.syntheticToc)
               ? optionsRef.current.metadata.syntheticToc
               : tocItems;
-            const betterItem = findTocItem(tocSource, item.href);
+            const betterItem = findTocItem(tocSource, section.href);
             if (betterItem) {
               title = betterItem.label;
             }
           }
 
           if (optionsRef.current.onLocationChange) {
-            optionsRef.current.onLocationChange(location, percentage, title, sectionId);
-          }
-        });
-
-        newRendition.on('selected', (cfiRange: string, contents: unknown) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const range = (newRendition as any).getRange(cfiRange);
-          if (optionsRef.current.onSelection && range) {
-            optionsRef.current.onSelection(cfiRange, range, contents);
-          }
-        });
-
-        newRendition.on('click', (event: MouseEvent) => {
-          if (optionsRef.current.onClick) optionsRef.current.onClick(event);
-        });
-
-        // Inject styles and spacer
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const injectExtras = (contents: any) => {
-          const doc = contents.document;
-          if (!doc) return;
-
-          // Normalize CSS OM to map absolute units to relative REM based on 16pt=1rem baseline
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const processRule = (rule: any) => {
-              if (rule && rule.style) {
-                if (rule.style.fontSize) {
-                  const newFontSize = normalizeAbsoluteToRem(rule.style.fontSize);
-                  if (newFontSize) rule.style.fontSize = newFontSize;
-                }
-                if (rule.style.lineHeight) {
-                  const newLineHeight = normalizeAbsoluteToRem(rule.style.lineHeight);
-                  if (newLineHeight) rule.style.lineHeight = newLineHeight;
-                }
-              }
-              if (rule && rule.cssRules) {
-                for (let i = 0; i < rule.cssRules.length; i++) {
-                  processRule(rule.cssRules[i]);
-                }
-              }
-            };
-
-            for (let i = 0; i < doc.styleSheets.length; i++) {
-              const sheet = doc.styleSheets[i];
-              // Skip dynamic injected themes
-              if (sheet.ownerNode?.id === 'force-theme-style' || sheet.ownerNode?.id === 'reader-static-styles') continue;
-
-              try {
-                for (let j = 0; j < sheet.cssRules.length; j++) {
-                  processRule(sheet.cssRules[j]);
-                }
-              } catch {
-                // Ignore CORS errors on cross-origin stylesheets if they happen
-              }
-            }
-          } catch {
-            // General catch
-          }
-
-          // Normalize inline styles
-          try {
-            const styledElements = doc.querySelectorAll('[style]');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            styledElements.forEach((el: any) => {
-              if (el.style.fontSize) {
-                const newFontSize = normalizeAbsoluteToRem(el.style.fontSize);
-                if (newFontSize) el.style.fontSize = newFontSize;
-              }
-              if (el.style.lineHeight) {
-                const newLineHeight = normalizeAbsoluteToRem(el.style.lineHeight);
-                if (newLineHeight) el.style.lineHeight = newLineHeight;
-              }
-            });
-          } catch {
-            // Ignore query conflicts
-          }
-
-          // Re-apply forced styles on content load
-          applyStylesRef.current();
-
-          // Inject static styles (e.g. note markers)
-          safeInjectStyles(doc, STATIC_READER_STYLES, 'reader-static-styles');
-
-          // Inject empty div for scrolling space
-          const spacerId = 'reader-bottom-spacer';
-          if (optionsRef.current.viewMode === 'scrolled' && !doc.getElementById(spacerId)) {
-            const spacer = doc.createElement('div');
-            spacer.id = spacerId;
-            spacer.style.height = '150px';
-            spacer.style.width = '100%';
-            spacer.style.clear = 'both'; // Ensure it sits below floated content
-            doc.body.appendChild(spacer);
+            optionsRef.current.onLocationChange(location, location.percentage, title, sectionId);
           }
         };
 
-        // Process Chinese text without corrupting DOM structure
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const processChineseContent = async (contents: any) => {
-          const doc = contents.document;
-          if (!doc) return;
-
-          const prefs = usePreferencesStore.getState();
-          const bookLang = bookId ? useBookStore.getState().books[bookId]?.language || 'en' : 'en';
-
-          if (bookLang !== 'zh') {
-            if (optionsRef.current.onPinyinPositionsUpdate) optionsRef.current.onPinyinPositionsUpdate([]);
-            return;
-          }
-
-          // Pre-load processors to allow synchronous calls in the loop
-          if (prefs.forceTraditionalChinese) await ensureOpenCC();
-          if (prefs.showPinyin) await ensurePinyin();
-
-          const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
-          const textNodes: Text[] = [];
-          let node: Text | null;
-          while ((node = walker.nextNode() as Text)) {
-            if (node.textContent && /[\u4e00-\u9fff]/.test(node.textContent)) {
-              textNodes.push(node);
+        // Location registry (engine/locations module): load the cached
+        // registry or generate in the background, then sync progress once.
+        yield initializeLocations({
+          book: newBook,
+          bookId: currentBookId,
+          isCurrent: () => bookRef.current === newBook,
+          onReady: () => {
+            resolveLocationsReady();
+            setAreLocationsReady(true);
+            // Force a location check to sync progress
+            const currentLocation = newEngine.currentLocation();
+            if (currentLocation) {
+              reportLocation(currentLocation);
             }
+          },
+        });
+
+        yield newBook.ready;
+
+        // Event Listeners. Selection is deliberately NOT consumed from the
+        // engine's 'selected' event: the selectionBridge mouseup pipeline
+        // below is the SINGLE selection source (D3 — epub.js 'selected' and
+        // the mouseup pipeline both reported one gesture in the legacy
+        // hook; the WebKit-reliable pipeline won, pinned by
+        // useEpubReader_Selection.test.tsx).
+        newEngine.subscribe((event) => {
+          if (event.type === 'relocated') {
+            reportLocation(event.location);
+          } else if (event.type === 'click') {
+            if (optionsRef.current.onClick) optionsRef.current.onClick(event.event);
           }
+        });
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const pinyinPositions: any[] = [];
-          const iframe = contents.window.frameElement as HTMLIFrameElement;
-          if (!iframe) return;
-
-          // In scrolled-doc mode, several iframes might be stacked. 
-          // We need to account for each iframe's position within the manager's container.
-          const iframeOffsetTop = iframe.offsetTop;
-          const iframeOffsetLeft = iframe.offsetLeft;
-
-          for (const textNode of textNodes) {
-            const parent = textNode.parentElement;
-            // Skip ruby/rt elements as they might already have annotations or be part of one
-            if (!parent || parent.tagName === 'RT' || parent.tagName === 'RUBY') continue;
-
-            // 1. Cache original text for clean reversion/toggling
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            if (!(textNode as any)._originalText) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (textNode as any)._originalText = textNode.nodeValue;
-            }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const originalText = (textNode as any)._originalText;
-
-            // 2. Handle Traditional Chinese (In-place string mutation)
-            if (prefs.forceTraditionalChinese) {
-              const translated = toTraditional(originalText);
-              if (textNode.nodeValue !== translated) {
-                textNode.nodeValue = translated;
-              }
-            } else {
-              if (textNode.nodeValue !== originalText) {
-                textNode.nodeValue = originalText;
-              }
-            }
-
-            // 3. Handle Pinyin (Ephemeral Geometry Collection)
-            if (prefs.showPinyin) {
-              const currentText = textNode.nodeValue || '';
-              const pinyinArray = getPinyin(currentText);
-
-              for (let i = 0; i < currentText.length; i++) {
-                const char = currentText[i];
-                if (/[\u4e00-\u9fff]/.test(char) && pinyinArray[i]) {
-                  try {
-                    const range = doc.createRange();
-                    range.setStart(textNode, i);
-                    range.setEnd(textNode, i + 1);
-
-                    const rect = range.getBoundingClientRect();
-                    // Optimization: Skip if rect has no dimensions
-                    if (rect.width > 0 && rect.height > 0) {
-                      pinyinPositions.push({
-                        char,
-                        pinyin: pinyinArray[i],
-                        // Use document-relative top and left by adding iframe offsets
-                        top: rect.top + iframeOffsetTop,
-                        left: rect.left + iframeOffsetLeft + (rect.width / 2), // Center of character
-                        width: rect.width,
-                        height: rect.height
-                      });
-                    }
-                  } catch {
-                    // Range errors can happen during rapid updates
-                  }
-                }
-              }
-            }
-          }
-
-          if (optionsRef.current.onPinyinPositionsUpdate) {
-            optionsRef.current.onPinyinPositionsUpdate(pinyinPositions);
-          }
-        };
-
-        processChineseContentRef.current = processChineseContent;
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const attachListeners = (contents: any) => {
-          const doc = contents.document;
-          if (!doc) return;
-
-          // Prevent duplicate listeners
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          if ((contents as any)._listenersAttached) return;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (contents as any)._listenersAttached = true;
-
-          // Prevent default context menu (especially for Android)
-          doc.addEventListener('contextmenu', (e: Event) => {
-            e.preventDefault();
-            e.stopPropagation();
-          });
-
-          doc.addEventListener('mouseup', () => {
-            const selection = contents.window.getSelection();
-            if (!selection || selection.isCollapsed) return;
-
-            setTimeout(() => {
-              // Re-check selection existence after delay to handle race conditions
-              // where a click event might have cleared it.
-              if (selection.rangeCount === 0 || selection.isCollapsed) return;
-
-              let range;
-              try {
-                range = selection.getRangeAt(0);
-              } catch {
-                // Handle IndexSizeError if selection was cleared
-                return;
-              }
-
-              if (!range) return;
-              const cfi = contents.cfiFromRange(range);
-              if (cfi && optionsRef.current.onSelection) {
-                optionsRef.current.onSelection(cfi, range, contents);
-              }
-            }, 10);
+        // Per-content-load pipeline (extras → selection, legacy order; the
+        // Chinese pass rides the ENGINE's contentRendered seam now and is
+        // registered by the app controller — Phase 6 §7, PR-10).
+        const injectExtras = (contents: Contents) => {
+          injectContentExtras(contents, {
+            viewMode: optionsRef.current.viewMode,
+            reapplyForcedStyles: () => applyStylesRef.current(),
           });
         };
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (newRendition.hooks.content as any).register(injectExtras);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (newRendition.hooks.content as any).register(processChineseContent);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (newRendition.hooks.content as any).register(attachListeners);
+        const attachListeners = (contents: Contents) => {
+          attachSelectionBridge(contents, (cfi, range, c) => {
+            if (optionsRef.current.onSelection) {
+              optionsRef.current.onSelection(cfi, range, c);
+            }
+          });
+        };
 
-        // Manually trigger extras for initially loaded content
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (newRendition as any).getContents().forEach((contents: any) => {
+        newRendition.hooks.content.register(injectExtras);
+        newRendition.hooks.content.register(attachListeners);
+
+        // Manually run BOTH content hooks for already-loaded content. The
+        // content.register() hooks only fire for content loaded AFTER
+        // registration, so the initial section (rendered before this runs) needs
+        // both run by hand. Previously only injectExtras was — so the selection
+        // bridge was never attached to the FIRST section, and text selection /
+        // the annotation popover silently did nothing until the reader turned a
+        // page (load a new section). Books whose content is the first section
+        // (e.g. short single-chapter books) never got selection at all.
+        // epubjs types getContents() as Contents (singular) but it returns an
+        // array at runtime — asserted to the runtime shape, not `any`.
+        (newRendition.getContents() as unknown as Contents[]).forEach((contents) => {
           injectExtras(contents);
-          processChineseContent(contents);
+          attachListeners(contents);
         });
 
       } catch (err) {
@@ -773,13 +375,18 @@ export function useEpubReader(
     const { cancel } = runCancellable(
       loadBookGenerator(bookId),
       () => {
+        if (engineRef.current) {
+          engineRef.current.destroy();
+          engineRef.current = null;
+          setActiveReaderEngine(null);
+        }
         if (bookRef.current) {
           bookRef.current.destroy();
           bookRef.current = null;
         }
         renditionRef.current = null;
         if (sandboxObserverRef.current) {
-          sandboxObserverRef.current.disconnect();
+          sandboxObserverRef.current();
           sandboxObserverRef.current = null;
         }
       }
@@ -809,9 +416,9 @@ export function useEpubReader(
         if (resizeRaf.current) cancelAnimationFrame(resizeRaf.current);
 
         resizeRaf.current = requestAnimationFrame(() => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const r = renditionRef.current as any;
-          if (r && r.manager) {
+          const r = renditionRef.current;
+          // Resize only once the view manager exists (post-start guard).
+          if (r && internals(r).manager) {
             r.resize(width, height);
           }
         });
@@ -826,166 +433,40 @@ export function useEpubReader(
     };
   }, [viewerRef]);
 
-  // Update Settings/Themes
-
+  // Presentation (epubTheming module): apply the whole spec on any input
+  // change. D5: flow()/display() runs only when the view mode actually
+  // changed — a colors/typography tweak no longer reflows (the legacy
+  // always-reflow fired a spurious relocation event per settings change,
+  // which fed the session recorder).
+  const prevViewModeRef = useRef<'paginated' | 'scrolled' | null>(null);
   useEffect(() => {
-    if (!renditionRef.current || !isReady) return;
-
-    // Trigger overlay re-injection on all currently loaded views
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (renditionRef.current as any).getContents().forEach((contents: any) => {
-      processChineseContentRef.current(contents);
-    });
-  }, [isReady, forceTraditionalChinese, showPinyin, pinyinSize]);
-
+    prevViewModeRef.current = null; // new book: rendition rendered with the current mode
+  }, [bookId]);
   useEffect(() => {
     if (!renditionRef.current || !isReady) return;
 
     const r = renditionRef.current;
-
-    // Update Themes
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const themes = r.themes as any;
-
-    themes.register('custom', {
-      'body': { 'background': `${options.customTheme?.bg || '#ffffff'} !important`, 'color': `${options.customTheme?.fg || '#000000'} !important` },
-      'p, div, span, h1, h2, h3, h4, h5, h6': { 'color': 'inherit !important', 'background': 'transparent !important' },
-      'a': { 'color': `${options.customTheme?.fg || '#0000e'} !important` }
-    });
-
-    const isDark = options.currentTheme === 'dark';
-    const highlightBlendMode = isDark ? 'screen' : 'multiply';
-    const highlightOpacity = isDark ? 0.4 : 0.3;
-
-    // TTS Highlight Theme
-    themes.default({
-      '.tts-highlight': {
-        'fill': '#fde047',
-        'background-color': isDark ? 'rgba(253, 224, 71, 0.4)' : 'rgba(253, 224, 71, 0.3)',
-        'fill-opacity': highlightOpacity,
-        'mix-blend-mode': highlightBlendMode
-      },
-      '.highlight-yellow': { 'fill': '#fde047', 'background-color': isDark ? 'rgba(253, 224, 71, 0.4)' : 'rgba(253, 224, 71, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
-      '.highlight-green': { 'fill': '#86efac', 'background-color': isDark ? 'rgba(134, 239, 172, 0.4)' : 'rgba(134, 239, 172, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
-      '.highlight-blue': { 'fill': '#93c5fd', 'background-color': isDark ? 'rgba(147, 197, 253, 0.4)' : 'rgba(147, 197, 253, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode },
-      '.highlight-red': { 'fill': '#fca5a5', 'background-color': isDark ? 'rgba(252, 165, 165, 0.4)' : 'rgba(252, 165, 165, 0.3)', 'fill-opacity': highlightOpacity, 'mix-blend-mode': highlightBlendMode }
-    });
-
-    themes.select(options.currentTheme);
-
-    // Set the theme font options.
-    themes.fontSize(`${options.fontSize}%`);
-    themes.font(options.fontFamily);
-
-    const TARGET_BASE_PX = 16; // The ideal unified size at 100% scale
-    const TARGET_RATIO = 1.35; // Standard baseline leading ratio
-
-    // Fallback to TARGET_BASE_PX if metadata is missing, resulting in a 1.0 multiplier
-    const bookBasePx = metadata?.baseFontSize || TARGET_BASE_PX;
-    // Calculate book's native ratio (resolved px LH / resolved px FS)
-    const bookBaseLH = metadata?.baseLineHeight || (bookBasePx * TARGET_RATIO);
-    const bookNativeRatio = bookBaseLH / bookBasePx;
-
-    // Normalization factors
-    const fsNormalizationFactor = TARGET_BASE_PX / bookBasePx;
-    const lhNormalizationFactor = TARGET_RATIO / bookNativeRatio;
-    const finalFSScalePct = Math.round(options.fontSize * fsNormalizationFactor);
-
-    // Apply line height normalization
-    const userLH = options.lineHeight;
-    const normalizedLH = userLH * lhNormalizationFactor;
-    // Respect Pinyin minimum leading even after normalization
-    const finalLH = showPinyin ? Math.max(normalizedLH, 1.8) : normalizedLH;
-
-    themes.default({
-      p: {
-        'line-height': `${finalLH} !important`,
-      },
-      body: {
-        'line-height': `${finalLH} !important`
-      }
-    });
-
-    // Flow
-    // Capture current location before changing flow to prevent reset
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const currentLoc = (r as any).location?.start?.cfi;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (r as any).flow(options.viewMode === 'scrolled' ? 'scrolled-doc' : 'paginated');
-
-    // Restore location if available
-    if (currentLoc) {
-      r.display(currentLoc);
-    }
-
-    // Forced Styles
-    const applyStyles = () => {
-      const isDarkOrSepia = options.currentTheme === 'dark' || options.currentTheme === 'sepia' || options.currentTheme === 'custom';
-
-      // The scaling part MUST always apply for normalization to work
-      let css = `
-            html {
-              font-size: ${finalFSScalePct}% !important;
-            }
-          `;
-
-      // Only add the "Force Font" and "Theme Colors" mapping if requested or in non-light themes
-      if (options.shouldForceFont || isDarkOrSepia) {
-        let bg, fg, linkColor;
-        switch (options.currentTheme) {
-          case 'dark':
-            bg = '#1a1a1a'; fg = '#f5f5f5'; linkColor = '#6ab0f3';
-            break;
-          case 'sepia':
-            bg = '#f4ecd8'; fg = '#5b4636'; linkColor = '#0000ee';
-            break;
-          case 'custom':
-            bg = options.customTheme?.bg || '#ffffff'; fg = options.customTheme?.fg || '#000000'; linkColor = options.customTheme?.fg || '#000000';
-            break;
-          default: // light + forced font
-            bg = '#ffffff'; fg = '#000000'; linkColor = '#0000ee';
-        }
-
-        const fontCss = options.shouldForceFont ? `
-                font-family: ${options.fontFamily} !important;
-                line-height: ${options.lineHeight} !important;
-                text-align: left !important;
-            ` : '';
-
-        css += `
-              html body *, html body p, html body div, html body span, html body h1, html body h2, html body h3, html body h4, html body h5, html body h6 {
-                ${fontCss}
-                color: ${fg} !important;
-                background-color: transparent !important;
-                -webkit-touch-callout: none !important;
-              }
-              html, body {
-                background: ${bg} !important;
-              }
-              a, a * {
-                color: ${linkColor} !important;
-                text-decoration: none !important;
-              }
-              a:hover, a:hover * {
-                text-decoration: underline !important;
-              }
-            `;
-      }
-
-      // Apply to all active contents
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (r as any).getContents().forEach((content: any) => {
-        const doc = content.document;
-        if (doc) {
-          safeInjectStyles(doc, css, 'force-theme-style');
-        }
-      });
+    const spec: ReaderThemeSpec = {
+      viewMode: options.viewMode,
+      currentTheme: options.currentTheme,
+      customTheme: options.customTheme,
+      fontFamily: options.fontFamily,
+      fontSize: options.fontSize,
+      lineHeight: options.lineHeight,
+      shouldForceFont: options.shouldForceFont,
+      showPinyin,
+      baseFontSize: metadata?.baseFontSize,
+      baseLineHeight: metadata?.baseLineHeight,
     };
 
-    applyStylesRef.current = applyStyles;
-    applyStyles();
+    // First run after a (re)load is never a mode change: renderTo received
+    // the current mode, so a flow() call would be a same-mode no-op plus a
+    // redundant display(currentLoc) round-trip.
+    const flowModeChanged =
+      prevViewModeRef.current !== null && prevViewModeRef.current !== options.viewMode;
+    prevViewModeRef.current = options.viewMode;
 
+    applyStylesRef.current = applyReaderTheme(r, spec, { flowModeChanged });
   }, [
     isReady,
     options.currentTheme,
@@ -1002,5 +483,5 @@ export function useEpubReader(
     pinyinSize
   ]);
 
-  return { book, rendition, isReady, areLocationsReady, isLoading, metadata, toc, error };
+  return { engine, isReady, areLocationsReady, isLoading, metadata, toc, error };
 }

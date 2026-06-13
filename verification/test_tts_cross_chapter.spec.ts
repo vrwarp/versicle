@@ -152,7 +152,7 @@ test("tts chapter navigation during playback", async ({ page }) => {
   // re-sync after navigation can lag, and the DOM data-current attribute follows the store.
   await page.waitForFunction(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => (window as any).useTTSStore?.getState?.().currentIndex === 0,
+    () => (window as any).useTTSPlaybackStore?.getState?.().currentIndex === 0,
     undefined,
     { timeout: 35000 }
   );

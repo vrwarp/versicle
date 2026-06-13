@@ -1,13 +1,14 @@
 import React, { useMemo } from 'react';
-import { useBookProgress } from '../../store/useReadingStateStore';
-import { parseCfiRange } from '../../lib/cfi-utils';
-import type { Rendition } from 'epubjs';
+import { useBookProgress } from '@store/useReadingStateStore';
+import { parseCfiRange } from '@kernel/cfi';
+import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { BookOpen, Headphones, ScrollText } from 'lucide-react';
-import type { ReadingEventType, ReadingSession } from '../../types/db';
+import type { ReadingEventType, ReadingSession } from '~types/user-data';
+import { formatDate, formatTime } from '@kernel/locale/format';
 
 interface Props {
     bookId: string;
-    rendition: Rendition | null;
+    engine: ReaderEngine | null;
     onNavigate: (cfi: string) => void;
     onClose?: () => void;
     trigger?: number;
@@ -25,50 +26,6 @@ interface HistoryItem {
 }
 
 /**
- * Resolve a section label from a CFI using the epub.js book instance.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function resolveSectionLabel(cfi: string, book: any): string | null {
-    let section;
-    try {
-        section = book.spine.get(cfi);
-    } catch {
-        return null;
-    }
-    if (!section) return null;
-
-    if (section.href) {
-        const navItem = book.navigation.get(section.href);
-        if (navItem?.label && navItem.label.trim() !== 'Chapter') {
-            return navItem.label.trim();
-        }
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const spinePos = (section as any).index ?? book.spine.items.indexOf(section);
-
-    // Try to find nav item by checking all nav items for matching spine index
-    // This handles cases where href lookup fails or is mismatched
-    if (spinePos >= 0 && book.navigation) {
-        let foundLabel = null;
-        book.navigation.forEach((item: { href?: string; label?: string }) => {
-            // Check if nav item's href points to our spine item
-            const itemHref = item.href ? item.href.split('#')[0] : null;
-            const itemSection = itemHref ? book.spine.get(itemHref) : null;
-            if (itemSection && itemSection.index === spinePos) {
-                foundLabel = item.label;
-            }
-        });
-        if (foundLabel && (typeof foundLabel === 'string') && (foundLabel as string).trim() !== 'Chapter') {
-            return (foundLabel as string).trim();
-        }
-    }
-
-    return spinePos >= 0 ? `Chapter ${spinePos + 1}` : null;
-}
-
-
-/**
  * Pick the dominant type from a list of session types.
  * Priority: tts > scroll > page
  */
@@ -78,16 +35,13 @@ function dominantType(types: ReadingEventType[]): ReadingEventType {
     return 'page';
 }
 
-export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavigate }) => {
+export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, engine, onNavigate }) => {
     // Reactive progress from Yjs store
     const progress = useBookProgress(bookId);
     const readingSessions = useMemo(() => progress?.readingSessions || [], [progress]);
     const completedRanges = useMemo(() => progress?.completedRanges || [], [progress]);
 
     const items = useMemo(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const book = rendition ? (rendition as any).book : null;
-
         const processSession = (session: ReadingSession): HistoryItem => {
             const cfi = session.cfiRange;
             let label = session.label || 'Reading Segment';
@@ -96,14 +50,14 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
 
             const parsed = parseCfiRange(cfi);
 
-            if (book) {
-                if (parsed && book.locations && book.locations.length() > 0) {
-                    percentage = book.locations.percentageFromCfi(parsed.fullStart);
+            if (engine) {
+                if (parsed && engine.locations.length() > 0) {
+                    percentage = engine.locations.percentageFromCfi(parsed.fullStart);
                 }
 
                 // Always prefer resolved label if available to ensure consistency for merging
-                // Use session.label as fallback if resolution fails or book not available
-                const resolved = resolveSectionLabel(cfi, book);
+                // Use session.label as fallback if resolution fails or engine not available
+                const resolved = engine.getNavLabel(cfi);
                 if (resolved) {
                     label = resolved;
                 } else if (session.label && session.label.trim() !== 'Chapter' && session.label.trim() !== '') {
@@ -117,9 +71,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
             if (session.startTime) {
                 const date = new Date(session.startTime);
                 if (!isNaN(date.getTime())) {
-                    const dateStr = date.toLocaleDateString();
-                    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    subLabel = `${dateStr} ${timeStr} • ${subLabel}`;
+                    subLabel = `${formatDate(date)} ${formatTime(date)} • ${subLabel}`;
                 }
             }
 
@@ -143,12 +95,12 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
 
             const parsed = parseCfiRange(range);
 
-            if (book) {
-                if (parsed && book.locations && book.locations.length() > 0) {
-                    percentage = book.locations.percentageFromCfi(parsed.fullStart);
+            if (engine) {
+                if (parsed && engine.locations.length() > 0) {
+                    percentage = engine.locations.percentageFromCfi(parsed.fullStart);
                 }
 
-                const resolved = resolveSectionLabel(range, book);
+                const resolved = engine.getNavLabel(range);
                 if (resolved) {
                     label = resolved;
                 } else {
@@ -200,7 +152,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, rendition, onNavi
         }
 
         return grouped;
-    }, [readingSessions, completedRanges, rendition]);
+    }, [readingSessions, completedRanges, engine]);
 
 
     if (items.length === 0) {

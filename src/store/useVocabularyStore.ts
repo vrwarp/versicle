@@ -1,6 +1,25 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
+import { canonicalizeChar } from '@domains/chinese/vocabulary/canonicalize';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
+
+/**
+ * Replication declaration (aggregated by src/store/registry.ts).
+ * Flipped to merge-defaults + scopedDiff in flip wave 1 (phase2-fork-surgery.md
+ * §2.6 #2): single small map, low write rate. No hydration-fallback canaries
+ * existed — the actions would already crash if hydration deleted
+ * `knownCharacters`, so the flip is strictly risk-reducing.
+ *
+ * KEY FORMAT (CRDT v7, Phase 6 §7.5): `knownCharacters` keys are
+ * SIMPLIFIED single characters — every action canonicalizes its input
+ * (write-path layer of the CH-6 fix; the read paths canonicalize the
+ * displayed char, and the v7 migration rewrote pre-existing docs).
+ */
+export const VOCABULARY_STORE_DEF: SyncedStoreDef<'knownCharacters'> = {
+  name: 'vocabulary',
+  syncedKeys: ['knownCharacters'],
+  hydration: 'merge-defaults',
+  scopedDiff: true,
+};
 
 export interface VocabularyState {
   // Key-value store of characters to preserve sync performance
@@ -16,22 +35,22 @@ export interface VocabularyState {
 }
 
 export const useVocabularyStore = create<VocabularyState>()(
-  yjs(
-    yDoc,
-    'vocabulary',
+  defineSyncedStore(
+    VOCABULARY_STORE_DEF,
     (set) => ({
       knownCharacters: {},
 
       toggleKnownCharacter: (char) => set((state) => {
-        if (state.knownCharacters[char]) {
+        const key = canonicalizeChar(char);
+        if (state.knownCharacters[key]) {
           const remaining = { ...state.knownCharacters };
-          delete remaining[char];
+          delete remaining[key];
           return { knownCharacters: remaining };
         } else {
           return {
             knownCharacters: {
               ...state.knownCharacters,
-              [char]: Date.now()
+              [key]: Date.now()
             }
           };
         }
@@ -40,18 +59,17 @@ export const useVocabularyStore = create<VocabularyState>()(
       markAsKnown: (char) => set((state) => ({
         knownCharacters: {
           ...state.knownCharacters,
-          [char]: Date.now()
+          [canonicalizeChar(char)]: Date.now()
         }
       })),
 
       markAsUnknown: (char) => set((state) => {
         const remaining = { ...state.knownCharacters };
-        delete remaining[char];
+        delete remaining[canonicalizeChar(char)];
         return { knownCharacters: remaining };
       }),
 
       clearAll: () => set({ knownCharacters: {} })
-    }),
-    getYjsOptions()
+    })
   )
 );

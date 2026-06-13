@@ -1,7 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { extractBookData, validateZipSignature } from './ingestion';
-import type { BookExtractionData } from './ingestion';
+import { validateZipSignature, sanitizeString, getSanitizedBookMetadata } from './ingestion';
+import { extractBook, type FullBookExtraction } from '@domains/library/import/extract';
+
+// Re-pointed at PR-L1/L2 (phase7): `extractBookData` was a deleted delegate;
+// the same assertions now exercise the unified extractor directly.
+const extractBookData = (file: File) => extractBook(file, { depth: 'full' });
+import { TTS_EXTRACTION_VERSION } from './ingestion/sentence-extraction';
 
 // Mock browser-image-compression
 vi.mock('browser-image-compression', () => ({
@@ -9,7 +14,7 @@ vi.mock('browser-image-compression', () => ({
 }));
 
 // Mock offscreen renderer
-vi.mock('./offscreen-renderer', () => ({
+vi.mock('@domains/reader/engine/offscreen/offscreen-renderer', () => ({
   extractContentOffscreen: vi.fn(async (_file, _options, onProgress) => {
     if (onProgress) onProgress(50, 'Processing...');
     return {
@@ -112,7 +117,7 @@ describe('ingestion', () => {
 
   it('should extract book data correctly', async () => {
     const mockFile = createMockFile(true);
-    const data: BookExtractionData = await extractBookData(mockFile);
+    const data: FullBookExtraction = await extractBookData(mockFile);
 
     expect(data.bookId).toBe('mock-uuid');
     expect(data.manifest.title).toBe('Mock Title');
@@ -246,5 +251,115 @@ describe('ingestion', () => {
     expect(data.manifest.title).not.toBe(longTitle);
     consoleSpy.mockRestore();
     warnSpy.mockRestore();
+  });
+
+  describe('regression: NFKD/CFI fix-forward extraction version stamp', () => {
+    it('stamps newly written TTS preparation rows with the current extraction version', async () => {
+      const mockFile = createMockFile(true);
+      const data: FullBookExtraction = await extractBookData(mockFile);
+
+      // Rows without this stamp predate the raw-offset segmentation fix and may
+      // carry drifted CFIs for non-ASCII books (re-ingestion targets them later).
+      expect(data.ttsContentBatches.length).toBeGreaterThan(0);
+      for (const batch of data.ttsContentBatches) {
+        expect(batch.extractionVersion).toBe(TTS_EXTRACTION_VERSION);
+      }
+    });
+  });
+
+  // Absorbed from src/db/validators.test.ts in the same PR that dissolved
+  // src/db/validators.ts into this module (Phase 3 D4; test-absorption
+  // ledger, plan/overhaul/README.md section 4 rule 8).
+  describe('regression: metadata sanitization (absorbed from db/validators.test.ts)', () => {
+    beforeEach(() => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    describe('sanitizeString', () => {
+      it('trims whitespace', () => {
+        expect(sanitizeString('  hello  ')).toBe('hello');
+      });
+
+      it('truncates to max length', () => {
+        expect(sanitizeString('hello world', 5)).toBe('hello');
+      });
+
+      it('returns empty string for non-string input', () => {
+        expect(sanitizeString(123 as any)).toBe('');
+      });
+
+      it('robustly sanitizes tricky HTML payloads (using DOMPurify)', () => {
+        // Nested tags: DOMPurify strips tags; the first < survives as text.
+        expect(sanitizeString('<<script>script>alert(1)</script>')).toBe('<');
+        // Attribute injection
+        expect(sanitizeString('<a title=">">Link</a>')).toBe('Link');
+        // Complex image tag
+        expect(sanitizeString('<<img src=x onerror=alert(1)>')).toBe('<');
+        // Script with whitespace: element removed along with content
+        expect(sanitizeString('<script >alert(1)</script >')).toBe('');
+        // Style tag removal: element removed along with content
+        expect(sanitizeString('<style>body{color:red}</style>')).toBe('');
+      });
+    });
+
+    describe('getSanitizedBookMetadata', () => {
+      const validBook = {
+        id: '123',
+        title: 'Title',
+        author: 'Author',
+        addedAt: 1234567890,
+      };
+
+      it('sanitizes string fields and detects modifications', () => {
+        const result = getSanitizedBookMetadata({
+          ...validBook,
+          title: '  Title  ',
+          author: '  Author  ',
+          description: '  Desc  ',
+        });
+        expect(result).not.toBeNull();
+        expect(result?.wasModified).toBe(true);
+        expect(result?.sanitized.title).toBe('Title');
+        expect(result?.sanitized.author).toBe('Author');
+        expect(result?.sanitized.description).toBe('Desc');
+      });
+
+      it('truncates overly long fields and reports it', () => {
+        const longString = 'a'.repeat(3000);
+        const result = getSanitizedBookMetadata({
+          ...validBook,
+          title: longString,
+          author: longString,
+          description: longString,
+        });
+        expect(result).not.toBeNull();
+        expect(result?.wasModified).toBe(true);
+        expect(result?.sanitized.title.length).toBe(500);
+        expect(result?.sanitized.author.length).toBe(255);
+        expect(result?.sanitized.description?.length).toBe(2000);
+        expect(result?.modifications).toHaveLength(3);
+        expect(result?.modifications[0]).toContain('Title sanitized');
+      });
+
+      it('strips HTML tags but preserves math symbols', () => {
+        const result = getSanitizedBookMetadata({
+          ...validBook,
+          title: '<b>Title</b>',
+          author: 'A < B',
+          description: '<script>alert(1)</script>',
+        });
+        expect(result?.wasModified).toBe(true);
+        expect(result?.sanitized.title).toBe('Title');
+        expect(result?.sanitized.author).toBe('A < B'); // Preserved as text
+        expect(result?.sanitized.description).toBe('');
+        expect(result?.modifications[0]).toContain('Title sanitized');
+      });
+
+      it('returns null for invalid structure', () => {
+        expect(getSanitizedBookMetadata(null)).toBeNull();
+        expect(getSanitizedBookMetadata({})).toBeNull();
+      });
+    });
   });
 });

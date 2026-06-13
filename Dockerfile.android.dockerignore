@@ -1,0 +1,28 @@
+# Per-Dockerfile ignore for Dockerfile.android (BuildKit picks
+# <Dockerfile>.dockerignore over the root .dockerignore when present).
+#
+# The root .dockerignore excludes android/ — correct for the web image
+# (Dockerfile) but fatal here: this build runs `npx cap sync android`
+# and `./gradlew test` inside /app/android, so android/ MUST be in the
+# build context. Everything else mirrors the root ignore file.
+#
+# NOTE: runtime verification (an actual `docker build -f Dockerfile.android .`)
+# is deferred to CI — keep this file in sync with .dockerignore when that
+# file changes.
+node_modules
+dist
+.git
+.github
+.vscode
+coverage
+plan
+*.md
+verification/screenshots
+ios
+.gemini
+*.out
+*.txt
+public/piper
+dev-dist
+test-results
+.claude
