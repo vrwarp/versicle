@@ -30,9 +30,12 @@ import {
 import { setConsentResolver, setQuotaScheduler } from '@kernel/net';
 import { QuotaGovernor, setQuotaStore, type QuotaLimits } from '@kernel/quota';
 import { makeQuotaStore } from '@app/quota/makeQuotaStore';
+import { makeBackgroundQuotaLimits } from '@app/quota/embedSpendReconciler';
 import { quotaCounterRepo } from '@data/repos/quotaCounter';
 import { setTtsQuotaGovernor } from '@lib/tts/providers/BaseCloudProvider';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
+import { useDeviceStore } from '@store/useDeviceStore';
+import { getDeviceId } from '@lib/device-id';
 import { useSyncStore } from '@store/useSyncStore';
 import { useDriveStore } from '@store/useDriveStore';
 import { useBookStore } from '@store/useBookStore';
@@ -97,7 +100,29 @@ export function wireGoogleDomain(): void {
   // persisted through the injected store onto the quotaCounter repo (the only
   // IDB touch); RPM/TPM live in-memory in the governor.
   const getQuotaLimits = (): QuotaLimits => ({ rpm: 100, tpm: 30_000, rpd: 1000 });
-  setQuotaStore(makeQuotaStore(quotaCounterRepo));
+  // A6 (design §3.4): saveDailyUsage — the single chokepoint where the governor
+  // reports today's usage — ALSO publishes THIS device's own spend onto its
+  // synced DeviceInfo record, for the project-wide cross-device quota sum.
+  setQuotaStore(
+    makeQuotaStore(quotaCounterRepo, (usage) =>
+      useDeviceStore.getState().publishEmbedSpend(getDeviceId(), usage),
+    ),
+  );
+  // A6 BG-lane-only effective ceiling: base RPD reduced by the sum of OTHER
+  // active-today devices' published spend. Read FRESH per acquire (GG-8) so the
+  // kernel is UNTOUCHED (the QuotaGovernor.ts:29 seam). bg-only division is
+  // enforced by routing ONLY the bg lane through this provider; the embedding
+  // BG acquire that consumes it is wired in Phase E2 (A6 supplies + installs
+  // the seam).
+  const getBackgroundQuotaLimits = makeBackgroundQuotaLimits(
+    getQuotaLimits,
+    () => useDeviceStore.getState().devices,
+    getDeviceId(),
+  );
+  void getBackgroundQuotaLimits; // consumed by the Phase-E2 bg acquire
+  // The fg/query provider (getQuotaLimits, full projectRPD) and this governor
+  // stay UNCHANGED so foreground + query embeds are never rate-divided
+  // (guardrail #4).
   const governor = new QuotaGovernor(getQuotaLimits);
   // A4 (design §3.2): the SAME governor instance enforces admission at the
   // NetworkGateway chokepoint (acquire/release — unbypassable, like consent)

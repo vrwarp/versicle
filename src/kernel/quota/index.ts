@@ -10,6 +10,10 @@ export {
   type QuotaStore,
   type DailyUsage,
   type QuotaLimits,
+  // Promoted onto the barrel for A6: the app-layer embedSpend reconciler
+  // (app/quota/embedSpendReconciler.ts) returns one as the BG-lane limits
+  // provider. Has a real production consumer (wireGoogle), so not knip-dead.
+  type QuotaLimitsProvider,
 } from './QuotaGovernor';
 
 // `LaneUsage` (the single shared snapshot shape) is intentionally NOT

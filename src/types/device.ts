@@ -30,4 +30,17 @@ export interface DeviceInfo {
 
     // The "Adoption" Payload
     profile: DeviceProfile;
+
+    /**
+     * Rolling daily GenAI spend this device published for the project-wide
+     * quota sum (design §3.4). `day` is the midnight-PT day key
+     * (`YYYY-MM-DD`, America/Los_Angeles) the count belongs to; shape mirrors
+     * the kernel DailyUsage / QuotaDailyUsageRow (rows/app.ts:190).
+     *
+     * OPTIONAL so it is additive — existing synced records and the registry
+     * merge-default `{}` stay valid; replicates with NO __schemaVersion bump
+     * because it nests below the root `devices` synced key (syncedKeys is
+     * root-only).
+     */
+    embedSpend?: { day: string; rpd: number; tpm?: number };
 }
