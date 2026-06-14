@@ -28,10 +28,11 @@ import type { DetailedSearchResult } from '~types/search';
 import { chunkSection } from './chunker';
 import type { SearchEngineProtocol, SearchTextSource } from './protocol';
 import type { QueryEmbeddingCache } from './queryEmbeddingCache';
-import type {
-  EmbeddingClientPort,
-  EmbeddingsSourcePort,
-  QuantizePort,
+import {
+  CURRENT_QUANT,
+  type EmbeddingClientPort,
+  type EmbeddingsSourcePort,
+  type QuantizePort,
 } from './embeddingPort';
 
 /** The query profile — MUST match the indexer's 'document' profile asymmetry. */
@@ -72,6 +73,19 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
   // vectors were written would mean the re-derived offsets no longer describe
   // the indexed chunks. Degrade the whole book to regex-only.
   if (embedded.extractionVersion !== corpus.extractionVersion) return [];
+
+  // Embedding-space mismatch (design §8.2): a stored row whose {model, dims,
+  // quant} no longer matches the live config is an INCOMPATIBLE space — the
+  // cosine is meaningless and vectors are NEVER converted. Degrade the whole
+  // book to regex-only (the index path re-embeds it). quant is the single
+  // literal today, guarded against the shared constant for completeness.
+  if (
+    embedded.model !== config.model ||
+    embedded.dims !== config.dims ||
+    embedded.quant !== CURRENT_QUANT
+  ) {
+    return [];
+  }
 
   // Embed the query ONCE (cached) under the 'query' profile + bookId/fg lane.
   const key = queryCache.keyOf({

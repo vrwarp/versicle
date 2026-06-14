@@ -42,6 +42,15 @@ interface GenAIState {
   embeddingModel: string;
   /** Requested embedding output dimensionality (Increment C §7). */
   embeddingDims: number;
+  /**
+   * §11.3 probe flag (Increment F): when ON, the embedding client packs up to
+   * 100 texts into one `:batchEmbedContents` call instead of N
+   * `:embedContent` calls. Default OFF — per-request RPD counting for the
+   * batch endpoint is UNCONFIRMED (a batch may debit N, not 1), so batching is
+   * scaffolding only until the live probe (design §11.3) confirms a delta of 1.
+   * Additive field — tolerated by older persist blobs (no migrate).
+   */
+  useBatchEmbedding: boolean;
   isEnabled: boolean;
   isModelRotationEnabled: boolean;
   isContentAnalysisEnabled: boolean;
@@ -86,6 +95,7 @@ interface GenAIState {
   setModel: (model: string) => void;
   setEmbeddingModel: (model: string) => void;
   setEmbeddingDims: (dims: number) => void;
+  setUseBatchEmbedding: (enabled: boolean) => void;
   setEnabled: (enabled: boolean) => void;
   setModelRotationEnabled: (enabled: boolean) => void;
   setContentAnalysisEnabled: (enabled: boolean) => void;
@@ -113,6 +123,7 @@ type PersistedGenAIState = Pick<
   | 'model'
   | 'embeddingModel'
   | 'embeddingDims'
+  | 'useBatchEmbedding'
   | 'isEnabled'
   | 'isModelRotationEnabled'
   | 'isContentAnalysisEnabled'
@@ -135,6 +146,7 @@ export const useGenAIStore = create<GenAIState>()(
       model: 'gemini-flash-lite-latest',
       embeddingModel: 'gemini-embedding-001',
       embeddingDims: 768,
+      useBatchEmbedding: false,
       isEnabled: false,
       isModelRotationEnabled: false,
       isContentAnalysisEnabled: false,
@@ -156,6 +168,7 @@ export const useGenAIStore = create<GenAIState>()(
       setModel: (model) => set({ model }),
       setEmbeddingModel: (model) => set({ embeddingModel: model }),
       setEmbeddingDims: (dims) => set({ embeddingDims: dims }),
+      setUseBatchEmbedding: (enabled) => set({ useBatchEmbedding: enabled }),
       setEnabled: (enabled) => set({ isEnabled: enabled }),
       setModelRotationEnabled: (enabled) => set({ isModelRotationEnabled: enabled }),
       setContentAnalysisEnabled: (enabled) => set({ isContentAnalysisEnabled: enabled }),
@@ -192,6 +205,7 @@ export const useGenAIStore = create<GenAIState>()(
         model: state.model,
         embeddingModel: state.embeddingModel,
         embeddingDims: state.embeddingDims,
+        useBatchEmbedding: state.useBatchEmbedding,
         isEnabled: state.isEnabled,
         isModelRotationEnabled: state.isModelRotationEnabled,
         isContentAnalysisEnabled: state.isContentAnalysisEnabled,

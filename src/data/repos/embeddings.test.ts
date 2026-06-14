@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   embeddingsRepo,
+  EMBEDDING_CACHE_BUDGET_BYTES,
   type CacheEmbeddingsRow,
   type CacheEmbedJobsRow,
 } from './embeddings';
@@ -164,5 +165,90 @@ describe('embeddingsRepo', () => {
     });
     const after = await embeddingsRepo.get('bk-stamp');
     expect(after).toMatchObject({ model: 'gemini-embedding-001', extractionVersion: 5 });
+  });
+});
+
+describe('EmbeddingsRepo.runEviction (injected-recency LRU, Increment F §6/§8.3)', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    await closeConnection();
+    await deleteAppDatabase();
+    vi.restoreAllMocks();
+  });
+
+  // Byte size per row() fixture (vectors.byteLength + scales.byteLength):
+  //   Section 0: 4 int8 (4 B) + 1 float32 (4 B) = 8 B.
+  //   Section 1: 8 int8 (8 B) + 2 float32 (8 B) = 16 B.  →  24 B total.
+  const ROW_BYTES = 24;
+
+  it('deletes least-recently-read first and keeps a recently-read book under budget', async () => {
+    await embeddingsRepo.put(row('bk-old'));
+    await embeddingsRepo.put(row('bk-mid'));
+    await embeddingsRepo.put(row('bk-new'));
+
+    // Recency: bk-new read most recently, bk-old least. Budget admits ONE row,
+    // so the two least-recently-read (bk-old, bk-mid) evict; bk-new survives.
+    const recency = new Map<string, number>([
+      ['bk-old', 1_000],
+      ['bk-mid', 2_000],
+      ['bk-new', 3_000],
+    ]);
+    const result = await embeddingsRepo.runEviction(recency, ROW_BYTES);
+
+    expect(result.deleted).toBe(2);
+    expect(result.freedBytes).toBe(2 * ROW_BYTES);
+    await expect(embeddingsRepo.get('bk-old')).resolves.toBeUndefined();
+    await expect(embeddingsRepo.get('bk-mid')).resolves.toBeUndefined();
+    // The recently-read book survives.
+    await expect(embeddingsRepo.get('bk-new')).resolves.toMatchObject({ bookId: 'bk-new' });
+  });
+
+  it('treats an unknown bookId (no recency entry) as oldest=0 and evicts it first', async () => {
+    await embeddingsRepo.put(row('bk-tracked'));
+    await embeddingsRepo.put(row('bk-untracked'));
+
+    // Only bk-tracked has a recency entry; bk-untracked ranks oldest (0) and
+    // evicts first. Budget admits one row.
+    const recency = new Map<string, number>([['bk-tracked', 5_000]]);
+    const result = await embeddingsRepo.runEviction(recency, ROW_BYTES);
+
+    expect(result.deleted).toBe(1);
+    await expect(embeddingsRepo.get('bk-untracked')).resolves.toBeUndefined();
+    await expect(embeddingsRepo.get('bk-tracked')).resolves.toMatchObject({ bookId: 'bk-tracked' });
+  });
+
+  it('an evicted book is fully re-derivable: get() AND getJob() both resolve undefined', async () => {
+    await embeddingsRepo.put(row('bk-doomed'));
+    await embeddingsRepo.putJob(job('bk-doomed'));
+
+    // Zero budget forces eviction of everything.
+    const result = await embeddingsRepo.runEviction(new Map(), 0);
+
+    expect(result.deleted).toBe(1);
+    // Vectors gone AND the resumable job died with them (re-derivable = absent).
+    await expect(embeddingsRepo.get('bk-doomed')).resolves.toBeUndefined();
+    await expect(embeddingsRepo.getJob('bk-doomed')).resolves.toBeUndefined();
+  });
+
+  it('is a no-op when total bytes are already under budget', async () => {
+    await embeddingsRepo.put(row('bk-1'));
+    await embeddingsRepo.put(row('bk-2'));
+
+    const result = await embeddingsRepo.runEviction(new Map(), EMBEDDING_CACHE_BUDGET_BYTES);
+
+    expect(result).toEqual({ deleted: 0, freedBytes: 0 });
+    await expect(embeddingsRepo.get('bk-1')).resolves.toMatchObject({ bookId: 'bk-1' });
+    await expect(embeddingsRepo.get('bk-2')).resolves.toMatchObject({ bookId: 'bk-2' });
+  });
+
+  it('uses the default budget constant when none is supplied (no eviction under it)', async () => {
+    await embeddingsRepo.put(row('bk-small'));
+    // The default 256 MiB budget admits a 24-byte row trivially.
+    const result = await embeddingsRepo.runEviction(new Map());
+    expect(result.deleted).toBe(0);
+    await expect(embeddingsRepo.get('bk-small')).resolves.toMatchObject({ bookId: 'bk-small' });
   });
 });

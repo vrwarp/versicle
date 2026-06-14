@@ -8,6 +8,16 @@
 import type { CacheEmbeddingsRow } from '@data/rows/cache';
 
 /**
+ * The quantization scheme stamp the indexer writes and BOTH the read
+ * (semanticRank) and index (EmbeddingIndexer) paths compare against (design
+ * §8.2). It is the single literal carried on every persisted row
+ * (cache.ts:`quant`); a future scheme change bumps this constant, and a stored
+ * row whose `quant` no longer matches is treated as INVALID (re-embed, never
+ * convert — incompatible spaces).
+ */
+export const CURRENT_QUANT: CacheEmbeddingsRow['quant'] = 'int8-pervec';
+
+/**
  * The embedding task profile (mirrors @domains/google EmbeddingProfile —
  * contract.ts:20): `document` for corpus indexing, `query` for search-time
  * lookup. The asymmetric pair is what makes the cosine meaningful.

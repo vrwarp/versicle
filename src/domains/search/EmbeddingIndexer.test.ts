@@ -31,11 +31,14 @@ function makeEmbeddingClient(configured = true) {
   return { client, calls };
 }
 
-function makeRepo(job?: CacheEmbedJobsRow) {
+/** The persisted-row stamp the indexer reads via repo.get for the §8.2 guard. */
+type PersistedStamp = Pick<CacheEmbeddingsRow, 'model' | 'dims' | 'quant'>;
+
+function makeRepo(job?: CacheEmbedJobsRow, persisted?: PersistedStamp) {
   const puts: CacheEmbeddingsRow[] = [];
   const jobPuts: CacheEmbedJobsRow[] = [];
   const repo = {
-    get: vi.fn(async () => undefined),
+    get: vi.fn(async () => persisted),
     getJob: vi.fn(async () => job),
     put: vi.fn(async (row: CacheEmbeddingsRow) => {
       puts.push(row);
@@ -175,6 +178,90 @@ describe('EmbeddingIndexer', () => {
 
     await indexer.enqueue('bk-1');
     expect(calls).toHaveLength(1);
+  });
+
+  describe('whole-row stamp-mismatch re-embed (Increment F §8.2)', () => {
+    it('re-embeds EVERY section when the persisted row model differs, never resume-skipping stale-space vectors', async () => {
+      const sections = [section('s0.xhtml', 'h0'), section('s1.xhtml', 'h1')];
+      // A prior job would normally resume-skip s0 (matching hash)…
+      const priorJob: CacheEmbedJobsRow = {
+        bookId: 'bk-1',
+        extractionVersion: 3,
+        sections: [
+          { href: 's0.xhtml', embeddedThroughChunk: 1, sectionTextHash: 'h0' },
+          { href: 's1.xhtml', embeddedThroughChunk: 1, sectionTextHash: 'h1' },
+        ],
+        updatedAt: 0,
+      };
+      // …but the persisted row was embedded under a DIFFERENT model (an
+      // incompatible space). The §8.2 guard must discard the job and re-embed.
+      const persisted: PersistedStamp = { model: 'old-model', dims: 4, quant: 'int8-pervec' };
+      const { client, calls } = makeEmbeddingClient();
+      const { repo, puts } = makeRepo(priorJob, persisted);
+      const indexer = new EmbeddingIndexer({
+        embeddingClient: client,
+        textSource: makeTextSource(sections),
+        embeddingsRepo: repo,
+        quantize,
+        getConfig: config, // { model: 'gemini-embedding-001', dims: 4 }
+      });
+
+      await indexer.enqueue('bk-1');
+
+      // BOTH sections re-embed (no resume-skip), and the re-written row carries
+      // the LIVE config model — vectors were re-derived, never converted.
+      expect(calls).toHaveLength(2);
+      expect(puts[puts.length - 1].model).toBe('gemini-embedding-001');
+    });
+
+    it('re-embeds EVERY section when the persisted row dims differ', async () => {
+      const sections = [section('s0.xhtml', 'h0')];
+      const priorJob: CacheEmbedJobsRow = {
+        bookId: 'bk-1',
+        extractionVersion: 3,
+        sections: [{ href: 's0.xhtml', embeddedThroughChunk: 1, sectionTextHash: 'h0' }],
+        updatedAt: 0,
+      };
+      // dims 768 stored vs dims 4 live → incompatible space.
+      const persisted: PersistedStamp = { model: 'gemini-embedding-001', dims: 768, quant: 'int8-pervec' };
+      const { client, calls } = makeEmbeddingClient();
+      const { repo } = makeRepo(priorJob, persisted);
+      const indexer = new EmbeddingIndexer({
+        embeddingClient: client,
+        textSource: makeTextSource(sections),
+        embeddingsRepo: repo,
+        quantize,
+        getConfig: config,
+      });
+
+      await indexer.enqueue('bk-1');
+      expect(calls).toHaveLength(1);
+    });
+
+    it('keeps the {href, sectionTextHash} resume-skip when the persisted stamp MATCHES the live config', async () => {
+      const sections = [section('s0.xhtml', 'h0'), section('s1.xhtml', 'h1')];
+      const priorJob: CacheEmbedJobsRow = {
+        bookId: 'bk-1',
+        extractionVersion: 3,
+        sections: [{ href: 's0.xhtml', embeddedThroughChunk: 1, sectionTextHash: 'h0' }],
+        updatedAt: 0,
+      };
+      // Stamp matches the live config → the per-section resume-skip still holds.
+      const persisted: PersistedStamp = { model: 'gemini-embedding-001', dims: 4, quant: 'int8-pervec' };
+      const { client, calls } = makeEmbeddingClient();
+      const { repo } = makeRepo(priorJob, persisted);
+      const indexer = new EmbeddingIndexer({
+        embeddingClient: client,
+        textSource: makeTextSource(sections),
+        embeddingsRepo: repo,
+        quantize,
+        getConfig: config,
+      });
+
+      await indexer.enqueue('bk-1');
+      // s0 is resume-skipped (matched hash); only s1 re-embeds.
+      expect(calls).toHaveLength(1);
+    });
   });
 
   it('threads consent { bookId, interactive } + document profile into the embed port', async () => {

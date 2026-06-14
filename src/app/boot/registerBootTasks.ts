@@ -25,7 +25,7 @@ import { whenHydratedTask, hydrateStaticMetadataTask } from './whenHydrated';
 import { crdtMigrationsTask } from './crdtMigrations';
 import { syncInitTask } from './syncInit';
 import { ttsInitializeTask, deviceRegistrationTask } from './deviceRegistration';
-import { deviceHeartbeatTask, driveAutoScanTask, audioCacheEvictionTask, reingestWaveTask } from './backgroundTasks';
+import { deviceHeartbeatTask, driveAutoScanTask, audioCacheEvictionTask, embeddingCacheEvictionTask, reingestWaveTask } from './backgroundTasks';
 import { embeddingBackfillTask } from './embeddingBackfill';
 import { socialLoginTask } from './socialLogin';
 import { wireGoogleDomain } from '../google/wireGoogle';
@@ -80,6 +80,7 @@ export function registerAppBootTasks(): void {
   registerBootTask('backgroundTasks', deviceHeartbeatTask);
   registerBootTask('backgroundTasks', driveAutoScanTask);
   registerBootTask('backgroundTasks', audioCacheEvictionTask);
+  registerBootTask('backgroundTasks', embeddingCacheEvictionTask);
   registerBootTask('backgroundTasks', reingestWaveTask);
   registerBootTask('backgroundTasks', embeddingBackfillTask);
   registerBootTask('backgroundTasks', socialLoginTask);

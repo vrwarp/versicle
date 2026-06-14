@@ -186,7 +186,13 @@ export function wireGoogleDomain(): void {
     makeLazyEmbeddingClient({
       getConfig: (): EmbeddingConfig => {
         const s = useGenAIStore.getState();
-        return { apiKey: s.apiKey, model: s.embeddingModel, dims: s.embeddingDims };
+        return {
+          apiKey: s.apiKey,
+          model: s.embeddingModel,
+          dims: s.embeddingDims,
+          // §11.3 probe flag, read per call (GG-8) — default-off scaffolding.
+          useBatchEmbedding: s.useBatchEmbedding,
+        };
       },
       onLog: (entry) => useGenAIStore.getState().addLog(entry),
     }),

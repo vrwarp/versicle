@@ -25,6 +25,7 @@
  */
 import { parseCfiTokens, tryParseCfiPoint } from '@kernel/cfi';
 import { chunkSection } from './chunker';
+import { CURRENT_QUANT } from './embeddingPort';
 import type { SearchTextSource } from './SearchSession';
 import type { CacheEmbeddingsRow, CacheEmbedJobsRow } from '@data/rows/cache';
 
@@ -44,9 +45,17 @@ interface EmbeddingClientPort {
   isConfigured(): boolean;
 }
 
+/**
+ * The persisted-row stamp the indexer compares against the live config to
+ * decide a whole-book re-embed (design §8.2). Narrowed to the stamp SCALARS
+ * only — the heavy typed-array view (CacheEmbeddingsView) never crosses this
+ * port boundary.
+ */
+type EmbeddedRowStamp = Pick<CacheEmbeddingsRow, 'model' | 'dims' | 'quant'>;
+
 /** The slice of the embeddings repo the indexer consumes (injected port). */
 interface EmbeddingsRepoPort {
-  get(bookId: string): Promise<unknown>;
+  get(bookId: string): Promise<EmbeddedRowStamp | undefined>;
   getJob(bookId: string): Promise<CacheEmbedJobsRow | undefined>;
   put(row: CacheEmbeddingsRow): Promise<void>;
   putJob(row: CacheEmbedJobsRow): Promise<void>;
@@ -90,8 +99,22 @@ export class EmbeddingIndexer {
     const sections = corpus.sections;
     const order = orderOutward(sections.length, spineOrdinalFrom(currentCfi, sections.length));
 
-    const job = await this.deps.embeddingsRepo.getJob(bookId);
     const config = this.deps.getConfig();
+
+    // Whole-row stamp-mismatch guard (design §8.2): when the persisted row's
+    // {model, dims, quant} no longer matches the live config, the stored
+    // vectors live in an INCOMPATIBLE space — they are NEVER converted. Discard
+    // the prior job so EVERY section re-embeds (the whole-book re-embed
+    // fallback), rather than resume-skipping stale-space vectors on the
+    // {href, sectionTextHash} key below.
+    const persisted = await this.deps.embeddingsRepo.get(bookId);
+    const stampMismatch =
+      persisted !== undefined &&
+      (persisted.model !== config.model ||
+        persisted.dims !== config.dims ||
+        persisted.quant !== CURRENT_QUANT);
+
+    const job = stampMismatch ? undefined : await this.deps.embeddingsRepo.getJob(bookId);
 
     // Accumulate the persisted embedding sections across this pass (one row per
     // book). We carry forward any already-embedded sections from the prior run

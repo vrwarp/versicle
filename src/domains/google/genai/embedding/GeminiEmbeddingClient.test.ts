@@ -24,6 +24,15 @@ function embedResponse(values: number[], status = 200): Response {
   });
 }
 
+/** A :batchEmbedContents response: `embeddings[]` aligned with `requests[]`. */
+function batchResponse(count: number, status = 200): Response {
+  const embeddings = Array.from({ length: count }, (_, i) => ({ values: [i, i + 1] }));
+  return new Response(JSON.stringify({ embeddings }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 function errorResponse(status: number, message = 'boom'): Response {
   return new Response(JSON.stringify({ error: { code: status, message } }), { status });
 }
@@ -184,6 +193,102 @@ describe('GeminiEmbeddingClient', () => {
   it('isConfigured() is false without an API key', () => {
     const { client } = makeClient([], { apiKey: '' });
     expect(client.isConfigured()).toBe(false);
+  });
+
+  describe('useBatchEmbedding swap (Increment F §9/§11.3)', () => {
+    it('false (default): N input texts → N :embedContent egress calls (= N RPD debits)', async () => {
+      const texts = Array.from({ length: 100 }, (_, i) => `t${i}`);
+      const { client, calls } = makeClient(
+        texts.map(() => embedResponse([1, 0])),
+        { useBatchEmbedding: false },
+      );
+      const { vectors } = await client.embed(texts, { profile: 'document' });
+      expect(vectors).toHaveLength(100);
+      // One egress acquire per text → the gateway debits RPD once per call.
+      expect(calls).toHaveLength(100);
+      for (const c of calls) expect(c.url).toContain(':embedContent');
+    });
+
+    it('true: 100 texts → exactly ONE :batchEmbedContents egress call returning 100 vectors', async () => {
+      const texts = Array.from({ length: 100 }, (_, i) => `t${i}`);
+      const { client, calls } = makeClient([batchResponse(100)], { useBatchEmbedding: true });
+      const { vectors } = await client.embed(texts, { profile: 'document' });
+
+      expect(vectors).toHaveLength(100);
+      expect(vectors[0]).toBeInstanceOf(Float32Array);
+      // ONE egress call (= ONE RPD debit) for the whole window.
+      expect(calls).toHaveLength(1);
+      expect(calls[0].url).toContain(':batchEmbedContents');
+      expect(calls[0].url).toContain('/models/gemini-embedding-001:batchEmbedContents');
+    });
+
+    it('true: >100 texts → ceil(n/100) egress calls (one per <=100 window)', async () => {
+      const texts = Array.from({ length: 250 }, (_, i) => `t${i}`);
+      const { client, calls } = makeClient(
+        [batchResponse(100), batchResponse(100), batchResponse(50)],
+        { useBatchEmbedding: true },
+      );
+      const { vectors } = await client.embed(texts, { profile: 'document' });
+      expect(vectors).toHaveLength(250);
+      expect(calls).toHaveLength(3); // ceil(250 / 100)
+      for (const c of calls) expect(c.url).toContain(':batchEmbedContents');
+    });
+
+    it('the egress-call count equals the per-call RPD debit count: 1 batched vs N singles for the same 100 texts', async () => {
+      const texts = Array.from({ length: 100 }, (_, i) => `t${i}`);
+
+      const single = makeClient(texts.map(() => embedResponse([1, 0])), {
+        useBatchEmbedding: false,
+      });
+      await single.client.embed(texts, { profile: 'document' });
+
+      const batched = makeClient([batchResponse(100)], { useBatchEmbedding: true });
+      await batched.client.embed(texts, { profile: 'document' });
+
+      // Structural N→1 RPD difference via the gateway's per-egress acquire.
+      expect(single.calls).toHaveLength(100);
+      expect(batched.calls).toHaveLength(1);
+    });
+
+    it('shapes requests[] per content: -001 carries taskType, EM2 prepends the instruction', async () => {
+      // -001: matched taskType, raw text, outputDimensionality from dims.
+      const a = makeClient([batchResponse(2)], {
+        useBatchEmbedding: true,
+        model: 'gemini-embedding-001',
+        dims: 256,
+      });
+      await a.client.embed(['x', 'y'], { profile: 'document' });
+      const bodyA = JSON.parse(String(a.calls[0].init.body));
+      expect(bodyA.requests).toHaveLength(2);
+      expect(bodyA.requests[0].model).toBe('models/gemini-embedding-001');
+      expect(bodyA.requests[0].taskType).toBe('RETRIEVAL_DOCUMENT');
+      expect(bodyA.requests[0].outputDimensionality).toBe(256);
+      expect(bodyA.requests[0].content.parts[0].text).toBe('x');
+
+      // EM2: no taskType, prepended instruction on each content.
+      const b = makeClient([batchResponse(1)], {
+        useBatchEmbedding: true,
+        model: 'gemini-embedding-2',
+      });
+      await b.client.embed(['the text'], { profile: 'query' });
+      const bodyB = JSON.parse(String(b.calls[0].init.body));
+      expect(bodyB.requests[0].taskType).toBeUndefined();
+      expect(bodyB.requests[0].content.parts[0].text).toContain('the text');
+      expect(bodyB.requests[0].content.parts[0].text).not.toBe('the text');
+    });
+
+    it('threads consent + lane into the single batch egress call', async () => {
+      const { client, calls } = makeClient([batchResponse(2)], { useBatchEmbedding: true });
+      await client.embed(['a', 'b'], {
+        profile: 'document',
+        bookId: 'bk-7',
+        interactive: false,
+        lane: 'bg',
+      });
+      expect(calls[0].opts.consent).toEqual({ bookId: 'bk-7', interactive: false });
+      expect(calls[0].opts.lane).toBe('bg');
+      expect(calls[0].opts.estTokens).toBeGreaterThan(0);
+    });
   });
 });
 

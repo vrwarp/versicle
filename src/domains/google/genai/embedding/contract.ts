@@ -51,6 +51,14 @@ export interface EmbeddingConfig {
   model: string;
   /** Requested output dimensionality (`outputDimensionality`). */
   dims: number;
+  /**
+   * §11.3 probe flag (Increment F), read PER CALL (GG-8). When falsy (the
+   * default), the client issues one `:embedContent` POST per text. When true,
+   * it packs up to 100 texts into ONE `:batchEmbedContents` requests[] call.
+   * Default-off because per-request RPD counting for the batch endpoint is
+   * unconfirmed (design §9/§11.3) — batching ships as scaffolding only.
+   */
+  useBatchEmbedding?: boolean;
 }
 
 /**

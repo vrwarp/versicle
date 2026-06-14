@@ -14,7 +14,10 @@ import { useDriveStore } from '@store/useDriveStore';
 import { getDriveLibrarySync } from '@domains/google';
 import { GoogleAuthRequiredError } from '@domains/google';
 import { audioCache } from '@data/repos/audioCache';
+import { embeddingsRepo } from '@data/repos/embeddings';
 import { bookContent } from '@data/repos/bookContent';
+import { useReadingStateStore, getMostRecentProgress } from '@store/useReadingStateStore';
+import { useBookStore } from '@store/useBookStore';
 import { runReingestWave, derivedContentSane } from '@domains/library/reingest';
 import { getLibrary } from '../library/createLibrary';
 import { createLogger } from '@lib/logger';
@@ -77,6 +80,30 @@ export const audioCacheEvictionTask: BootTask = {
       .catch((err) => {
         logger.warn('Audio cache eviction sweep failed at boot:', err);
       });
+  },
+};
+
+export const embeddingCacheEvictionTask: BootTask = {
+  name: 'data/embedding-cache-eviction',
+  run: () => {
+    // Fire-and-forget, mirroring audioCacheEvictionTask: the sweep streams a
+    // readonly cursor and deletes through the write gate, so it can never
+    // overlap an indexer write, and boot must not wait on it.
+    //
+    // The recency signal is INJECTED here (the repo stays store-free,
+    // data-no-upward): build Map<bookId, lastReadMs> from the reading-state
+    // store's per-book progress (getMostRecentProgress(...).lastRead) so
+    // recently-read books evict LAST. Books with no valid progress are absent
+    // from the map and rank oldest (0) inside runEviction.
+    const { progress } = useReadingStateStore.getState();
+    const recency = new Map<string, number>();
+    for (const bookId of Object.keys(useBookStore.getState().books)) {
+      const recent = getMostRecentProgress(progress[bookId]);
+      if (recent) recency.set(bookId, recent.lastRead);
+    }
+    void embeddingsRepo.runEviction(recency).catch((err) => {
+      logger.warn('Embedding cache eviction sweep failed at boot:', err);
+    });
   },
 };
 
