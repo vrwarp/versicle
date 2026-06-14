@@ -126,15 +126,30 @@ const applyChangesToSharedType = (
       break;
 
     case ChangeType.DELETE:
+      if (sharedType instanceof Y.Map)
       {
+        /*
+         * previousState DELETE guard — Y.Map keys ONLY. A key present in the
+         * map but absent from the batch-start state is a concurrent remote
+         * insert whose inbound microtask has not run yet; never delete it
+         * (the resurrection guard, §2.1/§2.3 — same protection scoped and
+         * legacy diff rely on). `property` here is a string object key, so
+         * `property in prev` is a meaningful membership test.
+         *
+         * This guard MUST NOT apply to Y.Array: there `property` is a numeric
+         * index, and a delete whose index is >= prev.length is the ordinary
+         * array-shrink case (e.g. a diff that inserts at the front and deletes
+         * the now-trailing element). `index in prevArray` would be false and
+         * silently drop the delete, leaving a stale trailing element and
+         * drifting the doc from state.
+         */
         const prev = options?.previousState;
 
         if (prev && typeof prev === "object" && !(property in prev))
           return;
-      }
 
-      if (sharedType instanceof Y.Map)
         sharedType.delete(property as string);
+      }
 
       else if (sharedType instanceof Y.Array)
       {
