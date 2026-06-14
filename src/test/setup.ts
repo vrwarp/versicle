@@ -86,7 +86,7 @@ Object.defineProperty(window, 'speechSynthesis', {
     cancel: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(),
-    getVoices: vi.fn().mockReturnValue([]),
+    getVoices: vi.fn().mockReturnValue([{ name: 'Mock Voice', lang: 'en-US' }]),
     onvoiceschanged: null
   },
   writable: true
