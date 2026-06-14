@@ -15,6 +15,10 @@
  *                      GlobalSettingsDialog, §B). Closing = history back,
  *                      so hardware/browser back "closes the dialog" with
  *                      no dedicated guard.
+ *   /read/:id/settings/:tab? → the SAME SettingsShell, but nested under the
+ *                      reader so opening settings from a book does NOT unmount
+ *                      ReaderShell (the book stays live behind the overlay and
+ *                      the "This Book" lexicon scope stays reachable).
  */
 import { Suspense, lazy } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
@@ -86,6 +90,25 @@ export const router = createBrowserRouter([
             </Suspense>
           </ErrorBoundary>
         ),
+        children: [
+          {
+            // Settings opened FROM the reader nests here so ReaderShell stays
+            // mounted (renders the overlay in its <Outlet/>). The book context
+            // (useReaderUIStore.currentBookId) survives, so the Lexicon
+            // Manager's "This Book" scope is reachable — unlike the top-level
+            // /settings route, which renders over the library and unmounts the
+            // reader. SettingsShell derives its tab base from the URL so tab
+            // hops stay under /read/:id/settings instead of bouncing away.
+            path: "settings/:tab?",
+            element: (
+              <ErrorBoundary>
+                <Suspense fallback={null}>
+                  <SettingsShellLazy />
+                </Suspense>
+              </ErrorBoundary>
+            ),
+          },
+        ],
       },
       {
         // The settings overlay renders OVER the library (deep-link

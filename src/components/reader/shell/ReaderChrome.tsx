@@ -5,7 +5,7 @@
  * workaround (load-bearing — see the inline comment).
  */
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { List, Settings, ArrowLeft, X, Search, Highlighter, Maximize, Minimize, Type, Headphones, Monitor } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useReaderUIStore } from '@store/useReaderUIStore';
@@ -26,6 +26,7 @@ export interface ReaderChromeProps {
 
 export const ReaderChrome: React.FC<ReaderChromeProps> = ({ title, onOpenSyncPanel }) => {
   const navigate = useNavigate();
+  const { id: bookId } = useParams<{ id: string }>();
   const { activeSidebar, setSidebar } = useSidebarState();
   const { immersiveMode, setImmersiveMode } = useReaderUIStore(useShallow(state => ({
     immersiveMode: state.immersiveMode,
@@ -176,9 +177,12 @@ export const ReaderChrome: React.FC<ReaderChromeProps> = ({ title, onOpenSyncPan
           size="icon"
           data-testid="reader-settings-button"
           aria-label="Settings"
-          // Phase 8 §B: settings are URL-addressable (/settings/:tab); the
-          // overlay renders over the library route — back returns here.
-          onClick={() => navigate('/settings')}
+          // Settings are URL-addressable. Opening from the reader nests under
+          // /read/:id/settings so ReaderShell stays mounted (the book — and the
+          // "This Book" lexicon scope — stays live behind the overlay); back
+          // returns here. Falls back to the top-level /settings if the book id
+          // is somehow absent.
+          onClick={() => navigate(bookId ? `/read/${bookId}/settings` : '/settings')}
           className="rounded-full text-muted-foreground"
         >
           <Settings className="w-5 h-5" />

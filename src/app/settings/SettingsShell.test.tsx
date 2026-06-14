@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Outlet, RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { SettingsShell } from './SettingsShell';
 import { SETTINGS_PANELS, resolveSettingsTab } from './registry';
 import TTSPanel from './panels/TTSPanel';
@@ -57,6 +57,28 @@ function renderShellAt(path: string) {
     [
       { path: '/', element: <div data-testid="home" /> },
       { path: '/settings/:tab?', element: <SettingsShell /> },
+    ],
+    { initialEntries: ['/', path], initialIndex: 1 },
+  );
+  const view = render(<RouterProvider router={router} />);
+  return { router, ...view };
+}
+
+// Mirrors the production route tree where settings nests under the reader so
+// ReaderShell stays mounted behind the overlay (the parent renders <Outlet/>).
+function renderShellNestedAt(path: string) {
+  const router = createMemoryRouter(
+    [
+      { path: '/', element: <div data-testid="home" /> },
+      {
+        path: '/read/:id',
+        element: (
+          <div data-testid="reader">
+            <Outlet />
+          </div>
+        ),
+        children: [{ path: 'settings/:tab?', element: <SettingsShell /> }],
+      },
     ],
     { initialEntries: ['/', path], initialIndex: 1 },
   );
@@ -138,6 +160,34 @@ describe('SettingsShell', () => {
       expect(router.state.location.pathname).toBe('/');
     });
     expect(screen.getByTestId('home')).toBeInTheDocument();
+  });
+
+  // Regression: opening settings from a book used to unmount the reader and
+  // drop the "This Book" lexicon scope. Nesting settings under /read/:id keeps
+  // the reader mounted; the shell must keep tab hops and close within that base.
+  it('nested under the reader: tab activation stays under /read/:id/settings', async () => {
+    const { router } = renderShellNestedAt('/read/b1/settings/general');
+
+    // The reader stays mounted behind the overlay.
+    expect(screen.getByTestId('reader')).toBeInTheDocument();
+
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Dictionary' }));
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/read/b1/settings/dictionary');
+    });
+    expect(screen.getByTestId('reader')).toBeInTheDocument();
+  });
+
+  it('nested under the reader: cold-close returns to the book, not the library', async () => {
+    const { router } = renderShellNestedAt('/read/b1/settings/dictionary');
+
+    fireEvent.click(await screen.findByTestId('settings-close-button'));
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/read/b1');
+    });
+    expect(screen.getByTestId('reader')).toBeInTheDocument();
   });
 });
 

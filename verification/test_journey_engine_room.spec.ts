@@ -52,7 +52,8 @@ test('Engine Room Journey Test', async ({ page }) => {
   await expect(page).toHaveURL(/.*\/read\/.*/);
   await page.waitForTimeout(2000);
 
-  // Click Settings (Gear) — navigates to /settings (overlay over the library).
+  // Click Settings (Gear) — nests Settings under /read/:id/settings (overlay
+  // over the live reader, which stays mounted behind it).
   const readerSettingsBtn = page.getByTestId('reader-settings-button');
   await readerSettingsBtn.click({ force: true });
 
