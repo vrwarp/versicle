@@ -24,7 +24,7 @@ test("recovery flow", async ({ page }) => {
 
   // 3. Go to Recovery Tab
   console.log("Navigating to Recovery Tab...");
-  const recoveryTab = page.getByRole("button", { name: "Recovery" });
+  const recoveryTab = page.getByRole("tab", { name: "Recovery" });
   await expect(recoveryTab).toBeVisible();
   await recoveryTab.click();
 

@@ -1,81 +1,86 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useLibraryStore } from '../../store/useLibraryStore';
-import { usePreferencesStore } from '../../store/usePreferencesStore';
-import { useAllBooks } from '../../store/selectors';
-import { createLogger } from '../../lib/logger';
-import { useToastStore } from '../../store/useToastStore';
+import React, { useEffect, useState, useRef, useCallback, useMemo, Suspense } from 'react';
+import { useLibraryStore } from '@store/useLibraryStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import { useAllBooks } from '@store/libraryViewStore';
+import { createLogger } from '@lib/logger';
+import { useToastStore } from '@store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
 import { SyncPulseIndicator } from '../sync/SyncPulseIndicator';
 import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Loader2 } from 'lucide-react';
-import { useUIStore } from '../../store/useUIStore';
 import { Button } from '../ui/Button';
-import { GlobalNotesView } from '../notes/GlobalNotesView';
 import { ImportSourceDialog } from './ImportSourceDialog';
 import { ContentMissingDialog } from './ContentMissingDialog';
 import { DriveImportDialog } from '../drive/DriveImportDialog';
-import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
-import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
+import { getGoogleAuthClient } from '@domains/google';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { useShallow } from 'zustand/react/shallow';
 import { DeleteBookDialog } from './DeleteBookDialog';
 import { OffloadBookDialog } from './OffloadBookDialog';
-import type { BookMetadata } from '../../types/db';
+import type { BookMetadata } from '~types/book';
 import { ReprocessingInterstitial } from './ReprocessingInterstitial';
-import { CURRENT_BOOK_VERSION } from '../../lib/constants';
+import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { DuplicateBookError } from '../../types/errors';
+import { DuplicateBookError } from '~types/errors';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
-import { useNavigationGuard } from '../../hooks/useNavigationGuard';
-import { BackButtonPriority } from '../../store/useBackNavigationStore';
+import { useNavigationGuard } from '@hooks/useNavigationGuard';
+import { BackButtonPriority } from '@store/useBackNavigationStore';
+import { useImportController } from '@app/library/useImportController';
+import { presentError } from '@app/errors/presentError';
 import { LibrarySearchBar, type LibrarySearchBarRef } from './LibrarySearchBar';
+import { compareTitles } from '@kernel/locale/format';
 
 /**
  * The main library view component.
  * Displays the user's collection of books in a responsive grid or list and allows importing new books.
  * Handles fetching books from the store.
  *
+ * Phase 8 §A/§J: the view context is ROUTE state, not a synced preference —
+ * `/` renders the library, `/notes` renders this same shell in notes
+ * context (the header Select navigates). The notes view itself is lazy so
+ * it stays out of the boot-surface chunk.
+ *
  * @returns A React component rendering the library interface.
  */
 const logger = createLogger('LibraryView');
 
-export const LibraryView: React.FC = () => {
+const GlobalNotesViewLazy = React.lazy(() =>
+  import('../notes/GlobalNotesView').then((m) => ({ default: m.GlobalNotesView })),
+);
+
+interface LibraryViewProps {
+  /** Which context this route renders: the library grid or global notes. */
+  context?: 'library' | 'notes';
+}
+
+export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' }) => {
   // OPTIMIZATION: Use useShallow to prevent re-renders when importProgress/uploadProgress changes
   const books = useAllBooks();
   const {
     isLoading,
     error,
-    addBook,
-    restoreBook,
-    isImporting,
-    hydrateStaticMetadata
+    isImporting
   } = useLibraryStore(useShallow(state => ({
     isLoading: state.isLoading,
     error: state.error,
-    addBook: state.addBook,
-    restoreBook: state.restoreBook,
-    isImporting: state.isImporting,
-    hydrateStaticMetadata: state.hydrateStaticMetadata
+    isImporting: state.isImporting
   })));
+  const controller = useImportController();
 
 
-  const { libraryLayout, setLibraryLayout, libraryFilterMode, setLibraryFilterMode, librarySortOrder, setLibrarySortOrder, activeContext, setActiveContext } = usePreferencesStore(useShallow(state => ({
+  const { libraryLayout, setLibraryLayout, libraryFilterMode, setLibraryFilterMode, librarySortOrder, setLibrarySortOrder } = usePreferencesStore(useShallow(state => ({
     libraryLayout: state.libraryLayout,
     setLibraryLayout: state.setLibraryLayout,
     libraryFilterMode: state.libraryFilterMode,
     setLibraryFilterMode: state.setLibraryFilterMode,
     librarySortOrder: state.librarySortOrder,
-    setLibrarySortOrder: state.setLibrarySortOrder,
-    activeContext: state.activeContext,
-    setActiveContext: state.setActiveContext
+    setLibrarySortOrder: state.setLibrarySortOrder
   })));
 
   // Alias for backward compatibility in component
   const viewMode = libraryLayout || 'grid';
   const setViewMode = setLibraryLayout;
-
-  const { setGlobalSettingsOpen } = useUIStore();
   const showToast = useToastStore(state => state.showToast);
   const searchBarRef = useRef<LibrarySearchBarRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -105,62 +110,36 @@ export const LibraryView: React.FC = () => {
 
   // Check for reprocessing request from navigation state
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const state = location.state as any;
-    if (state && state.reprocessBookId) {
+    const state = location.state as { reprocessBookId?: string } | null;
+    const reprocessBookId = state?.reprocessBookId;
+    if (reprocessBookId) {
       // Clear state to prevent reopening on reload/navigation
       window.history.replaceState({}, document.title);
       // Defer state update to avoid triggering cascading renders
-      setTimeout(() => setReprocessingBookId(state.reprocessBookId), 0);
+      setTimeout(() => setReprocessingBookId(reprocessBookId), 0);
     }
   }, [location.state]);
 
-  // Phase 2: Hydrate static metadata after Yjs sync completes
-  // Wait for books to be populated by Yjs before hydrating static metadata
-  const bookCount = books.length; // useAllBooks returns array
-  const { staticMetadata, offloadedBookIds, hasHydrated } = useLibraryStore(useShallow(state => ({
+  const { staticMetadata, offloadedBookIds } = useLibraryStore(useShallow(state => ({
     staticMetadata: state.staticMetadata,
-    offloadedBookIds: state.offloadedBookIds,
-    hasHydrated: state.hasHydrated
+    offloadedBookIds: state.offloadedBookIds
   })));
 
-  // Track previous book count to detect when new books sync
-  const prevBookCountRef = useRef(0);
-
-  useEffect(() => {
-    // Only hydrate when:
-    // 1. Books exist AND book count increased (new books added)
-    // 2. OR books exist but nothing has been hydrated yet (initial load on fresh device)
-    const bookCountIncreased = bookCount > prevBookCountRef.current;
-    const needsInitialHydration = bookCount > 0 && !hasHydrated;
-
-    if (bookCountIncreased || needsInitialHydration) {
-      hydrateStaticMetadata();
-    }
-
-    prevBookCountRef.current = bookCount;
-  }, [bookCount, hasHydrated, hydrateStaticMetadata]);
-
-  // Phase 2: fetchBooks removed - data auto-syncs via Yjs middleware
+  // Phase 7 (D16 paid): static-metadata hydration has ONE owner — the
+  // LibraryService inventory-delta subscription started by the boot task
+  // (src/app/boot/whenHydrated.ts). The prevBookCountRef heuristic that
+  // duplicated it here is gone.
 
   // Phase 5: Drive Import
   const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
   const [isImportSourceOpen, setIsImportSourceOpen] = useState(false);
   const [isContentMissingOpen, setIsContentMissingOpen] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
-  const { isServiceConnected } = useGoogleServicesStore();
-  const isDriveConnected = isServiceConnected('drive');
 
   const handleBrowseDrive = async () => {
     try {
-      if (!isDriveConnected) {
-        // Try to connect/get token which triggers flow if needed? 
-        // actually GoogleIntegrationManager.connectService('drive') is better if we want to force connect.
-        // But let's check token.
-        await googleIntegrationManager.getValidToken('drive');
-      } else {
-        await googleIntegrationManager.getValidToken('drive');
-      }
+      // User gesture: silent token when cached, interactive connect otherwise.
+      await getGoogleAuthClient().getTokenInteractive('drive');
       setIsDriveImportOpen(true);
     } catch (error) {
       console.error("Failed to access Drive", error);
@@ -178,7 +157,7 @@ export const LibraryView: React.FC = () => {
 
     setIsRestoring(true);
     try {
-      await restoreBook(bookToRestore.id, file);
+      await controller.restoreBook(bookToRestore.id, file);
       showToast(`Restored "${bookToRestore.title}"`, 'success');
       setIsContentMissingOpen(false);
       setBookToRestore(null);
@@ -226,13 +205,13 @@ export const LibraryView: React.FC = () => {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      addBook(file).then(() => {
+      controller.importFile(file).then(() => {
         showToast("Book imported successfully", "success");
       }).catch((err) => {
         if (err instanceof DuplicateBookError) {
           setDuplicateQueue(prev => [...prev, file]);
         } else {
-          showToast(`Import failed: ${err.message}`, "error");
+          showToast(`Import failed: ${presentError(err)}`, "error");
         }
       });
     }
@@ -245,11 +224,10 @@ export const LibraryView: React.FC = () => {
   const handleConfirmReplace = async () => {
     if (!currentDuplicate) return;
     try {
-      await addBook(currentDuplicate, { overwrite: true });
+      await controller.replaceFile(currentDuplicate);
       showToast("Book replaced successfully", "success");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      showToast(`Replace failed: ${msg}`, "error");
+      showToast(`Replace failed: ${presentError(e)}`, "error");
       throw e;
     }
   };
@@ -286,17 +264,17 @@ export const LibraryView: React.FC = () => {
         return;
       }
 
-      addBook(file).then(() => {
+      controller.importFile(file).then(() => {
         showToast("Book imported successfully", "success", 5000);
       }).catch((err) => {
         if (err instanceof DuplicateBookError) {
           setDuplicateQueue(prev => [...prev, file]);
         } else {
-          showToast(`Import failed: ${err.message}`, "error");
+          showToast(`Import failed: ${presentError(err)}`, "error");
         }
       });
     }
-  }, [addBook, showToast]);
+  }, [controller, showToast]);
 
   const triggerFileUpload = () => {
     fileInputRef.current?.click();
@@ -320,7 +298,7 @@ export const LibraryView: React.FC = () => {
     const isDownloadedFilter = libraryFilterMode === 'downloaded';
 
     // 1 & 2. Mapless single-pass filter to prevent intermediate array allocations and GC thrashing
-    const filtered: BookMetadata[] = [];
+    const filtered: typeof books = [];
     for (let i = 0; i < books.length; i++) {
       const book = books[i];
 
@@ -357,11 +335,11 @@ export const LibraryView: React.FC = () => {
           return (b.lastRead || 0) - (a.lastRead || 0);
         }
         case 'author':
-          // Sort by author ascending (A-Z)
-          return (a.author || '').localeCompare(b.author || '');
+          // Sort by author ascending (A-Z) — cached numeric collator (I18N-10)
+          return compareTitles(a.author || '', b.author || '');
         case 'title':
-          // Sort by title ascending (A-Z)
-          return (a.title || '').localeCompare(b.title || '');
+          // Sort by title ascending (A-Z) — cached numeric collator (I18N-10)
+          return compareTitles(a.title || '', b.title || '');
         default:
           return 0;
       }
@@ -496,7 +474,7 @@ export const LibraryView: React.FC = () => {
         {/* Top Row: Title and Actions */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <Select value={activeContext || 'library'} onValueChange={(val) => setActiveContext(val as 'library' | 'notes')}>
+            <Select value={context} onValueChange={(val) => navigate(val === 'notes' ? '/notes' : '/')}>
               <SelectTrigger className="w-auto text-2xl sm:text-3xl font-bold border-0 shadow-none p-0 h-auto focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none flex-shrink-0" aria-label="Select view context">
                 <SelectValue />
               </SelectTrigger>
@@ -509,7 +487,7 @@ export const LibraryView: React.FC = () => {
           </div>
 
           <div className="flex gap-2">
-            {(activeContext || 'library') === 'library' && (
+            {context === 'library' && (
               <>
                 <Button
                   variant="secondary"
@@ -545,7 +523,7 @@ export const LibraryView: React.FC = () => {
             <Button
               variant="secondary"
               size="icon"
-              onClick={() => setGlobalSettingsOpen(true)}
+              onClick={() => navigate('/settings')}
               className="shadow-sm"
               aria-label="Settings"
               data-testid="header-settings-button"
@@ -556,7 +534,7 @@ export const LibraryView: React.FC = () => {
         </div>
 
         {/* Combined Row: Search and Sort */}
-        {(activeContext || 'library') === 'library' && (
+        {context === 'library' && (
           <div className="flex flex-col gap-4 md:flex-row-reverse md:items-center md:justify-between">
             {/* Search Bar */}
             <div className="w-full md:w-72">
@@ -635,11 +613,19 @@ export const LibraryView: React.FC = () => {
           <Loader2 className="h-12 w-12 animate-spin text-primary" aria-hidden="true" />
           <span className="sr-only" aria-live="polite">Loading library...</span>
         </div>
-      ) : activeContext === 'notes' ? (
-        <GlobalNotesView onContentMissing={(bookId) => {
-          const book = books.find(b => b.id === bookId);
-          if (book) handleRestore(book);
-        }} />
+      ) : context === 'notes' ? (
+        <Suspense
+          fallback={
+            <div className="flex justify-center items-center py-12 flex-1" role="status" aria-label="Loading notes">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" aria-hidden="true" />
+            </div>
+          }
+        >
+          <GlobalNotesViewLazy onContentMissing={(bookId) => {
+            const book = books.find(b => b.id === bookId);
+            if (book) handleRestore(book);
+          }} />
+        </Suspense>
       ) : (
         <section className="flex-1 w-full">
           {books.length === 0 ? (

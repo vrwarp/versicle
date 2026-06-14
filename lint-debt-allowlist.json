@@ -1,0 +1,65 @@
+{
+  "$comment": "P9 lint-debt allowlist (plan/overhaul/README.md \u00a74 rule 3; checked by scripts/lint-debt-ratchet.mjs, wired into ci.yml). Phase 0 baseline: 138 `as any` sites / 245 eslint-disable directives in production src/. Everything mechanically fixable was driven to zero in P9; THIS is the irreducible rest \u2014 every entry carries its justification. Counts may only DECREASE (run --update to lock improvements in); a new entry requires a reason reviewers accept. Vendored fork source (packages/*/src) is out of scope by the same diff-minimal policy as the eslint ignore block.",
+  "files": {
+    "src/components/SmartLinkDialog.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "react-hooks/exhaustive-deps: the GenAI mapping effect deliberately keys on [open] only \u2014 re-running on mappings/isLoading deltas would re-fire the paid GenAI call it guards."
+    },
+    "src/components/reader/TTSQueue.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "react-hooks/exhaustive-deps: follow-scroll effect intentionally tracks the active sentence index only; reacting to the full queue identity would scroll on every snapshot broadcast."
+    },
+    "src/components/settings/DiagnosticsTab.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "react-hooks/exhaustive-deps: the mount-only flight-recorder snapshot load is a deliberate one-shot read of a non-reactive source (the diagnostics repo)."
+    },
+    "src/data/schema.ts": {
+      "asAny": 9,
+      "colonAny": 0,
+      "disables": 9,
+      "reason": "C1 migration registry (Phase 3 IDB v25): upgrade steps address LEGACY store names that no longer exist in the current TypedDB union by design \u2014 the registry replays history, so its store handles cannot be typed against the v25 schema. Shrinks only if idb ever types versioned schemas."
+    },
+    "src/domains/library/import/extract.ts": {
+      "asAny": 3,
+      "colonAny": 0,
+      "disables": 3,
+      "reason": "C8-sanctioned ingestion-side epubjs preamble (the ONE extractor; eslint carve-out names this file): epub.js's constructor/`book.loaded` surface is untyped upstream \u2014 the casts sit exactly on the vendor boundary."
+    },
+    "src/domains/reader/engine/EpubJsEngine.ts": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "@typescript-eslint/no-this-alias: epub.js hook callbacks rebind `this`; the alias is the documented upstream pattern inside the sole sanctioned epubjs runtime importer (C7)."
+    },
+    "src/domains/reader/engine/epubTheming.ts": {
+      "asAny": 2,
+      "colonAny": 0,
+      "disables": 2,
+      "reason": "C7 vendor boundary: `rendition.themes` is untyped in epub.js \u2014 the two casts wrap its private theme-registration surface inside the reader engine directory."
+    },
+    "src/domains/reader/engine/offscreen/offscreen-renderer.ts": {
+      "asAny": 3,
+      "colonAny": 2,
+      "disables": 5,
+      "reason": "C7 vendor boundary (engine carve-out): the offscreen renderer walks epub.js spine/rendition internals (`spine.each`, `getContents()` array shape) that upstream leaves untyped."
+    },
+    "src/hooks/useCfiCoordinates.ts": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "react-hooks/exhaustive-deps: the hook takes a caller-supplied `...dependencies` spread the rule cannot statically verify \u2014 the disable is the documented cost of the variadic dependency contract."
+    },
+    "src/store/useTTSSettingsStore.ts": {
+      "asAny": 0,
+      "colonAny": 1,
+      "disables": 1,
+      "reason": "LegacyEnvelope.state is a parsed PRE-SCHEMA `tts-storage` persist blob (v1/v2/v3): its shapes predate typing and are pinned by the captured-blob fixtures (src/store/__fixtures__/ttsStorageFixtures); the migration chain is copied verbatim from the deleted store. Dies when the legacy key retires."
+    }
+  }
+}

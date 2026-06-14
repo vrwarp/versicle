@@ -1,0 +1,111 @@
+{
+  "state": {
+    "activeLanguage": "en",
+    "profiles": {
+      "en": {
+        "voiceId": "en_US-lessac-medium",
+        "rate": 1,
+        "pitch": 1,
+        "volume": 1,
+        "minSentenceLength": 36
+      },
+      "zh": {
+        "voiceId": "zh_CN-huayan-medium",
+        "rate": 1.25,
+        "pitch": 1,
+        "volume": 1,
+        "minSentenceLength": 6
+      }
+    },
+    "rate": 1,
+    "pitch": 1,
+    "voice": {
+      "id": "en_US-lessac-medium",
+      "name": "Lessac (en_US)",
+      "lang": "en-US",
+      "provider": "piper"
+    },
+    "providerId": "piper",
+    "apiKeys": {
+      "google": "AIza-FIXTURE-google-key-not-real",
+      "openai": "",
+      "lemonfox": ""
+    },
+    "customAbbreviations": [
+      "Mr.",
+      "Mrs.",
+      "Ms.",
+      "Dr.",
+      "Prof.",
+      "Gen.",
+      "Rep.",
+      "Sen.",
+      "St.",
+      "vs.",
+      "Jr.",
+      "Sr.",
+      "e.g.",
+      "i.e.",
+      "Rev.",
+      "Gal."
+    ],
+    "alwaysMerge": [
+      "Mr.",
+      "Mrs.",
+      "Ms.",
+      "Prof.",
+      "Gen.",
+      "Rep.",
+      "Sen."
+    ],
+    "sentenceStarters": [
+      "He",
+      "She",
+      "It",
+      "They",
+      "We",
+      "You",
+      "I",
+      "The",
+      "A",
+      "An",
+      "This",
+      "That",
+      "These",
+      "Those",
+      "Here",
+      "There",
+      "Where",
+      "When",
+      "Why",
+      "How",
+      "But",
+      "And",
+      "Or",
+      "So",
+      "Then",
+      "It's",
+      "He's",
+      "She's",
+      "That's",
+      "There's",
+      "Here's",
+      "I'm",
+      "You're",
+      "We're",
+      "They're",
+      "What",
+      "Who",
+      "What's",
+      "Who's"
+    ],
+    "minSentenceLength": 36,
+    "enableCostWarning": true,
+    "prerollEnabled": false,
+    "sanitizationEnabled": true,
+    "isBibleLexiconEnabled": true,
+    "backgroundAudioMode": "silence",
+    "whiteNoiseVolume": 0.1
+  },
+  "version": 3
+}

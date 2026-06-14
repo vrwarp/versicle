@@ -5,7 +5,7 @@ import { PasswordInput } from '../ui/PasswordInput';
 import { Button } from '../ui/Button';
 import { Loader2, Trash2 } from 'lucide-react';
 
-export interface FirebaseConfig {
+interface FirebaseConfig {
     apiKey: string;
     authDomain: string;
     projectId: string;
@@ -15,9 +15,9 @@ export interface FirebaseConfig {
     measurementId?: string;
 }
 
-import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
-import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
-import type { FirebaseAuthStatus } from '../../lib/sync/FirestoreSyncManager';
+import { getGoogleAuthClient } from '@domains/google';
+import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
+import type { FirebaseAuthStatus } from '~types/sync';
 
 export interface SyncSettingsTabProps {
     // Device
@@ -39,13 +39,14 @@ export interface SyncSettingsTabProps {
 
 import { Modal, ModalContent, ModalHeader, ModalTitle } from '../ui/Modal';
 import { DriveFolderPicker } from '../drive/DriveFolderPicker';
-import { useDriveStore } from '../../store/useDriveStore';
-import { DriveScannerService } from '../../lib/drive/DriveScannerService';
-import { useToastStore } from '../../store/useToastStore';
-import { getFirestoreSyncManager } from '../../lib/sync/FirestoreSyncManager';
-import { useSyncStore } from '../../lib/sync/hooks/useSyncStore';
-import { CURRENT_SCHEMA_VERSION } from '../../store/yjs-provider';
-import type { WorkspaceMetadata } from '../../types/workspace';
+import { useDriveStore } from '@store/useDriveStore';
+import { getDriveLibrarySync } from '@domains/google';
+import { useToastStore } from '@store/useToastStore';
+import { getSyncOrchestratorAsync } from '@app/sync/createSync';
+import { useSyncStore } from '@store/useSyncStore';
+import { CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
+import type { WorkspaceMetadata } from '~types/workspace';
+import { useConfirm } from '../ui/ConfirmDialog';
 
 export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     currentDeviceId,
@@ -111,6 +112,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     const { linkedFolderName, setLinkedFolder } = useDriveStore();
     const [isScanning, setIsScanning] = React.useState(false);
     const { showToast } = useToastStore();
+    const confirm = useConfirm();
 
     // Workspace State
     const [workspaces, setWorkspaces] = React.useState<WorkspaceMetadata[]>([]);
@@ -119,13 +121,15 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     const [isCreatingWorkspace, setIsCreatingWorkspace] = React.useState(false);
     const [isSwitchingWorkspace, setIsSwitchingWorkspace] = React.useState<string | null>(null);
     const [isDeletingWorkspace, setIsDeletingWorkspace] = React.useState<string | null>(null);
+    const [isPurgingDeleted, setIsPurgingDeleted] = React.useState(false);
     const activeWorkspaceId = useSyncStore(state => state.activeWorkspaceId);
 
     // Load workspaces when signed in
     React.useEffect(() => {
         if (firebaseAuthStatus === 'signed-in') {
             setIsLoadingWorkspaces(true);
-            getFirestoreSyncManager().listWorkspaces()
+            getSyncOrchestratorAsync()
+                .then(orchestrator => orchestrator.listWorkspaces())
                 .then(setWorkspaces)
                 .catch(err => console.error('Failed to load workspaces:', err))
                 .finally(() => setIsLoadingWorkspaces(false));
@@ -136,11 +140,11 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
         if (!newWorkspaceName.trim()) return;
         setIsCreatingWorkspace(true);
         try {
-            await getFirestoreSyncManager().createWorkspace(newWorkspaceName.trim());
+            await (await getSyncOrchestratorAsync()).createWorkspace(newWorkspaceName.trim());
             showToast(`Workspace "${newWorkspaceName.trim()}" created!`, 'success');
             setNewWorkspaceName('');
             // Refresh workspace list
-            const updated = await getFirestoreSyncManager().listWorkspaces();
+            const updated = await (await getSyncOrchestratorAsync()).listWorkspaces();
             setWorkspaces(updated);
         } catch (err) {
             console.error('Failed to create workspace:', err);
@@ -153,7 +157,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     const handleSwitchWorkspace = async (workspaceId: string) => {
         setIsSwitchingWorkspace(workspaceId);
         try {
-            await getFirestoreSyncManager().switchWorkspace(workspaceId);
+            await (await getSyncOrchestratorAsync()).switchWorkspace(workspaceId);
             // switchWorkspace triggers reload, so this won't typically reach here
         } catch (err) {
             console.error('Failed to switch workspace:', err);
@@ -161,17 +165,40 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
         }
     };
 
+    const handlePurgeDeletedWorkspaces = async () => {
+        setIsPurgingDeleted(true);
+        try {
+            // One-time maintenance (P4-6): pre-honest-delete versions left
+            // history/maintenance/metadata docs and Storage blobs behind on
+            // every workspace deletion. Walks ALL tombstoned workspaces and
+            // purges the residue; the result toast rides the
+            // 'workspace-purged' SyncEvent. Safe to run repeatedly.
+            await (await getSyncOrchestratorAsync()).purgeDeletedWorkspaces();
+        } catch (err) {
+            console.error('Failed to purge deleted workspaces:', err);
+            showToast('Failed to purge deleted workspaces.', 'error');
+        } finally {
+            setIsPurgingDeleted(false);
+        }
+    };
+
     const handleDeleteWorkspace = async (workspaceId: string, name: string) => {
-        if (!confirm(`Are you sure you want to delete workspace "${name}"?\n\nThis will permanently reclaim cloud storage for this workspace. Your local data will be preserved but sync will be disabled for this workspace ID.`)) {
+        const proceed = await confirm({
+            titleKey: 'syncSettings.deleteWorkspace.title',
+            bodyKey: 'syncSettings.deleteWorkspace.body',
+            params: { name },
+            danger: true,
+        });
+        if (!proceed) {
             return;
         }
 
         setIsDeletingWorkspace(workspaceId);
         try {
-            await getFirestoreSyncManager().deleteWorkspace(workspaceId);
+            await (await getSyncOrchestratorAsync()).deleteWorkspace(workspaceId);
             showToast(`Workspace "${name}" deleted.`, 'success');
             // Refresh workspace list
-            const updated = await getFirestoreSyncManager().listWorkspaces();
+            const updated = await (await getSyncOrchestratorAsync()).listWorkspaces();
             setWorkspaces(updated);
         } catch (err) {
             console.error('Failed to delete workspace:', err);
@@ -191,7 +218,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
 
         setIsScanning(true);
         try {
-            const newFiles = await DriveScannerService.checkForNewFiles();
+            const newFiles = await getDriveLibrarySync().checkForNewFiles({ interactive: true });
             if (newFiles.length > 0) {
                 showToast(`Found ${newFiles.length} new books in "${linkedFolderName}".`, 'success');
             } else {
@@ -209,7 +236,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
         setIsDriveConnecting(true);
         try {
             // Pass login_hint if we have the firebase email to encourage same-account usage
-            await googleIntegrationManager.connectService('drive', firebaseUserEmail || undefined);
+            await getGoogleAuthClient().connect('drive', firebaseUserEmail || undefined);
         } catch (error) {
             console.error("Failed to connect Drive", error);
         } finally {
@@ -219,7 +246,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
 
     const handleDriveDisconnect = async () => {
         try {
-            await googleIntegrationManager.disconnectService('drive');
+            await getGoogleAuthClient().disconnect('drive');
             // Optionally clear linked folder on disconnect?
             // useDriveStore.getState().clearLinkedFolder();
         } catch (error) {
@@ -444,6 +471,25 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                         {isCreatingWorkspace ? (
                                             <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
                                         ) : 'Create'}
+                                    </Button>
+                                </div>
+
+                                {/* Maintenance: purge residuals of past deletions (P4-6) */}
+                                <div className="flex items-center justify-between gap-2 pt-2">
+                                    <p className="text-[11px] text-muted-foreground leading-snug">
+                                        Older versions left cloud data behind when deleting
+                                        workspaces. Run once to reclaim it.
+                                    </p>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="shrink-0"
+                                        onClick={handlePurgeDeletedWorkspaces}
+                                        disabled={isPurgingDeleted || isDeletingWorkspace !== null}
+                                    >
+                                        {isPurgingDeleted ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                                        ) : 'Purge deleted workspaces'}
                                     </Button>
                                 </div>
                             </div>

@@ -3,9 +3,8 @@ import { GoogleTTSProvider } from './GoogleTTSProvider';
 import type { TTSOptions } from './types';
 
 // Mock base dependencies to avoid instantiation issues if any
-vi.mock('../AudioElementPlayer');
-vi.mock('../TTSCache');
-vi.mock('../CostEstimator');
+// No module mocks (vi.mock is banned in providers/ since 5a-PR2): these tests only
+// exercise init/getVoices/fetchAudioData, which never touch the sink or the cache.
 
 describe('GoogleTTSProvider', () => {
   let provider: GoogleTTSProvider;
@@ -142,7 +141,6 @@ describe('GoogleTTSProvider', () => {
             voice: { name: 'en-US-Standard-A', languageCode: 'en-US' },
             audioConfig: {
               audioEncoding: 'MP3',
-              speakingRate: 1.0,
             },
             enableTimePointing: ["SSML_MARK"]
           })
@@ -153,6 +151,23 @@ describe('GoogleTTSProvider', () => {
       expect(result.audio?.size).toBe(5);
       expect(result.alignment).toHaveLength(1);
       expect(result.alignment![0].timeSeconds).toBe(0.1);
+    });
+  });
+
+  describe('regression: speed policy — synthesis always at 1.0', () => {
+    it('does not send speakingRate even for a non-1.0 playback speed', async () => {
+      const audioContent = Buffer.from('Hello').toString('base64');
+      (global.fetch as Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ audioContent })
+      });
+
+      // @ts-expect-error - accessing protected
+      await provider.fetchAudioData('Hello', { voiceId: 'en-US-Standard-A', speed: 1.5 });
+
+      const body = JSON.parse((global.fetch as Mock).mock.calls[0][1].body);
+      expect(body.audioConfig.speakingRate).toBeUndefined();
+      expect(JSON.stringify(body)).not.toContain('1.5');
     });
   });
 });

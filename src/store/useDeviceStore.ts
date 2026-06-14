@@ -1,8 +1,20 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
 import { UAParser } from 'ua-parser-js';
-import { yDoc, getYjsOptions } from './yjs-provider';
-import type { DeviceInfo, DeviceProfile } from '../types/device';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
+import type { DeviceInfo, DeviceProfile } from '~types/device';
+
+/**
+ * Replication declaration (aggregated by src/store/registry.ts).
+ * Flipped to merge-defaults + scopedDiff in flip wave 1 (phase2-fork-surgery.md
+ * §2.6 #3): the registry self-heals — registerCurrentDevice runs every boot.
+ * No hydration-fallback canaries existed.
+ */
+export const DEVICES_STORE_DEF: SyncedStoreDef<'devices'> = {
+    name: 'devices',
+    syncedKeys: ['devices'],
+    hydration: 'merge-defaults',
+    scopedDiff: true,
+};
 import packageJson from '../../package.json';
 
 /**
@@ -40,9 +52,8 @@ interface DeviceState {
 const HEARTBEAT_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes
 
 export const useDeviceStore = create<DeviceState>()(
-    yjs(
-        yDoc,
-        'devices', // Shared map name in Yjs
+    defineSyncedStore(
+        DEVICES_STORE_DEF,
         (set) => ({
             devices: {},
 
@@ -126,11 +137,9 @@ export const useDeviceStore = create<DeviceState>()(
 
             deleteDevice: (deviceId) =>
                 set((state) => {
-                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
                     const { [deviceId]: _removed, ...rest } = state.devices;
                     return { devices: rest };
                 }),
-        }),
-        getYjsOptions()
+        })
     )
 );

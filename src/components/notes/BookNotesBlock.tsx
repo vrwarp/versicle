@@ -1,13 +1,13 @@
 import React from 'react';
-import type { BookAnnotationGroup } from '../../hooks/useGroupedAnnotations';
-import { useBook } from '../../store/selectors';
+import type { BookAnnotationGroup } from '@hooks/useGroupedAnnotations';
+import { useBook } from '@store/libraryViewStore';
 import { AnnotationCard } from './AnnotationCard';
 import { Download, BookOpen, Link } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { exportNotesToMarkdown } from '../../lib/export-notes';
+import { exportNotesToMarkdown } from '@lib/export-notes';
 import { BookCover } from '../library/BookCover';
 import { ReassignBookDialog } from './ReassignBookDialog';
-import { useAnnotationStore } from '../../store/useAnnotationStore';
+import { useAnnotationStore } from '@store/useAnnotationStore';
 
 interface BookNotesBlockProps {
     group: BookAnnotationGroup;
@@ -60,13 +60,13 @@ export const BookNotesBlock: React.FC<BookNotesBlockProps> = ({ group, onNavigat
             >
                 <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-14 shrink-0 shadow-sm rounded overflow-hidden relative border border-border/50 bg-muted flex items-center justify-center">
-                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                        {book ? <BookCover book={book as any} onDelete={() => { }} onOffload={() => { }} onRestore={() => { }} showActions={false} /> : <BookOpen className="w-6 h-6 text-muted-foreground/30" />}
+                        {book ? <BookCover book={book} onDelete={() => { }} onOffload={() => { }} onRestore={() => { }} showActions={false} /> : <BookOpen className="w-6 h-6 text-muted-foreground/30" />}
                         <div className="absolute inset-0 bg-black/10 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                             <BookOpen className="text-white w-4 h-4" />
                         </div>
                     </div>
-                    <div className="min-w-0">
+                    {/* lang: book-sourced text carries the CONTENT language (i18n ADR §3) */}
+                    <div className="min-w-0" lang={book?.language}>
                         <h3 className="font-bold text-base truncate" title={title}>{title}</h3>
                         <p className="text-sm text-muted-foreground truncate" title={author}>{author}</p>
                     </div>
@@ -103,6 +103,7 @@ export const BookNotesBlock: React.FC<BookNotesBlockProps> = ({ group, onNavigat
                     <AnnotationCard
                         key={ann.id}
                         annotation={ann}
+                        contentLang={book?.language}
                         onNavigate={(cfi) => onNavigate(group.bookId, cfi)}
                     />
                 ))}

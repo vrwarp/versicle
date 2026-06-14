@@ -11,7 +11,7 @@ import {
     SelectValue,
 } from "./ui/Select";
 import { Star, BookOpen, Check, Clock, Ban } from 'lucide-react';
-import type { ReadingListEntry } from '../types/db';
+import type { ReadingListEntry } from '~types/user-data';
 
 interface EditReadingListEntryDialogProps {
     /** Whether the dialog is open. */

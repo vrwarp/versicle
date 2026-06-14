@@ -1,5 +1,8 @@
+import { egress } from '@kernel/net';
 import { BaseCloudProvider } from './BaseCloudProvider';
 import type { TTSOptions, SpeechSegment, Timepoint } from './types';
+import type { AudioSink } from '../engine/AudioSink';
+import type { TTSCache } from '../TTSCache';
 
 /**
  * TTS Provider for Google Cloud Text-to-Speech API.
@@ -9,8 +12,8 @@ export class GoogleTTSProvider extends BaseCloudProvider {
   id = 'google';
   private apiKey: string | null = null;
 
-  constructor(apiKey?: string) {
-    super();
+  constructor(apiKey?: string, audioSink?: AudioSink, cache?: TTSCache) {
+    super(audioSink, cache);
     if (apiKey) {
       this.apiKey = apiKey;
     }
@@ -53,7 +56,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
   private async fetchVoices() {
       if (!this.apiKey) return;
 
-      const response = await fetch(`https://texttospeech.googleapis.com/v1/voices`, {
+      const response = await egress('google-tts', `https://texttospeech.googleapis.com/v1/voices`, {
           headers: {
               'X-Goog-Api-Key': this.apiKey
           }
@@ -63,40 +66,41 @@ export class GoogleTTSProvider extends BaseCloudProvider {
       }
       const data = await response.json();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      this.voices = (data.voices || []).map((v: any) => ({
+      this.voices = (data.voices || []).map((v: { name: string; ssmlGender: string; languageCodes: string[] }) => ({
           id: v.name, // Use name directly as ID (e.g., "en-US-Standard-A")
           name: `${v.name} (${v.ssmlGender})`,
           lang: v.languageCodes[0],
-          provider: 'google',
-          originalVoice: v
+          provider: 'google'
       }));
   }
 
-  protected async fetchAudioData(text: string, options: TTSOptions): Promise<SpeechSegment> {
+  protected async fetchAudioData(text: string, options: TTSOptions, signal?: AbortSignal): Promise<SpeechSegment> {
     if (!this.apiKey) {
       throw new Error('Google Cloud API Key is missing');
     }
 
     const url = `https://texttospeech.googleapis.com/v1beta1/text:synthesize`;
 
+    // Speed policy: always synthesize at the provider default rate (1.0). The user's
+    // playback speed is applied at the audio sink (see BaseCloudProvider.play), so
+    // cached audio is speed-independent and never re-synthesized on a rate change.
     const requestBody = {
       input: { text },
       voice: { name: options.voiceId, languageCode: options.voiceId.split('-').slice(0, 2).join('-') },
       audioConfig: {
         audioEncoding: 'MP3',
-        speakingRate: options.speed,
       },
       enableTimePointing: ["SSML_MARK"]
     };
 
-    const response = await fetch(url, {
+    const response = await egress('google-tts', url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': this.apiKey
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      signal
     });
 
     if (!response.ok) {
@@ -119,8 +123,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
     // Parse timepoints if any
     let alignment: Timepoint[] | undefined = undefined;
     if (data.timepoints) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        alignment = data.timepoints.map((tp: any) => ({
+        alignment = data.timepoints.map((tp: { timeSeconds: number }) => ({
             timeSeconds: tp.timeSeconds,
             charIndex: 0,
             type: 'mark'
@@ -129,8 +132,7 @@ export class GoogleTTSProvider extends BaseCloudProvider {
 
     return {
       audio: blob,
-      alignment,
-      isNative: false
+      alignment
     };
   }
 }

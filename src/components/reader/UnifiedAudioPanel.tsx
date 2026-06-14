@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useTTSStore } from '../../store/useTTSStore';
+import { useTTSSettingsStore, selectActiveRate } from '@store/useTTSSettingsStore';
+import { isDeviceProviderId } from '@lib/tts/providers/registry';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
+import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { useShallow } from 'zustand/react/shallow';
 import { SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../ui/Sheet';
 import { Button } from '../ui/Button';
@@ -20,33 +23,19 @@ import { LexiconManager } from './LexiconManager';
  */
 export const UnifiedAudioPanel = () => {
   const {
-    isPlaying,
-    play,
-    pause,
     rate,
     setRate,
-    voice,
-    setVoice,
-    voices,
-    loadVoices,
-    seek,
+    setVoiceId,
     providerId,
     sanitizationEnabled,
     setSanitizationEnabled,
     prerollEnabled,
     setPrerollEnabled,
     activeLanguage
-  } = useTTSStore(useShallow(state => ({
-    isPlaying: state.isPlaying,
-    play: state.play,
-    pause: state.pause,
-    rate: state.rate,
+  } = useTTSSettingsStore(useShallow(state => ({
+    rate: selectActiveRate(state),
     setRate: state.setRate,
-    voice: state.voice,
-    setVoice: state.setVoice,
-    voices: state.voices,
-    loadVoices: state.loadVoices,
-    seek: state.seek,
+    setVoiceId: state.setVoiceId,
     providerId: state.providerId,
     sanitizationEnabled: state.sanitizationEnabled,
     setSanitizationEnabled: state.setSanitizationEnabled,
@@ -54,6 +43,16 @@ export const UnifiedAudioPanel = () => {
     setPrerollEnabled: state.setPrerollEnabled,
     activeLanguage: state.activeLanguage
   })));
+
+  const { isPlaying, engineReady, voice, voices } = useTTSPlaybackStore(useShallow(state => ({
+    isPlaying: state.isPlaying,
+    engineReady: state.engineReady,
+    voice: state.voice,
+    voices: state.voices
+  })));
+
+  // Engine commands come from the TtsController facade (stable identities).
+  const { play, pause, seek, loadVoices } = useAudioCommands();
 
   const [view, setView] = useState<'queue' | 'settings'>('queue');
   const [isLexiconOpen, setIsLexiconOpen] = useState(false);
@@ -66,14 +65,15 @@ export const UnifiedAudioPanel = () => {
      }
   }, [view, voices.length, loadVoices]);
 
-  // Helper for voice selection
+  // Helper for voice selection (writes the profile; the TtsController pushes
+  // the change to the engine and resolves the playback-store voice object)
   const handleVoiceChange = (voiceId: string) => {
       if (voiceId === 'default') {
-          setVoice(null);
+          setVoiceId(null);
           return;
       }
       const selected = voices.find(v => v.id === voiceId);
-      setVoice(selected || null);
+      setVoiceId(selected ? selected.id : null);
   };
 
   const handleRefreshVoices = async () => {
@@ -95,13 +95,13 @@ export const UnifiedAudioPanel = () => {
        <div className="player-stage bg-muted/30 p-4 border-b">
           {/* Main Controls */}
           <div className="flex justify-center items-center gap-6 mb-4">
-             <Button data-testid="tts-rewind-button" variant="ghost" size="icon" onClick={() => seek(-15)} aria-label={providerId === 'local' ? "Previous Sentence" : "Rewind 15s"}>
+             <Button data-testid="tts-rewind-button" variant="ghost" size="icon" onClick={() => seek(-15)} aria-label={isDeviceProviderId(providerId) ? "Previous Sentence" : "Rewind 15s"}>
                 <RotateCcw className="h-6 w-6" />
              </Button>
-             <Button data-testid="tts-play-pause-button" size="icon" className="h-12 w-12 rounded-full" onClick={isPlaying ? pause : play} aria-label={isPlaying ? "Pause" : "Play"}>
+             <Button data-testid="tts-play-pause-button" size="icon" className="h-12 w-12 rounded-full" disabled={!engineReady} onClick={isPlaying ? pause : play} aria-label={isPlaying ? "Pause" : "Play"}>
                 {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
              </Button>
-             <Button data-testid="tts-forward-button" variant="ghost" size="icon" onClick={() => seek(15)} aria-label={providerId === 'local' ? "Next Sentence" : "Forward 15s"}>
+             <Button data-testid="tts-forward-button" variant="ghost" size="icon" onClick={() => seek(15)} aria-label={isDeviceProviderId(providerId) ? "Next Sentence" : "Forward 15s"}>
                 <RotateCw className="h-6 w-6" />
              </Button>
           </div>

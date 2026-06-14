@@ -11,7 +11,7 @@ test('Timeout Protection', async ({ page }) => {
   await utils.navigateToChapter(page, 'toc-item-6');
 
   // Wait for TTS queue sync
-  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().queue.length > 0, { timeout: 15000 });
+  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().queue.length > 0, { timeout: 15000 });
 
   // Start Playback
   await page.getByTestId('compass-pill-active').getByLabel('Play').click();
@@ -40,10 +40,11 @@ test('Timeout Protection', async ({ page }) => {
 });
 
 test('Navigation Guard', async ({ page }) => {
-  // Previously WebKit-skipped. Now passes after clearing the Dragnet pause-timestamp on
-  // the TOC navigation INTENT (see ReaderView onNavigate → AudioPlayerService.clearPauseGesture):
-  // WebKit's slow rendition.display() relocation meant the section-change clear raced the
-  // user's next play, capturing a stale audio-bookmark.
+  // Dragnet invalidation is ENGINE-INTERNAL since 5b-PR4: the DragnetGesture unit disarms
+  // when the engine's own section changes (loadSection / section-index change) — the
+  // intent-time clearPauseGesture API and its ReaderView/useTTS call sites are gone. This
+  // test waits for the new chapter's queue to load before pressing play, so the engine has
+  // disarmed by then (the same ordering a real user hits: play targets the loaded chapter).
   // Verify that navigating to a new chapter during a pause prevents capturing stale context.
   console.log('Testing Navigation Guard...');
   await utils.resetApp(page);
@@ -53,7 +54,7 @@ test('Navigation Guard', async ({ page }) => {
   await utils.navigateToChapter(page, 'toc-item-3');
 
   // Wait for queue to load for this chapter
-  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().queue.length > 0, { timeout: 15000 });
+  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().queue.length > 0, { timeout: 15000 });
 
   // Start Playback
   await page.getByTestId('compass-pill-active').getByLabel('Play').click();
@@ -71,7 +72,7 @@ test('Navigation Guard', async ({ page }) => {
 
   // Wait for TTS queue to reload for the new chapter
   await page.waitForFunction(() => {
-    const queue = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().queue;
+    const queue = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().queue;
     return queue.length > 0;
   }, { timeout: 15000 });
 
@@ -102,7 +103,7 @@ test('Inline HUD Discard', async ({ page }) => {
   await utils.navigateToChapter(page, 'toc-item-6');
 
   // Wait for TTS queue sync
-  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().queue.length > 0, { timeout: 15000 });
+  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().queue.length > 0, { timeout: 15000 });
 
   // Trigger bookmark via gesture
   console.log('Triggering bookmark gesture...');
@@ -166,7 +167,7 @@ test('Section Start Boundary', async ({ page }) => {
   await utils.navigateToChapter(page, 'toc-item-6');
 
   // Wait for TTS queue sync but do NOT play yet
-  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSStore.getState().queue.length > 0, { timeout: 15000 });
+  await page.waitForFunction(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().queue.length > 0, { timeout: 15000 });
 
   // At index 0: Play briefly -> Pause -> Play
   console.log('Triggering gesture at index 0...');

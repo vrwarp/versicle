@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// Versicle Cloud Storage security rules (BYO-Firebase).
+//
+// Deploy with: firebase deploy --only firestore:rules,storage
+//
+// y-cinder offloads workspace blobs to Cloud Storage (see
+// node_modules/y-cinder/dist/compaction.js and sync.js):
+//   users/{uid}/versicle/{workspaceId}/snapshot_v{N}.bin     compacted snapshots
+//   users/{uid}/versicle/{workspaceId}/large_updates/*.bin   oversized updates
+//
+// Without these rules a BYO-Firebase project falls back to default-deny
+// Storage: every compaction upload fails and the updates collection grows
+// without bound (or, worse, the project is left in permissive "test mode").
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Owner-scoped: a user can only touch blobs under their own uid prefix.
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

@@ -1,12 +1,12 @@
 import { renderHook, act } from '@testing-library/react';
 import { createAnnotationStore } from './useAnnotationStore';
+import { useReaderUIStore } from './useReaderUIStore';
+import { getYDoc } from './yjs-provider';
+
+const yDoc = getYDoc();
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../db/db', () => ({
-  getDB: vi.fn(),
-}));
-
-vi.mock('../lib/crypto', () => ({
+vi.mock('@lib/crypto', () => ({
   generateSecureId: vi.fn(() => 'test-uuid'),
 }));
 
@@ -29,32 +29,10 @@ describe('useAnnotationStore', () => {
     mockDB.get.mockResolvedValue(undefined);
     mockDB.put.mockResolvedValue(undefined);
 
-    useAnnotationStore = createAnnotationStore(async () => mockDB);
-    useAnnotationStore.setState({ annotations: [], popover: { visible: false, x: 0, y: 0, cfiRange: '', text: '' } });
+    useAnnotationStore = createAnnotationStore();
+    useAnnotationStore.setState({ annotations: {} });
 
     vi.clearAllMocks();
-  });
-
-  it('should show and hide popover', () => {
-    const { result } = renderHook(() => useAnnotationStore());
-
-    act(() => {
-      result.current.showPopover(100, 200, 'cfi', 'selected text');
-    });
-
-    expect(result.current.popover).toEqual({
-      visible: true,
-      x: 100,
-      y: 200,
-      cfiRange: 'cfi',
-      text: 'selected text',
-    });
-
-    act(() => {
-      result.current.hidePopover();
-    });
-
-    expect(result.current.popover.visible).toBe(false);
   });
 
   it('should load annotations', async () => {
@@ -127,5 +105,73 @@ describe('useAnnotationStore', () => {
     });
 
     expect(result.current.annotations['test-uuid'].note).toBe('new note');
+  });
+
+  describe('regression: popover-desync — popover state is not synced through the CRDT', () => {
+    // The yjs() middleware flushes outbound writes in a microtask; yield a macrotask
+    // so any (erroneous) pending Y.Doc write would have fired before we assert.
+    const flushYjsWrites = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    it('does not carry popover state or actions on the annotation store', () => {
+      const state = useAnnotationStore.getState();
+      expect(state).not.toHaveProperty('popover');
+      expect(state).not.toHaveProperty('showPopover');
+      expect(state).not.toHaveProperty('hidePopover');
+    });
+
+    it('popover open/close writes nothing to the Y.Doc and fires no annotations observer', async () => {
+      // Let any writes scheduled by beforeEach setState settle first.
+      await flushYjsWrites();
+
+      const updateSpy = vi.fn();
+      const observerSpy = vi.fn();
+      const annotationsMap = yDoc.getMap('annotations');
+      yDoc.on('update', updateSpy);
+      annotationsMap.observeDeep(observerSpy);
+
+      try {
+        act(() => {
+          useReaderUIStore.getState().showPopover(100, 200, 'cfi', 'selected text');
+        });
+        await flushYjsWrites();
+
+        expect(useReaderUIStore.getState().popover).toEqual({
+          visible: true,
+          x: 100,
+          y: 200,
+          cfiRange: 'cfi',
+          text: 'selected text',
+          id: undefined,
+        });
+
+        act(() => {
+          useReaderUIStore.getState().hidePopover();
+        });
+        await flushYjsWrites();
+
+        expect(useReaderUIStore.getState().popover.visible).toBe(false);
+        expect(updateSpy).not.toHaveBeenCalled();
+        expect(observerSpy).not.toHaveBeenCalled();
+
+        // Control: a real annotation write must still reach the Y.Doc,
+        // proving the spies are wired to the live document.
+        act(() => {
+          useAnnotationStore.getState().add({
+            bookId: 'book1',
+            cfiRange: 'cfi',
+            text: 'text',
+            type: 'highlight',
+            color: 'yellow',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any);
+        });
+        await flushYjsWrites();
+
+        expect(updateSpy).toHaveBeenCalled();
+      } finally {
+        yDoc.off('update', updateSpy);
+        annotationsMap.unobserveDeep(observerSpy);
+      }
+    });
   });
 });

@@ -1,8 +1,8 @@
 import { App } from '@capacitor/app';
 import { useEffect, useRef, useCallback } from 'react';
-import { useBackNavigationStore } from '../store/useBackNavigationStore';
+import { useBackNavigationStore } from '@store/useBackNavigationStore';
 import { useNavigate, useLocation, useBlocker, type BlockerFunction } from 'react-router-dom';
-import { createLogger } from '../lib/logger';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('BackNavigationManager');
 
@@ -119,8 +119,7 @@ export const BackNavigationManager = () => {
         });
 
         return () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            listenerPromise.then((l: any) => l.remove());
+            listenerPromise.then((l: { remove: () => void }) => l.remove());
         };
     }, [navigate, executeHandler]);
 

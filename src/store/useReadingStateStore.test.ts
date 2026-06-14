@@ -1,13 +1,17 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 // Mock device-id before importing the store
-vi.mock('../lib/device-id', () => ({
+vi.mock('@lib/device-id', () => ({
     getDeviceId: vi.fn(() => 'test-device-id')
 }));
 
-// Mock cfi-utils to avoid real epub.js interactions
-vi.mock('../lib/cfi-utils', () => ({
-    mergeCfiRanges: vi.fn((ranges, newRange) => {
+// Mock the kernel's mergeCfiRanges to avoid real epub.js interactions
+// (P6: the store imports @kernel/cfi directly — the cfi-utils shim is gone).
+// importOriginal keeps the rest of the kernel surface real for any other
+// module loaded in this test graph.
+vi.mock('@kernel/cfi', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@kernel/cfi')>()),
+    mergeCfiRanges: vi.fn((ranges: string[], newRange: string) => {
         const last = ranges[ranges.length - 1];
         if (last === newRange) return [...ranges];
         return [...ranges, newRange];
@@ -15,7 +19,7 @@ vi.mock('../lib/cfi-utils', () => ({
 }));
 
 import { useReadingStateStore } from './useReadingStateStore';
-import { getDeviceId } from '../lib/device-id';
+import { getDeviceId } from '@lib/device-id';
 
 describe('useReadingStateStore - Per-Device Progress', () => {
     beforeEach(() => {
@@ -148,12 +152,12 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             vi.useRealTimers();
         });
 
-        it('should prune legacy history sessions via centralized runMigrations', async () => {
+        it('regression: prunes legacy history sessions via the CRDT migration coordinator', async () => {
             const bookId = 'book-legacy-prune';
             const now = Date.now();
 
-            // Dynamically import runMigrations (it uses lazy imports internally)
-            const { runMigrations } = await import('./yjs-provider');
+            const { runCrdtMigrationsOnDoc } = await import('@app/migrations');
+            const { getYDoc, CURRENT_SCHEMA_VERSION } = await import('./yjs-provider');
             const { useBookStore } = await import('./useBookStore');
 
             // Set __schemaVersion to 1 to simulate pre-migration state
@@ -191,11 +195,22 @@ describe('useReadingStateStore - Per-Device Progress', () => {
                 }
             });
 
-            // Trigger centralized migration
-            runMigrations();
+            // Drain the middleware's outbound microtask batch so the Y.Doc
+            // holds the injected state (the coordinator reads the DOC).
+            await new Promise(resolve => setTimeout(resolve, 0));
 
-            // Wait for lazy imports to resolve
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Run the coordinator on the singleton doc with a stub checkpoint
+            // (the engine never reaches IndexedDB in this unit test).
+            const result = await runCrdtMigrationsOnDoc(getYDoc(), {
+                createCheckpoint: () => Promise.resolve(101),
+            });
+            expect(result.status).toBe('migrated');
+            expect(result.from).toBe(1);
+            expect(result.to).toBe(CURRENT_SCHEMA_VERSION);
+            expect(result.checkpointId).toBe(101);
+
+            // The migration transactions reach the stores as ordinary inbound.
+            await new Promise(resolve => setTimeout(resolve, 0));
 
             const state = useReadingStateStore.getState();
             const deviceProgress = state.progress[bookId]['test-device-id'];
@@ -208,9 +223,14 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             expect(remainingSession.cfiRange).toBe('epubcfi(/6/4)');
             expect(remainingSession.startTime).toBe(now - 10000);
 
-            // Schema version should be bumped to 5 on useBookStore (migrations run v1→v2→v4→v5)
+            // meta carries the authoritative version; the library stamp is
+            // FROZEN at 8 (the v9 dual-write retirement — see
+            // clearHusksAndRetireDualWrite in app/migrations.ts) and the
+            // store state mirrors the doc's library map.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            expect((useBookStore.getState() as any).__schemaVersion).toBe(5);
+            expect((useBookStore.getState() as any).__schemaVersion).toBe(8);
+            expect(getYDoc().getMap('library').get('__schemaVersion')).toBe(8);
+            expect(getYDoc().getMap('meta').get('schemaVersion')).toBe(CURRENT_SCHEMA_VERSION);
         });
     });
 

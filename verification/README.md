@@ -1,49 +1,68 @@
-# Visual Verification Suite
+# Verification suite (Playwright E2E)
 
-This directory contains the Playwright-based visual verification tests for Versicle. These tests are designed to prevent visual regressions and verify critical user journeys by capturing screenshots and asserting state.
+This directory is the Playwright end-to-end suite: 74 TypeScript specs
+(`*.spec.ts`) that drive the built app as user journeys. **The canonical
+testing document is `TESTING.md` at the repo root** — commands, the Docker
+flow, and the program rules live there; this file only describes what is in
+this directory.
 
-## Directories
+> History note: an earlier pytest/Python suite lived here and is fully gone.
+> If any document tells you to run `verification/*.py` or pass pytest flags,
+> the document is stale — fix it.
 
-*   **`goldens/`**: Stores the validated "golden" screenshots. These represent the expected visual state of the application.
-*   **`screenshots/`**: (Generated at runtime) Stores the screenshots captured during the most recent test run.
+## Running
 
-## Configuration & Utilities
+```bash
+./run_verification.sh                                      # Docker; desktop + mobile projects
+./run_verification.sh verification/test_journey_library.spec.ts
+./run_verification.sh --project=webkit                     # auto-serialized (--workers=1)
+./run_verification.sh --help                               # full usage
+```
 
-*   **`__init__.py`**: Python package marker.
-*   **`conftest.py`**: Pytest configuration file. It defines fixtures for setting up the Playwright browser context, including mobile emulation and timeout settings.
-*   **`run_all.py`**: The master script to execute all verification tests. It invokes `pytest`. Defaults to parallel execution (`-n auto`) unless overridden (e.g., `-n 0` for serial).
-*   **`utils.py`**: Contains helper functions for tests, such as `reset_app` (to clear state and load the app) and `capture_screenshot`.
+`./jules_run_verification.sh` is the `sudo` wrapper. Projects (`desktop`,
+`mobile`, `webkit`) and their timeout/retry rationale are in
+`playwright.config.ts` — read its comments before "fixing" flakiness with
+bigger timeouts.
 
-## Test Scripts
+## Contents
 
-### User Journeys
-Tests that simulate complete user workflows.
+### Specs
 
-*   **`test_journey_annotations.py`**: Verifies highlighting text and adding notes.
-*   **`test_journey_audio_deck.py`**: Verifies the Unified Audio Panel (player controls, queue).
-*   **`test_journey_demo_book.py`**: Verifies the functionality of loading the built-in "Alice in Wonderland" demo book.
-*   **`test_journey_engine_room.py`**: Verifies the "Engine Room" (Global Settings Dialog), cycling through all tabs.
-*   **`test_journey_gesture_mode.py`**: Verifies the Gesture Mode overlay and touch interactions.
-*   **`test_journey_lexicon.py`**: Verifies the Pronunciation Lexicon UI (adding/editing rules).
-*   **`test_journey_lexicon_csv.py`**: Verifies the CSV import/export workflow for the Lexicon.
-*   **`test_journey_library.py`**: Verifies the Library view, including empty states and book ingestion.
-*   **`test_journey_preroll.py`**: Verifies Chapter Preroll settings and UI.
-*   **`test_journey_progress_bar.py`**: Verifies the reading progress bar on book cards.
-*   **`test_journey_reading.py`**: Verifies core reading features (navigation, text rendering).
-*   **`test_journey_search.py`**: Verifies full-text search and result highlighting.
-*   **`test_journey_search_position.py`**: Verifies navigation to specific search results within the reader.
-*   **`test_journey_visual_settings.py`**: Verifies the "Reading Room" (Visual Settings) popover (fonts, themes).
+- `test_journey_*.spec.ts` — user-journey tests (library, reading, audio,
+  sync, backup, workspaces, search, Chinese features, …). The convention
+  for new coverage: extend a suitable journey or add a focused new one.
+- `test_a11y_axe.spec.ts` — @axe-core/playwright scans of the core surfaces
+  (baseline mode; fails on serious/critical only when `A11Y_ENFORCE=1`).
+  Tagged `@a11y`.
+- `test_bug_*.spec.ts`, `verify_*.spec.ts`, feature specs — older
+  single-concern tests. Do not add new one-off bug specs; fold regression
+  coverage into the owning journey (TESTING.md, program rules).
+- `test_maintenance.spec.ts`, `test_journey_reprocessing.spec.ts` — open
+  `EpubLibraryDB` directly with a **hardcoded version**; they must be
+  updated when `src/db/db.ts` bumps the DB version (see AGENTS.md).
 
-### Feature & Regression Tests
+### Infrastructure
 
-*   **`test_abbrev_settings.py`**: Verifies abbreviation handling settings.
-*   **`test_bug_selection.py`**: Regression test ensuring text selection remains active after highlighting.
-*   **`test_sprint1.py`**: General verification for features delivered in Sprint 1.
-*   **`test_theme.py`**: Verifies global theme switching (Light/Dark/Sepia).
-*   **`test_tts_queue.py`**: Verifies the behavior of the TTS playback queue.
-*   **`verify_scrolled_mode.py`**: Specific verification for the "Scrolled" view mode.
+- `utils.ts` — the shared `test` fixture and helpers (`resetApp`,
+  `waitForPersistedWrites`, `ensureLibraryWithBook`, `captureScreenshot`,
+  `getReaderFrame`). It injects `tts-polyfill.js` into every page and
+  currently disables content sanitization on every page
+  (`__VERSICLE_SANITIZATION_DISABLED__` — a known honesty gap, see
+  TESTING.md "Honest caveats"). Deterministic persistence waits go through
+  `window.__versicleTest.flushPersistence()` (installed by `src/test-api.ts`
+  in DEV/VITE_E2E builds).
+- `tts-polyfill.js` — main-thread mock of the Web Speech API with word
+  timing; all E2E TTS runs against this, never a real provider.
+- `_idb_probe.js` — opt-in IndexedDB/event-loop hang instrumentation
+  (enable with `./run_verification.sh --probe …`).
+- `docker_entrypoint.sh` — container entrypoint: starts `npm run preview`,
+  waits for :5173, runs `npx playwright test "$@"`.
 
-## Assets
+### Fixtures & artifacts
 
-*   **`alice.epub`**: A local copy of the demo book used for consistent testing.
-*   **`*.png`** (e.g., `sprint2_empty_library.png`, `error_no_book.png`): Various screenshot artifacts or references used for specific test cases or documentation.
+- `*.epub` — test books (`alice.epub` is the standard fixture;
+  `create_test_chinese_epub.cjs` generates the Chinese-content fixture).
+- `screenshots/` — created at runtime, mounted from the host by
+  `run_verification.sh`; specs save key-step screenshots here via
+  `captureScreenshot`. There are **no golden-image assertions yet**
+  (no `toHaveScreenshot()`); screenshots are for humans and CI artifacts.

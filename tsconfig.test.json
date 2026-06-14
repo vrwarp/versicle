@@ -1,0 +1,28 @@
+{
+  // Typechecks the vitest (jsdom) test code that tsconfig.app.json
+  // deliberately excludes: src/**/*.test.* plus the src/test/ harness.
+  // Wired into `tsc -b` via the root tsconfig.json references so test
+  // code typechecking is a build invariant, not a convention.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    // Path aliases (@lib/*, @store/*, …) are inherited from
+    // tsconfig.app.json via extends — do not redeclare them here, or the
+    // two maps will drift. (paths values resolve relative to the file
+    // that DECLARES them, i.e. tsconfig.app.json, same directory.)
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    // vitest.config.ts sets `globals: true`; vitest/globals matches that.
+    "types": ["vite/client", "vitest/globals", "node"]
+  },
+  "include": ["src"],
+  // Override tsconfig.app.json's test excludes — this project exists to
+  // check exactly those files.
+  "exclude": [],
+  // `references` are not inherited from tsconfig.app.json via `extends`;
+  // repeat the vendored-fork references so store tests importing
+  // zustand-middleware-yjs (and sync tests importing y-cinder) resolve to
+  // their declarations too.
+  "references": [
+    { "path": "./packages/zustand-middleware-yjs" },
+    { "path": "./packages/y-cinder" }
+  ]
+}

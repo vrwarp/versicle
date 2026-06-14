@@ -2,13 +2,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useSectionDuration } from './useSectionDuration';
-import { useTTSStore } from '../store/useTTSStore';
-import { useReaderUIStore } from '../store/useReaderUIStore';
-import { useBookStore } from '../store/useBookStore';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
+import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { useBookStore } from '@store/useBookStore';
 
-vi.mock('../store/useTTSStore');
-vi.mock('../store/useReaderUIStore');
-vi.mock('../store/useBookStore');
+vi.mock('@store/useTTSPlaybackStore');
+vi.mock('@store/useTTSSettingsStore', async (importOriginal) => ({
+    ...(await importOriginal<object>()),
+    useTTSSettingsStore: vi.fn(),
+}));
+vi.mock('@store/useReaderUIStore');
+vi.mock('@store/useBookStore');
 
 describe('useSectionDuration', () => {
     let mockState: any;
@@ -21,7 +26,12 @@ describe('useSectionDuration', () => {
             currentIndex: 0,
             rate: 1.0
         };
-        (useTTSStore as any).mockImplementation((selector: any) => selector(mockState));
+        (useTTSPlaybackStore as any).mockImplementation((selector: any) => selector(mockState));
+        // The hook derives rate via selectActiveRate(settings); feed it a profile.
+        (useTTSSettingsStore as any).mockImplementation((selector: any) => selector({
+            get activeLanguage() { return 'en'; },
+            get profiles() { return { en: { voiceId: null, rate: mockState.rate, minSentenceLength: 36 } }; },
+        }));
 
         mockReaderUIState = {
             currentBookId: 'test-book-id'

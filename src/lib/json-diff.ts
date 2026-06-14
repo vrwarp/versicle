@@ -1,39 +1,36 @@
-export type DiffType = 'added' | 'removed' | 'modified' | 'unchanged';
+type DiffType = 'added' | 'removed' | 'modified' | 'unchanged';
 
 export interface DiffNode {
   key: string;
   type: DiffType;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  value?: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  oldValue?: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  newValue?: any;
+  value?: unknown;
+  oldValue?: unknown;
+  newValue?: unknown;
   children?: DiffNode[];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function isDeepEqual(a: any, b: any): boolean {
+function isDeepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== typeof b) return false;
   if (typeof a !== 'object' || a === null || b === null) return false;
 
   if (Array.isArray(a) !== Array.isArray(b)) return false;
 
-  const keysA = Object.keys(a);
-  const keysB = Object.keys(b);
+  const recA = a as Record<string, unknown>;
+  const recB = b as Record<string, unknown>;
+  const keysA = Object.keys(recA);
+  const keysB = Object.keys(recB);
   if (keysA.length !== keysB.length) return false;
 
   for (let i = 0; i < keysA.length; i++) {
     const k = keysA[i];
-    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
-    if (!isDeepEqual(a[k], b[k])) return false;
+    if (!Object.prototype.hasOwnProperty.call(recB, k)) return false;
+    if (!isDeepEqual(recA[k], recB[k])) return false;
   }
   return true;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const computeDiff = (oldVal: any, newVal: any, key: string = 'root'): DiffNode => {
+export const computeDiff = (oldVal: unknown, newVal: unknown, key: string = 'root'): DiffNode => {
   if (oldVal === newVal) {
     return { key, type: 'unchanged', value: oldVal };
   }
@@ -52,12 +49,14 @@ export const computeDiff = (oldVal: any, newVal: any, key: string = 'root'): Dif
   }
 
   // Both are objects/arrays
-  const keys = new Set([...Object.keys(oldVal), ...Object.keys(newVal)]);
+  const oldRec = oldVal as Record<string, unknown>;
+  const newRec = newVal as Record<string, unknown>;
+  const keys = new Set([...Object.keys(oldRec), ...Object.keys(newRec)]);
   const children: DiffNode[] = [];
 
   for (const k of keys) {
-    const oldV = oldVal[k];
-    const newV = newVal[k];
+    const oldV = oldRec[k];
+    const newV = newRec[k];
 
     if (oldV === undefined) {
       children.push({ key: k, type: 'added', value: newV });

@@ -1,13 +1,11 @@
 import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
-import { cn } from "../../lib/utils"
+import { cn } from "@lib/utils"
 
 /** Root Modal component (alias for Radix Dialog.Root). */
 const Modal = DialogPrimitive.Root
-const ModalTrigger = DialogPrimitive.Trigger
 const ModalPortal = DialogPrimitive.Portal
-const ModalClose = DialogPrimitive.Close
 
 const ModalOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
@@ -98,10 +96,6 @@ ModalDescription.displayName = DialogPrimitive.Description.displayName
 
 export {
   Modal,
-  ModalPortal,
-  ModalOverlay,
-  ModalTrigger,
-  ModalClose,
   ModalContent,
   ModalHeader,
   ModalTitle,

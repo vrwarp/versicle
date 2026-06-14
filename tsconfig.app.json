@@ -16,6 +16,34 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Path aliases (Phase 1 path-alias codemod). One alias per top-level
+       src/ root; cross-root imports MUST use these (enforced by the
+       no-restricted-imports rule in eslint.config.js). Keep this map in
+       sync with resolve.alias in vite.config.ts AND vitest.config.ts
+       (vitest does not read vite.config.ts here). tsconfig.test.json
+       inherits these via extends; dependency-cruiser resolves them via
+       its tsConfig option; eslint-import-resolver-typescript reads them
+       from the project tsconfigs. @data landed with Phase 3 (src/data/
+       is the L1 storage layer carved there, starting with the
+       write-gate). src/types is "~types" NOT "@types": TypeScript
+       hard-rejects any import specifier starting with "@types/" (error
+       TS6137 — that prefix is reserved for declaration packages), so the
+       one root that cannot follow the @ convention uses the common
+       tilde workaround. */
+    "paths": {
+      "@app/*": ["./src/app/*"],
+      "@components/*": ["./src/components/*"],
+      "@data/*": ["./src/data/*"],
+      "@domains/*": ["./src/domains/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@kernel/*": ["./src/kernel/*"],
+      "@lib/*": ["./src/lib/*"],
+      "@store/*": ["./src/store/*"],
+      "~types/*": ["./src/types/*"],
+      "@test/*": ["./src/test/*"],
+      "@workers/*": ["./src/workers/*"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
@@ -23,5 +51,15 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/integration.test.ts", "src/test/**", "src/setupTests.ts", "src/test/setup.ts"]
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/integration.test.ts", "src/test/**", "src/setupTests.ts", "src/test/setup.ts"],
+  // The vendored fork is consumed as TS source (its package.json `types`
+  // points at src/index.ts); this reference makes tsc -b typecheck it as its
+  // own composite project and redirect app imports to its emitted
+  // declarations instead of pulling foreign source into this project's
+  // (stricter) compilation. NOTE: `references` are NOT inherited via
+  // `extends` — tsconfig.test.json repeats this list.
+  "references": [
+    { "path": "./packages/zustand-middleware-yjs" },
+    { "path": "./packages/y-cinder" }
+  ]
 }

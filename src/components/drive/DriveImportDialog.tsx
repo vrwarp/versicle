@@ -3,25 +3,12 @@ import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from '
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { Search, Download, Loader2, Cloud, X } from 'lucide-react';
-import { cn } from '../../lib/utils';
-import { useDriveStore, type DriveFileIndex } from '../../store/useDriveStore';
-import { DriveScannerService } from '../../lib/drive/DriveScannerService';
-import { useToastStore } from '../../store/useToastStore';
-import { useDebounce } from '../../hooks/useDebounce';
-
-function formatRelativeTime(timestamp: number | null): string {
-    if (!timestamp) return 'Never';
-    const now = Date.now();
-    const diff = now - timestamp;
-
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-}
+import { cn } from '@lib/utils';
+import { useDriveStore, type DriveFileIndex } from '@store/useDriveStore';
+import { getDriveLibrarySync } from '@domains/google';
+import { useToastStore } from '@store/useToastStore';
+import { useDebounce } from '@hooks/useDebounce';
+import { formatBytes, formatDate, formatRelativeTime } from '@kernel/locale/format';
 
 interface DriveImportDialogProps {
     isOpen: boolean;
@@ -48,7 +35,8 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
         if (importingId) return; // Prevent multiple
         setImportingId(file.id);
         try {
-            await DriveScannerService.importFile(file.id, file.name);
+            // User gesture: interactive token acquisition (the deleted façade's default).
+            await getDriveLibrarySync().importFile(file.id, file.name, undefined, { interactive: true });
             showToast(`Imported "${file.name}"`, 'success');
         } catch (error) {
             console.error(error);
@@ -60,7 +48,7 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
 
     const handleRefresh = async () => {
         try {
-            await DriveScannerService.scanAndIndex();
+            await getDriveLibrarySync().scanAndIndex();
         } catch {
             showToast('Failed to refresh index', 'error');
         }
@@ -74,7 +62,7 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
             <div className="flex-1 min-w-0 pr-4">
                 <p className="font-medium truncate text-sm text-foreground">{file.name}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                    {(file.size / 1024 / 1024).toFixed(2)} MB • {new Date(file.modifiedTime).toLocaleDateString()}
+                    {formatBytes(file.size)} • {formatDate(file.modifiedTime)}
                 </p>
             </div>
             <Button
@@ -142,7 +130,7 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
                     </div>
                     <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
                         <span>
-                            {index?.length || 0} files indexed • Last scan: {formatRelativeTime(lastScanTime)}
+                            {index?.length || 0} files indexed • Last scan: {lastScanTime ? formatRelativeTime(lastScanTime) : 'Never'}
                         </span>
                         <Button
                             variant="ghost"

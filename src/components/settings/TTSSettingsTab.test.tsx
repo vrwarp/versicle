@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { TTSSettingsTab, TTSSettingsTabProps } from './TTSSettingsTab';
+import { TTSSettingsTab, type TTSSettingsTabProps } from './TTSSettingsTab';
 
 // Mock UI components
 vi.mock('../ui/Select', () => ({
@@ -30,8 +30,8 @@ vi.mock('../ui/Slider', () => ({
 describe('TTSSettingsTab', () => {
     const defaultProps: TTSSettingsTabProps = {
         activeLanguage: 'en',
-        profiles: { en: { voiceId: 'voice1', rate: 1.0, pitch: 1.0, volume: 1.0 } },
-        providerId: 'local',
+        profiles: { en: { voiceId: 'voice1', rate: 1.0, minSentenceLength: 36 } },
+        providerId: 'webspeech',
         onProviderChange: vi.fn(),
         apiKeys: {},
         onApiKeyChange: vi.fn(),
@@ -165,11 +165,75 @@ describe('TTSSettingsTab', () => {
         expect(onDownloadVoice).toHaveBeenCalledWith('voice1');
     });
 
-    it('calls onApiKeyChange when API key input changes', () => {
-        const onApiKeyChange = vi.fn();
-        render(<TTSSettingsTab {...defaultProps} providerId="google" onApiKeyChange={onApiKeyChange} />);
+    describe('buffered API-key edits (5a: the keystroke provider-rebuild is dead)', () => {
+        it('typing into the key field commits nothing — no provider construction per keystroke', () => {
+            const onApiKeyChange = vi.fn();
+            render(<TTSSettingsTab {...defaultProps} providerId="google" onApiKeyChange={onApiKeyChange} />);
 
-        fireEvent.change(screen.getByLabelText('Google API Key'), { target: { value: 'new-key' } });
-        expect(onApiKeyChange).toHaveBeenCalledWith('google', 'new-key');
+            const input = screen.getByLabelText('Google API Key');
+            fireEvent.change(input, { target: { value: 'n' } });
+            fireEvent.change(input, { target: { value: 'ne' } });
+            fireEvent.change(input, { target: { value: 'new-key' } });
+
+            expect(onApiKeyChange).not.toHaveBeenCalled();
+        });
+
+        it('blur commits the buffered key exactly once', () => {
+            const onApiKeyChange = vi.fn();
+            render(<TTSSettingsTab {...defaultProps} providerId="google" onApiKeyChange={onApiKeyChange} />);
+
+            const input = screen.getByLabelText('Google API Key');
+            fireEvent.change(input, { target: { value: 'new-key' } });
+            fireEvent.blur(input);
+
+            expect(onApiKeyChange).toHaveBeenCalledTimes(1);
+            expect(onApiKeyChange).toHaveBeenCalledWith('google', 'new-key');
+        });
+
+        it('blur without an actual edit commits nothing', () => {
+            const onApiKeyChange = vi.fn();
+            render(
+                <TTSSettingsTab
+                    {...defaultProps}
+                    providerId="google"
+                    apiKeys={{ google: 'existing' }}
+                    onApiKeyChange={onApiKeyChange}
+                />,
+            );
+
+            fireEvent.blur(screen.getByLabelText('Google API Key'));
+            expect(onApiKeyChange).not.toHaveBeenCalled();
+        });
+
+        it('the explicit "Test Key" button commits the draft and runs the key test', () => {
+            const onApiKeyChange = vi.fn();
+            const onTestApiKey = vi.fn();
+            render(
+                <TTSSettingsTab
+                    {...defaultProps}
+                    providerId="google"
+                    onApiKeyChange={onApiKeyChange}
+                    onTestApiKey={onTestApiKey}
+                />,
+            );
+
+            fireEvent.change(screen.getByLabelText('Google API Key'), { target: { value: 'probe-key' } });
+            fireEvent.click(screen.getByTestId('tts-google-test-key'));
+
+            expect(onApiKeyChange).toHaveBeenCalledWith('google', 'probe-key');
+            expect(onTestApiKey).toHaveBeenCalledWith('google', 'probe-key');
+        });
+    });
+
+    it('renders the provider choices from the registry (single source of truth)', () => {
+        render(<TTSSettingsTab {...defaultProps} />);
+
+        // jsdom is the web platform: device provider surfaces under its real
+        // post-split id (5b-PR3 — 'local' is migration-mapped, never offered).
+        expect(screen.getByTestId('select-item-webspeech')).toHaveTextContent('Web Speech (Local)');
+        expect(screen.getByTestId('select-item-piper')).toHaveTextContent('Piper (High Quality Local)');
+        expect(screen.getByTestId('select-item-google')).toHaveTextContent('Google Cloud TTS');
+        expect(screen.getByTestId('select-item-openai')).toHaveTextContent('OpenAI');
+        expect(screen.getByTestId('select-item-lemonfox')).toHaveTextContent('LemonFox.ai');
     });
 });

@@ -17,13 +17,22 @@ const OPT_OUT_REGISTRY = [
 describe('Sync Schema Exhaustion', () => {
   it('should ensure all sync-eligible fields in BookMetadata are present in SyncManifest', () => {
     const project = new Project();
-    const sourceFile = project.addSourceFileAtPath(
-      path.resolve(__dirname, '../../types/db.ts')
+    // Phase 1a type split: the declarations live in the domain modules
+    // (types/book.ts, types/sync.ts, ...). The types/db.ts re-export shim
+    // met its named P9 deletion deadline and is gone.
+    const bookFile = project.addSourceFileAtPath(
+      path.resolve(__dirname, '../../types/book.ts')
     );
+    const syncFile = project.addSourceFileAtPath(
+      path.resolve(__dirname, '../../types/sync.ts')
+    );
+    // Pull in the cross-module type imports (book/user-data/tts) so that
+    // SyncManifest's Partial<BookMetadata> resolves to real properties.
+    project.resolveSourceFileDependencies();
 
     // BookMetadata is now a Type Alias (composite), so we use getTypeAliasOrThrow
-    const bookMetadataType = sourceFile.getTypeAliasOrThrow('BookMetadata').getType();
-    const syncManifest = sourceFile.getInterfaceOrThrow('SyncManifest');
+    const bookMetadataType = bookFile.getTypeAliasOrThrow('BookMetadata').getType();
+    const syncManifest = syncFile.getInterfaceOrThrow('SyncManifest');
 
     // Get the keys defined in the SyncManifest.books[id].metadata structure
     const booksProp = syncManifest.getPropertyOrThrow('books');
@@ -60,8 +69,10 @@ describe('Sync Schema Exhaustion', () => {
 
   it('should ensure every Store in EpubLibraryDB has a corresponding sync strategy', () => {
     const project = new Project();
+    // P3-4: the EpubLibraryDB interface moved from src/db/db.ts (now a
+    // re-export shim) to the data layer's schema module.
     const sourceFile = project.addSourceFileAtPath(
-      path.resolve(__dirname, '../../db/db.ts')
+      path.resolve(__dirname, '../../data/schema.ts')
     );
 
     const dbInterface = sourceFile.getInterfaceOrThrow('EpubLibraryDB');
@@ -80,6 +91,7 @@ describe('Sync Schema Exhaustion', () => {
         'cache_session_state',
         'cache_tts_preparation',
         'cache_table_images',
+        'cache_search_text', // v26 (Phase 7 §F): local, rebuildable search corpus
 
         // App Level
         'checkpoints',      // Local recovery

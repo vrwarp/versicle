@@ -1,8 +1,8 @@
 import React from 'react';
 import { Button } from '../ui/Button';
 import { Loader2 } from 'lucide-react';
-import { MigrationStateService } from '../../lib/sync/MigrationStateService';
-import { createLogger } from '../../lib/logger';
+import { MigrationStateService } from '@domains/sync/workspaces/MigrationStateService';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('CriticalMigrationFailure');
 

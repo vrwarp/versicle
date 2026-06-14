@@ -1,12 +1,13 @@
-import { useBookStore } from '../../store/useBookStore';
-import { useAnnotationStore } from '../../store/useAnnotationStore';
-import { useLexiconStore } from '../../store/useLexiconStore';
-import { useReadingStateStore } from '../../store/useReadingStateStore';
-import { useReadingListStore } from '../../store/useReadingListStore';
-import { usePreferencesStore } from '../../store/usePreferencesStore';
+import { useBookStore } from '@store/useBookStore';
+import { useAnnotationStore } from '@store/useAnnotationStore';
+import { useLexiconStore } from '@store/useLexiconStore';
+import { useReadingStateStore } from '@store/useReadingStateStore';
+import { useReadingListStore } from '@store/useReadingListStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
 import { getDeviceId } from '../device-id';
 import { createLogger } from '../logger';
-import type { SyncManifest, UserProgress } from '../../types/db';
+import type { UserProgress } from '~types/user-data';
+import type { SyncManifest } from '~types/sync';
 
 const logger = createLogger('SemanticTree');
 

@@ -4,7 +4,7 @@ import { useDeviceStore } from './useDeviceStore';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Mock yjs-provider
 vi.mock('./yjs-provider', () => ({
-    yDoc: {
+    getYDoc: () => ({
         getMap: vi.fn(() => ({
             observe: vi.fn(),
             toJSON: () => ({}),
@@ -12,13 +12,10 @@ vi.mock('./yjs-provider', () => ({
             get: vi.fn(),
         })),
         transact: (cb: any) => cb(),
-    },
-    getYjsOptions: () => ({})
-}));
-
-// Mock zustand-middleware-yjs
-vi.mock('zustand-middleware-yjs', () => ({
-    default: (_doc: any, _name: any, config: any) => config
+    }),
+    // Pass-through seam: this suite tests the store's ACTIONS, not the
+    // middleware (the contract suite owns that).
+    defineSyncedStore: (_def: any, config: any) => config,
 }));
 
 describe('useDeviceStore', () => {

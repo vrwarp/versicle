@@ -1,15 +1,14 @@
-import React from 'react';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { SyncPulseIndicator } from './SyncPulseIndicator';
-import { useSyncStore } from '../../lib/sync/hooks/useSyncStore';
+import { useSyncStore } from '@store/useSyncStore';
 import { describe, it, expect, vi } from 'vitest';
 
 // Mock the store hook
-vi.mock('../../lib/sync/hooks/useSyncStore');
+vi.mock('@store/useSyncStore');
 
 // Define the state type based on the hook
-type SyncStoreState = ReturnType<typeof useSyncStore>;
+type SyncStoreState = ReturnType<typeof useSyncStore.getState>;
 
 const defaultMockState: SyncStoreState = {
   firebaseConfig: {
@@ -33,6 +32,8 @@ const defaultMockState: SyncStoreState = {
   setLastSyncTime: vi.fn(),
   activeWorkspaceId: null,
   setActiveWorkspaceId: vi.fn(),
+  hasCompletedOnboarding: false,
+  setHasCompletedOnboarding: vi.fn(),
 };
 
 describe('SyncPulseIndicator', () => {

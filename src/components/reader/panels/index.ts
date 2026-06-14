@@ -1,3 +1,3 @@
 // Reader Panel Components
-export { TOCPanel, type TOCPanelProps, type DeviceMarker } from './TOCPanel';
-export { SearchPanel, type SearchPanelProps } from './SearchPanel';
+export { TOCPanel,   } from './TOCPanel';
+export { SearchPanel,  } from './SearchPanel';

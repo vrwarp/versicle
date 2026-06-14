@@ -31,7 +31,8 @@ test("reading list journey", async ({ page }) => {
   // 4. Open Settings -> Data Management -> View List
   console.log("Opening Reading List...");
   await page.getByTestId("header-settings-button").click();
-  await page.getByRole("button", { name: "Data Management" }).click();
+  await page.getByRole("tab", { name: "Data Management" }).scrollIntoViewIfNeeded().catch(() => {});
+  await page.getByRole("tab", { name: "Data Management" }).click();
   await page.getByRole("button", { name: "View List" }).click();
 
   // 5. Verify Entry

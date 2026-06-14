@@ -1,7 +1,6 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
-import { getDeviceId } from '../lib/device-id';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
+import { getDeviceId } from '@lib/device-id';
 
 /**
  * Preferences store state.
@@ -9,7 +8,7 @@ import { getDeviceId } from '../lib/device-id';
  * Phase 2 (Yjs Migration): This store is wrapped with yjs() middleware.
  * All preferences are synced across devices automatically.
  */
-export interface FontProfile {
+interface FontProfile {
     fontSize: number;
     lineHeight: number;
 }
@@ -26,7 +25,10 @@ interface PreferencesState {
     libraryLayout: 'grid' | 'list';
     libraryFilterMode: 'all' | 'downloaded';
     librarySortOrder: 'recent' | 'last_read' | 'author' | 'title';
-    activeContext: 'library' | 'notes';
+    // `activeContext` left the store in Phase 8 §J: the library/notes
+    // switch is ROUTE state now (/ vs /notes). The Y.Map husk old clients
+    // keep writing is inert here (absent from syncedKeys = never written,
+    // never hydrated) and is pruned by the v9 husk-clear migration (P9).
 
     // === LANGUAGE SCOPED FONT RENDERING ===
     fontProfiles: Record<string, FontProfile>;
@@ -35,6 +37,18 @@ interface PreferencesState {
     forceTraditionalChinese: boolean;
     showPinyin: boolean;
     pinyinSize: number;
+
+    // === PER-BOOK AI CONSENT (Phase 7 §H, privacy D2) ===
+    /**
+     * bookId → whether book content/derived data may be sent to GenAI by
+     * NON-interactive flows (the NetworkGateway consent gate consults this
+     * through the resolver wired in src/app/google/wireGoogle.ts).
+     * Additive optional field — safe post-P2 merge-defaults. Absent entries
+     * fall back to grandfathering (books with existing contentAnalysis
+     * records) and then to the global feature flags (observe mode until the
+     * per-book consent prompt ships with the TTS UI work).
+     */
+    aiConsent: Record<string, boolean>;
 
     // === ACTIONS (not synced to Yjs) ===
     setTheme: (theme: 'light' | 'dark' | 'sepia') => void;
@@ -47,13 +61,14 @@ interface PreferencesState {
     setLibraryLayout: (layout: 'grid' | 'list') => void;
     setLibraryFilterMode: (mode: 'all' | 'downloaded') => void;
     setLibrarySortOrder: (order: 'recent' | 'last_read' | 'author' | 'title') => void;
-    setActiveContext: (context: 'library' | 'notes') => void;
 
     setForceTraditionalChinese: (force: boolean) => void;
     setShowPinyin: (show: boolean) => void;
     setPinyinSize: (size: number) => void;
 
     setFontProfile: (lang: string, profile: Partial<FontProfile>) => void;
+
+    setAiConsent: (bookId: string, granted: boolean) => void;
 }
 
 const defaultPreferences = {
@@ -67,7 +82,6 @@ const defaultPreferences = {
     libraryLayout: 'grid' as const,
     libraryFilterMode: 'all' as const,
     librarySortOrder: 'last_read' as const,
-    activeContext: 'library' as const,
 
     forceTraditionalChinese: false,
     showPinyin: false,
@@ -76,7 +90,44 @@ const defaultPreferences = {
     fontProfiles: {
         en: { fontSize: 100, lineHeight: 1.5 },
         zh: { fontSize: 120, lineHeight: 1.8 }
-    }
+    },
+
+    aiConsent: {} as Record<string, boolean>
+};
+
+/**
+ * Replication declaration (aggregated by src/store/registry.ts).
+ * Flipped in flip wave 3 (phase2-fork-surgery.md §2.6 #6, §5.3): bound to
+ * the v6-folded keyed map — the unchanged flat PreferencesState lives in the
+ * nested Y.Map `preferences.<deviceId>`, so zero consumer call sites change.
+ * The legacy top-level `preferences/<deviceId>` shares are dead husks from
+ * here on (v6 copied them in, copy-without-clear; v7 clears them) and no
+ * new ones are ever created (a new device starts from declared defaults and
+ * lazily writes its sub-map). merge-defaults retires the fontProfiles wipe
+ * class (D2) this store's v4→v5 migration existed for.
+ */
+export const PREFERENCES_STORE_DEF: SyncedStoreDef<keyof typeof defaultPreferences> = {
+    name: 'preferences',
+    scope: { key: getDeviceId() },
+    syncedKeys: [
+        'currentTheme',
+        'customTheme',
+        'fontFamily',
+        'lineHeight',
+        'fontSize',
+        'shouldForceFont',
+        'readerViewMode',
+        'libraryLayout',
+        'libraryFilterMode',
+        'librarySortOrder',
+        'fontProfiles',
+        'forceTraditionalChinese',
+        'showPinyin',
+        'pinyinSize',
+        'aiConsent',
+    ],
+    hydration: 'merge-defaults',
+    scopedDiff: true,
 };
 
 /**
@@ -86,9 +137,8 @@ const defaultPreferences = {
  * Keyed by device ID so each device maintains its own persistent preferences.
  */
 export const usePreferencesStore = create<PreferencesState>()(
-    yjs(
-        yDoc,
-        `preferences/${getDeviceId()}`,
+    defineSyncedStore(
+        PREFERENCES_STORE_DEF,
         (set) => ({
             ...defaultPreferences,
 
@@ -102,7 +152,6 @@ export const usePreferencesStore = create<PreferencesState>()(
             setLibraryLayout: (layout) => set({ libraryLayout: layout }),
             setLibraryFilterMode: (mode) => set({ libraryFilterMode: mode }),
             setLibrarySortOrder: (order) => set({ librarySortOrder: order }),
-            setActiveContext: (context) => set({ activeContext: context }),
 
             setForceTraditionalChinese: (force) => set({ forceTraditionalChinese: force }),
             setShowPinyin: (show) => set({ showPinyin: show }),
@@ -117,7 +166,10 @@ export const usePreferencesStore = create<PreferencesState>()(
                     }
                 };
             }),
-        }),
-        getYjsOptions()
+
+            setAiConsent: (bookId, granted) => set((state) => ({
+                aiConsent: { ...state.aiConsent, [bookId]: granted }
+            })),
+        })
     )
 );

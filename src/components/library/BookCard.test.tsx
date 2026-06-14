@@ -3,12 +3,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { BookCard } from './BookCard';
-import type { BookMetadata } from '../../types/db';
+import { coverUrl } from '@data/covers';
+import type { BookMetadata } from '~types/book';
 
 // Remove obsolete mock for BookActionMenu which is no longer used in BookCard
 
 // Mock Reading State Store (still needed for ResumeBadge)
-vi.mock('../../store/useReadingStateStore', () => ({
+vi.mock('@store/useReadingStateStore', () => ({
   useReadingStateStore: vi.fn((selector) => {
     return selector({ progress: {} });
   }),
@@ -17,7 +18,7 @@ vi.mock('../../store/useReadingStateStore', () => ({
 }));
 
 // Mock Device Store
-vi.mock('../../store/useDeviceStore', () => ({
+vi.mock('@store/useDeviceStore', () => ({
   useDeviceStore: vi.fn((selector) => {
     const mockState = {
       devices: {
@@ -30,7 +31,7 @@ vi.mock('../../store/useDeviceStore', () => ({
 }));
 
 // Mock Device ID
-vi.mock('../../lib/device-id', () => ({
+vi.mock('@lib/device-id', () => ({
   getDeviceId: () => 'test-device-id'
 }));
 
@@ -112,7 +113,7 @@ describe('BookCard', () => {
     renderCard();
 
     const img = screen.getByRole('img');
-    expect(img).toHaveAttribute('src', `/__versicle__/covers/${mockBook.id}`);
+    expect(img).toHaveAttribute('src', coverUrl(mockBook.id));
     expect(img).toHaveAttribute('alt', 'Cover of Test Title');
   });
 

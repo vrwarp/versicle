@@ -1,12 +1,14 @@
 import { memo, forwardRef } from 'react';
-import type { TTSQueueItem as TTSQueueItemType } from '../../lib/tts/AudioPlayerService';
-import { cn } from '../../lib/utils';
+import type { TTSQueueItem as TTSQueueItemType } from '~types/tts';
+import { cn } from '@lib/utils';
 
 interface TTSQueueItemProps {
     item: TTSQueueItemType;
     index: number;
     isActive: boolean;
     onJump: (index: number) => void;
+    /** Content language of the book (`book.language`) — `lang=` on the sentence text (i18n ADR §3). */
+    contentLang?: string;
 }
 
 /**
@@ -14,7 +16,7 @@ interface TTSQueueItemProps {
  * Memoized to prevent re-renders of inactive items when the current index changes.
  */
 export const TTSQueueItem = memo(forwardRef<HTMLButtonElement, TTSQueueItemProps>(
-    ({ item, index, isActive, onJump }, ref) => {
+    ({ item, index, isActive, onJump, contentLang }, ref) => {
         return (
             <button
                 data-testid={`tts-queue-item-${index}`}
@@ -29,7 +31,7 @@ export const TTSQueueItem = memo(forwardRef<HTMLButtonElement, TTSQueueItemProps
                     item.isSkipped && "opacity-40 hover:opacity-60 bg-muted/5"
                 )}
             >
-                <p className={cn("line-clamp-2", item.isSkipped && "line-through decoration-muted-foreground/50")}>
+                <p lang={contentLang} className={cn("line-clamp-2", item.isSkipped && "line-through decoration-muted-foreground/50")}>
                     {item.text}
                 </p>
                 {item.isSkipped && <span className="text-xs italic ml-1 block mt-0.5">Skipped</span>}

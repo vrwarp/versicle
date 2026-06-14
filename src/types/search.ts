@@ -1,23 +1,37 @@
 /**
- * Represents the result of a search query within a book.
- * Used by both the SearchEngine (to return results) and the UI (to display them).
- *
- * @example
- * ```ts
- * const result: SearchResult = {
- *   href: "chapter1.html",
- *   excerpt: "...found this text...",
- *   cfi: "epubcfi(/6/4!/4/2/1:0)"
- * };
- * ```
+ * A per-occurrence search hit (Phase 7 §F, PR-S2) — THE search result shape
+ * (the legacy `{href, excerpt}` SearchResult died with the reader-side
+ * SearchSession adoption). It carries enough position data to navigate to
+ * the EXACT occurrence: `charOffset` into the section's indexed plain text,
+ * the per-section `occurrence` ordinal, and an optional `cfi` resolved
+ * lazily at click time (the engine/worker never see the DOM).
  */
-export interface SearchResult {
-    /** The reference (href) to the location in the book (e.g., 'chapter1.html'). */
+export interface DetailedSearchResult {
+    /** The reference (href) to the section containing the match. */
     href: string;
-    /** A snippet of text containing the search term, with surrounding context. */
+    /** The section's display title, when the indexed corpus carried one. */
+    sectionTitle?: string;
+    /** Context snippet sliced from the ORIGINAL text around the match. */
     excerpt: string;
-    /** Optional Canonical Fragment Identifier (CFI) for precise location navigation. */
+    /** Code-unit offset of the match start within the section's indexed text. */
+    charOffset: number;
+    /** Code-unit length of the matched text in the original string. */
+    matchLength: number;
+    /** 1-based ordinal of this match within its section. */
+    occurrence: number;
+    /**
+     * EPUB CFI of the occurrence. NEVER produced by the engine/worker —
+     * resolved lazily on demand via `resolveResultCfi` (domains/search) with
+     * an injected `cfiFromRange`. Optional so results stay cheap.
+     */
     cfi?: string;
+}
+
+/** A bounded result page: the engine caps scans and SAYS so (no silent 50-cap). */
+export interface SearchBatchResult {
+    results: DetailedSearchResult[];
+    /** True when more matches existed beyond the cap. */
+    truncated: boolean;
 }
 
 /**
@@ -31,6 +45,6 @@ export interface SearchSection {
     href: string;
     /** The raw text content of the section. */
     text?: string;
-    /** The raw XML content of the section (optional, for worker-side parsing). */
-    xml?: string;
+    /** Optional display title (carried through to DetailedSearchResult.sectionTitle). */
+    title?: string;
 }

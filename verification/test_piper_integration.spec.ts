@@ -38,7 +38,8 @@ test("piper provider selection", async ({ page }) => {
   await page.getByRole("button", { name: "Settings" }).click();
 
   // Go to TTS tab
-  await page.getByRole("button", { name: "TTS Engine" }).click();
+  await page.getByRole("tab", { name: "TTS Engine" }).scrollIntoViewIfNeeded().catch(() => {});
+  await page.getByRole("tab", { name: "TTS Engine" }).click();
 
   // Check provider dropdown (initially Web Speech)
   const selectTrigger = page.getByTestId("tts-provider-select");

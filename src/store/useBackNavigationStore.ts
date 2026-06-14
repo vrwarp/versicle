@@ -13,8 +13,6 @@ export enum BackButtonPriority {
     MODAL = 50,
     /** Full-screen overlays, Critical alerts */
     OVERLAY = 100,
-    /** Critical system-level interruptions */
-    CRITICAL = 200,
 }
 
 /**

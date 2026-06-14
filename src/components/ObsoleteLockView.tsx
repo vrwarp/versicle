@@ -1,6 +1,6 @@
 import React from 'react';
-import { useUIStore } from '../store/useUIStore';
-import { CURRENT_SCHEMA_VERSION } from '../store/yjs-provider';
+import { useUIStore } from '@store/useUIStore';
+import { CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
 import { Button } from './ui/Button';
 
 /**

@@ -3,7 +3,7 @@ import { ThemeSelector } from '../ThemeSelector';
 import { Button } from '../ui/Button';
 import { ImportProgressUI } from '../library/ImportProgressUI';
 
-export type ThemeType = 'light' | 'dark' | 'sepia';
+type ThemeType = 'light' | 'dark' | 'sepia';
 
 export interface GeneralSettingsTabProps {
     // Theme
@@ -95,6 +95,8 @@ export const GeneralSettingsTab: React.FC<GeneralSettingsTabProps> = ({
                         <ImportProgressUI />
                     </div>
                 )}
+                {/* Per-file outcome summary, shown after a batch import completes */}
+                {!isImporting && <ImportProgressUI />}
             </div>
 
             <div className="border-t pt-6 space-y-4">

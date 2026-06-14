@@ -1,0 +1,251 @@
+/**
+ * FakeEngineContext — a deterministic, dependency-free EngineContext for unit tests.
+ *
+ * Lets a test drive the engine core without jsdom, Zustand, or module mocks: configure
+ * settings via the public fields, push analysis/book changes via `emit*`, and inspect
+ * what the engine wrote via the public log arrays.
+ *
+ * It is intentionally permissive (sensible defaults, every method a no-op unless it
+ * records something) so tests opt into only the surface they care about.
+ */
+import type {
+    EngineContext,
+    CompiledLexicon,
+    TTSSettingsData,
+    GenAISettingsSnapshot,
+    GenAILogEntry,
+    AnnotationInput,
+    Progress,
+    ReadingEventType,
+    ToastType,
+    SectionAnalysis,
+    LexiconRule,
+    ContentAnalysis,
+    BookMetadata,
+    BookContentPort,
+    SessionStore,
+    PlaybackSessionRow,
+} from './EngineContext';
+import type { TTSQueueItem } from '~types/tts';
+
+type AnalysisListener = (state: { sections: Record<string, SectionAnalysis> }) => void;
+
+export class FakeEngineContext implements EngineContext {
+    // --- Configurable inputs ---
+    activeLanguage = 'en';
+    ttsSettings: Partial<TTSSettingsData> = {};
+    genAISettings: Partial<GenAISettingsSnapshot> = {};
+    /** keyed by `${bookId}` → raw book language. */
+    bookLanguages: Record<string, string> = {};
+    /** keyed by `${bookId}/${sectionId}` → analysis. */
+    analyses: Record<string, SectionAnalysis> = {};
+    progress: Record<string, Progress> = {};
+    platformName = 'web';
+    batteryOptimizationEnabled = false;
+    minSentenceLengthByLang: (lang: string) => number = (lang) => (lang.startsWith('zh') ? 6 : 36);
+
+    /** Whether the fake GenAI client reports itself as configured. */
+    genAIConfigured = false;
+    /** Configurable model-call results for the GenAI port. */
+    contentTypeDetections: { classifications: { id: string; type: string }[]; justification: string; agreedWithHeuristic: boolean } =
+        { classifications: [], justification: '', agreedWithHeuristic: false };
+    tableAdaptationResults: { cfi: string; adaptation: string }[] = [];
+
+    // --- Recorded outputs (assert against these) ---
+    readonly toasts: Array<{ message: string; type?: ToastType }> = [];
+    readonly addedAnnotations: AnnotationInput[] = [];
+    readonly genAILogs: GenAILogEntry[] = [];
+    readonly genAIConfigureCalls: Array<{ apiKey: string; model: string }> = [];
+    readonly detectContentTypesCalls: Array<{ nodes: { id: string; sampleText: string }[]; hints: { enumeratorCandidate: number } }> = [];
+    readonly generateTableAdaptationsCalls: Array<{ nodes: { rootCfi: string }[]; thinkingBudget: number }> = [];
+    readonly ttsProgressWrites: Array<{ bookId: string; queueIndex: number; sectionIndex: number }> = [];
+    readonly completedRanges: Array<{ bookId: string; cfiRange: string; type?: ReadingEventType }> = [];
+    readonly playbackPositions: Array<{ bookId: string; lastPlayedCfi: string }> = [];
+    readonly sectionTitles: Array<{ title: string; sectionId: string }> = [];
+    readonly openedBatterySettings: number[] = [];
+
+    private genAIListeners = new Set<() => void>();
+    private analysisListeners = new Set<AnalysisListener>();
+    private bookListeners = new Set<() => void>();
+
+    config = {
+        getActiveLanguage: () => this.activeLanguage,
+        setActiveLanguage: (lang: string) => {
+            this.activeLanguage = lang;
+        },
+        getSettings: () => this.ttsSettings as TTSSettingsData,
+        getDefaultMinSentenceLength: (lang: string) => this.minSentenceLengthByLang(lang),
+    };
+
+    genAI = {
+        getSettings: () => this.genAISettings as GenAISettingsSnapshot,
+        addLog: (entry: GenAILogEntry) => {
+            this.genAILogs.push(entry);
+        },
+        subscribe: (listener: () => void) => {
+            this.genAIListeners.add(listener);
+            return () => this.genAIListeners.delete(listener);
+        },
+        isConfigured: () => this.genAIConfigured,
+        configure: (apiKey: string, model: string) => {
+            this.genAIConfigureCalls.push({ apiKey, model });
+            this.genAIConfigured = true;
+        },
+        detectContentTypes: async (
+            nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
+            hints: { enumeratorCandidate: number },
+        ) => {
+            this.detectContentTypesCalls.push({ nodes, hints });
+            return this.contentTypeDetections as never;
+        },
+        generateTableAdaptations: async (
+            nodes: { rootCfi: string; imageBlob: Blob }[],
+            thinkingBudget: number,
+        ) => {
+            this.generateTableAdaptationsCalls.push({ nodes, thinkingBudget });
+            return this.tableAdaptationResults;
+        },
+    };
+
+    readingState = {
+        getProgress: (bookId: string) => this.progress[bookId] ?? null,
+        updateTTSProgress: (bookId: string, queueIndex: number, sectionIndex: number) => {
+            this.ttsProgressWrites.push({ bookId, queueIndex, sectionIndex });
+        },
+        addCompletedRange: (bookId: string, cfiRange: string, type?: ReadingEventType) => {
+            this.completedRanges.push({ bookId, cfiRange, type });
+        },
+        updatePlaybackPosition: (bookId: string, lastPlayedCfi: string) => {
+            this.playbackPositions.push({ bookId, lastPlayedCfi });
+        },
+    };
+
+    /** keyed by `${bookId}/${sectionId}` → persisted ContentAnalysis (the getContentAnalysis result). */
+    contentAnalyses: Record<string, ContentAnalysis> = {};
+    /** Every getContentAnalysis fetch, as `${bookId}/${sectionId}` (parity P16 dedup pin). */
+    readonly contentAnalysisFetchLog: string[] = [];
+    readonly savedReferenceCfis: Array<{ bookId: string; sectionId: string; cfi: string | undefined }> = [];
+    readonly savedTableAdaptations: Array<{ bookId: string; sectionId: string; adaptations: { rootCfi: string; text: string }[] }> = [];
+
+    contentAnalysis = {
+        getAnalysis: (bookId: string, sectionId: string) => this.analyses[`${bookId}/${sectionId}`],
+        getSnapshot: () => ({ sections: this.analyses }),
+        subscribe: (listener: AnalysisListener) => {
+            this.analysisListeners.add(listener);
+            return () => this.analysisListeners.delete(listener);
+        },
+        getContentAnalysis: async (bookId: string, sectionId: string) => {
+            this.contentAnalysisFetchLog.push(`${bookId}/${sectionId}`);
+            return this.contentAnalyses[`${bookId}/${sectionId}`];
+        },
+        saveReferenceStartCfi: (bookId: string, sectionId: string, cfi: string | undefined) => {
+            this.savedReferenceCfis.push({ bookId, sectionId, cfi });
+        },
+        markAnalysisLoading: () => {},
+        markAnalysisError: () => {},
+        saveTableAdaptations: (bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]) => {
+            this.savedTableAdaptations.push({ bookId, sectionId, adaptations });
+        },
+    };
+
+    /** keyed by bookId → full BookMetadata (the getMetadata result). */
+    bookMetadata: Record<string, BookMetadata> = {};
+    book = {
+        getBookLanguage: (bookId: string) => this.bookLanguages[bookId] || 'en',
+        getMetadata: async (bookId: string) => this.bookMetadata[bookId],
+        subscribe: (listener: () => void) => {
+            this.bookListeners.add(listener);
+            return () => this.bookListeners.delete(listener);
+        },
+    };
+
+    annotations = {
+        add: (annotation: AnnotationInput) => {
+            this.addedAnnotations.push(annotation);
+        },
+    };
+
+    notifications = {
+        showToast: (message: string, type?: ToastType) => {
+            this.toasts.push({ message, type });
+        },
+    };
+
+    readerUI = {
+        setCurrentSection: (title: string, sectionId: string) => {
+            this.sectionTitles.push({ title, sectionId });
+        },
+    };
+
+    lexiconRules: LexiconRule[] = [];
+    biblePreference: 'on' | 'off' | 'default' = 'default';
+    /** Bumped by emitLexiconChange (the CompiledLexicon version the fake serves). */
+    lexiconVersion = 0;
+    private lexiconListeners = new Set<() => void>();
+    lexicon = {
+        getCompiled: async (_bookId: string | undefined, language: string): Promise<CompiledLexicon> => ({
+            rules: this.lexiconRules,
+            version: this.lexiconVersion,
+            language,
+        }),
+        getBibleLexiconPreference: async () => this.biblePreference,
+        subscribe: (listener: () => void) => {
+            this.lexiconListeners.add(listener);
+            return () => this.lexiconListeners.delete(listener);
+        },
+    };
+
+    platform = {
+        getPlatform: () => this.platformName,
+        isNativePlatform: () => this.platformName !== 'web',
+        isBatteryOptimizationEnabled: async () => this.batteryOptimizationEnabled,
+        openBatteryOptimizationSettings: async () => {
+            this.openedBatterySettings.push(Date.now());
+        },
+    };
+
+    // --- Storage ports (5b decomposition; in-memory, seed via the public maps) ---
+    /** bookId → spine sections (content.getSections). */
+    sections: Record<string, Array<{ sectionId: string; title?: string; characterCount?: number }>> = {};
+    /** `${bookId}/${sectionId}` → prepared content (content.getTTSPreparation). Markers travel WITH sentences (D4). */
+    ttsContent: Record<string, { sentences: Array<{ text: string; cfi: string; sourceIndices?: number[] }>; citationMarkers?: Array<Record<string, unknown>> } | undefined> = {};
+    /** bookId → persisted playback session (session.loadSession source). */
+    sessions: Record<string, PlaybackSessionRow | undefined> = {};
+    /** Recorded session writes (assert against these). */
+    readonly persistedQueues: Array<{ bookId: string; queue: ReadonlyArray<TTSQueueItem> }> = [];
+    readonly persistedPauseTimes: Array<{ bookId: string; lastPauseTime: number | null }> = [];
+
+    content: BookContentPort = {
+        getSections: async (bookId: string) => (this.sections[bookId] ?? []) as never,
+        getTTSPreparation: async (bookId: string, sectionId: string) =>
+            this.ttsContent[`${bookId}/${sectionId}`] as never,
+        getTableImages: async () => [],
+        getBookStructure: async () => undefined,
+    };
+
+    session: SessionStore = {
+        loadSession: async (bookId: string) => this.sessions[bookId],
+        persistQueue: (bookId: string, queue: ReadonlyArray<TTSQueueItem>) => {
+            this.persistedQueues.push({ bookId, queue });
+        },
+        persistPauseTime: async (bookId: string, lastPauseTime: number | null) => {
+            this.persistedPauseTimes.push({ bookId, lastPauseTime });
+        },
+    };
+
+    // --- Test-side triggers for the subscription ports ---
+    emitGenAIChange() {
+        this.genAIListeners.forEach((l) => l());
+    }
+    emitAnalysisChange() {
+        this.analysisListeners.forEach((l) => l({ sections: this.analyses }));
+    }
+    emitBookChange() {
+        this.bookListeners.forEach((l) => l());
+    }
+    /** Simulate a lexicon change (rule CRUD / bible flag): bump version + notify. */
+    emitLexiconChange() {
+        this.lexiconVersion++;
+        this.lexiconListeners.forEach((l) => l());
+    }
+}

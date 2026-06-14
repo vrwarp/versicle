@@ -1,14 +1,14 @@
 import React from 'react';
-import type { NavigationItem } from 'epubjs';
+import type { NavigationItem } from '~types/book';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/Tabs';
 import { Switch } from '../../ui/Switch';
 import { Label } from '../../ui/Label';
 import { Button } from '../../ui/Button';
 import { Wand2 } from 'lucide-react';
-import { cn } from '../../../lib/utils';
+import { cn } from '@lib/utils';
 import { ReadingHistoryPanel } from '../ReadingHistoryPanel';
 import { DeviceIcon } from '../DeviceIcon';
-import type { Rendition } from 'epubjs';
+import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 
 export interface DeviceMarker {
     id: string;
@@ -30,9 +30,15 @@ export interface TOCPanelProps {
     onEnhanceTOC: () => void;
     // History tab
     bookId: string;
-    rendition?: Rendition;
+    engine?: ReaderEngine;
     historyTick: number;
     onHistoryNavigate: (cfi: string) => void;
+    /**
+     * Content language of the book (`book.language`) — applied as `lang=`
+     * on TOC labels (i18n ADR §3: book-sourced text in the top document
+     * carries the content language, never the UI locale).
+     */
+    contentLang?: string;
 }
 
 export const TOCPanel: React.FC<TOCPanelProps> = ({
@@ -47,9 +53,10 @@ export const TOCPanel: React.FC<TOCPanelProps> = ({
     tocProgress,
     onEnhanceTOC,
     bookId,
-    rendition,
+    engine,
     historyTick,
-    onHistoryNavigate
+    onHistoryNavigate,
+    contentLang
 }) => {
     const renderTOCItem = (item: NavigationItem, index: number, level: number = 0, parentId: string = 'toc-item') => {
         const hasSubitems = item.subitems && item.subitems.length > 0;
@@ -73,7 +80,7 @@ export const TOCPanel: React.FC<TOCPanelProps> = ({
                     style={{ paddingLeft: `${level * 1.0 + 0.5}rem` }}
                     onClick={() => onNavigate(item.href)}
                 >
-                    <span className="truncate">{item.label.trim()}</span>
+                    <span className="truncate" lang={contentLang}>{item.label.trim()}</span>
                     {markers && markers.length > 0 && (
                         <div className="flex -space-x-1 ml-2 flex-shrink-0" title={`Read by: ${markers.map(m => m.name).join(', ')}`}>
                             {markers.map(m => (
@@ -147,7 +154,7 @@ export const TOCPanel: React.FC<TOCPanelProps> = ({
                 <TabsContent value="history" className="flex-1 overflow-y-auto mt-0 min-h-0 data-[state=active]:flex data-[state=active]:flex-col">
                     <ReadingHistoryPanel
                         bookId={bookId}
-                        rendition={rendition ?? null}
+                        engine={engine ?? null}
                         trigger={historyTick}
                         onNavigate={onHistoryNavigate}
                     />

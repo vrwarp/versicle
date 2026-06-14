@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { Checkbox } from './ui/Checkbox';
-import { useReadingListStore } from '../store/useReadingListStore';
-import { useBookStore } from '../store/useBookStore';
-import { genAIService } from '../lib/genai/GenAIService';
+import { useReadingListStore } from '@store/useReadingListStore';
+import { useBookStore } from '@store/useBookStore';
+import { getGenAIClient } from '@domains/google';
 import { Loader2, Link2, Unlink } from 'lucide-react';
-import { useGenAIStore } from '../store/useGenAIStore';
+import { useGenAIStore } from '@store/useGenAIStore';
 
 interface SmartLinkDialogProps {
     open: boolean;
@@ -73,7 +73,12 @@ export const SmartLinkDialog: React.FC<SmartLinkDialogProps> = ({ open, onOpenCh
             setError(null);
 
             try {
-                const generatedMappings = await genAIService.mapReadingListToLibrary(
+                // Deep feature import (first-use loading, Phase 8 §A).
+                const { mapReadingListToLibrary } = await import(
+                    '@domains/google/genai/features/libraryMapping'
+                );
+                const generatedMappings = await mapReadingListToLibrary(
+                    getGenAIClient(),
                     unmappedEntries,
                     unmappedBooks
                 );
@@ -87,10 +92,9 @@ export const SmartLinkDialog: React.FC<SmartLinkDialogProps> = ({ open, onOpenCh
 
                 setMappings(validMappings);
                 setSelectedMappings(new Set(validMappings.map(m => m.readingListFilename)));
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            } catch (err: any) {
+            } catch (err) {
                 console.error("Failed to generate mappings:", err);
-                setError(err.message || "An error occurred while matching books.");
+                setError(err instanceof Error && err.message ? err.message : "An error occurred while matching books.");
             } finally {
                 setIsLoading(false);
             }

@@ -1,16 +1,15 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import React from 'react';
 import { EmptyLibrary } from './EmptyLibrary';
-import { useLibraryStore } from '../../store/useLibraryStore';
-import { useToastStore } from '../../store/useToastStore';
+import { useLibraryStore } from '@store/useLibraryStore';
+import { useToastStore } from '@store/useToastStore';
 
 // Mock dependencies
-vi.mock('../../store/useLibraryStore', () => ({
+vi.mock('@store/useLibraryStore', () => ({
   useLibraryStore: vi.fn(),
 }));
 
-vi.mock('../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
   useToastStore: vi.fn(),
 }));
 
@@ -19,17 +18,24 @@ vi.mock('./FileUploader', () => ({
   FileUploader: () => <div data-testid="file-uploader-mock">File Uploader Mock</div>
 }));
 
+// Phase 7: import workflows live on the shared controller, not the store.
+const { mockAddBook } = vi.hoisted(() => ({ mockAddBook: vi.fn() }));
+vi.mock('@app/library/useImportController', () => {
+  const controller = { importFile: mockAddBook };
+  return { useImportController: () => controller, libraryController: controller };
+});
+
 describe('EmptyLibrary', () => {
-  const mockAddBook = vi.fn();
   const mockShowToast = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAddBook.mockResolvedValue({ status: 'imported', bookId: 'x' });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useLibraryStore as any).mockReturnValue({
-      addBook: mockAddBook,
-      isImporting: false,
+    (useLibraryStore as any).mockImplementation((selector: any) => {
+      const state = { isImporting: false };
+      return selector ? selector(state) : state;
     });
 
     // Mock useToastStore hook
@@ -98,9 +104,9 @@ describe('EmptyLibrary', () => {
 
   it('displays loading spinner when importing', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useLibraryStore as any).mockReturnValue({
-      addBook: mockAddBook,
-      isImporting: true,
+    (useLibraryStore as any).mockImplementation((selector: any) => {
+      const state = { isImporting: true };
+      return selector ? selector(state) : state;
     });
 
     render(<EmptyLibrary onImport={vi.fn()} />);

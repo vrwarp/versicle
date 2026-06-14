@@ -7,28 +7,30 @@ import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { Progress } from '../ui/Progress';
 import { Trash2 } from 'lucide-react';
-import type { TTSVoice } from '../../lib/tts/providers/types';
-import { getDefaultMinSentenceLength } from '../../store/useTTSStore';
+import type { TTSVoice } from '@lib/tts/providers/types';
+import {
+    selectableProviders,
+    type ProviderOption,
+    type TTSProviderId,
+    type TTSApiKeyProviderId,
+} from '@lib/tts/providers/registry';
+import { getDefaultMinSentenceLength } from '@store/useTTSSettingsStore';
 
-// Re-export TTSVoice for consumers
-export type { TTSVoice };
-
-// Type aliases matching the store types
-export type TTSProviderId = 'local' | 'google' | 'openai' | 'lemonfox' | 'piper';
-export type TTSApiKeyProvider = 'google' | 'openai' | 'lemonfox';
-export type BackgroundAudioMode = 'silence' | 'noise' | 'off';
+type BackgroundAudioMode = 'silence' | 'noise' | 'off';
 
 export interface TTSSettingsTabProps {
     /** Currently active language profile (from store, driven by book context) */
     activeLanguage: string;
     /** All TTS profiles for language context */
-    profiles: Record<string, import('../../store/useTTSStore').TTSProfile>;
+    profiles: Record<string, import('@store/useTTSSettingsStore').TTSProfile>;
     // Provider
     providerId: TTSProviderId;
     onProviderChange: (providerId: TTSProviderId) => void;
-    // API Keys
+    // API Keys — committed on blur / "Test Key", never per keystroke (5a buffered edits)
     apiKeys: Record<string, string>;
-    onApiKeyChange: (provider: TTSApiKeyProvider, key: string) => void;
+    onApiKeyChange: (provider: TTSApiKeyProviderId, key: string) => void;
+    /** Explicit "Test Key" action: verify the (buffered) key by probing the provider. */
+    onTestApiKey?: (provider: TTSApiKeyProviderId, key: string) => void;
     // Background Audio
     backgroundAudioMode: BackgroundAudioMode;
     onBackgroundAudioModeChange: (mode: BackgroundAudioMode) => void;
@@ -48,6 +50,54 @@ export interface TTSSettingsTabProps {
     onMinSentenceLengthChange: (length: number, lang: string) => void;
 }
 
+/**
+ * One buffered API-key editor. Keystrokes only touch local state — the key is
+ * committed (and the provider rebuilt) on blur or via the explicit "Test Key"
+ * button. This kills the per-keystroke provider rebuild (S10/D5): typing an API
+ * key constructs nothing.
+ */
+const ApiKeyField: React.FC<{
+    option: ProviderOption & { id: TTSApiKeyProviderId };
+    value: string;
+    onCommit: (provider: TTSApiKeyProviderId, key: string) => void;
+    onTest?: (provider: TTSApiKeyProviderId, key: string) => void;
+}> = ({ option, value, onCommit, onTest }) => {
+    const [draft, setDraft] = useState(value);
+
+    const commit = () => {
+        if (draft !== value) {
+            onCommit(option.id, draft);
+        }
+    };
+
+    return (
+        <div className="space-y-2">
+            <Label htmlFor={`tts-${option.id}-key`}>{option.apiKeyLabel}</Label>
+            <div className="flex gap-2">
+                <div className="flex-1">
+                    <PasswordInput
+                        id={`tts-${option.id}-key`}
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onBlur={commit}
+                    />
+                </div>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    data-testid={`tts-${option.id}-test-key`}
+                    onClick={() => {
+                        commit();
+                        onTest?.(option.id, draft);
+                    }}
+                >
+                    Test Key
+                </Button>
+            </div>
+        </div>
+    );
+};
+
 export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
     activeLanguage = 'en',
     profiles = {},
@@ -55,6 +105,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
     onProviderChange,
     apiKeys,
     onApiKeyChange,
+    onTestApiKey,
     backgroundAudioMode,
     onBackgroundAudioModeChange,
     whiteNoiseVolume,
@@ -73,9 +124,14 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
     // Local-only language state for configuration view. Changing this does NOT
     // affect the active playback profile — that is always set by the open book's language.
     const [configLanguage, setConfigLanguage] = useState(activeLanguage);
-    
+
+    // The provider choices and API-key fields render from the registry — the single
+    // source of truth (no re-declared aliases or hardcoded items in this component).
+    const providerOptions = selectableProviders();
+    const activeOption = providerOptions.find(o => o.id === providerId);
+
     // Derive the voice for the currently viewed config language from the profiles.
-    // Fall back to the legacy 'voice' prop if we are looking at the active language 
+    // Fall back to the legacy 'voice' prop if we are looking at the active language
     // and no specific profile exists yet.
     const configProfile = profiles?.[configLanguage];
     const configVoiceId = configProfile?.voiceId || (configLanguage === activeLanguage ? _voice?.id : null);
@@ -119,11 +175,9 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                         <Select value={providerId} onValueChange={onProviderChange}>
                             <SelectTrigger id="tts-provider-select" data-testid="tts-provider-select" aria-label="Select TTS provider"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="local">Web Speech (Local)</SelectItem>
-                                <SelectItem value="piper">Piper (High Quality Local)</SelectItem>
-                                <SelectItem value="google">Google Cloud TTS</SelectItem>
-                                <SelectItem value="openai">OpenAI</SelectItem>
-                                <SelectItem value="lemonfox">LemonFox.ai</SelectItem>
+                                {providerOptions.map(option => (
+                                    <SelectItem key={option.id} value={option.id}>{option.displayName}</SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
@@ -166,7 +220,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                         )}
                     </div>
 
-                    {providerId === 'piper' && (
+                    {activeOption?.capabilities.downloadableVoices && (
                         <div className="space-y-4 pt-4 border-t">
                             <div className="space-y-2">
                                 <Label htmlFor="tts-voice-select" className="text-sm font-medium">Select Voice</Label>
@@ -236,35 +290,14 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
                         </div>
                     )}
 
-                    {providerId === 'google' && (
-                        <div className="space-y-2">
-                            <Label htmlFor="tts-google-key">Google API Key</Label>
-                            <PasswordInput
-                                id="tts-google-key"
-                                value={apiKeys.google || ''}
-                                onChange={(e) => onApiKeyChange('google', e.target.value)}
-                            />
-                        </div>
-                    )}
-                    {providerId === 'openai' && (
-                        <div className="space-y-2">
-                            <Label htmlFor="tts-openai-key">OpenAI API Key</Label>
-                            <PasswordInput
-                                id="tts-openai-key"
-                                value={apiKeys.openai || ''}
-                                onChange={(e) => onApiKeyChange('openai', e.target.value)}
-                            />
-                        </div>
-                    )}
-                    {providerId === 'lemonfox' && (
-                        <div className="space-y-2">
-                            <Label htmlFor="tts-lemonfox-key">LemonFox API Key</Label>
-                            <PasswordInput
-                                id="tts-lemonfox-key"
-                                value={apiKeys.lemonfox || ''}
-                                onChange={(e) => onApiKeyChange('lemonfox', e.target.value)}
-                            />
-                        </div>
+                    {activeOption?.requiresApiKey && (
+                        <ApiKeyField
+                            key={activeOption.id}
+                            option={activeOption as ProviderOption & { id: TTSApiKeyProviderId }}
+                            value={apiKeys[activeOption.id] || ''}
+                            onCommit={onApiKeyChange}
+                            onTest={onTestApiKey}
+                        />
                     )}
 
                     <div className="pt-4 border-t space-y-4">

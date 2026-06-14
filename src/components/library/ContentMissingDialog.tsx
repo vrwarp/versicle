@@ -2,12 +2,13 @@ import React, { useRef } from 'react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { CloudOff, Loader2, Download, Cloud } from 'lucide-react';
-import type { BookMetadata } from '../../types/db';
-import { useDriveStore } from '../../store/useDriveStore';
-import { DriveScannerService } from '../../lib/drive/DriveScannerService';
-import { useGoogleServicesStore } from '../../store/useGoogleServicesStore';
-import { googleIntegrationManager } from '../../lib/google/GoogleIntegrationManager';
+import type { BookMetadata } from '~types/book';
+import { useDriveStore } from '@store/useDriveStore';
+import { getDriveLibrarySync } from '@domains/google';
+import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
+import { getGoogleAuthClient } from '@domains/google';
 import { AlertCircle } from 'lucide-react';
+import { formatBytes } from '@kernel/locale/format';
 
 interface ContentMissingDialogProps {
     open: boolean;
@@ -56,7 +57,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
         setIsReconnecting(true);
         setReconnectError(null);
         try {
-            await googleIntegrationManager.connectService('drive');
+            await getGoogleAuthClient().connect('drive');
         } catch (error) {
             console.error('Failed to reconnect Drive:', error);
             setReconnectError('Failed to reconnect. Please try again.');
@@ -75,15 +76,21 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
         setIsCloudRestoring(true);
         setReconnectError(null);
         try {
-            // we bypass the parent onRestore and go direct to ScannerService -> Library
-            // or we could fetch blob and pass to onRestore(new File(...))
-            // Let's use ScannerService as it encapsulates the download
-            await DriveScannerService.importFile(cloudMatch.id, cloudMatch.name, { overwrite: true });
-            onOpenChange(false);
+            // Download the cloud copy, then restore it onto THIS ghost via the
+            // same bookId-targeted path as "Select File" (onRestore ->
+            // controller.restoreBook(book.id, file)). Handing the File to the
+            // generic importer instead re-matched the binary by filename then
+            // title+author and -- when the Drive filename or the EPUB's embedded
+            // metadata differed from the synced ghost -- imported a duplicate and
+            // left the ghost unresolved.
+            // User gesture: interactive token acquisition (the deleted façade's default).
+            const file = await getDriveLibrarySync().downloadAsFile(cloudMatch.id, cloudMatch.name, { interactive: true });
+            await onRestore(file);
         } catch (error) {
             console.error(error);
-            // Toast handled by service usually, but let's be safe
-            setReconnectError('Failed to download from cloud.');
+            // Toast handled by the parent restore handler; surface download
+            // failures (which happen before onRestore) inline as a fallback.
+            setReconnectError('Failed to restore from cloud.');
         } finally {
             setIsCloudRestoring(false);
         }
@@ -181,7 +188,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                             </p>
                             <p className="text-xs text-muted-foreground break-all whitespace-normal">
                                 {isDriveConnected 
-                                    ? `"${cloudMatch.name}" (${(cloudMatch.size / 1024 / 1024).toFixed(1)} MB)`
+                                    ? `"${cloudMatch.name}" (${formatBytes(cloudMatch.size)})`
                                     : "Reconnect to download this book from the cloud."}
                             </p>
                         </div>

@@ -1,40 +1,30 @@
 import { create } from 'zustand';
-import yjs from 'zustand-middleware-yjs';
-import { yDoc, getYjsOptions } from './yjs-provider';
-import type { UserAnnotation } from '../types/db';
-import { createLogger } from '../lib/logger';
-import { generateSecureId } from '../lib/crypto';
+import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
+import type { UserAnnotation } from '~types/user-data';
+import { createLogger } from '@lib/logger';
+import { generateSecureId } from '@lib/crypto';
 
 const logger = createLogger('AnnotationStore');
 
 /**
- * UI state for the annotation popover (not synced to Yjs).
- */
-interface PopoverState {
-  visible: boolean;
-  x: number;
-  y: number;
-  cfiRange: string;
-  text: string;
-  id?: string;
-}
-
-/**
  * Annotation store state.
- * 
+ *
  * Phase 2 (Yjs Migration): This store is wrapped with yjs() middleware.
  * - `annotations` (Record): Synced to yDoc.getMap('annotations')
- * - `popover`: Transient UI state (not synced)
  * - Actions (functions): Not synced, local-only
+ *
+ * NOTE (popover-desync hotfix): the ephemeral annotation popover state used to
+ * live here, which synced screen coordinates through the CRDT to other devices.
+ * It now lives in useReaderUIStore (ephemeral, non-synced). Older documents may
+ * still contain a stale `popover` key in the `annotations` Y.Map; it is no
+ * longer read or written, and is scheduled for deletion in the v6 CRDT
+ * migration (Phase 2 of the overhaul plan). Do not reuse the `popover` key name
+ * in this store before that migration lands.
  */
 export interface AnnotationState {
   // === SYNCED STATE (persisted to Yjs) ===
   /** Map of annotations keyed by UUID. */
   annotations: Record<string, UserAnnotation>;
-
-  // === TRANSIENT STATE (local-only, not synced) ===
-  /** Popover state for creating new annotations. */
-  popover: PopoverState;
 
   // === ACTIONS (not synced to Yjs) ===
   /**
@@ -66,36 +56,33 @@ export interface AnnotationState {
    * @returns Array of annotations for the book.
    */
   getByBook: (bookId: string) => UserAnnotation[];
-  /**
-   * Shows the annotation popover.
-   */
-  showPopover: (x: number, y: number, cfiRange: string, text: string, id?: string) => void;
-  /**
-   * Hides the annotation popover.
-   */
-  hidePopover: () => void;
 }
+
+/**
+ * Replication declaration (aggregated by src/store/registry.ts). The stale
+ * `popover` doc key (see module docs) is structurally outside `syncedKeys`,
+ * so it can never ride into store state again.
+ * Flipped to merge-defaults + scopedDiff in flip wave 4 (phase2-fork-surgery.md
+ * §2.6 #7): real user data but a single simple key; no top-level canaries
+ * existed (the actions already assumed `annotations` present).
+ */
+export const ANNOTATIONS_STORE_DEF: SyncedStoreDef<'annotations'> = {
+  name: 'annotations',
+  syncedKeys: ['annotations'],
+  hydration: 'merge-defaults',
+  scopedDiff: true,
+};
 
 /**
  * Factory to create the Annotation store with dependency injection.
  * In Phase 2, this no longer needs dbProvider since Yjs handles persistence.
  */
 export const createAnnotationStore = () => create<AnnotationState>()(
-  yjs(
-    yDoc,
-    'annotations',
+  defineSyncedStore(
+    ANNOTATIONS_STORE_DEF,
     (set, get) => ({
       // Synced state
       annotations: {},
-
-      // Transient state
-      popover: {
-        visible: false,
-        x: 0,
-        y: 0,
-        cfiRange: '',
-        text: '',
-      },
 
       // Actions
       add: (partialAnnotation) => {
@@ -138,7 +125,6 @@ export const createAnnotationStore = () => create<AnnotationState>()(
 
       remove: (id) => {
         set((state) => {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { [id]: _removed, ...remaining } = state.annotations;
           return { annotations: remaining };
         });
@@ -161,31 +147,7 @@ export const createAnnotationStore = () => create<AnnotationState>()(
         }
         return bookAnnotations.sort((a, b) => a.created - b.created);
       },
-
-      showPopover: (x, y, cfiRange, text, id) => {
-        set({
-          popover: {
-            visible: true,
-            x,
-            y,
-            cfiRange,
-            text,
-            id,
-          },
-        });
-      },
-
-      hidePopover: () => {
-        set((state) => ({
-          popover: {
-            ...state.popover,
-            visible: false,
-            id: undefined,
-          },
-        }));
-      },
-    }),
-    getYjsOptions()
+    })
   )
 );
 
@@ -194,3 +156,11 @@ export const createAnnotationStore = () => create<AnnotationState>()(
  * Wrapped with yjs() middleware for automatic CRDT synchronization.
  */
 export const useAnnotationStore = createAnnotationStore();
+
+/**
+ * Returns all pending audio bookmarks across all books (moved from the
+ * deleted selectors.ts façade — it is a pure selector over THIS store).
+ */
+export const selectPendingAudioBookmarks = (state: AnnotationState): UserAnnotation[] => {
+    return Object.values(state.annotations).filter(a => a.type === 'audio-bookmark');
+};

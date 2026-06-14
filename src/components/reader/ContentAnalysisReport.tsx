@@ -1,20 +1,20 @@
 import React, { useMemo, useState } from 'react';
-import { useContentAnalysisStore } from '../../store/useContentAnalysisStore';
-import { useReaderUIStore } from '../../store/useReaderUIStore';
+import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
-import { TYPE_COLORS, type ContentType } from '../../types/content-analysis';
-import type { Rendition } from 'epubjs';
+import { TYPE_COLORS, type ContentType } from '~types/content-analysis';
+import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { ChevronRight, ChevronDown } from 'lucide-react';
-import type { NavigationItem } from '../../types/db';
+import type { NavigationItem } from '~types/book';
 
 interface ContentAnalysisReportProps {
     isOpen: boolean;
     onClose: () => void;
-    rendition?: Rendition | null;
+    engine?: ReaderEngine | null;
 }
 
-export const ContentAnalysisReport: React.FC<ContentAnalysisReportProps> = ({ isOpen, onClose, rendition }) => {
+export const ContentAnalysisReport: React.FC<ContentAnalysisReportProps> = ({ isOpen, onClose, engine }) => {
     const { sections } = useContentAnalysisStore();
     const { currentBookId, toc } = useReaderUIStore();
 
@@ -106,8 +106,8 @@ export const ContentAnalysisReport: React.FC<ContentAnalysisReportProps> = ({ is
     };
 
     const handleJump = (cfi: string) => {
-        if (rendition) {
-            rendition.display(cfi);
+        if (engine) {
+            engine.display(cfi);
             onClose();
         }
     };

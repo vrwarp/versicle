@@ -1,16 +1,31 @@
 import React, { forwardRef, useImperativeHandle } from 'react';
 import { Trash2, CloudOff, RefreshCw } from 'lucide-react';
-import type { BookMetadata } from '../../types/db';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '../ui/DropdownMenu';
-import { cn } from '../../lib/utils';
+import { cn } from '@lib/utils';
+
+/**
+ * The structural slice of a book row the cover/action surfaces read (P9
+ * any-ratchet): both the `~types/book` BookMetadata row and the
+ * libraryViewStore LibraryBook projection satisfy it, so callers pass
+ * either without casts.
+ */
+export interface CoverBook {
+    id: string;
+    title: string;
+    author?: string;
+    coverUrl?: string;
+    coverBlob?: Blob | null;
+    coverPalette?: number[];
+    isOffloaded?: boolean;
+}
 
 interface BookActionMenuProps {
-    book: BookMetadata;
+    book: CoverBook;
     /** The trigger element to be wrapped by the menu trigger (usually an icon button). */
     children: React.ReactNode;
     onDelete: () => void;

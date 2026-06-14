@@ -1,0 +1,28 @@
+{
+  // Composite project for the vendored fork's library source. Referenced from
+  // the root tsconfig.json solution so `tsc -b` typechecks the package and the
+  // app consumes its declarations (emitted to dist-types/, gitignored) while
+  // Vite/vitest consume src/ directly. Deliberately NOT extending the app
+  // config: the vendored code predates verbatimModuleSyntax / noUnusedLocals
+  // discipline, and keeping its compiler surface self-contained keeps the
+  // vendor diff minimal (see PROVENANCE.md).
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "./src",
+    "outDir": "./dist-types",
+    "tsBuildInfoFile": "./dist-types/tsconfig.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"]
+}

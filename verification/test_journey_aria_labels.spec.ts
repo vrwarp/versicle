@@ -37,9 +37,14 @@ test('ARIA Labels Verification', async ({ page }) => {
   // 3. Audio Panel ARIA Labels
   console.log('Verifying Audio Panel...');
   await page.getByLabel('Open Audio Deck').click();
+  await expect(page.getByTestId('tts-panel')).toBeVisible();
 
-  // Switch to settings tab in Audio Panel
-  await page.getByRole('button', { name: 'Settings', exact: true }).click({ force: true });
+  // Switch to the Settings view in the Audio Deck. The bare "Settings"
+  // accessible name now matches the deck's footer toggle button
+  // (tts-settings-tab-btn), which lives in the right-side Radix Sheet footer
+  // below the fold — a plain click reports "outside of viewport". The shared
+  // helper scrolls the footer button into view before clicking.
+  await utils.switchAudioPanelView(page, 'settings');
 
   // Playback speed slider
   await expect(page.getByRole('slider', { name: 'Speed' })).toBeVisible();

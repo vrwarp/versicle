@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { DiffResult } from '../../lib/sync/CheckpointInspector';
+import type { DiffResult } from '@domains/sync/checkpoints/CheckpointInspector';
 import { ChevronDown, ChevronRight, Plus, Minus, RefreshCw, Maximize2, Download } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from '../ui/Modal';
@@ -21,8 +21,7 @@ export const CheckpointDiffView: React.FC<CheckpointDiffViewProps> = ({
   isRestoring
 }) => {
   const [expandedStores, setExpandedStores] = useState<Set<string>>(new Set());
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [selectedDiff, setSelectedDiff] = useState<{ title: string; old: any; new: any } | null>(null);
+  const [selectedDiff, setSelectedDiff] = useState<{ title: string; old: unknown; new: unknown } | null>(null);
 
   const toggleStore = (store: string) => {
     const newExpanded = new Set(expandedStores);

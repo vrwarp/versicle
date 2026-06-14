@@ -1,0 +1,49 @@
+{
+  // Typechecks the Playwright E2E surface: playwright.config.ts and the
+  // verification/ suite (playwright.config.ts `testDir`). Tests run in
+  // Node but page.evaluate() callbacks execute in the browser, so both
+  // DOM and node types are loaded. Wired into `tsc -b` via the root
+  // tsconfig.json references.
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.e2e.tsbuildinfo",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "types": ["node"],
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Path aliases — same map as tsconfig.app.json (this config does not
+       extend it, so the map is duplicated; the docs drift gate
+       src/app/docs/docs.test.ts asserts the two stay in sync; see
+       tsconfig.app.json for why types/ is "~types" not "@types"). The E2E
+       suite drives the served app and currently has no src/ imports, but
+       any future type-only import of src code must use the aliases. */
+    "paths": {
+      "@app/*": ["./src/app/*"],
+      "@components/*": ["./src/components/*"],
+      "@data/*": ["./src/data/*"],
+      "@domains/*": ["./src/domains/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@kernel/*": ["./src/kernel/*"],
+      "@lib/*": ["./src/lib/*"],
+      "@store/*": ["./src/store/*"],
+      "~types/*": ["./src/types/*"],
+      "@test/*": ["./src/test/*"],
+      "@workers/*": ["./src/workers/*"]
+    },
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["verification/**/*.ts", "playwright.config.ts"]
+}

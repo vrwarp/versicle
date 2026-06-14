@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { FileSearch } from 'lucide-react';
-import { CheckpointService } from '../../lib/sync/CheckpointService';
-import { CheckpointInspector, type DiffResult } from '../../lib/sync/CheckpointInspector';
+import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';
+import { CheckpointInspector, type DiffResult } from '@domains/sync/checkpoints/CheckpointInspector';
+import { stopSyncConnections } from '@app/sync/createSync';
 import { CheckpointDiffView } from './CheckpointDiffView';
-import { backupService } from '../../lib/BackupService';
-import type { SyncCheckpoint } from '../../types/db';
+import { backupService } from '@lib/BackupService';
+import type { SyncCheckpoint } from '~types/sync';
 import { DataRecoveryView } from './DataRecoveryView';
 import { Modal, ModalContent, ModalHeader, ModalTitle } from '../ui/Modal';
+import { formatDateTime } from '@kernel/locale/format';
 
 export interface RecoverySettingsTabProps {
     checkpoints: SyncCheckpoint[];
@@ -46,7 +48,10 @@ export const RecoverySettingsTab: React.FC<RecoverySettingsTabProps> = ({
         setIsRestoring(true);
         setStatus("Restoring...");
         try {
-            await CheckpointService.restoreCheckpoint(inspectingCheckpoint.id);
+            // pauseSync (§D7 inversion): sever live cloud sync before the wipe.
+            await CheckpointService.restoreCheckpoint(inspectingCheckpoint.id, {
+                pauseSync: stopSyncConnections,
+            });
             setStatus("Restore complete. Reloading...");
             setTimeout(() => {
                 window.location.reload();
@@ -112,7 +117,7 @@ export const RecoverySettingsTab: React.FC<RecoverySettingsTabProps> = ({
                             <div key={cp.id} className="flex items-center justify-between p-3 border rounded-md">
                                 <div className="flex flex-col">
                                     <span className="font-medium text-sm">
-                                        {new Date(cp.timestamp).toLocaleString()}
+                                        {formatDateTime(cp.timestamp)}
                                     </span>
                                     <div className="flex gap-2 text-xs text-muted-foreground mt-1">
                                         <span className="capitalize bg-secondary px-1.5 py-0.5 rounded text-secondary-foreground">

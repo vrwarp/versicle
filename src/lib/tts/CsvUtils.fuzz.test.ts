@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { LexiconCSV, SimpleListCSV } from './CsvUtils';
-import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '../../test/fuzz-utils';
-import type { LexiconRule } from '../../types/db';
+import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '@test/fuzz-utils';
+import type { LexiconRule } from '~types/user-data';
 
 describe('LexiconCSV Fuzzing', () => {
     const SEED = DEFAULT_FUZZ_SEED;

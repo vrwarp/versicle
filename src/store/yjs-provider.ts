@@ -1,33 +1,73 @@
 import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-idb';
-import { isStorageSupported } from '../lib/sync/support';
-import { runExclusiveIdbWrite } from '../lib/idb-write-lock';
-import { createLogger } from '../lib/logger';
-import type { YjsOptions } from 'zustand-middleware-yjs';
-import type { UserProgress } from '../types/db';
+import type { StateCreator, StoreMutatorIdentifier } from 'zustand';
+import yjs from 'zustand-middleware-yjs';
+import { isStorageSupported } from '@lib/sync/support';
+import { runExclusiveIdbWrite } from '@data/write-gate';
+import { getSyncEventBus } from '@domains/sync/events';
+import { createLogger } from '@lib/logger';
 
 const logger = createLogger('YjsProvider');
 
 // ─── Schema Version ─────────────────────────────────────────────────────────
 // Increment this when introducing breaking changes to Yjs-synced state.
-// See: Operational Runbook for Breaking Changes in the TDD.
-export const CURRENT_SCHEMA_VERSION = 5;
+// A bump REQUIRES a matching CrdtMigration step in src/app/migrations.ts
+// (the coordinator throws on a version gap) and fixture-matrix coverage in
+// src/store/__tests__/crdt-contract/migrations.test.ts.
+// v6: popover residual key deleted, `meta` map dual-write (N+1 staged),
+// preferences folded to one keyed map (copy-without-clear) — see
+// plan/overhaul/prep/phase2-fork-surgery.md §5.3.
+// v7: vocabulary simplified-key canonicalization (Phase 6 §7.5, CH-6) —
+// traditional knownCharacters keys merge into their simplified form
+// (min-timestamp).
+// v8: reading-list bookId FK (Phase 7 §D) — the one-time linker joins
+// existing entries to the inventory (exact filename, then fuzzy
+// title+author); pre-v8 clients would drop the unknown field on their
+// whole-entry rebuilds, so the bump quarantines them.
+// v9 (Phase 9 — the program's LAST format change): preferences
+// husk-clearing, library.__schemaVersion dual-write retirement (meta is
+// the sole version authority; library stays FROZEN at 8 as the pre-meta
+// poison-pill tripwire), activeContext Y.Map husk pruning. Fleet-safety
+// reasoning documented on clearHusksAndRetireDualWrite in
+// src/app/migrations.ts.
+export const CURRENT_SCHEMA_VERSION = 9;
 
-// Singleton Y.Doc instance - Source of Truth for User Data
-export const yDoc = new Y.Doc();
+// Singleton Y.Doc - Source of Truth for User Data. Constructed lazily on
+// first access instead of at module scope: importing this module (e.g. for
+// CURRENT_SCHEMA_VERSION) must not create CRDT state. Synced stores reach
+// it through `defineSyncedStore` (src/store/registry.ts) while wiring their
+// middleware at module init.
+let doc: Y.Doc | null = null;
 
-// Expose globally for Playwright end-to-end tests
-if (typeof window !== 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__YJS_DOC__ = yDoc;
+export function getYDoc(): Y.Doc {
+    if (!doc) {
+        doc = new Y.Doc();
+    }
+    return doc;
 }
 
 let persistence: IndexeddbPersistence | null = null;
+let persistenceStarted = false;
 
-// Initialize persistence only if supported
-if (isStorageSupported()) {
+/**
+ * Start the y-idb persistence binding for the shared Y.Doc. Idempotent.
+ *
+ * Called EXCLUSIVELY by the bootstrap `startYjsPersistence` phase
+ * (src/app/boot/yjsPersistence.ts) — persistence used to boot here at import
+ * time as a module-scope side effect (any store import started IndexedDB
+ * writes before React rendered); now boot owns the moment explicitly.
+ */
+export function startYjsPersistence(): void {
+    if (persistenceStarted) return;
+    persistenceStarted = true;
+
+    if (!isStorageSupported()) {
+        logger.warn('IndexedDB not supported. Falling back to in-memory mode.');
+        return;
+    }
+
     try {
-        persistence = new IndexeddbPersistence('versicle-yjs', yDoc, {
+        persistence = new IndexeddbPersistence('versicle-yjs', getYDoc(), {
             writeDebounceMs: 200,
             transactionRunner: runExclusiveIdbWrite,
         });
@@ -41,19 +81,30 @@ if (isStorageSupported()) {
     } catch (error) {
         logger.error('Failed to initialize IndexedDB persistence:', error);
     }
-} else {
-    logger.warn('IndexedDB not supported. Falling back to in-memory mode.');
 }
 
 /**
- * Expose the persistence instance for lower-level access (e.g., clearing data)
+ * Live accessor for the persistence instance — null until
+ * `startYjsPersistence()` has run, and again after `disconnectYjs()`.
+ * Always read it through this function; never cache the instance.
  */
-export const yjsPersistence = persistence;
+export function getYjsPersistence(): IndexeddbPersistence | null {
+    return persistence;
+}
 
 // ─── Client Quarantine ──────────────────────────────────────────────────────
 /**
- * Fires when FirestoreSyncManager pulls a document with a newer schema version.
- * Severs the cloud connection and locks the UI to prevent data corruption.
+ * Fires when any quarantine layer sees a document from a newer schema
+ * version: the middleware poison pill (defense in depth, maps carrying
+ * `__schemaVersion`) and the P4 §D5 doc-level layers (pre-attach metadata
+ * probe, pre-apply scratch check, live `meta` observer).
+ *
+ * This function owns the UI-LOCK half and ANNOUNCES the quarantine on the
+ * typed SyncEvent bus; severing is delegated to the subscribers
+ * (src/app/sync/wireSyncEvents.ts destroys the live provider connection via
+ * the sync manager and stops the device heartbeat — pre-P4 the heartbeat
+ * kept writing from behind the lock screen and the provider was never
+ * destroyed; the old dynamic-import status flip only changed a label).
  */
 export function handleObsoleteClient(incomingVersion: number): void {
     logger.error(
@@ -61,10 +112,9 @@ export function handleObsoleteClient(incomingVersion: number): void {
         `but cloud has v${incomingVersion}. Entering safe mode.`
     );
 
-    // 1. Sever cloud connection (lazy import to avoid circular deps)
-    import('../lib/sync/hooks/useSyncStore').then(({ useSyncStore }) => {
-        useSyncStore.getState().setFirestoreStatus('disconnected');
-    }).catch(err => logger.error('Failed to import useSyncStore:', err));
+    // 1. Announce: the app-side subscriber severs the provider connection
+    //    and stops the device heartbeat (zero outbound writes after lock).
+    getSyncEventBus().emit({ type: 'obsolete', incomingVersion });
 
     // 2. Lock UI — requires useUIStore (imported lazily to avoid circular deps at module init)
     import('./useUIStore').then(({ useUIStore }) => {
@@ -72,130 +122,80 @@ export function handleObsoleteClient(incomingVersion: number): void {
     }).catch(err => logger.error('Failed to import useUIStore:', err));
 }
 
-// ─── Deterministic Migration Runner ─────────────────────────────────────────
+// ─── The synced-store seam ───────────────────────────────────────────────────
+
 /**
- * Executes strictly deterministic Zustand state transformations.
- * Runs sequentially through each version step. Because transforms are
- * identical across all clients, Yjs LWW merges concurrent upgrades safely.
+ * Declaration of one CRDT-synced store (phase2-fork-surgery.md §2.5). Each
+ * synced store module declares and exports its own def; the store registry
+ * (src/store/registry.ts) aggregates them into the three-tier table and the
+ * boot roster.
  *
- * Called via `onLoaded` after the Y.Doc is hydrated from IndexedDB/cloud.
+ * `K` is the union of top-level state keys that replicate; declaring a def
+ * as `SyncedStoreDef<'books'>` and passing it to
+ * `defineSyncedStore<BookState>` proves at compile time that every synced
+ * key exists on the state type (the middleware additionally fails loudly at
+ * store creation in dev mode on a mismatch).
+ *
+ * (This type and {@link defineSyncedStore} live HERE rather than in the
+ * registry because the TTS worker's type-closure already reaches this
+ * module — a store importing any NEW src/store module would regress the
+ * `worker-no-state-typegraph` depcruise ratchet. The registry must stay out
+ * of the worker closure, so stores must never import it.)
  */
-function runMigrationsImpl(): void {
-    // Lazy import to avoid circular dependency at module init time
-    import('./useBookStore').then(({ useBookStore }) => {
-        if (!useBookStore) return; // Guard for test environments
-
-        const bookState = useBookStore.getState();
-        let currentVersion: number =
-            (bookState as unknown as Record<string, unknown>).__schemaVersion as number || 1;
-
-        if (currentVersion >= CURRENT_SCHEMA_VERSION) return;
-
-        logger.info(`Running migrations from v${currentVersion} → v${CURRENT_SCHEMA_VERSION}`);
-
-        // ── Migration v1 → v2: Prune legacy reading history ─────────────
-        if (currentVersion === 1) {
-            import('./useReadingStateStore').then(({ useReadingStateStore }) => {
-                if (!useReadingStateStore) return; // Guard for test environments
-
-                const rsState = useReadingStateStore.getState();
-                const progress = rsState.progress;
-                const nextProgress = { ...progress };
-                let migrated = false;
-
-                for (const bookId in nextProgress) {
-                    const devices = nextProgress[bookId];
-                    for (const deviceId in devices) {
-                        const userProgress: UserProgress = devices[deviceId];
-                        if (userProgress.readingSessions) {
-                            const validSessions = userProgress.readingSessions.filter(
-                                s => typeof s.startTime === 'number' && typeof s.endTime === 'number'
-                            );
-
-                            if (validSessions.length !== userProgress.readingSessions.length) {
-                                migrated = true;
-                                nextProgress[bookId] = {
-                                    ...nextProgress[bookId],
-                                    [deviceId]: {
-                                        ...userProgress,
-                                        readingSessions: validSessions
-                                    }
-                                };
-                            }
-                        }
-                    }
-                }
-
-                if (migrated) {
-                    useReadingStateStore.setState({ progress: nextProgress });
-                }
-
-                // Bump version on the primary store
-                useBookStore.setState({ __schemaVersion: 2 } as unknown as Record<string, unknown>);
-                logger.info('Migration v1 → v2 complete (legacy history pruned).');
-            }).catch(() => {
-                // Silently ignore if useReadingStateStore can't be imported (test env)
-            });
-
-            currentVersion = 2;
-        }
-
-        if (currentVersion === 2 || currentVersion === 3) {
-            useBookStore.setState({ __schemaVersion: 4 } as unknown as Record<string, unknown>);
-            logger.info('Migration v2 → v4 complete (major version bump).');
-            currentVersion = 4;
-        }
-
-        if (currentVersion === 4) {
-            import('./usePreferencesStore').then(({ usePreferencesStore }) => {
-                if (!usePreferencesStore) return;
-                const state = usePreferencesStore.getState();
-                if (!state.fontProfiles) {
-                    usePreferencesStore.setState({
-                        fontProfiles: {
-                            en: { fontSize: 100, lineHeight: 1.5 },
-                            zh: { fontSize: 120, lineHeight: 1.8 }
-                        }
-                    });
-                    logger.info('Migration v4 → v5 complete (fontProfiles initialized).');
-                }
-                useBookStore.setState({ __schemaVersion: 5 } as unknown as Record<string, unknown>);
-            }).catch(() => {});
-            currentVersion = 5;
-        }
-
-        // Future migrations added here sequentially:
-        // if (currentVersion === 5) { ... currentVersion = 6; }
-    }).catch(() => {
-        // Silently ignore if useBookStore can't be imported (test env)
-    });
+export interface SyncedStoreDef<K extends string = string> {
+    /**
+     * Top-level Y.Map name. FROZEN: map names are user-data format surface —
+     * renaming one is a schema migration, not a refactor.
+     */
+    readonly name: string;
+    /**
+     * The replication whitelist (fork option `syncedKeys`). Top level only;
+     * nesting below a synced key replicates fully. `__schemaVersion` is
+     * implicitly synced and need not be listed.
+     */
+    readonly syncedKeys: readonly K[];
+    /**
+     * Inbound semantics for top-level keys absent from the map.
+     * 'merge-defaults' suppresses top-level deletes of declared defaults (the
+     * D2 fix: new fields survive hydration from older docs); 'replace' is the
+     * legacy wipe. Flipped per store in the phase2-fork-surgery.md §2.6 order.
+     */
+    readonly hydration: 'replace' | 'merge-defaults';
+    /** Per-top-level-key diffing (the D13 write-amplification fix). */
+    readonly scopedDiff: boolean;
+    /** Bind to a nested Y.Map at `getMap(name).get(scope.key)` (preferences fold). */
+    readonly scope?: { readonly key: string };
 }
 
 /**
- * Defers the execution of migrations to ensure zustand-middleware-yjs has fully processed
- * the inbound snapshot into the local state via its microtask queue. Otherwise, migration logic
- * reads and modifies stale state, which can lead to overwriting the incoming remote map.
+ * The single seam wiring a synced store to the shared Y.Doc (replaces the
+ * legacy `getYjsOptions()`): every synced store consistently gets the
+ * schema-version poison pill, the obsolete-client handler, and plain-string
+ * encoding (`disableYText` — the v4 format), plus its declared replication
+ * options. This is the ONLY production `yjs()` call site (lint-enforced via
+ * no-restricted-imports).
  *
- * We use nested queueMicrotask instead of setTimeout to ensure migrations run immediately
- * after the state update microtask but before any macrotasks (like React renders) can interleave.
+ * Schema migrations do not hang off `onLoaded`: the migration coordinator
+ * (src/app/migrations.ts) runs ONCE from the bootstrap 'migrations' phase
+ * and transforms the Y.Doc directly.
  */
-export function runMigrations(): void {
-    queueMicrotask(() => queueMicrotask(runMigrationsImpl));
-}
-
-// ─── Shared Middleware Options ───────────────────────────────────────────────
-/**
- * Returns the standard YjsOptions to pass to every yjs() middleware call.
- * Centralises version guarding so every store consistently enforces it.
- */
-export function getYjsOptions(extra?: Partial<YjsOptions>): YjsOptions {
-    return {
+export function defineSyncedStore<
+    S,
+    Mps extends [StoreMutatorIdentifier, unknown][] = [],
+    Mcs extends [StoreMutatorIdentifier, unknown][] = [],
+>(
+    def: SyncedStoreDef<keyof S & string>,
+    creator: StateCreator<S, Mps, Mcs>,
+): StateCreator<S, Mps, Mcs> {
+    return yjs(getYDoc(), def.name, creator, {
         schemaVersion: CURRENT_SCHEMA_VERSION,
         onObsolete: handleObsoleteClient,
-        onLoaded: runMigrations,
         disableYText: true,
-        ...extra
-    };
+        syncedKeys: def.syncedKeys,
+        hydration: def.hydration,
+        scopedDiff: def.scopedDiff,
+        scope: def.scope,
+    });
 }
 
 /**
@@ -237,8 +237,3 @@ export const disconnectYjs = async () => {
         logger.info('Persistence disconnected.');
     }
 };
-
-if (typeof window !== 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).__DISCONNECT_YJS__ = disconnectYjs;
-}

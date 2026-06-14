@@ -10,5 +10,5 @@ This directory contains the React components that make up the user interface.
 
 ## Shared Components
 
-*   **`GlobalSettingsDialog.tsx`**: The "Engine Room" of the application. A comprehensive modal dialog for managing global application settings, including TTS API keys, Gesture controls, Data management, and Dictionary rules.
+*   Settings moved to `src/app/settings/` in Phase 8: `SettingsShell.tsx` (the `/settings/:tab` route overlay) renders lazy, self-contained panels from `registry.ts`; the presentational tabs stay in `settings/` here.
 *   **`ThemeSynchronizer.tsx`**: A utility component that renders nothing visually. It subscribes to the reader store and dynamically updates the `<html>` element's class list to enforce the active theme (Light, Dark, Sepia) globally.

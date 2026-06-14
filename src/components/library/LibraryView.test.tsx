@@ -1,12 +1,13 @@
-import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
-import React, { ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { LibraryView } from './LibraryView';
-import { usePreferencesStore } from '../../store/usePreferencesStore';
-import { useLibraryStore, useBookStore } from '../../store/useLibraryStore';
-import { useToastStore } from '../../store/useToastStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import { useLibraryStore, useBookStore } from '@store/useLibraryStore';
+import { useToastStore } from '@store/useToastStore';
 import { MemoryRouter } from 'react-router-dom';
-import type { UserProgress, BookMetadata } from '../../types/db';
+import type { BookMetadata } from '~types/book';
+import type { UserProgress } from '~types/user-data';
 
 // Mock zustand/middleware to disable persistence
 vi.mock('zustand/middleware', () => ({
@@ -39,9 +40,28 @@ vi.mock('./ReprocessingInterstitial', () => ({
     ReprocessingInterstitial: ({ isOpen }: ReprocessingInterstitialProps) => isOpen ? <div data-testid="reprocessing-interstitial">Processing...</div> : null
 }));
 
-vi.mock('../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
     useToastStore: vi.fn(),
 }));
+
+// Phase 7: workflows moved off the store — mock the shared controller.
+const { mockImportFile } = vi.hoisted(() => ({
+    mockImportFile: vi.fn().mockResolvedValue({ status: 'imported', bookId: 'x' }),
+}));
+vi.mock('@app/library/useImportController', () => {
+    const controller = {
+        importFile: mockImportFile,
+        replaceFile: vi.fn(),
+        importFiles: vi.fn(),
+        restoreBook: vi.fn(),
+        removeBook: vi.fn(),
+        offloadBook: vi.fn(),
+        reprocessBook: vi.fn(),
+        updateBook: vi.fn(),
+        hydrate: vi.fn(),
+    };
+    return { useImportController: () => controller, libraryController: controller };
+});
 
 // Mock Select components
 interface SelectItemProps {
@@ -71,20 +91,24 @@ vi.mock('../ui/Select', () => ({
     ),
 }));
 
-vi.mock('../../store/useReadingStateStore', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+vi.mock('@store/useReadingStateStore', () => {
+     
     const getProgress = (_bookId: string) => {
         // This will be overridden in tests that need custom progress
         return null;
     };
-    const mockStore = vi.fn((selector) => selector ? selector({ progress: {}, getProgress }) : { progress: {}, getProgress });
-    mockStore.getState = vi.fn().mockReturnValue({
-        progress: {},
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        getProgress: (_bookId: string) => null
-    });
-    mockStore.setState = vi.fn();
-    mockStore.subscribe = vi.fn();
+    const mockStore = Object.assign(
+        vi.fn((selector) => selector ? selector({ progress: {}, getProgress }) : { progress: {}, getProgress }),
+        {
+            getState: vi.fn().mockReturnValue({
+                progress: {},
+                 
+                getProgress: (_bookId: string) => null
+            }),
+            setState: vi.fn(),
+            subscribe: vi.fn(),
+        }
+    );
     return {
         useReadingStateStore: mockStore,
         isValidProgress: (p: UserProgress | null | undefined) => !!(p && p.percentage > 0.005),
@@ -101,7 +125,7 @@ vi.mock('../../store/useReadingStateStore', () => {
         },
     };
 });
-import { useReadingStateStore } from '../../store/useReadingStateStore';
+import { useReadingStateStore } from '@store/useReadingStateStore';
 
 describe('LibraryView', () => {
     const mockShowToast = vi.fn();
@@ -123,8 +147,6 @@ describe('LibraryView', () => {
         useLibraryStore.setState({
             isLoading: false,
             error: null,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            fetchBooks: vi.fn().mockResolvedValue(undefined) as any
         });
 
         // Mock getBoundingClientRect and offsetWidth
@@ -139,9 +161,9 @@ describe('LibraryView', () => {
     it('sorts books correctly', async () => {
         useBookStore.setState({
             books: {
-                '1': { id: '1', bookId: '1', title: 'B', author: 'Z', addedAt: 100, lastRead: 200, lastInteraction: 100 } as BookMetadata,
-                '2': { id: '2', bookId: '2', title: 'A', author: 'Y', addedAt: 300, lastRead: 100, lastInteraction: 300 } as BookMetadata,
-                '3': { id: '3', bookId: '3', title: 'C', author: 'X', addedAt: 200, lastRead: 300, lastInteraction: 200 } as BookMetadata
+                '1': { bookId: '1', title: 'B', author: 'Z', addedAt: 100, lastInteraction: 100, tags: [], status: 'unread' as const },
+                '2': { bookId: '2', title: 'A', author: 'Y', addedAt: 300, lastInteraction: 300, tags: [], status: 'unread' as const },
+                '3': { bookId: '3', title: 'C', author: 'X', addedAt: 200, lastInteraction: 200, tags: [], status: 'unread' as const }
             }
         });
 
@@ -216,7 +238,7 @@ describe('LibraryView', () => {
     it('shows no results message when search returns nothing', async () => {
         useBookStore.setState({
             books: {
-                '1': { id: '1', bookId: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', lastInteraction: 100 } as BookMetadata
+                '1': { bookId: '1', title: 'The Great Gatsby', author: 'F. Scott Fitzgerald', addedAt: 100, lastInteraction: 100, tags: [], status: 'unread' as const }
             }
         });
 
@@ -236,11 +258,7 @@ describe('LibraryView', () => {
     });
 
     it('handles drag and drop import', async () => {
-        const mockAddBook = vi.fn().mockResolvedValue(undefined);
-        useLibraryStore.setState({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            addBook: mockAddBook as any
-        });
+        mockImportFile.mockResolvedValue({ status: 'imported', bookId: 'x' });
 
         render(
             <MemoryRouter>
@@ -258,18 +276,12 @@ describe('LibraryView', () => {
         });
 
         await waitFor(() => {
-            expect(mockAddBook).toHaveBeenCalledWith(file);
+            expect(mockImportFile).toHaveBeenCalledWith(file);
             expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('imported successfully'), 'success', 5000);
         });
     });
 
     it('handles drag and drop invalid file', async () => {
-        const mockAddBook = vi.fn();
-        useLibraryStore.setState({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            addBook: mockAddBook as any
-        });
-
         render(
             <MemoryRouter>
                 <LibraryView />
@@ -286,7 +298,7 @@ describe('LibraryView', () => {
         });
 
         await waitFor(() => {
-            expect(mockAddBook).not.toHaveBeenCalled();
+            expect(mockImportFile).not.toHaveBeenCalled();
             expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Only .epub files'), 'error');
         });
     });

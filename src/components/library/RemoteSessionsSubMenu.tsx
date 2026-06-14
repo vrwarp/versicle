@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
 import { Monitor } from 'lucide-react';
 
-import { useDeviceStore } from '../../store/useDeviceStore';
-import { getDeviceId } from '../../lib/device-id';
+import { useDeviceStore } from '@store/useDeviceStore';
+import { getDeviceId } from '@lib/device-id';
 import { DeviceIcon } from '../devices/DeviceIcon';
+import { formatTime } from '@kernel/locale/format';
 import {
   DropdownMenuSub,
   DropdownMenuSubTrigger,
@@ -13,7 +14,8 @@ import {
 
 interface RemoteSessionsSubMenuProps {
   bookId: string;
-  allProgress?: Record<string, { percentage: number; currentCfi: string; lastRead: number }>;
+  /** Per-device progress map (UserProgress-shaped: currentCfi optional). */
+  allProgress?: Record<string, { percentage: number; currentCfi?: string; lastRead: number }>;
   onResumeClick: (deviceId: string, cfi: string) => void;
 }
 
@@ -69,7 +71,7 @@ export const RemoteSessionsSubMenu: React.FC<RemoteSessionsSubMenuProps> = React
             <div className="flex flex-col gap-0.5">
               <span>{session.name}</span>
               <span className="text-xs text-muted-foreground">
-                {Math.round(session.percentage * 100)}% • {new Date(session.lastRead).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {Math.round(session.percentage * 100)}% • {formatTime(session.lastRead)}
               </span>
             </div>
           </DropdownMenuItem>

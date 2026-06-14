@@ -154,7 +154,9 @@ test('Journey Long Reading Test', async ({ page }) => {
   await page.waitForTimeout(3000);
 
   // 2. Verify Highlight is present
-  const countAfter = await page.evaluate(() => (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).__reader_added_annotations_count);
+  // Engine-port test handle (Phase 6): the raw __reader_added_annotations_count
+  // global died with the rendition global; the manager-backed counter replaces it.
+  const countAfter = await page.evaluate(() => window.__versicleTest?.reader?.highlightCount('annotation') ?? 0);
   console.log(`Annotations count after reload: ${countAfter}`);
 
   if (countAfter > 0) {

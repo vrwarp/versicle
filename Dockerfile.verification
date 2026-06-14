@@ -13,8 +13,16 @@ RUN npm ci --legacy-peer-deps
 # 3. Copy Source Code
 COPY . .
 
+# 3b. Compiled dictionary (Phase 6 PR-12: cedict.json left git). The local
+# build context usually carries the dev artifact; a fresh CI checkout does
+# not — compile it from the pinned release (fail-hard, no mock fallback).
+RUN test -f public/dict/cedict.json || npm run compile-dict
+
 # 4. Build the App (with HTTPS disabled for verification)
 ENV VITE_HTTPS=false
+# Install the typed window.__versicleTest API (flushPersistence/resetApp) in
+# the E2E build — the deterministic waits in verification/utils.ts need it.
+ENV VITE_E2E=true
 RUN npm run build
 
 # 5. Set Entrypoint

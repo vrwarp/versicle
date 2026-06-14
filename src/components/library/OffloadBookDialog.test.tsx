@@ -1,10 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import React from 'react';
 import { OffloadBookDialog } from './OffloadBookDialog';
-import { useLibraryStore } from '../../store/useLibraryStore';
-import { useToastStore } from '../../store/useToastStore';
-import { BookMetadata } from '../../types/db';
+import { useToastStore } from '@store/useToastStore';
+import type { BookMetadata } from '~types/book';
 
 // Mock UI components
 vi.mock('../ui/Dialog', () => ({
@@ -36,12 +34,18 @@ vi.mock('lucide-react', () => ({
 }));
 
 // Mock useToastStore
-vi.mock('../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
   useToastStore: vi.fn(),
 }));
 
+// Phase 7: offload moved off the store onto the shared controller.
+const { mockOffloadBook } = vi.hoisted(() => ({ mockOffloadBook: vi.fn() }));
+vi.mock('@app/library/useImportController', () => {
+    const controller = { offloadBook: mockOffloadBook };
+    return { useImportController: () => controller, libraryController: controller };
+});
+
 describe('OffloadBookDialog', () => {
-    const mockOffloadBook = vi.fn();
     const mockShowToast = vi.fn();
     const mockOnClose = vi.fn();
 
@@ -54,10 +58,6 @@ describe('OffloadBookDialog', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-
-        useLibraryStore.setState({
-            offloadBook: mockOffloadBook
-        });
 
         // Mock useToastStore implementation
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

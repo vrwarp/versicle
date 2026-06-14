@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { flightRecorder } from '../../lib/tts/TTSFlightRecorder';
-import type { FlightSnapshot } from '../../types/db';
+import { useAudioCommands } from '@app/tts/useAudioCommands';
+import type { FlightSnapshot } from '~types/flight-recorder';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { ScrollArea } from '../ui/ScrollArea';
-import { 
+import { formatBytes, formatDateTime, formatTime } from '@kernel/locale/format';
+import { useConfirm } from '../ui/ConfirmDialog';
+import {
     Activity, 
     Download, 
     Trash2, 
@@ -18,45 +20,57 @@ import {
 } from 'lucide-react';
 
 export const DiagnosticsTab: React.FC = () => {
+    // The LIVE ring buffer + stats come over the engine handle (5b-PR4, the
+    // S9 fix): the engine runs in the worker, whose flight recorder is a
+    // DIFFERENT module instance than the main thread's — reading the local
+    // singleton showed an empty buffer. Persisted snapshots are shared
+    // IndexedDB rows, listed through the same command facade.
+    const audio = useAudioCommands();
+    const confirm = useConfirm();
     const [snapshots, setSnapshots] = useState<Omit<FlightSnapshot, 'eventsJSON'>[]>([]);
-    const [stats, setStats] = useState(flightRecorder.getStats());
+    const [stats, setStats] = useState<{ eventCount: number; capacity: number; oldestWall: number | null }>(
+        { eventCount: 0, capacity: 0, oldestWall: null });
     const [isCapturing, setIsCapturing] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     const loadSnapshots = async () => {
         setIsRefreshing(true);
-        const list = await flightRecorder.listSnapshots();
+        const [list, exported] = await Promise.all([
+            audio.listDiagnosticSnapshots(),
+            audio.exportDiagnostics(),
+        ]);
         setSnapshots(list);
-        setStats(flightRecorder.getStats());
+        setStats(exported.stats);
         setIsRefreshing(false);
     };
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+         
         loadSnapshots();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleManualSnapshot = async () => {
         setIsCapturing(true);
-        await flightRecorder.snapshot('manual', 'User triggered snapshot');
+        await audio.triggerDiagnosticsSnapshot('manual', 'User triggered snapshot');
         await loadSnapshots();
         setIsCapturing(false);
     };
 
     const handleDeleteSnapshot = async (id: string) => {
-        await flightRecorder.deleteSnapshot(id);
+        await audio.deleteDiagnosticSnapshot(id);
         await loadSnapshots();
     };
 
     const handleClearAll = async () => {
-        if (confirm('Are you sure you want to delete all diagnostic snapshots?')) {
-            await flightRecorder.clearSnapshots();
+        if (await confirm({ titleKey: 'diagnostics.deleteSnapshots.title', bodyKey: 'diagnostics.deleteSnapshots.body', danger: true })) {
+            await audio.clearDiagnosticSnapshots();
             await loadSnapshots();
         }
     };
 
     const handleShare = async (id: string) => {
-        await flightRecorder.shareSnapshot(id);
+        await audio.shareDiagnosticSnapshot(id);
     };
 
     return (
@@ -71,7 +85,7 @@ export const DiagnosticsTab: React.FC = () => {
                         <h3 className="font-semibold text-foreground">Active Flight Buffer</h3>
                         <p className="text-sm text-muted-foreground">
                             {stats.eventCount} / {stats.capacity} events tracked 
-                            {stats.oldestWall ? ` (since ${new Date(stats.oldestWall).toLocaleTimeString()})` : ''}
+                            {stats.oldestWall ? ` (since ${formatTime(stats.oldestWall)})` : ''}
                         </p>
                     </div>
                 </div>
@@ -163,11 +177,11 @@ export const DiagnosticsTab: React.FC = () => {
                                             <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
                                                 <div className="flex items-center gap-1.5">
                                                     <Clock className="w-3 h-3" />
-                                                    {new Date(snap.createdAt).toLocaleString()}
+                                                    {formatDateTime(snap.createdAt)}
                                                 </div>
                                                 <div className="flex items-center gap-1.5">
                                                     <FileJson className="w-3 h-3" />
-                                                    {snap.eventCount} events ({(snap.sizeBytes / 1024).toFixed(1)} KB)
+                                                    {snap.eventCount} events ({formatBytes(snap.sizeBytes)})
                                                 </div>
                                             </div>
                                             

@@ -1,4 +1,4 @@
-import type { LexiconRule } from '../../types/db';
+import type { LexiconRule } from '~types/user-data';
 import Papa from 'papaparse';
 
 /**
@@ -40,13 +40,19 @@ export const LexiconCSV = {
                  matchType = 'regex';
              }
 
+             // Optional 5th column: ISO 639-1 language scope. Empty/missing
+             // means the rule applies to all languages (undefined), keeping
+             // the legacy 4-column format backward-compatible.
+             const language = row[4]?.trim() || undefined;
+
              parsedRules.push({
                  original: row[0],
                  replacement: row[1],
                  // Default to false if missing
                  isRegex: matchType === 'regex',
                  matchType,
-                 applyBeforeGlobal: row[3]?.toLowerCase() === 'true' || row[3] === '1'
+                 applyBeforeGlobal: row[3]?.toLowerCase() === 'true' || row[3] === '1',
+                 language
              });
         }
     }
@@ -56,14 +62,17 @@ export const LexiconCSV = {
   /**
    * Generates a CSV string from an array of LexiconRule objects.
    *
-   * Outputs a header row "original,replacement,isRegex,applyBeforeGlobal".
-   * Automatically escapes quotes by doubling them and wraps all string fields in quotes.
+   * Outputs a header row "original,replacement,isRegex,applyBeforeGlobal,language".
+   * The trailing `language` column holds an ISO 639-1 code (empty = all
+   * languages); parse() treats it as optional, so older 4-column exports still
+   * round-trip. Automatically escapes quotes by doubling them and wraps all
+   * string fields in quotes.
    *
    * @param rules - The array of lexicon rules to serialize.
    * @returns A string representing the CSV content.
    */
   generate(rules: LexiconRule[]): string {
-    const header = "original,replacement,isRegex,applyBeforeGlobal";
+    const header = "original,replacement,isRegex,applyBeforeGlobal,language";
     if (rules.length === 0) {
         return header;
     }
@@ -72,11 +81,12 @@ export const LexiconCSV = {
         r.original || '',
         r.replacement || '',
         r.matchType || (r.isRegex ? 'regex' : 'ignore_case'),
-        !!r.applyBeforeGlobal
+        !!r.applyBeforeGlobal,
+        r.language || ''
     ]);
 
     const csv = Papa.unparse(rows, {
-        quotes: [true, true, false, false],
+        quotes: [true, true, false, false, false],
         newline: '\n'
     });
 

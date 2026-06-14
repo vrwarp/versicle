@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { GenAISettingsTab, GenAISettingsTabProps } from './GenAISettingsTab';
+import { GenAISettingsTab, type GenAISettingsTabProps } from './GenAISettingsTab';
 
 // Mock UI components
 vi.mock('../ui/Select', () => ({
@@ -60,7 +60,10 @@ describe('GenAISettingsTab', () => {
         isTableAdaptationEnabled: false,
         onTableAdaptationChange: vi.fn(),
         logs: [],
-        onDownloadLogs: vi.fn()
+        onDownloadLogs: vi.fn(),
+        maxLogs: 100,
+        onMaxLogsChange: vi.fn(),
+        onClearLogs: vi.fn()
     };
 
     it('renders header and toggle', () => {

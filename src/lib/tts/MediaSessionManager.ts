@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { MediaSession } from '@jofr/capacitor-media-session';
 import { isPaletteBright, rgbToL, unpackColorToRGB } from '../cover-palette';
-import type { PerceptualPalette } from '../../types/db';
+import type { PerceptualPalette } from '~types/book';
 
 /**
  * Metadata for the Media Session API.
@@ -39,16 +39,6 @@ export interface MediaSessionCallbacks {
   onSeekBackward?: (details?: MediaSessionActionDetails) => void;
   onSeekForward?: (details?: MediaSessionActionDetails) => void;
   onSeekTo?: (details: MediaSessionActionDetails) => void;
-}
-
-/**
- * Represents the current state of playback.
- */
-export interface PlaybackState {
-  playbackState: 'playing' | 'paused' | 'none';
-  playbackSpeed?: number;
-  position?: number;
-  duration?: number;
 }
 
 /**
@@ -109,12 +99,20 @@ export class MediaSessionManager {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async setNativeActionHandler(action: string, handler?: (...args: any[]) => void) {
+  private async setNativeActionHandler(
+    action: Parameters<typeof MediaSession.setActionHandler>[0]['action'],
+    handler?: (details?: MediaSessionActionDetails) => void,
+  ) {
     if (handler) {
-      // The types for MediaSessionAction might not perfectly align with string but it works at runtime or needs explicit casting
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await MediaSession.setActionHandler({ action: action as any }, handler);
+      // Typed bridge, not `any`: the plugin's ActionDetails is the web
+      // MediaSessionActionDetails shape plus a required `action` field —
+      // structurally compatible for the seek fields the callbacks read.
+      // The handler is passed through UNWRAPPED (identity matters: the
+      // characterization suite pins setActionHandler(opts, theCallback)).
+      await MediaSession.setActionHandler(
+        { action },
+        handler as unknown as Parameters<typeof MediaSession.setActionHandler>[1],
+      );
     }
   }
 
@@ -154,8 +152,7 @@ export class MediaSessionManager {
         artwork: artwork
       });
     } else if (this.hasWebMediaSession) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      navigator.mediaSession.metadata = new (window as any).MediaMetadata({
+      navigator.mediaSession.metadata = new MediaMetadata({
         title: metadata.title,
         artist: metadata.artist,
         album: metadata.album,

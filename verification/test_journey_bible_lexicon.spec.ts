@@ -11,9 +11,9 @@ test('Journey Bible Lexicon Test', async ({ page }) => {
   await page.click("button[data-testid='header-settings-button']", { force: true });
   await expect(page.getByRole('dialog')).toBeVisible();
 
-  // 2. Switch to Dictionary Tab
+  // 2. Switch to Dictionary Tab (Radix-Tabs SettingsShell → real role="tab")
   console.log('Switching to Dictionary Tab...');
-  await page.getByRole('button', { name: 'Dictionary' }).click();
+  await page.getByRole('tab', { name: 'Dictionary' }).click();
 
   // 3. Verify Bible Lexicon Global Toggle
   console.log('Verifying Global Toggle...');
@@ -34,24 +34,25 @@ test('Journey Bible Lexicon Test', async ({ page }) => {
   await page.getByText("Alice's Adventures in Wonderland").first().click();
   await expect(page).toHaveURL(/.*\/read\/.*/, { timeout: 10000 });
 
-  // 5. Open Lexicon Manager (Dictionary) from Reader Settings
-  console.log('Opening Reader Settings > Dictionary...');
-  const settingsBtn = page.getByTestId('reader-settings-button');
-  await expect(settingsBtn).toBeVisible();
-  await page.waitForTimeout(500);
-  await settingsBtn.click({ force: true });
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('button', { name: 'Dictionary' }).click();
-
-  // 6. Verify Per-Book Override Controls
-  console.log('Verifying Per-Book Controls...');
-  await page.getByRole('button', { name: 'Manage Rules' }).click();
+  // 5. Open the Lexicon Manager from the reader's Audio Deck.
+  //
+  // The per-book ("This Book") scope only renders while a book is the active
+  // reader context (LexiconManager reads currentBookId from useReaderUIStore,
+  // which the reader sets on mount and clears on unmount). The Audio Deck (a
+  // Sheet inside the reader) keeps the book context alive, so it is a reliable
+  // entry point for the per-book override. (The reader header's settings button
+  // also preserves the book context now that settings nest under
+  // /read/:id/settings — see test_journey_reader_settings_lexicon.spec.ts.)
+  console.log('Opening Audio Deck > Settings > Manage Pronunciation Rules...');
+  await utils.openAudioSettings(page);
+  await page.getByText('Manage Pronunciation Rules').click();
 
   // Wait for Lexicon Manager Dialog
   await expect(page.getByRole('heading', { name: 'Pronunciation Lexicon' })).toBeVisible();
 
-  // Switch to "This Book" scope
-  await page.getByText('This Book').click();
+  // 6. Switch to "This Book" scope (a real role="tab" in the Lexicon Scope tablist)
+  console.log('Verifying Per-Book Controls...');
+  await page.getByRole('tab', { name: 'This Book' }).click();
 
   // Verify Bible Preference Buttons (Default / On / Off)
   console.log('Verifying Preference Buttons...');

@@ -1,17 +1,17 @@
-import { tryFastMergeCfi, mergeCfiSlow } from '../cfi-utils';
-import type { SentenceNode } from '../tts';
-import { getCachedSegmenter } from './segmenter-cache';
+import { tryFastMergeCfi, mergeCfiSlow } from '@kernel/cfi';
+import type { SentenceNode } from '~types/tts-content';
+import { getCachedSegmenter } from '@kernel/locale/segmenterCache';
 import { TextScanningTrie } from './TextScanningTrie';
 
 /**
  * Represents a segment of text (e.g., a sentence) with its location.
  */
 export interface TextSegment {
-    /** The text content of the segment. */
+    /** The NFKD-normalized text content of the segment (its length may differ from `length`). */
     text: string;
-    /** The start index of the segment in the original text. */
+    /** The start index of the segment in the original (raw, un-normalized) text. */
     index: number;
-    /** The length of the segment. */
+    /** The length of the segment in the original (raw, un-normalized) text. */
     length: number;
 }
 
@@ -112,22 +112,29 @@ export class TextSegmenter {
     /**
      * Segments a text string into sentences or logical units.
      *
+     * Segmentation runs against the RAW input: `index`/`length` are offsets into
+     * `text` exactly as passed, so callers can map segments back onto source DOM
+     * text nodes (Range/CFI bookkeeping). Only the outbound segment `text` is
+     * NFKD-normalized (nbsp → space, accent/ligature decomposition). Normalizing
+     * the input *before* segmenting shifted offsets by the cumulative length
+     * change of every decomposable character (é → e+◌́, ﬁ → fi) and corrupted
+     * persisted CFIs in non-ASCII books.
+     *
      * @param text - The text to segment.
      * @returns An array of TextSegment objects.
      */
     segment(text: string): TextSegment[] {
         if (!text) return [];
-        const normalizedText = text.normalize('NFKD');
 
         if (this.segmenter) {
-            return Array.from(this.segmenter.segment(normalizedText)).map(s => ({
-                text: s.segment,
+            return Array.from(this.segmenter.segment(text)).map(s => ({
+                text: s.segment.normalize('NFKD'),
                 index: s.index,
                 length: s.segment.length
             }));
         }
 
-        return this.fallbackSegment(normalizedText);
+        return this.fallbackSegment(text);
     }
 
     /**
@@ -180,6 +187,7 @@ export class TextSegmenter {
 
     /**
      * Fallback segmentation logic using simple regex if Intl.Segmenter is unavailable.
+     * Same contract as `segment`: raw-text `index`/`length`, NFKD-normalized `text`.
      *
      * @param text - The text to segment.
      * @returns An array of TextSegment objects.
@@ -199,7 +207,7 @@ export class TextSegmenter {
             }
 
             sentences.push({
-                text: match[0],
+                text: match[0].normalize('NFKD'),
                 index: match.index,
                 length: match[0].length
             });
@@ -210,7 +218,7 @@ export class TextSegmenter {
             const remaining = text.substring(lastIndex);
             if (remaining.trim().length > 0) {
                 sentences.push({
-                    text: remaining,
+                    text: remaining.normalize('NFKD'),
                     index: lastIndex,
                     length: remaining.length
                 });

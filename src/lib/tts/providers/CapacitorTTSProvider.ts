@@ -1,5 +1,6 @@
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
-import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice } from './types';
+import { toTTSErrorPayload } from './types';
+import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice, Unsubscribe } from './types';
 import type { PluginListenerHandle } from '@capacitor/core';
 import { playEarconOscillators } from '../earcons';
 import { flightRecorder } from '../TTSFlightRecorder';
@@ -17,8 +18,8 @@ export class CapacitorTTSProvider implements ITTSProvider {
   private currentUtteranceFinished = false;
 
   private lastText: string | null = null;
-  private lastOptions: TTSOptions | null = null;
   private audioContext: AudioContext | null = null;
+  private disposed = false;
 
   async init(): Promise<void> {
     await this.getVoices();
@@ -68,7 +69,6 @@ export class CapacitorTTSProvider implements ITTSProvider {
     const isNaturalFlow = this.currentUtteranceFinished;
 
     this.lastText = text;
-    this.lastOptions = options;
     const myId = ++this.activeUtteranceId;
 
     // Reset flags for the NEW utterance (it hasn't finished yet)
@@ -101,7 +101,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
             })
             .catch((e) => {
                 if (this.activeUtteranceId === myId) {
-                    this.emit({ type: 'error', error: e });
+                    this.emit({ type: 'error', error: toTTSErrorPayload(e) });
                 }
             });
 
@@ -133,6 +133,8 @@ export class CapacitorTTSProvider implements ITTSProvider {
 
     this.emit({ type: 'start' });
 
+    // Playback-time rate: native speech has no synthesized artifact (and thus no
+    // cache), so the engine legitimately speaks live at the requested rate here.
     const speakPromise = TextToSpeech.speak({
         text,
         lang,
@@ -148,7 +150,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
         }
     }).catch((e) => {
         if (this.activeUtteranceId === myId) {
-            this.emit({ type: 'error', error: e });
+            this.emit({ type: 'error', error: toTTSErrorPayload(e) });
         }
     });
   }
@@ -207,26 +209,37 @@ export class CapacitorTTSProvider implements ITTSProvider {
     this.nextUtterancePromise = null;
     this.currentUtteranceFinished = false;
 
-    // However, we do NOT clear this.lastText, so resume() can restart the utterance.
+    // lastText is retained: the onRangeStart boundary listener bounds-checks against it.
     TextToSpeech.stop().catch(e => console.warn('Failed to stop TTS', e));
   }
 
-  resume(): void {
-      // Native resume not reliable. We restart the current sentence.
-      if (this.lastText && this.lastOptions) {
-          this.play(this.lastText, this.lastOptions);
-      }
+  on(callback: (event: TTSEvent) => void): Unsubscribe {
+      this.eventListeners.push(callback);
+      return () => {
+          this.eventListeners = this.eventListeners.filter(l => l !== callback);
+      };
   }
 
-  on(callback: (event: TTSEvent) => void): void {
-      this.eventListeners.push(callback);
+  /** Stop speech, remove the native range listener, detach everything. */
+  dispose(): void {
+      if (this.disposed) return;
+      this.disposed = true;
+      this.stop();
+      this.eventListeners = [];
+      if (this.listenerHandle) {
+          void this.listenerHandle.remove().catch(() => {});
+          this.listenerHandle = null;
+      }
+      if (this.audioContext) {
+          void this.audioContext.close().catch(() => {});
+          this.audioContext = null;
+      }
   }
 
   playEarcon(type: 'bookmark_captured' | 'bookmark_failed'): void {
       // Fallback for CapacitorTTSProvider
       // Similar to WebSpeechProvider, ducks other audio if we have an AudioContext, but native TTS volume cannot be easily ducked this way
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       if (!AudioContextClass) return;
       if (!this.audioContext) {
           this.audioContext = new AudioContextClass();
@@ -239,6 +252,7 @@ export class CapacitorTTSProvider implements ITTSProvider {
   }
 
   private emit(event: TTSEvent) {
+      if (this.disposed) return;
       flightRecorder.record('CAP', event.type, {
           uttId: this.activeUtteranceId,
           ...(event.type === 'error' ? { error: String(event.error) } : {}),

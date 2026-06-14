@@ -42,14 +42,3 @@ export const getDeviceId = (): string => {
     cachedDeviceId = deviceId;
     return deviceId;
 };
-
-/**
- * Reset the device ID (for testing or troubleshooting)
- */
-export const resetDeviceId = (): string => {
-    const newId = generateDeviceId();
-    localStorage.setItem(DEVICE_ID_KEY, newId);
-    cachedDeviceId = newId;
-    logger.info('Reset device ID to:', newId);
-    return newId;
-};

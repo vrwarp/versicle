@@ -80,23 +80,21 @@ import { createLogger } from './logger';
 const logger = createLogger('CancellableTaskRunner');
 
 // Helper to safely ignore promise rejections
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function safelyIgnorePromise(value: any) {
-  if (value instanceof Promise || (value && typeof value.catch === 'function')) {
-    value.catch(() => {}); // Suppress unhandled promise rejection
+function safelyIgnorePromise(value: unknown) {
+  const thenable = value as { catch?: (onRejected: () => void) => void } | null | undefined;
+  if (value instanceof Promise || (thenable && typeof thenable.catch === 'function')) {
+    thenable!.catch!(() => {}); // Suppress unhandled promise rejection
   }
 }
 
 export function runCancellable<TReturn = void>(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  generator: Generator<Promise<any> | any, TReturn, any>,
+  generator: Generator<unknown, TReturn, unknown>,
   onCancel?: () => void
 ) {
   let cancelled = false;
 
   const resultPromise = new Promise<TReturn>((resolve, reject) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const iterate = async (arg?: any) => {
+    const iterate = async (arg?: unknown) => {
       if (cancelled) return;
 
       try {

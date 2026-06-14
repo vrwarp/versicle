@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { DriveService, type DriveFile } from '../../lib/drive/DriveService';
+import { getDriveClient, type DriveFile } from '@domains/google';
 
 interface Breadcrumb {
     id: string;
@@ -30,7 +30,9 @@ export const useDriveBrowser = (initialFolderId = 'root'): UseDriveBrowserReturn
         setError(null);
         const currentReq = ++requestCounter.current;
         try {
-            const files = await DriveService.listFolders(folderId);
+            // User-gesture surface: interactive token acquisition (popup-on-demand)
+            // — the policy the deleted DriveService façade applied wholesale.
+            const files = await getDriveClient().listFolders(folderId, { interactive: true });
             if (currentReq === requestCounter.current) {
                 setItems(files);
             }

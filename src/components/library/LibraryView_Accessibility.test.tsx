@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import React from 'react';
 import { LibraryView } from './LibraryView';
-import { useLibraryStore } from '../../store/useLibraryStore';
+import { useLibraryStore } from '@store/useLibraryStore';
 import { MemoryRouter } from 'react-router-dom';
 
 // Mock everything needed to render LibraryView
@@ -16,7 +15,7 @@ vi.mock('zustand/middleware', () => ({
     }),
 }));
 
-vi.mock('../../store/useToastStore', () => ({
+vi.mock('@store/useToastStore', () => ({
     useToastStore: () => ({ showToast: vi.fn() }),
 }));
 

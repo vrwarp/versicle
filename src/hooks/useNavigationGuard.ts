@@ -1,5 +1,5 @@
 import { useEffect, useId } from 'react';
-import { useBackNavigationStore, type BackButtonHandler } from '../store/useBackNavigationStore';
+import { useBackNavigationStore, type BackButtonHandler } from '@store/useBackNavigationStore';
 
 /**
  * Hook to register a navigation guard (back button handler).

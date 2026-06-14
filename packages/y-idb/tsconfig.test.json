@@ -1,0 +1,27 @@
+{
+  // Composite project for the package's first-party contract suite
+  // (test/contract/**). Referenced from the root tsconfig.json so test code
+  // typechecking stays a build invariant (Phase 0 rule). The library source
+  // itself is vendored JS (src/y-idb.js) typed by the hand-maintained
+  // src/y-idb.d.ts (see PROVENANCE.md); imports of 'y-idb' resolve to those
+  // declarations through the package exports map, so no library project
+  // reference is needed.
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": ["vitest/globals"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": ".",
+    "outDir": "./dist-types-test",
+    "tsBuildInfoFile": "./dist-types-test/tsconfig.tsbuildinfo"
+  },
+  "include": ["test/**/*.ts"]
+}

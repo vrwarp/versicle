@@ -1,0 +1,300 @@
+/**
+ * EngineContext — the single boundary between the TTS engine core and the host
+ * environment (React/Zustand stores, native platform bridges).
+ *
+ * The engine core (PlaybackController, SectionAnalysisDriver, TableAdaptationProcessor)
+ * must reach the outside world ONLY through this interface — including, since the
+ * 5b decomposition, its storage reads/writes: {@link BookContentPort} (derived
+ * content reads) and {@link SessionStore} (the playback-session persistence with
+ * the WebKit-detach discipline). The production implementations wrap the
+ * `src/data` repos (see engine/repoPorts.ts — worker-safe, both threads use the
+ * same modules); tests inject in-memory fakes, which is what lets the engine-dir
+ * `vi.mock` allowlist sit at ZERO (phase5 doc N3 deadline).
+ *
+ * Two implementations exist:
+ *  - `createZustandEngineContext()` — the production wiring. Forwards every call to the
+ *    real stores / Capacitor, so behavior is identical to the pre-refactor code and
+ *    existing module-level store mocks in tests keep working unchanged.
+ *  - `FakeEngineContext` — a deterministic in-memory implementation for unit tests.
+ *
+ * When the engine later moves into a worker (Phase 5), a third implementation backed by
+ * a message port replaces the Zustand one; the engine code does not change because it
+ * only ever sees this interface.
+ *
+ * All argument/return types are derived from the existing store signatures via `typeof`
+ * type queries on type-only imports. These imports are erased at runtime and create no
+ * runtime dependency, so the core stays worker-portable.
+ */
+import type { bookContent } from '@data/repos/bookContent';
+import type { CompiledLexicon } from '../LexiconEngine';
+import type { TTSQueueItem } from '~types/tts';
+import type { useGenAIStore } from '@store/useGenAIStore';
+import type { useReadingStateStore } from '@store/useReadingStateStore';
+import type { SectionAnalysis, TableAdaptation } from '@store/useContentAnalysisStore';
+import type { useAnnotationStore } from '@store/useAnnotationStore';
+import type { useToastStore } from '@store/useToastStore';
+import type { ContentAnalysis, BookMetadata } from '~types/book';
+import type { LexiconRule } from '~types/user-data';
+import type { ContentType } from '~types/content-analysis';
+
+// Re-exported so the engine core and helpers (e.g. FakeEngineContext) get all
+// engine-boundary types from this one module without re-reaching into the stores.
+export type { SectionAnalysis, TableAdaptation, LexiconRule, ContentAnalysis, BookMetadata, CompiledLexicon };
+
+// --- Snapshot / argument types ---
+
+/**
+ * The EXPLICIT data-only TTS settings payload the engine consumes (Phase 5b
+ * store split; phase5-tts-strangler.md §5b.5, engine D14 second half). This
+ * replaced `ReturnType<typeof useTTSStore.getState>` — the engine no longer
+ * type-depends on the store shape, and the replication slice pushes exactly
+ * these fields instead of `plain(getState())`'s everything-including-the-queue.
+ * The field list is the grep audit of `ctx.config.getSettings()` accesses
+ * (the queue-building path: segmentation lists, Bible flag, per-language profile
+ * minSentenceLength) plus the sanitization flag the extraction options accept.
+ */
+export interface TTSSettingsData {
+    /** Per-language profiles; the pipeline reads `profiles[lang]?.minSentenceLength`. */
+    profiles: Record<string, { voiceId: string | null; rate: number; minSentenceLength?: number }>;
+    customAbbreviations: string[];
+    alwaysMerge: string[];
+    sentenceStarters: string[];
+    sanitizationEnabled: boolean;
+    isBibleLexiconEnabled: boolean;
+}
+
+/** Full GenAI settings snapshot (enabled flags, skip types, api key, logging). */
+export type GenAISettingsSnapshot = ReturnType<typeof useGenAIStore.getState>;
+
+type ReadingStateSnapshot = ReturnType<typeof useReadingStateStore.getState>;
+/** Persisted reading progress for a book (queue index, section index, …). */
+export type Progress = ReturnType<ReadingStateSnapshot['getProgress']>;
+/** The reading-event classification accepted by `addCompletedRange` (e.g. 'tts'). */
+export type ReadingEventType = Parameters<ReadingStateSnapshot['addCompletedRange']>[2];
+
+/** The annotation payload accepted by the annotation store's `add`. */
+export type AnnotationInput = Parameters<ReturnType<typeof useAnnotationStore.getState>['add']>[0];
+
+/** A single GenAI activity-log entry. */
+export type GenAILogEntry = Parameters<GenAISettingsSnapshot['addLog']>[0];
+
+/** Toast severity levels. */
+export type ToastType = Parameters<ReturnType<typeof useToastStore.getState>['showToast']>[1];
+
+// --- Ports (grouped by concern) ---
+
+/** TTS user settings + the active language (read/write). */
+interface TTSConfigPort {
+    /** The language currently driving voice/segmentation selection. */
+    getActiveLanguage(): string;
+    /** Update the active language (e.g. when the book's language changes). */
+    setActiveLanguage(lang: string): void;
+    /** A snapshot of the full TTS settings used by the content pipeline. */
+    getSettings(): TTSSettingsData;
+    /** Locale-aware default for minimum sentence length during segmentation. */
+    getDefaultMinSentenceLength(lang: string): number;
+}
+
+/** The classification result for one content group, as returned by content-type detection. */
+interface ContentTypeDetectionResult {
+    classifications: { id: string; type: ContentType }[];
+    justification: string;
+    agreedWithHeuristic: boolean;
+}
+
+/**
+ * GenAI settings + activity log + change notifications, plus the model calls themselves.
+ *
+ * The model calls live on the port (not in the engine) so the GenAI SDK stays on the
+ * main thread: the worker context bridges these to the host, which owns the SDK. All
+ * arguments and results are structured-cloneable (Blobs included).
+ */
+export interface GenAIPort {
+    getSettings(): GenAISettingsSnapshot;
+    addLog(entry: GenAILogEntry): void;
+    /** Subscribe to settings changes; returns an unsubscribe function. */
+    subscribe(listener: () => void): () => void;
+    /** Whether the underlying GenAI client currently holds a usable configuration. */
+    isConfigured(): Promise<boolean> | boolean;
+    /** Configure the underlying GenAI client (no-op if the host rejects the key). */
+    configure(apiKey: string, model: string): void;
+    /**
+     * Classify content groups (main text vs references/footnotes…) via the
+     * model. `context.bookId` flows to the NetworkGateway's per-book consent
+     * gate (P9 threading — phase7 §Follow-ups item 3); callers MUST pass it
+     * so un-consented books are denied at the egress boundary.
+     */
+    detectContentTypes(
+        nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
+        hints: { enumeratorCandidate: number },
+        context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
+    ): Promise<ContentTypeDetectionResult>;
+    /** Generate TTS-friendly narrative adaptations for table images via the model (bookId: see detectContentTypes). */
+    generateTableAdaptations(
+        nodes: { rootCfi: string; imageBlob: Blob }[],
+        thinkingBudget: number,
+        context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
+    ): Promise<{ cfi: string; adaptation: string }[]>;
+}
+
+/** Per-book reading progress and completed-range history. */
+interface ReadingStatePort {
+    getProgress(bookId: string): Progress;
+    updateTTSProgress(bookId: string, queueIndex: number, sectionIndex: number): void;
+    addCompletedRange(bookId: string, cfiRange: string, type?: ReadingEventType): void;
+    updatePlaybackPosition(bookId: string, lastPlayedCfi: string): void;
+}
+
+/** A snapshot of all cached section analyses, keyed by `${bookId}/${sectionId}`. */
+export type ContentAnalysisSnapshot = { sections: Record<string, SectionAnalysis> };
+
+/** Cached GenAI content analysis (skip masks, table adaptations) + change stream. */
+export interface ContentAnalysisPort {
+    getAnalysis(bookId: string, sectionId: string): SectionAnalysis | undefined;
+    /**
+     * The current snapshot of all analyses. The engine reads from snapshots (pushed via
+     * `subscribe` or pulled here) rather than per-key queries, which keeps the data flow
+     * serializable and worker-friendly.
+     */
+    getSnapshot(): ContentAnalysisSnapshot;
+    /** Subscribe to analysis updates; the listener receives the new snapshot. Returns an unsubscribe function. */
+    subscribe(listener: (state: ContentAnalysisSnapshot) => void): () => void;
+
+    // --- Per-section read/writes (persisted analysis). Async so they work across the worker
+    // boundary; the main thread backs these with the content-analysis store via the
+    // ContentAnalysisRepository host adapter (src/app/repositories). ---
+    /** The fully-resolved persisted analysis for a section (title, refStartCfi, adaptations, status). */
+    getContentAnalysis(bookId: string, sectionId: string): Promise<ContentAnalysis | undefined>;
+    saveReferenceStartCfi(bookId: string, sectionId: string, referenceStartCfi: string | undefined): void;
+    markAnalysisLoading(bookId: string, sectionId: string): void;
+    markAnalysisError(bookId: string, sectionId: string, error: string): void;
+    saveTableAdaptations(bookId: string, sectionId: string, adaptations: { rootCfi: string; text: string }[]): void;
+}
+
+/** Book inventory metadata the engine needs + change stream. */
+export interface BookInfoPort {
+    getBookLanguage(bookId: string): string;
+    /** Full book metadata (title, author, palette, cover, language). Async (worker-boundary-safe). */
+    getMetadata(bookId: string): Promise<BookMetadata | undefined>;
+    /** Subscribe to book inventory changes; returns an unsubscribe function. */
+    subscribe(listener: () => void): () => void;
+}
+
+/** Sink for audio-bookmark annotations (the pause→play "Dragnet" capture). */
+export interface AnnotationPort {
+    add(annotation: AnnotationInput): void;
+}
+
+/** User-facing transient notifications. */
+interface NotificationPort {
+    showToast(message: string, type?: ToastType): void;
+}
+
+/** Reader UI coordination (highlighting the active section as it plays). */
+interface ReaderUIPort {
+    setCurrentSection(title: string, sectionId: string): void;
+}
+
+/**
+ * Pronunciation-lexicon *reads*. The rules are stored in a yjs-backed store on the main thread;
+ * this port lets the engine fetch the ASSEMBLED lexicon (async, so it works across the worker
+ * boundary) without importing the store. Applying rules to text is done locally via the
+ * yjs-free LexiconApplier.
+ *
+ * 5c-PR3: the port serves {@link CompiledLexicon} value objects (stable identity per
+ * (bookId, language, store version)) and exposes an invalidation stream so a mid-playback
+ * rule edit reaches the engine (S15) — the controller drops its handle and refetches on the
+ * next sentence.
+ */
+interface LexiconPort {
+    getCompiled(bookId: string | undefined, language: string): Promise<CompiledLexicon>;
+    getBibleLexiconPreference(bookId: string): Promise<'on' | 'off' | 'default'>;
+    /** Fires on any lexicon-affecting change (rule CRUD, bible flag). Returns unsubscribe. */
+    subscribe(listener: () => void): () => void;
+}
+
+/**
+ * Native platform detection and capability requests. NOTE: this is distinct from the
+ * audio-output `PlatformPort` introduced in Phase 3 — this port is only about *which*
+ * platform we're on and one-shot native capability prompts.
+ */
+interface PlatformInfoPort {
+    /** 'web' | 'ios' | 'android'. */
+    getPlatform(): string;
+    isNativePlatform(): boolean;
+    /** Whether the OS is currently battery-optimizing this app (Android). */
+    isBatteryOptimizationEnabled(): Promise<boolean>;
+    /** Open the OS battery-optimization settings screen (Android). */
+    openBatteryOptimizationSettings(): Promise<void>;
+}
+
+/**
+ * Derived-content reads (sections, prepared TTS sentences, table images, book
+ * structure). The shape is exactly the `bookContent` repo's (type-only import,
+ * erased at runtime) so the production port is the repo itself; tests inject
+ * in-memory fakes (see engine/parityHostDb.ts) instead of `vi.mock`ing the
+ * repo module.
+ */
+export type BookContentPort = Pick<
+    typeof bookContent,
+    'getSections' | 'getTTSPreparation' | 'getTableImages' | 'getBookStructure'
+>;
+
+/** The persisted playback-session row the engine restores from. */
+export interface PlaybackSessionRow {
+    bookId: string;
+    playbackQueue: TTSQueueItem[];
+    lastPauseTime?: number;
+    updatedAt: number;
+}
+
+/**
+ * SessionStore — the playback-session persistence port (Phase 5b decomposition;
+ * phase5-tts-strangler.md §5b.1). The ONE owner of `cache_session_state`
+ * traffic in the engine: restore reads, queue writes, and pause-time writes
+ * all flow through here (this closes the P3 dual-owner gap where
+ * AudioPlayerService and the QueueModel each talked to `playbackCache`).
+ *
+ * ## The WebKit-detach discipline (preserved VERBATIM from the legacy engine)
+ *
+ * The `cache_session_state` IndexedDB write can hang indefinitely on WebKit
+ * (its transaction never settles — see src/data/repos/playbackCache.ts, the
+ * protected keeper carved from the multi-week WebKit investigation). Callers
+ * must therefore NEVER await these writes inside a sequenced task:
+ *
+ *  - `persistQueue` is fire-and-forget BY TYPE (returns void; the impl
+ *    debounces into the repo's in-memory mirror);
+ *  - `persistPauseTime` returns a promise, but the engine detaches it
+ *    (`void ….catch(() => {})`) — awaiting it inside the TaskSequencer would
+ *    wedge every subsequent play/pause/skip task behind a hung transaction
+ *    (isPlaying never flips, skip never advances).
+ */
+export interface SessionStore {
+    /** Read a book's persisted session (restore source). */
+    loadSession(bookId: string): Promise<PlaybackSessionRow | undefined>;
+    /** Persist the playback queue. Fire-and-forget (mirror + debounced disk write). */
+    persistQueue(bookId: string, queue: ReadonlyArray<TTSQueueItem>): void;
+    /** Persist (or clear, with `null`) the last pause timestamp. Callers detach (WebKit). */
+    persistPauseTime(bookId: string, lastPauseTime: number | null): Promise<void>;
+}
+
+/**
+ * The aggregate context handed to the engine core. One object, injected at the
+ * composition root, carrying every non-worker-safe capability the core needs.
+ */
+export interface EngineContext {
+    config: TTSConfigPort;
+    genAI: GenAIPort;
+    readingState: ReadingStatePort;
+    contentAnalysis: ContentAnalysisPort;
+    book: BookInfoPort;
+    annotations: AnnotationPort;
+    notifications: NotificationPort;
+    readerUI: ReaderUIPort;
+    lexicon: LexiconPort;
+    platform: PlatformInfoPort;
+    /** Derived-content reads (5b decomposition; replaces direct repo imports). */
+    content: BookContentPort;
+    /** Playback-session persistence (5b decomposition; the single session owner). */
+    session: SessionStore;
+}

@@ -1,19 +1,16 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
-import { usePreferencesStore } from '../../store/usePreferencesStore';
-import { useVocabularyStore } from '../../store/useVocabularyStore';
+import { usePreferencesStore } from '@store/usePreferencesStore';
+import { useVocabularyStore } from '@store/useVocabularyStore';
+import { ReaderOverlay } from '@domains/reader/ui/ReaderOverlay';
+import { canonicalizeChar } from '@domains/chinese/vocabulary/canonicalize';
+import type { PinyinPosition } from '@domains/chinese/types';
 
 /**
- * Pinyin position entry.
+ * Pinyin position entry — canonical definition lives with the chinese
+ * feature module (Phase 6 §7 types.ts); re-exported here for the legacy
+ * import path.
  */
-export interface PinyinPosition {
-  char: string;
-  pinyin: string;
-  top: number;
-  left: number;
-  width: number;
-  height: number;
-}
+export type { PinyinPosition };
 
 interface PinyinOverlayProps {
   positions: PinyinPosition[];
@@ -53,12 +50,12 @@ export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({
     shadowColor = customTheme.bg || '#ffffff';
   }
 
-  const overlayContent = (
-    <div 
-      className="absolute inset-0 pointer-events-none z-[10] overflow-visible"
-      aria-hidden="true"
-    >
-      {positions.filter(pos => !knownCharacters[pos.char]).map((pos, idx) => (
+  return (
+    <ReaderOverlay mode="decorative" containerNode={containerNode} className="z-[10]">
+      {/* Known-character suppression compares the CANONICAL (simplified)
+          form of the DISPLAYED char (CH-6 read path, CRDT v7): suppression
+          works identically in Simplified and Traditional display modes. */}
+      {positions.filter(pos => !knownCharacters[canonicalizeChar(pos.char)]).map((pos, idx) => (
         <span
           key={`${pos.char}-${idx}`}
           className="absolute text-muted-foreground whitespace-nowrap transition-opacity duration-200 font-pinyin"
@@ -77,9 +74,7 @@ export const PinyinOverlay: React.FC<PinyinOverlayProps> = ({
           {pos.pinyin}
         </span>
       ))}
-    </div>
+    </ReaderOverlay>
   );
-
-  return createPortal(overlayContent, containerNode);
 };
 

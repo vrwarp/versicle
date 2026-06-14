@@ -1,8 +1,11 @@
 import React from 'react';
-import { useAnnotationStore } from '../../store/useAnnotationStore';
+import { useAnnotationStore } from '@store/useAnnotationStore';
 import { Trash2, StickyNote, PenLine } from 'lucide-react';
-import type { Annotation } from '../../types/db';
+import type { Annotation } from '~types/user-data';
 import { Button } from '../ui/Button';
+import { useConfirm } from '../ui/ConfirmDialog';
+import { formatDate } from '@kernel/locale/format';
+import { useBook } from '@store/libraryViewStore';
 
 interface Props {
   /** Callback to navigate to the annotation's location. */
@@ -20,10 +23,13 @@ interface Props {
  */
 export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
   const { annotations, remove, update } = useAnnotationStore();
+  const confirmDelete = useConfirm();
+  // Content-language attribution for book excerpts (i18n ADR §3).
+  const contentLang = useBook(bookId ?? null)?.language;
 
-  const handleDelete = (e: React.MouseEvent, id: string) => {
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (confirm('Delete this annotation?')) {
+    if (await confirmDelete({ titleKey: 'reader.annotation.delete.title', bodyKey: 'reader.annotation.delete.body', danger: true })) {
       remove(id);
     }
   };
@@ -105,11 +111,11 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
                         <span data-testid="annotation-note-text" className="truncate">{annotation.note}</span>
                       </div>
                     )}
-                    <p data-testid="annotation-text" className="text-sm text-foreground line-clamp-3 border-l-2 pl-2" style={{ borderColor: annotation.color }}>
+                    <p data-testid="annotation-text" lang={contentLang} className="text-sm text-foreground line-clamp-3 border-l-2 pl-2" style={{ borderColor: annotation.color }}>
                       {annotation.text}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(annotation.created).toLocaleDateString()}
+                      {formatDate(annotation.created)}
                     </p>
                   </div>
                 )}

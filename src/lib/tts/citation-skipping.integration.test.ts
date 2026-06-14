@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import JSZip from 'jszip';
-import { extractSentencesFromNode } from '../tts';
-import type { SentenceNode } from '../tts';
+import { extractSentencesFromNode } from '@lib/ingestion/sentence-extraction';
+import type { SentenceNode } from '~types/tts-content';
 
 /**
  * Integration test: Loads the real "Book of Citations - Gemini.epub" and runs

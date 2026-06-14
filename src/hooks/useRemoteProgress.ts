@@ -1,7 +1,7 @@
 import React from 'react';
-import { useReadingStateStore } from '../store/useReadingStateStore';
-import { useDeviceStore } from '../store/useDeviceStore';
-import { getDeviceId } from '../lib/device-id';
+import { useReadingStateStore } from '@store/useReadingStateStore';
+import { useDeviceStore } from '@store/useDeviceStore';
+import { getDeviceId } from '@lib/device-id';
 
 export interface RemoteProgressInfo {
     deviceId: string;

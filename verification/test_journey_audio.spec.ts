@@ -49,7 +49,7 @@ test('Journey Audio Test', async ({ page }) => {
 
   // Switch to Settings
   console.log('Switching to Audio Settings...');
-  await page.getByRole('button', { name: 'Settings' }).click({ force: true });
+  await utils.switchAudioPanelView(page, 'settings');
   await expect(page.getByText('Voice & Pace')).toBeVisible();
   await expect(page.getByText('Flow Control')).toBeVisible();
 
@@ -57,7 +57,7 @@ test('Journey Audio Test', async ({ page }) => {
 
   // Switch back to Queue
   console.log('Switching back to Queue...');
-  await page.getByRole('button', { name: 'Up Next' }).click({ force: true });
+  await utils.switchAudioPanelView(page, 'queue');
 
   // --- Enhanced Queue Assertions ---
   console.log('Verifying queue content...');

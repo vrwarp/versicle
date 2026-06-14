@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TextSegmenter } from './TextSegmenter';
-import type { SentenceNode } from '../tts';
+import type { SentenceNode } from '~types/tts-content';
 
 describe('TextSegmenter Performance', () => {
     it('avoids unnecessary string splitting during post-processing', () => {

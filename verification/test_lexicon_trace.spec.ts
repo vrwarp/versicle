@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook, captureScreenshot } from "./utils";
+import { resetApp, ensureLibraryWithBook, captureScreenshot, openAudioSettings } from "./utils";
 
 test("lexicon trace", async ({ page }) => {
   console.log("Starting Lexicon Trace Test...");
@@ -14,11 +14,12 @@ test("lexicon trace", async ({ page }) => {
   // Wait for book to load
   await page.waitForTimeout(2000);
 
-  // Open Audio Deck -> Settings -> Lexicon
+  // Open Audio Deck -> Settings -> Lexicon.
+  // The audio deck is a right-side Radix Sheet; its "Settings" footer tab
+  // (tts-settings-tab-btn) sits below the fold and must be scrolled into view
+  // before clicking, otherwise the click reports "outside of viewport".
   console.log("Opening Pronunciation Lexicon...");
-  await page.getByTestId("reader-audio-button").click();
-  // Click Settings tab inside the TTS Panel
-  await page.getByTestId("tts-settings-tab-btn").click({ force: true });
+  await openAudioSettings(page);
   await page.getByText("Manage Pronunciation Rules").click();
 
   // 1. Add Rule 1: Hello -> Hi
