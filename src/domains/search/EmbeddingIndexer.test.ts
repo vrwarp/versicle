@@ -31,8 +31,22 @@ function makeEmbeddingClient(configured = true) {
   return { client, calls };
 }
 
-/** The persisted-row stamp the indexer reads via repo.get for the §8.2 guard. */
-type PersistedStamp = Pick<CacheEmbeddingsRow, 'model' | 'dims' | 'quant'>;
+/**
+ * The persisted-row stamp the indexer reads via repo.get for the §8.2 guard,
+ * widened with the optional prior `sections` so resume can read-modify-write.
+ * `vectors`/`scales` here are the typed-array VIEWS the production repo re-wraps
+ * on read (the indexer's toArrayBuffer normalizes them back on write).
+ */
+type PriorSection = {
+  href: string;
+  sectionTextHash: string;
+  chunks: CacheEmbeddingsRow['sections'][number]['chunks'];
+  vectors: Int8Array;
+  scales: Float32Array;
+};
+type PersistedStamp = Pick<CacheEmbeddingsRow, 'model' | 'dims' | 'quant'> & {
+  sections?: PriorSection[];
+};
 
 function makeRepo(job?: CacheEmbedJobsRow, persisted?: PersistedStamp) {
   const puts: CacheEmbeddingsRow[] = [];
@@ -178,6 +192,62 @@ describe('EmbeddingIndexer', () => {
 
     await indexer.enqueue('bk-1');
     expect(calls).toHaveLength(1);
+  });
+
+  it('a resumed run preserves prior persisted sections (read-modify-write, not overwrite)', async () => {
+    const sections = [section('s0.xhtml', 'h0'), section('s1.xhtml', 'h1')];
+    // The prior run already embedded s0: its job marks it done AND its vectors
+    // live in the persisted row (returned by get() as typed-array views).
+    const priorJob: CacheEmbedJobsRow = {
+      bookId: 'bk-1',
+      extractionVersion: 3,
+      sections: [{ href: 's0.xhtml', embeddedThroughChunk: 1, sectionTextHash: 'h0' }],
+      updatedAt: 0,
+    };
+    const s0Vectors = new Int8Array([1, 2, 3, 4]);
+    const s0Scales = new Float32Array([0.125]);
+    const persisted: PersistedStamp = {
+      model: 'gemini-embedding-001',
+      dims: 4,
+      quant: 'int8-pervec',
+      sections: [
+        {
+          href: 's0.xhtml',
+          sectionTextHash: 'h0',
+          chunks: [{ cfiStart: '', cfiEnd: '', tokenCount: 9 }],
+          vectors: s0Vectors,
+          scales: s0Scales,
+        },
+      ],
+    };
+    const { client, calls } = makeEmbeddingClient();
+    const { repo, puts } = makeRepo(priorJob, persisted);
+    const indexer = new EmbeddingIndexer({
+      embeddingClient: client,
+      textSource: makeTextSource(sections),
+      embeddingsRepo: repo,
+      quantize,
+      getConfig: config, // stamp matches → s0 resume-skips, s1 re-embeds
+    });
+
+    await indexer.enqueue('bk-1');
+
+    // Only s1 hit the embed client (s0 was resume-skipped).
+    expect(calls).toHaveLength(1);
+    expect(calls[0].texts.length).toBeGreaterThan(0);
+
+    // The final persisted row carries BOTH the carried-forward s0 AND the
+    // newly-embedded s1 — the resumed pass did NOT overwrite s0's vectors.
+    const finalRow = puts[puts.length - 1];
+    const finalHrefs = finalRow.sections.map((s) => s.href);
+    expect(new Set(finalHrefs)).toEqual(new Set(['s0.xhtml', 's1.xhtml']));
+
+    const s0 = finalRow.sections.find((s) => s.href === 's0.xhtml');
+    expect(s0).toBeDefined();
+    // s0's original vectors/scales survived, byte-for-byte.
+    expect(Array.from(new Int8Array(s0!.vectors))).toEqual([1, 2, 3, 4]);
+    expect(Array.from(new Float32Array(s0!.scales))).toEqual([0.125]);
+    expect(s0!.sectionTextHash).toBe('h0');
   });
 
   describe('whole-row stamp-mismatch re-embed (Increment F §8.2)', () => {

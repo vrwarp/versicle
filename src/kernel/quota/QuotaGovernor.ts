@@ -18,9 +18,15 @@
  *  - fg preempts bg: background acquisitions are refused once a foreground
  *    claim is in flight OR the bg fraction of the RPM/TPM budget is spent, so
  *    interactive work is never starved by background spend (decision §3.6).
- *  - acquire/commit is a two-step reconcile: `acquire(estTokens)` admits
- *    against the estimate; `commit(actualTokens)` debits the windows + persists
- *    the RPD with the real cost (usageMetadata when present, else the estimate).
+ *  - acquire RECORDS the spend; commit RECONCILES estimate→actual; release
+ *    frees the fg claim only. `acquire(estTokens)` admits against the estimate
+ *    AND, once admitted, records the rolling RPM/TPM window event plus bumps +
+ *    persists the daily RPD — so a request that never commits (e.g. an
+ *    embedding, which has no governor commit) STILL counts and still publishes
+ *    via the store. `commit(actualTokens)` only reconciles that already-recorded
+ *    event's token cost (est→actual) + the daily.tpm delta; it records no new
+ *    event and never bumps RPD. `release()` frees the fg claim only and never
+ *    undoes the acquire-recorded window/daily event.
  *  - cooldown: a 429 feeds `recordCooldown(retryAfterMs)`; acquire throws
  *    {@link NetRateLimitedError} (pre-network backpressure) while a cooldown is
  *    active or the RPD is exhausted.
@@ -118,6 +124,13 @@ export function setQuotaStore(s: QuotaStore): void {
 interface WindowEvent {
   at: number;
   tokens: number;
+  /**
+   * False until the matching {@link QuotaGovernor.commit} reconciles this
+   * event's `tokens` from the acquire-time estimate to the actual cost. A
+   * never-committed event (every embedding) stays `false` and keeps its
+   * estimate — the acquire-time recording is what makes it count.
+   */
+  committed: boolean;
 }
 
 /** Length of the sliding RPM/TPM window. */
@@ -230,7 +243,12 @@ export class QuotaGovernor {
    *    while a foreground claim is in flight — fg preempts bg).
    *
    * Limits are read FRESH here (GG-8). On success a foreground claim is held
-   * until the matching {@link commit}/{@link release}.
+   * until the matching {@link commit}/{@link release}, AND the spend is RECORDED
+   * here (the rolling RPM/TPM window event + the persisted daily RPD/TPM): this
+   * is the single recorder, so a request that never commits (every embedding —
+   * the embedding client has no governor) still counts toward RPM/TPM/RPD and
+   * still persists+publishes via the store. {@link commit} only reconciles the
+   * recorded estimate to the actual cost.
    */
   async acquire(lane: Lane, estTokens: number): Promise<void> {
     const at = this.now();
@@ -254,13 +272,15 @@ export class QuotaGovernor {
     }
 
     // fg preempts bg: never admit background work while foreground is claiming,
-    // and cap background spend at the bg fraction of the minute budget.
+    // and cap background spend at the bg fraction of the minute budget. The caps
+    // floor to >=1 (Math.max(1, …)) so a free-tier rpm/tpm of 1 still admits at
+    // least one bg request instead of flooring the bg fraction to zero.
     if (lane === 'bg') {
       if (this.fgClaims > 0) {
         throw new NetRateLimitedError(WINDOW_MS, { lane, reason: 'fg-preempt' });
       }
-      const bgRequestCap = Math.floor(limits.rpm * BG_FRACTION);
-      const bgTokenCap = Math.floor(limits.tpm * BG_FRACTION);
+      const bgRequestCap = Math.max(1, Math.floor(limits.rpm * BG_FRACTION));
+      const bgTokenCap = Math.max(1, Math.floor(limits.tpm * BG_FRACTION));
       this.prune('bg', at);
       const bgTokens = this.events.bg.reduce((acc, e) => acc + e.tokens, 0);
       if (this.events.bg.length >= bgRequestCap || bgTokens + estTokens > bgTokenCap) {
@@ -281,36 +301,61 @@ export class QuotaGovernor {
     if (lane === 'fg') {
       this.fgClaims += 1;
     }
+
+    // RECORD the spend at admission (the single recorder). Push the rolling
+    // RPM/TPM window event sized by the estimate (commit reconciles it to the
+    // actual later, if it commits at all), then bump + persist the daily RPD/TPM.
+    // A never-committing request (every embedding) is counted purely here.
+    const est = Math.max(0, estTokens);
+    this.events[lane].push({ at, tokens: est, committed: false });
+    this.prune(lane, at);
+
+    daily.rpd += 1;
+    daily.tpm = (daily.tpm ?? 0) + est;
+    store.saveDailyUsage({ ...daily });
   }
 
   /**
-   * Reconcile a completed request: debit the rolling RPM/TPM windows with the
-   * actual token cost, bump + persist the daily RPD, and release the foreground
-   * claim (if any). Call exactly once per successful {@link acquire}.
+   * RECONCILE a completed request's estimate to its actual token cost. The spend
+   * was already RECORDED by {@link acquire} (the window event + the daily
+   * RPD/TPM), so commit ONLY rewrites the oldest still-uncommitted event on
+   * `lane` from its estimate to `actualTokens` and reconciles the daily.tpm by
+   * the (actual − estimate) delta. It pushes NO new event, bumps NO RPD, and
+   * does NOT release the foreground claim (the gateway is the single release
+   * owner). A no-op when there is no uncommitted event (already reconciled, or a
+   * never-acquired call). Optional per request — an embedding never commits and
+   * simply keeps its acquire-time estimate.
+   *
+   * Attribution is FIFO (oldest-uncommitted-first) rather than per-request — the
+   * QuotaScheduler/commit signature stays lane-only — so under concurrent
+   * in-flight requests the token reconcile may mis-attribute by event; this is
+   * observability-only (admission correctness is fully preserved by recording at
+   * acquire) and never causes over/under-admission.
    */
   commit(lane: Lane, actualTokens: number): void {
     const at = this.now();
-    this.events[lane].push({ at, tokens: Math.max(0, actualTokens) });
     this.prune(lane, at);
+    const event = this.events[lane].find((e) => !e.committed);
+    if (!event) return;
+
+    const actual = Math.max(0, actualTokens);
+    const delta = actual - event.tokens;
+    event.tokens = actual;
+    event.committed = true;
 
     const today = ptDayString(at);
-    if (!this.daily || this.daily.day !== today) {
-      this.daily = { day: today, rpd: 0, tpm: 0 };
-    }
-    this.daily.rpd += 1;
-    this.daily.tpm = (this.daily.tpm ?? 0) + Math.max(0, actualTokens);
-    store.saveDailyUsage({ ...this.daily });
-
-    if (lane === 'fg') {
-      this.fgClaims = Math.max(0, this.fgClaims - 1);
+    if (this.daily && this.daily.day === today) {
+      this.daily.tpm = Math.max(0, (this.daily.tpm ?? 0) + delta);
+      store.saveDailyUsage({ ...this.daily });
     }
   }
 
   /**
-   * Release a foreground claim WITHOUT debiting the windows — for the failure
-   * path where an {@link acquire} succeeded but the request never ran (so
-   * {@link commit} is not called). bg acquisitions hold no claim and are a
-   * no-op here.
+   * Release a foreground claim WITHOUT touching the windows or daily — for the
+   * failure path where an {@link acquire} succeeded but the request never ran.
+   * It NEVER undoes the acquire-recorded window/daily event (the attempt still
+   * counts — matching free-tier reality). Idempotent (clamped at zero). bg
+   * acquisitions hold no claim and are a no-op here.
    */
   release(lane: Lane): void {
     if (lane === 'fg') {

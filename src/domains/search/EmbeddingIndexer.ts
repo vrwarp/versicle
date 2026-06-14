@@ -47,11 +47,39 @@ interface EmbeddingClientPort {
 
 /**
  * The persisted-row stamp the indexer compares against the live config to
- * decide a whole-book re-embed (design §8.2). Narrowed to the stamp SCALARS
- * only — the heavy typed-array view (CacheEmbeddingsView) never crosses this
- * port boundary.
+ * decide a whole-book re-embed (design §8.2), WIDENED with the prior row's
+ * `sections` so the indexer can read-modify-write `cache_embeddings` and carry
+ * forward resume-skipped sections' vectors (rather than overwriting the row with
+ * only this-pass sections). `sections` is optional/lightweight — the buffers it
+ * carries are the already-materialized vectors/scales (the production repo hands
+ * them back as typed-array views, which we re-pack to ArrayBuffers on write).
  */
-type EmbeddedRowStamp = Pick<CacheEmbeddingsRow, 'model' | 'dims' | 'quant'>;
+type EmbeddedRowStamp = Pick<CacheEmbeddingsRow, 'model' | 'dims' | 'quant'> & {
+  sections?: PriorEmbeddedSection[];
+};
+
+/**
+ * A prior persisted section as seen via the read port. `vectors`/`scales` are
+ * `ArrayBufferLike | ArrayBufferView` so this accepts BOTH the on-disk
+ * ArrayBuffer shape AND the typed-array views the production repo re-wraps on
+ * read; {@link toArrayBuffer} normalizes either back to the ArrayBuffer the
+ * `put` row carries so a carried-forward section re-persists losslessly.
+ */
+interface PriorEmbeddedSection {
+  href: string;
+  sectionTextHash: string;
+  chunks: CacheEmbeddingsRow['sections'][number]['chunks'];
+  vectors: ArrayBufferLike | ArrayBufferView;
+  scales: ArrayBufferLike | ArrayBufferView;
+}
+
+/** Normalize a persisted buffer or a re-wrapped typed-array view to ArrayBuffer. */
+function toArrayBuffer(buf: ArrayBufferLike | ArrayBufferView): ArrayBuffer {
+  if (ArrayBuffer.isView(buf)) {
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  }
+  return buf as ArrayBuffer;
+}
 
 /** The slice of the embeddings repo the indexer consumes (injected port). */
 interface EmbeddingsRepoPort {
@@ -116,12 +144,24 @@ export class EmbeddingIndexer {
 
     const job = stampMismatch ? undefined : await this.deps.embeddingsRepo.getJob(bookId);
 
-    // Accumulate the persisted embedding sections across this pass (one row per
-    // book). We carry forward any already-embedded sections from the prior run
-    // implicitly by skipping them (their rows already live in cache_embeddings),
-    // but C persists what THIS pass produces; the resumable job state is the
-    // {href, sectionTextHash} skip key.
-    const embeddedSections: CacheEmbeddingsRow['sections'] = [];
+    // Read-modify-write the per-book embedding row: SEED the accumulator from the
+    // prior persisted row's sections (carried forward losslessly) so a RESUMED
+    // pass — which resume-skips already-embedded sections below — keeps their
+    // persisted vectors instead of overwriting the row with only this-pass
+    // sections. On a stamp mismatch the prior sections live in an incompatible
+    // space, so we start empty (the whole-book re-embed). Each section is
+    // pushed-or-REPLACED by href in the loop; this-pass sections merge over any
+    // carried-forward entry for the same href.
+    const embeddedSections: CacheEmbeddingsRow['sections'] =
+      !stampMismatch && persisted?.sections
+        ? persisted.sections.map((s) => ({
+            href: s.href,
+            sectionTextHash: s.sectionTextHash,
+            chunks: s.chunks,
+            vectors: toArrayBuffer(s.vectors),
+            scales: toArrayBuffer(s.scales),
+          }))
+        : [];
     const jobSections: CacheEmbedJobsRow['sections'] = job ? [...job.sections] : [];
 
     for (const idx of order) {
@@ -164,7 +204,7 @@ export class EmbeddingIndexer {
         scales[i] = scale;
       });
 
-      embeddedSections.push({
+      const embeddedSection = {
         href: section.href,
         sectionTextHash,
         // CFI population is Phase D (the chunker cannot emit CFI from text):
@@ -172,7 +212,13 @@ export class EmbeddingIndexer {
         chunks: chunks.map((c) => ({ cfiStart: '', cfiEnd: '', tokenCount: c.tokenCount })),
         vectors: packed.buffer,
         scales: scales.buffer,
-      });
+      };
+      // Push-or-REPLACE by href (mirrors the jobSections merge below) so a
+      // re-embedded section updates its carried-forward entry instead of
+      // duplicating it.
+      const existingIdx = embeddedSections.findIndex((s) => s.href === section.href);
+      if (existingIdx >= 0) embeddedSections[existingIdx] = embeddedSection;
+      else embeddedSections.push(embeddedSection);
 
       // Mark this section fully embedded for resumability ({href, sectionTextHash}
       // via the embeddedThroughChunk count, stamped with the section hash so a

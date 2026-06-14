@@ -16,7 +16,7 @@
  *    rejects pending promises (the old `terminate()` leaked them), and
  *    clears caches unconditionally.
  */
-import { AppError } from '~types/errors';
+import { AppError, NetRateLimitedError } from '~types/errors';
 import type { SearchBatchResult, SearchSection } from '~types/search';
 import { QueryEmbeddingCache } from './queryEmbeddingCache';
 import { fuseRrf } from './rrf';
@@ -201,10 +201,13 @@ export class SearchSession {
       // Not embedded / stamp-mismatch / no hits → keep the pure regex result.
       if (semantic.length === 0) return regex;
       return fuseRrf(regex.results, semantic, { truncated: regex.truncated });
-    } catch {
-      // Quota-exhausted / network failure / any embed-rank error: regex is the
-      // DEFAULT and must never regress, so return it unchanged.
-      return regex;
+    } catch (error) {
+      // Only EXPECTED quota/network errors fall back to regex (semantic is
+      // purely additive and must never regress full-text). Anything else (a
+      // genuine bug in the semantic path) is rethrown so it surfaces instead of
+      // being silently swallowed.
+      if (isExpectedSearchFallbackError(error)) return regex;
+      throw error;
     }
   }
 
@@ -248,4 +251,22 @@ export class SearchSession {
       });
     }
   }
+}
+
+/**
+ * True for the EXPECTED quota/network errors the semantic path may throw, which
+ * are tolerated by falling back to the regex result. Branches STRUCTURALLY (no
+ * cross-domain import of the google GenAIHttpError class, which would trip the
+ * domains barrier): a pre-network {@link NetRateLimitedError}; the GenAI HTTP
+ * 429/5xx path (an {@link AppError} with `code === 'GENAI_UNKNOWN'` or
+ * `retryable`); or a raw network failure (DOMException `AbortError` / a fetch
+ * `TypeError`). Any other error is unexpected and is rethrown by the caller.
+ */
+function isExpectedSearchFallbackError(error: unknown): boolean {
+  if (error instanceof NetRateLimitedError) return true;
+  if (error instanceof AppError) {
+    return error.code === 'GENAI_UNKNOWN' || error.retryable;
+  }
+  if (error instanceof DOMException && error.name === 'AbortError') return true;
+  return error instanceof TypeError;
 }

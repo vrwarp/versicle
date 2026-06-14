@@ -116,11 +116,11 @@ describe('QuotaGovernor', () => {
     it('refuses background acquisitions while a foreground claim is in flight', async () => {
       const g = newGovernor();
 
-      await g.acquire('fg', 1); // claim held until commit/release
+      await g.acquire('fg', 1); // claim held until release (the gateway's finally)
 
       await expect(g.acquire('bg', 1)).rejects.toBeInstanceOf(NetRateLimitedError);
 
-      g.commit('fg', 1); // release the claim
+      g.release('fg'); // the gateway frees the claim (commit no longer releases)
       await expect(g.acquire('bg', 1)).resolves.toBeUndefined();
     });
 
@@ -137,20 +137,24 @@ describe('QuotaGovernor', () => {
     });
   });
 
-  describe('estimate → commit reconcile', () => {
-    it('debits the window with the ACTUAL token cost, not the estimate', async () => {
+  describe('acquire records the spend; commit reconciles estimate → actual', () => {
+    it('records the estimate at acquire then commit reconciles it to the ACTUAL cost (exactly one event)', async () => {
       limits = { ...LOOSE, tpm: 100 };
       const g = newGovernor();
 
-      await g.acquire('fg', 10); // admitted on a 10-token estimate
-      g.commit('fg', 80); // but actually cost 80
+      await g.acquire('fg', 10); // admitted on (and recorded as) a 10-token estimate
+      expect(g.snapshot().fg.tpm).toBe(10); // recorded at acquire, before any commit
+      expect(g.snapshot().fg.rpm).toBe(1); // exactly one window event
+      g.commit('fg', 80); // reconcile the recorded event 10 → 80
 
-      // 80 spent; an estimate of 30 would exceed 100.
+      // 80 now spent; an estimate of 30 would exceed 100.
       await expect(g.acquire('fg', 30)).rejects.toBeInstanceOf(NetRateLimitedError);
+      // Still exactly one (fg) event, now carrying the actual cost.
       expect(g.snapshot().fg.tpm).toBe(80);
+      expect(g.snapshot().fg.rpm).toBe(1);
     });
 
-    it('persists the daily RPD through the store on every commit', async () => {
+    it('persists the daily RPD at ACQUIRE (the count reflects admissions, not commits)', async () => {
       const double = makeStoreDouble();
       setQuotaStore(double.store);
       const g = newGovernor();
@@ -161,6 +165,61 @@ describe('QuotaGovernor', () => {
       g.commit('fg', 1);
 
       expect(double.saved.at(-1)).toMatchObject({ rpd: 2 });
+    });
+
+    it('an acquire with NO commit still counts toward RPM/TPM/RPD and persists (the embedding-egress regression)', async () => {
+      const double = makeStoreDouble();
+      setQuotaStore(double.store);
+      const g = newGovernor();
+
+      // Emulate an embedding egress: acquire + the gateway's finally release,
+      // but NO governor commit (the embedding client has no governor wired).
+      await g.acquire('fg', 7);
+      g.release('fg');
+
+      const snap = g.snapshot().fg;
+      expect(snap.rpm).toBe(1); // counted in the rolling RPM window
+      expect(snap.tpm).toBe(7); // counted in the rolling TPM window (the estimate)
+      expect(snap.rpd).toBe(1); // counted against the daily RPD
+      // …and persisted+published through the store (the A6 saveDailyUsage).
+      expect(double.saved.at(-1)).toMatchObject({ rpd: 1, tpm: 7 });
+    });
+
+    it('commit does NOT double-record RPD/window (one acquire + one commit ⇒ rpd 1, one event)', async () => {
+      const double = makeStoreDouble();
+      setQuotaStore(double.store);
+      const g = newGovernor();
+
+      await g.acquire('fg', 5);
+      g.commit('fg', 12);
+
+      const snap = g.snapshot().fg;
+      expect(snap.rpm).toBe(1); // exactly one event (acquire recorded, commit reconciled)
+      expect(snap.tpm).toBe(12); // reconciled to the actual, not 5 + 12
+      expect(snap.rpd).toBe(1); // bumped once (at acquire), NOT again at commit
+      expect(double.saved.at(-1)).toMatchObject({ rpd: 1, tpm: 12 });
+    });
+
+    it('release does NOT undo the recorded spend (the attempt still counts; the fg claim frees so bg is admitted)', async () => {
+      const double = makeStoreDouble();
+      setQuotaStore(double.store);
+      const g = newGovernor();
+
+      await g.acquire('fg', 3);
+      g.release('fg'); // the gateway frees the claim — but the spend stays recorded
+
+      expect(g.snapshot().fg.rpd).toBe(1); // the attempt still counts (free-tier reality)
+      expect(double.saved.at(-1)).toMatchObject({ rpd: 1 });
+      // The fg claim was freed, so a bg acquire is now admitted (no fg-preempt).
+      await expect(g.acquire('bg', 1)).resolves.toBeUndefined();
+    });
+
+    it('admits at least one bg request even when rpm=1 (the bg cap floors to >=1)', async () => {
+      // floor(1 * 0.5) = 0 would refuse ALL bg; Math.max(1, …) admits one.
+      limits = { ...LOOSE, rpm: 1, tpm: 1 };
+      const g = newGovernor();
+
+      await expect(g.acquire('bg', 1)).resolves.toBeUndefined();
     });
   });
 

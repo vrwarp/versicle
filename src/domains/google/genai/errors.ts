@@ -1,7 +1,7 @@
 /**
  * Typed GenAI errors (Phase 7 §H; C10 codes GENAI_*).
  */
-import { AppError } from '~types/errors';
+import { AppError, NetRateLimitedError } from '~types/errors';
 
 /** No API key configured. Message kept verbatim — UI surfaces it. */
 export class GenAINotConfiguredError extends AppError {
@@ -42,7 +42,22 @@ export class GenAIHttpError extends AppError {
   }
 }
 
-/** 429 / quota detection for the rotation retry (typed, no string sniffing). */
-export function isResourceExhausted(error: unknown): boolean {
+/**
+ * 429 / quota detection for the rotation retry (typed, no string sniffing).
+ * Module-local: the rotation loop consumes it via {@link isRetryableForRotation}.
+ */
+function isResourceExhausted(error: unknown): boolean {
   return error instanceof GenAIHttpError && error.status === 429;
+}
+
+/**
+ * The rotation continue-predicate: keep rotating to the remaining models on a
+ * server 429 ({@link isResourceExhausted}) OR on a PRE-NETWORK
+ * {@link NetRateLimitedError}. The latter is the cooldown-backpressure case —
+ * when model A's 429 sets a governor cooldown, model B's gateway acquire throws
+ * NetRateLimitedError before any network call; without this, that cooldown would
+ * abort rotation to the still-untried models.
+ */
+export function isRetryableForRotation(error: unknown): boolean {
+  return isResourceExhausted(error) || error instanceof NetRateLimitedError;
 }

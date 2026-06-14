@@ -8,6 +8,7 @@ import { SearchEngine } from '@lib/search-engine';
 import { SearchSession, type SearchEngineHandle, type SearchTextSource } from './SearchSession';
 import { chunkSection } from './chunker';
 import { MockEmbeddingClient } from '@domains/google';
+import { NetRateLimitedError } from '~types/errors';
 import type { EmbeddedRowView, EmbeddingClientPort } from './embeddingPort';
 
 function makeFactory() {
@@ -318,13 +319,14 @@ describe('SearchSession — hybrid semantic query path (Increment D)', () => {
     expect(result.results).toHaveLength(1);
   });
 
-  it('regex is the DEFAULT when the embed throws (quota exhausted / network)', async () => {
+  it('regex is the DEFAULT when the embed throws an EXPECTED quota error (NetRateLimitedError)', async () => {
     const { factory } = makeFactory();
     const embedded = await seededEmbeddedRow(new MockEmbeddingClient({ dims: DIMS }));
     const throwingClient: EmbeddingClientPort = {
       isConfigured: () => true,
       embed: vi.fn(async () => {
-        throw new Error('NET_RATE_LIMITED');
+        // A typed pre-network backpressure error — an EXPECTED fallback case.
+        throw new NetRateLimitedError(1000, { lane: 'fg' });
       }),
     };
 
@@ -338,11 +340,39 @@ describe('SearchSession — hybrid semantic query path (Increment D)', () => {
     });
     await session.index('bk-1', [{ id: 's1', href: SEMANTIC_HREF, title: 'Chapter 1', text: SEMANTIC_TEXT }]);
 
-    // The semantic branch threw — full-text result is returned UNCHANGED.
+    // The semantic branch threw an EXPECTED quota error — full-text result is
+    // returned UNCHANGED (regex is the default).
     const result = await session.search('bk-1', 'Ishmael');
     expect(throwingClient.embed).toHaveBeenCalledTimes(1);
     expect(result.results).toHaveLength(1);
     expect(result.results[0].href).toBe(SEMANTIC_HREF);
+  });
+
+  it('an UNEXPECTED error from the semantic path SURFACES (is NOT swallowed by the regex fallback)', async () => {
+    const { factory } = makeFactory();
+    const embedded = await seededEmbeddedRow(new MockEmbeddingClient({ dims: DIMS }));
+    const boom = new Error('boom'); // a non-quota / non-network bug
+    const throwingClient: EmbeddingClientPort = {
+      isConfigured: () => true,
+      embed: vi.fn(async () => {
+        throw boom;
+      }),
+    };
+
+    const session = new SearchSession({
+      engineFactory: factory,
+      textSource: semanticTextSource(),
+      embeddingClient: throwingClient,
+      embeddingsSource: { get: vi.fn(async () => embedded) },
+      quantize,
+      getSemanticConfig: semanticConfig(true),
+    });
+    await session.index('bk-1', [{ id: 's1', href: SEMANTIC_HREF, title: 'Chapter 1', text: SEMANTIC_TEXT }]);
+
+    // The narrowed catch rethrows an unexpected error rather than masking it as
+    // a silent regex fallback.
+    await expect(session.search('bk-1', 'Ishmael')).rejects.toBe(boom);
+    expect(throwingClient.embed).toHaveBeenCalledTimes(1);
   });
 
   it('exercises the real SearchEngine.rankInt8 through the in-process factory seam', async () => {

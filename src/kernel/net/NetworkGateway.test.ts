@@ -211,6 +211,7 @@ describe('NetworkGateway.egress', () => {
       await expect(
         egress('gemini', GEMINI_URL, {}, { lane: 'bg', estTokens: 5 }),
       ).rejects.toBeInstanceOf(TypeError);
+      expect(release).toHaveBeenCalledTimes(1);
       expect(release).toHaveBeenCalledWith('bg');
     });
 
@@ -231,7 +232,20 @@ describe('NetworkGateway.egress', () => {
       expect(scheduler.release).not.toHaveBeenCalled();
     });
 
-    it('releases the lane when the fetch rejects (migrated fg-claim cleanup)', async () => {
+    it('releases EXACTLY ONCE on a resolved non-2xx (429/500) — the single-owner regression', async () => {
+      // The headline fix: a 429/500 RESOLVES (it does not throw), so the old
+      // catch-only release leaked the claim. The finally now frees it exactly once.
+      const release = vi.fn();
+      setQuotaScheduler({ acquire: vi.fn(async () => {}), release });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('rate limited', { status: 429 })));
+
+      const res = await egress('gemini', GEMINI_URL, {}, { lane: 'fg', estTokens: 5 });
+      expect(res.status).toBe(429); // the gateway never reads the body; it resolves the Response
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(release).toHaveBeenCalledWith('fg');
+    });
+
+    it('releases the lane exactly once when the fetch rejects (migrated fg-claim cleanup)', async () => {
       const release = vi.fn();
       setQuotaScheduler({ acquire: vi.fn(async () => {}), release });
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network down')));
@@ -239,14 +253,16 @@ describe('NetworkGateway.egress', () => {
       await expect(
         egress('gemini', GEMINI_URL, {}, { lane: 'fg', estTokens: 5 }),
       ).rejects.toBeInstanceOf(TypeError);
+      expect(release).toHaveBeenCalledTimes(1);
       expect(release).toHaveBeenCalledWith('fg');
     });
 
-    it('does not release on a successful fetch (the client commits instead)', async () => {
+    it('releases exactly once on a successful fetch (release is finally-owned; commit no longer releases)', async () => {
       const release = vi.fn();
       setQuotaScheduler({ acquire: vi.fn(async () => {}), release });
       await egress('gemini', GEMINI_URL, {}, { lane: 'fg', estTokens: 5 });
-      expect(release).not.toHaveBeenCalled();
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(release).toHaveBeenCalledWith('fg');
     });
 
     it('does not consult the scheduler for ungoverned destinations (drive)', async () => {

@@ -22,7 +22,7 @@ import {
   GenAIHttpError,
   GenAIInvalidResponseError,
   GenAINotConfiguredError,
-  isResourceExhausted,
+  isRetryableForRotation,
 } from './errors';
 import { redactPayload, type GenAILogEntry, type GenAILogSink } from './logging';
 import type {
@@ -160,12 +160,16 @@ export class GeminiClient implements GenAIClient {
         return await operation(modelId);
       } catch (error) {
         lastError = error;
-        if (rotationEnabled && isResourceExhausted(error)) {
+        // Rotate on a server 429 OR a pre-network NET_RATE_LIMITED cooldown (a
+        // sibling model's 429 set the governor cooldown, so this model's gateway
+        // acquire backpressured before the network) — both leave the remaining
+        // models worth trying.
+        if (rotationEnabled && isRetryableForRotation(error)) {
           this.log(
             'error',
             method,
             {
-              message: `Model ${modelId} exhausted (429). Retrying with next model...`,
+              message: `Model ${modelId} unavailable (429 / cooldown backpressure). Retrying with next model...`,
               error: (error as Error).message,
             },
             context,

@@ -91,7 +91,7 @@ export function setConsentResolver(resolver: ConsentResolver | null): void {
  * same dependency inversion as {@link ConsentResolver}. The composition root
  * installs the QuotaGovernor (which already implements `acquire`/`release`) via
  * {@link setQuotaScheduler}; the split is deliberate — `acquire` + the
- * failure-path `release` are a GATEWAY concern (pre-network, unbypassable),
+ * once-per-egress `release` are a GATEWAY concern (pre-network, unbypassable),
  * while `commit`/`recordCooldown` stay a CLIENT step because they need the
  * parsed response body the gateway by contract never reads.
  */
@@ -99,11 +99,14 @@ export interface QuotaScheduler {
   /**
    * Admit one request on `lane`, sized by `estTokens`. Rejects with
    * `NetRateLimitedError` (pre-network backpressure) when the request cannot be
-   * admitted. A foreground claim is held until the matching {@link release} (the
-   * gateway's failure path) or the client's commit.
+   * admitted. On admission the governor RECORDS the spend; a foreground claim is
+   * held until the matching {@link release} (the gateway frees it exactly once
+   * per egress in its finally — on success, on a resolved non-2xx, or on a
+   * throw).
    */
   acquire(lane: 'fg' | 'bg', estTokens: number): Promise<void>;
-  /** Release a foreground claim that was admitted but never ran (failure path). */
+  /** Release a foreground claim. The gateway calls this exactly once per egress
+   *  (its finally) — on a 200, a resolved 429/500, or a throw. Idempotent. */
   release(lane: 'fg' | 'bg'): void;
 }
 
@@ -215,9 +218,10 @@ export async function egress(
   // the injected scheduler is awaited BEFORE recordEgress/fetch, so a
   // backpressured call throws NetRateLimitedError pre-network and is NOT counted
   // as egress (mirrors the consent gate's "policy failures are not counted").
-  // Observe mode: no scheduler ⇒ no throttle. The admitted fg claim is owned by
-  // the gateway on its failure path (release below) and reconciled by the
-  // CLIENT's commit on success — the gateway never reads the body.
+  // Observe mode: no scheduler ⇒ no throttle. The admitted fg claim is released
+  // by the gateway EXACTLY ONCE per egress in the finally below (the single
+  // release owner — on 200, on a resolved 429/500, or on a throw); the CLIENT's
+  // commit only reconciles the recorded token estimate and never releases.
   // Per-call lane (E2) overrides the destination default so a bg-tagged egress
   // on a rate-limited destination acquires/releases on the bg lane (fg-preempt +
   // bg-fraction caps apply). Ungoverned destinations stay ungoverned.
@@ -251,17 +255,21 @@ export async function egress(
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (error) {
-    // An admitted-but-never-committed fg claim must be released here so it
-    // cannot leak the foreground preemption (this responsibility migrated from
-    // the clients into the gateway when acquire moved to the chokepoint).
-    if (rateLane && quotaScheduler) {
-      quotaScheduler.release(rateLane);
-    }
     if (timedOut) {
       throw new NetTimeoutError(destinationId, destination.timeoutMs ?? 0);
     }
     throw error;
   } finally {
+    // The gateway is the SINGLE owner of the claim release (try/finally, exactly
+    // ONCE per egress) — it fires on EVERY completion: a 200, a resolved non-2xx
+    // (429/500), or a throw. The governor RECORDS the spend at acquire (so the
+    // attempt counts regardless of outcome) and commit no longer releases; the
+    // release here only frees the fg-preempt claim. release() is idempotent
+    // (clamped at zero) so the once-per-egress call cannot drive fgClaims
+    // negative.
+    if (rateLane && quotaScheduler) {
+      quotaScheduler.release(rateLane);
+    }
     clearTimeout(timer);
   }
 }
