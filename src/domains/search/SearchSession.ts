@@ -18,48 +18,38 @@
  */
 import { AppError } from '~types/errors';
 import type { SearchBatchResult, SearchSection } from '~types/search';
+import { QueryEmbeddingCache } from './queryEmbeddingCache';
+import { fuseRrf } from './rrf';
+import { semanticRank } from './semanticRank';
+import type {
+  SearchEngineProtocol,
+  SearchEngineHandle,
+  SearchEngineFactory,
+  SearchTextSource,
+} from './protocol';
+import type {
+  EmbeddingClientPort,
+  EmbeddingsSourcePort,
+  QuantizePort,
+  SemanticConfigPort,
+} from './embeddingPort';
 
-/** The engine surface the session needs — satisfied by the real SearchEngine and its Comlink remote. */
-export interface SearchEngineProtocol {
-  initIndex(bookId: string): void | Promise<void>;
-  addDocuments(bookId: string, sections: SearchSection[]): void | Promise<void>;
-  searchDetailed(
-    bookId: string,
-    query: string,
-    opts?: { limit?: number },
-  ): SearchBatchResult | Promise<SearchBatchResult>;
-}
-
-export interface SearchEngineHandle {
-  engine: SearchEngineProtocol;
-  /** Release the underlying resource (terminate the worker). */
-  dispose(): void;
-  /** Subscribe to fatal engine errors (worker `onerror`). Returns unsubscribe. */
-  onError?(listener: (error: unknown) => void): () => void;
-}
-
-export type SearchEngineFactory = () => SearchEngineHandle;
-
-/** Read access to the persisted corpus (the data repo, injected to keep this module store/data-free in tests). */
-export interface SearchTextSource {
-  get(bookId: string): Promise<
-    | {
-        extractionVersion: number;
-        sections: {
-          href: string;
-          title: string;
-          text: string;
-          /** Embedding-indexer skip key, stamped at import (Increment C §3). */
-          sectionTextHash?: string;
-        }[];
-      }
-    | undefined
-  >;
-}
+// Re-exported so the published domain surface (index.ts) and existing importers
+// of these contracts from './SearchSession' are unchanged — the declarations
+// moved to ./protocol to break the SearchSession↔semanticRank import cycle.
+export type {
+  SearchEngineProtocol,
+  SearchEngineHandle,
+  SearchEngineFactory,
+  SearchTextSource,
+} from './protocol';
 
 export type IndexOutcome = 'indexed' | 'no-text';
 
 const BATCH_SIZE = 50;
+
+/** Top-k chunk rows kept per section before RRF fusion (Increment D §2). */
+const SEMANTIC_SECTION_LIMIT = 50;
 
 export class SearchSession {
   private handle: SearchEngineHandle | null = null;
@@ -68,6 +58,12 @@ export class SearchSession {
   private pendingIndexes = new Map<string, Promise<IndexOutcome>>();
   /** Bumped on dispose()/engine failure; in-flight work from older generations is void. */
   private generation = 0;
+  /**
+   * One query-embedding cache per session (Increment D §1): a repeated query
+   * reuses the cached vector with NO second embed call, protecting the shared
+   * daily RPD budget (design §5.2/§8.1).
+   */
+  private readonly queryEmbeddingCache = new QueryEmbeddingCache();
 
   constructor(
     private readonly opts: {
@@ -84,6 +80,21 @@ export class SearchSession {
        * textSource seam: bookId/CFI flow as arguments, no store edge.
        */
       embeddingIndexer?: { enqueue(bookId: string, currentCfi?: string): Promise<void> };
+      /**
+       * Increment D — hybrid semantic query ports, ALL optional so the
+       * regex-only/test constructions are untouched. When all are present AND
+       * semantic is enabled+configured+embedded, {@link search} fuses a
+       * semantic-cosine ranking into the regex result (RRF). On ANY miss or
+       * thrown error the regex result is returned UNCHANGED (regex is the
+       * DEFAULT). Wired by the app reader controller from the @domains/google
+       * embedding facade + the embeddings repo + the B3 quantizer; semantic
+       * on/off + {model,dims} arrive via {@link getSemanticConfig}, never a
+       * store import inside the domain.
+       */
+      embeddingClient?: EmbeddingClientPort;
+      embeddingsSource?: EmbeddingsSourcePort;
+      quantize?: QuantizePort;
+      getSemanticConfig?: SemanticConfigPort;
     },
   ) {}
 
@@ -147,9 +158,54 @@ export class SearchSession {
     return 'indexed';
   }
 
-  /** Per-occurrence results with an honest truncation flag. */
+  /**
+   * Per-occurrence results with an honest truncation flag.
+   *
+   * Regex full-text is the DEFAULT (Increment D §4): the regex `searchDetailed`
+   * always runs. The semantic branch is entered ONLY when ALL hold — the
+   * semantic ports were injected, semantic search is ON, the embedding client
+   * reports configured, and the book has a non-empty embedded row. When it
+   * succeeds the semantic ranking is FUSED into the regex result via RRF
+   * (regex never disappears). On ANY miss (off / unconfigured / not-embedded)
+   * or ANY thrown error (quota-exhausted NET_RATE_LIMITED/429, network
+   * failure) the regex result is returned UNCHANGED — semantic is purely
+   * additive and can never break or regress full-text search.
+   */
   async search(bookId: string, query: string, opts?: { limit?: number }): Promise<SearchBatchResult> {
-    return this.engine().searchDetailed(bookId, query, opts);
+    const engine = this.engine();
+    const regex = await engine.searchDetailed(bookId, query, opts);
+
+    const { embeddingClient, embeddingsSource, quantize, getSemanticConfig, textSource } = this.opts;
+    if (!embeddingClient || !embeddingsSource || !quantize || !getSemanticConfig || !textSource) {
+      return regex;
+    }
+    const semanticConfig = getSemanticConfig();
+    if (!semanticConfig.enabled || !embeddingClient.isConfigured()) return regex;
+
+    const trimmed = query.trim();
+    if (trimmed.length === 0) return regex;
+
+    try {
+      const semantic = await semanticRank({
+        engine,
+        embeddingClient,
+        embeddingsSource,
+        textSource,
+        quantize,
+        queryCache: this.queryEmbeddingCache,
+        config: { model: semanticConfig.model, dims: semanticConfig.dims },
+        bookId,
+        query: trimmed,
+        limit: opts?.limit ?? SEMANTIC_SECTION_LIMIT,
+      });
+      // Not embedded / stamp-mismatch / no hits → keep the pure regex result.
+      if (semantic.length === 0) return regex;
+      return fuseRrf(regex.results, semantic, { truncated: regex.truncated });
+    } catch {
+      // Quota-exhausted / network failure / any embed-rank error: regex is the
+      // DEFAULT and must never regress, so return it unchanged.
+      return regex;
+    }
   }
 
   /**

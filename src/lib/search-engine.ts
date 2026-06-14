@@ -218,4 +218,42 @@ export class SearchEngine {
         }
         return best;
     }
+
+    /**
+     * Rank the packed int8 corpus rows by cosine against an int8 query vector,
+     * returning the top-`limit` rows as `{ row, cosine }` descending (Increment
+     * D §2, the search-side semantic ranking). `packedVecs` packs one
+     * `dims`-length int8 row per chunk back-to-back; `scales[r]` is row `r`'s
+     * per-vector float32 scale. Each row's cosine is computed via the SAME
+     * {@link int8Cosine} formula on a single-row view — so int8Cosine gains a
+     * real production consumer (it was previously only self-tested) and the two
+     * code paths can never drift.
+     *
+     * Pure compute over typed arrays only (no IDB/store edge): it crosses the
+     * Comlink worker seam exactly like {@link searchDetailed}.
+     */
+    rankInt8(
+        packedVecs: Int8Array,
+        scales: Float32Array,
+        queryVec: Int8Array,
+        queryScale: number,
+        dims: number,
+        limit: number,
+    ): { row: number; cosine: number }[] {
+        if (dims <= 0 || limit <= 0 || queryScale === 0) return [];
+
+        const rows = Math.floor(packedVecs.length / dims);
+        const scored: { row: number; cosine: number }[] = [];
+        for (let r = 0; r < rows; r++) {
+            const base = r * dims;
+            // A single-row view so int8Cosine ranks exactly this chunk (its
+            // "best across packed rows" reduces to the one row's cosine).
+            const rowView = packedVecs.subarray(base, base + dims);
+            const cosine = this.int8Cosine(rowView, scales[r] ?? 0, queryVec, queryScale, dims);
+            if (cosine > 0) scored.push({ row: r, cosine });
+        }
+
+        scored.sort((a, b) => b.cosine - a.cosine);
+        return scored.slice(0, limit);
+    }
 }

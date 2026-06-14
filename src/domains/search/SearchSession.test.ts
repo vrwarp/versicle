@@ -6,6 +6,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SearchEngine } from '@lib/search-engine';
 import { SearchSession, type SearchEngineHandle, type SearchTextSource } from './SearchSession';
+import { chunkSection } from './chunker';
+import { MockEmbeddingClient } from '@domains/google';
+import type { EmbeddedRowView, EmbeddingClientPort } from './embeddingPort';
 
 function makeFactory() {
   const created: { engine: SearchEngine; dispose: ReturnType<typeof vi.fn> }[] = [];
@@ -147,5 +150,234 @@ describe('SearchSession', () => {
     await session.index('bk-1', [{ id: 's1', href: 'c.xhtml', text: 'hello world' }]);
     expect(created).toHaveLength(2);
     expect((await session.search('bk-1', 'world')).results).toHaveLength(1);
+  });
+});
+
+// ── Increment D — hybrid semantic query path ─────────────────────────────────
+
+const DIMS = 8;
+
+/** A section whose text chunks deterministically (matches the indexer's defaults). */
+const SEMANTIC_TEXT =
+  'Call me Ishmael. Some years ago, never mind how long precisely, I thought I would sail about a little. ' +
+  'The white whale swam beneath the moonlit waves toward the distant horizon.';
+const SEMANTIC_HREF = 'ch1.xhtml';
+
+/**
+ * The B3 quantizer port (reuse the real SearchEngine helper, the same instance
+ * shape the controller passes).
+ */
+const quantize = (vec: Float32Array) => new SearchEngine().quantizeInt8PerVector(vec);
+
+/**
+ * Seed an embedded row exactly the way the indexer does (Increment C): chunk the
+ * section, embed each chunk under the 'document' profile, quantize + pack. Row r
+ * ↔ chunk r, so semanticRank's re-chunk alignment holds.
+ */
+async function seededEmbeddedRow(
+  client: EmbeddingClientPort,
+  extractionVersion = 3,
+): Promise<EmbeddedRowView> {
+  const { chunks } = chunkSection({ href: SEMANTIC_HREF, title: 'Chapter 1', text: SEMANTIC_TEXT });
+  const { vectors } = await client.embed(
+    chunks.map((c) => c.text),
+    { profile: 'document', bookId: 'bk-1', interactive: true },
+  );
+  const packed = new Int8Array(vectors.length * DIMS);
+  const scales = new Float32Array(vectors.length);
+  vectors.forEach((vec, i) => {
+    const { vectors: q, scale } = quantize(vec);
+    packed.set(q, i * DIMS);
+    scales[i] = scale;
+  });
+  return {
+    bookId: 'bk-1',
+    model: 'mock-embed',
+    dims: DIMS,
+    quant: 'int8-pervec',
+    extractionVersion,
+    sections: [
+      {
+        href: SEMANTIC_HREF,
+        sectionTextHash: 'h1',
+        chunks: chunks.map((c) => ({ cfiStart: '', cfiEnd: '', tokenCount: c.tokenCount })),
+        vectors: packed,
+        scales,
+      },
+    ],
+  };
+}
+
+const semanticTextSource = (extractionVersion = 3): SearchTextSource => ({
+  get: vi.fn(async () => ({
+    extractionVersion,
+    sections: [{ href: SEMANTIC_HREF, title: 'Chapter 1', text: SEMANTIC_TEXT }],
+  })),
+});
+
+const semanticConfig = (enabled = true) => () => ({ enabled, model: 'mock-embed', dims: DIMS });
+
+describe('SearchSession — hybrid semantic query path (Increment D)', () => {
+  it('caches the query embedding: two identical searches embed exactly once', async () => {
+    const { factory } = makeFactory();
+    // Spy on the mock client's embed, but seed the corpus through a separate
+    // fixture instance so the seeding embeds (document profile) are not counted.
+    const seedClient = new MockEmbeddingClient({ dims: DIMS });
+    const embedded = await seededEmbeddedRow(seedClient);
+
+    const queryClient = new MockEmbeddingClient({ dims: DIMS });
+    const embedSpy = vi.spyOn(queryClient, 'embed');
+
+    const session = new SearchSession({
+      engineFactory: factory,
+      textSource: semanticTextSource(),
+      embeddingClient: queryClient,
+      embeddingsSource: { get: vi.fn(async () => embedded) },
+      quantize,
+      getSemanticConfig: semanticConfig(true),
+    });
+    await session.index('bk-1', [{ id: 's1', href: SEMANTIC_HREF, title: 'Chapter 1', text: SEMANTIC_TEXT }]);
+
+    const first = await session.search('bk-1', 'great white whale');
+    const second = await session.search('bk-1', 'great white whale');
+
+    // The repeated query reused the cached vector — exactly one query embed.
+    expect(embedSpy).toHaveBeenCalledTimes(1);
+    expect(embedSpy).toHaveBeenCalledWith(
+      ['great white whale'],
+      expect.objectContaining({ profile: 'query', bookId: 'bk-1', interactive: true }),
+    );
+    // Fusion preserves the regex result (none here) + semantic hits.
+    expect(first.results.length).toBeGreaterThan(0);
+    expect(second.results).toEqual(first.results);
+  });
+
+  it('regex is the DEFAULT when semantic is OFF (zero embed calls, result == regex)', async () => {
+    const { factory } = makeFactory();
+    const embedded = await seededEmbeddedRow(new MockEmbeddingClient({ dims: DIMS }));
+    const queryClient = new MockEmbeddingClient({ dims: DIMS });
+    const embedSpy = vi.spyOn(queryClient, 'embed');
+
+    const session = new SearchSession({
+      engineFactory: factory,
+      textSource: semanticTextSource(),
+      embeddingClient: queryClient,
+      embeddingsSource: { get: vi.fn(async () => embedded) },
+      quantize,
+      getSemanticConfig: semanticConfig(false), // OFF
+    });
+    await session.index('bk-1', [{ id: 's1', href: SEMANTIC_HREF, title: 'Chapter 1', text: SEMANTIC_TEXT }]);
+
+    const result = await session.search('bk-1', 'Ishmael');
+    const regexOnly = await session.search('bk-1', 'Ishmael'); // recompute regex for parity
+
+    expect(embedSpy).not.toHaveBeenCalled();
+    // Identical to a pure regex searchDetailed (one occurrence of "Ishmael").
+    expect(result.results.map((r) => r.charOffset)).toEqual(regexOnly.results.map((r) => r.charOffset));
+    expect(result.results).toHaveLength(1);
+  });
+
+  it('regex is the DEFAULT when the client is unconfigured (no embed)', async () => {
+    const { factory } = makeFactory();
+    const embedded = await seededEmbeddedRow(new MockEmbeddingClient({ dims: DIMS }));
+    const queryClient = new MockEmbeddingClient({ dims: DIMS, configured: false });
+    const embedSpy = vi.spyOn(queryClient, 'embed');
+
+    const session = new SearchSession({
+      engineFactory: factory,
+      textSource: semanticTextSource(),
+      embeddingClient: queryClient,
+      embeddingsSource: { get: vi.fn(async () => embedded) },
+      quantize,
+      getSemanticConfig: semanticConfig(true),
+    });
+    await session.index('bk-1', [{ id: 's1', href: SEMANTIC_HREF, title: 'Chapter 1', text: SEMANTIC_TEXT }]);
+
+    const result = await session.search('bk-1', 'Ishmael');
+    expect(embedSpy).not.toHaveBeenCalled();
+    expect(result.results).toHaveLength(1);
+  });
+
+  it('regex is the DEFAULT when the book is not embedded (empty row → no embed)', async () => {
+    const { factory } = makeFactory();
+    const queryClient = new MockEmbeddingClient({ dims: DIMS });
+    const embedSpy = vi.spyOn(queryClient, 'embed');
+
+    const session = new SearchSession({
+      engineFactory: factory,
+      textSource: semanticTextSource(),
+      embeddingClient: queryClient,
+      embeddingsSource: { get: vi.fn(async () => undefined) }, // never embedded
+      quantize,
+      getSemanticConfig: semanticConfig(true),
+    });
+    await session.index('bk-1', [{ id: 's1', href: SEMANTIC_HREF, title: 'Chapter 1', text: SEMANTIC_TEXT }]);
+
+    const result = await session.search('bk-1', 'Ishmael');
+    expect(embedSpy).not.toHaveBeenCalled();
+    expect(result.results).toHaveLength(1);
+  });
+
+  it('regex is the DEFAULT when the embed throws (quota exhausted / network)', async () => {
+    const { factory } = makeFactory();
+    const embedded = await seededEmbeddedRow(new MockEmbeddingClient({ dims: DIMS }));
+    const throwingClient: EmbeddingClientPort = {
+      isConfigured: () => true,
+      embed: vi.fn(async () => {
+        throw new Error('NET_RATE_LIMITED');
+      }),
+    };
+
+    const session = new SearchSession({
+      engineFactory: factory,
+      textSource: semanticTextSource(),
+      embeddingClient: throwingClient,
+      embeddingsSource: { get: vi.fn(async () => embedded) },
+      quantize,
+      getSemanticConfig: semanticConfig(true),
+    });
+    await session.index('bk-1', [{ id: 's1', href: SEMANTIC_HREF, title: 'Chapter 1', text: SEMANTIC_TEXT }]);
+
+    // The semantic branch threw — full-text result is returned UNCHANGED.
+    const result = await session.search('bk-1', 'Ishmael');
+    expect(throwingClient.embed).toHaveBeenCalledTimes(1);
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].href).toBe(SEMANTIC_HREF);
+  });
+
+  it('exercises the real SearchEngine.rankInt8 through the in-process factory seam', async () => {
+    const { factory, created } = makeFactory();
+    const seedClient = new MockEmbeddingClient({ dims: DIMS });
+    const embedded = await seededEmbeddedRow(seedClient);
+    const queryClient = new MockEmbeddingClient({ dims: DIMS });
+
+    // Spy on the REAL engine's rankInt8 to prove the worker-seam method ran.
+    const rankSpy = vi.fn();
+
+    const session = new SearchSession({
+      engineFactory: () => {
+        const handle = factory();
+        const engine = handle.engine as SearchEngine;
+        const original = engine.rankInt8.bind(engine);
+        engine.rankInt8 = (...a: Parameters<SearchEngine['rankInt8']>) => {
+          rankSpy(...a);
+          return original(...a);
+        };
+        return handle;
+      },
+      textSource: semanticTextSource(),
+      embeddingClient: queryClient,
+      embeddingsSource: { get: vi.fn(async () => embedded) },
+      quantize,
+      getSemanticConfig: semanticConfig(true),
+    });
+    await session.index('bk-1', [{ id: 's1', href: SEMANTIC_HREF, title: 'Chapter 1', text: SEMANTIC_TEXT }]);
+
+    const { results } = await session.search('bk-1', 'whale');
+    // The real engine ranked the packed corpus (one call per embedded section).
+    expect(rankSpy).toHaveBeenCalled();
+    expect(created.length).toBeGreaterThan(0);
+    // The regex hit for "whale" survives fusion alongside semantic chunk hits.
+    expect(results.some((r) => SEMANTIC_TEXT.substring(r.charOffset, r.charOffset + r.matchLength).toLowerCase().includes('whale'))).toBe(true);
   });
 });

@@ -305,6 +305,18 @@ export function useReaderController(
       engineFactory: createWorkerSearchEngineFactory(),
       textSource: searchTextRepo,
       embeddingIndexer,
+      // Increment D — hybrid semantic query ports (additive; regex stays the
+      // default). Reuse the SAME embedding client + repo + quantizer the
+      // indexer was wired from; semantic on/off + {model,dims} arrive via the
+      // injected thunk reading useGenAIStore (mirrors the getConfig thunk
+      // above) — no store edge inside domains/search.
+      embeddingClient,
+      embeddingsSource: embeddingsRepo,
+      quantize: (vec) => embeddingQuantizer.quantizeInt8PerVector(vec),
+      getSemanticConfig: () => {
+        const s = useGenAIStore.getState();
+        return { enabled: s.isEnabled, model: s.embeddingModel, dims: s.embeddingDims };
+      },
       onError: (error) => {
         logger.error('Search engine failed; session reset', error);
         useToastStore.getState().showToast('Search failed', 'error');
