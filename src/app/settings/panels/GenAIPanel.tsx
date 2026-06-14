@@ -11,6 +11,7 @@ import { exportFile } from '@lib/export';
 import { GenAISettingsTab } from '@components/settings';
 import { useConfirm } from '@components/ui/ConfirmDialog';
 import { createLogger } from '@lib/logger';
+import { useQuotaMeters } from './useQuotaMeters';
 
 const logger = createLogger('GenAIPanel');
 
@@ -37,8 +38,18 @@ const GenAIPanel: React.FC = () => {
     setMaxLogs,
     clearLogs,
     isDebugModeEnabled,
-    setDebugModeEnabled
+    setDebugModeEnabled,
+    quotaLimits,
+    setQuotaLimits,
+    bgThrottlePercent,
+    setBgThrottlePercent,
+    fgRpdHeadroom,
+    setFgRpdHeadroom,
+    pauseAllGenAI,
+    setPauseAllGenAI
   } = useGenAIStore();
+
+  const meters = useQuotaMeters();
 
   const handleClearContentAnalysis = async () => {
     if (await confirm({ titleKey: 'genai.clearCache.title', bodyKey: 'genai.clearCache.body', danger: true })) {
@@ -92,6 +103,15 @@ const GenAIPanel: React.FC = () => {
       onMaxLogsChange={setMaxLogs}
       onClearLogs={clearLogs}
       onDownloadLogs={handleDownloadLogs}
+      quotaLimits={quotaLimits}
+      onQuotaLimitsChange={setQuotaLimits}
+      bgThrottlePercent={bgThrottlePercent}
+      onBgThrottlePercentChange={setBgThrottlePercent}
+      fgRpdHeadroom={fgRpdHeadroom}
+      onFgRpdHeadroomChange={setFgRpdHeadroom}
+      pauseAllGenAI={pauseAllGenAI}
+      onPauseAllGenAIChange={setPauseAllGenAI}
+      meters={meters}
     />
   );
 };

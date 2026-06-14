@@ -95,11 +95,17 @@ export function wireGoogleDomain(): void {
 
   // QuotaGovernor (Phase A): ONE kernel governor shared by the GenAI egress
   // lane (below) and the cloud-TTS lane (the audio domain holder). Limits are
-  // read FRESH per acquire (GG-8) from this provider — per-lane settings UI is
-  // a later increment (A7), so today it returns the free-tier defaults. RPD is
-  // persisted through the injected store onto the quotaCounter repo (the only
+  // read FRESH per acquire (GG-8) from this provider — A7 sources them from the
+  // user-editable GenAI settings (useGenAIStore.quotaLimits), read fresh inside
+  // the closure so a settings edit takes effect on the very next acquire. When
+  // pauseAllGenAI is on, limits collapse to zero so acquire throws
+  // NetRateLimitedError PRE-network (a master pause with no kernel change). RPD
+  // is persisted through the injected store onto the quotaCounter repo (the only
   // IDB touch); RPM/TPM live in-memory in the governor.
-  const getQuotaLimits = (): QuotaLimits => ({ rpm: 100, tpm: 30_000, rpd: 1000 });
+  const getQuotaLimits = (): QuotaLimits => {
+    const s = useGenAIStore.getState();
+    return s.pauseAllGenAI ? { rpm: 0, tpm: 0, rpd: 0 } : s.quotaLimits;
+  };
   // A6 (design §3.4): saveDailyUsage — the single chokepoint where the governor
   // reports today's usage — ALSO publishes THIS device's own spend onto its
   // synced DeviceInfo record, for the project-wide cross-device quota sum.
@@ -129,6 +135,11 @@ export function wireGoogleDomain(): void {
   // AND receives the post-response commit/recordCooldown from the clients.
   setQuotaScheduler(governor);
   setTtsQuotaGovernor(governor);
+  // A7: the READ-direction mirror of the `onLog: addLog` injection below — the
+  // settings quota meters poll this provider for live per-lane usage. The
+  // governor stays the single source of truth; the store only re-exposes its
+  // snapshot to the UI layer (no kernel→store edge).
+  useGenAIStore.getState().setQuotaSnapshotProvider(() => governor.snapshot());
 
   // GenAI (Phase 7 §H): config read PER CALL from the store — the mutable
   // singleton fields (and the TTS pipeline's configure() clobber, GG-8) are

@@ -63,7 +63,23 @@ describe('GenAISettingsTab', () => {
         onDownloadLogs: vi.fn(),
         maxLogs: 100,
         onMaxLogsChange: vi.fn(),
-        onClearLogs: vi.fn()
+        onClearLogs: vi.fn(),
+        quotaLimits: { rpm: 100, tpm: 30000, rpd: 1000 },
+        onQuotaLimitsChange: vi.fn(),
+        bgThrottlePercent: 50,
+        onBgThrottlePercentChange: vi.fn(),
+        fgRpdHeadroom: 0,
+        onFgRpdHeadroomChange: vi.fn(),
+        pauseAllGenAI: false,
+        onPauseAllGenAIChange: vi.fn(),
+        meters: {
+            // Seeded snapshot: the bars MUST read these exact figures, proving
+            // the meter derives from the snapshot rather than fabricating.
+            fg: { rpm: 40, tpm: 12000, rpd: 300, limits: { rpm: 100, tpm: 30000, rpd: 1000 } },
+            bg: { rpm: 5, tpm: 2000, rpd: 300, limits: { rpm: 100, tpm: 30000, rpd: 1000 } },
+            projectRpd: 500,
+            etas: { rpmMs: 90_000, tpmMs: 90_000, rpdMs: 7_200_000 }
+        }
     };
 
     it('renders header and toggle', () => {
@@ -160,5 +176,64 @@ describe('GenAISettingsTab', () => {
         render(<GenAISettingsTab {...defaultProps} isEnabled={true} logs={[]} />);
 
         expect(screen.getByText('Download Logs').closest('button')).toBeDisabled();
+    });
+
+    // ── Quota & Usage (A7, §10.7 meters test at the presentational layer) ──
+
+    it('shows the Quota & Usage section when enabled', () => {
+        render(<GenAISettingsTab {...defaultProps} isEnabled={true} />);
+
+        expect(screen.getByText('Quota & Usage')).toBeInTheDocument();
+        expect(screen.getByText('Live Usage')).toBeInTheDocument();
+    });
+
+    it('calls onQuotaLimitsChange when a per-lane limit input changes', () => {
+        const onQuotaLimitsChange = vi.fn();
+        render(
+            <GenAISettingsTab
+                {...defaultProps}
+                isEnabled={true}
+                onQuotaLimitsChange={onQuotaLimitsChange}
+            />
+        );
+
+        fireEvent.change(screen.getByLabelText('Requests / min'), { target: { value: '200' } });
+        expect(onQuotaLimitsChange).toHaveBeenCalledWith({ rpm: 200, tpm: 30000, rpd: 1000 });
+    });
+
+    it('calls onPauseAllGenAIChange when the pause-all switch is toggled', () => {
+        const onPauseAllGenAIChange = vi.fn();
+        render(
+            <GenAISettingsTab
+                {...defaultProps}
+                isEnabled={true}
+                onPauseAllGenAIChange={onPauseAllGenAIChange}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId('switch-genai-pause-all'));
+        expect(onPauseAllGenAIChange).toHaveBeenCalledWith(true);
+    });
+
+    it('meter progressbars derive aria-valuenow/max from the SEEDED snapshot (no fabrication)', () => {
+        render(<GenAISettingsTab {...defaultProps} isEnabled={true} />);
+
+        const rpmBar = screen.getByRole('progressbar', { name: 'Foreground RPM usage' });
+        expect(rpmBar).toHaveAttribute('aria-valuenow', '40'); // meters.fg.rpm
+        expect(rpmBar).toHaveAttribute('aria-valuemax', '100'); // meters.fg.limits.rpm
+
+        const tpmBar = screen.getByRole('progressbar', { name: 'Foreground TPM usage' });
+        expect(tpmBar).toHaveAttribute('aria-valuenow', '12000'); // meters.fg.tpm
+        expect(tpmBar).toHaveAttribute('aria-valuemax', '30000'); // meters.fg.limits.tpm
+
+        const rpdBar = screen.getByRole('progressbar', { name: 'Foreground RPD usage' });
+        expect(rpdBar).toHaveAttribute('aria-valuenow', '300'); // meters.fg.rpd
+        expect(rpdBar).toHaveAttribute('aria-valuemax', '1000'); // meters.fg.limits.rpd
+    });
+
+    it("today-spend shows the seeded project-wide RPD total", () => {
+        render(<GenAISettingsTab {...defaultProps} isEnabled={true} />);
+
+        expect(screen.getByTestId('genai-project-rpd')).toHaveTextContent('500 / 1000 requests');
     });
 });
