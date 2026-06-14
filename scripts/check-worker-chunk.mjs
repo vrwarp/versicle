@@ -321,6 +321,10 @@ const ENTRY_FORBIDDEN = [
   { pattern: 'src/domains/sync/backend/FirestoreBackend', label: 'FirestoreBackend' },
   { pattern: 'src/app/sync/composeSync', label: 'sync composition (heavy half)' },
   { pattern: 'src/domains/google/genai/GeminiClient', label: 'GeminiClient' },
+  {
+    pattern: 'src/domains/google/genai/embedding/GeminiEmbeddingClient',
+    label: 'GeminiEmbeddingClient',
+  },
   { pattern: 'src/domains/google/genai/features/', label: 'GenAI feature modules' },
   { pattern: 'src/components/reader/ReaderShell', label: 'ReaderShell (reader surface)' },
 ];

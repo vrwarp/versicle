@@ -161,6 +161,13 @@ const searchTextSectionSchema = z.looseObject({
   href: z.string(),
   title: z.string(),
   text: z.string(),
+  /**
+   * Embedding-indexer skip key (Increment C §3): cheapHash of the section
+   * text, stamped at import. Optional/additive on this CACHE `z.looseObject`
+   * row — legacy rows extracted before the field rebuild cleanly (no
+   * migration, no schema-version bump).
+   */
+  sectionTextHash: z.string().optional(),
 });
 /**
  * @public C1 row contract: no parse call site yet — kept exported as the
@@ -174,7 +181,7 @@ export const cacheSearchTextRowSchema = z.looseObject({
 export type CacheSearchTextRow = {
   bookId: string;
   extractionVersion: number;
-  sections: { href: string; title: string; text: string }[];
+  sections: { href: string; title: string; text: string; sectionTextHash?: string }[];
 };
 
 /** A persisted binary field: canonically ArrayBuffer (WebKit-safe structured
@@ -255,6 +262,13 @@ export const cacheEmbedJobsRowSchema = z.looseObject({
     z.looseObject({
       href: z.string(),
       embeddedThroughChunk: z.number(),
+      /**
+       * The {href, sectionTextHash} resume key (Increment C §4): the indexer
+       * skips a section whose recorded hash matches the live corpus hash, and
+       * re-embeds on mismatch (a re-extracted section). Optional/additive on
+       * this CACHE `z.looseObject` row — legacy rows re-embed (no migration).
+       */
+      sectionTextHash: z.string().optional(),
     }),
   ),
   updatedAt: z.number(),
@@ -262,7 +276,7 @@ export const cacheEmbedJobsRowSchema = z.looseObject({
 export type CacheEmbedJobsRow = {
   bookId: string;
   extractionVersion: number;
-  sections: { href: string; embeddedThroughChunk: number }[];
+  sections: { href: string; embeddedThroughChunk: number; sectionTextHash?: string }[];
   updatedAt: number;
 };
 

@@ -9,6 +9,7 @@ export {
   setConsentResolver,
   setQuotaScheduler,
   type EgressFn,
+  type EgressOptions,
   type ConsentResolver,
 } from './NetworkGateway';
 export { NetConsentRequiredError } from './errors';

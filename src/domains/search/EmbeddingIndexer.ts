@@ -1,0 +1,204 @@
+/**
+ * EmbeddingIndexer (Increment C §4) — the FOREGROUND document-embedding pass.
+ *
+ * Constructor-injected ports ONLY (mirrors SearchSession's engineFactory /
+ * textSource seam at SearchSession.ts:63): the embedding client, the persisted
+ * corpus source, the embeddings repo, and the int8 quantizer (the B3
+ * `SearchEngine.quantizeInt8PerVector`, passed as a port so this domain never
+ * deep-imports the worker). bookId/CFI flow as ARGUMENTS — never read from a
+ * store (domains-no-store guardrail).
+ *
+ * `enqueue(bookId, currentCfi?)`:
+ *  - loads `cache_search_text` via the injected textSource,
+ *  - orders sections OUTWARD from the current reading position (the CFI's
+ *    spine ordinal, derived via @kernel/cfi parseCfiTokens; falls back to
+ *    section 0 when absent/unparseable),
+ *  - per section: skips when `cache_embed_jobs` already records the
+ *    {href, sectionTextHash} fully embedded (resume), else chunks → embeds
+ *    (FG, consent + lane threaded through the client → gateway) → quantizes
+ *    each vector → packs int8 rows + float32 scales → persists via the repo,
+ *    updating `cache_embed_jobs` per section for resumability.
+ *
+ * CFI population is deferred to Phase D (the chunker cannot emit CFI from text;
+ * cache.ts:188), so chunk CFIs are persisted as empty strings here — char
+ * offsets are recoverable from `cache_search_text`.
+ */
+import { parseCfiTokens, tryParseCfiPoint } from '@kernel/cfi';
+import { chunkSection } from './chunker';
+import type { SearchTextSource } from './SearchSession';
+import type { CacheEmbeddingsRow, CacheEmbedJobsRow } from '@data/rows/cache';
+
+/** The slice of the EmbeddingClient the indexer consumes (injected port). */
+interface EmbeddingClientPort {
+  embed(
+    texts: string[],
+    opts: { profile: 'document' | 'query'; bookId?: string; interactive?: boolean; signal?: AbortSignal },
+  ): Promise<{ vectors: Float32Array[] }>;
+  isConfigured(): boolean;
+}
+
+/** The slice of the embeddings repo the indexer consumes (injected port). */
+interface EmbeddingsRepoPort {
+  get(bookId: string): Promise<unknown>;
+  getJob(bookId: string): Promise<CacheEmbedJobsRow | undefined>;
+  put(row: CacheEmbeddingsRow): Promise<void>;
+  putJob(row: CacheEmbedJobsRow): Promise<void>;
+}
+
+/** The int8 quantizer port (B3 SearchEngine.quantizeInt8PerVector). */
+type QuantizePort = (vec: Float32Array) => { vectors: Int8Array; scale: number };
+
+interface EmbeddingIndexerDeps {
+  embeddingClient: EmbeddingClientPort;
+  textSource: SearchTextSource;
+  embeddingsRepo: EmbeddingsRepoPort;
+  quantize: QuantizePort;
+  /** Embedding stamp config (read once per enqueue). */
+  getConfig: () => { model: string; dims: number };
+}
+
+export class EmbeddingIndexer {
+  constructor(private readonly deps: EmbeddingIndexerDeps) {}
+
+  /**
+   * Embed `bookId`'s document corpus, outward from `currentCfi`. No-op when the
+   * client is unconfigured or the book has no persisted corpus.
+   */
+  async enqueue(bookId: string, currentCfi?: string): Promise<void> {
+    if (!this.deps.embeddingClient.isConfigured()) return;
+
+    const corpus = await this.deps.textSource.get(bookId);
+    if (!corpus || corpus.sections.length === 0) return;
+
+    const sections = corpus.sections;
+    const order = orderOutward(sections.length, spineOrdinalFrom(currentCfi, sections.length));
+
+    const job = await this.deps.embeddingsRepo.getJob(bookId);
+    const config = this.deps.getConfig();
+
+    // Accumulate the persisted embedding sections across this pass (one row per
+    // book). We carry forward any already-embedded sections from the prior run
+    // implicitly by skipping them (their rows already live in cache_embeddings),
+    // but C persists what THIS pass produces; the resumable job state is the
+    // {href, sectionTextHash} skip key.
+    const embeddedSections: CacheEmbeddingsRow['sections'] = [];
+    const jobSections: CacheEmbedJobsRow['sections'] = job ? [...job.sections] : [];
+
+    for (const idx of order) {
+      const section = sections[idx];
+      const sectionTextHash = section.sectionTextHash ?? '';
+
+      // Resume-skip: the job already records this {href, sectionTextHash} as
+      // fully embedded (design §2.1). A re-extracted section (hash mismatch) or
+      // a legacy job row without the stamp falls through and re-embeds.
+      const prior = job?.sections.find((s) => s.href === section.href);
+      if (prior && sectionTextHash !== '' && prior.sectionTextHash === sectionTextHash) {
+        continue;
+      }
+
+      const { chunks } = chunkSection({
+        href: section.href,
+        title: section.title,
+        text: section.text,
+      });
+      if (chunks.length === 0) continue;
+
+      const { vectors } = await this.deps.embeddingClient.embed(
+        chunks.map((c) => c.text),
+        { profile: 'document', bookId, interactive: true },
+      );
+
+      // Quantize each returned float32 vector to int8 + a per-vector scale (B3),
+      // then pack the int8 rows back-to-back and the float32 scales alongside.
+      const dims = vectors[0]?.length ?? config.dims;
+      const packed = new Int8Array(vectors.length * dims);
+      const scales = new Float32Array(vectors.length);
+      vectors.forEach((vec, i) => {
+        const { vectors: q, scale } = this.deps.quantize(vec);
+        packed.set(q, i * dims);
+        scales[i] = scale;
+      });
+
+      embeddedSections.push({
+        href: section.href,
+        sectionTextHash,
+        // CFI population is Phase D (the chunker cannot emit CFI from text):
+        // char offsets are recoverable from cache_search_text.
+        chunks: chunks.map((c) => ({ cfiStart: '', cfiEnd: '', tokenCount: c.tokenCount })),
+        vectors: packed.buffer,
+        scales: scales.buffer,
+      });
+
+      // Mark this section fully embedded for resumability ({href, sectionTextHash}
+      // via the embeddedThroughChunk count, stamped with the section hash so a
+      // re-extracted section is re-embedded).
+      const jobEntry = { href: section.href, embeddedThroughChunk: chunks.length, sectionTextHash };
+      const existingJobIdx = jobSections.findIndex((s) => s.href === section.href);
+      if (existingJobIdx >= 0) jobSections[existingJobIdx] = jobEntry;
+      else jobSections.push(jobEntry);
+
+      // Persist incrementally so a mid-pass abort leaves resumable progress.
+      // Snapshot the arrays (don't share the mutable accumulators with the
+      // repo) so each persisted row is an independent point-in-time value.
+      await this.deps.embeddingsRepo.put({
+        bookId,
+        model: config.model,
+        dims,
+        quant: 'int8-pervec',
+        extractionVersion: corpus.extractionVersion,
+        sections: [...embeddedSections],
+      });
+      await this.deps.embeddingsRepo.putJob({
+        bookId,
+        extractionVersion: corpus.extractionVersion,
+        sections: [...jobSections],
+        updatedAt: Date.now(),
+      });
+    }
+  }
+}
+
+/**
+ * Derive the 0-based spine-section ordinal from a position CFI, clamped to
+ * `[0, count)`. Uses the standard EPUB even-step spine encoding (`/6/14…` →
+ * the spine step `/14` maps to ordinal `(14 - 2) / 2`). Returns 0 when the CFI
+ * is absent/unparseable (the section-0-first fallback — design risk note).
+ */
+function spineOrdinalFrom(currentCfi: string | undefined, count: number): number {
+  if (!currentCfi) return 0;
+  // tryParseCfiPoint validates structural parseability (the epubjs oracle);
+  // parseCfiTokens gives us the step sequence to read the spine ordinal from.
+  if (!tryParseCfiPoint(currentCfi)) return 0;
+  const tokens = parseCfiTokens(currentCfi);
+  if (!tokens) return 0;
+
+  // The spine step is the last `/N` step BEFORE the first `!` indirection.
+  let spineStepIndex: number | null = null;
+  for (const token of tokens) {
+    if (token.kind === 'indirection') break;
+    if (token.kind === 'step') spineStepIndex = token.index;
+  }
+  if (spineStepIndex === null) return 0;
+
+  const ordinal = Math.floor((spineStepIndex - 2) / 2);
+  if (!Number.isFinite(ordinal) || ordinal < 0) return 0;
+  return Math.min(ordinal, count - 1);
+}
+
+/**
+ * Emit an OUTWARD section order from `center`: center, center+1, center-1,
+ * center+2, center-2, … fanning out and covering every index exactly once.
+ */
+export function orderOutward(count: number, center: number): number[] {
+  const order: number[] = [];
+  if (count <= 0) return order;
+  const start = Math.max(0, Math.min(center, count - 1));
+  order.push(start);
+  for (let d = 1; order.length < count; d++) {
+    const up = start + d;
+    const down = start - d;
+    if (up < count) order.push(up);
+    if (down >= 0) order.push(down);
+  }
+  return order;
+}

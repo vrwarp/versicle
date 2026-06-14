@@ -38,6 +38,10 @@ import type { QuotaLimits, LaneUsage } from '@kernel/quota';
 interface GenAIState {
   apiKey: string;
   model: string;
+  /** Embedding model id (Increment C §7), read per embed call by the client. */
+  embeddingModel: string;
+  /** Requested embedding output dimensionality (Increment C §7). */
+  embeddingDims: number;
   isEnabled: boolean;
   isModelRotationEnabled: boolean;
   isContentAnalysisEnabled: boolean;
@@ -63,6 +67,8 @@ interface GenAIState {
   getQuotaSnapshot?: () => Record<'fg' | 'bg', LaneUsage>;
   setApiKey: (key: string) => void;
   setModel: (model: string) => void;
+  setEmbeddingModel: (model: string) => void;
+  setEmbeddingDims: (dims: number) => void;
   setEnabled: (enabled: boolean) => void;
   setModelRotationEnabled: (enabled: boolean) => void;
   setContentAnalysisEnabled: (enabled: boolean) => void;
@@ -85,6 +91,8 @@ type PersistedGenAIState = Pick<
   GenAIState,
   | 'apiKey'
   | 'model'
+  | 'embeddingModel'
+  | 'embeddingDims'
   | 'isEnabled'
   | 'isModelRotationEnabled'
   | 'isContentAnalysisEnabled'
@@ -104,6 +112,8 @@ export const useGenAIStore = create<GenAIState>()(
     (set) => ({
       apiKey: '',
       model: 'gemini-flash-lite-latest',
+      embeddingModel: 'gemini-embedding-001',
+      embeddingDims: 768,
       isEnabled: false,
       isModelRotationEnabled: false,
       isContentAnalysisEnabled: false,
@@ -120,6 +130,8 @@ export const useGenAIStore = create<GenAIState>()(
       getQuotaSnapshot: undefined,
       setApiKey: (key) => set({ apiKey: key }),
       setModel: (model) => set({ model }),
+      setEmbeddingModel: (model) => set({ embeddingModel: model }),
+      setEmbeddingDims: (dims) => set({ embeddingDims: dims }),
       setEnabled: (enabled) => set({ isEnabled: enabled }),
       setModelRotationEnabled: (enabled) => set({ isModelRotationEnabled: enabled }),
       setContentAnalysisEnabled: (enabled) => set({ isContentAnalysisEnabled: enabled }),
@@ -151,6 +163,8 @@ export const useGenAIStore = create<GenAIState>()(
       partialize: (state): PersistedGenAIState => ({
         apiKey: state.apiKey,
         model: state.model,
+        embeddingModel: state.embeddingModel,
+        embeddingDims: state.embeddingDims,
         isEnabled: state.isEnabled,
         isModelRotationEnabled: state.isModelRotationEnabled,
         isContentAnalysisEnabled: state.isContentAnalysisEnabled,

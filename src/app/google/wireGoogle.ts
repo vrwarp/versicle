@@ -21,11 +21,14 @@ import {
   DriveLibrarySync,
   GoogleAuthClient,
   defaultPlatformOptions,
+  makeLazyEmbeddingClient,
   makeLazyGenAIClient,
   setDriveClient,
   setDriveLibrarySync,
+  setEmbeddingClient,
   setGenAIClient,
   setGoogleAuthClient,
+  type EmbeddingConfig,
 } from '@domains/google';
 import { setConsentResolver, setQuotaScheduler } from '@kernel/net';
 import { QuotaGovernor, setQuotaStore, type QuotaLimits } from '@kernel/quota';
@@ -161,6 +164,24 @@ export function wireGoogleDomain(): void {
       },
       onLog: (entry) => useGenAIStore.getState().addLog(entry),
       governor,
+    }),
+  );
+
+  // GenAI embedding (Increment C §1): the LAZY embedding facade —
+  // GeminiEmbeddingClient (and its egress plumbing) loads on the first embed
+  // call, kept out of the entry chunk (check 4). Config is read PER CALL from
+  // the store (GG-8: an embeddingModel/embeddingDims edit takes effect on the
+  // next embed); log entries arrive pre-redacted into the same in-memory ring
+  // buffer as the GenAI client. The fg-lane acquire at the gateway already
+  // throttles it (no governor commit is wired here — the embedContent
+  // usageMetadata reconcile is a Phase-D/F refinement).
+  setEmbeddingClient(
+    makeLazyEmbeddingClient({
+      getConfig: (): EmbeddingConfig => {
+        const s = useGenAIStore.getState();
+        return { apiKey: s.apiKey, model: s.embeddingModel, dims: s.embeddingDims };
+      },
+      onLog: (entry) => useGenAIStore.getState().addLog(entry),
     }),
   );
 

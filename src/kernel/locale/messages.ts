@@ -44,6 +44,8 @@ const errorMessages: ErrorMessages = {
   'errors.GENAI_UNKNOWN': 'The AI request failed.',
   'errors.GENAI_NOT_CONFIGURED': 'Add a Gemini API key in Settings to use AI features.',
   'errors.GENAI_INVALID_RESPONSE': 'The AI returned an unusable response.',
+  'errors.GENAI_EMBEDDING_NOT_CONFIGURED':
+    'Add a Gemini API key in Settings to use semantic search.',
   'errors.DRIVE_UNKNOWN': 'Google Drive request failed.',
   'errors.DRIVE_API_ERROR': 'Google Drive returned an error.',
   'errors.INGEST_UNKNOWN': 'Import failed.',

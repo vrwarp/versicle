@@ -24,12 +24,16 @@ import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
 import { ReadingSessionRecorder } from '@domains/reader/session/ReadingSessionRecorder';
 import type { ReaderCommands } from '@domains/reader/ui/ReaderCommands';
-import { SearchSession, createWorkerSearchEngineFactory } from '@domains/search';
+import { SearchSession, createWorkerSearchEngineFactory, EmbeddingIndexer } from '@domains/search';
+import { getEmbeddingClient, type EmbeddingClient } from '@domains/google';
 import { registerChineseReading, getBookBaseLanguage } from '@domains/chinese';
 import type { PinyinPosition } from '@domains/chinese/types';
 import type { BookMetadata } from '~types/book';
 import type { DetailedSearchResult } from '~types/search';
 import { searchTextRepo } from '@data/repos/searchText';
+import { embeddingsRepo } from '@data/repos/embeddings';
+import { SearchEngine } from '@lib/search-engine';
+import { useGenAIStore } from '@store/useGenAIStore';
 import { useReadingStateStore } from '@store/useReadingStateStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
@@ -44,6 +48,12 @@ import { createLogger } from '@lib/logger';
 const logger = createLogger('ReaderController');
 
 const DEFAULT_CUSTOM_THEME = { bg: '#ffffff', fg: '#000000' };
+
+// The B3 int8 quantizer port (SearchEngine.quantizeInt8PerVector) for the
+// foreground embedding indexer — a pure compute helper, instantiated once and
+// passed as a port so domains/search never deep-imports the worker (Increment
+// C §4 guardrail). The instance holds no per-book state for quantization.
+const embeddingQuantizer = new SearchEngine();
 
 export interface ReaderController {
   engine: ReaderEngine | null;
@@ -276,9 +286,25 @@ export function useReaderController(
   // crashes reset the session and surface a toast (search.md #6).
   const searchSessionRef = useRef<SearchSession | null>(null);
   if (!searchSessionRef.current) {
+    // Foreground document-embedding indexer (Increment C §4): ports wired from
+    // the @domains/google lazy embedding facade + the searchText/embeddings
+    // repos + the B3 quantize port. bookId/CFI flow as arguments through
+    // enqueueEmbedding — no store edge in domains/search.
+    const embeddingClient: EmbeddingClient = getEmbeddingClient();
+    const embeddingIndexer = new EmbeddingIndexer({
+      embeddingClient,
+      textSource: searchTextRepo,
+      embeddingsRepo,
+      quantize: (vec) => embeddingQuantizer.quantizeInt8PerVector(vec),
+      getConfig: () => {
+        const s = useGenAIStore.getState();
+        return { model: s.embeddingModel, dims: s.embeddingDims };
+      },
+    });
     searchSessionRef.current = new SearchSession({
       engineFactory: createWorkerSearchEngineFactory(),
       textSource: searchTextRepo,
+      embeddingIndexer,
       onError: (error) => {
         logger.error('Search engine failed; session reset', error);
         useToastStore.getState().showToast('Search failed', 'error');
@@ -299,6 +325,20 @@ export function useReaderController(
       logger.error('Search navigation failed', e);
     }
   }, []);
+
+  // Foreground document embedding (Increment C §4): once the reader is open,
+  // embed the document corpus OUTWARD from the current reading position. The
+  // indexer's {href, sectionTextHash} resume-skip makes a re-trigger on
+  // section change cheap (already-embedded sections are skipped), and it
+  // no-ops when the embedding client is unconfigured. bookId/CFI are passed as
+  // ARGUMENTS — the trigger context lives here in app/, never in domains/search.
+  useEffect(() => {
+    if (!isReady || !bookId) return;
+    const currentCfi = useReadingStateStore.getState().getProgress(bookId)?.currentCfi;
+    void searchSession.enqueueEmbedding(bookId, currentCfi).catch((e) => {
+      logger.error('Embedding indexer failed', e);
+    });
+  }, [isReady, bookId, currentSectionTitle, searchSession]);
 
   // Chinese reading registration (Phase 6 §7, PR-10): the app layer wires
   // the feature module to the engine's content seam — and ONLY for books

@@ -8,11 +8,16 @@
  */
 export {
   SearchSession,
-  
-  
+
+
   type SearchEngineProtocol,
-  
-  
+
+
 } from './SearchSession';
 export { createWorkerSearchEngineFactory } from './workerFactory';
 export {  resolveResultCfi } from './offsetRange';
+// Increment C §4: the foreground document-embedding indexer + the chunker, so
+// app/ can construct the indexer and any in-domain consumer reaches the chunker
+// via the published surface.
+export { EmbeddingIndexer } from './EmbeddingIndexer';
+export { chunkSection } from './chunker';

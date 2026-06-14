@@ -43,7 +43,16 @@ export type SearchEngineFactory = () => SearchEngineHandle;
 /** Read access to the persisted corpus (the data repo, injected to keep this module store/data-free in tests). */
 export interface SearchTextSource {
   get(bookId: string): Promise<
-    | { extractionVersion: number; sections: { href: string; title: string; text: string }[] }
+    | {
+        extractionVersion: number;
+        sections: {
+          href: string;
+          title: string;
+          text: string;
+          /** Embedding-indexer skip key, stamped at import (Increment C §3). */
+          sectionTextHash?: string;
+        }[];
+      }
     | undefined
   >;
 }
@@ -67,6 +76,14 @@ export class SearchSession {
       textSource?: SearchTextSource;
       /** Notified once per engine failure AFTER the session has reset itself. */
       onError?: (error: unknown) => void;
+      /**
+       * The foreground document-embedding indexer (Increment C §4), wired by
+       * the app reader controller from the @domains/google embedding facade +
+       * repos. Optional — absent in the regex-only/test paths, where
+       * {@link enqueueEmbedding} is a no-op. Preserves the engineFactory /
+       * textSource seam: bookId/CFI flow as arguments, no store edge.
+       */
+      embeddingIndexer?: { enqueue(bookId: string, currentCfi?: string): Promise<void> };
     },
   ) {}
 
@@ -133,6 +150,16 @@ export class SearchSession {
   /** Per-occurrence results with an honest truncation flag. */
   async search(bookId: string, query: string, opts?: { limit?: number }): Promise<SearchBatchResult> {
     return this.engine().searchDetailed(bookId, query, opts);
+  }
+
+  /**
+   * Trigger the foreground document-embedding pass for `bookId`, outward from
+   * `currentCfi` (Increment C §4). No-op when no indexer was injected. bookId
+   * and CFI are ARGUMENTS — the trigger context comes from the app reader
+   * controller, never a store.
+   */
+  async enqueueEmbedding(bookId: string, currentCfi?: string): Promise<void> {
+    await this.opts.embeddingIndexer?.enqueue(bookId, currentCfi);
   }
 
   /**
