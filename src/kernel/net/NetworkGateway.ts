@@ -52,6 +52,18 @@ export interface EgressOptions {
   /** Caller cancellation; composed with the per-destination timeout. */
   signal?: AbortSignal;
   consent?: EgressConsentContext;
+  /**
+   * The quota lane this call belongs to (Phase A §3.2). Foreground (`'fg'`,
+   * interactive) preempts background (`'bg'`, prefetch/auto). Only consulted
+   * for `rateLimit`-governed destinations; ignored otherwise.
+   */
+  lane?: 'fg' | 'bg';
+  /**
+   * A coarse pre-flight token estimate for the governor's admission window
+   * (reconciled to the real cost by the CLIENT's commit, which reads the parsed
+   * response body the gateway never touches). Defaults to 0.
+   */
+  estTokens?: number;
 }
 
 export type ConsentResolver = (
@@ -67,6 +79,41 @@ let consentResolver: ConsentResolver | null = null;
  */
 export function setConsentResolver(resolver: ConsentResolver | null): void {
   consentResolver = resolver;
+}
+
+/**
+ * The admission/backpressure seam the gateway consults for `rateLimit`-governed
+ * destinations (Phase A §3.2). Defined structurally HERE (not imported from
+ * @kernel/quota) so kernel/net keeps its zero-internal-import admission — the
+ * same dependency inversion as {@link ConsentResolver}. The composition root
+ * installs the QuotaGovernor (which already implements `acquire`/`release`) via
+ * {@link setQuotaScheduler}; the split is deliberate — `acquire` + the
+ * failure-path `release` are a GATEWAY concern (pre-network, unbypassable),
+ * while `commit`/`recordCooldown` stay a CLIENT step because they need the
+ * parsed response body the gateway by contract never reads.
+ */
+export interface QuotaScheduler {
+  /**
+   * Admit one request on `lane`, sized by `estTokens`. Rejects with
+   * `NetRateLimitedError` (pre-network backpressure) when the request cannot be
+   * admitted. A foreground claim is held until the matching {@link release} (the
+   * gateway's failure path) or the client's commit.
+   */
+  acquire(lane: 'fg' | 'bg', estTokens: number): Promise<void>;
+  /** Release a foreground claim that was admitted but never ran (failure path). */
+  release(lane: 'fg' | 'bg'): void;
+}
+
+let quotaScheduler: QuotaScheduler | null = null;
+
+/**
+ * Install the quota scheduler (composition root only — app/ wires it to the
+ * shared QuotaGovernor). Pass null to remove (tests). OBSERVE MODE: with no
+ * scheduler installed the gateway applies no throttle and only counts —
+ * enforcement arrives with the scheduler (mirrors the consent observe-mode).
+ */
+export function setQuotaScheduler(scheduler: QuotaScheduler | null): void {
+  quotaScheduler = scheduler;
 }
 
 export interface EgressCounters {
@@ -161,6 +208,18 @@ export async function egress(
 
   checkConsent(destination, opts.consent ?? {});
 
+  // Quota admission/backpressure (Phase A §3.2): for rate-limited destinations
+  // the injected scheduler is awaited BEFORE recordEgress/fetch, so a
+  // backpressured call throws NetRateLimitedError pre-network and is NOT counted
+  // as egress (mirrors the consent gate's "policy failures are not counted").
+  // Observe mode: no scheduler ⇒ no throttle. The admitted fg claim is owned by
+  // the gateway on its failure path (release below) and reconciled by the
+  // CLIENT's commit on success — the gateway never reads the body.
+  const rateLane = destination.rateLimit?.lane;
+  if (rateLane && quotaScheduler) {
+    await quotaScheduler.acquire(rateLane, opts.estTokens ?? 0);
+  }
+
   recordEgress(destinationId, estimateBodyBytes(init.body));
 
   // Compose caller signal(s) with the per-destination timeout.
@@ -186,6 +245,12 @@ export async function egress(
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (error) {
+    // An admitted-but-never-committed fg claim must be released here so it
+    // cannot leak the foreground preemption (this responsibility migrated from
+    // the clients into the gateway when acquire moved to the chokepoint).
+    if (rateLane && quotaScheduler) {
+      quotaScheduler.release(rateLane);
+    }
     if (timedOut) {
       throw new NetTimeoutError(destinationId, destination.timeoutMs ?? 0);
     }

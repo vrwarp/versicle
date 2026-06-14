@@ -11,9 +11,14 @@ const SYNTHESIS_TIMEOUT_MS = 30_000;
 /**
  * The slice of the kernel QuotaGovernor the cloud-TTS egress lane uses (Phase
  * A) — the SECOND kernel/quota consumer (audio domain), which together with
- * GeminiClient satisfies the ≥2-domain kernel-admission bar (C12).
+ * GeminiClient satisfies the ≥2-domain kernel-admission bar (C12). Since A4
+ * (design §3.2) the pre-flight `acquire` + the failure-path `release` are the
+ * NetworkGateway's job (unbypassable at the chokepoint), so this slice keeps
+ * only the post-response reconcile steps — `commit` and the 429
+ * `recordCooldown` — both of which read the parsed response the gateway never
+ * touches.
  */
-type TtsQuotaGovernor = Pick<QuotaGovernor, 'acquire' | 'commit' | 'recordCooldown' | 'release'>;
+type TtsQuotaGovernor = Pick<QuotaGovernor, 'commit' | 'recordCooldown'>;
 
 /**
  * Module-level governor holder, installed once at the TTS composition root
@@ -260,17 +265,19 @@ export abstract class BaseCloudProvider implements ITTSProvider {
   protected async fetchAudio(destinationId: DestinationId, url: string, body: unknown, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<Blob> {
     const payload = JSON.stringify(body);
 
-    // Pre-egress admission (Phase A): the cloud-TTS chokepoint. A foreground
-    // claim sized by a coarse estimate over the request payload, reconciled on
-    // commit. Backpressure throws NetRateLimitedError before any network call.
-    // The governor is the module-level holder (no-op when unset, e.g. unit
-    // tests), so this is additive for direct-construction provider suites.
+    // Admission/backpressure moved to the NetworkGateway chokepoint (A4, design
+    // §3.2): the gateway awaits the injected scheduler's acquire('fg', estTokens)
+    // BEFORE the network call (unbypassable) and owns the failure-path release.
+    // This call declares its lane + estimate through the egress opts and keeps
+    // only the post-response reconcile (commit) + the 429 cooldown — both read
+    // the parsed response the gateway never touches. The governor holder is a
+    // no-op when unset (e.g. direct-construction provider unit tests).
     const estimate = estTtsTokens(payload);
-    await ttsGovernor?.acquire('fg', estimate);
-    let committed = false;
 
-    try {
-      const response = await egress(destinationId, url, {
+    const response = await egress(
+      destinationId,
+      url,
+      {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -278,23 +285,19 @@ export abstract class BaseCloudProvider implements ITTSProvider {
         },
         body: payload,
         signal
-      });
+      },
+      { lane: 'fg', estTokens: estimate },
+    );
 
-      if (!response.ok) {
-        if (response.status === 429) {
-          ttsGovernor?.recordCooldown(this.retryAfterMs(response));
-        }
-        throw new Error(`TTS API Error: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      if (response.status === 429) {
+        ttsGovernor?.recordCooldown(this.retryAfterMs(response));
       }
-
-      committed = true;
-      ttsGovernor?.commit('fg', estimate);
-      return await response.blob();
-    } finally {
-      // Release a claim acquired but never committed (egress threw / non-ok)
-      // so it cannot leak the fg preemption.
-      if (!committed) ttsGovernor?.release('fg');
+      throw new Error(`TTS API Error: ${response.status} ${response.statusText}`);
     }
+
+    ttsGovernor?.commit('fg', estimate);
+    return await response.blob();
   }
 
   /** Parse a 429's `Retry-After` (delta-seconds) into ms; default 30s. */

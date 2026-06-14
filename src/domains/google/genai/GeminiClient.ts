@@ -62,14 +62,15 @@ interface GeminiResponseBody {
 
 /**
  * The slice of the kernel QuotaGovernor the GenAI egress lane uses. A `Pick`
- * keeps the dep minimal (rate/backoff/cooldown only) and makes the seam
- * trivially fakeable; rotation stays in {@link GeminiClient.executeWithRetry}
+ * keeps the dep minimal and makes the seam trivially fakeable. Since A4
+ * (design §3.2) the pre-flight `acquire` + the failure-path `release` are the
+ * NetworkGateway's job (unbypassable at the chokepoint, via setQuotaScheduler),
+ * so the client keeps only the post-response reconcile steps — `commit` and the
+ * 429 `recordCooldown` — both of which need the parsed response body the gateway
+ * never reads. Rotation stays in {@link GeminiClient.executeWithRetry}
  * (decision §3.6) so the governor never owns retry/rotation.
  */
-export type GenAIQuotaGovernor = Pick<
-  QuotaGovernor,
-  'acquire' | 'commit' | 'recordCooldown' | 'release'
->;
+export type GenAIQuotaGovernor = Pick<QuotaGovernor, 'commit' | 'recordCooldown'>;
 
 /**
  * A coarse token estimate for the pre-flight {@link GenAIQuotaGovernor.acquire}
@@ -190,12 +191,14 @@ export class GeminiClient implements GenAIClient {
         ? [{ role: 'user', parts: [{ text: prompt }] }]
         : prompt.contents;
 
-    // Pre-egress admission (Phase A): a foreground claim against the rate/spend
-    // windows, sized by a coarse estimate, reconciled on commit below. A
-    // governor backpressure refusal throws NetRateLimitedError BEFORE any
-    // network call. Rotation stays in executeWithRetry (decision §3.6).
+    // Admission/backpressure moved to the NetworkGateway chokepoint (A4, design
+    // §3.2): the gateway awaits the injected scheduler's acquire('fg', estTokens)
+    // BEFORE the network call (unbypassable) and owns the failure-path release.
+    // The client declares its lane + estimate through the egress opts and keeps
+    // only the post-response reconcile (commit) + the 429 cooldown — both read
+    // the parsed body the gateway never touches. Rotation stays in
+    // executeWithRetry (decision §3.6).
     const estimate = estTokens(prompt);
-    await this.deps.governor?.acquire('fg', estimate);
     let committed = false;
     const commit = (tokens: number): void => {
       if (committed) return;
@@ -203,55 +206,51 @@ export class GeminiClient implements GenAIClient {
       this.deps.governor?.commit('fg', tokens);
     };
 
-    try {
-      const response = await this.egress(
-        'gemini',
-        `${GEMINI_API_BASE}/models/${modelId}:generateContent`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-goog-api-key': config.apiKey,
-          },
-          body: JSON.stringify({
-            contents,
-            ...(generationConfig ? { generationConfig } : {}),
-          }),
+    const response = await this.egress(
+      'gemini',
+      `${GEMINI_API_BASE}/models/${modelId}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': config.apiKey,
         },
-        {
-          signal,
-          consent: { bookId: context?.bookId, interactive: context?.interactive },
-        },
-      );
+        body: JSON.stringify({
+          contents,
+          ...(generationConfig ? { generationConfig } : {}),
+        }),
+      },
+      {
+        signal,
+        consent: { bookId: context?.bookId, interactive: context?.interactive },
+        lane: 'fg',
+        estTokens: estimate,
+      },
+    );
 
-      if (!response.ok) {
-        const body = (await response
-          .json()
-          .catch(() => ({}))) as GeminiResponseBody;
-        // Feed a 429 to the governor as a cooldown signal, then RE-THROW so
-        // executeWithRetry's rotation path still sees it (the governor never
-        // swallows the error the rotation loop branches on).
-        if (response.status === 429) {
-          this.deps.governor?.recordCooldown(retryAfterMsFrom(response));
-        }
-        throw new GenAIHttpError(
-          body.error?.message || `Gemini request failed: ${response.status}`,
-          response.status,
-          { apiStatus: body.error?.status, model: modelId },
-        );
+    if (!response.ok) {
+      const body = (await response
+        .json()
+        .catch(() => ({}))) as GeminiResponseBody;
+      // Feed a 429 to the governor as a cooldown signal, then RE-THROW so
+      // executeWithRetry's rotation path still sees it (the governor never
+      // swallows the error the rotation loop branches on).
+      if (response.status === 429) {
+        this.deps.governor?.recordCooldown(retryAfterMsFrom(response));
       }
-
-      const body = (await response.json()) as GeminiResponseBody;
-      // Reconcile with the real cost when the API reports it; else the estimate.
-      commit(body.usageMetadata?.totalTokenCount ?? estimate);
-      return (body.candidates?.[0]?.content?.parts ?? [])
-        .map((part) => part.text ?? '')
-        .join('');
-    } finally {
-      // A claim acquired but never committed (egress threw, or a non-ok
-      // response) must be released so it cannot leak the fg preemption.
-      if (!committed) this.deps.governor?.release('fg');
+      throw new GenAIHttpError(
+        body.error?.message || `Gemini request failed: ${response.status}`,
+        response.status,
+        { apiStatus: body.error?.status, model: modelId },
+      );
     }
+
+    const body = (await response.json()) as GeminiResponseBody;
+    // Reconcile with the real cost when the API reports it; else the estimate.
+    commit(body.usageMetadata?.totalTokenCount ?? estimate);
+    return (body.candidates?.[0]?.content?.parts ?? [])
+      .map((part) => part.text ?? '')
+      .join('');
   }
 
   async generateStructured<T>(request: GenAIRequest<T>): Promise<T> {

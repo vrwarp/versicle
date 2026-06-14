@@ -27,7 +27,7 @@ import {
   setGenAIClient,
   setGoogleAuthClient,
 } from '@domains/google';
-import { setConsentResolver } from '@kernel/net';
+import { setConsentResolver, setQuotaScheduler } from '@kernel/net';
 import { QuotaGovernor, setQuotaStore, type QuotaLimits } from '@kernel/quota';
 import { makeQuotaStore } from '@app/quota/makeQuotaStore';
 import { quotaCounterRepo } from '@data/repos/quotaCounter';
@@ -99,6 +99,10 @@ export function wireGoogleDomain(): void {
   const getQuotaLimits = (): QuotaLimits => ({ rpm: 100, tpm: 30_000, rpd: 1000 });
   setQuotaStore(makeQuotaStore(quotaCounterRepo));
   const governor = new QuotaGovernor(getQuotaLimits);
+  // A4 (design §3.2): the SAME governor instance enforces admission at the
+  // NetworkGateway chokepoint (acquire/release — unbypassable, like consent)
+  // AND receives the post-response commit/recordCooldown from the clients.
+  setQuotaScheduler(governor);
   setTtsQuotaGovernor(governor);
 
   // GenAI (Phase 7 §H): config read PER CALL from the store — the mutable

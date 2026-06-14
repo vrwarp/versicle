@@ -9,6 +9,8 @@ import {
   getEgressCounters,
   resetEgressCounters,
   setConsentResolver,
+  setQuotaScheduler,
+  type QuotaScheduler,
 } from './NetworkGateway';
 import {
   HostNotAllowedError,
@@ -18,6 +20,7 @@ import {
   NetworkGatewayError,
   UnknownDestinationError,
 } from './errors';
+import { NetRateLimitedError } from '~types/errors';
 import { hostMatches, type DestinationId } from './destinations';
 
 describe('hostMatches', () => {
@@ -40,6 +43,7 @@ describe('NetworkGateway.egress', () => {
   beforeEach(() => {
     resetEgressCounters();
     setConsentResolver(null);
+    setQuotaScheduler(null);
     vi.stubGlobal('fetch', okFetch());
   });
 
@@ -47,6 +51,7 @@ describe('NetworkGateway.egress', () => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
     setConsentResolver(null);
+    setQuotaScheduler(null);
   });
 
   it('throws NET_UNKNOWN_DESTINATION for ids not in the registry', async () => {
@@ -143,6 +148,88 @@ describe('NetworkGateway.egress', () => {
       setConsentResolver(resolver);
       await egress('drive', 'https://www.googleapis.com/drive/v3/files');
       expect(resolver).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('quota scheduler (rate-limited destinations)', () => {
+    const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/x';
+
+    it('observe mode: with no scheduler installed the call is allowed', async () => {
+      const res = await egress('gemini', GEMINI_URL);
+      expect(res.status).toBe(200);
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('awaits acquire(lane, estTokens) BEFORE fetch for a governed destination', async () => {
+      const order: string[] = [];
+      const acquire = vi.fn(async () => {
+        order.push('acquire');
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          order.push('fetch');
+          return new Response('ok', { status: 200 });
+        }),
+      );
+      const scheduler: QuotaScheduler = { acquire, release: vi.fn() };
+      setQuotaScheduler(scheduler);
+
+      await egress('gemini', GEMINI_URL, {}, { lane: 'fg', estTokens: 42 });
+
+      expect(acquire).toHaveBeenCalledWith('fg', 42);
+      expect(order).toEqual(['acquire', 'fetch']);
+    });
+
+    it('defaults estTokens to 0 when the caller omits it', async () => {
+      const acquire = vi.fn(async () => {});
+      setQuotaScheduler({ acquire, release: vi.fn() });
+      await egress('gemini', GEMINI_URL, {}, { lane: 'fg' });
+      expect(acquire).toHaveBeenCalledWith('fg', 0);
+    });
+
+    it('acquire throwing NetRateLimitedError rejects pre-network and is NOT counted', async () => {
+      const scheduler: QuotaScheduler = {
+        acquire: vi.fn().mockRejectedValue(new NetRateLimitedError(1000, { lane: 'fg' })),
+        release: vi.fn(),
+      };
+      setQuotaScheduler(scheduler);
+
+      await expect(
+        egress('gemini', GEMINI_URL, {}, { lane: 'fg', estTokens: 10 }),
+      ).rejects.toBeInstanceOf(NetRateLimitedError);
+      expect(fetch).not.toHaveBeenCalled();
+      // A backpressured call is refused before recordEgress — not counted.
+      expect(getEgressCounters().get('gemini')).toBeUndefined();
+      // The claim was never admitted, so the gateway does not release it.
+      expect(scheduler.release).not.toHaveBeenCalled();
+    });
+
+    it('releases the lane when the fetch rejects (migrated fg-claim cleanup)', async () => {
+      const release = vi.fn();
+      setQuotaScheduler({ acquire: vi.fn(async () => {}), release });
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network down')));
+
+      await expect(
+        egress('gemini', GEMINI_URL, {}, { lane: 'fg', estTokens: 5 }),
+      ).rejects.toBeInstanceOf(TypeError);
+      expect(release).toHaveBeenCalledWith('fg');
+    });
+
+    it('does not release on a successful fetch (the client commits instead)', async () => {
+      const release = vi.fn();
+      setQuotaScheduler({ acquire: vi.fn(async () => {}), release });
+      await egress('gemini', GEMINI_URL, {}, { lane: 'fg', estTokens: 5 });
+      expect(release).not.toHaveBeenCalled();
+    });
+
+    it('does not consult the scheduler for ungoverned destinations (drive)', async () => {
+      const scheduler: QuotaScheduler = { acquire: vi.fn(async () => {}), release: vi.fn() };
+      setQuotaScheduler(scheduler);
+      await egress('drive', 'https://www.googleapis.com/drive/v3/files');
+      expect(scheduler.acquire).not.toHaveBeenCalled();
+      expect(scheduler.release).not.toHaveBeenCalled();
+      expect(fetch).toHaveBeenCalledTimes(1);
     });
   });
 

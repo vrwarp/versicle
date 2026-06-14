@@ -7,6 +7,7 @@ export { findDestination, type DestinationId } from './destinations';
 export {
   egress,
   setConsentResolver,
+  setQuotaScheduler,
   type EgressFn,
   type ConsentResolver,
 } from './NetworkGateway';

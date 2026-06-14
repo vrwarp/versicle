@@ -98,6 +98,19 @@ export interface EgressDestination {
    *                  serve a cached copy (documented caller policy).
    */
   offline: 'fail' | 'cache-fallback';
+  /**
+   * Quota governance (Phase A §3.2). When present, NetworkGateway.egress()
+   * applies the injected QuotaScheduler's admission/backpressure on this
+   * `lane` before any bytes leave — making throttling structurally
+   * unbypassable (the caller no longer has to remember to ask), exactly like
+   * the host-allowlist/offline/consent checks. Absent ⇒ ungoverned egress.
+   *
+   * NOTE: the lane union is INLINED (not imported from @kernel/quota) because
+   * this module's hard "NO imports" constraint (above) feeds the generate-csp
+   * Node type-stripping path, which cannot resolve path aliases. It mirrors
+   * `Lane` in @kernel/quota.
+   */
+  rateLimit?: { lane: 'fg' | 'bg' };
 }
 
 /**
@@ -122,6 +135,7 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
     consent: 'per-book',
     timeoutMs: 60_000,
     offline: 'fail',
+    rateLimit: { lane: 'fg' },
   },
   {
     id: 'google-tts',
@@ -132,6 +146,7 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
     consent: 'provider-selection',
     timeoutMs: 30_000,
     offline: 'fail',
+    rateLimit: { lane: 'fg' },
   },
   {
     id: 'openai-tts',
@@ -142,6 +157,7 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
     consent: 'provider-selection',
     timeoutMs: 30_000,
     offline: 'fail',
+    rateLimit: { lane: 'fg' },
   },
   {
     id: 'lemonfox-tts',
@@ -152,6 +168,7 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
     consent: 'provider-selection',
     timeoutMs: 30_000,
     offline: 'fail',
+    rateLimit: { lane: 'fg' },
   },
   {
     id: 'hf-piper-catalog',
