@@ -72,6 +72,8 @@ describe('GenAISettingsTab', () => {
         onFgRpdHeadroomChange: vi.fn(),
         pauseAllGenAI: false,
         onPauseAllGenAIChange: vi.fn(),
+        preEmbedLibrary: false,
+        onPreEmbedLibraryChange: vi.fn(),
         meters: {
             // Seeded snapshot: the bars MUST read these exact figures, proving
             // the meter derives from the snapshot rather than fabricating.
@@ -235,5 +237,46 @@ describe('GenAISettingsTab', () => {
         render(<GenAISettingsTab {...defaultProps} isEnabled={true} />);
 
         expect(screen.getByTestId('genai-project-rpd')).toHaveTextContent('500 / 1000 requests');
+    });
+
+    // ── Semantic Search opt-in + disclosure (E3, §7/§8.4) ──
+
+    it('renders the pre-embed opt-in default-OFF when enabled', () => {
+        render(<GenAISettingsTab {...defaultProps} isEnabled={true} />);
+
+        expect(screen.getByText('Semantic Search')).toBeInTheDocument();
+        const toggle = screen.getByTestId('switch-genai-preembed');
+        expect(toggle).toHaveAttribute('data-checked', 'false');
+    });
+
+    it('hides the pre-embed opt-in when AI features are disabled', () => {
+        render(<GenAISettingsTab {...defaultProps} isEnabled={false} />);
+
+        expect(screen.queryByTestId('switch-genai-preembed')).not.toBeInTheDocument();
+    });
+
+    it('calls onPreEmbedLibraryChange when the opt-in is toggled', () => {
+        const onPreEmbedLibraryChange = vi.fn();
+        render(
+            <GenAISettingsTab
+                {...defaultProps}
+                isEnabled={true}
+                onPreEmbedLibraryChange={onPreEmbedLibraryChange}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId('switch-genai-preembed'));
+        expect(onPreEmbedLibraryChange).toHaveBeenCalledWith(true);
+    });
+
+    it('shows the NEW disclosure copy (full-text embedding + query-term egress)', () => {
+        render(<GenAISettingsTab {...defaultProps} isEnabled={true} />);
+
+        const disclosure = screen.getByText(/full text/i).closest('p');
+        expect(disclosure).toHaveTextContent(/full text/i);
+        expect(disclosure).toHaveTextContent(/search query terms/i);
+        expect(disclosure).toHaveTextContent(/Google/);
+        // Distinct from the TTS excerpt consent (the copy says so explicitly).
+        expect(disclosure).toHaveTextContent(/TTS/);
     });
 });

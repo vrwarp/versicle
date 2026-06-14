@@ -8,7 +8,7 @@
  * deep-imports the worker). bookId/CFI flow as ARGUMENTS — never read from a
  * store (domains-no-store guardrail).
  *
- * `enqueue(bookId, currentCfi?)`:
+ * `enqueue(bookId, currentCfi?, opts?)`:
  *  - loads `cache_search_text` via the injected textSource,
  *  - orders sections OUTWARD from the current reading position (the CFI's
  *    spine ordinal, derived via @kernel/cfi parseCfiTokens; falls back to
@@ -32,7 +32,14 @@ import type { CacheEmbeddingsRow, CacheEmbedJobsRow } from '@data/rows/cache';
 interface EmbeddingClientPort {
   embed(
     texts: string[],
-    opts: { profile: 'document' | 'query'; bookId?: string; interactive?: boolean; signal?: AbortSignal },
+    opts: {
+      profile: 'document' | 'query';
+      bookId?: string;
+      interactive?: boolean;
+      /** Gateway quota lane (default `'fg'`); the bg backfill passes `'bg'`. */
+      lane?: 'fg' | 'bg';
+      signal?: AbortSignal;
+    },
   ): Promise<{ vectors: Float32Array[] }>;
   isConfigured(): boolean;
 }
@@ -63,8 +70,18 @@ export class EmbeddingIndexer {
   /**
    * Embed `bookId`'s document corpus, outward from `currentCfi`. No-op when the
    * client is unconfigured or the book has no persisted corpus.
+   *
+   * `opts` selects the consent/lane posture (default `{ interactive: true,
+   * lane: 'fg' }`, preserving the committed FOREGROUND reader behavior). The
+   * Increment E background backfill passes `{ interactive: false, lane: 'bg' }`
+   * so the embed rides the bg lane and is gated by the §8.4.1 consent grant —
+   * never `interactive: true` from a background path.
    */
-  async enqueue(bookId: string, currentCfi?: string): Promise<void> {
+  async enqueue(
+    bookId: string,
+    currentCfi?: string,
+    opts?: { interactive?: boolean; lane?: 'fg' | 'bg' },
+  ): Promise<void> {
     if (!this.deps.embeddingClient.isConfigured()) return;
 
     const corpus = await this.deps.textSource.get(bookId);
@@ -105,7 +122,12 @@ export class EmbeddingIndexer {
 
       const { vectors } = await this.deps.embeddingClient.embed(
         chunks.map((c) => c.text),
-        { profile: 'document', bookId, interactive: true },
+        {
+          profile: 'document',
+          bookId,
+          interactive: opts?.interactive ?? true,
+          lane: opts?.lane ?? 'fg',
+        },
       );
 
       // Quantize each returned float32 vector to int8 + a per-vector scale (B3),

@@ -102,6 +102,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
       profile: EmbeddingProfile;
       bookId?: string;
       interactive?: boolean;
+      lane?: 'fg' | 'bg';
       signal?: AbortSignal;
     },
   ): Promise<{ vectors: Float32Array[] }> {
@@ -118,6 +119,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
       profile: EmbeddingProfile;
       bookId?: string;
       interactive?: boolean;
+      lane?: 'fg' | 'bg';
       signal?: AbortSignal;
     },
   ): Promise<Float32Array> {
@@ -151,7 +153,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
       {
         signal: opts.signal,
         consent: { bookId: opts.bookId, interactive: opts.interactive },
-        lane: 'fg',
+        lane: opts.lane ?? 'fg',
         estTokens: estTokens(content),
       },
     );

@@ -12,7 +12,7 @@ import type { CacheEmbeddingsRow, CacheEmbedJobsRow } from '@data/rows/cache';
 
 interface CapturedEmbedCall {
   texts: string[];
-  opts: { profile: EmbeddingProfile; bookId?: string; interactive?: boolean };
+  opts: { profile: EmbeddingProfile; bookId?: string; interactive?: boolean; lane?: 'fg' | 'bg' };
 }
 
 function makeEmbeddingClient(configured = true) {
@@ -190,11 +190,34 @@ describe('EmbeddingIndexer', () => {
     });
 
     await indexer.enqueue('bk-99');
+    // The default (FOREGROUND reader) posture: interactive:true, lane:'fg'.
     expect(calls[0].opts).toMatchObject({
       profile: 'document',
       bookId: 'bk-99',
       interactive: true,
+      lane: 'fg',
     });
+  });
+
+  it('background enqueue { interactive:false, lane:"bg" } never sets interactive:true', async () => {
+    const sections = [section('s0.xhtml', 'h0'), section('s1.xhtml', 'h1')];
+    const { client, calls } = makeEmbeddingClient();
+    const { repo } = makeRepo();
+    const indexer = new EmbeddingIndexer({
+      embeddingClient: client,
+      textSource: makeTextSource(sections),
+      embeddingsRepo: repo,
+      quantize,
+      getConfig: config,
+    });
+
+    await indexer.enqueue('bk-bg', undefined, { interactive: false, lane: 'bg' });
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(call.opts).toMatchObject({ profile: 'document', bookId: 'bk-bg', interactive: false, lane: 'bg' });
+      // The §8.4.1 invariant: a bg path is NEVER interactive:true.
+      expect(call.opts.interactive).not.toBe(true);
+    }
   });
 
   it('no-ops when the embedding client is unconfigured', async () => {

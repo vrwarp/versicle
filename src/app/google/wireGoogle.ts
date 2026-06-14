@@ -120,15 +120,15 @@ export function wireGoogleDomain(): void {
   // A6 BG-lane-only effective ceiling: base RPD reduced by the sum of OTHER
   // active-today devices' published spend. Read FRESH per acquire (GG-8) so the
   // kernel is UNTOUCHED (the QuotaGovernor.ts:29 seam). bg-only division is
-  // enforced by routing ONLY the bg lane through this provider; the embedding
-  // BG acquire that consumes it is wired in Phase E2 (A6 supplies + installs
-  // the seam).
+  // enforced by routing ONLY the bg lane through this provider; the Phase-E2
+  // embedding backfill task consumes it (below) as the cross-device admission
+  // pre-flight (the single governor uses ONE full-projectRPD provider for both
+  // lanes, so the cross-device ceiling is an app-layer admission gate).
   const getBackgroundQuotaLimits = makeBackgroundQuotaLimits(
     getQuotaLimits,
     () => useDeviceStore.getState().devices,
     getDeviceId(),
   );
-  void getBackgroundQuotaLimits; // consumed by the Phase-E2 bg acquire
   // The fg/query provider (getQuotaLimits, full projectRPD) and this governor
   // stay UNCHANGED so foreground + query embeds are never rate-divided
   // (guardrail #4).
@@ -143,6 +143,13 @@ export function wireGoogleDomain(): void {
   // governor stays the single source of truth; the store only re-exposes its
   // snapshot to the UI layer (no kernel→store edge).
   useGenAIStore.getState().setQuotaSnapshotProvider(() => governor.snapshot());
+  // E2: install the BG-budget seam the embeddingBackfillTask reads for its
+  // cross-device RPD pre-flight — the A6 reduced bg ceiling + the governor's
+  // live bg.rpd. In-memory (never persisted, same contract as the snapshot
+  // provider) so the boot task never imports the kernel governor.
+  useGenAIStore
+    .getState()
+    .setBgBudgetProvider(getBackgroundQuotaLimits, () => governor.snapshot().bg.rpd);
 
   // GenAI (Phase 7 §H): config read PER CALL from the store — the mutable
   // singleton fields (and the TTS pipeline's configure() clobber, GG-8) are
@@ -194,6 +201,11 @@ export function wireGoogleDomain(): void {
         Object.keys(useContentAnalysisStore.getState().sections).some((key) =>
           key.startsWith(`${bookId}/`),
         ),
+      // E1 (§8.4.1): the library-wide opt-in is the user's consent for bulk
+      // BACKGROUND embedding — granted before the per-book default-deny so an
+      // unread book can be backfilled. Read fresh so a settings flip takes
+      // effect on the next egress.
+      isLibraryPreEmbedEnabled: () => useGenAIStore.getState().preEmbedLibrary,
     }),
   );
 }

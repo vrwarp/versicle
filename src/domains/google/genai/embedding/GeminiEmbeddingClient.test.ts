@@ -135,6 +135,26 @@ describe('GeminiEmbeddingClient', () => {
     expect(opts.estTokens).toBeGreaterThan(0);
   });
 
+  it('defaults the egress lane to fg when the caller omits it', async () => {
+    const { client, calls } = makeClient([embedResponse([0])]);
+    await client.embed(['x'], { profile: 'document' });
+    expect(calls[0].opts.lane).toBe('fg');
+  });
+
+  it('routes egress on the bg lane when lane:"bg" is passed (background backfill)', async () => {
+    const { client, calls } = makeClient([embedResponse([0])]);
+    await client.embed(['some chunk text'], {
+      profile: 'document',
+      bookId: 'bk-7',
+      interactive: false,
+      lane: 'bg',
+    });
+    const { opts } = calls[0];
+    expect(opts.lane).toBe('bg');
+    // The bg backfill is NEVER interactive:true (the §8.4.1 invariant).
+    expect(opts.consent).toEqual({ bookId: 'bk-7', interactive: false });
+  });
+
   it('logs request/response with the embedContent method name', async () => {
     const { client, logs } = makeClient([embedResponse([0])]);
     await client.embed(['x'], { profile: 'document' });

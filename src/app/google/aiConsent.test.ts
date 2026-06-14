@@ -14,10 +14,15 @@ import {
 
 const gemini = findDestination('gemini')!;
 
-function makeResolver(consent: Record<string, boolean>, analyzed: string[] = []) {
+function makeResolver(
+  consent: Record<string, boolean>,
+  analyzed: string[] = [],
+  preEmbed = false,
+) {
   return makeAiConsentResolver({
     getConsent: (bookId) => consent[bookId],
     hasAnalysisRecords: (bookId) => analyzed.includes(bookId),
+    isLibraryPreEmbedEnabled: () => preEmbed,
   });
 }
 
@@ -44,6 +49,24 @@ describe('makeAiConsentResolver', () => {
 
   it('interactive calls are always allowed', () => {
     expect(makeResolver({ b1: false })(gemini, { bookId: 'b1', interactive: true })).toBe(true);
+  });
+
+  // ── Increment E §8.4.1 background grant path ──────────────────────────────
+
+  it('opt-in OFF: a background unread book (bookId, no interactive) is DENIED', () => {
+    expect(makeResolver({})(gemini, { bookId: 'unread-book' })).toBe(false);
+  });
+
+  it('opt-in ON: the SAME background book is GRANTED (the bulk pre-embed consent)', () => {
+    expect(makeResolver({}, [], true)(gemini, { bookId: 'unread-book' })).toBe(true);
+  });
+
+  it('opt-in ON grants before the per-book default-deny (un-prompted book backfills)', () => {
+    // No explicit bit, no analysis records — default-deny territory, but the
+    // library-wide opt-in is the user's consent for background embedding.
+    expect(makeResolver({ other: false }, [], true)(gemini, { bookId: 'never-prompted' })).toBe(
+      true,
+    );
   });
 });
 
@@ -77,5 +100,32 @@ describe('gateway integration: no Gemini egress without consent', () => {
       { consent: { bookId: 'ok-book' } },
     );
     expect(res.status).toBe(200);
+  });
+
+  it('opt-in OFF: a background unread book is refused with NET_CONSENT_REQUIRED', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}')));
+    setConsentResolver(makeResolver({}, [], false));
+    await expect(
+      egress(
+        'gemini',
+        'https://generativelanguage.googleapis.com/v1beta/models/m:embedContent',
+        { method: 'POST' },
+        { consent: { bookId: 'unread-book' } },
+      ),
+    ).rejects.toBeInstanceOf(NetConsentRequiredError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('opt-in ON: the SAME background book embed proceeds (egress reaches fetch)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}')));
+    setConsentResolver(makeResolver({}, [], true));
+    const res = await egress(
+      'gemini',
+      'https://generativelanguage.googleapis.com/v1beta/models/m:embedContent',
+      { method: 'POST' },
+      { consent: { bookId: 'unread-book' } },
+    );
+    expect(res.status).toBe(200);
+    expect(fetch).toHaveBeenCalled();
   });
 });

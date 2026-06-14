@@ -46,7 +46,9 @@ const GenAIPanel: React.FC = () => {
     fgRpdHeadroom,
     setFgRpdHeadroom,
     pauseAllGenAI,
-    setPauseAllGenAI
+    setPauseAllGenAI,
+    preEmbedLibrary,
+    setPreEmbedLibrary
   } = useGenAIStore();
 
   const meters = useQuotaMeters();
@@ -112,6 +114,8 @@ const GenAIPanel: React.FC = () => {
       pauseAllGenAI={pauseAllGenAI}
       onPauseAllGenAIChange={setPauseAllGenAI}
       meters={meters}
+      preEmbedLibrary={preEmbedLibrary}
+      onPreEmbedLibraryChange={setPreEmbedLibrary}
     />
   );
 };

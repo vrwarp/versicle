@@ -55,7 +55,10 @@ export interface EgressOptions {
   /**
    * The quota lane this call belongs to (Phase A §3.2). Foreground (`'fg'`,
    * interactive) preempts background (`'bg'`, prefetch/auto). Only consulted
-   * for `rateLimit`-governed destinations; ignored otherwise.
+   * for `rateLimit`-governed destinations; ignored otherwise. When set it
+   * OVERRIDES the destination's default lane (`destination.rateLimit.lane`) —
+   * Increment E2 routes a background embed onto the bg lane this way, where the
+   * gemini destination's default is `'fg'`.
    */
   lane?: 'fg' | 'bg';
   /**
@@ -215,7 +218,10 @@ export async function egress(
   // Observe mode: no scheduler ⇒ no throttle. The admitted fg claim is owned by
   // the gateway on its failure path (release below) and reconciled by the
   // CLIENT's commit on success — the gateway never reads the body.
-  const rateLane = destination.rateLimit?.lane;
+  // Per-call lane (E2) overrides the destination default so a bg-tagged egress
+  // on a rate-limited destination acquires/releases on the bg lane (fg-preempt +
+  // bg-fraction caps apply). Ungoverned destinations stay ungoverned.
+  const rateLane = destination.rateLimit ? (opts.lane ?? destination.rateLimit.lane) : undefined;
   if (rateLane && quotaScheduler) {
     await quotaScheduler.acquire(rateLane, opts.estTokens ?? 0);
   }

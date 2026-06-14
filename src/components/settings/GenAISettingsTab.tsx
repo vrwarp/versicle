@@ -133,6 +133,9 @@ export interface GenAISettingsTabProps {
     pauseAllGenAI: boolean;
     onPauseAllGenAIChange: (paused: boolean) => void;
     meters: QuotaMeters;
+    // Semantic Search — library-wide background pre-embed opt-in (E3)
+    preEmbedLibrary: boolean;
+    onPreEmbedLibraryChange: (enabled: boolean) => void;
 }
 
 export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
@@ -166,7 +169,9 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
     onFgRpdHeadroomChange,
     pauseAllGenAI,
     onPauseAllGenAIChange,
-    meters
+    meters,
+    preEmbedLibrary,
+    onPreEmbedLibraryChange
 }) => {
     const contentTypes: ContentType[] = ['reference'];
 
@@ -485,6 +490,37 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                         <span>TPM exhausts: {formatEta(meters.etas.tpmMs)}</span>
                                         <span>RPD exhausts: {formatEta(meters.etas.rpdMs)}</span>
                                     </div>
+                                </div>
+                            </div>
+
+                            <div className="pt-4 border-t space-y-4">
+                                <div>
+                                    <h4 className="text-sm font-medium">Semantic Search</h4>
+                                    <p className="text-xs text-muted-foreground">
+                                        Pre-embed your library so semantic search can find passages by meaning.
+                                    </p>
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5 max-w-md">
+                                        <label htmlFor="genai-preembed" className="text-sm font-medium">
+                                            Pre-embed my library for semantic search
+                                        </label>
+                                        <p className="text-xs text-muted-foreground">
+                                            When ON, the <strong>full text</strong> of books you have loaded but
+                                            not yet read is sent to Google during idle time to build search
+                                            embeddings, and your <strong>search query terms</strong> leave the
+                                            device to Google whenever you run a semantic search. This is broader
+                                            than the per-book TTS consent, which only sends short excerpts to
+                                            improve audio narration. Default OFF — nothing is pre-embedded unless
+                                            you turn this on.
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        id="genai-preembed"
+                                        checked={preEmbedLibrary}
+                                        onCheckedChange={onPreEmbedLibraryChange}
+                                    />
                                 </div>
                             </div>
                         </>

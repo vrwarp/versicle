@@ -61,10 +61,27 @@ interface GenAIState {
   /** Persisted master pause — zeroes limits so acquire backpressures pre-network. */
   pauseAllGenAI: boolean;
   /**
+   * Persisted, default-OFF library-wide opt-in (Increment E §8.4): the single
+   * source of truth read by BOTH the consent resolver (the §8.4.1 background
+   * grant path) AND the embeddingBackfillTask. When ON, the FULL TEXT of
+   * loaded-but-unread books may be embedded by Google during idle time on the
+   * bg lane. Additive field — tolerated by older persist blobs (no migrate).
+   */
+  preEmbedLibrary: boolean;
+  /**
    * In-memory injected snapshot provider (the READ mirror of `addLog`):
    * wireGoogle installs `() => governor.snapshot()`. NEVER persisted.
    */
   getQuotaSnapshot?: () => Record<'fg' | 'bg', LaneUsage>;
+  /**
+   * In-memory injected BG-budget seam (Increment E2): wireGoogle installs the
+   * A6 cross-device bg-lane ceiling (makeBackgroundQuotaLimits) and the
+   * governor's live bg.rpd, so the embeddingBackfillTask reads the admission
+   * pre-flight WITHOUT importing the kernel governor. NEVER persisted (the same
+   * exclusion contract as getQuotaSnapshot — a function serializes to garbage).
+   */
+  getBgQuotaLimits?: () => QuotaLimits;
+  getBgUsedRpd?: () => number;
   setApiKey: (key: string) => void;
   setModel: (model: string) => void;
   setEmbeddingModel: (model: string) => void;
@@ -83,7 +100,10 @@ interface GenAIState {
   setBgThrottlePercent: (percent: number) => void;
   setFgRpdHeadroom: (headroom: number) => void;
   setPauseAllGenAI: (paused: boolean) => void;
+  setPreEmbedLibrary: (enabled: boolean) => void;
   setQuotaSnapshotProvider: (provider: () => Record<'fg' | 'bg', LaneUsage>) => void;
+  /** Install the E2 BG-budget seam (in-memory; never persisted). */
+  setBgBudgetProvider: (getBgQuotaLimits: () => QuotaLimits, getBgUsedRpd: () => number) => void;
 }
 
 /** The persisted slice (explicit allowlist — see module header). */
@@ -105,6 +125,7 @@ type PersistedGenAIState = Pick<
   | 'bgThrottlePercent'
   | 'fgRpdHeadroom'
   | 'pauseAllGenAI'
+  | 'preEmbedLibrary'
 >;
 
 export const useGenAIStore = create<GenAIState>()(
@@ -127,7 +148,10 @@ export const useGenAIStore = create<GenAIState>()(
       bgThrottlePercent: 50,
       fgRpdHeadroom: 0,
       pauseAllGenAI: false,
+      preEmbedLibrary: false,
       getQuotaSnapshot: undefined,
+      getBgQuotaLimits: undefined,
+      getBgUsedRpd: undefined,
       setApiKey: (key) => set({ apiKey: key }),
       setModel: (model) => set({ model }),
       setEmbeddingModel: (model) => set({ embeddingModel: model }),
@@ -154,7 +178,10 @@ export const useGenAIStore = create<GenAIState>()(
       setBgThrottlePercent: (percent) => set({ bgThrottlePercent: percent }),
       setFgRpdHeadroom: (headroom) => set({ fgRpdHeadroom: headroom }),
       setPauseAllGenAI: (paused) => set({ pauseAllGenAI: paused }),
+      setPreEmbedLibrary: (enabled) => set({ preEmbedLibrary: enabled }),
       setQuotaSnapshotProvider: (provider) => set({ getQuotaSnapshot: provider }),
+      setBgBudgetProvider: (getBgQuotaLimits, getBgUsedRpd) =>
+        set({ getBgQuotaLimits, getBgUsedRpd }),
     }),
     {
       name: 'genai-storage',
@@ -177,6 +204,7 @@ export const useGenAIStore = create<GenAIState>()(
         bgThrottlePercent: state.bgThrottlePercent,
         fgRpdHeadroom: state.fgRpdHeadroom,
         pauseAllGenAI: state.pauseAllGenAI,
+        preEmbedLibrary: state.preEmbedLibrary,
       }),
       /**
        * v0 → v1: strip the legacy persisted `logs` (full prompts, base64

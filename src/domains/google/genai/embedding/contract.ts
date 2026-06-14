@@ -24,7 +24,10 @@ export interface EmbeddingClient {
    * Embed `texts` under `opts.profile`. One `:embedContent` POST per text
    * (batching off by design §0/§8.1). The returned `vectors` are float32 and
    * positionally aligned with `texts`. `bookId`/`interactive` thread the
-   * gateway's per-book consent gate; `signal` cancels.
+   * gateway's per-book consent gate; `signal` cancels. `lane` selects the
+   * gateway quota lane (default `'fg'`) — the Increment E background backfill
+   * passes `lane: 'bg'` + `interactive: false`; the matched profile + consent
+   * semantics are otherwise unchanged.
    */
   embed(
     texts: string[],
@@ -33,6 +36,8 @@ export interface EmbeddingClient {
       bookId?: string;
       /** True when an explicit user gesture drove this exact call. */
       interactive?: boolean;
+      /** Gateway quota lane (default `'fg'`); background backfill uses `'bg'`. */
+      lane?: 'fg' | 'bg';
       signal?: AbortSignal;
     },
   ): Promise<{ vectors: Float32Array[] }>;

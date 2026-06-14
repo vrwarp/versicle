@@ -188,6 +188,32 @@ describe('NetworkGateway.egress', () => {
       expect(acquire).toHaveBeenCalledWith('fg', 0);
     });
 
+    it('opts.lane overrides the destination default lane (gemini default is fg)', async () => {
+      const acquire = vi.fn(async () => {});
+      setQuotaScheduler({ acquire, release: vi.fn() });
+      // gemini's destination.rateLimit.lane is 'fg'; a bg-tagged egress acquires bg.
+      await egress('gemini', GEMINI_URL, {}, { lane: 'bg', estTokens: 7 });
+      expect(acquire).toHaveBeenCalledWith('bg', 7);
+    });
+
+    it('falls back to the destination default lane (fg) when opts.lane is omitted', async () => {
+      const acquire = vi.fn(async () => {});
+      setQuotaScheduler({ acquire, release: vi.fn() });
+      await egress('gemini', GEMINI_URL, {}, { estTokens: 3 });
+      expect(acquire).toHaveBeenCalledWith('fg', 3);
+    });
+
+    it('releases on the bg lane when a bg-tagged fetch rejects', async () => {
+      const release = vi.fn();
+      setQuotaScheduler({ acquire: vi.fn(async () => {}), release });
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network down')));
+
+      await expect(
+        egress('gemini', GEMINI_URL, {}, { lane: 'bg', estTokens: 5 }),
+      ).rejects.toBeInstanceOf(TypeError);
+      expect(release).toHaveBeenCalledWith('bg');
+    });
+
     it('acquire throwing NetRateLimitedError rejects pre-network and is NOT counted', async () => {
       const scheduler: QuotaScheduler = {
         acquire: vi.fn().mockRejectedValue(new NetRateLimitedError(1000, { lane: 'fg' })),

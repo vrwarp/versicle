@@ -26,6 +26,7 @@ import { crdtMigrationsTask } from './crdtMigrations';
 import { syncInitTask } from './syncInit';
 import { ttsInitializeTask, deviceRegistrationTask } from './deviceRegistration';
 import { deviceHeartbeatTask, driveAutoScanTask, audioCacheEvictionTask, reingestWaveTask } from './backgroundTasks';
+import { embeddingBackfillTask } from './embeddingBackfill';
 import { socialLoginTask } from './socialLogin';
 import { wireGoogleDomain } from '../google/wireGoogle';
 import { applyDocumentLanguage } from '@kernel/locale/uiLocale';
@@ -80,5 +81,6 @@ export function registerAppBootTasks(): void {
   registerBootTask('backgroundTasks', driveAutoScanTask);
   registerBootTask('backgroundTasks', audioCacheEvictionTask);
   registerBootTask('backgroundTasks', reingestWaveTask);
+  registerBootTask('backgroundTasks', embeddingBackfillTask);
   registerBootTask('backgroundTasks', socialLoginTask);
 }
