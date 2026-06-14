@@ -50,6 +50,7 @@ Captured-fixture upgrades (v18, v24 → current) are pinned in
 | `diagnostics.ts` | flight-recorder persistence |
 | `dictionary.ts` | the separate versicle-dict database (Chinese dictionary) |
 | `playbackCache.ts` | session/playback cache (WebKit-safe write pattern preserved verbatim) |
+| `quotaCounter.ts` | persisted daily quota counter (app_metadata KV — the QuotaGovernor RPD store) |
 | `searchText.ts` | persisted search corpus (cache_search_text) |
 
 The Yjs document itself is persisted by `packages/y-idb` (vendored fork)

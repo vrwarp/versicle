@@ -1,4 +1,5 @@
 import { egress, type DestinationId } from '@kernel/net';
+import type { QuotaGovernor } from '@kernel/quota';
 import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice, SpeechSegment, Unsubscribe } from './types';
 import { AudioElementPlayer } from '../AudioElementPlayer';
 import type { AudioSink } from '../engine/AudioSink';
@@ -6,6 +7,34 @@ import { TTSCache } from '../TTSCache';
 
 /** Max wall time for one synthesis round-trip before it is abandoned (TimeoutError). */
 const SYNTHESIS_TIMEOUT_MS = 30_000;
+
+/**
+ * The slice of the kernel QuotaGovernor the cloud-TTS egress lane uses (Phase
+ * A) — the SECOND kernel/quota consumer (audio domain), which together with
+ * GeminiClient satisfies the ≥2-domain kernel-admission bar (C12).
+ */
+type TtsQuotaGovernor = Pick<QuotaGovernor, 'acquire' | 'commit' | 'recordCooldown' | 'release'>;
+
+/**
+ * Module-level governor holder, installed once at the TTS composition root
+ * (src/app/google/wireGoogle.ts via {@link setTtsQuotaGovernor}). A holder
+ * rather than a constructor param keeps {@link BaseCloudProvider}'s signature
+ * (and every subclass `super()` + every direct-construction provider unit test)
+ * untouched while still routing every cloud-TTS egress through the governor.
+ * `null` (the default) makes the governor a no-op, so provider tests that never
+ * install one behave exactly as before.
+ */
+let ttsGovernor: TtsQuotaGovernor | null = null;
+
+/** Install the cloud-TTS rate/spend governor (composition root, Phase A). */
+export function setTtsQuotaGovernor(governor: TtsQuotaGovernor | null): void {
+  ttsGovernor = governor;
+}
+
+/** ~4-chars-per-token estimate for the pre-flight acquire (commit reconciles). */
+function estTtsTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
 
 export abstract class BaseCloudProvider implements ITTSProvider {
   abstract id: string;
@@ -229,20 +258,49 @@ export abstract class BaseCloudProvider implements ITTSProvider {
    * registry destination their synthesis endpoint belongs to.
    */
   protected async fetchAudio(destinationId: DestinationId, url: string, body: unknown, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<Blob> {
-    const response = await egress(destinationId, url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers
-      },
-      body: JSON.stringify(body),
-      signal
-    });
+    const payload = JSON.stringify(body);
 
-    if (!response.ok) {
-      throw new Error(`TTS API Error: ${response.status} ${response.statusText}`);
+    // Pre-egress admission (Phase A): the cloud-TTS chokepoint. A foreground
+    // claim sized by a coarse estimate over the request payload, reconciled on
+    // commit. Backpressure throws NetRateLimitedError before any network call.
+    // The governor is the module-level holder (no-op when unset, e.g. unit
+    // tests), so this is additive for direct-construction provider suites.
+    const estimate = estTtsTokens(payload);
+    await ttsGovernor?.acquire('fg', estimate);
+    let committed = false;
+
+    try {
+      const response = await egress(destinationId, url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers
+        },
+        body: payload,
+        signal
+      });
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          ttsGovernor?.recordCooldown(this.retryAfterMs(response));
+        }
+        throw new Error(`TTS API Error: ${response.status} ${response.statusText}`);
+      }
+
+      committed = true;
+      ttsGovernor?.commit('fg', estimate);
+      return await response.blob();
+    } finally {
+      // Release a claim acquired but never committed (egress threw / non-ok)
+      // so it cannot leak the fg preemption.
+      if (!committed) ttsGovernor?.release('fg');
     }
+  }
 
-    return await response.blob();
+  /** Parse a 429's `Retry-After` (delta-seconds) into ms; default 30s. */
+  private retryAfterMs(response: Response): number {
+    const header = response.headers.get('Retry-After');
+    const seconds = header ? Number(header) : NaN;
+    return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : SYNTHESIS_TIMEOUT_MS;
   }
 }

@@ -102,6 +102,9 @@ export const APP_ERROR_CODES = [
   'NET_CONSENT_REQUIRED',
   'NET_TIMEOUT',
   'NET_OFFLINE',
+  // Pre-network backpressure raised by the kernel QuotaGovernor before egress
+  // (distinct from a network 429 — Phase A). Append-only.
+  'NET_RATE_LIMITED',
   // BACKUP_* — backup/snapshot capture, validation, and restore.
   'BACKUP_SNAPSHOT_INVALID',
   // GOOGLE_* — Google OAuth boundary (GoogleAuthClient, Phase 7).
@@ -300,5 +303,33 @@ export class WorkspaceDeletedError extends AppError {
   constructor(message: string = 'This workspace has been deleted.') {
     super(message, { code: 'SYNC_WORKSPACE_DELETED' });
     this.name = 'WorkspaceDeletedError';
+  }
+}
+
+/**
+ * Pre-network backpressure raised by the kernel {@link AppError} consumers
+ * (the QuotaGovernor, Phase A) when a request is refused **before any egress** —
+ * RPD-exhausted, an active 429 cooldown, or the rolling RPM/TPM minute budget.
+ *
+ * Distinct from a network 429 (the `GenAIHttpError` / `isResourceExhausted`
+ * path): that one means the server pushed back; this one means the governor
+ * pushed back first. Like {@link NetTimeoutError}/{@link NetOfflineError} it is
+ * `retryable: true`, and it carries `retryAfterMs` in `context` so callers and
+ * meters can branch on `code === 'NET_RATE_LIMITED'` (never message substrings)
+ * and schedule a retry.
+ *
+ * It extends {@link AppError} directly (not `NetworkGatewayError`, which lives in
+ * `kernel/net`) because the throw site — `kernel/quota` — is bound by
+ * `kernel-imports-nothing` (kernel may import only `~types`); `kernel/net`
+ * re-exports it so the net layer can reference it under its own surface.
+ */
+export class NetRateLimitedError extends AppError {
+  constructor(retryAfterMs: number, context: Record<string, unknown> = {}) {
+    super('Rate limited: request refused before egress (quota backpressure).', {
+      code: 'NET_RATE_LIMITED',
+      context: { retryAfterMs, ...context },
+      retryable: true,
+    });
+    this.name = 'NetRateLimitedError';
   }
 }

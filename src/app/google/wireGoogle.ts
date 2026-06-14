@@ -28,6 +28,10 @@ import {
   setGoogleAuthClient,
 } from '@domains/google';
 import { setConsentResolver } from '@kernel/net';
+import { QuotaGovernor, setQuotaStore, type QuotaLimits } from '@kernel/quota';
+import { makeQuotaStore } from '@app/quota/makeQuotaStore';
+import { quotaCounterRepo } from '@data/repos/quotaCounter';
+import { setTtsQuotaGovernor } from '@lib/tts/providers/BaseCloudProvider';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 import { useSyncStore } from '@store/useSyncStore';
 import { useDriveStore } from '@store/useDriveStore';
@@ -86,6 +90,17 @@ export function wireGoogleDomain(): void {
     }),
   );
 
+  // QuotaGovernor (Phase A): ONE kernel governor shared by the GenAI egress
+  // lane (below) and the cloud-TTS lane (the audio domain holder). Limits are
+  // read FRESH per acquire (GG-8) from this provider — per-lane settings UI is
+  // a later increment (A7), so today it returns the free-tier defaults. RPD is
+  // persisted through the injected store onto the quotaCounter repo (the only
+  // IDB touch); RPM/TPM live in-memory in the governor.
+  const getQuotaLimits = (): QuotaLimits => ({ rpm: 100, tpm: 30_000, rpd: 1000 });
+  setQuotaStore(makeQuotaStore(quotaCounterRepo));
+  const governor = new QuotaGovernor(getQuotaLimits);
+  setTtsQuotaGovernor(governor);
+
   // GenAI (Phase 7 §H): config read PER CALL from the store — the mutable
   // singleton fields (and the TTS pipeline's configure() clobber, GG-8) are
   // gone. Log entries arrive pre-redacted (no inlineData bytes) and land in
@@ -105,6 +120,7 @@ export function wireGoogleDomain(): void {
         };
       },
       onLog: (entry) => useGenAIStore.getState().addLog(entry),
+      governor,
     }),
   );
 

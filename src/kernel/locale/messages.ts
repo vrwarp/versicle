@@ -60,6 +60,7 @@ const errorMessages: ErrorMessages = {
   'errors.NET_CONSENT_REQUIRED': 'This feature needs your consent before sending data.',
   'errors.NET_TIMEOUT': 'The request timed out.',
   'errors.NET_OFFLINE': 'You appear to be offline.',
+  'errors.NET_RATE_LIMITED': 'Rate limit reached. Please wait a moment and try again.',
   'errors.BACKUP_SNAPSHOT_INVALID': 'The backup file is invalid.',
   'errors.GOOGLE_AUTH_REQUIRED': 'Sign in with Google to continue.',
   'errors.GOOGLE_AUTH_REVOKED': 'Google access was revoked. Reconnect to continue.',

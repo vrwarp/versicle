@@ -115,6 +115,13 @@ export const APP_METADATA_KEYS = {
   legacyRecoveryV25: 'legacy-recovery-v25',
   /** `true` once the post-open idle audio `size` backfill completed (v25). */
   audioSizeBackfillV25: 'audio-size-backfill-v25',
+  /**
+   * `QuotaDailyUsageRow` — the QuotaGovernor's persisted daily (RPD) counter
+   * for the current PT day (Phase A). Lives under the existing app_metadata KV
+   * (NO new store, NO DB bump): last-write-wins, rolls over on a day-string
+   * mismatch. The only IDB touch for the governor (src/data/repos/quotaCounter.ts).
+   */
+  quotaDailyUsage: 'quota-daily-usage',
 } as const;
 
 /**
@@ -167,10 +174,34 @@ export type LegacyRecoveryRecord = {
 };
 
 /**
+ * The `quota-daily-usage` record (Phase A): the QuotaGovernor's persisted
+ * daily counter. Structurally matches the kernel's `DailyUsage` shape
+ * (`@kernel/quota`) — the app-layer `makeQuotaStore` adapter maps between them.
+ * `day` is the midnight-PT day key (`YYYY-MM-DD`); a stored row whose `day`
+ * differs from today is treated as zero (rollover).
+ * @public C1 row contract: parsed via the quotaCounter repo; pinned to the type
+ * by `_QuotaSchemaMatches` below.
+ */
+export const quotaDailyUsageSchema = z.looseObject({
+  day: z.string(),
+  rpd: z.number(),
+  tpm: z.number().optional(),
+});
+export type QuotaDailyUsageRow = {
+  day: string;
+  rpd: number;
+  tpm?: number;
+};
+
+/**
  * Everything `app_metadata` may hold — the typed envelope replacing the dead
  * store's `any`. Readers narrow by key (see APP_METADATA_KEYS).
  */
-export type AppMetadataValue = SchemaHistoryEntry[] | LegacyRecoveryRecord | boolean;
+export type AppMetadataValue =
+  | SchemaHistoryEntry[]
+  | LegacyRecoveryRecord
+  | QuotaDailyUsageRow
+  | boolean;
 
 // ── Compile-time drift guards (see rows/static.ts for the pattern) ────────
 type _CheckpointSchemaMatches = z.infer<typeof syncCheckpointRowSchema> extends SyncCheckpointRow ? true : never;
@@ -180,6 +211,7 @@ type _CheckpointRound = SyncCheckpointRow extends SyncCheckpoint ? true : never;
 type _SnapshotRound = FlightSnapshotRow extends FlightSnapshot ? true : never;
 type _HistorySchemaMatches = z.infer<typeof schemaHistoryEntrySchema> extends SchemaHistoryEntry ? true : never;
 type _RecoverySchemaMatches = z.infer<typeof legacyRecoveryRecordSchema> extends LegacyRecoveryRecord ? true : never;
+type _QuotaSchemaMatches = z.infer<typeof quotaDailyUsageSchema> extends QuotaDailyUsageRow ? true : never;
 const _schemaChecks: [
   _CheckpointSchemaMatches,
   _LogSchemaMatches,
@@ -188,7 +220,8 @@ const _schemaChecks: [
   _SnapshotRound,
   _HistorySchemaMatches,
   _RecoverySchemaMatches,
-] = [true, true, true, true, true, true, true];
+  _QuotaSchemaMatches,
+] = [true, true, true, true, true, true, true, true];
 void _schemaChecks;
 
 function _rowTypeDriftGuard(

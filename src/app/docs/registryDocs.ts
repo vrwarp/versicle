@@ -92,6 +92,7 @@ export const KERNEL_MODULES: Readonly<Record<string, string>> = {
   diagnostics: 'flight-recorder ring-buffer core (namespaced buffers per subsystem)',
   locale: 'typed MessageKey catalog, cached Intl formatters, LiveAnnouncer, uiLocale',
   net: 'NetworkGateway + egress destination registry + generated-CSP renderer',
+  quota: 'QuotaGovernor rate/spend math — in-memory RPM/TPM windows + injected-port daily RPD',
 };
 
 /** Entry files — gated: existence on disk. */
@@ -826,6 +827,7 @@ export const DATA_REPOS: Readonly<Record<string, string>> = {
   'diagnostics.ts': 'flight-recorder persistence',
   'dictionary.ts': 'the separate versicle-dict database (Chinese dictionary)',
   'playbackCache.ts': 'session/playback cache (WebKit-safe write pattern preserved verbatim)',
+  'quotaCounter.ts': 'persisted daily quota counter (app_metadata KV — the QuotaGovernor RPD store)',
   'searchText.ts': 'persisted search corpus (cache_search_text)',
 };
 

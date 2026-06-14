@@ -37,6 +37,7 @@ src/
     diagnostics/           # flight-recorder ring-buffer core (namespaced buffers per subsystem)
     locale/                # typed MessageKey catalog, cached Intl formatters, LiveAnnouncer, uiLocale
     net/                   # NetworkGateway + egress destination registry + generated-CSP renderer
+    quota/                 # QuotaGovernor rate/spend math — in-memory RPM/TPM windows + injected-port daily RPD
   data/                    # L1 — the ONLY IndexedDB subsystem (rule 2; see src/data/README.md)
   store/                   # L2 — three-tier store registry + Y.Doc provider (see src/store/README.md)
   domains/                 # L3 — vertical feature modules (rule 3; see src/domains/README.md)

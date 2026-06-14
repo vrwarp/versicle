@@ -6,6 +6,7 @@ import {
   StorageFullError,
   DuplicateBookError,
   WorkspaceDeletedError,
+  NetRateLimitedError,
   type AppErrorCode,
   type AppErrorNamespace,
   type SerializedAppError
@@ -50,6 +51,7 @@ describe('AppErrorCode union', () => {
       NET_CONSENT_REQUIRED: 'NET',
       NET_TIMEOUT: 'NET',
       NET_OFFLINE: 'NET',
+      NET_RATE_LIMITED: 'NET',
       BACKUP_SNAPSHOT_INVALID: 'BACKUP',
       GOOGLE_AUTH_REQUIRED: 'GOOGLE',
       GOOGLE_AUTH_REVOKED: 'GOOGLE',
@@ -259,6 +261,24 @@ describe('DuplicateBookError', () => {
   it('instanceof chain: DuplicateBookError -> AppError -> Error', () => {
     const error = new DuplicateBookError('test-book.epub');
     expect(error).toBeInstanceOf(DuplicateBookError);
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toBeInstanceOf(Error);
+  });
+});
+
+describe('NetRateLimitedError', () => {
+  it('carries NET_RATE_LIMITED code, retryable true, and retryAfterMs in context', () => {
+    const error = new NetRateLimitedError(1500, { lane: 'fg', reason: 'rpd-exhausted' });
+
+    expect(error.code).toBe('NET_RATE_LIMITED');
+    expect(error.retryable).toBe(true);
+    expect(error.context).toMatchObject({ retryAfterMs: 1500, lane: 'fg', reason: 'rpd-exhausted' });
+    expect(error.name).toBe('NetRateLimitedError');
+  });
+
+  it('instanceof chain: NetRateLimitedError -> AppError -> Error', () => {
+    const error = new NetRateLimitedError(0);
+    expect(error).toBeInstanceOf(NetRateLimitedError);
     expect(error).toBeInstanceOf(AppError);
     expect(error).toBeInstanceOf(Error);
   });
