@@ -826,6 +826,7 @@ export const DATA_REPOS: Readonly<Record<string, string>> = {
   'checkpoints.ts': 'pre-danger Y.Doc checkpoints (used by backup/restore/migrations)',
   'diagnostics.ts': 'flight-recorder persistence',
   'dictionary.ts': 'the separate versicle-dict database (Chinese dictionary)',
+  'embeddings.ts': 'per-book int8 embedding vectors + resumable embed jobs (cache_embeddings / cache_embed_jobs)',
   'playbackCache.ts': 'session/playback cache (WebKit-safe write pattern preserved verbatim)',
   'quotaCounter.ts': 'persisted daily quota counter (app_metadata KV — the QuotaGovernor RPD store)',
   'searchText.ts': 'persisted search corpus (cache_search_text)',

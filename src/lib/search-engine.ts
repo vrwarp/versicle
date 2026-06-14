@@ -136,4 +136,86 @@ export class SearchEngine {
 
         return (start > 0 ? '...' : '') + text.substring(start, end) + (end < text.length ? '...' : '');
     }
+
+    /**
+     * §2.3/§4.4 pure-compute helpers consumed by the Phase-C worker cosine
+     * ranking. They operate ONLY over transferred typed arrays (no IDB, no
+     * store/yjs/zustand edge), so the worker stays pure: all embedding I/O is
+     * main-thread via the repos, and the worker only ever receives the packed
+     * vectors. Quantization is per-vector: `scale = max(|v|)/127`, so each row
+     * keeps its own dynamic range and the cosine is a single int32 dot product
+     * rescaled by the two float32 scales once.
+     */
+
+    /**
+     * Quantize a float32 embedding to int8 with a single per-vector scale.
+     * `q[i] = round(v[i] / scale)` where `scale = max(|v|) / 127`; a zero (or
+     * all-zero) vector yields a zero int8 row and `scale === 0`.
+     */
+    quantizeInt8PerVector(vec: Float32Array): { vectors: Int8Array; scale: number } {
+        let maxAbs = 0;
+        for (let i = 0; i < vec.length; i++) {
+            const a = Math.abs(vec[i]);
+            if (a > maxAbs) maxAbs = a;
+        }
+        const vectors = new Int8Array(vec.length);
+        if (maxAbs === 0) {
+            return { vectors, scale: 0 };
+        }
+        const scale = maxAbs / 127;
+        for (let i = 0; i < vec.length; i++) {
+            // round-half-away-from-zero, clamped to the signed-int8 range.
+            let q = Math.round(vec[i] / scale);
+            if (q > 127) q = 127;
+            else if (q < -128) q = -128;
+            vectors[i] = q;
+        }
+        return { vectors, scale };
+    }
+
+    /**
+     * Cosine similarity between a query int8 vector and a packed corpus of
+     * int8 rows. `aVecs` packs one or more `dims`-length rows back-to-back;
+     * each row's dot product with `bVec` is accumulated as an int32 (a plain
+     * JS number stays exact well within ±2^53), then multiplied by
+     * `aScale * bScale` ONCE — never per element. Returns the BEST (max)
+     * cosine across the packed rows. A zero-scale (zero vector) row contributes
+     * a cosine of 0.
+     */
+    int8Cosine(
+        aVecs: Int8Array,
+        aScale: number,
+        bVec: Int8Array,
+        bScale: number,
+        dims: number,
+    ): number {
+        if (dims <= 0 || bScale === 0 || aScale === 0) return 0;
+
+        // |b| in the dequantized space: scale * sqrt(Σ q_b²). Computed once.
+        let bSq = 0;
+        for (let i = 0; i < dims; i++) bSq += bVec[i] * bVec[i];
+        const bNorm = bScale * Math.sqrt(bSq);
+        if (bNorm === 0) return 0;
+
+        const rows = Math.floor(aVecs.length / dims);
+        let best = 0;
+        for (let r = 0; r < rows; r++) {
+            const base = r * dims;
+            let dot = 0; // int8·int8 accumulated as an exact int32-range number
+            let aSq = 0;
+            for (let i = 0; i < dims; i++) {
+                const av = aVecs[base + i];
+                dot += av * bVec[i];
+                aSq += av * av;
+            }
+            if (aSq === 0) continue; // zero row → cosine 0
+            // Apply the two float32 scales once: the scales cancel in the
+            // cosine ratio's numerator/denominator, but keeping them explicit
+            // mirrors the §4.4 formula and stays exact for non-unit vectors.
+            const aNorm = aScale * Math.sqrt(aSq);
+            const cosine = (aScale * bScale * dot) / (aNorm * bNorm);
+            if (cosine > best) best = cosine;
+        }
+        return best;
+    }
 }
