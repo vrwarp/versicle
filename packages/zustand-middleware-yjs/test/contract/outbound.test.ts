@@ -144,6 +144,34 @@ describe('contract A.3 — previousState delete-protection on outbound', () => {
     expect(map.has('keep')).toBe(true);
     expect(map.has('drop')).toBe(false);
   });
+
+  it('unit pin (src/patching.ts DELETE branch): the guard is Y.Map-only — an array-shrink delete past the previous length still applies', () => {
+    // Regression (the scoped-diff.test.ts flake): the previousState DELETE
+    // guard protects Y.Map STRING keys (a concurrent remote insert must not be
+    // deleted). For a Y.Array `property` is a numeric INDEX, and a shrink can
+    // emit a delete at an index >= the previous array length — e.g.
+    // getChanges(['', ''], [' ', '']) => INSERT ' ' at 0, then DELETE at 2.
+    // Misapplying the guard as `index in prevArray` skips that delete, leaving
+    // a stale trailing element ([' ', '', '']) and silently drifting the doc
+    // from state. The guard must NOT touch arrays.
+    const doc = new Y.Doc();
+    const map = doc.getMap('unit');
+    doc.transact(() => {
+      const tags = new Y.Array<string>();
+      tags.push(['', '']);
+      map.set('tags', tags);
+    });
+
+    doc.transact(() => {
+      patchSharedType(
+        map,
+        { tags: [' ', ''] },
+        { disableYText: true, previousState: { tags: ['', ''] } },
+      );
+    });
+
+    expect((map.get('tags') as Y.Array<string>).toJSON()).toEqual([' ', '']);
+  });
 });
 
 describe('contract A.10 — regression: undefined values are preserved (absorbed from src/store/zustand-middleware-yjs-undefined.test.ts)', () => {

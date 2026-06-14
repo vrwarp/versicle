@@ -112,7 +112,16 @@ const seed = (store: { getState: () => State }): void => {
 
 describe('contract D.1 — fast-check equivalence: scoped diff ≡ full diff', () => {
   it('random update sequences converge scoped and full stores to identical doc JSON and state', async () => {
-    __scopedDiffDevSampling.rate = 1; // free extra tripwire on every flush
+    // The convergence tripwire runs IN-BAND below (after every settle) rather
+    // than via the production async sampling. Sampling fires the tripwire from
+    // inside flushOutbound's queueMicrotask, which is not awaited by the
+    // property — a divergence throws there escapes as an UNHANDLED microtask
+    // error: the run aborts with a non-zero exit while every test still
+    // reports "passed", and the offending random sequence is lost. Asserting
+    // in-band (plus the fixed `seed`) makes a failure a normal, shrinkable
+    // property failure: fast-check prints the minimal counterexample and the
+    // exact sequence reproduces every run.
+    __scopedDiffDevSampling.rate = 0;
 
     await fc.assert(
       fc.asyncProperty(ticksArb(['a', 'b', 'c']), async (ticks) => {
@@ -127,6 +136,7 @@ describe('contract D.1 — fast-check equivalence: scoped diff ≡ full diff', (
         seed(fullStore);
         await drain();
         expect(scopedDoc.getMap('s').toJSON()).toEqual(fullDoc.getMap('s').toJSON());
+        assertScopedDiffConvergence(scopedDoc.getMap('s'), scopedStore.getState());
 
         for (const tick of ticks) {
           for (const op of tick) {
@@ -134,17 +144,29 @@ describe('contract D.1 — fast-check equivalence: scoped diff ≡ full diff', (
             applyOp(fullStore, op);
           }
           await drain();
+          // In-band divergence tripwire: a scoped flush that left the doc
+          // diverged from state (e.g. a missed array-shrink delete) throws
+          // HERE, inside the property, so fast-check shrinks it and reports
+          // the offending tick sequence.
+          assertScopedDiffConvergence(scopedDoc.getMap('s'), scopedStore.getState());
         }
 
         expect(scopedDoc.getMap('s').toJSON()).toEqual(fullDoc.getMap('s').toJSON());
         expect(dataOf(scopedStore.getState())).toEqual(dataOf(fullStore.getState()));
       }),
-      { numRuns: 30 },
+      // Fixed seed => deterministic generation: the same sequences run every
+      // time, so a regression fails reproducibly instead of ~1-in-5. (seed 7
+      // deterministically reproduced the array-shrink delete-guard bug this
+      // suite was flaking on.)
+      { numRuns: 200, seed: 7 },
     );
   });
 
   it('two-doc concurrent merges (disjoint writes) converge identically under scoped and full diff', async () => {
-    __scopedDiffDevSampling.rate = 1;
+    // In-band convergence checks (see the note on the previous test): the
+    // production async sampling would surface a divergence only as an
+    // unhandled microtask error, so assert directly and seed the generator.
+    __scopedDiffDevSampling.rate = 0;
 
     await fc.assert(
       fc.asyncProperty(
@@ -171,6 +193,8 @@ describe('contract D.1 — fast-check equivalence: scoped diff ≡ full diff', (
             for (const tick of ticksA) {
               for (const op of tick) applyOp(storeA, op);
               await drain();
+              if (scoped)
+                assertScopedDiffConvergence(docA.getMap('s'), storeA.getState());
             }
             for (const tick of ticksB) {
               const nestedOnly = tick.filter(
@@ -178,6 +202,8 @@ describe('contract D.1 — fast-check equivalence: scoped diff ≡ full diff', (
               if (nestedOnly.length === 0) continue;
               for (const op of nestedOnly) applyOp(storeB, op);
               await drain();
+              if (scoped)
+                assertScopedDiffConvergence(docB.getMap('s'), storeB.getState());
             }
 
             replicate(docA, docB);
@@ -192,7 +218,7 @@ describe('contract D.1 — fast-check equivalence: scoped diff ≡ full diff', (
           expect(await run(true)).toEqual(await run(false));
         },
       ),
-      { numRuns: 20 },
+      { numRuns: 50, seed: 7 },
     );
   });
 });
