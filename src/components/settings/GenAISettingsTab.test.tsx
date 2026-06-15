@@ -74,6 +74,8 @@ describe('GenAISettingsTab', () => {
         onPauseAllGenAIChange: vi.fn(),
         preEmbedLibrary: false,
         onPreEmbedLibraryChange: vi.fn(),
+        shareAiCaches: false,
+        onShareAiCachesChange: vi.fn(),
         meters: {
             // Seeded snapshot: the bars MUST read these exact figures, proving
             // the meter derives from the snapshot rather than fabricating.
@@ -267,6 +269,28 @@ describe('GenAISettingsTab', () => {
 
         fireEvent.click(screen.getByTestId('switch-genai-preembed'));
         expect(onPreEmbedLibraryChange).toHaveBeenCalledWith(true);
+    });
+
+    it('renders the share-AI-caches opt-in default-OFF when enabled', () => {
+        render(<GenAISettingsTab {...defaultProps} isEnabled={true} />);
+
+        expect(screen.getByText('Share AI caches across my devices')).toBeInTheDocument();
+        const toggle = screen.getByTestId('switch-genai-share-ai-caches');
+        expect(toggle).toHaveAttribute('data-checked', 'false');
+    });
+
+    it('calls onShareAiCachesChange when the share-AI-caches opt-in is toggled', () => {
+        const onShareAiCachesChange = vi.fn();
+        render(
+            <GenAISettingsTab
+                {...defaultProps}
+                isEnabled={true}
+                onShareAiCachesChange={onShareAiCachesChange}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId('switch-genai-share-ai-caches'));
+        expect(onShareAiCachesChange).toHaveBeenCalledWith(true);
     });
 
     it('shows the NEW disclosure copy (full-text embedding + query-term egress)', () => {

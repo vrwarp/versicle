@@ -21,12 +21,22 @@ export {  resolveResultCfi } from './offsetRange';
 // via the published surface.
 export { EmbeddingIndexer } from './EmbeddingIndexer';
 export { chunkSection } from './chunker';
-// Artifact Lane Phase B (shared-ai-cache-design.md §2.2/§2.6): the PURE
-// content-key + blob-header PARSE codec, so app/ reaches it via the published
-// surface (mirrors the EmbeddingIndexer/chunkSection exports above). Serialize
-// side is Phase C.
-export { contentKey, parseArtifactBlob } from './artifactBlob';
-export type { ArtifactStamp, ArtifactBlobHeader } from './artifactBlob';
+// Artifact Lane Phase B/C (shared-ai-cache-design.md §2.2/§2.6): the PURE
+// content-key + blob-header codec, so app/ reaches it via the published surface
+// (mirrors the EmbeddingIndexer/chunkSection exports above). Phase B exported
+// the PARSE side (consult/hydrate); Phase C adds the SERIALIZE side +
+// ARTIFACT_HEADER_VERSION for the ArtifactPublisher upload boot task.
+export {
+  contentKey,
+  parseArtifactBlob,
+  serializeArtifactBlob,
+  ARTIFACT_HEADER_VERSION,
+} from './artifactBlob';
+export type {
+  ArtifactStamp,
+  ArtifactBlobHeader,
+  SerializableEmbeddingRow,
+} from './artifactBlob';
 // The quant stamp literal the artifact contentKey folds in (app/ builds the
 // ArtifactStamp from the live config — useGenAIStore {model,dims} + this).
 export { CURRENT_QUANT } from './embeddingPort';

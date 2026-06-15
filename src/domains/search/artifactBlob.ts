@@ -1,10 +1,10 @@
 /**
  * Artifact-blob codec (shared-ai-cache-design.md §2.2/§2.6) — the PURE,
  * store-free content-addressing key + self-describing blob header for the
- * shared AI-cache "Artifact Lane". Phase B implements ONLY the PARSE side
- * (download/consult); the SERIALIZE side is Phase C (the ArtifactPublisher
- * upload boot task) and reuses the exact header types + byte layout pinned
- * here verbatim.
+ * shared AI-cache "Artifact Lane". Phase B implemented the PARSE side
+ * (download/consult); Phase C now adds the SERIALIZE side ({@link
+ * serializeArtifactBlob}, the ArtifactPublisher upload boot task) — the exact
+ * inverse, reusing the header types + byte layout pinned here verbatim.
  *
  * No store/IDB import (domains-no-store holds): the app layer reads the
  * stores/manifest and injects the bytes; this module only turns a stamp into a
@@ -32,6 +32,7 @@
  * a 4-byte boundary (the writer pads — see {@link parseArtifactBlob} which
  * slices, never reinterpret-casts, so a misaligned read cannot occur).
  */
+import type { CacheEmbeddingsRow } from '@data/rows/cache';
 
 /**
  * The embedding-space stamp baked into {@link contentKey} and re-asserted on
@@ -158,4 +159,115 @@ export function parseArtifactBlob(bytes: ArrayBuffer): {
       };
     },
   };
+}
+
+/**
+ * View a section binary as raw bytes WITHOUT reinterpreting elements. The row's
+ * `vectors`/`scales` are typed `ArrayBuffer` (the persisted shape), but the
+ * embeddings repo's read path hands back re-wrapped Int8Array/Float32Array
+ * views; either is byte-copied here over its own `buffer`/`byteOffset`/
+ * `byteLength` (NOT `new Uint8Array(floatArray)`, which would copy float values
+ * as integers).
+ */
+function asBytes(bin: ArrayBuffer | ArrayBufferView): Uint8Array {
+  if (ArrayBuffer.isView(bin)) {
+    return new Uint8Array(bin.buffer, bin.byteOffset, bin.byteLength);
+  }
+  return new Uint8Array(bin);
+}
+
+/**
+ * The serializer's input shape: a `cache_embeddings` row whose section binaries
+ * may be raw ArrayBuffers (the persisted {@link CacheEmbeddingsRow}) OR the
+ * repo's re-wrapped typed-array views (the read path) — both byte-read via
+ * {@link asBytes}. Stamp fields are reused from {@link CacheEmbeddingsRow}.
+ */
+export type SerializableEmbeddingRow = Pick<
+  CacheEmbeddingsRow,
+  'model' | 'dims' | 'quant' | 'extractionVersion'
+> & {
+  sections: {
+    href: string;
+    sectionTextHash: string;
+    vectors: ArrayBuffer | ArrayBufferView;
+    scales: ArrayBuffer | ArrayBufferView;
+  }[];
+};
+
+/**
+ * Serialize a persisted `cache_embeddings` row into the header-format blob the
+ * {@link parseArtifactBlob} reader consumes (§2.2) — the EXACT inverse of the
+ * parse side, byte-for-byte to the documented layout.
+ *
+ * The body concatenates, per section in row order, the int8 vectors FIRST
+ * (`section.vectors`) then the float32 scales SECOND (`section.scales`), padding
+ * the body so the next section slice begins on a 4-byte boundary (the scales
+ * region stays 4-byte aligned — matching the parse-side alignment-safe slicing).
+ * The header stamp ({model, dims, quant, extractionVersion}) comes from the ROW,
+ * NOT live config, so the published object is content-addressed by what was
+ * actually embedded — the indexer's §8.2 stamp-mismatch guard re-embeds a stale
+ * row before the publisher ever sees it, keeping the writer/reader keys aligned.
+ *
+ * PURE/store-free: the bytes are read off the row's buffers (honoring
+ * `byteOffset`/`byteLength` defensively whether the row carries raw
+ * ArrayBuffers or the repo's re-wrapped typed-array views) — NO re-quant.
+ *
+ * Accepts both the persisted {@link CacheEmbeddingsRow} (binaries are
+ * ArrayBuffers) AND the embeddings repo's read view (binaries are
+ * Int8Array/Float32Array) via the {@link SerializableEmbeddingRow} structural
+ * type, so the publisher passes `embeddingsRepo.get(...)` straight through.
+ */
+export function serializeArtifactBlob(row: SerializableEmbeddingRow): ArrayBuffer {
+  const bodyChunks: Uint8Array[] = [];
+  const headerSections: ArtifactBlobHeader['sections'] = [];
+  let offset = 0;
+  for (const s of row.sections) {
+    // Read the raw bytes off whatever buffers the row carries (the persisted
+    // ArrayBuffers, or the repo's re-wrapped Int8Array/Float32Array views) —
+    // {@link asBytes} honors byteOffset/byteLength so a shared backing buffer
+    // cannot leak neighboring bytes, and never reinterprets float ELEMENTS as
+    // bytes (a Uint8Array OVER a Float32Array's buffer, not FROM its values).
+    const vectorBytes = asBytes(s.vectors);
+    const scaleBytes = asBytes(s.scales);
+    const sliceLen = vectorBytes.byteLength + scaleBytes.byteLength;
+    const slice = new Uint8Array(sliceLen);
+    slice.set(vectorBytes, 0);
+    slice.set(scaleBytes, vectorBytes.byteLength);
+    headerSections.push({
+      href: s.href,
+      sectionTextHash: s.sectionTextHash,
+      byteOffset: offset, // position of this slice within the packed body
+      byteLen: sliceLen,
+      vectorsByteLen: vectorBytes.byteLength,
+    });
+    bodyChunks.push(slice);
+    offset += sliceLen;
+    // Pad to a 4-byte boundary before the next slice.
+    const pad = (4 - (offset % 4)) % 4;
+    if (pad > 0) {
+      bodyChunks.push(new Uint8Array(pad));
+      offset += pad;
+    }
+  }
+  const body = new Uint8Array(offset);
+  let cursor = 0;
+  for (const chunk of bodyChunks) {
+    body.set(chunk, cursor);
+    cursor += chunk.byteLength;
+  }
+
+  const header: ArtifactBlobHeader = {
+    headerVersion: ARTIFACT_HEADER_VERSION,
+    model: row.model,
+    dims: row.dims,
+    quant: row.quant,
+    extractionVersion: row.extractionVersion,
+    sections: headerSections,
+  };
+  const headerJson = new TextEncoder().encode(JSON.stringify(header));
+  const bytes = new Uint8Array(4 + headerJson.byteLength + body.byteLength);
+  new DataView(bytes.buffer).setUint32(0, headerJson.byteLength, true);
+  bytes.set(headerJson, 4);
+  bytes.set(body, 4 + headerJson.byteLength);
+  return bytes.buffer;
 }

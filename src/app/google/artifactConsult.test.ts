@@ -17,9 +17,17 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MockBackend, clearMockArtifacts } from '@domains/sync/backend/MockBackend';
-import { contentKey, type ArtifactStamp, type ArtifactBlobHeader } from '@domains/search';
-import { ARTIFACT_HEADER_VERSION } from '@domains/search/artifactBlob';
-import { makeArtifactConsult, type ArtifactConsultDeps } from './artifactConsult';
+import {
+  contentKey,
+  ARTIFACT_HEADER_VERSION,
+  type ArtifactStamp,
+  type ArtifactBlobHeader,
+} from '@domains/search';
+import {
+  makeArtifactConsult,
+  makeArtifactConsentGate,
+  type ArtifactConsultDeps,
+} from './artifactConsult';
 import type { StaticManifestRow } from '@data/rows/static';
 import type {
   CacheEmbeddingsRow,
@@ -338,5 +346,79 @@ describe('makeArtifactConsult', () => {
       await expect(consult.probeArtifact('bk-1', { interactive: true })).resolves.toBe(true);
       await expect(consult.hydrateFromArtifact('bk-1', { interactive: true })).resolves.not.toBeNull();
     });
+
+    it('shareAiCaches OFF (gate built from makeArtifactConsentGate): probe + hydrate DENIED even interactively (Phase C tighten)', async () => {
+      // The Phase-C consult wires isConsented from makeArtifactConsentGate, so a
+      // shareAiCaches-OFF master switch DENIES the read path regardless of the
+      // interactive gesture / preEmbed / per-book bit — a behavior change vs the
+      // Phase-B preEmbed-OR-interactive grant.
+      const { backend } = await seedBackend();
+      const getArtifact = vi.spyOn(backend, 'getArtifact');
+      const headArtifact = vi.spyOn(backend, 'headArtifact');
+      const gate = makeArtifactConsentGate({
+        isShareEnabled: () => false, // master switch OFF
+        isPreEmbedEnabled: () => true, // even with preEmbed ON…
+        getPerBookConsent: () => true, // …and a per-book bit set…
+      });
+      const { deps, hydrated } = makeDeps(backend, { isConsented: gate });
+      const consult = makeArtifactConsult(deps);
+
+      // …both interactive AND background postures are denied.
+      await expect(consult.probeArtifact('bk-1', { interactive: true })).resolves.toBe(false);
+      await expect(consult.hydrateFromArtifact('bk-1', { interactive: true })).resolves.toBeNull();
+      expect(headArtifact).not.toHaveBeenCalled();
+      expect(getArtifact).not.toHaveBeenCalled();
+      expect(hydrated).toHaveLength(0);
+    });
+  });
+});
+
+describe('makeArtifactConsentGate (Phase C, §3 — shareAiCaches AND the §2.6 predicate)', () => {
+  it('shareAiCaches OFF → DENIED even with interactive / preEmbed / per-book all true', () => {
+    const gate = makeArtifactConsentGate({
+      isShareEnabled: () => false,
+      isPreEmbedEnabled: () => true,
+      getPerBookConsent: () => true,
+    });
+    expect(gate('bk-1', { interactive: true })).toBe(false);
+    expect(gate('bk-1', { interactive: false })).toBe(false);
+  });
+
+  it('shareAiCaches ON → follows the §2.6 predicate (interactive OR preEmbed OR per-book)', () => {
+    // interactive grants regardless of preEmbed/per-book.
+    expect(
+      makeArtifactConsentGate({
+        isShareEnabled: () => true,
+        isPreEmbedEnabled: () => false,
+        getPerBookConsent: () => undefined,
+      })('bk-1', { interactive: true }),
+    ).toBe(true);
+
+    // background: preEmbed grants…
+    expect(
+      makeArtifactConsentGate({
+        isShareEnabled: () => true,
+        isPreEmbedEnabled: () => true,
+        getPerBookConsent: () => undefined,
+      })('bk-1', { interactive: false }),
+    ).toBe(true);
+
+    // …or the per-book bit grants…
+    expect(
+      makeArtifactConsentGate({
+        isShareEnabled: () => true,
+        isPreEmbedEnabled: () => false,
+        getPerBookConsent: (b) => b === 'bk-1',
+      })('bk-1', { interactive: false }),
+    ).toBe(true);
+
+    // …but neither → denied (background, no preEmbed, no per-book bit).
+    expect(
+      makeArtifactConsentGate({
+        isShareEnabled: () => true,
+        isPreEmbedEnabled: () => false,
+        getPerBookConsent: () => undefined,
+      })('bk-1', { interactive: false }),
+    ).toBe(false);
   });
 });

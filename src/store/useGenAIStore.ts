@@ -78,6 +78,16 @@ interface GenAIState {
    */
   preEmbedLibrary: boolean;
   /**
+   * Persisted, default-OFF "Share AI caches across my devices" opt-in (Artifact
+   * Lane Phase C, shared-ai-cache-design.md §3). When ON it GATES UPLOAD (the
+   * ArtifactPublisher boot task that mirrors a book's whole-corpus embeddings
+   * into the user's OWN cloud so peers hydrate quota-free) AND tightens the
+   * Phase-B consult (the read path requires it too — consult+upload share the
+   * AND-shareAiCaches semantics). localStorage flag like preEmbedLibrary — NO
+   * IDB/CRDT change. Additive — tolerated by older persist blobs (no migrate).
+   */
+  shareAiCaches: boolean;
+  /**
    * In-memory injected snapshot provider (the READ mirror of `addLog`):
    * wireGoogle installs `() => governor.snapshot()`. NEVER persisted.
    */
@@ -111,6 +121,7 @@ interface GenAIState {
   setFgRpdHeadroom: (headroom: number) => void;
   setPauseAllGenAI: (paused: boolean) => void;
   setPreEmbedLibrary: (enabled: boolean) => void;
+  setShareAiCaches: (enabled: boolean) => void;
   setQuotaSnapshotProvider: (provider: () => Record<'fg' | 'bg', LaneUsage>) => void;
   /** Install the E2 BG-budget seam (in-memory; never persisted). */
   setBgBudgetProvider: (getBgQuotaLimits: () => QuotaLimits, getBgUsedRpd: () => number) => void;
@@ -137,6 +148,7 @@ type PersistedGenAIState = Pick<
   | 'fgRpdHeadroom'
   | 'pauseAllGenAI'
   | 'preEmbedLibrary'
+  | 'shareAiCaches'
 >;
 
 export const useGenAIStore = create<GenAIState>()(
@@ -161,6 +173,7 @@ export const useGenAIStore = create<GenAIState>()(
       fgRpdHeadroom: 0,
       pauseAllGenAI: false,
       preEmbedLibrary: false,
+      shareAiCaches: false,
       getQuotaSnapshot: undefined,
       getBgQuotaLimits: undefined,
       getBgUsedRpd: undefined,
@@ -192,6 +205,7 @@ export const useGenAIStore = create<GenAIState>()(
       setFgRpdHeadroom: (headroom) => set({ fgRpdHeadroom: headroom }),
       setPauseAllGenAI: (paused) => set({ pauseAllGenAI: paused }),
       setPreEmbedLibrary: (enabled) => set({ preEmbedLibrary: enabled }),
+      setShareAiCaches: (enabled) => set({ shareAiCaches: enabled }),
       setQuotaSnapshotProvider: (provider) => set({ getQuotaSnapshot: provider }),
       setBgBudgetProvider: (getBgQuotaLimits, getBgUsedRpd) =>
         set({ getBgQuotaLimits, getBgUsedRpd }),
@@ -219,6 +233,7 @@ export const useGenAIStore = create<GenAIState>()(
         fgRpdHeadroom: state.fgRpdHeadroom,
         pauseAllGenAI: state.pauseAllGenAI,
         preEmbedLibrary: state.preEmbedLibrary,
+        shareAiCaches: state.shareAiCaches,
       }),
       /**
        * v0 → v1: strip the legacy persisted `logs` (full prompts, base64

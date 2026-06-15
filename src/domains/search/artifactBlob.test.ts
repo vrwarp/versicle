@@ -16,9 +16,11 @@ import { describe, it, expect } from 'vitest';
 import {
   contentKey,
   parseArtifactBlob,
+  serializeArtifactBlob,
   ARTIFACT_HEADER_VERSION,
   type ArtifactBlobHeader,
   type ArtifactStamp,
+  type SerializableEmbeddingRow,
 } from './artifactBlob';
 
 const STAMP: ArtifactStamp = {
@@ -190,5 +192,104 @@ describe('corruption guard (§2.4 bit-rot rejection)', () => {
     const requested = await contentKey({ contentHash, ...STAMP });
     const rederived = await contentKey({ contentHash, ...STAMP });
     expect(rederived).toBe(requested);
+  });
+});
+
+describe('serializeArtifactBlob <-> parseArtifactBlob round-trip (Phase C)', () => {
+  /** Copy a typed array into a standalone (non-shared) ArrayBuffer. */
+  function toArrayBuffer(view: ArrayBufferView): ArrayBuffer {
+    const out = new ArrayBuffer(view.byteLength);
+    new Uint8Array(out).set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
+    return out;
+  }
+
+  /**
+   * A `cache_embeddings` row in the serializer's input shape, with the section
+   * binaries as raw standalone ArrayBuffers (the persisted shape) to exercise
+   * the buffer path.
+   */
+  function row(
+    sections: { href: string; sectionTextHash: string; vectors: Int8Array; scales: Float32Array }[],
+  ): SerializableEmbeddingRow {
+    return {
+      model: STAMP.model,
+      dims: STAMP.dims,
+      quant: STAMP.quant,
+      extractionVersion: STAMP.extractionVersion,
+      sections: sections.map((s) => ({
+        href: s.href,
+        sectionTextHash: s.sectionTextHash,
+        vectors: toArrayBuffer(s.vectors),
+        scales: toArrayBuffer(s.scales),
+      })),
+    };
+  }
+
+  it('recovers every header field + per-section int8 vectors and float32 scales bytes', () => {
+    const v0 = Int8Array.from([12, -34, 56, -78]);
+    const s0 = Float32Array.from([0.0123]);
+    const v1 = Int8Array.from([1, 2, 3, 4, -5, -6, -7, -8]);
+    const s1 = Float32Array.from([0.5, 0.25]);
+    const bytes = serializeArtifactBlob(
+      row([
+        { href: 'ch1.xhtml', sectionTextHash: 'h1', vectors: v0, scales: s0 },
+        { href: 'ch2.xhtml', sectionTextHash: 'h2', vectors: v1, scales: s1 },
+      ]),
+    );
+
+    const parsed = parseArtifactBlob(bytes);
+    expect(parsed.header.headerVersion).toBe(ARTIFACT_HEADER_VERSION);
+    expect(parsed.header.model).toBe(STAMP.model);
+    expect(parsed.header.dims).toBe(STAMP.dims);
+    expect(parsed.header.quant).toBe('int8-pervec');
+    expect(parsed.header.extractionVersion).toBe(STAMP.extractionVersion);
+    expect(parsed.header.sections.map((s) => s.href)).toEqual(['ch1.xhtml', 'ch2.xhtml']);
+    expect(parsed.header.sections.map((s) => s.sectionTextHash)).toEqual(['h1', 'h2']);
+
+    const ch1 = parsed.sectionBytes('ch1.xhtml')!;
+    expect(Array.from(new Int8Array(ch1.vectors))).toEqual([12, -34, 56, -78]);
+    expect(Array.from(new Float32Array(ch1.scales))).toEqual([Math.fround(0.0123)]);
+
+    const ch2 = parsed.sectionBytes('ch2.xhtml')!;
+    expect(Array.from(new Int8Array(ch2.vectors))).toEqual([1, 2, 3, 4, -5, -6, -7, -8]);
+    expect(Array.from(new Float32Array(ch2.scales))).toEqual([0.5, 0.25]);
+  });
+
+  it('emits bytes BYTE-EQUAL to the hand-laid buildBlob fixture (the documented layout)', () => {
+    // The fixture IS the parse-side byte spec; pinning the writer to it proves
+    // serializeArtifactBlob is the exact inverse (including the 4-byte slice
+    // padding and vectors-before-scales ordering).
+    const sections = [
+      { href: 'ch1.xhtml', sectionTextHash: 'h1', vectors: Int8Array.from([12, -34, 56, -78]), scales: Float32Array.from([0.0123]) },
+      { href: 'ch2.xhtml', sectionTextHash: 'h2', vectors: Int8Array.from([1, 2, 3, 4, -5, -6, -7, -8]), scales: Float32Array.from([0.5, 0.25]) },
+    ];
+    const { bytes: fixture } = buildBlob(STAMP, sections);
+    const serialized = serializeArtifactBlob(row(sections));
+    expect(new Uint8Array(serialized)).toEqual(new Uint8Array(fixture));
+  });
+
+  it('round-trips a row whose binaries are typed-array VIEWS (repo read shape)', () => {
+    // The embeddingsRepo.get() read path hands back Int8Array/Float32Array views
+    // (not raw ArrayBuffers); serialize must read their bytes, never reinterpret
+    // float ELEMENTS as integers.
+    const viewRow: SerializableEmbeddingRow = {
+      model: STAMP.model,
+      dims: STAMP.dims,
+      quant: STAMP.quant,
+      extractionVersion: STAMP.extractionVersion,
+      sections: [
+        {
+          href: 'only.xhtml',
+          sectionTextHash: 'hh',
+          // Typed-array VIEWS (the runtime embeddingsRepo.get read shape).
+          vectors: Int8Array.from([9, -9, 1]),
+          scales: Float32Array.from([1.5, -2.25]),
+        },
+      ],
+    };
+    const parsed = parseArtifactBlob(serializeArtifactBlob(viewRow));
+    const sec = parsed.sectionBytes('only.xhtml')!;
+    expect(Array.from(new Int8Array(sec.vectors))).toEqual([9, -9, 1]);
+    expect(Array.from(new Float32Array(sec.scales))).toEqual([1.5, -2.25]);
   });
 });

@@ -45,6 +45,31 @@ const logger = createLogger('ArtifactConsult');
 /** Whether the read-path consult is consented for a book (§2.6). */
 type ConsentGate = (bookId: string, opts: { interactive: boolean }) => boolean;
 
+/**
+ * Build the shared Artifact-Lane consent gate (Phase C, design §3). It ANDs the
+ * "Share AI caches across my devices" master switch into the §2.6 read-path
+ * predicate, so BOTH the consult (probe + hydrate) AND the publisher upload gate
+ * require shareAiCaches ON:
+ *
+ *   gate(bookId, {interactive}) =
+ *     isShareEnabled() && (interactive || isPreEmbedEnabled() || perBook === true)
+ *
+ * shareAiCaches OFF → DENIED regardless of interactive/preEmbed/per-book consent
+ * (the Phase-B consult is TIGHTENED: a hydrate while shareAiCaches is OFF is now
+ * forbidden even on an interactive gesture). PURE/store-free — app/ injects the
+ * three store reads; reused by the consult wiring (wireGoogle) and the
+ * ArtifactPublisher boot task so consult+upload share one gating semantics.
+ */
+export function makeArtifactConsentGate(deps: {
+  isShareEnabled(): boolean;
+  isPreEmbedEnabled(): boolean;
+  getPerBookConsent(bookId: string): boolean | undefined;
+}): ConsentGate {
+  return (bookId, { interactive }) =>
+    deps.isShareEnabled() &&
+    (interactive || deps.isPreEmbedEnabled() || deps.getPerBookConsent(bookId) === true);
+}
+
 export interface ArtifactConsultDeps {
   /**
    * The artifact-lane backend handle, or `null` when sync is off / not

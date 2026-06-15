@@ -136,6 +136,9 @@ export interface GenAISettingsTabProps {
     // Semantic Search — library-wide background pre-embed opt-in (E3)
     preEmbedLibrary: boolean;
     onPreEmbedLibraryChange: (enabled: boolean) => void;
+    // Shared AI cache — cross-device embedding-blob upload opt-in (Phase C, §8.4)
+    shareAiCaches: boolean;
+    onShareAiCachesChange: (enabled: boolean) => void;
 }
 
 export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
@@ -171,7 +174,9 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
     onPauseAllGenAIChange,
     meters,
     preEmbedLibrary,
-    onPreEmbedLibraryChange
+    onPreEmbedLibraryChange,
+    shareAiCaches,
+    onShareAiCachesChange
 }) => {
     const contentTypes: ContentType[] = ['reference'];
 
@@ -520,6 +525,29 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                         id="genai-preembed"
                                         checked={preEmbedLibrary}
                                         onCheckedChange={onPreEmbedLibraryChange}
+                                    />
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5 max-w-md">
+                                        <label htmlFor="genai-share-ai-caches" className="text-sm font-medium">
+                                            Share AI caches across my devices
+                                        </label>
+                                        <p className="text-xs text-muted-foreground">
+                                            When ON, the <strong>whole-book embeddings</strong> a device builds
+                                            (the full-corpus search vectors, roughly ~251&nbsp;KB per book — far
+                                            heavier than the small annotation/progress data normal sync uploads)
+                                            are uploaded to <strong>your own cloud</strong>, so your other devices
+                                            can <strong>hydrate them without re-spending Gemini quota</strong>.
+                                            Nothing is shared with anyone else — the cache lands only in your own
+                                            Firebase project, content-addressed by the book and embedding stamp.
+                                            Default OFF — no embeddings leave the device unless you turn this on.
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        id="genai-share-ai-caches"
+                                        checked={shareAiCaches}
+                                        onCheckedChange={onShareAiCachesChange}
                                     />
                                 </div>
                             </div>

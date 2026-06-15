@@ -48,7 +48,9 @@ const GenAIPanel: React.FC = () => {
     pauseAllGenAI,
     setPauseAllGenAI,
     preEmbedLibrary,
-    setPreEmbedLibrary
+    setPreEmbedLibrary,
+    shareAiCaches,
+    setShareAiCaches
   } = useGenAIStore();
 
   const meters = useQuotaMeters();
@@ -116,6 +118,8 @@ const GenAIPanel: React.FC = () => {
       meters={meters}
       preEmbedLibrary={preEmbedLibrary}
       onPreEmbedLibraryChange={setPreEmbedLibrary}
+      shareAiCaches={shareAiCaches}
+      onShareAiCachesChange={setShareAiCaches}
     />
   );
 };

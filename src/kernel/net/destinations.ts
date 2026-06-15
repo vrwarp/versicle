@@ -233,7 +233,7 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
     ],
     via: 'sdk', // firebase SDK owns the HTTP/WebChannel transport
     purpose:
-      "Sync to the user's own Firebase project: Yjs doc (library inventory, progress, annotations incl. selected text), checkpoints, Cloud Storage snapshots",
+      "Sync to the user's own Firebase project: Yjs doc (library inventory, progress, annotations incl. selected text), checkpoints, Cloud Storage snapshots, and — when 'Share AI caches across my devices' is ON — the AI-derived content-addressed full-book embedding cache (Cloud Storage embeddings/{key}.bin blobs + their Firestore embedCache/{key} HEAD docs)",
     dataClass: 'book-derived',
     consent: 'oauth',
     timeoutMs: null,

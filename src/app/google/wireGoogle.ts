@@ -47,7 +47,7 @@ import { useGenAIStore } from '@store/useGenAIStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
 import { makeAiConsentResolver } from './aiConsent';
-import { makeArtifactConsult, setArtifactConsult } from './artifactConsult';
+import { makeArtifactConsult, makeArtifactConsentGate, setArtifactConsult } from './artifactConsult';
 import { peekSyncOrchestrator } from '@app/sync/createSync';
 import { bookContent } from '@data/repos/bookContent';
 import { searchTextRepo } from '@data/repos/searchText';
@@ -249,15 +249,17 @@ export function wireGoogleDomain(): void {
       },
       getLiveCorpus: (bookId) => searchTextRepo.get(bookId),
       putHydrated: (row, jobRow) => embeddingsRepo.putHydrated(row, jobRow),
-      // §2.6 read-path consent gate: the SAME predicate shape makeAiConsentResolver
-      // applies to the embed it replaces — per-book aiConsent bit OR the library
-      // preEmbed opt-in (bg) OR the interactive reader-open gesture (FG). A
-      // hydrate while OFF with no per-book bit is FORBIDDEN.
-      isConsented: (bookId, { interactive }) => {
-        if (interactive) return true;
-        if (useGenAIStore.getState().preEmbedLibrary) return true;
-        return usePreferencesStore.getState().aiConsent[bookId] === true;
-      },
+      // §2.6 read-path consent gate, TIGHTENED in Phase C (design §3): the §2.6
+      // predicate (per-book aiConsent bit OR the library preEmbed opt-in (bg) OR
+      // the interactive reader-open gesture (FG)) ANDed with the shareAiCaches
+      // master switch. shareAiCaches OFF → DENIED even on an interactive gesture
+      // — consult+upload share ONE gate (the ArtifactPublisher boot task builds
+      // its upload gate from the SAME makeArtifactConsentGate helper).
+      isConsented: makeArtifactConsentGate({
+        isShareEnabled: () => useGenAIStore.getState().shareAiCaches,
+        isPreEmbedEnabled: () => useGenAIStore.getState().preEmbedLibrary,
+        getPerBookConsent: (bookId) => usePreferencesStore.getState().aiConsent[bookId],
+      }),
     }),
   );
 }
