@@ -14,6 +14,13 @@
  *
  * Worker-safe like every repo: no store/UI imports; writes go through the
  * navigator.locks write-gate.
+ *
+ * Artifact Lane Phase B (§2.8): {@link EmbeddingsRepo.putHydrated} writes the
+ * embeddings row AND its `complete` job row in ONE gated cross-store
+ * transaction, so a cloud hydrate (consult-hit refill) can never leave a
+ * section the job marks done with absent vectors — the §2.8 skip-but-empty
+ * crash window that the two independent {@link EmbeddingsRepo.put}/
+ * {@link EmbeddingsRepo.putJob} transactions could otherwise open.
  */
 import { getConnection } from '../connection';
 import { write } from '../write-gate';
@@ -107,6 +114,29 @@ class EmbeddingsRepo {
     try {
       await write(['cache_embed_jobs'], (tx) => {
         tx.objectStore('cache_embed_jobs').put(row);
+      });
+    } catch (error) {
+      handleDbError(error);
+    }
+  }
+
+  /**
+   * Hydrate a book from a cloud artifact (Artifact Lane §2.8): write the
+   * embedding row AND its companion `complete` job row in ONE gated cross-store
+   * transaction (the SAME `write(['cache_embeddings','cache_embed_jobs'], …)`
+   * shape as {@link EmbeddingsRepo.delete}). Atomicity is the point: the legacy
+   * {@link EmbeddingsRepo.put}/{@link EmbeddingsRepo.putJob} are two
+   * INDEPENDENT single-store transactions, so a crash between them on the
+   * hydrate path could mark a section done in the job row while its vectors are
+   * absent — and resume-skip would `continue` it forever (silently
+   * un-searchable). One tx closes that window; the jobRow must mark ONLY the
+   * sections actually present in `row` complete (partial-hydrate correctness).
+   */
+  async putHydrated(row: CacheEmbeddingsRow, jobRow: CacheEmbedJobsRow): Promise<void> {
+    try {
+      await write(['cache_embeddings', 'cache_embed_jobs'], (tx) => {
+        tx.objectStore('cache_embeddings').put(row);
+        tx.objectStore('cache_embed_jobs').put(jobRow);
       });
     } catch (error) {
       handleDbError(error);

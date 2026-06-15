@@ -144,6 +144,51 @@ describe('embeddingsRepo', () => {
     await expect(embeddingsRepo.getJob('bk-survivor')).resolves.toEqual(job('bk-survivor'));
   });
 
+  it('putHydrated writes BOTH stores in one atomic cross-store transaction (§2.8)', async () => {
+    const hydrated = row('bk-hydrated');
+    const jobRow = job('bk-hydrated');
+
+    await embeddingsRepo.putHydrated(hydrated, jobRow);
+
+    // Both the vectors AND the completed job row landed.
+    const readRow = await embeddingsRepo.get('bk-hydrated');
+    const readJob = await embeddingsRepo.getJob('bk-hydrated');
+    expect(readRow).toMatchObject({ bookId: 'bk-hydrated', model: 'gemini-embedding-001' });
+    expect(readJob).toEqual(jobRow);
+    // The vectors re-wrap correctly (the hydrate row uses the same packed shape).
+    expect(Array.from(readRow!.sections[0].vectors)).toEqual([12, -34, 56, -78]);
+  });
+
+  it('crash-window self-heal: putHydrated marks ONLY present sections complete (no skip-but-empty)', async () => {
+    // A PARTIAL hydrate (reconciliation dropped a diverged section): the row
+    // carries only ch1, and the jobRow must mark ONLY ch1 complete — so the
+    // indexer re-embeds the dropped ch2 on the next pass instead of resume-
+    // skipping a section whose vectors are absent. putHydrated is the primary
+    // fix (one atomic tx); the B-3 indexer guard is the backstop.
+    const partialRow: CacheEmbeddingsRow = {
+      ...row('bk-partial'),
+      // Only the first section survived reconciliation.
+      sections: [row('bk-partial').sections[0]],
+    };
+    const partialJob: CacheEmbedJobsRow = {
+      bookId: 'bk-partial',
+      extractionVersion: 3,
+      // The completed job lists ONLY the surviving section (ch1).
+      sections: [{ href: 'ch1.xhtml', embeddedThroughChunk: 1, sectionTextHash: 'hash-ch1' }],
+      updatedAt: 1_700_000_000_000,
+    };
+
+    await embeddingsRepo.putHydrated(partialRow, partialJob);
+
+    const readRow = await embeddingsRepo.get('bk-partial');
+    const readJob = await embeddingsRepo.getJob('bk-partial');
+    // The persisted row has ch1 but NOT ch2…
+    expect(readRow!.sections.map((s) => s.href)).toEqual(['ch1.xhtml']);
+    // …and the job marks ONLY ch1 complete (ch2 is absent from BOTH → re-embeds,
+    // never silently un-searchable: there is no job entry to resume-skip on).
+    expect(readJob!.sections.map((s) => s.href)).toEqual(['ch1.xhtml']);
+  });
+
   it('faithfully round-trips the {model,dims,quant,extractionVersion} stamp (invalidation lives in Phase F)', async () => {
     // Two rows with different stamps for the same logical book id family —
     // the repo surfaces whatever stamp is stored; it never invalidates.

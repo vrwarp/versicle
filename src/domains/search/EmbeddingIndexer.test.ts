@@ -157,8 +157,25 @@ describe('EmbeddingIndexer', () => {
       sections: [{ href: 's0.xhtml', embeddedThroughChunk: 1, sectionTextHash: 'h0' }],
       updatedAt: 0,
     };
+    // B-3: resume-skip requires the section's VECTORS to be present in the
+    // persisted row (a job-complete-but-vectors-absent section re-embeds). So
+    // the persisted row carries s0's vectors alongside the matching job entry.
+    const persisted: PersistedStamp = {
+      model: 'gemini-embedding-001',
+      dims: 4,
+      quant: 'int8-pervec',
+      sections: [
+        {
+          href: 's0.xhtml',
+          sectionTextHash: 'h0',
+          chunks: [{ cfiStart: '', cfiEnd: '', tokenCount: 9 }],
+          vectors: new Int8Array([1, 2, 3, 4]),
+          scales: new Float32Array([0.125]),
+        },
+      ],
+    };
     const { client, calls } = makeEmbeddingClient();
-    const { repo } = makeRepo(priorJob);
+    const { repo } = makeRepo(priorJob, persisted);
     const indexer = new EmbeddingIndexer({
       embeddingClient: client,
       textSource: makeTextSource(sections),
@@ -168,8 +185,44 @@ describe('EmbeddingIndexer', () => {
     });
 
     await indexer.enqueue('bk-1');
-    // s0 is skipped (matched hash); only s1 is embedded.
+    // s0 is skipped (matched hash + vectors present); only s1 is embedded.
     expect(calls).toHaveLength(1);
+  });
+
+  it('B-3 self-heal: a job-complete section whose VECTORS are absent re-embeds (skip-but-empty)', async () => {
+    // The §2.8 crash window: the job marks s0 complete but the persisted row has
+    // NO s0 section (a crash between the two legacy writes, or a partial
+    // hydrate). The guard must treat s0 as a MISS and re-embed, not continue
+    // forever leaving it silently un-searchable.
+    const sections = [section('s0.xhtml', 'h0')];
+    const priorJob: CacheEmbedJobsRow = {
+      bookId: 'bk-1',
+      extractionVersion: 3,
+      sections: [{ href: 's0.xhtml', embeddedThroughChunk: 1, sectionTextHash: 'h0' }],
+      updatedAt: 0,
+    };
+    // Stamp matches the live config (so it is NOT a whole-row re-embed), but the
+    // sections list is empty — s0's vectors never landed.
+    const persisted: PersistedStamp = {
+      model: 'gemini-embedding-001',
+      dims: 4,
+      quant: 'int8-pervec',
+      sections: [],
+    };
+    const { client, calls } = makeEmbeddingClient();
+    const { repo, puts } = makeRepo(priorJob, persisted);
+    const indexer = new EmbeddingIndexer({
+      embeddingClient: client,
+      textSource: makeTextSource(sections),
+      embeddingsRepo: repo,
+      quantize,
+      getConfig: config,
+    });
+
+    await indexer.enqueue('bk-1');
+    // s0 re-embedded (the absent vectors are now materialized).
+    expect(calls).toHaveLength(1);
+    expect(puts[puts.length - 1].sections.map((s) => s.href)).toContain('s0.xhtml');
   });
 
   it('re-embeds a section whose hash changed (re-extracted content)', async () => {
@@ -316,8 +369,22 @@ describe('EmbeddingIndexer', () => {
         sections: [{ href: 's0.xhtml', embeddedThroughChunk: 1, sectionTextHash: 'h0' }],
         updatedAt: 0,
       };
-      // Stamp matches the live config → the per-section resume-skip still holds.
-      const persisted: PersistedStamp = { model: 'gemini-embedding-001', dims: 4, quant: 'int8-pervec' };
+      // Stamp matches the live config → the per-section resume-skip still holds,
+      // PROVIDED s0's vectors are actually present in the persisted row (B-3).
+      const persisted: PersistedStamp = {
+        model: 'gemini-embedding-001',
+        dims: 4,
+        quant: 'int8-pervec',
+        sections: [
+          {
+            href: 's0.xhtml',
+            sectionTextHash: 'h0',
+            chunks: [{ cfiStart: '', cfiEnd: '', tokenCount: 9 }],
+            vectors: new Int8Array([1, 2, 3, 4]),
+            scales: new Float32Array([0.125]),
+          },
+        ],
+      };
       const { client, calls } = makeEmbeddingClient();
       const { repo } = makeRepo(priorJob, persisted);
       const indexer = new EmbeddingIndexer({
@@ -426,6 +493,72 @@ describe('EmbeddingIndexer', () => {
     expect(sec.chunks[0].cfiStart).toBe('');
     expect(sec.chunks[0].tokenCount).toBeGreaterThan(0);
     expect(sec.sectionTextHash).toBe('h0');
+  });
+
+  describe('shared-AI-cache consult (Artifact Lane B-7, FG zero-quota path)', () => {
+    it('full hit: enqueue() returns WITHOUT calling embed() (no acquire, no quota)', async () => {
+      const sections = [section('s0.xhtml', 'h0'), section('s1.xhtml', 'h1')];
+      const { client, calls } = makeEmbeddingClient();
+      const { repo, puts, jobPuts } = makeRepo();
+      const probe = vi.fn(async () => true);
+      const hydrate = vi.fn(async () => true);
+      const indexer = new EmbeddingIndexer({
+        embeddingClient: client,
+        textSource: makeTextSource(sections),
+        embeddingsRepo: repo,
+        quantize,
+        getConfig: config,
+        consult: { probe, hydrate },
+      });
+
+      await indexer.enqueue('bk-hit');
+
+      // The consult fired and hydrated; embed() was NEVER called.
+      expect(probe).toHaveBeenCalledWith('bk-hit');
+      expect(hydrate).toHaveBeenCalledWith('bk-hit');
+      expect(calls).toHaveLength(0);
+      // The indexer itself wrote nothing (hydrate owns the local row write).
+      expect(puts).toHaveLength(0);
+      expect(jobPuts).toHaveLength(0);
+    });
+
+    it('probe miss: falls through to the normal embed loop', async () => {
+      const sections = [section('s0.xhtml', 'h0')];
+      const { client, calls } = makeEmbeddingClient();
+      const { repo } = makeRepo();
+      const probe = vi.fn(async () => false);
+      const hydrate = vi.fn(async () => true);
+      const indexer = new EmbeddingIndexer({
+        embeddingClient: client,
+        textSource: makeTextSource(sections),
+        embeddingsRepo: repo,
+        quantize,
+        getConfig: config,
+        consult: { probe, hydrate },
+      });
+
+      await indexer.enqueue('bk-miss');
+      expect(probe).toHaveBeenCalledWith('bk-miss');
+      expect(hydrate).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(1); // embedded normally
+    });
+
+    it('probe hit but hydrate fails: falls through to the embed loop', async () => {
+      const sections = [section('s0.xhtml', 'h0')];
+      const { client, calls } = makeEmbeddingClient();
+      const { repo } = makeRepo();
+      const indexer = new EmbeddingIndexer({
+        embeddingClient: client,
+        textSource: makeTextSource(sections),
+        embeddingsRepo: repo,
+        quantize,
+        getConfig: config,
+        consult: { probe: async () => true, hydrate: async () => false },
+      });
+
+      await indexer.enqueue('bk-partial');
+      expect(calls).toHaveLength(1); // hydrate failed → embedded
+    });
   });
 
   it('drives end-to-end through the MockEmbeddingClient deterministic fixture', async () => {

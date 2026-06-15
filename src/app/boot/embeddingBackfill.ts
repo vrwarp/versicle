@@ -28,6 +28,7 @@ import { ACTIVE_DEVICE_WINDOW_MS } from '@app/quota/embedSpendReconciler';
 import { NetRateLimitedError } from '~types/errors';
 import { EmbeddingIndexer } from '@domains/search';
 import { getEmbeddingClient } from '@domains/google';
+import { getArtifactConsult } from '@app/google/artifactConsult';
 import { SearchEngine } from '@lib/search-engine';
 import { searchTextRepo } from '@data/repos/searchText';
 import { embeddingsRepo } from '@data/repos/embeddings';
@@ -73,6 +74,19 @@ export interface EmbeddingBackfillDeps {
   getBgUsedRpd(): number;
   /** Embed one book's corpus on the bg lane (EmbeddingIndexer.enqueue port). */
   enqueue(bookId: string, opts: { interactive: false; lane: 'bg' }): Promise<void>;
+  /**
+   * Shared-AI-cache HEAD probe (Artifact Lane B-6/H-1): does a hydratable
+   * artifact exist for this book? Consulted BEFORE the cross-device RPD gate so
+   * a SATURATED-quota run still hydrates probe-hit books quota-free. Returns
+   * `false` (degrade to embed) when sync is off / not connected / no contentHash
+   * / consult unwired.
+   */
+  probeArtifact(bookId: string): Promise<boolean>;
+  /**
+   * Download + materialize the local row from the artifact (quota-free).
+   * Returns `true` on a successful hydrate; `false` falls through to embed.
+   */
+  hydrateFromArtifact(bookId: string): Promise<boolean>;
   /** Cooperative cancel + live re-check (opt-in flipped off / shutdown). */
   shouldContinue(): boolean;
 }
@@ -99,21 +113,34 @@ export async function runEmbeddingBackfill(deps: EmbeddingBackfillDeps): Promise
   for (const bookId of deps.listBooks()) {
     if (!deps.shouldContinue()) return;
 
+    // Loaded-but-unread: a local binary is present AND progress is below the
+    // ceiling (the FG indexer targets the open/read books). getOffloadedStatus
+    // is an async IDB read — done lazily per candidate to avoid a boot burst.
+    // Filtered BEFORE the RPD gate so the shared-cache consult below only ever
+    // probes the books the bg lane would actually embed.
+    const progress = deps.getProgress(bookId) ?? 0;
+    if (progress >= UNREAD_PROGRESS_CEILING) continue;
+    if (!(await deps.hasLocalBinary(bookId))) continue;
+
+    // Shared-AI-cache consult — HOISTED ABOVE THE A6 GATE (Artifact Lane H-1,
+    // §2.4): a probe-hit book takes the quota-free hydrate path and is `continue`d
+    // BEFORE the cross-device RPD pre-flight, so a SATURATED-quota run
+    // (remaining<=0) still hydrates peer-embedded books at zero cost — the exact
+    // case this design exists for. Only a probe-miss / partial / failed hydrate
+    // falls through to the RPD gate + embed.
+    if (await deps.probeArtifact(bookId)) {
+      if (await deps.hydrateFromArtifact(bookId)) continue;
+    }
+
     // Cross-device RPD pre-flight (A6): the governor uses ONE full-projectRPD
     // provider for both lanes, so the cross-device ceiling is enforced HERE as
-    // an admission gate (remaining = bgLimits.rpd - bg.rpd already spent).
+    // an admission gate (remaining = bgLimits.rpd - bg.rpd already spent). Only
+    // probe-miss/partial books that fell through the consult above reach it.
     const remaining = deps.getBgLimits().rpd - deps.getBgUsedRpd();
     if (remaining <= 0) {
       logger.info('Background embedding paused: cross-device bg RPD ceiling reached.');
       return;
     }
-
-    // Loaded-but-unread: a local binary is present AND progress is below the
-    // ceiling (the FG indexer targets the open/read books). getOffloadedStatus
-    // is an async IDB read — done lazily per candidate to avoid a boot burst.
-    const progress = deps.getProgress(bookId) ?? 0;
-    if (progress >= UNREAD_PROGRESS_CEILING) continue;
-    if (!(await deps.hasLocalBinary(bookId))) continue;
 
     try {
       // ALWAYS interactive:false (the §8.4.1 invariant) on the bg lane.
@@ -194,6 +221,20 @@ export const embeddingBackfillTask: BootTask = {
           useGenAIStore.getState().getBgQuotaLimits?.() ?? { rpm: 0, tpm: 0, rpd: 0 },
         getBgUsedRpd: () => useGenAIStore.getState().getBgUsedRpd?.() ?? 0,
         enqueue: (bookId, opts) => indexer.enqueue(bookId, undefined, opts),
+        // Shared-AI-cache consult (B-6/B-11): hoisted into the loop ABOVE the A6
+        // gate. interactive:false (a background path is NEVER interactive:true,
+        // the §8.4.1 invariant) and the adapter's §2.6 gate is preEmbed-OR-
+        // per-book. Unwired (sync/Google not composed) → probe false → degrade
+        // to embed, so the consult never blocks the bg lane.
+        probeArtifact: (bookId) =>
+          getArtifactConsult()?.probeArtifact(bookId, { interactive: false }) ??
+          Promise.resolve(false),
+        hydrateFromArtifact: async (bookId) => {
+          const row = await getArtifactConsult()?.hydrateFromArtifact(bookId, {
+            interactive: false,
+          });
+          return row != null;
+        },
         shouldContinue: () => !cancelled && useGenAIStore.getState().preEmbedLibrary,
       }).catch((err) => {
         logger.warn('Embedding backfill failed (will retry next boot):', err);

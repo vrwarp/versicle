@@ -26,6 +26,7 @@ import { ReadingSessionRecorder } from '@domains/reader/session/ReadingSessionRe
 import type { ReaderCommands } from '@domains/reader/ui/ReaderCommands';
 import { SearchSession, createWorkerSearchEngineFactory, EmbeddingIndexer } from '@domains/search';
 import { getEmbeddingClient, type EmbeddingClient } from '@domains/google';
+import { getArtifactConsult } from '@app/google/artifactConsult';
 import { registerChineseReading, getBookBaseLanguage } from '@domains/chinese';
 import type { PinyinPosition } from '@domains/chinese/types';
 import type { BookMetadata } from '~types/book';
@@ -299,6 +300,22 @@ export function useReaderController(
       getConfig: () => {
         const s = useGenAIStore.getState();
         return { model: s.embeddingModel, dims: s.embeddingDims };
+      },
+      // Shared-AI-cache consult (Artifact Lane B-7/B-10): consult the BYO cloud
+      // cache BEFORE spending Gemini quota on a reader-open embed. interactive:
+      // true — the reader-open IS the user gesture that satisfies the §2.6
+      // read-path consent gate. Unwired (sync/Google not composed) → probe false
+      // → degrade to embed, so the no-sync reader path is unchanged.
+      consult: {
+        probe: (bookId) =>
+          getArtifactConsult()?.probeArtifact(bookId, { interactive: true }) ??
+          Promise.resolve(false),
+        hydrate: async (bookId) => {
+          const row = await getArtifactConsult()?.hydrateFromArtifact(bookId, {
+            interactive: true,
+          });
+          return row != null;
+        },
       },
     });
     searchSessionRef.current = new SearchSession({

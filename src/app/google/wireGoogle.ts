@@ -47,6 +47,13 @@ import { useGenAIStore } from '@store/useGenAIStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
 import { makeAiConsentResolver } from './aiConsent';
+import { makeArtifactConsult, setArtifactConsult } from './artifactConsult';
+import { peekSyncOrchestrator } from '@app/sync/createSync';
+import { bookContent } from '@data/repos/bookContent';
+import { searchTextRepo } from '@data/repos/searchText';
+import { embeddingsRepo } from '@data/repos/embeddings';
+import { CURRENT_QUANT } from '@domains/search';
+import { TTS_EXTRACTION_VERSION } from '@lib/ingestion/sentence-extraction';
 import { createLogger } from '@lib/logger';
 
 let wired = false;
@@ -212,6 +219,45 @@ export function wireGoogleDomain(): void {
       // unread book can be backfilled. Read fresh so a settings flip takes
       // effect on the next egress.
       isLibraryPreEmbedEnabled: () => useGenAIStore.getState().preEmbedLibrary,
+    }),
+  );
+
+  // Shared-AI-cache READ-side adapter (Artifact Lane Phase B, shared-ai-cache-
+  // design.md §2.4/§2.6): consult the BYO cloud cache BEFORE spending Gemini
+  // quota and hydrate the local row on a hit. The store/manifest/backend edges
+  // live HERE (README §2 rule 3); the boot loop + reader controller inject the
+  // installed singleton's port. READ-ONLY in Phase B — no upload (Phase C).
+  setArtifactConsult(
+    makeArtifactConsult({
+      // The connected backend handle, or null when sync is off / not connected.
+      // peekSyncOrchestrator never CREATES the orchestrator (no-sync = null =
+      // cheap no-network short-circuit). Read fresh per call.
+      getBackend: () => peekSyncOrchestrator()?.getConnectedArtifactBackend() ?? null,
+      getManifest: (bookId) => bookContent.getManifest(bookId),
+      // The live embedding-space stamp: {model,dims} from the GenAI settings
+      // (read fresh, GG-8), the int8 quant literal, and the current extraction
+      // version (the same TTS_EXTRACTION_VERSION the corpus rows are stamped
+      // with — see extract.ts) so the contentKey matches the publisher's.
+      getStamp: () => {
+        const s = useGenAIStore.getState();
+        return {
+          model: s.embeddingModel,
+          dims: s.embeddingDims,
+          quant: CURRENT_QUANT,
+          extractionVersion: TTS_EXTRACTION_VERSION,
+        };
+      },
+      getLiveCorpus: (bookId) => searchTextRepo.get(bookId),
+      putHydrated: (row, jobRow) => embeddingsRepo.putHydrated(row, jobRow),
+      // §2.6 read-path consent gate: the SAME predicate shape makeAiConsentResolver
+      // applies to the embed it replaces — per-book aiConsent bit OR the library
+      // preEmbed opt-in (bg) OR the interactive reader-open gesture (FG). A
+      // hydrate while OFF with no per-book bit is FORBIDDEN.
+      isConsented: (bookId, { interactive }) => {
+        if (interactive) return true;
+        if (useGenAIStore.getState().preEmbedLibrary) return true;
+        return usePreferencesStore.getState().aiConsent[bookId] === true;
+      },
     }),
   );
 }

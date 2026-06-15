@@ -71,6 +71,11 @@ function makeDeps(overrides: Partial<EmbeddingBackfillDeps> = {}) {
     enqueue: vi.fn(async (bookId, opts) => {
       enqueued.push({ bookId, opts });
     }),
+    // Artifact Lane B-6: the shared-cache consult defaults to a MISS so the
+    // existing cases (which exercise the embed lane) are unchanged. The H-1
+    // suite overrides probeArtifact to a HIT.
+    probeArtifact: async () => false,
+    hydrateFromArtifact: async () => false,
     shouldContinue: () => true,
     ...overrides,
   };
@@ -170,5 +175,80 @@ describe('runEmbeddingBackfill (E2)', () => {
     });
     await runEmbeddingBackfill(deps);
     expect(captured).toEqual(['b1']);
+  });
+});
+
+describe('runEmbeddingBackfill shared-AI-cache consult (Artifact Lane H-1)', () => {
+  it('a SATURATED-quota run (remaining<=0) STILL hydrates a probe-HIT book and never enqueues/spends', async () => {
+    // The consult is hoisted ABOVE the A6 gate, so even with zero RPD headroom a
+    // peer-embedded (probe-hit) book hydrates quota-free. This is the exact case
+    // a downstream-of-gate consult (the H-1 bug) would skip.
+    const probed: string[] = [];
+    const hydrated: string[] = [];
+    let bgRpdQueried = false;
+    const { deps, enqueued } = makeDeps({
+      listBooks: () => ['b1'],
+      // Quota fully consumed: bgLimits.rpd - bgUsedRpd <= 0.
+      getBgLimits: () => ({ ...LIMITS, rpd: 100 }),
+      getBgUsedRpd: () => {
+        bgRpdQueried = true;
+        return 100;
+      },
+      probeArtifact: async (bookId) => {
+        probed.push(bookId);
+        return true;
+      },
+      hydrateFromArtifact: async (bookId) => {
+        hydrated.push(bookId);
+        return true;
+      },
+    });
+
+    await runEmbeddingBackfill(deps);
+
+    // The book was hydrated quota-free…
+    expect(probed).toEqual(['b1']);
+    expect(hydrated).toEqual(['b1']);
+    // …and NEVER enqueued (no embed → no acquire → no embedSpend). The RPD
+    // pre-flight was never even reached for this book (continue before the gate).
+    expect(enqueued).toHaveLength(0);
+    expect(bgRpdQueried).toBe(false);
+  });
+
+  it('a probe-MISS book under remaining<=0 is skipped (the gate still bites the embed lane)', async () => {
+    const { deps, enqueued } = makeDeps({
+      listBooks: () => ['b1'],
+      getBgLimits: () => ({ ...LIMITS, rpd: 100 }),
+      getBgUsedRpd: () => 100,
+      probeArtifact: async () => false, // miss → falls through to the A6 gate
+    });
+    await runEmbeddingBackfill(deps);
+    expect(enqueued).toHaveLength(0); // remaining<=0 → never enqueued
+  });
+
+  it('a probe-HIT whose hydrate FAILS falls through to the embed lane (with headroom)', async () => {
+    const { deps, enqueued } = makeDeps({
+      listBooks: () => ['b1'],
+      probeArtifact: async () => true,
+      hydrateFromArtifact: async () => false, // partial/failed hydrate
+    });
+    await runEmbeddingBackfill(deps);
+    // Hydrate failed → fell through to embed (ample default quota).
+    expect(enqueued.map((e) => e.bookId)).toEqual(['b1']);
+  });
+
+  it('a probe-HIT is consulted ONLY after the loaded-but-unread filter (never probes a read book)', async () => {
+    const probed: string[] = [];
+    const { deps } = makeDeps({
+      listBooks: () => ['b1', 'b2'],
+      getProgress: (id) => ({ b1: 0.8, b2: 0 })[id] ?? null, // b1 read, b2 unread
+      probeArtifact: async (bookId) => {
+        probed.push(bookId);
+        return false;
+      },
+    });
+    await runEmbeddingBackfill(deps);
+    // b1 was filtered out (read) BEFORE the consult; only b2 is probed.
+    expect(probed).toEqual(['b2']);
   });
 });

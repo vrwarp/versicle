@@ -457,6 +457,30 @@ export class SyncOrchestrator {
   isSignedIn(): boolean {
     return this.getAuthStatus() === 'signed-in';
   }
+
+  /**
+   * The artifact-lane backend handle for the app-layer ArtifactConsult adapter
+   * (shared-ai-cache-design.md §2.4; Phase B). Additive and read-only — it
+   * exposes ONLY the `{ backend, workspaceId }` pair the consult needs to call
+   * the C3 artifact trio (headArtifact/getArtifact).
+   *
+   * Returns `null` unless the orchestrator is live on a definite destination:
+   * connected AND signed-in (a current user) AND an active workspace selected.
+   * The null-gate is deliberate — it ensures the returned backend is bound to
+   * the right uid and the path is scoped to the right workspace, so a consult
+   * can never read an artifact under the wrong account/workspace (the §2.4/M-7
+   * precondition). Adds NO new C3 method (the three sync contract suites stay
+   * green); it only re-exposes the existing {@link getBackend} +
+   * {@link getActiveWorkspaceId} the connect path already uses.
+   */
+  getConnectedArtifactBackend(): { backend: SyncBackend; workspaceId: string } | null {
+    if (!this.isConnected()) return null;
+    const user = this.getCurrentUser();
+    if (!user) return null;
+    const workspaceId = this.getActiveWorkspaceId();
+    if (!workspaceId) return null;
+    return { backend: this.getBackend(user.uid), workspaceId };
+  }
 }
 
 /**

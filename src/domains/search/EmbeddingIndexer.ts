@@ -92,6 +92,23 @@ interface EmbeddingsRepoPort {
 /** The int8 quantizer port (B3 SearchEngine.quantizeInt8PerVector). */
 type QuantizePort = (vec: Float32Array) => { vectors: Int8Array; scale: number };
 
+/**
+ * The OPTIONAL shared-AI-cache consult port (Artifact Lane B-7): an injected
+ * app-layer adapter that probes the BYO cloud cache and, on a hit, hydrates the
+ * local `cache_embeddings`/`cache_embed_jobs` rows from the downloaded blob —
+ * BEFORE any Gemini quota is spent. Optional so existing indexer constructions
+ * (which pass no consult) compile and behave exactly as before. Both calls are
+ * the app layer's responsibility to consent-gate (§2.6) and to short-circuit to
+ * `false` cheaply when there is no connected backend (the common no-sync case
+ * adds zero latency).
+ */
+interface EmbeddingConsultPort {
+  /** Cheap HEAD probe: is a hydratable artifact available for this book? */
+  probe(bookId: string): Promise<boolean>;
+  /** Download + materialize the row; `true` when the local row was hydrated. */
+  hydrate(bookId: string): Promise<boolean>;
+}
+
 interface EmbeddingIndexerDeps {
   embeddingClient: EmbeddingClientPort;
   textSource: SearchTextSource;
@@ -99,6 +116,12 @@ interface EmbeddingIndexerDeps {
   quantize: QuantizePort;
   /** Embedding stamp config (read once per enqueue). */
   getConfig: () => { model: string; dims: number };
+  /**
+   * The optional shared-AI-cache consult (B-7). When present, `enqueue`
+   * consults it BEFORE the embed loop; on a full hit it hydrates and RETURNS
+   * without calling {@link EmbeddingClientPort.embed} — the FG zero-quota path.
+   */
+  consult?: EmbeddingConsultPort;
 }
 
 export class EmbeddingIndexer {
@@ -123,6 +146,17 @@ export class EmbeddingIndexer {
 
     const corpus = await this.deps.textSource.get(bookId);
     if (!corpus || corpus.sections.length === 0) return;
+
+    // Shared-AI-cache consult (B-7 / §2.4): BEFORE the embed loop, ask the
+    // injected adapter whether a hydratable artifact exists; on a full hit the
+    // adapter materializes the local rows and we RETURN without ever calling
+    // embed() — no acquire, no quota spend (the FG zero-quota path). The adapter
+    // owns the consent gate (§2.6) and short-circuits cheaply when no backend is
+    // connected, so the common no-sync case adds no latency. A probe-miss or a
+    // partial/failed hydrate falls through to the normal embed loop below.
+    if (this.deps.consult && (await this.deps.consult.probe(bookId))) {
+      if (await this.deps.consult.hydrate(bookId)) return;
+    }
 
     const sections = corpus.sections;
     const order = orderOutward(sections.length, spineOrdinalFrom(currentCfi, sections.length));
@@ -164,15 +198,31 @@ export class EmbeddingIndexer {
         : [];
     const jobSections: CacheEmbedJobsRow['sections'] = job ? [...job.sections] : [];
 
+    // §2.8 resume-skip defensive guard (Artifact Lane B-3): the set of hrefs
+    // whose VECTORS actually live in the persisted embeddings row. A section the
+    // job marks complete but that is ABSENT here is the skip-but-empty crash
+    // window (a crash between the legacy put/putJob, or a partial hydrate) — it
+    // must be treated as a MISS and re-embed, NOT resume-skipped forever.
+    const persistedHrefs = new Set(
+      (!stampMismatch && persisted?.sections ? persisted.sections : []).map((s) => s.href),
+    );
+
     for (const idx of order) {
       const section = sections[idx];
       const sectionTextHash = section.sectionTextHash ?? '';
 
       // Resume-skip: the job already records this {href, sectionTextHash} as
-      // fully embedded (design §2.1). A re-extracted section (hash mismatch) or
-      // a legacy job row without the stamp falls through and re-embeds.
+      // fully embedded (design §2.1) AND its vectors are present in the
+      // persisted row (the B-3 guard above). A re-extracted section (hash
+      // mismatch), a legacy job row without the stamp, OR a job-complete-but-
+      // vectors-absent section (§2.8) falls through and re-embeds.
       const prior = job?.sections.find((s) => s.href === section.href);
-      if (prior && sectionTextHash !== '' && prior.sectionTextHash === sectionTextHash) {
+      if (
+        prior &&
+        sectionTextHash !== '' &&
+        prior.sectionTextHash === sectionTextHash &&
+        persistedHrefs.has(section.href)
+      ) {
         continue;
       }
 
