@@ -1,4 +1,4 @@
-import { egress, type DestinationId } from '@kernel/net';
+import { egress, retryAfterMs, type DestinationId } from '@kernel/net';
 import type { QuotaGovernor } from '@kernel/quota';
 import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice, SpeechSegment, Unsubscribe } from './types';
 import { AudioElementPlayer } from '../AudioElementPlayer';
@@ -291,19 +291,15 @@ export abstract class BaseCloudProvider implements ITTSProvider {
 
     if (!response.ok) {
       if (response.status === 429) {
-        ttsGovernor?.recordCooldown(this.retryAfterMs(response));
+        // The cloud-TTS 429 default falls back to the synthesis timeout (30s) —
+        // passed explicitly so the shared kernel/net helper keeps no baked-in
+        // default (each caller owns its own constant).
+        ttsGovernor?.recordCooldown(retryAfterMs(response, SYNTHESIS_TIMEOUT_MS));
       }
       throw new Error(`TTS API Error: ${response.status} ${response.statusText}`);
     }
 
     ttsGovernor?.commit('fg', estimate);
     return await response.blob();
-  }
-
-  /** Parse a 429's `Retry-After` (delta-seconds) into ms; default 30s. */
-  private retryAfterMs(response: Response): number {
-    const header = response.headers.get('Retry-After');
-    const seconds = header ? Number(header) : NaN;
-    return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : SYNTHESIS_TIMEOUT_MS;
   }
 }

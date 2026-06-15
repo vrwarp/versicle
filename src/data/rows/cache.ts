@@ -197,6 +197,14 @@ const embeddingChunkSchema = z.looseObject({
   cfiStart: z.string(),
   cfiEnd: z.string(),
   tokenCount: z.number(),
+  /** Inclusive/exclusive CHAR offsets of the chunk in the section text, written
+   *  by the indexer from the chunker output so the read path (semanticRank) need
+   *  not re-segment to recover charOffset/matchLength. ADDITIVE on this
+   *  `z.looseObject` cache row: legacy rows lack them and fall back to
+   *  re-segmentation — no migration, no DB_VERSION bump. (A stamp/
+   *  extractionVersion change still re-embeds, so they never go stale silently.) */
+  charStart: z.number().optional(),
+  charEnd: z.number().optional(),
 });
 
 const embeddingSectionSchema = z.looseObject({
@@ -240,7 +248,14 @@ export type CacheEmbeddingsRow = {
   sections: {
     href: string;
     sectionTextHash: string;
-    chunks: { cfiStart: string; cfiEnd: string; tokenCount: number }[];
+    chunks: {
+      cfiStart: string;
+      cfiEnd: string;
+      tokenCount: number;
+      /** Additive char offsets (see embeddingChunkSchema): legacy rows omit them. */
+      charStart?: number;
+      charEnd?: number;
+    }[];
     vectors: ArrayBuffer;
     scales: ArrayBuffer;
   }[];

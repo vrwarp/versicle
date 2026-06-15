@@ -339,18 +339,20 @@ export function useReaderController(
   }, []);
 
   // Foreground document embedding (Increment C §4): once the reader is open,
-  // embed the document corpus OUTWARD from the current reading position. The
-  // indexer's {href, sectionTextHash} resume-skip makes a re-trigger on
-  // section change cheap (already-embedded sections are skipped), and it
-  // no-ops when the embedding client is unconfigured. bookId/CFI are passed as
-  // ARGUMENTS — the trigger context lives here in app/, never in domains/search.
+  // embed the document corpus OUTWARD from the current reading position.
+  // Reader-open per bookId is the trigger (cleanup #9): the CFI is captured at
+  // RUN time via useReadingStateStore.getState(), so the section title is NOT a
+  // dependency — re-running on every section change only re-walked the
+  // resume-skip for already-embedded sections. The indexer no-ops when the
+  // embedding client is unconfigured. bookId/CFI are passed as ARGUMENTS — the
+  // trigger context lives here in app/, never in domains/search.
   useEffect(() => {
     if (!isReady || !bookId) return;
     const currentCfi = useReadingStateStore.getState().getProgress(bookId)?.currentCfi;
     void searchSession.enqueueEmbedding(bookId, currentCfi).catch((e) => {
       logger.error('Embedding indexer failed', e);
     });
-  }, [isReady, bookId, currentSectionTitle, searchSession]);
+  }, [isReady, bookId, searchSession]);
 
   // Chinese reading registration (Phase 6 §7, PR-10): the app layer wires
   // the feature module to the engine's content seam — and ONLY for books

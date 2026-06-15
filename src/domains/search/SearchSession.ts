@@ -51,6 +51,12 @@ const BATCH_SIZE = 50;
 /** Top-k chunk rows kept per section before RRF fusion (Increment D §2). */
 const SEMANTIC_SECTION_LIMIT = 50;
 
+/** The corpus row shape `textSource.get` resolves (mirrors {@link SearchTextSource}). */
+type CorpusRow = Awaited<ReturnType<SearchTextSource['get']>>;
+
+/** FIFO cap for the per-session corpus cache — generous for one reader open. */
+const CORPUS_CACHE_MAX = 8;
+
 export class SearchSession {
   private handle: SearchEngineHandle | null = null;
   private unsubscribeError: (() => void) | null = null;
@@ -64,6 +70,17 @@ export class SearchSession {
    * daily RPD budget (design §5.2/§8.1).
    */
   private readonly queryEmbeddingCache = new QueryEmbeddingCache();
+  /**
+   * Per-session corpus cache (cleanup #10c): promise-memoizes the full-corpus
+   * read (`textSource.get`) per bookId so repeated semantic queries in one
+   * reading session don't re-load the entire book text on every keystroke.
+   * Insertion-ordered (FIFO eviction); cleared on {@link reset} so a
+   * disposed/failed session re-loads. A rejected read is evicted so a retry
+   * re-calls. The extractionVersion stamp guard inside {@link semanticRank}
+   * still invalidates on corpus drift, so this never serves a semantically
+   * stale corpus past a re-extraction.
+   */
+  private readonly corpusCache = new Map<string, Promise<CorpusRow>>();
 
   constructor(
     private readonly opts: {
@@ -104,6 +121,35 @@ export class SearchSession {
       this.unsubscribeError = this.handle.onError?.((error) => this.handleEngineFailure(error)) ?? null;
     }
     return this.handle.engine;
+  }
+
+  /**
+   * A {@link SearchTextSource} that promise-memoizes the per-bookId corpus read
+   * against {@link corpusCache} (cleanup #10c), so a stream of semantic queries
+   * in one session reads the full corpus at most once per book. A rejected read
+   * is evicted (a retry re-calls); the cache is FIFO-bounded and cleared on
+   * {@link reset}. `base` is the real injected source.
+   */
+  private memoizingTextSource(base: SearchTextSource): SearchTextSource {
+    return {
+      get: (bookId: string): Promise<CorpusRow> => {
+        const cached = this.corpusCache.get(bookId);
+        if (cached) return cached;
+
+        const promise = base.get(bookId).catch((error) => {
+          // Don't poison the cache with a failed read — a retry must re-call.
+          this.corpusCache.delete(bookId);
+          throw error;
+        });
+        this.corpusCache.set(bookId, promise);
+        while (this.corpusCache.size > CORPUS_CACHE_MAX) {
+          const oldest = this.corpusCache.keys().next().value;
+          if (oldest === undefined) break;
+          this.corpusCache.delete(oldest);
+        }
+        return promise;
+      },
+    };
   }
 
   /** True when the session has a live index for the book. */
@@ -190,7 +236,9 @@ export class SearchSession {
         engine,
         embeddingClient,
         embeddingsSource,
-        textSource,
+        // Memoize the full-corpus read per book for this session (cleanup #10c):
+        // repeated queries reuse the loaded corpus instead of re-reading it.
+        textSource: this.memoizingTextSource(textSource),
         quantize,
         queryCache: this.queryEmbeddingCache,
         config: { model: semanticConfig.model, dims: semanticConfig.dims },
@@ -242,6 +290,9 @@ export class SearchSession {
     this.handle = null;
     this.indexedBooks.clear();
     this.pendingIndexes.clear();
+    // Drop the per-session corpus cache (cleanup #10c) so a disposed/failed
+    // session re-loads the corpus on its next semantic query.
+    this.corpusCache.clear();
   }
 
   private assertLive(generation: number): void {

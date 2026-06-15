@@ -20,3 +20,8 @@ export {
   // props (both typed by it), so it is no longer a knip-dead export.
   type LaneUsage,
 } from './QuotaGovernor';
+// The shared midnight-PT day key (Phase A DRY). Re-exported so the app-layer
+// embedSpendReconciler imports the SAME helper the kernel governor uses (its
+// cross-device stamps must match the kernel structurally). Consumer:
+// app/quota/embedSpendReconciler.ts — knip-clean.
+export { ptDayString } from './ptDay';

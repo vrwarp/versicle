@@ -15,7 +15,7 @@
  * {@link QuotaLimitsProvider} closure the governor already calls.
  */
 import type { DeviceInfo } from '~types/device';
-import type { QuotaLimits, QuotaLimitsProvider } from '@kernel/quota';
+import { ptDayString, type QuotaLimits, type QuotaLimitsProvider } from '@kernel/quota';
 
 /**
  * The §3.4 heartbeat-active recency window: a sibling device counts toward the
@@ -23,33 +23,6 @@ import type { QuotaLimits, QuotaLimitsProvider } from '@kernel/quota';
  * net-new constant — the device UI does not literally expose one.
  */
 export const ACTIVE_DEVICE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
-
-/** Pad an integer to two digits for the day string. */
-function pad2(n: number): string {
-  return n < 10 ? `0${n}` : String(n);
-}
-
-/**
- * The midnight-PT day key (`YYYY-MM-DD` in America/Los_Angeles) for an epoch.
- * MUST match the kernel's day key (QuotaGovernor.ts:142-156) so cross-device
- * stamps align — a mismatched key would silently drop sibling spend. Uses
- * `Intl` so DST is handled by the runtime rather than a hand-rolled offset.
- */
-function ptDayString(epochMs: number): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Los_Angeles',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date(epochMs));
-  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '';
-  const year = get('year');
-  const month = get('month');
-  const day = get('day');
-  // en-CA already yields YYYY-MM-DD, but assemble defensively so locale data
-  // changes cannot reorder the key.
-  return `${year}-${pad2(Number(month))}-${pad2(Number(day))}`;
-}
 
 /**
  * Sum `embedSpend.rpd` over OTHER devices that are heartbeat-active

@@ -207,9 +207,17 @@ export class EmbeddingIndexer {
       const embeddedSection = {
         href: section.href,
         sectionTextHash,
-        // CFI population is Phase D (the chunker cannot emit CFI from text):
-        // char offsets are recoverable from cache_search_text.
-        chunks: chunks.map((c) => ({ cfiStart: '', cfiEnd: '', tokenCount: c.tokenCount })),
+        // CFI population is Phase D (the chunker cannot emit CFI from text);
+        // the CHAR offsets ARE persisted (additive, no IDB bump) so the read
+        // path (semanticRank) can recover charOffset/matchLength WITHOUT
+        // re-segmenting. Legacy rows lack them and fall back to re-segmentation.
+        chunks: chunks.map((c) => ({
+          cfiStart: '',
+          cfiEnd: '',
+          tokenCount: c.tokenCount,
+          charStart: c.charStart,
+          charEnd: c.charEnd,
+        })),
         vectors: packed.buffer,
         scales: scales.buffer,
       };

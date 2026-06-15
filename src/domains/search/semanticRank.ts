@@ -5,10 +5,14 @@
  * int8 (the B3 per-vector quantizer, injected as a port), loads the book's
  * packed int8 vectors (injected embeddings repo), and ranks each section's
  * chunk rows via `engine.rankInt8` (which crosses the worker seam like
- * searchDetailed). Each `{ href, row, cosine }` hit is mapped back to a
- * DetailedSearchResult by RE-RUNNING the deterministic {@link chunkSection} on
- * the section's text (same boundaries as the indexer → row `r` ↔ chunk `r`) to
- * recover charStart/charEnd → charOffset/matchLength + excerpt.
+ * searchDetailed). The per-section rankInt8 calls run CONCURRENTLY (Promise.all
+ * over the Comlink seam, cleanup #8) but results are assembled in embedded-
+ * section ORDER, so the fused ordering is byte-identical to the sequential pass.
+ * Each `{ href, row, cosine }` hit is mapped back to a DetailedSearchResult by
+ * reading the chunk's PERSISTED charStart/charEnd (cleanup #10b — written by the
+ * indexer) → charOffset/matchLength + excerpt; LEGACY rows lacking the offsets
+ * fall back to RE-RUNNING the deterministic {@link chunkSection} on the
+ * section's text (same boundaries as the indexer → row `r` ↔ chunk `r`).
  *
  * CFI is left UNSET — resolved lazily at click time by
  * app/reader/searchNavigation.ts (resolveResultCfi against the live view), so
@@ -22,9 +26,12 @@
  *  - skips the whole book when the embedded row's extractionVersion != the
  *    live corpus extractionVersion (stamp mismatch, design §8.2).
  *
- * Imports only sibling search modules + ~types — no store/kernel-state edge.
+ * Imports only sibling search modules + ~types + the shared @lib/search-engine
+ * excerpt helper (the domains→lib edge workerFactory.ts already uses) — no
+ * store/kernel-state edge.
  */
 import type { DetailedSearchResult } from '~types/search';
+import { getExcerpt } from '@lib/search-engine';
 import { chunkSection } from './chunker';
 import type { SearchEngineProtocol, SearchTextSource } from './protocol';
 import type { QueryEmbeddingCache } from './queryEmbeddingCache';
@@ -37,9 +44,6 @@ import {
 
 /** The query profile — MUST match the indexer's 'document' profile asymmetry. */
 const QUERY_PROFILE = 'query' as const;
-
-/** ±40-char context window, mirroring SearchEngine.getExcerpt (search-engine.ts:134). */
-const EXCERPT_CONTEXT = 40;
 
 export interface SemanticRankArgs {
   engine: SearchEngineProtocol;
@@ -111,33 +115,87 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
   // Section text by href, for re-chunking + excerpt slicing.
   const textByHref = new Map(corpus.sections.map((s) => [s.href, { title: s.title, text: s.text }]));
 
-  const results: DetailedSearchResult[] = [];
-
+  // Resolve each embedded section to {source, a row→offsets getter, vectors}
+  // BEFORE ranking, dropping sections the corpus no longer carries or whose
+  // chunk↔row alignment cannot be trusted (they degrade to regex-only). The
+  // resolved list is kept in embedded-section ORDER so the fused output ordering
+  // is identical to the sequential pass even though the rankInt8 awaits below
+  // run concurrently.
+  type Resolved = {
+    section: (typeof embedded.sections)[number];
+    source: { title: string; text: string };
+    offsetsFor: (row: number) => { charStart: number; charEnd: number } | undefined;
+  };
+  const resolved: Resolved[] = [];
   for (const section of embedded.sections) {
     const source = textByHref.get(section.href);
     if (!source) continue; // corpus no longer has this section
 
-    // Re-run the deterministic chunker with the SAME defaults the indexer used
-    // (EmbeddingIndexer.ts:99-103 — no options) so row r ↔ chunk r aligns.
-    const { chunks } = chunkSection({ href: section.href, title: source.title, text: source.text });
-
     const rowCount = Math.floor(section.vectors.length / dims);
-    // Stale corpus vs vectors: re-chunk count != row count → can't trust the
-    // row↔chunk alignment for this section. Degrade it to regex-only.
+
+    // Prefer the PERSISTED char offsets (cleanup #10b): when EVERY chunk row
+    // carries them (new rows) we recover charOffset/matchLength with NO
+    // re-segmentation. Presence is checked with `typeof === 'number'` (NOT
+    // truthiness) since charStart=0 is valid for the first chunk. The alignment
+    // guard becomes `chunks.length === rowCount` — one chunk entry per vector
+    // row by construction; a corrupt/partial row still degrades to regex-only.
+    const persistedChunks = section.chunks;
+    const hasPersistedOffsets =
+      persistedChunks.length === rowCount &&
+      persistedChunks.every(
+        (c) => typeof c.charStart === 'number' && typeof c.charEnd === 'number',
+      );
+    if (hasPersistedOffsets) {
+      resolved.push({
+        section,
+        source,
+        offsetsFor: (row) => {
+          const c = persistedChunks[row];
+          return c ? { charStart: c.charStart as number, charEnd: c.charEnd as number } : undefined;
+        },
+      });
+      continue;
+    }
+
+    // LEGACY rows (no persisted offsets): re-run the deterministic chunker with
+    // the SAME defaults the indexer used (EmbeddingIndexer — no options) so row
+    // r ↔ chunk r aligns. Stale corpus vs vectors (re-chunk count != row count)
+    // degrades this section to regex-only.
+    const { chunks } = chunkSection({ href: section.href, title: source.title, text: source.text });
     if (chunks.length !== rowCount) continue;
+    resolved.push({
+      section,
+      source,
+      offsetsFor: (row) => {
+        const c = chunks[row];
+        return c ? { charStart: c.charStart, charEnd: c.charEnd } : undefined;
+      },
+    });
+  }
 
-    const ranked = engine.rankInt8(section.vectors, section.scales, queryVec, queryScale, dims, limit);
-    const top = await ranked;
+  // Rank every section CONCURRENTLY across the Comlink worker seam (cleanup #8),
+  // then consume the resolved `top` arrays in their ORIGINAL section order so the
+  // result ordering is byte-identical to the prior sequential loop.
+  const tops = await Promise.all(
+    resolved.map((r) =>
+      Promise.resolve(
+        engine.rankInt8(r.section.vectors, r.section.scales, queryVec, queryScale, dims, limit),
+      ),
+    ),
+  );
 
-    for (const { row } of top) {
-      const chunk = chunks[row];
-      if (!chunk) continue;
-      const charOffset = chunk.charStart;
-      const matchLength = chunk.charEnd - chunk.charStart;
+  const results: DetailedSearchResult[] = [];
+  for (let s = 0; s < resolved.length; s++) {
+    const { section, source, offsetsFor } = resolved[s];
+    for (const { row } of tops[s]) {
+      const offsets = offsetsFor(row);
+      if (!offsets) continue;
+      const charOffset = offsets.charStart;
+      const matchLength = offsets.charEnd - offsets.charStart;
       results.push({
         href: section.href,
         sectionTitle: source.title,
-        excerpt: excerptFor(source.text, charOffset, matchLength),
+        excerpt: getExcerpt(source.text, charOffset, matchLength),
         charOffset,
         matchLength,
         // 1-based ordinal within the section (chunk row + 1); CFI stays unset.
@@ -147,11 +205,4 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
   }
 
   return results;
-}
-
-/** ±EXCERPT_CONTEXT context window, sliced from the ORIGINAL section text. */
-function excerptFor(text: string, index: number, length: number): string {
-  const start = Math.max(0, index - EXCERPT_CONTEXT);
-  const end = Math.min(text.length, index + length + EXCERPT_CONTEXT);
-  return (start > 0 ? '...' : '') + text.substring(start, end) + (end < text.length ? '...' : '');
 }

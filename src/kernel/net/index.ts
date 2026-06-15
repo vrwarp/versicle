@@ -12,5 +12,5 @@ export {
   type EgressOptions,
   type ConsentResolver,
 } from './NetworkGateway';
-export { NetConsentRequiredError } from './errors';
+export { NetConsentRequiredError, retryAfterMs } from './errors';
 export { localFetch } from './local';

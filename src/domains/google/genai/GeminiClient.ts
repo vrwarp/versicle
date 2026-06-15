@@ -16,7 +16,7 @@
  *  - Logs are redacted (inlineData → {byteCount, hash}) BEFORE they reach
  *    the injected sink (privacy D3).
  */
-import { egress, type EgressFn } from '@kernel/net';
+import { egress, retryAfterMs, type EgressFn } from '@kernel/net';
 import type { QuotaGovernor } from '@kernel/quota';
 import {
   GenAIHttpError,
@@ -84,13 +84,6 @@ function estTokens(prompt: GenAIPrompt): number {
 
 /** Default cooldown when a 429 carries no usable `Retry-After` header. */
 const DEFAULT_COOLDOWN_MS = 30_000;
-
-/** Parse a 429's `Retry-After` (delta-seconds) into ms; fall back to a default. */
-function retryAfterMsFrom(response: Response): number {
-  const header = response.headers.get('Retry-After');
-  const seconds = header ? Number(header) : NaN;
-  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : DEFAULT_COOLDOWN_MS;
-}
 
 export interface GeminiClientDeps {
   getConfig: GenAIConfigProvider;
@@ -240,7 +233,7 @@ export class GeminiClient implements GenAIClient {
       // executeWithRetry's rotation path still sees it (the governor never
       // swallows the error the rotation loop branches on).
       if (response.status === 429) {
-        this.deps.governor?.recordCooldown(retryAfterMsFrom(response));
+        this.deps.governor?.recordCooldown(retryAfterMs(response, DEFAULT_COOLDOWN_MS));
       }
       throw new GenAIHttpError(
         body.error?.message || `Gemini request failed: ${response.status}`,

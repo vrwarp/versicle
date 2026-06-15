@@ -1,6 +1,24 @@
 import type { SearchSection, DetailedSearchResult, SearchBatchResult } from '~types/search';
 
 /**
+ * Build a context excerpt around a match, sliced from the ORIGINAL string with
+ * the ORIGINAL match offsets (so excerpts stay aligned even when lowercasing
+ * would change length — the Turkish-İ hazard). Shared (Increment cleanup #10a)
+ * by {@link SearchEngine.searchDetailed} (the regex path) and the search-side
+ * semantic ranker (semanticRank.ts), which previously kept a verbatim copy.
+ *
+ * @param text - The full text the match was found in.
+ * @param index - The start index of the match.
+ * @param length - The length of the match.
+ * @param context - Chars of context on each side (default 40).
+ */
+export function getExcerpt(text: string, index: number, length: number, context = 40): string {
+    const start = Math.max(0, index - context);
+    const end = Math.min(text.length, index + length + context);
+    return (start > 0 ? '...' : '') + text.substring(start, end) + (end < text.length ? '...' : '');
+}
+
+/**
  * In-memory full-text scan over a book's plain text (one entry per spine
  * section). Matching is a case-insensitive escaped-literal scan against the
  * ORIGINAL string (Phase 7 PR-S2): an escaped literal cannot backtrack — the
@@ -110,7 +128,7 @@ export class SearchEngine {
                 results.push({
                     href,
                     sectionTitle: section.title,
-                    excerpt: this.getExcerpt(section.text, match.index, match[0].length),
+                    excerpt: getExcerpt(section.text, match.index, match[0].length),
                     charOffset: match.index,
                     matchLength: match[0].length,
                     occurrence,
@@ -119,22 +137,6 @@ export class SearchEngine {
         }
 
         return { results, truncated };
-    }
-
-    /**
-     * Generates a context excerpt around the match, sliced from the ORIGINAL
-     * string with the ORIGINAL match offsets.
-     *
-     * @param text - The full text where the match was found.
-     * @param index - The start index of the match.
-     * @param length - The length of the match.
-     * @returns A string snippet surrounding the matched term.
-     */
-    private getExcerpt(text: string, index: number, length: number): string {
-        const start = Math.max(0, index - 40);
-        const end = Math.min(text.length, index + length + 40);
-
-        return (start > 0 ? '...' : '') + text.substring(start, end) + (end < text.length ? '...' : '');
     }
 
     /**

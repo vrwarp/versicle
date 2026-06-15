@@ -77,6 +77,42 @@ describe('chunkSection', () => {
     expect(sawOverlap).toBe(true);
   });
 
+  it('keeps overlap when a single sentence exceeds the target window (oversized run)', () => {
+    // A run of sentences each LONGER than the target window: every window is a
+    // single oversized sentence (j===i). The sentence-snapped overlap is then
+    // geometrically impossible (the next sentence starts at/after windowEnd), so
+    // the chunker must continue the next window from a MID-sentence offset inside
+    // the overlap zone — otherwise the overlap is silently lost (#7).
+    const big = `Big ${'wordy '.repeat(120)}tail.`; // ~735 chars, one sentence
+    const text = [big, big, big].join(' ');
+    const targetChars = 80 * 4; // 320 — each `big` is well over the target
+    const { chunks } = chunkSection(
+      { href: 'h', title: 't', text },
+      { targetTokens: 80, overlapPct: 0.15 },
+    );
+    expect(chunks.length).toBeGreaterThan(2);
+
+    let sawOverlap = false;
+    for (let i = 1; i < chunks.length; i++) {
+      // Forward progress always holds even across the oversized sentences.
+      expect(chunks[i].charStart).toBeGreaterThan(chunks[i - 1].charStart);
+      // No GAP: every window starts at/before the previous window ended.
+      expect(chunks[i].charStart).toBeLessThanOrEqual(chunks[i - 1].charEnd);
+      if (chunks[i].charStart < chunks[i - 1].charEnd) sawOverlap = true;
+    }
+    // The overlap is NOT silently lost for the oversized single sentences.
+    expect(sawOverlap).toBe(true);
+    // Char offsets still round-trip the source exactly (mid-sentence start ok).
+    for (const chunk of chunks) {
+      expect(chunk.text).toBe(text.slice(chunk.charStart, chunk.charEnd));
+    }
+    // Full coverage: first chunk at 0, last ends at text length.
+    expect(chunks[0].charStart).toBe(0);
+    expect(chunks[chunks.length - 1].charEnd).toBe(text.length);
+    // The oversized run is NOT re-chunked char-by-char into a flood of windows.
+    expect(chunks.length).toBeLessThan(text.length / targetChars + 5);
+  });
+
   it('covers the whole section: the first chunk starts at 0 and the last ends at text length', () => {
     const text = buildText(60);
     const { chunks } = chunkSection({ href: 'h', title: 't', text }, { targetTokens: 60 });

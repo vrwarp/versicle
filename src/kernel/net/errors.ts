@@ -80,3 +80,17 @@ export class NetOfflineError extends NetworkGatewayError {
     this.name = 'NetOfflineError';
   }
 }
+
+/**
+ * Parse a 429's `Retry-After` (delta-seconds) header into milliseconds, falling
+ * back to `defaultMs` when the header is missing/unparseable/negative (Phase A
+ * DRY). The default is a PARAMETER — each caller keeps its own named constant
+ * (GeminiClient: DEFAULT_COOLDOWN_MS; cloud-TTS: SYNTHESIS_TIMEOUT_MS) — so this
+ * helper never bakes one in. Imports NOTHING internal (`Response` is a DOM
+ * global) → honors kernel-imports-nothing.
+ */
+export function retryAfterMs(response: Response, defaultMs: number): number {
+  const header = response.headers.get('Retry-After');
+  const seconds = header ? Number(header) : NaN;
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : defaultMs;
+}

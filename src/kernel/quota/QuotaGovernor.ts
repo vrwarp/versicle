@@ -36,6 +36,7 @@
  * governor only ever asks the port for "today's usage".
  */
 import { NetRateLimitedError } from '~types/errors';
+import { ptDayString } from './ptDay';
 
 /** Foreground (interactive) or background (prefetch/auto) egress lane. */
 export type Lane = 'fg' | 'bg';
@@ -141,32 +142,6 @@ const WINDOW_MS = 60_000;
  * it is refused — leaves headroom for foreground (decision §3.6, fg preempts).
  */
 const BG_FRACTION = 0.5;
-
-/** Pad an integer to two digits for the day string. */
-function pad2(n: number): string {
-  return n < 10 ? `0${n}` : String(n);
-}
-
-/**
- * The midnight-PT day key (`YYYY-MM-DD` in America/Los_Angeles) for an epoch.
- * Uses `Intl` formatting so DST is handled by the runtime rather than a
- * hand-rolled offset (the off-by-one/DST hazard the plan calls out).
- */
-function ptDayString(epochMs: number): string {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Los_Angeles',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date(epochMs));
-  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '';
-  const year = get('year');
-  const month = get('month');
-  const day = get('day');
-  // en-CA already yields YYYY-MM-DD, but assemble defensively so locale data
-  // changes cannot reorder the key.
-  return `${year}-${pad2(Number(month))}-${pad2(Number(day))}`;
-}
 
 export class QuotaGovernor {
   /** Sliding per-lane request/token events (pruned to the 60 s window). */
