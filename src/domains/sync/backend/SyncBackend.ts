@@ -88,6 +88,36 @@ export interface PurgeReport {
   blobsDeleted: number;
 }
 
+// ─── Artifact lane (C3 method trio; shared-ai-cache-design.md §2.1) ───────────
+
+/**
+ * The HEAD-doc projection of one cached artifact: a cheap existence/stamp
+ * probe (`getDoc` on the `embedCache/{key}` doc) that avoids a Storage
+ * `list`. `exists` is always `true` on a returned head — a HEAD-doc miss is
+ * `null`, never `{ exists: false }`. Because {@link SyncBackend.putArtifact}
+ * writes the HEAD doc AFTER the Storage blob (HEAD-after-Storage), a HEAD hit
+ * implies the bytes are present.
+ */
+export interface ArtifactHead {
+  exists: true;
+  /** The content stamp re-asserted on consult (embedding-space stamp). */
+  stamp: string;
+  /** Byte length of the blob the HEAD doc points at. */
+  size: number;
+}
+
+/**
+ * Derive the HEAD-doc tail (`embedCache/{key}`) from a blob tail
+ * (`embeddings/{key}.bin`) — shared-ai-cache-design.md §2.1 keys both tiers
+ * by the same `{key}`. Used by {@link SyncBackend.putArtifact}
+ * implementations to write the companion HEAD doc alongside the Storage
+ * blob. Shared so both backends derive the sibling tail identically.
+ */
+export function artifactHeadTail(blobRelPath: string): string {
+  const key = blobRelPath.replace(/^embeddings\//, '').replace(/\.bin$/, '');
+  return `embedCache/${key}`;
+}
+
 export interface SyncBackend {
   /** The authenticated user this backend is bound to (post-auth). */
   readonly uid: string;
@@ -129,6 +159,51 @@ export interface SyncBackend {
    * blobs must survive). Idempotent and re-runnable.
    */
   purgeWorkspace(workspaceId: string): Promise<PurgeReport>;
+  /**
+   * Cheap existence/stamp probe of a cached artifact (the artifact lane —
+   * shared-ai-cache-design.md §2.1). `relPath` is the in-workspace tail of
+   * the HEAD doc (`embedCache/{key}`); the backend prefixes it with its own
+   * `users/{uid}/versicle/{workspaceId}/` root. Returns the HEAD-doc
+   * projection ({@link ArtifactHead}) or `null` on a HEAD-doc miss. Reads the
+   * Firestore HEAD doc only — never a Storage `list`. Because the HEAD doc is
+   * written AFTER the Storage blob (see {@link putArtifact}), a hit implies
+   * the bytes are present.
+   */
+  headArtifact(workspaceId: string, relPath: string): Promise<ArtifactHead | null>;
+  /**
+   * Mirror one content-addressed artifact into the workspace's BYO backend
+   * (shared-ai-cache-design.md §2.1/§2.3). `relPath` is the in-workspace tail
+   * of the blob (`embeddings/{key}.bin`); the backend prefixes it with its
+   * own `users/{uid}/versicle/{workspaceId}/` root and writes the companion
+   * HEAD doc at the sibling `embedCache/{key}` tail.
+   *
+   * **ifAbsent (idempotent / content-addressed):** head-before-put — when the
+   * HEAD doc is already present this is a no-op (§2.5: identical inputs →
+   * byte-identical content, so a concurrent duplicate upload is harmless).
+   *
+   * **Ordering is HEAD-after-Storage:** `uploadBytes` to Cloud Storage FIRST,
+   * THEN `setDoc` the HEAD doc, so a HEAD hit always implies the bytes
+   * landed (a crash between the two leaves a recoverable blob with no HEAD
+   * doc, never a HEAD doc pointing at absent bytes).
+   */
+  putArtifact(
+    workspaceId: string,
+    relPath: string,
+    bytes: ArrayBuffer | Uint8Array,
+    meta: { stamp: string; size: number }
+  ): Promise<void>;
+  /**
+   * Fetch a cached artifact's bytes (shared-ai-cache-design.md §2.4).
+   * `relPath` is the in-workspace tail of the blob (`embeddings/{key}.bin`);
+   * the backend prefixes it with its own workspace root.
+   *
+   * **Error taxonomy (§2.7) — OPPOSITE polarity to {@link isWorkspaceAlive}'s
+   * fail-safe:** a definitive miss (`storage/object-not-found`) returns
+   * `null` (the caller re-embeds); a transient/permission error THROWS (an
+   * offline blip or denied read must NOT be mistaken for a miss — never burn
+   * quota on a network hiccup).
+   */
+  getArtifact(workspaceId: string, relPath: string): Promise<ArrayBuffer | null>;
   /**
    * Attach a Y.Doc to the workspace's replicated document. Synchronous —
    * providers connect in the background and announce themselves via the

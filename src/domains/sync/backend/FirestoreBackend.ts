@@ -8,14 +8,22 @@
  *
  * This is the ONLY sync module that may import `firebase/firestore` or
  * `firebase/storage` (boundary: every other sync module talks
- * `SyncBackend`; the storage import exists solely for the P4-6 honest
- * delete's blob purge).
+ * `SyncBackend`). The storage import was delete-only (the P4-6 honest
+ * delete's blob purge: `getStorage`/`ref`/`listAll`/`deleteObject`); the
+ * artifact lane (shared-ai-cache-design.md §2.1, M-1) WIDENS it to
+ * read/write by ADDING `uploadBytes`/`getBytes` for putArtifact/getArtifact.
+ * FirestoreBackend remains the sole `firebase/storage` importer — no other
+ * sync module gains a storage import.
  *
  * Paths (the live layout — `~types/workspace.ts` documents the same):
  *   - metadata directory: `users/{uid}/workspaces/{workspaceId}`
  *   - replicated doc:     `users/{uid}/versicle/{workspaceId}` (+ `updates`,
  *     `history`, `maintenance`, `metadata` subcollections, managed by
  *     y-cinder)
+ *   - artifact blob:      `users/{uid}/versicle/{workspaceId}/embeddings/{key}.bin`
+ *     (Cloud Storage; swept by purgeStoragePrefix under the workspace prefix)
+ *   - artifact HEAD doc:  `users/{uid}/versicle/{workspaceId}/embedCache/{key}`
+ *     (Firestore; swept by the `embedCache` PURGE_SUBCOLLECTIONS entry)
  */
 import type * as Y from 'yjs';
 import { FireProvider } from 'y-cinder';
@@ -35,28 +43,42 @@ import {
   ref,
   listAll,
   deleteObject,
+  uploadBytes,
+  getBytes,
   type StorageReference,
 } from 'firebase/storage';
 import { getFirebaseApp, getFirestoreDb } from '@lib/sync/firebase-config';
 import { createLogger } from '@lib/logger';
 import type { WorkspaceMetadata } from '~types/workspace';
 import type {
+  ArtifactHead,
   ConnectOptions,
   PurgeReport,
   SyncBackend,
   SyncConnection,
 } from './SyncBackend';
-import { observeWorkspaceMetadata } from './SyncBackend';
+import { artifactHeadTail, observeWorkspaceMetadata } from './SyncBackend';
 import { createSyncConnectionEmitter } from './connectionEvents';
 
 const logger = createLogger('FirestoreBackend');
 
 /**
- * The y-cinder-managed subcollections an honest delete must sweep
- * (firestore.rules documents the same four; the legacy delete purged only
- * `updates` — sync.md debt #2).
+ * The Firestore subcollections an honest delete must sweep. The first four
+ * are y-cinder-managed (firestore.rules documents the same; the legacy
+ * delete purged only `updates` — sync.md debt #2). `embedCache` is the
+ * artifact-lane HEAD-doc subcollection (shared-ai-cache-design.md §2.7, H-3):
+ * `purgeStoragePrefix` is Storage-only and sweeps the blob for free under
+ * the workspace prefix, but the Firestore HEAD doc is NOT swept "for free" —
+ * it needs this explicit entry so a workspace delete leaves no orphaned
+ * HEAD docs.
  */
-const PURGE_SUBCOLLECTIONS = ['updates', 'history', 'maintenance', 'metadata'] as const;
+const PURGE_SUBCOLLECTIONS = [
+  'updates',
+  'history',
+  'maintenance',
+  'metadata',
+  'embedCache',
+] as const;
 
 /**
  * The provider event surface the adapter listens to. y-cinder's emitter is
@@ -79,6 +101,18 @@ export class FirestoreBackend implements SyncBackend {
 
   private docPath(workspaceId: string): string {
     return `users/${this.uid}/versicle/${workspaceId}`;
+  }
+
+  /**
+   * The full path of an artifact-lane object (blob or HEAD doc) from its
+   * in-workspace tail (`embeddings/{key}.bin` or `embedCache/{key}`):
+   * `users/{uid}/versicle/{workspaceId}/{relPath}` (shared-ai-cache-design.md
+   * §2.1). Both tiers live inside the workspace prefix so the blob is swept
+   * by purgeStoragePrefix and the HEAD doc by the `embedCache`
+   * PURGE_SUBCOLLECTIONS entry.
+   */
+  private artifactPath(workspaceId: string, relPath: string): string {
+    return `${this.docPath(workspaceId)}/${relPath}`;
   }
 
   async createWorkspace(meta: WorkspaceMetadata): Promise<void> {
@@ -250,6 +284,74 @@ export class FirestoreBackend implements SyncBackend {
       `Purged workspace ${workspaceId}: ${docsDeleted} docs, ${blobsDeleted} blobs.`
     );
     return { docsDeleted, blobsDeleted };
+  }
+
+  async headArtifact(
+    workspaceId: string,
+    relPath: string
+  ): Promise<ArtifactHead | null> {
+    const db = getFirestoreDb();
+    if (!db) throw new Error('Firestore not initialized');
+
+    // relPath is the HEAD-doc tail (`embedCache/{key}`) — a Firestore getDoc,
+    // never a Storage list.
+    const snapshot = await getDoc(doc(db, this.artifactPath(workspaceId, relPath)));
+    if (!snapshot.exists()) return null;
+    const data = snapshot.data();
+    return { exists: true, stamp: data.stamp as string, size: data.size as number };
+  }
+
+  async putArtifact(
+    workspaceId: string,
+    relPath: string,
+    bytes: ArrayBuffer | Uint8Array,
+    meta: { stamp: string; size: number }
+  ): Promise<void> {
+    const db = getFirestoreDb();
+    if (!db) throw new Error('Firestore not initialized');
+
+    // relPath is the blob tail (`embeddings/{key}.bin`); the companion HEAD
+    // doc is the sibling `embedCache/{key}` tail (§2.1).
+    const headRelPath = artifactHeadTail(relPath);
+
+    // ifAbsent: head-before-put. A HEAD hit means the bytes already landed
+    // (HEAD-after-Storage), so this is a no-op — content-addressed writes are
+    // byte-idempotent (§2.5).
+    if (await this.headArtifact(workspaceId, headRelPath)) return;
+
+    const app = getFirebaseApp();
+    if (!app) throw new Error('Firebase app not available');
+    const storage = getStorage(app);
+
+    // HEAD-after-Storage: upload the bytes FIRST, then write the HEAD doc, so
+    // a HEAD hit always implies the blob is present (a crash between the two
+    // leaves a recoverable blob with no HEAD doc).
+    await uploadBytes(ref(storage, this.artifactPath(workspaceId, relPath)), bytes);
+    await setDoc(doc(db, this.artifactPath(workspaceId, headRelPath)), {
+      stamp: meta.stamp,
+      size: meta.size,
+      createdAt: Date.now(),
+    });
+  }
+
+  async getArtifact(
+    workspaceId: string,
+    relPath: string
+  ): Promise<ArrayBuffer | null> {
+    const app = getFirebaseApp();
+    if (!app) throw new Error('Firebase app not available');
+    const storage = getStorage(app);
+
+    // relPath is the blob tail (`embeddings/{key}.bin`).
+    try {
+      return await getBytes(ref(storage, this.artifactPath(workspaceId, relPath)));
+    } catch (error) {
+      // §2.7 taxonomy (OPPOSITE polarity to isWorkspaceAlive's fail-safe): a
+      // definitive miss => null (caller re-embeds); transient/permission =>
+      // rethrow (never mistake an offline blip for a miss and burn quota).
+      if ((error as { code?: string })?.code === 'storage/object-not-found') return null;
+      throw error;
+    }
   }
 
   connect(ydoc: Y.Doc, workspaceId: string, opts: ConnectOptions): SyncConnection {

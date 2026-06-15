@@ -16,17 +16,25 @@
  * Storage layout (shared with the Playwright suite, which seeds/reads it):
  *  - `__VERSICLE_WORKSPACES__`: JSON WorkspaceMetadata[] directory
  *  - `versicle_mock_firestore_snapshot`: per-path doc snapshots/tombstones
+ *
+ * Artifact lane (shared-ai-cache-design.md §2.1): the trio is an in-memory
+ * `Map` round-trip (no real Cloud Storage tier — purgeWorkspace still
+ * reports `blobsDeleted:0`). It gives the shared C3 contract cases real
+ * put/head/get semantics WITHOUT an emulator, but the HEAD-after-Storage
+ * write ordering and the crash/offline fail-safes (§2.5/§2.7) are pinned
+ * ONLY by the emulator suite (syncBackendContract.emulator.test.ts).
  */
 import type * as Y from 'yjs';
 import { createLogger } from '@lib/logger';
 import type { WorkspaceMetadata } from '~types/workspace';
 import type {
+  ArtifactHead,
   ConnectOptions,
   PurgeReport,
   SyncBackend,
   SyncConnection,
 } from './SyncBackend';
-import { observeWorkspaceMetadata } from './SyncBackend';
+import { artifactHeadTail, observeWorkspaceMetadata } from './SyncBackend';
 import { createSyncConnectionEmitter } from './connectionEvents';
 import { MockFireProvider } from './MockFireProvider';
 
@@ -53,11 +61,37 @@ const readSnapshots = (): Record<string, MockSnapshotEntry> =>
 const writeSnapshots = (snapshots: Record<string, MockSnapshotEntry>): void =>
   localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshots));
 
+/**
+ * The artifact-lane in-memory store (shared-ai-cache-design.md §2.1): the
+ * mock has no real Cloud Storage tier, so the put/head/get round-trip is one
+ * `Map` keyed by the full artifact path. Module-level (not localStorage:
+ * ArrayBuffers don't serialize and the lane is test-only here);
+ * {@link clearMockArtifacts} wipes it for the harness's per-test reset,
+ * mirroring MockFireProvider.clearMockStorage.
+ */
+const artifactStore = new Map<string, { bytes: ArrayBuffer; stamp: string; size: number }>();
+
+/** Wipe the artifact-lane store (per-test reset; mirrors clearMockStorage). */
+export const clearMockArtifacts = (): void => {
+  artifactStore.clear();
+};
+
+/** Normalize a put payload to an owned ArrayBuffer copy (Uint8Array view → buffer). */
+const toArrayBuffer = (bytes: ArrayBuffer | Uint8Array): ArrayBuffer =>
+  bytes instanceof Uint8Array
+    ? bytes.slice().buffer
+    : bytes.slice(0);
+
 export class MockBackend implements SyncBackend {
   constructor(readonly uid: string) {}
 
   private docPath(workspaceId: string): string {
     return `users/${this.uid}/versicle/${workspaceId}`;
+  }
+
+  /** Full artifact path from an in-workspace tail (§2.1; mirrors FirestoreBackend). */
+  private artifactPath(workspaceId: string, relPath: string): string {
+    return `${this.docPath(workspaceId)}/${relPath}`;
   }
 
   async createWorkspace(meta: WorkspaceMetadata): Promise<void> {
@@ -122,9 +156,63 @@ export class MockBackend implements SyncBackend {
       delete entry.snapshotBase64;
       writeSnapshots(snapshots);
     }
+    // Sweep the artifact-lane HEAD docs (+ their in-Map "blobs") under this
+    // workspace's prefix — the mock mirror of the real backend's `embedCache`
+    // PURGE_SUBCOLLECTIONS entry (§2.7, H-3). Each Map entry stands in for one
+    // HEAD doc; counted as a doc (the mock has no separate Storage tier).
+    const prefix = `${this.docPath(workspaceId)}/`;
+    let artifactDocs = 0;
+    for (const key of [...artifactStore.keys()]) {
+      if (key.startsWith(prefix)) {
+        artifactStore.delete(key);
+        artifactDocs += 1;
+      }
+    }
     logger.info(`[Mock] Workspace purged: ${workspaceId} (hadData=${hadData})`);
-    // The mock's "subcollections" are its one snapshot blob; no Storage.
-    return { docsDeleted: hadData ? 1 : 0, blobsDeleted: 0 };
+    // The mock's "subcollections" are its one snapshot blob + artifact HEAD
+    // docs; no Storage tier.
+    return { docsDeleted: (hadData ? 1 : 0) + artifactDocs, blobsDeleted: 0 };
+  }
+
+  // Artifact lane (§2.1). The store is keyed by the HEAD-doc path so head/put/
+  // get all resolve to one canonical entry; put/get pass the blob tail and
+  // derive the sibling HEAD tail via artifactHeadTail (same as FirestoreBackend).
+
+  async headArtifact(
+    workspaceId: string,
+    relPath: string
+  ): Promise<ArtifactHead | null> {
+    // relPath is the HEAD-doc tail (`embedCache/{key}`).
+    const entry = artifactStore.get(this.artifactPath(workspaceId, relPath));
+    if (!entry) return null;
+    return { exists: true, stamp: entry.stamp, size: entry.size };
+  }
+
+  async putArtifact(
+    workspaceId: string,
+    relPath: string,
+    bytes: ArrayBuffer | Uint8Array,
+    meta: { stamp: string; size: number }
+  ): Promise<void> {
+    // relPath is the blob tail (`embeddings/{key}.bin`); key by the sibling
+    // HEAD-doc path so headArtifact finds it.
+    const headPath = this.artifactPath(workspaceId, artifactHeadTail(relPath));
+    // ifAbsent: a no-op if the key already exists (§2.5 content-addressed).
+    if (artifactStore.has(headPath)) return;
+    artifactStore.set(headPath, {
+      bytes: toArrayBuffer(bytes),
+      stamp: meta.stamp,
+      size: meta.size,
+    });
+  }
+
+  async getArtifact(
+    workspaceId: string,
+    relPath: string
+  ): Promise<ArrayBuffer | null> {
+    // relPath is the blob tail (`embeddings/{key}.bin`).
+    const headPath = this.artifactPath(workspaceId, artifactHeadTail(relPath));
+    return artifactStore.get(headPath)?.bytes ?? null;
   }
 
   connect(ydoc: Y.Doc, workspaceId: string, opts: ConnectOptions): SyncConnection {

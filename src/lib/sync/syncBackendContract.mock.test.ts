@@ -6,7 +6,7 @@
  * formerly duplicated here now live in (and are pinned through) the
  * backend itself.
  */
-import { MockBackend } from '@domains/sync/backend/MockBackend';
+import { MockBackend, clearMockArtifacts } from '@domains/sync/backend/MockBackend';
 import { MockFireProvider } from '@domains/sync/backend/MockFireProvider';
 import { CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
 import type { WorkspaceMetadata } from '~types/workspace';
@@ -24,6 +24,7 @@ function makeHarness(): SyncBackendContractHarness {
   // Fresh backend state per test.
   localStorage.removeItem(WORKSPACES_KEY);
   MockFireProvider.clearMockStorage();
+  clearMockArtifacts();
   MockFireProvider.setMockFailure(false);
   MockFireProvider.setSyncDelay(1);
 
@@ -80,15 +81,34 @@ function makeHarness(): SyncBackendContractHarness {
 
     isWorkspaceAlive: (workspaceId) => backend.isWorkspaceAlive(workspaceId),
 
-    // The mock's residual surface is its one snapshot blob per workspace.
+    // The artifact lane (C3 trio) — straight delegation to the backend's
+    // in-memory Map round-trip.
+    putArtifact: (workspaceId, relPath, bytes, meta) =>
+      backend.putArtifact(workspaceId, relPath, bytes, meta),
+    headArtifact: (workspaceId, relPath) => backend.headArtifact(workspaceId, relPath),
+    getArtifact: (workspaceId, relPath) => backend.getArtifact(workspaceId, relPath),
+
+    // The mock's residual surface is its one snapshot blob per workspace plus
+    // an artifact-lane HEAD doc (the embedCache residual the H-3 fix sweeps).
     seedResiduals: async (workspaceId) => {
       MockFireProvider.injectSnapshot(
         `users/${UID}/versicle/${workspaceId}`,
         btoa('residual-update-bytes')
       );
+      await backend.putArtifact(
+        workspaceId,
+        'embeddings/contract-key.bin',
+        new TextEncoder().encode('residual-embedding-bytes'),
+        { stamp: 'residual-stamp', size: 24 }
+      );
     },
-    countResiduals: async (workspaceId) =>
-      (await backend.probeHasData(workspaceId)) ? 1 : 0,
+    countResiduals: async (workspaceId) => {
+      let count = (await backend.probeHasData(workspaceId)) ? 1 : 0;
+      // The embedCache HEAD-doc residual (its blob lives in the same Map entry;
+      // the mock has no separate Storage tier, so count it as one residual).
+      if (await backend.headArtifact(workspaceId, 'embedCache/contract-key')) count += 1;
+      return count;
+    },
     purgeWorkspace: (workspaceId) => backend.purgeWorkspace(workspaceId),
 
     injectConnectionEvent: (workspaceId, event, payload) =>
@@ -99,6 +119,7 @@ function makeHarness(): SyncBackendContractHarness {
     dispose: () => {
       localStorage.removeItem(WORKSPACES_KEY);
       MockFireProvider.clearMockStorage();
+      clearMockArtifacts();
     },
   };
 }
@@ -113,6 +134,7 @@ describeSyncBackendContract({
     savedEvent: true,
     eventInjection: true,
     purge: true,
+    artifacts: true,
   },
   makeHarness,
 });

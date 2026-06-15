@@ -53,6 +53,15 @@ const SYNC_CONNECTION_ERROR_EVENTS = [
 ] as const satisfies readonly SyncConnectionEventName[];
 
 /**
+ * The artifact-lane tails the C3 trio cases exercise (shared-ai-cache-design.md
+ * §2.1): the blob tail for put/get, the sibling HEAD-doc tail for head. The
+ * `{key}` (`contract-key`) is the residual the extended purge case seeds and
+ * the embedCache PURGE_SUBCOLLECTIONS entry must sweep (H-3).
+ */
+const ARTIFACT_BLOB_REL_PATH = 'embeddings/contract-key.bin';
+const ARTIFACT_HEAD_REL_PATH = 'embedCache/contract-key';
+
+/**
  * What a backend must provide to run the contract. Mirrors the surface P4
  * extracts into `SyncBackend` (workspace metadata CRUD, tombstone
  * pre-flight, doc replication).
@@ -113,6 +122,24 @@ export interface SyncBackendContractHarness {
    */
   attemptWriteToTombstoned?(workspaceId: string): Promise<boolean>;
   /**
+   * Artifact lane (C3 method trio; shared-ai-cache-design.md §2.1). `relPath`
+   * is the in-workspace tail — the blob tail (`embeddings/{key}.bin`) for
+   * put/get, the HEAD-doc tail (`embedCache/{key}`) for head. Required when
+   * capabilities.artifacts is on; both backends implement it (the mock via an
+   * in-memory Map, FirestoreBackend via Cloud Storage + a Firestore HEAD doc).
+   */
+  putArtifact?(
+    workspaceId: string,
+    relPath: string,
+    bytes: ArrayBuffer | Uint8Array,
+    meta: { stamp: string; size: number }
+  ): Promise<void>;
+  headArtifact?(
+    workspaceId: string,
+    relPath: string
+  ): Promise<{ exists: true; stamp: string; size: number } | null>;
+  getArtifact?(workspaceId: string, relPath: string): Promise<ArrayBuffer | null>;
+  /**
    * Make probeHasData turn true WITHOUT a realtime connection (e.g. write
    * an `updates` doc directly). Used by the probe cases when
    * capabilities.connect is off.
@@ -153,6 +180,13 @@ interface SyncBackendContractCapabilities {
    * countResiduals simply reports what the environment can see.
    */
   purge: boolean;
+  /**
+   * The artifact-lane trio (headArtifact/putArtifact/getArtifact) is
+   * exercisable here. True for both backends; the mock runs the round-trip
+   * over an in-memory Map (no real Storage tier), so HEAD-after-Storage
+   * ordering + crash fail-safes are pinned ONLY by the emulator suite.
+   */
+  artifacts: boolean;
 }
 
 export interface SyncBackendContractOptions {
@@ -446,10 +480,26 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
           await harness.seedResiduals!(doomed.workspaceId);
           expect(await harness.countResiduals!(doomed.workspaceId)).toBeGreaterThan(0);
 
+          // shared-ai-cache-design.md §2.7 (H-3): the artifact HEAD doc is
+          // swept by the `embedCache` PURGE_SUBCOLLECTIONS entry — seedResiduals
+          // planted one (an `embedCache/{key}` doc + its blob); assert it is
+          // present before delete and gone after. purgeStoragePrefix sweeps the
+          // blob; this pins the HEAD-doc half that is NOT free.
+          if (capabilities.artifacts) {
+            await expect(
+              harness.headArtifact!(doomed.workspaceId, ARTIFACT_HEAD_REL_PATH)
+            ).resolves.not.toBeNull();
+          }
+
           await harness.deleteWorkspace(doomed.workspaceId);
 
           // Honest: nothing replicated remains…
           expect(await harness.countResiduals!(doomed.workspaceId)).toBe(0);
+          if (capabilities.artifacts) {
+            await expect(
+              harness.headArtifact!(doomed.workspaceId, ARTIFACT_HEAD_REL_PATH)
+            ).resolves.toBeNull();
+          }
           // …but the tombstone does (no resurrection).
           await expect(harness.isWorkspaceAlive(doomed.workspaceId)).resolves.toBe(false);
         });
@@ -483,6 +533,95 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
           'deleteWorkspace purges residual updates/history/maintenance docs and Storage snapshots'
         );
       }
+    });
+
+    // The C3 additive method trio (shared-ai-cache-design.md §2.1, Phase A):
+    // content-addressed put/head/get over the workspace prefix. Behavioral
+    // cases run against BOTH backends (the mock's in-memory Map and, in CI,
+    // the real Firestore+Storage emulator). HEAD-after-Storage write ordering
+    // and the §2.7 offline-vs-miss fail-safe are pinned ONLY by the emulator
+    // suite (the mock has no real Storage tier) — see capabilities.artifacts.
+    describe('artifact lane (C3 method trio)', () => {
+      if (!capabilities.artifacts) {
+        it.todo('headArtifact/putArtifact/getArtifact round-trip');
+        return;
+      }
+
+      const bytesOf = (s: string): Uint8Array => new TextEncoder().encode(s);
+
+      it('put → head → get round-trip: bytes and {stamp,size} survive', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        const payload = bytesOf('int8-vectors-and-scales');
+        await harness.putArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH, payload, {
+          stamp: 'model-a|dims-256|q8',
+          size: payload.byteLength,
+        });
+
+        const head = await harness.headArtifact!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH);
+        expect(head).not.toBeNull();
+        expect(head!.exists).toBe(true);
+        expect(head!.stamp).toBe('model-a|dims-256|q8');
+        expect(head!.size).toBe(payload.byteLength);
+
+        const got = await harness.getArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH);
+        expect(got).not.toBeNull();
+        expect(Array.from(new Uint8Array(got!))).toEqual(Array.from(payload));
+      });
+
+      it('headArtifact returns null on a HEAD-doc miss', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        await expect(
+          harness.headArtifact!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH)
+        ).resolves.toBeNull();
+      });
+
+      it('getArtifact returns null on a never-put blob (definitive miss)', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        await expect(
+          harness.getArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH)
+        ).resolves.toBeNull();
+      });
+
+      it('putArtifact is idempotent (ifAbsent): a second put with the same key does not corrupt the first', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        const original = bytesOf('original-bytes');
+        await harness.putArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH, original, {
+          stamp: 'stamp-1',
+          size: original.byteLength,
+        });
+
+        // Second put with the SAME key (head-before-put → no-op). Different
+        // bytes/meta must NOT overwrite the content-addressed original.
+        const overwrite = bytesOf('different-bytes-should-be-ignored');
+        await harness.putArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH, overwrite, {
+          stamp: 'stamp-2',
+          size: overwrite.byteLength,
+        });
+
+        const head = await harness.headArtifact!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH);
+        expect(head!.stamp).toBe('stamp-1');
+        expect(head!.size).toBe(original.byteLength);
+        const got = await harness.getArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH);
+        expect(Array.from(new Uint8Array(got!))).toEqual(Array.from(original));
+      });
+
+      it('artifacts in different workspaces do not collide (workspace-scoped path)', async () => {
+        const wsA = await harness.createWorkspace('A');
+        const wsB = await harness.createWorkspace('B');
+        const payloadA = bytesOf('A-only');
+        await harness.putArtifact!(wsA.workspaceId, ARTIFACT_BLOB_REL_PATH, payloadA, {
+          stamp: 'stamp-a',
+          size: payloadA.byteLength,
+        });
+
+        // Same relPath, different workspace → independent slot, still a miss.
+        await expect(
+          harness.headArtifact!(wsB.workspaceId, ARTIFACT_HEAD_REL_PATH)
+        ).resolves.toBeNull();
+        await expect(
+          harness.getArtifact!(wsB.workspaceId, ARTIFACT_BLOB_REL_PATH)
+        ).resolves.toBeNull();
+      });
     });
   });
 }
