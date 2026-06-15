@@ -87,6 +87,11 @@ function makeHarness(): SyncBackendContractHarness {
       backend.putArtifact(workspaceId, relPath, bytes, meta),
     headArtifact: (workspaceId, relPath) => backend.headArtifact(workspaceId, relPath),
     getArtifact: (workspaceId, relPath) => backend.getArtifact(workspaceId, relPath),
+    // Phase D lifecycle/GC — straight delegation (the mock collapses HEAD doc +
+    // blob, so blob-survival is pinned only on the emulator path).
+    deleteArtifactHead: (workspaceId, relPath) =>
+      backend.deleteArtifactHead(workspaceId, relPath),
+    sweepArtifacts: (workspaceId, opts) => backend.sweepArtifacts(workspaceId, opts),
 
     // The mock's residual surface is its one snapshot blob per workspace plus
     // an artifact-lane HEAD doc (the embedCache residual the H-3 fix sweeps).

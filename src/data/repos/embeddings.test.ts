@@ -296,4 +296,41 @@ describe('EmbeddingsRepo.runEviction (injected-recency LRU, Increment F §6/§8.
     expect(result.deleted).toBe(0);
     await expect(embeddingsRepo.get('bk-small')).resolves.toMatchObject({ bookId: 'bk-small' });
   });
+
+  it('never evicts a protected book even when it is oldest and the cache is over budget', async () => {
+    await embeddingsRepo.put(row('bk-protected'));
+    await embeddingsRepo.put(row('bk-evictable'));
+
+    // bk-protected is the OLDEST (recency 0 — unknown) AND the cache is over
+    // budget (one row admitted), so by recency alone it would evict FIRST. The
+    // protected set must keep it; bk-evictable goes instead.
+    const recency = new Map<string, number>([['bk-evictable', 9_000]]);
+    const result = await embeddingsRepo.runEviction(
+      recency,
+      ROW_BYTES,
+      new Set(['bk-protected']),
+    );
+
+    expect(result.deleted).toBe(1);
+    // The protected book survives despite being oldest/over-budget…
+    await expect(embeddingsRepo.get('bk-protected')).resolves.toMatchObject({ bookId: 'bk-protected' });
+    // …and the unprotected, more-recently-read book is the one evicted.
+    await expect(embeddingsRepo.get('bk-evictable')).resolves.toBeUndefined();
+  });
+
+  it('an empty/omitted protectedBookIds set behaves exactly as today (regression)', async () => {
+    await embeddingsRepo.put(row('bk-old'));
+    await embeddingsRepo.put(row('bk-new'));
+
+    const recency = new Map<string, number>([
+      ['bk-old', 1_000],
+      ['bk-new', 2_000],
+    ]);
+    // Passing an explicit empty set must match the no-arg behavior: oldest evicts.
+    const result = await embeddingsRepo.runEviction(recency, ROW_BYTES, new Set());
+
+    expect(result.deleted).toBe(1);
+    await expect(embeddingsRepo.get('bk-old')).resolves.toBeUndefined();
+    await expect(embeddingsRepo.get('bk-new')).resolves.toMatchObject({ bookId: 'bk-new' });
+  });
 });

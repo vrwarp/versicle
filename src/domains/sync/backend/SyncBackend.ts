@@ -205,6 +205,41 @@ export interface SyncBackend {
    */
   getArtifact(workspaceId: string, relPath: string): Promise<ArrayBuffer | null>;
   /**
+   * Per-book cloud GC (Phase D, §2.7 reference-safety): best-effort delete of
+   * the `embedCache/{key}` HEAD doc ONLY. `relPath` is the HEAD-doc tail
+   * (`embedCache/{key}`, mirroring {@link headArtifact}); the backend prefixes
+   * it with its own `users/{uid}/versicle/{workspaceId}/` root.
+   *
+   * **The content-addressed shared blob is DELIBERATELY left in place** — a
+   * sibling device may still need those bytes, and the blob is keyed by
+   * content (identical inputs → byte-identical content), so leaving it is
+   * safe and re-derivable. Reclaiming the orphaned blob is the
+   * {@link sweepArtifacts} TTL sweeper's job (the design endorses
+   * delete-HEAD-doc + leave-blob-to-sweeper over reference-counting for v1).
+   *
+   * Best-effort: an already-gone HEAD doc is a clean no-op (never an error).
+   * Removing YOUR OWN HEAD doc for a removed book is always safe regardless of
+   * the shareAiCaches gate (the gate governs UPLOAD/consult, not delete).
+   */
+  deleteArtifactHead(workspaceId: string, relPath: string): Promise<void>;
+  /**
+   * Cloud TTL/quota sweeper — the REQUIRED Phase-D cloud GC that bounds the
+   * bucket so the shared cache never grows unbounded (separate from
+   * runEviction, which is device-local IDB eviction). For each `embedCache`
+   * HEAD doc whose `createdAt < now - ttlMs` (and, when `budgetBytes` is set,
+   * oldest-first by `createdAt` until the total `size` is under budget),
+   * deletes BOTH the HEAD doc AND its sibling `embeddings/{key}.bin` blob —
+   * reusing the {@link purgeWorkspace} `deleteObject` +
+   * `storage/object-not-found`-tolerant recursion shape.
+   *
+   * Returns the counts actually removed. Idempotent and re-runnable (a re-run
+   * after a crash mid-sweep reports smaller numbers, never an error).
+   */
+  sweepArtifacts(
+    workspaceId: string,
+    opts: { ttlMs: number; now: number; budgetBytes?: number }
+  ): Promise<{ headsDeleted: number; blobsDeleted: number }>;
+  /**
    * Attach a Y.Doc to the workspace's replicated document. Synchronous —
    * providers connect in the background and announce themselves via the
    * `synced` event.

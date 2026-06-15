@@ -15,7 +15,15 @@ import { useBookStore } from '@store/useBookStore';
 import { useReadingListStore } from '@store/useReadingListStore';
 import { useLibraryStore } from '@store/useLibraryStore';
 import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
+import { useGenAIStore } from '@store/useGenAIStore';
 import { bookRepository } from '@app/repositories/BookRepository';
+import { bookContent } from '@data/repos/bookContent';
+import { contentKey, CURRENT_QUANT } from '@domains/search';
+import { TTS_EXTRACTION_VERSION } from '@lib/ingestion/sentence-extraction';
+import { peekSyncOrchestrator } from '@app/sync/createSync';
+import { createLogger } from '@lib/logger';
+
+const logger = createLogger('createLibrary');
 
 export interface LibraryComposition {
   mutex: KeyedMutex;
@@ -68,6 +76,48 @@ export function buildProjectionPort(): LibraryProjectionPort {
   };
 }
 
+/**
+ * The app-layer per-book cloud-artifact GC adapter (Artifact Lane Phase D,
+ * §2.7), injected as LibraryService's `purgeBookArtifact` port. It holds the
+ * store/backend/manifest edges the store-free LibraryService cannot reach:
+ *
+ *  (a) read the connected backend (peekSyncOrchestrator; null => no-op);
+ *  (b) bookContent.getManifest(bookId) for contentHash (absent/pre-P7 => no-op
+ *      — getManifest is called BEFORE LibraryService runs deleteBook, so the
+ *      manifest row carrying the hash is still present);
+ *  (c) derive the contentKey via the LIVE stamp (useGenAIStore {model,dims} +
+ *      CURRENT_QUANT + TTS_EXTRACTION_VERSION — the SAME stamp wireGoogle's
+ *      consult uses, so the key matches what the publisher wrote);
+ *  (d) best-effort backend.deleteArtifactHead(workspaceId, `embedCache/{key}`)
+ *      — the HEAD doc only; the shared blob is left for the sweeper.
+ *
+ * shareAiCaches gating is irrelevant to delete (removing YOUR OWN HEAD doc for
+ * a removed book is always safe). A null backend / no contentHash / pre-P7 book
+ * is a clean no-op; a backend throw is logged (LibraryService also degrades).
+ */
+async function purgeBookArtifact(bookId: string): Promise<void> {
+  const handle = peekSyncOrchestrator()?.getConnectedArtifactBackend() ?? null;
+  if (!handle) return;
+
+  const manifest = await bookContent.getManifest(bookId);
+  const contentHash = manifest?.contentHash;
+  if (!contentHash) return;
+
+  const s = useGenAIStore.getState();
+  const key = await contentKey({
+    contentHash,
+    model: s.embeddingModel,
+    dims: s.embeddingDims,
+    quant: CURRENT_QUANT,
+    extractionVersion: TTS_EXTRACTION_VERSION,
+  });
+  try {
+    await handle.backend.deleteArtifactHead(handle.workspaceId, `embedCache/${key}`);
+  } catch (err) {
+    logger.warn(`Cloud HEAD-doc delete failed for ${bookId}; sweeper will reclaim it:`, err);
+  }
+}
+
 export function getLibrary(): LibraryComposition {
   if (instance) return instance;
 
@@ -94,7 +144,16 @@ export function getLibrary(): LibraryComposition {
     }),
   });
 
-  const service = new LibraryService({ mutex, inventory, projection, persistence, orchestrator });
+  const service = new LibraryService({
+    mutex,
+    inventory,
+    projection,
+    persistence,
+    orchestrator,
+    // Phase D per-book cloud GC: drop THIS device's HEAD doc on book removal
+    // (the shared blob is left for the sweeper). Store/backend edges live here.
+    purgeBookArtifact,
+  });
 
   instance = { mutex, orchestrator, service };
   return instance;

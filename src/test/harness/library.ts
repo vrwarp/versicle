@@ -32,6 +32,8 @@ export function makeTestLibrary(opts: {
   expandZip?: ImportOrchestratorDeps['expandZip'];
   extractionOptions?: () => ExtractionOptions;
   now?: () => number;
+  /** Phase D: the per-book cloud-artifact GC port (best-effort delete). */
+  purgeBookArtifact?: (bookId: string) => Promise<void>;
 }): TestLibrary {
   const mutex = new KeyedMutex();
   const inventory = buildInventoryPort();
@@ -56,6 +58,7 @@ export function makeTestLibrary(opts: {
     projection,
     persistence: opts.persistence,
     orchestrator,
+    purgeBookArtifact: opts.purgeBookArtifact,
   });
 
   return { mutex, orchestrator, service };

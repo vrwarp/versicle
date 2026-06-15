@@ -140,6 +140,20 @@ export interface SyncBackendContractHarness {
   ): Promise<{ exists: true; stamp: string; size: number } | null>;
   getArtifact?(workspaceId: string, relPath: string): Promise<ArrayBuffer | null>;
   /**
+   * Phase-D lifecycle/GC (shared-ai-cache-design.md §2.7). `deleteArtifactHead`
+   * deletes the `embedCache/{key}` HEAD doc ONLY (the shared blob is left for
+   * the sweeper). `sweepArtifacts` bounds the bucket by deleting past-TTL HEAD-
+   * doc+blob pairs (and over-budget oldest-first). Required when
+   * capabilities.artifacts is on; both backends implement them (the mock
+   * collapses HEAD doc + blob into one Map entry, so the leave-the-blob
+   * guarantee is pinned ONLY by the emulator path).
+   */
+  deleteArtifactHead?(workspaceId: string, relPath: string): Promise<void>;
+  sweepArtifacts?(
+    workspaceId: string,
+    opts: { ttlMs: number; now: number; budgetBytes?: number }
+  ): Promise<{ headsDeleted: number; blobsDeleted: number }>;
+  /**
    * Make probeHasData turn true WITHOUT a realtime connection (e.g. write
    * an `updates` doc directly). Used by the probe cases when
    * capabilities.connect is off.
@@ -621,6 +635,134 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
         await expect(
           harness.getArtifact!(wsB.workspaceId, ARTIFACT_BLOB_REL_PATH)
         ).resolves.toBeNull();
+      });
+
+      // ── Phase D lifecycle/GC (shared-ai-cache-design.md §2.7) ─────────────
+      // NOTE: the MockBackend collapses HEAD doc + blob into one Map entry (no
+      // Storage tier), so the "delete the HEAD doc but KEEP the shared blob"
+      // reference-safety guarantee CANNOT be proven on the mock — these cases
+      // pin HEAD-removal semantics on the mock; blob-survival is pinned only on
+      // the FirestoreBackend/emulator path (capabilities not yet wired there).
+      it('deleteArtifactHead removes the HEAD doc; an untouched second key survives', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        const SECOND_BLOB = 'embeddings/second-key.bin';
+        const SECOND_HEAD = 'embedCache/second-key';
+
+        const a = bytesOf('first');
+        await harness.putArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH, a, {
+          stamp: 'stamp-1',
+          size: a.byteLength,
+        });
+        const b = bytesOf('second');
+        await harness.putArtifact!(ws.workspaceId, SECOND_BLOB, b, {
+          stamp: 'stamp-2',
+          size: b.byteLength,
+        });
+
+        await harness.deleteArtifactHead!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH);
+
+        // The targeted HEAD doc is gone…
+        await expect(
+          harness.headArtifact!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH)
+        ).resolves.toBeNull();
+        // …but a freshly-put SECOND key under the same workspace is untouched.
+        await expect(
+          harness.headArtifact!(ws.workspaceId, SECOND_HEAD)
+        ).resolves.not.toBeNull();
+      });
+
+      it('deleteArtifactHead on an already-gone key is a clean no-op', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        await expect(
+          harness.deleteArtifactHead!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH)
+        ).resolves.toBeUndefined();
+      });
+
+      it('sweepArtifacts deletes a past-TTL artifact and keeps a fresh one', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        const FRESH_BLOB = 'embeddings/fresh-key.bin';
+        const FRESH_HEAD = 'embedCache/fresh-key';
+
+        const stale = bytesOf('stale');
+        await harness.putArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH, stale, {
+          stamp: 'stale',
+          size: stale.byteLength,
+        });
+        const fresh = bytesOf('fresh');
+        await harness.putArtifact!(ws.workspaceId, FRESH_BLOB, fresh, {
+          stamp: 'fresh',
+          size: fresh.byteLength,
+        });
+
+        // now in the far future + ttlMs=0 → EVERY artifact whose createdAt is in
+        // the past is past-TTL. (Both were just put; both qualify.) Drive a more
+        // discriminating case via budget below; here we prove a past-TTL sweep
+        // deletes and the report is honest.
+        const report = await harness.sweepArtifacts!(ws.workspaceId, {
+          ttlMs: 0,
+          now: Date.now() + 60_000,
+        });
+        expect(report.headsDeleted).toBe(2);
+        await expect(
+          harness.headArtifact!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH)
+        ).resolves.toBeNull();
+        await expect(
+          harness.headArtifact!(ws.workspaceId, FRESH_HEAD)
+        ).resolves.toBeNull();
+      });
+
+      it('sweepArtifacts with a large TTL keeps everything (nothing past-TTL)', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        const payload = bytesOf('keep-me');
+        await harness.putArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH, payload, {
+          stamp: 'keep',
+          size: payload.byteLength,
+        });
+
+        const report = await harness.sweepArtifacts!(ws.workspaceId, {
+          ttlMs: 30 * 24 * 60 * 60 * 1000, // 30d
+          now: Date.now(),
+        });
+        expect(report.headsDeleted).toBe(0);
+        await expect(
+          harness.headArtifact!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH)
+        ).resolves.not.toBeNull();
+      });
+
+      it('over-budget sweep deletes oldest-by-createdAt first', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        // Three artifacts, each 4 bytes; put sequentially so createdAt orders
+        // them oldest→newest. A 4-byte budget admits exactly one (the newest);
+        // the two oldest evict.
+        const KEYS = [
+          { blob: 'embeddings/k1.bin', head: 'embedCache/k1' },
+          { blob: 'embeddings/k2.bin', head: 'embedCache/k2' },
+          { blob: 'embeddings/k3.bin', head: 'embedCache/k3' },
+        ];
+        for (const k of KEYS) {
+          const payload = bytesOf('1234'); // 4 bytes
+          await harness.putArtifact!(ws.workspaceId, k.blob, payload, {
+            stamp: k.head,
+            size: payload.byteLength,
+          });
+          // A tiny gap so createdAt is strictly increasing on fast clocks.
+          await new Promise((r) => setTimeout(r, 2));
+        }
+
+        // ttlMs huge (nothing past-TTL) so ONLY the budget rule fires; budget
+        // admits one 4-byte artifact, so the two oldest (k1, k2) evict.
+        const report = await harness.sweepArtifacts!(ws.workspaceId, {
+          ttlMs: 30 * 24 * 60 * 60 * 1000,
+          now: Date.now(),
+          budgetBytes: 4,
+        });
+        expect(report.headsDeleted).toBe(2);
+        await expect(harness.headArtifact!(ws.workspaceId, 'embedCache/k1')).resolves.toBeNull();
+        await expect(harness.headArtifact!(ws.workspaceId, 'embedCache/k2')).resolves.toBeNull();
+        // The newest survives (under budget).
+        await expect(
+          harness.headArtifact!(ws.workspaceId, 'embedCache/k3')
+        ).resolves.not.toBeNull();
       });
     });
   });

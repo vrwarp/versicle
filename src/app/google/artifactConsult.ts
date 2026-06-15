@@ -42,6 +42,22 @@ import { createLogger } from '@lib/logger';
 
 const logger = createLogger('ArtifactConsult');
 
+/**
+ * Steady-state HEAD-vs-object drift counter (Phase D, L-3): incremented when a
+ * hydrate finds a present HEAD doc but an ABSENT object (the HEAD-after-Storage
+ * invariant says this should never happen — a HEAD hit implies the bytes
+ * landed). A non-zero count means a stale HEAD doc was observed (a crash
+ * between blob-delete and HEAD-delete elsewhere, or a sweeper/blob race); each
+ * occurrence opportunistically self-heals (deletes the stale HEAD doc) so the
+ * drift is transient. Observable via {@link getArtifactDriftCount} (test/meter).
+ */
+let driftCount = 0;
+
+/** Read the in-module HEAD-vs-object drift counter (Phase D observability). */
+export function getArtifactDriftCount(): number {
+  return driftCount;
+}
+
 /** Whether the read-path consult is consented for a book (§2.6). */
 type ConsentGate = (bookId: string, opts: { interactive: boolean }) => boolean;
 
@@ -152,11 +168,35 @@ export function makeArtifactConsult(deps: ArtifactConsultDeps): ArtifactConsult 
       if (!resolved) return null;
       const { backend, workspaceId, key } = resolved;
 
+      // HEAD probe FIRST (§2.1: HEAD doc tail `embedCache/{key}`) so we can tell
+      // a clean miss (no HEAD doc → not drift, re-embed) from steady-state drift
+      // (HEAD hit but absent object — the HEAD-after-Storage invariant says this
+      // can't happen, so it signals a stale HEAD doc to self-heal). A null HEAD
+      // is a clean miss.
+      const head = await backend.headArtifact(workspaceId, `embedCache/${key}`);
+      if (head === null) return null;
+
       // Blob tail is `embeddings/{key}.bin` (§2.1). §2.7 taxonomy: a definitive
       // miss is `null` (re-embed); a transient/permission error THROWS from the
       // backend and we let it propagate (never burn quota on an offline blip).
       const bytes = await backend.getArtifact(workspaceId, `embeddings/${key}.bin`);
-      if (!bytes) return null;
+      if (!bytes) {
+        // HEAD-hit-but-object-missing: steady-state DRIFT (L-3). Count + log it
+        // (stable search key), opportunistically delete the stale HEAD doc so a
+        // future probe re-embeds instead of false-hitting, and return null.
+        driftCount += 1;
+        logger.warn(
+          `[artifact-head-object-drift] HEAD doc present but object absent for ${bookId} ` +
+            `(key=${key}); self-healing the stale HEAD doc and re-embedding. ` +
+            `drift count: ${driftCount}.`,
+        );
+        try {
+          await backend.deleteArtifactHead(workspaceId, `embedCache/${key}`);
+        } catch (err) {
+          logger.warn(`Stale HEAD-doc self-heal delete failed for ${bookId}:`, err);
+        }
+        return null;
+      }
 
       let parsed: ReturnType<typeof parseArtifactBlob>;
       try {

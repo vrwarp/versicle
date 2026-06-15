@@ -62,10 +62,14 @@ interface LibraryWorkflows {
 
 const tick = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function makeWorkflows(db: Partial<LibraryPersistence>): LibraryWorkflows {
+function makeWorkflows(
+  db: Partial<LibraryPersistence>,
+  purgeBookArtifact?: (bookId: string) => Promise<void>,
+): LibraryWorkflows {
   const persistence = makeLibraryPersistenceDouble(db);
   const { service } = makeTestLibrary({
     persistence,
+    purgeBookArtifact,
     // Restore's synced-download path runs a full extraction; the fake keeps
     // the legacy 50ms "slow import" latency the I-3 pin was written with.
     extract: vi.fn(async (file: File) => {
@@ -261,6 +265,90 @@ describe('LibraryService invariants (I-1..I-5)', () => {
       await hydratePromise;
 
       expect(wf.offloaded().has('book1')).toBe(false);
+    });
+  });
+
+  describe('Phase D: per-book cloud-artifact GC on remove (best-effort, pre-tx contentHash)', () => {
+    it('remove() invokes purgeBookArtifact with the bookId, resolving contentHash BEFORE deleteBook', async () => {
+      // The persistence manifest lives until deleteBook clears it (mirroring the
+      // real tx). The purge port reads the manifest itself: if remove() ordered
+      // purge AFTER deleteBook, getManifest would already be undefined and the
+      // captured hash would be missing (the orphaned-HEAD-doc bug).
+      const manifests = new Map<string, { contentHash?: string }>([
+        ['bk-1', { contentHash: 'hash-1' }],
+      ]);
+      const capturedHashes: (string | undefined)[] = [];
+      const purgeCalls: string[] = [];
+
+      const wf = makeWorkflows(
+        {
+          deleteBook: vi.fn(async (id: string) => {
+            manifests.delete(id); // the manifest row dies in deleteBook's tx
+          }),
+          getManifest: vi.fn(async (id: string) => manifests.get(id) as never),
+          getOffloadedStatus: vi.fn(async () => new Map<string, boolean>()),
+        },
+        async (bookId: string) => {
+          purgeCalls.push(bookId);
+          // Resolve contentHash exactly as the real adapter does — from the
+          // STILL-PRESENT manifest (proves the pre-tx ordering).
+          const manifest = manifests.get(bookId);
+          capturedHashes.push(manifest?.contentHash);
+        },
+      );
+
+      useBookStore.setState({
+        books: { 'bk-1': makeInventoryItem({ bookId: 'bk-1', title: 'Book 1' }) },
+      });
+
+      await wf.remove('bk-1');
+
+      expect(purgeCalls).toEqual(['bk-1']);
+      // The hash was captured from a present manifest — purge ran before deleteBook.
+      expect(capturedHashes).toEqual(['hash-1']);
+      expect(useBookStore.getState().books['bk-1']).toBeUndefined();
+    });
+
+    it('a purgeBookArtifact rejection is swallowed and the local delete still completes', async () => {
+      const deleteBook = vi.fn(async () => undefined);
+      const wf = makeWorkflows(
+        {
+          deleteBook,
+          getManifest: vi.fn(async () => undefined),
+          getOffloadedStatus: vi.fn(async () => new Map<string, boolean>()),
+        },
+        async () => {
+          throw new Error('cloud delete failed');
+        },
+      );
+
+      useBookStore.setState({
+        books: { 'bk-1': makeInventoryItem({ bookId: 'bk-1', title: 'Book 1' }) },
+      });
+
+      await wf.remove('bk-1');
+
+      // Best-effort degrade: the local delete still ran despite the port throw.
+      expect(deleteBook).toHaveBeenCalledWith('bk-1');
+      expect(useBookStore.getState().books['bk-1']).toBeUndefined();
+    });
+
+    it('when no purgeBookArtifact is wired, remove() behaves exactly as before', async () => {
+      const deleteBook = vi.fn(async () => undefined);
+      const wf = makeWorkflows({
+        deleteBook,
+        getManifest: vi.fn(async () => undefined),
+        getOffloadedStatus: vi.fn(async () => new Map<string, boolean>()),
+      });
+
+      useBookStore.setState({
+        books: { 'bk-1': makeInventoryItem({ bookId: 'bk-1', title: 'Book 1' }) },
+      });
+
+      await wf.remove('bk-1');
+
+      expect(deleteBook).toHaveBeenCalledWith('bk-1');
+      expect(useBookStore.getState().books['bk-1']).toBeUndefined();
     });
   });
 

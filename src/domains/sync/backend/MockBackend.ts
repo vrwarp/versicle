@@ -69,7 +69,10 @@ const writeSnapshots = (snapshots: Record<string, MockSnapshotEntry>): void =>
  * {@link clearMockArtifacts} wipes it for the harness's per-test reset,
  * mirroring MockFireProvider.clearMockStorage.
  */
-const artifactStore = new Map<string, { bytes: ArrayBuffer; stamp: string; size: number }>();
+const artifactStore = new Map<
+  string,
+  { bytes: ArrayBuffer; stamp: string; size: number; createdAt: number }
+>();
 
 /** Wipe the artifact-lane store (per-test reset; mirrors clearMockStorage). */
 export const clearMockArtifacts = (): void => {
@@ -203,6 +206,9 @@ export class MockBackend implements SyncBackend {
       bytes: toArrayBuffer(bytes),
       stamp: meta.stamp,
       size: meta.size,
+      // createdAt drives the Phase-D sweepArtifacts TTL/budget math (mirrors
+      // the FirestoreBackend HEAD-doc createdAt field).
+      createdAt: Date.now(),
     });
   }
 
@@ -213,6 +219,56 @@ export class MockBackend implements SyncBackend {
     // relPath is the blob tail (`embeddings/{key}.bin`).
     const headPath = this.artifactPath(workspaceId, artifactHeadTail(relPath));
     return artifactStore.get(headPath)?.bytes ?? null;
+  }
+
+  async deleteArtifactHead(workspaceId: string, relPath: string): Promise<void> {
+    // relPath is the HEAD-doc tail (`embedCache/{key}`). The mock has no
+    // separate Storage tier, so the single Map entry collapses HEAD doc + blob:
+    // deleting it removes both. The "delete HEAD doc but KEEP the shared blob"
+    // guarantee therefore CANNOT be proven on the mock — that reference-safety
+    // invariant is pinned only on the FirestoreBackend/emulator path; the mock
+    // pins the HEAD-removal semantics.
+    artifactStore.delete(this.artifactPath(workspaceId, relPath));
+  }
+
+  async sweepArtifacts(
+    workspaceId: string,
+    opts: { ttlMs: number; now: number; budgetBytes?: number }
+  ): Promise<{ headsDeleted: number; blobsDeleted: number }> {
+    // Iterate the HEAD-doc-keyed Map entries under this workspace's prefix; the
+    // mock collapses HEAD doc + blob into one entry, so blobsDeleted mirrors
+    // headsDeleted (counted once per entry).
+    const prefix = `${this.docPath(workspaceId)}/embedCache/`;
+    const entries: { path: string; createdAt: number; size: number }[] = [];
+    for (const [path, entry] of artifactStore) {
+      if (path.startsWith(prefix)) {
+        entries.push({ path, createdAt: entry.createdAt, size: entry.size });
+      }
+    }
+
+    const cutoff = opts.now - opts.ttlMs;
+    const victims = new Set<string>();
+    for (const entry of entries) {
+      if (entry.createdAt < cutoff) victims.add(entry.path);
+    }
+
+    if (typeof opts.budgetBytes === 'number') {
+      const survivors = entries.filter((e) => !victims.has(e.path));
+      let totalBytes = survivors.reduce((s, e) => s + e.size, 0);
+      const oldestFirst = survivors.slice().sort((a, b) => a.createdAt - b.createdAt);
+      for (const entry of oldestFirst) {
+        if (totalBytes <= opts.budgetBytes) break;
+        victims.add(entry.path);
+        totalBytes -= entry.size;
+      }
+    }
+
+    let headsDeleted = 0;
+    for (const path of victims) {
+      artifactStore.delete(path);
+      headsDeleted += 1;
+    }
+    return { headsDeleted, blobsDeleted: headsDeleted };
   }
 
   connect(ydoc: Y.Doc, workspaceId: string, opts: ConnectOptions): SyncConnection {

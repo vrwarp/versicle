@@ -321,6 +321,13 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
       backend.putArtifact(workspaceId, relPath, bytes, meta),
     headArtifact: (workspaceId, relPath) => backend.headArtifact(workspaceId, relPath),
     getArtifact: (workspaceId, relPath) => backend.getArtifact(workspaceId, relPath),
+    // Phase-D lifecycle/GC — the real cloud delete/sweep round-trips (delete
+    // HEAD doc + LEAVE the shared blob; sweep past-TTL HEAD+blob pairs). These
+    // are the round-trips the mock cannot model (no Storage tier) — CI-PENDING,
+    // auto-skip when the emulator trio is unreachable (EMULATOR HONESTY).
+    deleteArtifactHead: (workspaceId, relPath) =>
+      backend.deleteArtifactHead(workspaceId, relPath),
+    sweepArtifacts: (workspaceId, opts) => backend.sweepArtifacts(workspaceId, opts),
   });
 
   // ── Artifact-lane emulator cases (CI-PENDING) ──────────────────────────

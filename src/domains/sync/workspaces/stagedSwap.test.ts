@@ -325,6 +325,8 @@ describe('WorkspaceService.switch — pre-commit crash/abort rows (row 1)', () =
     headArtifact: async () => null,
     putArtifact: async () => undefined,
     getArtifact: async () => null,
+    deleteArtifactHead: async () => undefined,
+    sweepArtifacts: async () => ({ headsDeleted: 0, blobsDeleted: 0 }),
     connect: () => {
       throw new Error('connect not stubbed');
     },

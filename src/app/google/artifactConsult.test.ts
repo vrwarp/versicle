@@ -26,6 +26,7 @@ import {
 import {
   makeArtifactConsult,
   makeArtifactConsentGate,
+  getArtifactDriftCount,
   type ArtifactConsultDeps,
 } from './artifactConsult';
 import type { StaticManifestRow } from '@data/rows/static';
@@ -314,6 +315,74 @@ describe('makeArtifactConsult', () => {
       const consult = makeArtifactConsult(deps);
       await expect(consult.hydrateFromArtifact('bk-1', { interactive: false })).resolves.toBeNull();
       expect(hydrated).toHaveLength(0);
+    });
+  });
+
+  describe('HEAD-vs-object drift self-heal (Phase D, L-3)', () => {
+    it('HEAD hit + getArtifact null: increments drift, self-heals the stale HEAD doc, returns null', async () => {
+      // A stub whose HEAD doc is present but whose object is ABSENT (the
+      // HEAD-after-Storage invariant violated → steady-state drift). The consult
+      // must count it, opportunistically delete the stale HEAD doc, and re-embed.
+      const deleteHead = vi.fn(async () => undefined);
+      const stub = {
+        uid: UID,
+        headArtifact: async () => ({ exists: true as const, stamp: 's', size: 1 }),
+        getArtifact: async () => null,
+        deleteArtifactHead: deleteHead,
+      } as unknown as SyncBackend;
+      const { deps, hydrated } = makeDeps(stub);
+      const consult = makeArtifactConsult(deps);
+
+      const before = getArtifactDriftCount();
+      await expect(consult.hydrateFromArtifact('bk-1', { interactive: false })).resolves.toBeNull();
+      expect(getArtifactDriftCount()).toBe(before + 1);
+      // Self-heal: the stale HEAD doc was deleted at the derived key.
+      const key = await contentKey({ contentHash: 'book-hash', ...STAMP });
+      expect(deleteHead).toHaveBeenCalledWith(WORKSPACE, `embedCache/${key}`);
+      expect(hydrated).toHaveLength(0);
+    });
+
+    it('a clean miss (no HEAD doc) does NOT count as drift and does NOT self-heal', async () => {
+      const deleteHead = vi.fn(async () => undefined);
+      const stub = {
+        uid: UID,
+        headArtifact: async () => null, // no HEAD doc → clean miss
+        getArtifact: async () => null,
+        deleteArtifactHead: deleteHead,
+      } as unknown as SyncBackend;
+      const { deps, hydrated } = makeDeps(stub);
+      const consult = makeArtifactConsult(deps);
+
+      const before = getArtifactDriftCount();
+      await expect(consult.hydrateFromArtifact('bk-1', { interactive: false })).resolves.toBeNull();
+      // A clean miss is the not-embedded state, NOT drift.
+      expect(getArtifactDriftCount()).toBe(before);
+      expect(deleteHead).not.toHaveBeenCalled();
+      expect(hydrated).toHaveLength(0);
+    });
+
+    it('the §2.7 transient-error rethrow path is unaffected by the drift check', async () => {
+      // HEAD hit, but getArtifact throws transient → rethrow (NOT drift: an
+      // offline blip must not be counted as a stale HEAD doc or self-healed).
+      const deleteHead = vi.fn(async () => undefined);
+      const transient = new Error('storage/retry-limit-exceeded');
+      const stub = {
+        uid: UID,
+        headArtifact: async () => ({ exists: true as const, stamp: 's', size: 1 }),
+        getArtifact: async () => {
+          throw transient;
+        },
+        deleteArtifactHead: deleteHead,
+      } as unknown as SyncBackend;
+      const { deps } = makeDeps(stub);
+      const consult = makeArtifactConsult(deps);
+
+      const before = getArtifactDriftCount();
+      await expect(consult.hydrateFromArtifact('bk-1', { interactive: false })).rejects.toBe(
+        transient,
+      );
+      expect(getArtifactDriftCount()).toBe(before);
+      expect(deleteHead).not.toHaveBeenCalled();
     });
   });
 

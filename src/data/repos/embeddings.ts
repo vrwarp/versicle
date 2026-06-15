@@ -41,6 +41,9 @@ export const EMBEDDING_CACHE_BUDGET_BYTES = 256 * 1024 * 1024;
 /** Deletes per gated transaction during eviction pass 2 (mirrors audioCache). */
 const EVICTION_DELETE_BATCH = 50;
 
+/** Shared empty protected set (the no-protection default; avoids a per-call alloc). */
+const EMPTY_PROTECTED: ReadonlySet<string> = new Set();
+
 /**
  * A `cache_embeddings` row as the read path hands it to callers: identical to
  * {@link CacheEmbeddingsRow} except the persisted binary buffers are re-wrapped
@@ -180,10 +183,20 @@ class EmbeddingsRepo {
    * total is under budget. Vectors are re-derivable (cache_search_text + the
    * API), so an evicted book simply re-embeds on next read — absence is the
    * not-embedded state.
+   *
+   * `protectedBookIds` (Phase D): any candidate in this set is NEVER evicted
+   * (skipped in pass 2 even when oldest/over-budget). The repo stays pure/
+   * store-free — the set is INJECTED by the boot task exactly like
+   * recencyByBookId. The never-evict-unconfirmed-upload INVARIANT lives at the
+   * TASK level: when shareAiCaches is OFF the set is empty (evict as today);
+   * when ON, the task probes the connected backend's headArtifact per locally-
+   * embedded book and protects books whose upload is NOT yet confirmed (a
+   * HEAD miss), so eviction can never destroy the only copy of a shared cache.
    */
   async runEviction(
     recencyByBookId: Map<string, number>,
     budgetBytes: number = EMBEDDING_CACHE_BUDGET_BYTES,
+    protectedBookIds: ReadonlySet<string> = EMPTY_PROTECTED,
   ): Promise<{ deleted: number; freedBytes: number }> {
     try {
       const db = await getConnection();
@@ -240,6 +253,10 @@ class EmbeddingsRepo {
 
       for (const entry of candidates) {
         if (remaining <= budgetBytes) break;
+        // Never-evict-unconfirmed-upload (Phase D): skip a protected book even
+        // when it is oldest/over-budget; its bytes stay counted in `remaining`,
+        // so the loop keeps looking for an evictable candidate.
+        if (protectedBookIds.has(entry.bookId)) continue;
         batch.push(entry.bookId);
         deleted += 1;
         freedBytes += entry.size;

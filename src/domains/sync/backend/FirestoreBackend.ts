@@ -31,6 +31,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  deleteDoc,
   collection,
   getDocs,
   query,
@@ -352,6 +353,108 @@ export class FirestoreBackend implements SyncBackend {
       if ((error as { code?: string })?.code === 'storage/object-not-found') return null;
       throw error;
     }
+  }
+
+  async deleteArtifactHead(workspaceId: string, relPath: string): Promise<void> {
+    const db = getFirestoreDb();
+    if (!db) throw new Error('Firestore not initialized');
+
+    // relPath is the HEAD-doc tail (`embedCache/{key}`). Delete the HEAD doc
+    // ONLY — the content-addressed shared blob is deliberately left for
+    // sweepArtifacts (§2.7: never destroy bytes a sibling device may still
+    // need). Best-effort: an already-gone doc is a clean no-op.
+    try {
+      await deleteDoc(doc(db, this.artifactPath(workspaceId, relPath)));
+    } catch (error) {
+      logger.warn(
+        `deleteArtifactHead for ${relPath} in ${workspaceId} failed (already gone?):`,
+        error
+      );
+    }
+  }
+
+  async sweepArtifacts(
+    workspaceId: string,
+    opts: { ttlMs: number; now: number; budgetBytes?: number }
+  ): Promise<{ headsDeleted: number; blobsDeleted: number }> {
+    const db = getFirestoreDb();
+    if (!db) throw new Error('Firestore not initialized');
+
+    // 1. List the embedCache HEAD docs (batched like purgeSubcollection, but
+    // we keep each doc's createdAt/size to pick victims rather than blanket-
+    // deleting). Each doc id is the content `{key}`.
+    const headColPath = `${this.docPath(workspaceId)}/embedCache`;
+    const heads: { key: string; createdAt: number; size: number }[] = [];
+    {
+      const subRef = collection(db, headColPath);
+      const snapshot = await getDocs(subRef);
+      snapshot.docs.forEach((docSnap) => {
+        const data = docSnap.data();
+        heads.push({
+          key: docSnap.id,
+          createdAt: typeof data.createdAt === 'number' ? data.createdAt : 0,
+          size: typeof data.size === 'number' ? data.size : 0,
+        });
+      });
+    }
+
+    // 2. Past-TTL victims: createdAt older than now - ttlMs.
+    const cutoff = opts.now - opts.ttlMs;
+    const victims = new Set<string>();
+    for (const head of heads) {
+      if (head.createdAt < cutoff) victims.add(head.key);
+    }
+
+    // 3. Over-budget victims: oldest-first by createdAt until the surviving
+    // total is under budgetBytes.
+    if (typeof opts.budgetBytes === 'number') {
+      const survivors = heads.filter((h) => !victims.has(h.key));
+      let totalBytes = survivors.reduce((s, h) => s + h.size, 0);
+      const oldestFirst = survivors.slice().sort((a, b) => a.createdAt - b.createdAt);
+      for (const head of oldestFirst) {
+        if (totalBytes <= opts.budgetBytes) break;
+        victims.add(head.key);
+        totalBytes -= head.size;
+      }
+    }
+
+    // 4. Delete each victim's HEAD doc AND its sibling blob (reusing the
+    // object-not-found-tolerant deleteObject shape from purgeStoragePrefix;
+    // wrap Storage in the same getFirebaseApp() guard as purgeWorkspace so
+    // BYO-Firestore-only projects degrade — the HEAD docs still go).
+    let headsDeleted = 0;
+    let blobsDeleted = 0;
+
+    let storage: ReturnType<typeof getStorage> | null = null;
+    try {
+      const app = getFirebaseApp();
+      if (app) storage = getStorage(app);
+    } catch (error) {
+      logger.warn(
+        `sweepArtifacts for ${workspaceId}: Storage unavailable (project without Storage?); ` +
+          'sweeping HEAD docs only.',
+        error
+      );
+    }
+
+    for (const key of victims) {
+      await deleteDoc(doc(db, this.artifactPath(workspaceId, `embedCache/${key}`)));
+      headsDeleted += 1;
+      if (storage) {
+        try {
+          await deleteObject(ref(storage, this.artifactPath(workspaceId, `embeddings/${key}.bin`)));
+          blobsDeleted += 1;
+        } catch (error) {
+          if ((error as { code?: string })?.code === 'storage/object-not-found') continue;
+          throw error;
+        }
+      }
+    }
+
+    logger.info(
+      `Swept workspace ${workspaceId} artifacts: ${headsDeleted} heads, ${blobsDeleted} blobs.`
+    );
+    return { headsDeleted, blobsDeleted };
   }
 
   connect(ydoc: Y.Doc, workspaceId: string, opts: ConnectOptions): SyncConnection {
