@@ -1,5 +1,6 @@
 import React from 'react';
 import { Label } from '../ui/Label';
+import { Input } from '../ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { PasswordInput } from '../ui/PasswordInput';
 import { Switch } from '../ui/Switch';
@@ -7,7 +8,39 @@ import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
 import { Download } from 'lucide-react';
 import type { ContentType } from '~types/content-analysis';
+import type { QuotaLimits, LaneUsage } from '@kernel/quota';
 import { formatTime } from '@kernel/locale/format';
+
+/**
+ * Per-lane time-to-exhaustion hints (ms; null when not filling) the panel
+ * derives from the live snapshot's window fill rate. Presentational only —
+ * every number here is computed by the wiring layer (GenAIPanel useQuotaMeters)
+ * and passed in; this tab fabricates nothing.
+ */
+interface QuotaMeterEtas {
+    /** ms until RPM exhaustion at the current minute fill rate (null = idle). */
+    rpmMs: number | null;
+    /** ms until TPM exhaustion at the current minute fill rate (null = idle). */
+    tpmMs: number | null;
+    /** ms until RPD exhaustion at the current daily rate (null = idle). */
+    rpdMs: number | null;
+}
+
+/** Live meter inputs, all derived from `governor.snapshot()` by the panel. */
+export interface QuotaMeters {
+    /** Foreground-lane live usage (the shared snapshot shape). */
+    fg: LaneUsage;
+    /** Background-lane live usage (the shared snapshot shape). */
+    bg: LaneUsage;
+    /**
+     * Today's requests-per-day spent against the shared Gemini project budget
+     * across ALL the user's devices: this device's background spend plus the sum
+     * reported by the user's other active devices.
+     */
+    projectRpd: number;
+    /** Foreground-lane time-to-exhaustion hints. */
+    etas: QuotaMeterEtas;
+}
 
 interface GenAILog {
     id: string;
@@ -19,6 +52,52 @@ interface GenAILog {
     sectionTitle?: string;
     correlationId?: string;
 }
+
+/** Render an ms-ETA as a short human hint, or a dash when not filling. */
+function formatEta(ms: number | null): string {
+    if (ms === null || !Number.isFinite(ms) || ms <= 0) return '—';
+    const minutes = Math.round(ms / 60_000);
+    if (minutes < 1) return '< 1 min';
+    if (minutes < 60) return `~${minutes} min`;
+    const hours = Math.round(minutes / 60);
+    return `~${hours} hr`;
+}
+
+/**
+ * A used-vs-limit progress bar. `role="progressbar"` with aria-valuenow/min/max
+ * carries the exact figures for assistive tech (jsx-a11y clean); the visible
+ * label echoes `used / limit`. Every number is a prop — no fabrication.
+ */
+const UsageBar: React.FC<{ label: string; used: number; limit: number }> = ({
+    label,
+    used,
+    limit,
+}) => {
+    const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+    return (
+        <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">{label}</span>
+                <span className="font-mono">
+                    {used} / {limit}
+                </span>
+            </div>
+            <div
+                role="progressbar"
+                aria-label={`${label} usage`}
+                aria-valuenow={used}
+                aria-valuemin={0}
+                aria-valuemax={limit}
+                className="h-2 w-full overflow-hidden rounded-full bg-muted"
+            >
+                <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: `${pct}%` }}
+                />
+            </div>
+        </div>
+    );
+};
 
 export interface GenAISettingsTabProps {
     // Core settings
@@ -48,6 +127,25 @@ export interface GenAISettingsTabProps {
     onMaxLogsChange: (max: number) => void;
     onDownloadLogs: () => void;
     onClearLogs: () => void;
+    // Quota & Usage
+    quotaLimits: QuotaLimits;
+    onQuotaLimitsChange: (limits: QuotaLimits) => void;
+    bgThrottlePercent: number;
+    onBgThrottlePercentChange: (percent: number) => void;
+    fgRpdHeadroom: number;
+    onFgRpdHeadroomChange: (headroom: number) => void;
+    pauseAllGenAI: boolean;
+    onPauseAllGenAIChange: (paused: boolean) => void;
+    meters: QuotaMeters;
+    // Opt-in: embed the whole library in the background so semantic search can
+    // find passages by meaning (default off).
+    preEmbedLibrary: boolean;
+    onPreEmbedLibraryChange: (enabled: boolean) => void;
+    // Opt-in: upload this device's embedding vectors to the user's own cloud so
+    // their other devices can reuse them instead of re-spending Gemini quota
+    // (default off).
+    shareAiCaches: boolean;
+    onShareAiCachesChange: (enabled: boolean) => void;
 }
 
 export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
@@ -72,7 +170,20 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
     maxLogs,
     onMaxLogsChange,
     onDownloadLogs,
-    onClearLogs
+    onClearLogs,
+    quotaLimits,
+    onQuotaLimitsChange,
+    bgThrottlePercent,
+    onBgThrottlePercentChange,
+    fgRpdHeadroom,
+    onFgRpdHeadroomChange,
+    pauseAllGenAI,
+    onPauseAllGenAIChange,
+    meters,
+    preEmbedLibrary,
+    onPreEmbedLibraryChange,
+    shareAiCaches,
+    onShareAiCachesChange
 }) => {
     const contentTypes: ContentType[] = ['reference'];
 
@@ -273,6 +384,178 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                             </div>
                                         ))
                                     )}
+                                </div>
+                            </div>
+
+                            <div className="pt-4 border-t space-y-4">
+                                <div>
+                                    <h4 className="text-sm font-medium">Quota & Usage</h4>
+                                    <p className="text-xs text-muted-foreground">
+                                        Per-lane rate limits (read fresh on each request) and live usage meters.
+                                    </p>
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <Label htmlFor="genai-pause-all" className="text-sm font-medium">Pause All AI Requests</Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Stops every outgoing AI request before it leaves this device.
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        id="genai-pause-all"
+                                        checked={pauseAllGenAI}
+                                        onCheckedChange={onPauseAllGenAIChange}
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div className="space-y-1">
+                                        <Label htmlFor="genai-quota-rpm" className="text-xs">Requests / min</Label>
+                                        <Input
+                                            id="genai-quota-rpm"
+                                            type="number"
+                                            min={0}
+                                            value={quotaLimits.rpm}
+                                            onChange={(e) =>
+                                                onQuotaLimitsChange({ ...quotaLimits, rpm: parseInt(e.target.value) || 0 })
+                                            }
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="genai-quota-tpm" className="text-xs">Tokens / min</Label>
+                                        <Input
+                                            id="genai-quota-tpm"
+                                            type="number"
+                                            min={0}
+                                            value={quotaLimits.tpm}
+                                            onChange={(e) =>
+                                                onQuotaLimitsChange({ ...quotaLimits, tpm: parseInt(e.target.value) || 0 })
+                                            }
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="genai-quota-rpd" className="text-xs">Requests / day</Label>
+                                        <Input
+                                            id="genai-quota-rpd"
+                                            type="number"
+                                            min={0}
+                                            value={quotaLimits.rpd}
+                                            onChange={(e) =>
+                                                onQuotaLimitsChange({ ...quotaLimits, rpd: parseInt(e.target.value) || 0 })
+                                            }
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <Label htmlFor="genai-bg-throttle" className="text-xs">Background Throttle (%)</Label>
+                                        <Input
+                                            id="genai-bg-throttle"
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            value={bgThrottlePercent}
+                                            onChange={(e) =>
+                                                onBgThrottlePercentChange(parseInt(e.target.value) || 0)
+                                            }
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                            Share of the budget background work may use before it yields to foreground.
+                                        </p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="genai-fg-headroom" className="text-xs">Foreground RPD Headroom</Label>
+                                        <Input
+                                            id="genai-fg-headroom"
+                                            type="number"
+                                            min={0}
+                                            value={fgRpdHeadroom}
+                                            onChange={(e) =>
+                                                onFgRpdHeadroomChange(parseInt(e.target.value) || 0)
+                                            }
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                            Daily requests reserved for interactive use.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3 pt-2">
+                                    <h5 className="text-sm font-medium">Live Usage</h5>
+                                    <div className="space-y-2">
+                                        <UsageBar label="Foreground RPM" used={meters.fg.rpm} limit={meters.fg.limits.rpm} />
+                                        <UsageBar label="Foreground TPM" used={meters.fg.tpm} limit={meters.fg.limits.tpm} />
+                                        <UsageBar label="Foreground RPD" used={meters.fg.rpd} limit={meters.fg.limits.rpd} />
+                                        <UsageBar label="Background RPM" used={meters.bg.rpm} limit={meters.bg.limits.rpm} />
+                                        <UsageBar label="Background TPM" used={meters.bg.tpm} limit={meters.bg.limits.tpm} />
+                                    </div>
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">Today's spend (this project, all devices)</span>
+                                        <span className="font-mono" data-testid="genai-project-rpd">
+                                            {meters.projectRpd} / {meters.fg.limits.rpd} requests
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-muted-foreground">
+                                        <span>RPM exhausts: {formatEta(meters.etas.rpmMs)}</span>
+                                        <span>TPM exhausts: {formatEta(meters.etas.tpmMs)}</span>
+                                        <span>RPD exhausts: {formatEta(meters.etas.rpdMs)}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="pt-4 border-t space-y-4">
+                                <div>
+                                    <h4 className="text-sm font-medium">Semantic Search</h4>
+                                    <p className="text-xs text-muted-foreground">
+                                        Pre-embed your library so semantic search can find passages by meaning.
+                                    </p>
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5 max-w-md">
+                                        <label htmlFor="genai-preembed" className="text-sm font-medium">
+                                            Pre-embed my library for semantic search
+                                        </label>
+                                        <p className="text-xs text-muted-foreground">
+                                            When ON, the <strong>full text</strong> of books you have loaded but
+                                            not yet read is sent to Google during idle time to build search
+                                            embeddings, and your <strong>search query terms</strong> leave the
+                                            device to Google whenever you run a semantic search. This is broader
+                                            than the per-book TTS consent, which only sends short excerpts to
+                                            improve audio narration. Default OFF — nothing is pre-embedded unless
+                                            you turn this on.
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        id="genai-preembed"
+                                        checked={preEmbedLibrary}
+                                        onCheckedChange={onPreEmbedLibraryChange}
+                                    />
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5 max-w-md">
+                                        <label htmlFor="genai-share-ai-caches" className="text-sm font-medium">
+                                            Share AI caches across my devices
+                                        </label>
+                                        <p className="text-xs text-muted-foreground">
+                                            When ON, the <strong>whole-book embeddings</strong> a device builds
+                                            (the full-corpus search vectors, roughly ~251&nbsp;KB per book — far
+                                            heavier than the small annotation/progress data normal sync uploads)
+                                            are uploaded to <strong>your own cloud</strong>, so your other devices
+                                            can <strong>hydrate them without re-spending Gemini quota</strong>.
+                                            Nothing is shared with anyone else — the cache lands only in your own
+                                            Firebase project, content-addressed by the book and embedding stamp.
+                                            Default OFF — no embeddings leave the device unless you turn this on.
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        id="genai-share-ai-caches"
+                                        checked={shareAiCaches}
+                                        onCheckedChange={onShareAiCachesChange}
+                                    />
                                 </div>
                             </div>
                         </>

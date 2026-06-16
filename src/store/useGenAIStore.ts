@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { GenAILogEntry } from '@domains/google';
 import type { ContentType } from '~types/content-analysis';
+import type { QuotaLimits, LaneUsage } from '@kernel/quota';
 
 /**
  * GenAI configuration + activity-log store (Phase 7 §H, privacy D3/GG-3).
@@ -25,10 +26,31 @@ import type { ContentType } from '~types/content-analysis';
  *
  * The store no longer configures any singleton: the GeminiClient reads
  * config PER CALL via the provider wired in src/app/google/wireGoogle.ts.
+ *
+ * Quota config: the plain-data quota fields (`quotaLimits`,
+ * `bgThrottlePercent`, `fgRpdHeadroom`, `pauseAllGenAI`) ARE in the allowlist
+ * — settings the user edits in the GenAI tab to cap request rate/spend.
+ * `getQuotaSnapshot` is a live read-back of current usage: an IN-MEMORY
+ * provider function injected at startup (wireGoogle installs
+ * `() => governor.snapshot()`), so it is NEVER persisted — a function in
+ * localStorage would serialize to garbage, the same exclusion as logs above.
  */
 interface GenAIState {
   apiKey: string;
   model: string;
+  /** Embedding model id, read per embed call by the client. */
+  embeddingModel: string;
+  /** Requested embedding output dimensionality (vector length). */
+  embeddingDims: number;
+  /**
+   * When ON, the embedding client packs up to 100 texts into one
+   * `:batchEmbedContents` call instead of N separate `:embedContent` calls.
+   * Default OFF: it is not yet confirmed whether the batch endpoint counts as
+   * one request against the daily quota or N, so batching could silently blow
+   * the budget — it stays off until measured live. Additive field — tolerated
+   * by older persisted blobs (no migration needed).
+   */
+  useBatchEmbedding: boolean;
   isEnabled: boolean;
   isModelRotationEnabled: boolean;
   isContentAnalysisEnabled: boolean;
@@ -39,8 +61,54 @@ interface GenAIState {
   /** In-memory ring buffer (never persisted; pre-redacted entries). */
   logs: GenAILogEntry[];
   maxLogs: number;
+  /** Persisted per-lane quota limits, read fresh on every budget reservation. */
+  quotaLimits: QuotaLimits;
+  /** Persisted fraction (%) of the budget background work may consume. */
+  bgThrottlePercent: number;
+  /** Persisted RPD headroom reserved for the foreground lane. */
+  fgRpdHeadroom: number;
+  /** Persisted master pause — zeroes limits so acquire backpressures pre-network. */
+  pauseAllGenAI: boolean;
+  /**
+   * Persisted, default-OFF library-wide opt-in for proactively embedding books.
+   * When ON, the FULL TEXT of loaded-but-unread books may be sent to Google for
+   * embedding during idle time on the background (low-priority) request lane, so
+   * semantic search is ready before the user opens the book. The single source
+   * of truth read by both the consent check and the background backfill task.
+   * Additive field — tolerated by older persisted blobs (no migration needed).
+   */
+  preEmbedLibrary: boolean;
+  /**
+   * Persisted, default-OFF "Share AI caches across my devices" opt-in.
+   * Embeddings are expensive to regenerate (they cost API quota), so a book
+   * embedded on one device should be reusable on the user's other devices. When
+   * ON, this gates BOTH halves of that: uploading this device's book embeddings
+   * into the user's OWN cloud storage, AND reading another device's uploaded
+   * embeddings instead of recomputing. A localStorage flag like preEmbedLibrary
+   * — no IndexedDB/CRDT change. Additive — tolerated by older persisted blobs
+   * (no migration needed). (design: plan/shared-ai-cache-design.md)
+   */
+  shareAiCaches: boolean;
+  /**
+   * In-memory injected snapshot provider (the READ mirror of `addLog`):
+   * wireGoogle installs `() => governor.snapshot()`. NEVER persisted.
+   */
+  getQuotaSnapshot?: () => Record<'fg' | 'bg', LaneUsage>;
+  /**
+   * In-memory injected seam exposing the background lane's budget: wireGoogle
+   * installs the background-lane ceiling and the governor's live
+   * background-requests-today count, so the background backfill task can check
+   * whether it has room to embed more WITHOUT importing the kernel governor.
+   * NEVER persisted (same reason as getQuotaSnapshot — a function serializes to
+   * garbage).
+   */
+  getBgQuotaLimits?: () => QuotaLimits;
+  getBgUsedRpd?: () => number;
   setApiKey: (key: string) => void;
   setModel: (model: string) => void;
+  setEmbeddingModel: (model: string) => void;
+  setEmbeddingDims: (dims: number) => void;
+  setUseBatchEmbedding: (enabled: boolean) => void;
   setEnabled: (enabled: boolean) => void;
   setModelRotationEnabled: (enabled: boolean) => void;
   setContentAnalysisEnabled: (enabled: boolean) => void;
@@ -51,6 +119,15 @@ interface GenAIState {
   setMaxLogs: (max: number) => void;
   addLog: (log: GenAILogEntry) => void;
   clearLogs: () => void;
+  setQuotaLimits: (limits: QuotaLimits) => void;
+  setBgThrottlePercent: (percent: number) => void;
+  setFgRpdHeadroom: (headroom: number) => void;
+  setPauseAllGenAI: (paused: boolean) => void;
+  setPreEmbedLibrary: (enabled: boolean) => void;
+  setShareAiCaches: (enabled: boolean) => void;
+  setQuotaSnapshotProvider: (provider: () => Record<'fg' | 'bg', LaneUsage>) => void;
+  /** Install the background-lane budget read-back seam (in-memory; never persisted). */
+  setBgBudgetProvider: (getBgQuotaLimits: () => QuotaLimits, getBgUsedRpd: () => number) => void;
 }
 
 /** The persisted slice (explicit allowlist — see module header). */
@@ -58,6 +135,9 @@ type PersistedGenAIState = Pick<
   GenAIState,
   | 'apiKey'
   | 'model'
+  | 'embeddingModel'
+  | 'embeddingDims'
+  | 'useBatchEmbedding'
   | 'isEnabled'
   | 'isModelRotationEnabled'
   | 'isContentAnalysisEnabled'
@@ -66,6 +146,12 @@ type PersistedGenAIState = Pick<
   | 'isDebugModeEnabled'
   | 'referenceDetectionStrategy'
   | 'maxLogs'
+  | 'quotaLimits'
+  | 'bgThrottlePercent'
+  | 'fgRpdHeadroom'
+  | 'pauseAllGenAI'
+  | 'preEmbedLibrary'
+  | 'shareAiCaches'
 >;
 
 export const useGenAIStore = create<GenAIState>()(
@@ -73,6 +159,9 @@ export const useGenAIStore = create<GenAIState>()(
     (set) => ({
       apiKey: '',
       model: 'gemini-flash-lite-latest',
+      embeddingModel: 'gemini-embedding-001',
+      embeddingDims: 768,
+      useBatchEmbedding: false,
       isEnabled: false,
       isModelRotationEnabled: false,
       isContentAnalysisEnabled: false,
@@ -82,8 +171,20 @@ export const useGenAIStore = create<GenAIState>()(
       referenceDetectionStrategy: 'gemini' as ReferenceDetectionStrategy,
       logs: [],
       maxLogs: 500,
+      quotaLimits: { rpm: 100, tpm: 30_000, rpd: 1000 },
+      bgThrottlePercent: 50,
+      fgRpdHeadroom: 0,
+      pauseAllGenAI: false,
+      preEmbedLibrary: false,
+      shareAiCaches: false,
+      getQuotaSnapshot: undefined,
+      getBgQuotaLimits: undefined,
+      getBgUsedRpd: undefined,
       setApiKey: (key) => set({ apiKey: key }),
       setModel: (model) => set({ model }),
+      setEmbeddingModel: (model) => set({ embeddingModel: model }),
+      setEmbeddingDims: (dims) => set({ embeddingDims: dims }),
+      setUseBatchEmbedding: (enabled) => set({ useBatchEmbedding: enabled }),
       setEnabled: (enabled) => set({ isEnabled: enabled }),
       setModelRotationEnabled: (enabled) => set({ isModelRotationEnabled: enabled }),
       setContentAnalysisEnabled: (enabled) => set({ isContentAnalysisEnabled: enabled }),
@@ -102,6 +203,15 @@ export const useGenAIStore = create<GenAIState>()(
           return { logs: newLogs };
         }),
       clearLogs: () => set({ logs: [] }),
+      setQuotaLimits: (limits) => set({ quotaLimits: limits }),
+      setBgThrottlePercent: (percent) => set({ bgThrottlePercent: percent }),
+      setFgRpdHeadroom: (headroom) => set({ fgRpdHeadroom: headroom }),
+      setPauseAllGenAI: (paused) => set({ pauseAllGenAI: paused }),
+      setPreEmbedLibrary: (enabled) => set({ preEmbedLibrary: enabled }),
+      setShareAiCaches: (enabled) => set({ shareAiCaches: enabled }),
+      setQuotaSnapshotProvider: (provider) => set({ getQuotaSnapshot: provider }),
+      setBgBudgetProvider: (getBgQuotaLimits, getBgUsedRpd) =>
+        set({ getBgQuotaLimits, getBgUsedRpd }),
     }),
     {
       name: 'genai-storage',
@@ -110,6 +220,9 @@ export const useGenAIStore = create<GenAIState>()(
       partialize: (state): PersistedGenAIState => ({
         apiKey: state.apiKey,
         model: state.model,
+        embeddingModel: state.embeddingModel,
+        embeddingDims: state.embeddingDims,
+        useBatchEmbedding: state.useBatchEmbedding,
         isEnabled: state.isEnabled,
         isModelRotationEnabled: state.isModelRotationEnabled,
         isContentAnalysisEnabled: state.isContentAnalysisEnabled,
@@ -118,6 +231,12 @@ export const useGenAIStore = create<GenAIState>()(
         isDebugModeEnabled: state.isDebugModeEnabled,
         referenceDetectionStrategy: state.referenceDetectionStrategy,
         maxLogs: state.maxLogs,
+        quotaLimits: state.quotaLimits,
+        bgThrottlePercent: state.bgThrottlePercent,
+        fgRpdHeadroom: state.fgRpdHeadroom,
+        pauseAllGenAI: state.pauseAllGenAI,
+        preEmbedLibrary: state.preEmbedLibrary,
+        shareAiCaches: state.shareAiCaches,
       }),
       /**
        * v0 → v1: strip the legacy persisted `logs` (full prompts, base64

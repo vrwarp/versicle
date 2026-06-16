@@ -165,4 +165,71 @@ describe('useDeviceStore', () => {
         // this might fail in a real distributed scenario, but locally it should pass unless logic is flawed.
         expect(devices['device-existing']).toBeDefined();
     });
+
+    it('embedSpend survives a registerCurrentDevice call (self-clobber fix, §3.4 prereq iii)', () => {
+        // registerCurrentDevice runs on EVERY boot and rebuilds the device's
+        // record from a fresh literal. Without `embedSpend: existing?.embedSpend`
+        // it would DELETE this device's own published spend each boot.
+        useDeviceStore.setState({
+            devices: {
+                'device-self': {
+                    id: 'device-self',
+                    name: 'My Device',
+                    created: 1000,
+                    lastActive: 1000,
+                    profile: {} as any,
+                    embedSpend: { day: '2026-06-13', rpd: 5 }
+                } as any
+            }
+        });
+
+        // Re-register the SAME device (the every-boot path).
+        const { registerCurrentDevice } = useDeviceStore.getState();
+        registerCurrentDevice('device-self', {} as any);
+
+        const device = useDeviceStore.getState().devices['device-self'];
+        expect(device.embedSpend).toEqual({ day: '2026-06-13', rpd: 5 });
+    });
+
+    it('publishEmbedSpend writes only the own record via immutable spread', () => {
+        useDeviceStore.setState({
+            devices: {
+                'device-a': {
+                    id: 'device-a',
+                    name: 'Device A',
+                    created: 1000,
+                    lastActive: 2000,
+                    profile: { theme: 'dark' } as any
+                } as any,
+                'device-b': {
+                    id: 'device-b',
+                    name: 'Device B',
+                    created: 3000,
+                    lastActive: 4000,
+                    profile: {} as any,
+                    embedSpend: { day: '2026-06-12', rpd: 9 }
+                } as any
+            }
+        });
+
+        const { publishEmbedSpend } = useDeviceStore.getState();
+        publishEmbedSpend('device-a', { day: '2026-06-13', rpd: 7 });
+
+        const devices = useDeviceStore.getState().devices;
+        // device-a got its embedSpend set...
+        expect(devices['device-a'].embedSpend).toEqual({ day: '2026-06-13', rpd: 7 });
+        // ...with created / profile / lastActive preserved.
+        expect(devices['device-a'].created).toBe(1000);
+        expect(devices['device-a'].lastActive).toBe(2000);
+        expect(devices['device-a'].profile).toEqual({ theme: 'dark' });
+        // device-b is untouched.
+        expect(devices['device-b']).toEqual({
+            id: 'device-b',
+            name: 'Device B',
+            created: 3000,
+            lastActive: 4000,
+            profile: {},
+            embedSpend: { day: '2026-06-12', rpd: 9 }
+        });
+    });
 });

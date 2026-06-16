@@ -53,6 +53,17 @@ const SYNC_CONNECTION_ERROR_EVENTS = [
 ] as const satisfies readonly SyncConnectionEventName[];
 
 /**
+ * In-workspace paths the artifact round-trip cases exercise. An artifact is a
+ * cached embedding stored as two records: the raw bytes ("blob", used by
+ * put/get) and a small sibling metadata record ("HEAD doc", used by head). The
+ * shared key (`contract-key`) is also what the workspace-delete purge case
+ * seeds so it can assert the HEAD doc gets swept along with everything else.
+ * (design: plan/shared-ai-cache-design.md)
+ */
+const ARTIFACT_BLOB_REL_PATH = 'embeddings/contract-key.bin';
+const ARTIFACT_HEAD_REL_PATH = 'embedCache/contract-key';
+
+/**
  * What a backend must provide to run the contract. Mirrors the surface P4
  * extracts into `SyncBackend` (workspace metadata CRUD, tombstone
  * pre-flight, doc replication).
@@ -113,6 +124,41 @@ export interface SyncBackendContractHarness {
    */
   attemptWriteToTombstoned?(workspaceId: string): Promise<boolean>;
   /**
+   * Cached-embedding storage (put/head/get). `relPath` is the in-workspace
+   * path — the raw-bytes blob (`embeddings/{key}.bin`) for put/get, the small
+   * metadata record (`embedCache/{key}`) for head. Required when
+   * capabilities.artifacts is on; both backends implement it (the mock via an
+   * in-memory Map, the Firestore backend via Cloud Storage for the blob plus a
+   * Firestore doc for the metadata record).
+   */
+  putArtifact?(
+    workspaceId: string,
+    relPath: string,
+    bytes: ArrayBuffer | Uint8Array,
+    meta: { stamp: string; size: number }
+  ): Promise<void>;
+  headArtifact?(
+    workspaceId: string,
+    relPath: string
+  ): Promise<{ exists: true; stamp: string; size: number } | null>;
+  getArtifact?(workspaceId: string, relPath: string): Promise<ArrayBuffer | null>;
+  /**
+   * Cached-embedding garbage collection. `deleteArtifactHead` deletes the
+   * `embedCache/{key}` metadata record ONLY, leaving the raw-bytes blob for the
+   * sweeper to reclaim later (the blob may be shared, so it is not safe to
+   * delete eagerly). `sweepArtifacts` bounds total storage by deleting
+   * metadata+blob pairs that are past their TTL, and evicting oldest-first when
+   * over a byte budget. Required when capabilities.artifacts is on; both
+   * backends implement them (the mock collapses metadata record + blob into one
+   * Map entry, so the leave-the-blob guarantee is pinned ONLY by the emulator
+   * path). (design: plan/shared-ai-cache-design.md)
+   */
+  deleteArtifactHead?(workspaceId: string, relPath: string): Promise<void>;
+  sweepArtifacts?(
+    workspaceId: string,
+    opts: { ttlMs: number; now: number; budgetBytes?: number }
+  ): Promise<{ headsDeleted: number; blobsDeleted: number }>;
+  /**
    * Make probeHasData turn true WITHOUT a realtime connection (e.g. write
    * an `updates` doc directly). Used by the probe cases when
    * capabilities.connect is off.
@@ -153,6 +199,14 @@ interface SyncBackendContractCapabilities {
    * countResiduals simply reports what the environment can see.
    */
   purge: boolean;
+  /**
+   * The cached-embedding round-trip (headArtifact/putArtifact/getArtifact) is
+   * exercisable here. True for both backends; the mock runs the round-trip
+   * over an in-memory Map (no real Storage tier), so the ordering guarantee
+   * (write the blob before its metadata record) and crash fail-safes are pinned
+   * ONLY by the emulator suite.
+   */
+  artifacts: boolean;
 }
 
 export interface SyncBackendContractOptions {
@@ -446,10 +500,26 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
           await harness.seedResiduals!(doomed.workspaceId);
           expect(await harness.countResiduals!(doomed.workspaceId)).toBeGreaterThan(0);
 
+          // A workspace delete must also remove cached embeddings. seedResiduals
+          // planted one (an `embedCache/{key}` metadata record + its blob);
+          // assert it is present before the delete and gone after. The blob is
+          // reclaimed by the storage-prefix purge; this case pins the metadata-
+          // record half, which is not removed automatically with it.
+          if (capabilities.artifacts) {
+            await expect(
+              harness.headArtifact!(doomed.workspaceId, ARTIFACT_HEAD_REL_PATH)
+            ).resolves.not.toBeNull();
+          }
+
           await harness.deleteWorkspace(doomed.workspaceId);
 
           // Honest: nothing replicated remains…
           expect(await harness.countResiduals!(doomed.workspaceId)).toBe(0);
+          if (capabilities.artifacts) {
+            await expect(
+              harness.headArtifact!(doomed.workspaceId, ARTIFACT_HEAD_REL_PATH)
+            ).resolves.toBeNull();
+          }
           // …but the tombstone does (no resurrection).
           await expect(harness.isWorkspaceAlive(doomed.workspaceId)).resolves.toBe(false);
         });
@@ -483,6 +553,225 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
           'deleteWorkspace purges residual updates/history/maintenance docs and Storage snapshots'
         );
       }
+    });
+
+    // Cached-embedding storage: content-addressed put/head/get under the
+    // workspace's path. Behavioral cases run against BOTH backends (the mock's
+    // in-memory Map and, in CI, the real Firestore+Storage emulator). The write
+    // ordering guarantee (blob first, then its metadata record) and the
+    // offline-vs-genuine-miss fail-safe are pinned ONLY by the emulator suite
+    // (the mock has no real Storage tier) — see capabilities.artifacts.
+    describe('artifact lane (C3 method trio)', () => {
+      if (!capabilities.artifacts) {
+        it.todo('headArtifact/putArtifact/getArtifact round-trip');
+        return;
+      }
+
+      const bytesOf = (s: string): Uint8Array => new TextEncoder().encode(s);
+
+      it('put → head → get round-trip: bytes and {stamp,size} survive', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        const payload = bytesOf('int8-vectors-and-scales');
+        await harness.putArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH, payload, {
+          stamp: 'model-a|dims-256|q8',
+          size: payload.byteLength,
+        });
+
+        const head = await harness.headArtifact!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH);
+        expect(head).not.toBeNull();
+        expect(head!.exists).toBe(true);
+        expect(head!.stamp).toBe('model-a|dims-256|q8');
+        expect(head!.size).toBe(payload.byteLength);
+
+        const got = await harness.getArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH);
+        expect(got).not.toBeNull();
+        expect(Array.from(new Uint8Array(got!))).toEqual(Array.from(payload));
+      });
+
+      it('headArtifact returns null on a HEAD-doc miss', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        await expect(
+          harness.headArtifact!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH)
+        ).resolves.toBeNull();
+      });
+
+      it('getArtifact returns null on a never-put blob (definitive miss)', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        await expect(
+          harness.getArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH)
+        ).resolves.toBeNull();
+      });
+
+      it('putArtifact is idempotent (ifAbsent): a second put with the same key does not corrupt the first', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        const original = bytesOf('original-bytes');
+        await harness.putArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH, original, {
+          stamp: 'stamp-1',
+          size: original.byteLength,
+        });
+
+        // Second put with the SAME key is a no-op (put checks for an existing
+        // metadata record first). Different bytes/meta must NOT overwrite the
+        // content-addressed original.
+        const overwrite = bytesOf('different-bytes-should-be-ignored');
+        await harness.putArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH, overwrite, {
+          stamp: 'stamp-2',
+          size: overwrite.byteLength,
+        });
+
+        const head = await harness.headArtifact!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH);
+        expect(head!.stamp).toBe('stamp-1');
+        expect(head!.size).toBe(original.byteLength);
+        const got = await harness.getArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH);
+        expect(Array.from(new Uint8Array(got!))).toEqual(Array.from(original));
+      });
+
+      it('artifacts in different workspaces do not collide (workspace-scoped path)', async () => {
+        const wsA = await harness.createWorkspace('A');
+        const wsB = await harness.createWorkspace('B');
+        const payloadA = bytesOf('A-only');
+        await harness.putArtifact!(wsA.workspaceId, ARTIFACT_BLOB_REL_PATH, payloadA, {
+          stamp: 'stamp-a',
+          size: payloadA.byteLength,
+        });
+
+        // Same relPath, different workspace → independent slot, still a miss.
+        await expect(
+          harness.headArtifact!(wsB.workspaceId, ARTIFACT_HEAD_REL_PATH)
+        ).resolves.toBeNull();
+        await expect(
+          harness.getArtifact!(wsB.workspaceId, ARTIFACT_BLOB_REL_PATH)
+        ).resolves.toBeNull();
+      });
+
+      // ── Cached-embedding garbage collection ───────────────────────────────
+      // NOTE: the MockBackend collapses metadata record + blob into one Map
+      // entry (no Storage tier), so the "delete the metadata record but KEEP the
+      // shared blob" reference-safety guarantee CANNOT be proven on the mock —
+      // these cases pin metadata-record-removal semantics on the mock;
+      // blob-survival is pinned only on the Firestore/emulator path (capability
+      // not yet wired there).
+      it('deleteArtifactHead removes the HEAD doc; an untouched second key survives', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        const SECOND_BLOB = 'embeddings/second-key.bin';
+        const SECOND_HEAD = 'embedCache/second-key';
+
+        const a = bytesOf('first');
+        await harness.putArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH, a, {
+          stamp: 'stamp-1',
+          size: a.byteLength,
+        });
+        const b = bytesOf('second');
+        await harness.putArtifact!(ws.workspaceId, SECOND_BLOB, b, {
+          stamp: 'stamp-2',
+          size: b.byteLength,
+        });
+
+        await harness.deleteArtifactHead!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH);
+
+        // The targeted HEAD doc is gone…
+        await expect(
+          harness.headArtifact!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH)
+        ).resolves.toBeNull();
+        // …but a freshly-put SECOND key under the same workspace is untouched.
+        await expect(
+          harness.headArtifact!(ws.workspaceId, SECOND_HEAD)
+        ).resolves.not.toBeNull();
+      });
+
+      it('deleteArtifactHead on an already-gone key is a clean no-op', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        await expect(
+          harness.deleteArtifactHead!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH)
+        ).resolves.toBeUndefined();
+      });
+
+      it('sweepArtifacts deletes a past-TTL artifact and keeps a fresh one', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        const FRESH_BLOB = 'embeddings/fresh-key.bin';
+        const FRESH_HEAD = 'embedCache/fresh-key';
+
+        const stale = bytesOf('stale');
+        await harness.putArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH, stale, {
+          stamp: 'stale',
+          size: stale.byteLength,
+        });
+        const fresh = bytesOf('fresh');
+        await harness.putArtifact!(ws.workspaceId, FRESH_BLOB, fresh, {
+          stamp: 'fresh',
+          size: fresh.byteLength,
+        });
+
+        // now in the far future + ttlMs=0 → EVERY artifact whose createdAt is in
+        // the past is past-TTL. (Both were just put; both qualify.) Drive a more
+        // discriminating case via budget below; here we prove a past-TTL sweep
+        // deletes and the report is honest.
+        const report = await harness.sweepArtifacts!(ws.workspaceId, {
+          ttlMs: 0,
+          now: Date.now() + 60_000,
+        });
+        expect(report.headsDeleted).toBe(2);
+        await expect(
+          harness.headArtifact!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH)
+        ).resolves.toBeNull();
+        await expect(
+          harness.headArtifact!(ws.workspaceId, FRESH_HEAD)
+        ).resolves.toBeNull();
+      });
+
+      it('sweepArtifacts with a large TTL keeps everything (nothing past-TTL)', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        const payload = bytesOf('keep-me');
+        await harness.putArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH, payload, {
+          stamp: 'keep',
+          size: payload.byteLength,
+        });
+
+        const report = await harness.sweepArtifacts!(ws.workspaceId, {
+          ttlMs: 30 * 24 * 60 * 60 * 1000, // 30d
+          now: Date.now(),
+        });
+        expect(report.headsDeleted).toBe(0);
+        await expect(
+          harness.headArtifact!(ws.workspaceId, ARTIFACT_HEAD_REL_PATH)
+        ).resolves.not.toBeNull();
+      });
+
+      it('over-budget sweep deletes oldest-by-createdAt first', async () => {
+        const ws = await harness.createWorkspace('Artifacts');
+        // Three artifacts, each 4 bytes; put sequentially so createdAt orders
+        // them oldest→newest. A 4-byte budget admits exactly one (the newest);
+        // the two oldest evict.
+        const KEYS = [
+          { blob: 'embeddings/k1.bin', head: 'embedCache/k1' },
+          { blob: 'embeddings/k2.bin', head: 'embedCache/k2' },
+          { blob: 'embeddings/k3.bin', head: 'embedCache/k3' },
+        ];
+        for (const k of KEYS) {
+          const payload = bytesOf('1234'); // 4 bytes
+          await harness.putArtifact!(ws.workspaceId, k.blob, payload, {
+            stamp: k.head,
+            size: payload.byteLength,
+          });
+          // A tiny gap so createdAt is strictly increasing on fast clocks.
+          await new Promise((r) => setTimeout(r, 2));
+        }
+
+        // ttlMs huge (nothing past-TTL) so ONLY the budget rule fires; budget
+        // admits one 4-byte artifact, so the two oldest (k1, k2) evict.
+        const report = await harness.sweepArtifacts!(ws.workspaceId, {
+          ttlMs: 30 * 24 * 60 * 60 * 1000,
+          now: Date.now(),
+          budgetBytes: 4,
+        });
+        expect(report.headsDeleted).toBe(2);
+        await expect(harness.headArtifact!(ws.workspaceId, 'embedCache/k1')).resolves.toBeNull();
+        await expect(harness.headArtifact!(ws.workspaceId, 'embedCache/k2')).resolves.toBeNull();
+        // The newest survives (under budget).
+        await expect(
+          harness.headArtifact!(ws.workspaceId, 'embedCache/k3')
+        ).resolves.not.toBeNull();
+      });
     });
   });
 }

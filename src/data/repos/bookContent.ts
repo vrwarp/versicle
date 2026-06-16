@@ -439,7 +439,8 @@ class BookContentRepo {
       await write([
         'static_manifests', 'static_resources', 'static_structure',
         'cache_render_metrics', 'cache_session_state', 'cache_tts_preparation',
-        'cache_table_images', 'cache_search_text'
+        'cache_table_images', 'cache_search_text',
+        'cache_embeddings', 'cache_embed_jobs'
       ], (tx) => {
         tx.objectStore('static_manifests').delete(id);
         tx.objectStore('static_resources').delete(id);
@@ -448,6 +449,10 @@ class BookContentRepo {
         tx.objectStore('cache_session_state').delete(id);
         // v26: the persisted search corpus dies with the book (Phase 7 §F).
         tx.objectStore('cache_search_text').delete(id);
+        // v27: the embedding vectors and their resumable job state die with
+        // the book too (Increment B) — no vectors leak past deletion.
+        tx.objectStore('cache_embeddings').delete(id);
+        tx.objectStore('cache_embed_jobs').delete(id);
 
         const prepStore = tx.objectStore('cache_tts_preparation');
         for (const key of prepKeys) prepStore.delete(key);

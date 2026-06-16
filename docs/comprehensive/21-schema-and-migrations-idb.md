@@ -1,6 +1,6 @@
 # IndexedDB Schema & Migrations
 
-This document covers the `EpubLibraryDB` IndexedDB schema in full — every object store, its key path, its indexes, and the row types — plus the versioned migration registry, the IDB v25 and v26 steps, the straggler snapshot-before-delete guard, the `schemaHistory` append-on-upgrade mechanism, the `by_lastAccessed` LRU index and its post-open idle size backfill, and multi-tab upgrade coordination. The authoritative source code is [src/data/schema.ts](../../src/data/schema.ts), [src/data/connection.ts](../../src/data/connection.ts), [src/data/rows/](../../src/data/rows/), and [src/data/migrations.test.ts](../../src/data/migrations.test.ts).
+This document covers the `EpubLibraryDB` IndexedDB schema in full — every object store, its key path, its indexes, and the row types — plus the versioned migration registry, the IDB v25, v26, and v27 steps, the straggler snapshot-before-delete guard, the `schemaHistory` append-on-upgrade mechanism, the `by_lastAccessed` LRU index and its post-open idle size backfill, and multi-tab upgrade coordination. The authoritative source code is [src/data/schema.ts](../../src/data/schema.ts), [src/data/connection.ts](../../src/data/connection.ts), [src/data/rows/](../../src/data/rows/), and [src/data/migrations.test.ts](../../src/data/migrations.test.ts).
 
 For the broader storage gateway context — the write gate, repos, wipe, and service-worker contract — see [Storage gateway](20-storage-gateway.md). For the Yjs CRDT that lives in the separate `versicle-yjs` database, see [CRDT format and migrations](22-crdt-format-and-migrations.md).
 
@@ -20,7 +20,9 @@ This taxonomy is embedded in the store naming convention (`static_*`, `cache_*`,
 
 ### The One-In-Flight Format Rule
 
-The master plan (`plan/overhaul/README.md` §4 rule 4) enforces that at most one user-data format change is in flight at any time, in a specific chain: backup manifest v3 (Phase 0) → CRDT v6 (Phase 2) → **IDB v25** (Phase 3) → `tts-storage` v3 / `tts-settings` v1 (Phase 5b) → CRDT v7 (Phase 6) → CRDT v8 + IDB v26 (Phase 7) → CRDT v9 (Phase 9). IDB versions are monotonic — a v24 build cannot open a v25 database — which is why each IDB bump waits for the previous format change's stability window.
+The master plan (`plan/overhaul/README.md` §4 rule 4) enforces that at most one user-data format change is in flight at any time, in a specific chain: backup manifest v3 (Phase 0) → CRDT v6 (Phase 2) → **IDB v25** (Phase 3) → `tts-storage` v3 / `tts-settings` v1 (Phase 5b) → CRDT v7 (Phase 6) → CRDT v8 + IDB v26 (Phase 7) → CRDT v9 (Phase 9) → **IDB v27** (semantic search). IDB versions are monotonic — a v24 build cannot open a v25 database — which is why each IDB bump waits for the previous format change's stability window.
+
+The v27 bump is a **deviation** from the original plan: `plan/semantic-search-design.md` §6.2 reserved v27 for *retiring old surface* (the `sync_log` drop plus the SW legacy-cover fallback removal) and expected the embedding stores to take the next slot after that cleanup shipped. The cleanup was never done, so the embedding stores took v27 directly (both are purely additive cache-domain stores, so the deviation is safe). The reserved `sync_log`/SW-cover cleanup is therefore now the **next** (v28) bump (see §7 and the timeline in §8).
 
 ---
 
@@ -90,6 +92,21 @@ erDiagram
         string bookId PK
         number extractionVersion
         array sections
+        string sectionTextHash
+    }
+    cache_embeddings {
+        string bookId PK
+        string model
+        number dims
+        string quant
+        number extractionVersion
+        array sections
+    }
+    cache_embed_jobs {
+        string bookId PK
+        number extractionVersion
+        array sections
+        number updatedAt
     }
     checkpoints {
         number id PK
@@ -129,6 +146,8 @@ erDiagram
     static_manifests ||--|| cache_session_state : "playback state"
     static_manifests ||--o{ cache_table_images : "by bookId"
     static_manifests ||--o| cache_search_text : "search corpus"
+    static_manifests ||--o| cache_embeddings : "semantic vectors"
+    static_manifests ||--o| cache_embed_jobs : "embed progress"
 ```
 
 ### 2.1 Object Store Reference Table
@@ -144,12 +163,14 @@ erDiagram
 | `cache_session_state` | `bookId` | No | — | CACHE |
 | `cache_tts_preparation` | `id` | No | `by_bookId` | CACHE |
 | `cache_search_text` | `bookId` | No | — | CACHE (v26) |
+| `cache_embeddings` | `bookId` | No | — | CACHE (v27) |
+| `cache_embed_jobs` | `bookId` | No | — | CACHE (v27) |
 | `checkpoints` | `id` | Yes | `by_timestamp` | APP |
 | `sync_log` | `id` | Yes | `by_timestamp` | APP |
 | `app_metadata` | out-of-line | No | — | APP |
 | `flight_snapshots` | `id` | No | — | APP |
 
-The complete 13-store set at `DB_VERSION = 26` is pinned by both `connection.test.ts` and `migrations.test.ts` (the `CURRENT_STORE_SET` constant at [src/data/migrations.test.ts](../../src/data/migrations.test.ts#L56)).
+The complete 15-store set at `DB_VERSION = 27` is pinned by both `connection.test.ts` and `migrations.test.ts` (the `CURRENT_STORE_SET` constant at [src/data/migrations.test.ts](../../src/data/migrations.test.ts#L56)).
 
 ### 2.2 Static Domain
 
@@ -185,11 +206,19 @@ The v25 migration step adds the `by_lastAccessed` index on this store (see §4.1
 
 **`cache_search_text`** — introduced by the v26 migration step (Phase 7). One row per book, keyed by `bookId`. Holds a `sections` array of `{ href, title, text }` objects representing the plain-text search corpus for each spine section, plus an `extractionVersion` invalidation stamp. Absence triggers re-extraction on first search. Deleted in the same transaction as the book ([bookContent.ts](../../src/data/repos/bookContent.ts)).
 
+Each section also carries an **additive `sectionTextHash`** field (a `cheapHash` of the section text, stamped at import in [extract.ts](../../src/domains/library/import/extract.ts#L296)). It is the change-detection key the embedding builder uses to skip re-embedding sections whose text is unchanged. Additive on the row — rows written before the field existed simply lack it and get re-extracted (no migration, no schema-version bump).
+
+**`cache_embeddings`** — introduced by the v27 migration step (semantic search). One row per book, keyed by `bookId`, holding the precomputed embedding vectors that power semantic ("meaning-based") in-book search. Each spine section in the `sections` array carries its `href`, the `sectionTextHash` invalidation stamp, a `chunks` array of `{ cfiStart, cfiEnd, tokenCount }`, and two packed binary buffers: `vectors` (int8-quantized embedding rows, one per chunk, 768 dims) and `scales` (the per-vector float32 dequantization scales). A row-level `{ model, dims, quant: 'int8-pervec', extractionVersion }` stamp lets search detect vectors built with a now-outdated model or settings and rebuild them. The binary buffers are persisted as raw `ArrayBuffer`s (the WebKit-safe structured-clone form) and re-wrapped to `Int8Array`/`Float32Array` on read by the [embeddings repo](../../src/data/repos/embeddings.ts). Cache-domain, **device-local, never synced**; deleted in the same gated transaction as the book.
+
+Two **additive per-chunk char offsets** — `charStart` and `charEnd` — record the inclusive/exclusive character span of each chunk within the section text, written when embeddings are built so search can highlight the matched span without re-splitting the section. Additive: rows written before these fields existed lack them and fall back to re-splitting (no migration, no `DB_VERSION` bump). The `cfiStart`/`cfiEnd` fields stay empty in practice — the EPUB CFI jump-target is resolved lazily at click time rather than at embed time (the background chunker cannot derive a CFI from raw text).
+
+**`cache_embed_jobs`** — introduced by the v27 migration step alongside `cache_embeddings`. One row per book, keyed by `bookId`, holding per-section progress for the background embedding-build job so it can resume mid-book after an interruption instead of re-embedding sections already written to `cache_embeddings`. Each section records `{ href, embeddedThroughChunk, sectionTextHash? }` (the `{ href, sectionTextHash }` pair is the resume key — a section whose recorded hash still matches the current text is skipped, a mismatch re-embeds it), plus a row-level `extractionVersion` stamp and `updatedAt`. The `sectionTextHash` per-section field is additive — rows written before it existed lack it and re-embed. Deleted together with the book and its vectors in the same gated delete transaction.
+
 ### 2.4 App Domain
 
 **`checkpoints`** — recovery checkpoints for the Yjs document, written before migration steps and periodically by the sync layer. Uses autoincrement numeric keys (`id`). The `by_timestamp` index supports querying the most-recent checkpoint. The `protected` boolean (additive, absent on old rows) pins a checkpoint against the rolling 10-checkpoint prune limit. The checkpoints repo ([src/data/repos/checkpoints.ts](../../src/data/repos/checkpoints.ts)) enforces both invariants: supersede-older-protected (only the newest protected checkpoint stays pinned) and prune-skip-protected (protected rows are never pruned during the rolling trim).
 
-**`sync_log`** — a dead store at HEAD. Defined in the schema with a `by_timestamp` index and a typed `SyncLogEntryRow` shape (`level: 'info' | 'warn' | 'error'`, `message`, optional `details`), but has zero production readers or writers. Frozen as-is (`rows/app.ts` comment: "FROZEN (dead store at HEAD, see module docs)") for the Phase 4 sync strangler to adopt or Phase 9 to delete (the operator's hand-off checklist, point 4). The next IDB bump that touches it must be a separate v27 step.
+**`sync_log`** — a dead store at HEAD. Defined in the schema with a `by_timestamp` index and a typed `SyncLogEntryRow` shape (`level: 'info' | 'warn' | 'error'`, `message`, optional `details`), but has zero production readers or writers. Frozen as-is (`rows/app.ts` comment: "FROZEN (dead store at HEAD, see module docs)") for the Phase 4 sync strangler to adopt or Phase 9 to delete (the operator's hand-off checklist, point 4). The IDB bump that retires it must be a separate step — originally reserved as v27, but v27 was taken by the additive embedding stores (see §1, §7), so its retirement is now the **next** (v28) step (§8 timeline).
 
 **`app_metadata`** — an out-of-line-key key-value store repurposed by the v25 migration step as the schema-evolution envelope (previously it was unused since v18). Known keys are enumerated in `APP_METADATA_KEYS` ([src/data/rows/app.ts](../../src/data/rows/app.ts#L107)):
 
@@ -299,9 +328,11 @@ flowchart TD
     C --> D{"For each MIGRATIONS step\nwhere oldVersion < step.toVersion"}
     D -->|"toVersion=25\noldVersion < 25"| E["migrateToV25()\n1. captureLegacyUserData()\n2. deleteDeprecatedStores()\n3. createIndex by_lastAccessed"]
     D -->|"toVersion=26\noldVersion < 26"| F["migrateToV26()\nCreate cache_search_text\n(additive, cache domain)"]
+    D -->|"toVersion=27\noldVersion < 27"| F2["migrateToV27()\nCreate cache_embeddings\n+ cache_embed_jobs\n(additive, cache domain)"]
     D -->|"no more steps"| G["appendSchemaHistory()\nPush {from, to, at}\nto app_metadata['schemaHistory']"]
     E --> D
     F --> D
+    F2 --> D
     G --> H["versionchange transaction commits\nDB opens at new version"]
 ```
 
@@ -311,6 +342,7 @@ The registry is the `MIGRATIONS` constant in [src/data/schema.ts](../../src/data
 export const MIGRATIONS: readonly IdbMigration[] = [
   { toVersion: 25, migrate: migrateToV25 },
   { toVersion: 26, migrate: migrateToV26 },
+  { toVersion: 27, migrate: migrateToV27 },
 ];
 ```
 
@@ -436,7 +468,7 @@ async function appendSchemaHistory(
 }
 ```
 
-A fresh install produces `[{ from: 0, to: 26, at: <timestamp> }]`. A v24-to-current upgrade produces `[{ from: 24, to: 26, at: ... }]`. This is the only way to determine the upgrade path taken on a given device, which is useful for diagnosing issues in production (e.g. "was this database ever at v18?").
+A fresh install produces `[{ from: 0, to: 27, at: <timestamp> }]`. A v24-to-current upgrade produces `[{ from: 24, to: 27, at: ... }]`. This is the only way to determine the upgrade path taken on a given device, which is useful for diagnosing issues in production (e.g. "was this database ever at v18?").
 
 ---
 
@@ -458,7 +490,30 @@ The step was deliberately bundled as a v26 bump through the Phase 3 versioned mi
 
 ---
 
-## 7. The IDB Version Timeline
+## 7. IDB v27: The Semantic-Search Additive Step
+
+v27 is the semantic-search format change — the additive `cache_embeddings` + `cache_embed_jobs` stores (§2.3):
+
+```typescript
+function migrateToV27(db: IDBPDatabase<EpubLibraryDB>): void {
+  if (!db.objectStoreNames.contains('cache_embeddings')) {
+    db.createObjectStore('cache_embeddings', { keyPath: 'bookId' });
+  }
+  if (!db.objectStoreNames.contains('cache_embed_jobs')) {
+    db.createObjectStore('cache_embed_jobs', { keyPath: 'bookId' });
+  }
+}
+```
+
+Like v26, this step is entirely additive: no existing data is read, moved, or transformed, and each `createObjectStore` is guarded by `contains()`. It creates two empty object stores keyed by `bookId`. Both are cache-domain, device-local, and rebuildable — the rollback story is trivial, since a lost (or older-build-absent) `cache_embeddings`/`cache_embed_jobs` simply means the book gets re-embedded.
+
+**This is the deviation §1 flagged.** `plan/semantic-search-design.md` §6.2 reserved v27 for *retiring old surface* (dropping the dead `sync_log` store and the SW legacy-cover fallback) and expected the embedding stores to take the next free slot after that cleanup shipped. The cleanup was never done, so the embedding stores took v27 directly. Because both stores are purely additive, the decoupling is safe — but it means the reserved `sync_log`/SW-cover retirement is now the **next** (v28) bump, with its own append-only `MIGRATIONS` step (it must never be folded into a released step).
+
+The embedding stores hold the int8-quantized vectors that power semantic ("meaning-based") in-book search; they are written only on the device that built them and are never synced through the CRDT. (The expensive embedding blobs *can* be mirrored into the user's own BYO cloud storage so a second device downloads them rather than re-spending Gemini quota — the "Artifact Lane" — but that is a sync-layer + cloud-storage concern that touches neither `EpubLibraryDB` schema nor `DB_VERSION`; see [Domain: search](38-domain-search.md) and [Domain: sync](36-domain-sync.md).)
+
+---
+
+## 8. The IDB Version Timeline
 
 ```mermaid
 stateDiagram-v2
@@ -467,14 +522,15 @@ stateDiagram-v2
     v18 --> v24 : "Phase 0-2 interim\n(multiple minor bumps collapsed)\nlegacy + user_* stores deleted\nbaseline 12-store set\nno by_lastAccessed index"
     v24 --> v25 : "Phase 3 (P3-13)\nStraggler guard\nby_lastAccessed index\napp_metadata repurposed\nschemaHistory begins"
     v25 --> v26 : "Phase 7 (§F)\ncache_search_text store added\npurely additive"
-    v26 --> v27 : "Future\nsync_log retirement\nSW legacy-books fallback removal\n(documented hand-off item 4)"
+    v26 --> v27 : "Semantic search\ncache_embeddings + cache_embed_jobs added\npurely additive\n(took the slot reserved for the cleanup)"
+    v27 --> v28 : "Future\nsync_log retirement\nSW legacy-books fallback removal\n(documented hand-off item 4)"
 ```
 
-The version numbers below 24 are reconstructed from the deprecated-store list in [src/data/schema.ts](../../src/data/schema.ts#L194) and the v18-fixture documentation in [src/data/__fixtures__/schema-fixtures.ts](../../src/data/__fixtures__/schema-fixtures.ts#L17). v25 and v26 are the two versioned steps in the live `MIGRATIONS` registry.
+The version numbers below 24 are reconstructed from the deprecated-store list in [src/data/schema.ts](../../src/data/schema.ts#L194) and the v18-fixture documentation in [src/data/__fixtures__/schema-fixtures.ts](../../src/data/__fixtures__/schema-fixtures.ts#L17). v25, v26, and v27 are the three versioned steps in the live `MIGRATIONS` registry.
 
 ---
 
-## 8. The Post-Open Idle Size Backfill
+## 9. The Post-Open Idle Size Backfill
 
 The v25 `by_lastAccessed` index (§5.2) enables LRU eviction, but the eviction budget calculation needs the byte size of each audio row. New rows stamped after P3-6 carry `size: audio.byteLength` as an additive field. Pre-P3-6 rows do not.
 
@@ -494,7 +550,7 @@ After all rows are stamped, the completion flag `app_metadata['audio-size-backfi
 
 ---
 
-## 9. Multi-Tab Upgrade Coordination
+## 10. Multi-Tab Upgrade Coordination
 
 IndexedDB's version-change protocol creates a race condition when two tabs are open and a deployment bump the schema version. The old-version tab holds an open connection; the new-version tab's `openDB` call fires the `upgrade` callback only after all old-version connections close.
 
@@ -505,15 +561,15 @@ sequenceDiagram
     participant IDB as "IndexedDB"
 
     OT ->> IDB : "holds open connection v24"
-    NB ->> IDB : "openDB(EpubLibraryDB, 26)"
+    NB ->> IDB : "openDB(EpubLibraryDB, 27)"
     IDB -->> OT : "versionchange event\n(blocking callback)"
     OT ->> OT : "closeConnection()\ndrops cached dbPromise"
     OT -->> IDB : "connection.close()"
-    IDB -->> NB : "upgrade callback fires\nupradeSchema(db, 24, 26, tx)"
-    NB ->> NB : "ensureBaselineStores()\nmigrateToV25()\nmigrateToV26()\nappendSchemaHistory()"
+    IDB -->> NB : "upgrade callback fires\nupradeSchema(db, 24, 27, tx)"
+    NB ->> NB : "ensureBaselineStores()\nmigrateToV25()\nmigrateToV26()\nmigrateToV27()\nappendSchemaHistory()"
     IDB -->> NB : "versionchange tx commits"
     NB -->> NB : "onBlocking callback\n→ prompts user to reload"
-    OT ->> IDB : "next getConnection() re-opens\nat v26"
+    OT ->> IDB : "next getConnection() re-opens\nat v27"
 ```
 
 The `connection.ts` module ([src/data/connection.ts](../../src/data/connection.ts)) handles all three IDB lifecycle events:
@@ -545,11 +601,11 @@ it('lets the v25 open complete once the v24 holder closes on versionchange', asy
 
 ---
 
-## 10. Connection Hardening
+## 11. Connection Hardening
 
 The connection module ([src/data/connection.ts](../../src/data/connection.ts)) addresses three defects present in the old `src/db/db.ts`:
 
-### 10.1 Reset-on-Failure (▲18)
+### 11.1 Reset-on-Failure (▲18)
 
 The old `db.ts` cached a rejected `dbPromise` forever — one transient open failure (e.g. a browser crash recovery restart, a QuotaExceeded during upgrade) bricked all database access until a full page reload. The new `getConnection()` uses a self-evicting promise:
 
@@ -575,7 +631,7 @@ export function getConnection(): Promise<IDBPDatabase<EpubLibraryDB>> {
 
 The failure handler evicts the rejected promise from the cache only if it is still the current `dbPromise` (guarding against a race where a concurrent `closeConnection` or `terminated` handler already replaced it). After eviction, the next `getConnection()` call starts a fresh open attempt.
 
-### 10.2 Retry With Backoff
+### 11.2 Retry With Backoff
 
 Open failures are retried up to `OPEN_RETRY_ATTEMPTS = 3` times with `OPEN_RETRY_BACKOFF_MS = 250` ms between attempts:
 
@@ -596,13 +652,13 @@ async function openWithRetry(): Promise<IDBPDatabase<EpubLibraryDB>> {
 
 Migration test connection tests (M.* suite via `connection.test.ts`) verify that two sequential failures followed by a success complete without throwing, and that exhausting the attempt budget does not brick later calls.
 
-### 10.3 Persistent Storage Request
+### 11.3 Persistent Storage Request
 
 After the first successful open, `requestPersistentStorageOnce()` calls `navigator.storage.persist()` (fire-and-forget, result logged). This requests that the browser treat the origin's storage as persistent — making it far less likely to evict the EPUB library under storage pressure. The call is guarded by a `persistRequested` flag and a feature check (`typeof storage?.persist !== 'function'`). The connection test suite verifies that `persist()` is called exactly once per session regardless of how many `getConnection()` calls are made.
 
 ---
 
-## 11. Error Handling at the Storage Boundary
+## 12. Error Handling at the Storage Boundary
 
 All repo methods catch errors from IDB operations and route them through `handleDbError` ([src/data/errors.ts](../../src/data/errors.ts#L17)):
 
@@ -623,7 +679,7 @@ export function handleDbError(error: unknown): never {
 
 ---
 
-## 12. The Service-Worker Read Contract
+## 13. The Service-Worker Read Contract
 
 The service worker runs in its own JavaScript context and cannot share the app's cached `IDBPDatabase` connection. [src/data/sw-contract.ts](../../src/data/sw-contract.ts) provides a dedicated read path:
 
@@ -652,13 +708,13 @@ Two design decisions here:
 
 1. **Unversioned open**: `openDB(DB_NAME)` (no version argument) opens the database at whatever current version exists without triggering an upgrade. The SW must never trigger or block a version change — it does not own the schema.
 
-2. **Legacy fallback**: The `BOOKS_STORE = 'books'` fallback survives until the next IDB bump deletes it (hand-off item 4). A pre-v18 straggler's covers render before their first main-app upgrade.
+2. **Legacy fallback**: The `BOOKS_STORE = 'books'` fallback survives until the reserved cleanup bump removes it (hand-off item 4) — now the v28 step, since v27 was spent on the additive embedding stores and left this fallback in place (see §1, §7). A pre-v18 straggler's covers render before their first main-app upgrade.
 
 The `DB_NAME` constant is imported from `schema.ts` rather than re-declared locally, closing a previous drift hazard where the SW had its own `DB_NAME` literal that could diverge.
 
 ---
 
-## 13. The Complete Migration Pipeline
+## 14. The Complete Migration Pipeline
 
 ```mermaid
 sequenceDiagram
@@ -670,8 +726,8 @@ sequenceDiagram
 
     App ->> Conn : "getConnection()"
     Conn ->> Conn : "openWithRetry()\nattempts 1-3, 250ms backoff"
-    Conn ->> IDB : "openDB(EpubLibraryDB, 26)"
-    IDB -->> Schema : "upgrade(db, oldVersion, 26, tx)"
+    Conn ->> IDB : "openDB(EpubLibraryDB, 27)"
+    IDB -->> Schema : "upgrade(db, oldVersion, 27, tx)"
     Schema ->> Schema : "ensureBaselineStores()\ncreate-if-missing all current stores"
     Schema ->> Schema : "for step in MIGRATIONS\nwhere oldVersion < step.toVersion"
     alt "oldVersion < 25"
@@ -682,8 +738,11 @@ sequenceDiagram
     alt "oldVersion < 26"
         Schema ->> IDB : "createObjectStore cache_search_text\n{ keyPath: bookId }"
     end
+    alt "oldVersion < 27"
+        Schema ->> IDB : "createObjectStore cache_embeddings\n+ cache_embed_jobs\n{ keyPath: bookId }"
+    end
     Schema ->> AM : "appendSchemaHistory()\nput schemaHistory entry"
-    IDB -->> Conn : "db at v26"
+    IDB -->> Conn : "db at v27"
     Conn ->> Conn : "requestPersistentStorageOnce()"
     Conn -->> App : "IDBPDatabase<EpubLibraryDB>"
     App -->> App : "boot continues\n(background phase)\naudioCache.backfillSizesOnce()"
@@ -691,11 +750,11 @@ sequenceDiagram
 
 ---
 
-## 14. Fixture Strategy and Test Coverage
+## 15. Fixture Strategy and Test Coverage
 
 The migration test suite ([src/data/migrations.test.ts](../../src/data/migrations.test.ts)) uses programmatic fixture builders — [src/data/__fixtures__/schema-fixtures.ts](../../src/data/__fixtures__/schema-fixtures.ts) — rather than binary database dumps. Programmatic builders are reviewable, deterministic under `fake-indexeddb` (the vitest IDB environment), and resilient to test runner differences. They re-declare store names and layouts as literals rather than importing from `schema.ts`, so a fixture cannot silently start testing the current schema instead of the historical one.
 
-### 14.1 v24 Fixture
+### 15.1 v24 Fixture
 
 `buildV24Fixture()` opens the database at version 24 using the verbatim store set and key paths from the old `src/db/db.ts` upgrade callback, then inserts one row in every store. Notable `v24Rows` entries:
 
@@ -704,7 +763,7 @@ The migration test suite ([src/data/migrations.test.ts](../../src/data/migration
 - `checkpoint`: has `protected: true` — pins the checkpoint prune invariants.
 - `syncLog`: a dead store row that must survive the upgrade (the store is frozen, not deleted).
 
-### 14.2 v18 Fixture
+### 15.2 v18 Fixture
 
 `buildV18Fixture()` opens at version 18 with:
 - The three `static_*` stores (v18 architecture — the SW read contract's "V18 Architecture" comment confirms this layout).
@@ -713,7 +772,7 @@ The migration test suite ([src/data/migrations.test.ts](../../src/data/migration
 
 The `oversizedAnnotations` option allows M.3 to inject synthetic rows that exceed the 8 MB size cap, verifying truncation behavior.
 
-### 14.3 Test Coverage Map
+### 15.3 Test Coverage Map
 
 | Test | Verifies |
 |---|---|
@@ -721,13 +780,14 @@ The `oversizedAnnotations` option allows M.3 to inject synthetic rows that excee
 | M.2 v18 fixture → current | Straggler guard: all user-data stores captured; binary fields elided; regenerable store not captured |
 | M.3 size cap | `truncated: true` when annotations exceed 8 MB; upgrade still completes |
 | M.4 fresh create | `schemaHistory` from 0 |
-| M.5 multi-tab | v24 holder closes on `blocking`; v26 open completes |
+| M.5 multi-tab | v24 holder closes on `blocking`; the newer-version open completes |
 | M.6 size backfill | Legacy rows stamped once; `alignmentData` untouched; flag set; second run no-op |
 | M.7 v26 search text | `cache_search_text` created empty; keyed by `bookId` |
+| M.8 v27 embedding stores | `cache_embeddings` + `cache_embed_jobs` created empty; both keyed by `bookId`; adjacent cache data untouched |
 
 ---
 
-## 15. The Deprecated Store Inventory
+## 16. The Deprecated Store Inventory
 
 The two generations of deprecated stores, frozen in [src/data/schema.ts](../../src/data/schema.ts#L194):
 
@@ -743,7 +803,7 @@ The **`LEGACY_USER_DATA_STORES`** subset (13 entries) is the capture target for 
 
 ---
 
-## 16. Related Subsystems
+## 17. Related Subsystems
 
 **[Storage gateway](20-storage-gateway.md)** — the full `src/data/` module: repos, write gate, wipe, error mapping.
 
@@ -753,6 +813,6 @@ The **`LEGACY_USER_DATA_STORES`** subset (13 entries) is the capture target for 
 
 **[Backup and restore](23-backup-and-restore.md)** — the `BackupService` that reads from `checkpoints` and `static_*` stores; the `backupStaticManifestRowSchema` and `backupManifestEnvelopeSchema` at the untrusted ingress boundary; how the straggler recovery record can be surfaced via support/diagnostics.
 
-**[Domain: library](37-domain-library.md)** — `ImportOrchestrator` and `LibraryService` that write to `static_*` and `cache_tts_preparation`/`cache_search_text` stores during book import.
+**[Domain: library](37-domain-library.md)** — `ImportOrchestrator` and `LibraryService` that write to `static_*` and `cache_tts_preparation`/`cache_search_text` stores during book import (including the `sectionTextHash` stamp); `LibraryService.remove` that deletes the per-book embedding stores and the matching cloud HEAD doc.
 
-**[Domain: search](38-domain-search.md)** — the `searchTextRepo` that reads and writes `cache_search_text`; how extraction version invalidation works.
+**[Domain: search](38-domain-search.md)** — the `searchTextRepo` that reads and writes `cache_search_text`; the embeddings repo over `cache_embeddings`/`cache_embed_jobs`; the int8-quantized cosine ranking fused with regex full-text via reciprocal-rank fusion; and the "Artifact Lane" that mirrors embedding blobs into the user's own BYO cloud storage so a sibling device skips re-embedding (the cloud round-trips are MockBackend-verified and code-complete, but the Firestore+Storage emulator and security-rules suites are CI-pending — not yet proven end-to-end against real Firebase). How extraction-version invalidation works.

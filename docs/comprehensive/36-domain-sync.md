@@ -6,12 +6,14 @@ FireProvider, enabling multiple devices to converge on a single shared library w
 proprietary cloud. This document covers everything from design intent through the innermost
 implementation details: the port-injected orchestrator, the `SyncBackend` seam separating
 Firestore from the mock transport, the typed `SyncEvent` bus and its single presentation
-subscriber, the three-layer doc-level quarantine that keeps stale clients out, and the
-crash-resumable staged workspace swap.
+subscriber, the three-layer doc-level quarantine that keeps stale clients out, the
+crash-resumable staged workspace swap, and the additive Artifact Lane that mirrors expensive
+embedding blobs into the user's own cloud so they can be reused across their devices.
 
 Related documents: [State management (CRDT)](13-state-management-crdt.md),
 [Bootstrap and lifecycle](14-bootstrap-and-lifecycle.md),
 [Storage gateway](20-storage-gateway.md), [Backup and restore](23-backup-and-restore.md),
+[Search domain](38-domain-search.md) (the Artifact-Lane consumers),
 [Composition root](50-composition-root.md).
 
 ---
@@ -150,8 +152,8 @@ needs from the store layer arrives through the `SyncOrchestratorDeps` interface 
 | [src/domains/sync/core/ProviderConnection.ts](../../src/domains/sync/core/ProviderConnection.ts) | Provider attach/detach, transport event normalization, live quarantine observer (layer 2) |
 | [src/domains/sync/core/downloadWorkspaceState.ts](../../src/domains/sync/core/downloadWorkspaceState.ts) | Single temp-doc hydration utility replacing three copy-pasted dances |
 | [src/domains/sync/core/quarantine.ts](../../src/domains/sync/core/quarantine.ts) | `readDocSchemaVersion`, `readUpdateSchemaVersion` primitives |
-| [src/domains/sync/backend/SyncBackend.ts](../../src/domains/sync/backend/SyncBackend.ts) | `SyncBackend` interface (C3 contract), `WorkspaceMetadata` zod schema, OBSERVE-mode validator |
-| [src/domains/sync/backend/FirestoreBackend.ts](../../src/domains/sync/backend/FirestoreBackend.ts) | Only module in sync importing `firebase/firestore` + `firebase/storage` |
+| [src/domains/sync/backend/SyncBackend.ts](../../src/domains/sync/backend/SyncBackend.ts) | `SyncBackend` interface (C3 contract), `WorkspaceMetadata` zod schema, OBSERVE-mode validator, Artifact-Lane `ArtifactHead` + `artifactHeadTail` |
+| [src/domains/sync/backend/FirestoreBackend.ts](../../src/domains/sync/backend/FirestoreBackend.ts) | Only module in sync importing `firebase/firestore` + `firebase/storage` (read/write since the Artifact Lane added `uploadBytes`/`getBytes`) |
 | [src/domains/sync/backend/MockBackend.ts](../../src/domains/sync/backend/MockBackend.ts) | localStorage-backed test transport; never in production bundles |
 | [src/domains/sync/workspaces/WorkspaceService.ts](../../src/domains/sync/workspaces/WorkspaceService.ts) | create/switch/delete/list over `SyncBackend`; staged swap orchestration |
 | [src/domains/sync/workspaces/stagedSwap.ts](../../src/domains/sync/workspaces/stagedSwap.ts) | Durable staging, apply, swap lock, test-harness pause points |
@@ -182,20 +184,46 @@ export interface SyncBackend {
   probeHasData(workspaceId: string): Promise<boolean>;
   tombstoneWorkspace(workspaceId: string): Promise<void>;
   purgeWorkspace(workspaceId: string): Promise<PurgeReport>;
+  // Artifact Lane (shared embedding cache) — see Section 3.6
+  headArtifact(workspaceId: string, relPath: string): Promise<ArtifactHead | null>;
+  putArtifact(workspaceId: string, relPath: string, bytes: ArrayBuffer | Uint8Array,
+              meta: { stamp: string; size: number }): Promise<void>;
+  getArtifact(workspaceId: string, relPath: string): Promise<ArrayBuffer | null>;
+  deleteArtifactHead(workspaceId: string, relPath: string): Promise<void>;
+  sweepArtifacts(workspaceId: string,
+                 opts: { ttlMs: number; now: number; budgetBytes?: number }
+                ): Promise<{ headsDeleted: number; blobsDeleted: number }>;
   connect(doc: Y.Doc, workspaceId: string, opts: ConnectOptions): SyncConnection;
 }
 
 export type SyncBackendFactory = (uid: string) => SyncBackend;
 ```
 
+The five `*Artifact*` methods are the C3 surface for the shared AI-cache feature (the "Artifact
+Lane"). They were originally designed as a three-method `head`/`put`/`get` trio
+(`plan/shared-ai-cache-design.md` §4) but grew to **five** once the lifecycle phase landed:
+`deleteArtifactHead` and `sweepArtifacts` were added for garbage collection. They are documented
+in full in Section 3.6 and their cloud round-trips in Section 8.5.
+
 ### 3.2 FirestoreBackend
 
 [FirestoreBackend](../../src/domains/sync/backend/FirestoreBackend.ts) is the only sync module
-allowed to import `firebase/firestore` or `firebase/storage`. Firestore document paths:
+allowed to import `firebase/firestore` or `firebase/storage`. It remains the *sole*
+`firebase/storage` importer, but the Artifact Lane **widened that import from delete-only to
+read/write**: the storage import was previously only `getStorage`/`ref`/`listAll`/`deleteObject`
+(the P4-6 blob purge), and the shared embedding cache added `uploadBytes` + `getBytes` for
+`putArtifact`/`getArtifact`. No other sync module gains a storage import. Firestore document
+paths:
 
 - Workspace metadata directory: `users/{uid}/workspaces/{workspaceId}`
 - Replicated CRDT document root: `users/{uid}/versicle/{workspaceId}`
 - y-cinder subcollections: `.../updates`, `.../history`, `.../maintenance`, `.../metadata`
+- Cached-embedding blob (Cloud Storage): `.../versicle/{workspaceId}/embeddings/{key}.bin`
+- Cached-embedding HEAD record (Firestore): `.../versicle/{workspaceId}/embedCache/{key}`
+
+The two cached-embedding siblings deliberately live *inside* the workspace prefix so the blob is
+swept by the existing `purgeStoragePrefix` on workspace delete, and the HEAD record is swept by
+the `embedCache` entry now in `PURGE_SUBCOLLECTIONS` (Section 8.3).
 
 The `connect()` method instantiates a `FireProvider` from `y-cinder` and adapts its
 ObservableV2 events onto the typed `SyncConnectionEvents` surface:
@@ -241,6 +269,14 @@ The Playwright E2E suite arms the mock by setting `window.__VERSICLE_MOCK_FIREST
 the app loads; the single flag reader in [src/test-flags.ts](../../src/test-flags.ts) exposes
 `isMockFirestoreEnabled()` and `getMockFirestoreUserId()` to the composition root.
 
+`MockBackend` also carries an in-memory implementation of the five Artifact-Lane methods: a
+single `Map` keyed by the HEAD-record path collapses the head record and the blob bytes into one
+entry, so `head`/`put`/`get`/`delete`/`sweep` all resolve to one canonical entry. Because the
+mock has no separate Storage tier, the "delete the HEAD record but KEEP the shared blob" invariant
+(Section 3.6) **cannot** be proven on the mock — that guarantee is pinned only on the
+FirestoreBackend/emulator path. The cross-device savings flow is otherwise verified entirely
+against `MockBackend`; the cloud round-trips themselves are CI-pending (Section 8.5).
+
 ### 3.4 WorkspaceMetadata Schema and OBSERVE Mode
 
 ```typescript
@@ -281,11 +317,17 @@ classDiagram
         +probeHasData(id) Promise
         +tombstoneWorkspace(id) Promise
         +purgeWorkspace(id) Promise
+        +headArtifact(id, relPath) Promise
+        +putArtifact(id, relPath, bytes, meta) Promise
+        +getArtifact(id, relPath) Promise
+        +deleteArtifactHead(id, relPath) Promise
+        +sweepArtifacts(id, opts) Promise
         +connect(doc, id, opts) SyncConnection
     }
     class FirestoreBackend {
         -metaPath(id) string
         -docPath(id) string
+        -artifactPath(id, relPath) string
         -purgeSubcollection(db, path) Promise
         -purgeStoragePrefix(ref) Promise
     }
@@ -310,6 +352,49 @@ classDiagram
     SyncConnection --> SyncConnectionEvents
     SyncBackend --> SyncConnection
 ```
+
+### 3.6 The Artifact Lane (Shared Embedding Cache)
+
+The five `*Artifact*` methods are the sync-domain half of the shared AI-cache feature, designed in
+[plan/shared-ai-cache-design.md](../../plan/shared-ai-cache-design.md) and implemented in Phases
+A–D. Embeddings (see [the search domain doc](38-domain-search.md)) are expensive to compute, so a
+book embedded once on one device is mirrored into the user's **own** BYO Cloud Storage and reused
+by their other devices instead of re-spending Gemini quota. The lane is a cold-miss refill behind
+the device-local IDB cache: the hot read path never touches it.
+
+Each cached embedding set is stored as two siblings keyed by the same content `{key}` (a SHA-256
+over the book content hash + embedding-space stamp):
+
+| Tier | Path | Role |
+|------|------|------|
+| Payload blob (~251 KB int8 vectors) | `users/{uid}/versicle/{workspaceId}/embeddings/{key}.bin` (Cloud Storage) | The bytes themselves; too large for the CRDT, never touches Yjs |
+| HEAD record (`stamp`, `size`, `createdAt`) | `users/{uid}/versicle/{workspaceId}/embedCache/{key}` (Firestore) | A cheap `getDoc` existence/stamp probe — never a Storage `list` |
+
+The `artifactHeadTail(blobRelPath)` helper in `SyncBackend.ts` derives the HEAD-record tail
+(`embedCache/{key}`) from the blob tail (`embeddings/{key}.bin`); both backends use it so they
+derive the sibling tail identically. The methods (full JSDoc in
+[SyncBackend.ts](../../src/domains/sync/backend/SyncBackend.ts)):
+
+| Method | Behavior |
+|--------|----------|
+| `headArtifact(workspaceId, relPath)` | Probe: one `getDoc` on the HEAD record. Returns `ArtifactHead` (`exists: true`, `stamp`, `size`) or `null` on a miss. A head hit **implies the bytes are present** (`putArtifact` writes the blob first). |
+| `putArtifact(workspaceId, relPath, bytes, meta)` | Upload. **Skip-if-present** (idempotent: checks the HEAD first, no-op if it exists). **Blob first, head second** — `uploadBytes` to Storage THEN `setDoc` the HEAD, so a crash between leaves a recoverable blob with no head, never a head pointing at absent bytes. |
+| `getArtifact(workspaceId, relPath)` | Download the blob bytes. **Miss vs error is OPPOSITE polarity to `isWorkspaceAlive`'s fail-safe**: a definitive `storage/object-not-found` returns `null` (caller recomputes); a transient/permission error **throws** (an offline blip must never be mistaken for a miss and pay to re-embed). |
+| `deleteArtifactHead(workspaceId, relPath)` | Best-effort delete of the HEAD record **only**. The shared blob is **deliberately left in place** — a sibling device may still need those bytes, and because the blob is content-keyed it is safe and re-derivable. Reclaiming the orphaned blob is the sweeper's job. An already-gone record is a clean no-op. |
+| `sweepArtifacts(workspaceId, opts)` | The cloud garbage collector (Section 8.5). For each HEAD record past `now - ttlMs` (and, when `budgetBytes` is set, oldest-first by `createdAt` until under budget), deletes BOTH the HEAD record and its sibling blob. Idempotent and re-runnable. |
+
+The orchestrator exposes `getConnectedArtifactBackend()` — a null-gated accessor returning
+`{ backend, workspaceId }` only when sync is connected AND signed in AND an active workspace is
+selected. The null-gate ensures the returned backend is bound to the right uid and the path is
+scoped to the right workspace, so a lookup can never read a cached embedding under the wrong
+account. It adds **no** new backend method (the three sync contract suites stay green) — it
+re-exposes the existing `getBackend` + `getActiveWorkspaceId` the connect path already uses.
+
+The app-layer consumers (the consult/hydrate adapter, the upload publisher, and the per-book
+cloud delete in the library domain) live outside the sync domain and are documented in
+[the search domain doc](38-domain-search.md); they are gated by a default-OFF "Share AI caches
+across my devices" opt-in. This document covers only the C3 transport surface and its cloud
+round-trips.
 
 ---
 
@@ -982,7 +1067,9 @@ a non-active workspace leaves the active provider connected throughout.
 ### 8.3 FirestoreBackend.purgeWorkspace
 
 ```typescript
-const PURGE_SUBCOLLECTIONS = ['updates', 'history', 'maintenance', 'metadata'] as const;
+const PURGE_SUBCOLLECTIONS = [
+  'updates', 'history', 'maintenance', 'metadata', 'embedCache',
+] as const;
 
 async purgeWorkspace(workspaceId: string): Promise<PurgeReport> {
   // 1. Sweep subcollection docs in batches of ≤500
@@ -1005,6 +1092,15 @@ async purgeWorkspace(workspaceId: string): Promise<PurgeReport> {
   return { docsDeleted, blobsDeleted };
 }
 ```
+
+The `embedCache` entry in `PURGE_SUBCOLLECTIONS` is the Artifact-Lane addition. The Storage sweep
+(`purgeStoragePrefix` under the workspace prefix) collects the cached-embedding `embeddings/*.bin`
+blobs "for free" — but the Firestore `embedCache/{key}` HEAD records are **not** swept for free
+(`purgeStoragePrefix` is Storage-only), so they need this explicit entry or a workspace delete
+would leave orphaned HEAD records. The design (`plan/shared-ai-cache-design.md` §2.7) originally
+scheduled this `PURGE_SUBCOLLECTIONS` add for the lifecycle phase (Phase D); in implementation it
+landed earlier, in **Phase A** alongside the C3 method skeleton, with a contract case seeding and
+counting an `embedCache` residual.
 
 `purgeSubcollection` loops in batches of 500 (the Firestore `writeBatch` limit):
 
@@ -1107,6 +1203,56 @@ async purgeDeleted(backend: SyncBackend): Promise<PurgeReport> {
 It re-asserts each tombstone before sweeping (idempotent per the rules; closes any
 crash-mid-delete husk). Safe to run repeatedly. This is how pre-P4 deletions — which left
 `history`/`maintenance`/`metadata` and Storage blobs — are retroactively cleaned up.
+
+### 8.5 The Cloud Artifact Sweeper
+
+`purgeWorkspace` reclaims the cached-embedding siblings only on a *workspace* delete. The shared
+embedding cache also needs a steady-state garbage collector so it never grows without limit, and
+so the orphaned blobs that `deleteArtifactHead` deliberately leaves behind (Section 3.6) are
+eventually reclaimed. That is `FirestoreBackend.sweepArtifacts`, driven by a separate boot task.
+
+`sweepArtifacts(workspaceId, { ttlMs, now, budgetBytes? })` lists the `embedCache` HEAD records
+(keeping each record's `createdAt`/`size` rather than blanket-deleting), then chooses victims:
+
+1. **Past-TTL**: every HEAD whose `createdAt < now - ttlMs`.
+2. **Over-budget** (when `budgetBytes` is set): oldest-first by `createdAt` until the surviving
+   total `size` is under budget.
+
+For each victim it deletes BOTH the HEAD record AND its sibling `embeddings/{key}.bin` blob,
+reusing the `deleteObject` + `storage/object-not-found`-tolerant shape from `purgeStoragePrefix`,
+under the same `getFirebaseApp()` guard as `purgeWorkspace` (projects without a Storage bucket
+degrade — the HEAD records still go). It returns `{ headsDeleted, blobsDeleted }` and is
+idempotent: a re-run after a crash mid-sweep reports smaller numbers, never an error.
+
+The boot task is [src/app/boot/artifactSweeper.ts](../../src/app/boot/artifactSweeper.ts),
+registered in the `backgroundTasks` phase after the upload publisher. Its core `runArtifactSweep`
+is pure/injectable — every backend/clock/budget edge arrives as a dep — so the suite drives it
+with fakes. Posture:
+
+- **Silent no-op** when `getConnectedArtifactBackend()` returns `null` (sync off / not connected /
+  no active workspace) — the backend handle is read FRESH per call so a connect/disconnect takes
+  effect immediately;
+- **Best-effort**: a thrown `sweepArtifacts` is logged and swallowed (the next boot retries; the
+  sweep is idempotent);
+- **Idle-scheduled** on `requestIdleCallback` (`setTimeout` fallback) so it never competes with
+  the boot path or interactive work, cancelling itself on boot cleanup.
+
+The TTL is `ARTIFACT_TTL_MS` = 30 days (a deliberately conservative policy guess — because the
+blob is content-addressed and re-derivable, an over-aggressive sweep only costs a re-embed). The
+budget reuses `EMBEDDING_CACHE_BUDGET_BYTES`. This is the *cloud* GC; the device-local IDB cache
+eviction (`runEviction`) is a separate sweep that never touches the cloud mirror.
+
+> **CI-PENDING — the Artifact-Lane cloud paths are MockBackend-verified, not yet proven against
+> real Firebase.** Every cloud round-trip — the Firestore+Storage emulator
+> `put`/`head`/`get`/`delete`/`sweep` cases, the blob-first/head-second HEAD-after-Storage
+> ordering, and the `storage.rules` security-rules suite — lives in test suites that
+> **auto-skip when the local Firebase emulators are unreachable** (`describe.skipIf(!emulatorUp)`
+> in [syncBackendContract.emulator.test.ts](../../src/lib/sync/syncBackendContract.emulator.test.ts)
+> and [security-rules.test.ts](../../src/lib/sync/security-rules.test.ts)). On the default
+> `vitest run` these are skipped, so the cross-device savings flow is verified end-to-end only
+> against `MockBackend` (which has no Storage tier). The cloud paths are **code-complete and
+> unit-verified** but the emulator suite must run in CI for the Section 3.6 ordering/idempotency
+> guarantees to be proven against the real Firebase SDK.
 
 ---
 
@@ -1345,6 +1491,9 @@ A dev auth-domain proxy allows local development without deploying to the Fireba
 | Validate before destroy | `applyStagedSwap` and `restoreCheckpoint` both call `validateSnapshot` before any wipe |
 | Swap lock around destructive operations | `withSwapLock` wrapping in `applyStagedSwap` and `restoreCheckpoint` |
 | `firebaseEnabled` gate | `isSyncEnabled()` in `createSync.ts`; checked at `start()` |
+| `FirestoreBackend` is the sole `firebase/storage` importer | Boundary rule; the Artifact Lane widened it to read/write but added no new importer |
+| Artifact blob written before HEAD record | `putArtifact` ordering (code); pinned only by the CI-pending emulator suite |
+| `getArtifact` miss vs error polarity (miss ⇒ null, transient ⇒ throw) | `getArtifact` code; opposite of `isWorkspaceAlive`'s fail-safe |
 
 ### 15.2 Failure Modes
 
@@ -1368,6 +1517,14 @@ This is the intended behavior.
 **Corrupted staging blob**: `validateSnapshot` (a scratch-doc `Y.applyUpdate`) throws. The main
 database is never touched. The catch routes to rollback.
 
+**Artifact HEAD present but blob absent (drift)**: a HEAD record can outlive its blob (e.g. a
+crash after `deleteObject` of the blob but before the HEAD delete, or a partial sweep). `getArtifact`
+returns `null` for `storage/object-not-found`, so the consumer treats it as a definitive miss and
+re-embeds; the app-layer consult adapter records this as a drift metric (stable search key
+`artifact-head-object-drift`) and opportunistically deletes the stale HEAD, so the drift is
+transient. Because the cloud round-trips are CI-pending (Section 8.5), this drift path is exercised
+only against `MockBackend`, not the real Firebase SDK.
+
 ---
 
 ## 16. File Map and Test Coverage
@@ -1375,9 +1532,9 @@ database is never touched. The catch routes to rollback.
 ```
 src/domains/sync/
 ├── backend/
-│   ├── SyncBackend.ts            # C3 interface + WorkspaceMetadata schema
-│   ├── FirestoreBackend.ts       # Production: firebase/firestore + firebase/storage
-│   ├── MockBackend.ts            # E2E/dev: localStorage
+│   ├── SyncBackend.ts            # C3 interface + WorkspaceMetadata schema + Artifact-Lane types
+│   ├── FirestoreBackend.ts       # Production: firebase/firestore + firebase/storage (read/write)
+│   ├── MockBackend.ts            # E2E/dev: localStorage (+ in-memory artifact cache)
 │   ├── MockFireProvider.ts       # localStorage-backed provider transport
 │   ├── MockFireProvider.test.ts
 │   ├── FirestoreBackend.purge.test.ts
@@ -1413,6 +1570,16 @@ src/app/sync/
 ├── composeSync.ts                # Heavy half: port wiring (dynamic import only)
 ├── wireSyncEvents.ts             # Single SyncEvent subscriber
 └── wireSyncEvents.test.ts
+
+src/app/boot/
+├── artifactSweeper.ts            # Cloud Artifact-Lane TTL/quota GC boot task (Section 8.5)
+└── artifactSweeper.test.ts       # Drives the pure runArtifactSweep with fakes
+
+src/lib/sync/
+├── syncBackendContract.ts        # Shared C3 contract spec (incl. artifact round-trip cases)
+├── syncBackendContract.mock.test.ts      # Runs the spec against MockBackend
+├── syncBackendContract.emulator.test.ts  # Runs it against real FirestoreBackend + y-cinder (CI-pending; auto-skips)
+└── security-rules.test.ts        # firestore.rules + storage.rules (CI-pending; auto-skips)
 ```
 
 The `SyncOrchestrator.characterization.test.ts` pins the auth→connect sequencing and
@@ -1420,4 +1587,8 @@ clean-sync routing against `MockBackend`. `SyncOrchestrator.quarantine.test.ts` 
 quarantine layers. `stagedSwap.test.ts` pins every row of the crash failure table using real
 `fake-indexeddb` + real `localStorage`, constructing each crash state literally and asserting
 the resume path. `wireSyncEvents.test.ts` asserts each `SyncEvent` type produces the correct
-store write or toast call.
+store write or toast call. The `syncBackendContract` spec runs against both backends — the
+artifact round-trip, HEAD-after-Storage ordering, and `embedCache` purge cases are pinned on the
+emulator path, which **auto-skips when local Firebase emulators are unreachable**, so on a default
+`vitest run` they are skipped and the Artifact-Lane cloud paths remain MockBackend-verified only
+(Section 8.5).

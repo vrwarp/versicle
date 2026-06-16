@@ -16,12 +16,13 @@
  *  - Logs are redacted (inlineData → {byteCount, hash}) BEFORE they reach
  *    the injected sink (privacy D3).
  */
-import { egress, type EgressFn } from '@kernel/net';
+import { egress, retryAfterMs, type EgressFn } from '@kernel/net';
+import type { QuotaGovernor } from '@kernel/quota';
 import {
   GenAIHttpError,
   GenAIInvalidResponseError,
   GenAINotConfiguredError,
-  isResourceExhausted,
+  isRetryableForRotation,
 } from './errors';
 import { redactPayload, type GenAILogEntry, type GenAILogSink } from './logging';
 import type {
@@ -55,8 +56,36 @@ function generateLogId(): string {
 
 interface GeminiResponseBody {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
+  usageMetadata?: { totalTokenCount?: number };
   error?: { code?: number; message?: string; status?: string };
 }
+
+/**
+ * The slice of the AI-API rate limiter this client touches. A `Pick` keeps the
+ * dependency minimal and the seam easy to fake in tests. The limiter's
+ * pre-flight admission check (reserve quota before the request) and its
+ * failure-path refund are enforced one layer down at the network chokepoint,
+ * where they cannot be bypassed; this client is left with only the two steps
+ * that need the parsed response body the network layer never reads — `commit`
+ * (record the actual tokens spent) and `recordCooldown` (start a back-off after
+ * a 429 rate-limit reply). Retrying with a different model on a 429 stays in
+ * {@link GeminiClient.executeWithRetry}, so the limiter never owns retries.
+ */
+export type GenAIQuotaGovernor = Pick<QuotaGovernor, 'commit' | 'recordCooldown'>;
+
+/**
+ * A coarse up-front token estimate so the rate limiter can reserve quota
+ * before the request goes out; the actual cost is reconciled afterward from
+ * the response's usage report. Uses the usual ~4-characters-per-token
+ * heuristic over the serialized prompt.
+ */
+function estTokens(prompt: GenAIPrompt): number {
+  const text = typeof prompt === 'string' ? prompt : JSON.stringify(prompt.contents);
+  return Math.ceil(text.length / 4);
+}
+
+/** Default cooldown when a 429 carries no usable `Retry-After` header. */
+const DEFAULT_COOLDOWN_MS = 30_000;
 
 export interface GeminiClientDeps {
   getConfig: GenAIConfigProvider;
@@ -64,6 +93,12 @@ export interface GeminiClientDeps {
   egress?: EgressFn;
   /** Activity-log sink (entries arrive pre-redacted). */
   onLog?: GenAILogSink;
+  /**
+   * The AI-API rate/spend limiter. Optional: when absent the client behaves
+   * exactly as before, with no quota accounting (the rotation tests construct
+   * it without one).
+   */
+  governor?: GenAIQuotaGovernor;
 }
 
 export class GeminiClient implements GenAIClient {
@@ -121,12 +156,16 @@ export class GeminiClient implements GenAIClient {
         return await operation(modelId);
       } catch (error) {
         lastError = error;
-        if (rotationEnabled && isResourceExhausted(error)) {
+        // Rotate on a server 429 OR a pre-network NET_RATE_LIMITED cooldown (a
+        // sibling model's 429 set the governor cooldown, so this model's gateway
+        // acquire backpressured before the network) — both leave the remaining
+        // models worth trying.
+        if (rotationEnabled && isRetryableForRotation(error)) {
           this.log(
             'error',
             method,
             {
-              message: `Model ${modelId} exhausted (429). Retrying with next model...`,
+              message: `Model ${modelId} unavailable (429 / cooldown backpressure). Retrying with next model...`,
               error: (error as Error).message,
             },
             context,
@@ -152,6 +191,21 @@ export class GeminiClient implements GenAIClient {
         ? [{ role: 'user', parts: [{ text: prompt }] }]
         : prompt.contents;
 
+    // Rate-limit admission lives one layer down at the network chokepoint: the
+    // network layer reserves quota (by lane + token estimate) before the call
+    // goes out and refunds it on failure, so it cannot be bypassed. This client
+    // just declares its lane and estimate via the egress options and handles the
+    // two steps that need the parsed response body — recording the real token
+    // cost (commit) and starting a back-off on a 429. Model-rotation retries
+    // stay in executeWithRetry.
+    const estimate = estTokens(prompt);
+    let committed = false;
+    const commit = (tokens: number): void => {
+      if (committed) return;
+      committed = true;
+      this.deps.governor?.commit('fg', tokens);
+    };
+
     const response = await this.egress(
       'gemini',
       `${GEMINI_API_BASE}/models/${modelId}:generateContent`,
@@ -169,6 +223,8 @@ export class GeminiClient implements GenAIClient {
       {
         signal,
         consent: { bookId: context?.bookId, interactive: context?.interactive },
+        lane: 'fg',
+        estTokens: estimate,
       },
     );
 
@@ -176,6 +232,12 @@ export class GeminiClient implements GenAIClient {
       const body = (await response
         .json()
         .catch(() => ({}))) as GeminiResponseBody;
+      // Feed a 429 to the governor as a cooldown signal, then RE-THROW so
+      // executeWithRetry's rotation path still sees it (the governor never
+      // swallows the error the rotation loop branches on).
+      if (response.status === 429) {
+        this.deps.governor?.recordCooldown(retryAfterMs(response, DEFAULT_COOLDOWN_MS));
+      }
       throw new GenAIHttpError(
         body.error?.message || `Gemini request failed: ${response.status}`,
         response.status,
@@ -184,6 +246,8 @@ export class GeminiClient implements GenAIClient {
     }
 
     const body = (await response.json()) as GeminiResponseBody;
+    // Reconcile with the real cost when the API reports it; else the estimate.
+    commit(body.usageMetadata?.totalTokenCount ?? estimate);
     return (body.candidates?.[0]?.content?.parts ?? [])
       .map((part) => part.text ?? '')
       .join('');

@@ -28,9 +28,9 @@ export function genAIIsConfigured(): boolean {
 /**
  * @deprecated No-op, kept only because the EngineContext port still carries
  * `configure` (the legacy pipeline calls it before analysis): config is read
- * per call from the composition-root provider (useGenAIStore), so the
- * hardcoded model clobber is structurally impossible (GG-8). Narrowing the
- * port itself is the P9 deletion-audit item's call.
+ * per call from the composition-root provider (useGenAIStore), so this legacy
+ * setter can no longer clobber the live model selection. Narrowing the port
+ * itself is the P9 deletion-audit item's call.
  */
 export function genAIConfigure(apiKey: string, model: string): void {
   void apiKey;

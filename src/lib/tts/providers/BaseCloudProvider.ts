@@ -1,4 +1,5 @@
-import { egress, type DestinationId } from '@kernel/net';
+import { egress, retryAfterMs, type DestinationId } from '@kernel/net';
+import type { QuotaGovernor } from '@kernel/quota';
 import type { ITTSProvider, TTSOptions, TTSEvent, TTSVoice, SpeechSegment, Unsubscribe } from './types';
 import { AudioElementPlayer } from '../AudioElementPlayer';
 import type { AudioSink } from '../engine/AudioSink';
@@ -6,6 +7,39 @@ import { TTSCache } from '../TTSCache';
 
 /** Max wall time for one synthesis round-trip before it is abandoned (TimeoutError). */
 const SYNTHESIS_TIMEOUT_MS = 30_000;
+
+/**
+ * The slice of the shared rate/spend governor that the cloud-TTS request path
+ * needs. Reserving budget before a request (`acquire`) and refunding it when the
+ * request fails (`release`) are handled centrally in the NetworkGateway, where
+ * every outbound request must pass through and so cannot bypass the limit. That
+ * leaves this path only the after-the-fact bookkeeping: `commit` to record what
+ * a successful response actually spent, and `recordCooldown` to honor a server
+ * 429's back-off — both of which need the parsed response the gateway never
+ * inspects.
+ */
+type TtsQuotaGovernor = Pick<QuotaGovernor, 'commit' | 'recordCooldown'>;
+
+/**
+ * Module-level governor holder, installed once at the TTS composition root
+ * (src/app/google/wireGoogle.ts via {@link setTtsQuotaGovernor}). A holder
+ * rather than a constructor param keeps {@link BaseCloudProvider}'s signature
+ * (and every subclass `super()` + every direct-construction provider unit test)
+ * untouched while still routing every cloud-TTS request through the governor.
+ * `null` (the default) makes the governor a no-op, so provider tests that never
+ * install one behave exactly as before.
+ */
+let ttsGovernor: TtsQuotaGovernor | null = null;
+
+/** Install the cloud-TTS rate/spend governor (called once at the composition root). */
+export function setTtsQuotaGovernor(governor: TtsQuotaGovernor | null): void {
+  ttsGovernor = governor;
+}
+
+/** ~4-chars-per-token estimate for the up-front budget reservation (commit corrects it). */
+function estTtsTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
 
 export abstract class BaseCloudProvider implements ITTSProvider {
   abstract id: string;
@@ -229,20 +263,44 @@ export abstract class BaseCloudProvider implements ITTSProvider {
    * registry destination their synthesis endpoint belongs to.
    */
   protected async fetchAudio(destinationId: DestinationId, url: string, body: unknown, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<Blob> {
-    const response = await egress(destinationId, url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers
+    const payload = JSON.stringify(body);
+
+    // Rate-limiting/back-pressure lives in the NetworkGateway, the single point
+    // every outbound request passes through: it reserves budget (acquire) before
+    // the network call and refunds it on failure (release), so nothing can skip
+    // the limit. This call just declares its lane (foreground) and token
+    // estimate via the egress opts, then does the after-the-fact bookkeeping
+    // below — commit on success, cooldown on a 429 — using the parsed response
+    // the gateway never inspects. The governor holder is a no-op when unset
+    // (e.g. direct-construction provider unit tests).
+    const estimate = estTtsTokens(payload);
+
+    const response = await egress(
+      destinationId,
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers
+        },
+        body: payload,
+        signal
       },
-      body: JSON.stringify(body),
-      signal
-    });
+      { lane: 'fg', estTokens: estimate },
+    );
 
     if (!response.ok) {
+      if (response.status === 429) {
+        // The cloud-TTS 429 default falls back to the synthesis timeout (30s) —
+        // passed explicitly so the shared kernel/net helper keeps no baked-in
+        // default (each caller owns its own constant).
+        ttsGovernor?.recordCooldown(retryAfterMs(response, SYNTHESIS_TIMEOUT_MS));
+      }
       throw new Error(`TTS API Error: ${response.status} ${response.statusText}`);
     }
 
+    ttsGovernor?.commit('fg', estimate);
     return await response.blob();
   }
 }

@@ -13,13 +13,14 @@ transaction literals and `idb` imports are lint-banned everywhere else
 `await` inside a transaction unrepresentable — the WebKit-hang discipline
 is structural.
 
-The database is `EpubLibraryDB` at **v26** (`schema.ts`). Migration
+The database is `EpubLibraryDB` at **v27** (`schema.ts`). Migration
 steps are append-only registry entries; the steps past the v24 baseline:
 
 | Step | Transform |
 | --- | --- |
 | v25 | `migrateToV25` |
 | v26 | `migrateToV26` |
+| v27 | `migrateToV27` |
 
 Captured-fixture upgrades (v18, v24 → current) are pinned in
 `migrations.test.ts`; multi-tab upgrade behavior in `connection.test.ts`.
@@ -49,7 +50,9 @@ Captured-fixture upgrades (v18, v24 → current) are pinned in
 | `checkpoints.ts` | pre-danger Y.Doc checkpoints (used by backup/restore/migrations) |
 | `diagnostics.ts` | flight-recorder persistence |
 | `dictionary.ts` | the separate versicle-dict database (Chinese dictionary) |
+| `embeddings.ts` | per-book int8 embedding vectors + resumable embed jobs (cache_embeddings / cache_embed_jobs) |
 | `playbackCache.ts` | session/playback cache (WebKit-safe write pattern preserved verbatim) |
+| `quotaCounter.ts` | persisted daily quota counter (app_metadata KV — the QuotaGovernor RPD store) |
 | `searchText.ts` | persisted search corpus (cache_search_text) |
 
 The Yjs document itself is persisted by `packages/y-idb` (vendored fork)

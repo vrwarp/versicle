@@ -73,16 +73,16 @@ The table below summarizes the twelve contracts:
 
 | Id | Contract | Home module | Runtime validation | Version surface |
 |---|---|---|---|---|
-| C1 | IndexedDB storage schema | [src/data/schema.ts](../../src/data/schema.ts) | Zod row schemas in `src/data/rows/` at untrusted ingress | `DB_VERSION = 26`; append-only `MIGRATIONS` registry |
+| C1 | IndexedDB storage schema | [src/data/schema.ts](../../src/data/schema.ts) | Zod row schemas in `src/data/rows/` at untrusted ingress | `DB_VERSION = 27`; append-only `MIGRATIONS` registry |
 | C2 | CRDT document schema | [src/store/registry.ts](../../src/store/registry.ts), [src/app/migrations.ts](../../src/app/migrations.ts) | `syncedKeys` whitelist + merge-defaults hydration; `meta` Y.Map quarantine | `CURRENT_SCHEMA_VERSION = 9` |
-| C3 | Sync transport | [src/domains/sync/backend/SyncBackend.ts](../../src/domains/sync/backend/SyncBackend.ts) | Typed errors; Zod on inbound workspace metadata | `firestore.rules` versioned in-repo |
+| C3 | Sync transport | [src/domains/sync/backend/SyncBackend.ts](../../src/domains/sync/backend/SyncBackend.ts) | Typed errors; observe-mode Zod on inbound workspace metadata; five additive artifact methods (head/put/get/delete/sweep) | `firestore.rules` versioned in-repo |
 | C4 | TTS engine RPC | [src/lib/tts/engine/TtsEngine.ts](../../src/lib/tts/engine/TtsEngine.ts) | Single monotonic `PlaybackSnapshot{seq}` channel | 23 parity scenarios × 2 transports |
 | C5 | TTS provider plugin | [src/lib/tts/providers/registry.ts](../../src/lib/tts/providers/registry.ts) | `ProviderDescriptor` registry; reject-only `play()` | 6 providers in `PROVIDERS as const` |
 | C6 | Store/selector public API | [src/store/registry.ts](../../src/store/registry.ts) | Three declared tiers; `defineSyncedStore` seam | Generated `src/store/README.md` |
 | C7 | Reader engine port | [src/domains/reader/engine/ReaderEngine.ts](../../src/domains/reader/engine/ReaderEngine.ts) | `EpubJsEngine` sole epubjs importer (lint error) | One swap-test as acceptance |
 | C8 | Ingestion artifact contract | [src/lib/ingestion/sentence-extraction.ts](../../src/lib/ingestion/sentence-extraction.ts) | `extractionVersion` stamp; raw-at-rest CFI fixtures | Real-EPUB integration tests |
 | C9 | External egress contract | [src/kernel/net/destinations.ts](../../src/kernel/net/destinations.ts) | `NetworkGateway.egress()` checks every call; CSP generated | `EGRESS_DESTINATIONS` array |
-| C10 | Error contract | [src/types/errors.ts](../../src/types/errors.ts) | `AppError` taxonomy; append-only code namespaces | `presentError` is the one UI mapper |
+| C10 | Error contract | [src/types/errors.ts](../../src/types/errors.ts) | `AppError` taxonomy; append-only code namespaces (incl. `NET_RATE_LIMITED`) | `presentError` is the one UI mapper |
 | C11 | Boot contract | [src/app/bootstrap.ts](../../src/app/bootstrap.ts) | 8 phases; `halt()` for migration confirmation | `BOOT_PHASES as const` |
 | C12 | Layering & worker-purity | [.dependency-cruiser.cjs](../../.dependency-cruiser.cjs) | depcruise + ESLint; emitted-chunk content test | 10 boundary rules, most at error/0 |
 
@@ -290,6 +290,8 @@ export interface EpubLibraryDB extends DBSchema {
     indexes: { by_bookId: string; };
   };
   cache_search_text: { key: string; value: CacheSearchTextRow; };
+  cache_embeddings: { key: string; value: CacheEmbeddingsRow; };
+  cache_embed_jobs: { key: string; value: CacheEmbedJobRow; };
 
   // --- DOMAIN 3: APP (Sync Infrastructure + Schema Evolution) ---
   checkpoints: {
@@ -305,7 +307,7 @@ export interface EpubLibraryDB extends DBSchema {
 
 This three-domain taxonomy (STATIC / CACHE / APP) is a fundamental organizational rule: static stores hold immutable book content, cache stores hold ephemeral/regenerable derived data, and app stores hold sync infrastructure. The classification governs backup behavior (only static survives backup), eviction policy (only cache is subject to LRU), and wipe behavior.
 
-The current schema version is `DB_VERSION = 26` (as of Phase 7).
+The current schema version is `DB_VERSION = 27`. The v27 step (`migrateToV27`) is purely additive: it creates the two regenerable CACHE stores `cache_embeddings` (per-book semantic-search vectors) and `cache_embed_jobs` (embedding-build job progress), both keyed by `bookId`, each guarded by `contains()`. Because both are device-local and rebuildable, the rollback story is trivial — the stores are simply re-embedded if ever lost. A deviation worth recording: v27 had been *reserved* for the `sync_log`/SW-cover cleanup, but that cleanup was never done, so the embedding stores took the v27 slot and the reserved cleanup is now the next, v28, bump.
 
 #### Zod row schemas as the data contract
 
@@ -356,6 +358,7 @@ export interface IdbMigration {
 export const MIGRATIONS: readonly IdbMigration[] = [
   { toVersion: 25, migrate: migrateToV25 },
   { toVersion: 26, migrate: migrateToV26 },
+  { toVersion: 27, migrate: migrateToV27 },
 ];
 ```
 
@@ -400,13 +403,14 @@ sequenceDiagram
     participant M25 as "migrateToV25()"
     participant AM as "app_metadata store"
 
-    C ->> S: "openDB('EpubLibraryDB', 26)"
+    C ->> S: "openDB('EpubLibraryDB', 27)"
     S ->> S: "ensureBaselineStores() — step 0"
     S ->> M25: "oldVersion < 25"
     M25 ->> AM: "captureLegacyUserData() — snapshot FIRST"
     M25 ->> S: "deleteDeprecatedStores()"
     M25 ->> S: "createIndex('by_lastAccessed')"
     S ->> S: "migrateToV26() — create cache_search_text"
+    S ->> S: "migrateToV27() — create cache_embeddings + cache_embed_jobs"
     S ->> AM: "appendSchemaHistory({from, to, at})"
     S ->> C: "db handle returned"
 ```
@@ -637,6 +641,93 @@ The `DestinationId` union is append-only: `'gemini' | 'google-tts' | 'openai-tts
 
 ---
 
+### The cross-provider quota governor (kernel subsystem)
+
+The quota module in [src/kernel/quota/](../../src/kernel/quota/) is a second dependency-free kernel subsystem — admitted under boundary rule 1 because it has zero internal deps (it imports only `~types/errors` and the `Intl` global) and ≥2 consumers (the AI/Gemini code and the audio/TTS code). It is the rate/spend bookkeeping that keeps the app within each provider's request/token budget; the free-tier Gemini quota is the motivating case. The module is three files plus a barrel:
+
+- `QuotaGovernor.ts` — the governor class and its port types.
+- `ptDay.ts` — `ptDayString(epochMs)`, the midnight-Pacific calendar-day key. It is the single source of truth for two things that must agree: when the daily request budget resets, and the per-day stamp used to sum AI spend across the user's devices. The barrel re-exports it so the app-side cross-device reconciler produces *byte-identical* keys to the governor — a mismatch would silently drop a sibling device's spend.
+- `index.ts` — the public surface (`@kernel/quota`).
+
+The governor tracks three budgets per **lane** (`'fg'` foreground/interactive vs `'bg'` background/prefetch):
+
+| Budget | Where it lives | Reset |
+|---|---|---|
+| Requests-per-minute (`rpm`) | in-memory sliding 60 s window | dies with the process |
+| Tokens-per-minute (`tpm`) | in-memory sliding 60 s window | dies with the process |
+| Requests-per-day (`rpd`) | persisted via the injected `QuotaStore` port | midnight-PT day-string compare |
+
+Limits are read **fresh on every `acquire()`** from an injected `QuotaLimitsProvider` (never snapshotted at construction, never cached), so an edit in settings takes effect on the next acquire. The clock is injectable, making the midnight-PT rollover unit-testable without waiting for real midnight. Foreground preempts background: a `bg` acquire is refused while any `fg` claim is in flight, and `bg` is additionally capped at a fraction (`BG_FRACTION = 0.5`) of the minute budget, so interactive work is never starved by automatic embedding/prefetch spend.
+
+The lifecycle is **record-at-admission**: `acquire(lane, estTokens)` is the single recorder — once admitted it pushes the rolling-window event and bumps + persists the daily counter, so a request that never commits (every embedding) still counts and still persists. `commit(lane, actualTokens)` only reconciles the already-recorded estimate to the actual cost (FIFO over the oldest uncommitted event, plus the daily-token delta); it records no new event and never bumps the daily request count. `release(lane)` only frees the foreground claim and never undoes a recorded spend. A 429 feeds `recordCooldown(retryAfterMs)`, after which `acquire` throws before any network call.
+
+#### The injected `QuotaStore` port
+
+The governor never touches IndexedDB itself. The day-rollover-surviving RPD reaches disk through an injected port, swapped in at the composition root via `setQuotaStore`:
+
+```typescript
+export interface QuotaStore {
+  /** The persisted daily usage, or null when never written (treated as zero). */
+  loadDailyUsage(): Promise<DailyUsage | null>;
+  /** Persist the daily usage (last-write-wins; fire-and-forget). */
+  saveDailyUsage(usage: DailyUsage): void;
+}
+```
+
+`saveDailyUsage` is intentionally fire-and-forget (returns `void`): a failed persist must never fail an `acquire`/`commit` — the 429 cooldown is the safety net. Until the root installs a real store the module uses an in-memory fallback. The wired port lives in [src/data/repos/quotaCounter.ts](../../src/data/repos/quotaCounter.ts), which reads/writes a single `quota-daily-usage` record in the **existing `app_metadata` key-value store** — no dedicated store, **no DB version bump**. The port is also the single seam where a sum of spend across the user's other devices can later be folded in without changing the governor; that cross-device reconcile rides an additive `embedSpend` field on the synced `DeviceInfo` record (no CRDT format change), because the free-tier quota is per-Google-Cloud-*project*, not per-device.
+
+#### The admission seam inside the gateway
+
+The governor cannot be bypassed because admission happens **inside** `NetworkGateway.egress`, before any bytes leave. The gateway declares the throttle structurally (not by importing the quota module — the same dependency inversion used for `ConsentResolver`, so `kernel/net` keeps importing nothing internal) and the composition root installs the governor as the implementation via `setQuotaScheduler`:
+
+```typescript
+export interface QuotaScheduler {
+  acquire(lane: 'fg' | 'bg', estTokens: number): Promise<void>;
+  release(lane: 'fg' | 'bg'): void;
+}
+```
+
+For a rate-limited destination the gateway `await`s `acquire(lane, estTokens)` *before* `recordEgress`/`fetch`, then is the **single owner** of `release` (a `try/finally`, exactly once per egress — on a 200, a resolved non-2xx, or a throw). The split is deliberate: `acquire` + `release` sit at the gateway because they must run before egress and cannot be bypassed, while reconciling the actual token cost (`commit`) and recording 429 cooldowns stay a caller step because they need the parsed response body the gateway never reads. A per-call `lane` override lets a background embedding ride the `bg` lane even on the `gemini` destination, whose default lane is `fg`. As with consent, the gateway runs in OBSERVE mode until the scheduler is installed: with no scheduler it applies no throttle and only counts. Consumers are `GeminiClient`, the cloud TTS providers, and the new embedding client; model rotation stays in `GeminiClient`. Editable per-lane limits, a pause-all switch, and live used-vs-limit meters live in the GenAI settings tab (fed by `snapshot()`'s per-lane `LaneUsage` shape).
+
+---
+
+### The shared embedding cache surface on C3 (the Artifact Lane)
+
+The C3 sync-transport contract in [src/domains/sync/backend/SyncBackend.ts](../../src/domains/sync/backend/SyncBackend.ts) grew an additive surface in service of the **Artifact Lane**: expensive embedding blobs are mirrored into the user's own BYO Cloud Storage so a book embedded once on one device is *downloaded* by their other devices instead of re-spending Gemini quota. Each cached embedding set is two siblings keyed by the same content `{key}`: a large vector blob in Cloud Storage (`embeddings/{key}.bin` under the workspace prefix) and a tiny Firestore "head" record (`embedCache/{key}`) holding its stamp + byte size, so a device probes "do we already have this?" with one cheap document read instead of a Storage listing.
+
+The contract gained **five** additive methods (a deviation: the design originally planned a three-method "trio" — `head`/`put`/`get` — and grew two GC methods during implementation):
+
+| Method | Role | Key invariant |
+|---|---|---|
+| `headArtifact` | probe | reads the Firestore head only, never a Storage `list`; a head hit implies the bytes are present |
+| `putArtifact` | write | **blob first, head second** (a crash between leaves a recoverable blob, never a head pointing at absent bytes); skip-if-present idempotent |
+| `getArtifact` | read | a definitive miss (`object-not-found`) returns `null`; a transient/permission error **throws** — opposite polarity to `isWorkspaceAlive`'s fail-safe, because recomputing embeddings is expensive |
+| `deleteArtifactHead` | GC (per-book) | best-effort delete of the head record **only**; the content-addressed blob is deliberately left for the sweeper, since a sibling device may still need it |
+| `sweepArtifacts` | GC (cloud TTL/quota) | deletes both head and sibling blob for heads past `ttlMs` (and oldest-first under an optional `budgetBytes`); idempotent and re-runnable |
+
+The `ArtifactHead` projection encodes the no-list invariant directly — `exists` is always `true` on a returned head (a miss is `null`, never `{ exists: false }`):
+
+```typescript
+export interface ArtifactHead {
+  exists: true;
+  /** Identifies which embedding space (model/dims/quant) produced the bytes. */
+  stamp: string;
+  /** Byte length of the blob the head record points at. */
+  size: number;
+}
+```
+
+The two implementations:
+
+- [FirestoreBackend](../../src/domains/sync/backend/FirestoreBackend.ts) — the **sole** `firebase/storage` importer. The Artifact Lane widened it from delete-only (the purge path) to read/write by adding `uploadBytes` + `getBytes`; no other sync module gains a Storage import. The cache is also a first-class purge target: `embedCache` was wired into `PURGE_SUBCOLLECTIONS` in **Phase A**, so deleting a workspace removes its head records too.
+- [MockBackend](../../src/domains/sync/backend/MockBackend.ts) — an in-memory `Map`-backed implementation (no real Storage tier) that satisfies the same five methods.
+
+Both are pinned by the single behavioral spec `describeSyncBackendContract` (in `src/lib/sync/syncBackendContract.ts`), run against the mock on every CI run and against the Firestore+Storage emulator on a gated run.
+
+> **CI-PENDING caveat.** The cloud round-trips — the Firestore+Storage emulator `put`/`head`/`get`/`delete`/`sweep` cases, the HEAD-after-Storage ordering, and the `storage.rules` security-rules suite — **auto-skip when no local emulators are reachable**. The Artifact Lane is therefore code-complete and unit-verified against `MockBackend`, but the real cloud paths are **not yet proven end-to-end against real Firebase**. (Cross-*user* sharing, TTS-audio cache sharing, per-blob HMAC, and the live token-count probe are explicitly deferred — see [plan/shared-ai-cache-design.md](../../plan/shared-ai-cache-design.md).)
+
+---
+
 ## The drift gate and doc generation system
 
 The documentation generation system in [src/app/docs/](../../src/app/docs/) is the mechanism by which registries become self-enforcing documentation.
@@ -847,7 +938,7 @@ Every contract has a version surface, a rule governing version bumps, and a test
 
 The `CURRENT_SCHEMA_VERSION` constant in `yjs-provider.ts` is imported by both the middleware seam and the docs generator, ensuring the architecture documentation always reflects the live version.
 
-**Error codes are append-only**: the `AppError` taxonomy in [src/types/errors.ts](../../src/types/errors.ts) has namespaced codes (`DB_* / SYNC_* / TTS_* / GENAI_* / DRIVE_* / INGEST_*`). The `code` union is append-only by convention — removing a code would break `presentError` mappings in older clients.
+**Error codes are append-only**: the `AppError` taxonomy in [src/types/errors.ts](../../src/types/errors.ts) has namespaced codes (`APP_* / DB_* / SYNC_* / TTS_* / GENAI_* / DRIVE_* / INGEST_* / SEARCH_* / NET_* / BACKUP_* / GOOGLE_*`), and the namespace registry itself (`APP_ERROR_NAMESPACES`) is append-only too — a `satisfies` clause rejects any code that is not `<NAMESPACE>_<DETAIL>` at compile time. The `code` union is append-only by convention — removing a code would break `presentError` mappings in older clients. The most recent addition is `NET_RATE_LIMITED`, thrown by `NetRateLimitedError` when the quota governor refuses a request **before any network call** (daily budget spent, a prior 429 cooldown still active, or the rolling per-minute budget exhausted). It is deliberately distinct from a server-sent 429, is `retryable: true`, and carries `retryAfterMs` in `context` so callers branch on `code === 'NET_RATE_LIMITED'` rather than message substrings. The error class extends `AppError` directly (not `NetworkGatewayError`) because its throw site, `kernel/quota`, may import only `~types`; `kernel/net` re-exports it under its own surface.
 
 ---
 

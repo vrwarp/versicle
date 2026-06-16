@@ -204,8 +204,8 @@ sequenceDiagram
     T6-->>BS: returns
     BS->>T7: ttsInitialize + deviceRegistration
     T7-->>BS: returns
-    BS->>T8: heartbeat + driveAutoScan + audioCacheEviction + reingestWave + socialLogin
-    T8-->>BS: returns (fire-and-forget where noted)
+    BS->>T8: heartbeat + driveAutoScan + audio/embedding cache eviction + reingestWave + embeddingBackfill + artifactPublisher + artifactSweeper + socialLogin
+    T8-->>BS: returns (fire-and-forget / idle-scheduled where noted)
     BS-->>Hook: promise resolves { status: 'ready', pendingMigration }
     Hook->>Hook: setState({ status: 'ready', ... })
     Hook-->>App: AppBootState { status: 'ready' }
@@ -239,7 +239,11 @@ The full registration table:
 | `backgroundTasks` | `device/heartbeat` | backgroundTasks.ts |
 | `backgroundTasks` | `drive/auto-scan` | backgroundTasks.ts |
 | `backgroundTasks` | `data/audio-cache-eviction` | backgroundTasks.ts |
+| `backgroundTasks` | `data/embedding-cache-eviction` | backgroundTasks.ts |
 | `backgroundTasks` | `library/reingest-wave` | backgroundTasks.ts |
+| `backgroundTasks` | `search/embedding-backfill` | embeddingBackfill.ts |
+| `backgroundTasks` | `search/artifact-publisher` | artifactPublisher.ts |
+| `backgroundTasks` | `search/artifact-sweeper` | artifactSweeper.ts |
 | `backgroundTasks` | `google/social-login` | socialLogin.ts |
 
 The `registered` boolean guard at the top of `registerAppBootTasks` makes the function idempotent — HMR and repeated calls in tests cannot double-register tasks or the sequencer would throw on the duplicate-name check.
@@ -262,8 +266,12 @@ graph TD
     A --> P8a["registerBootTask backgroundTasks\ndevice/heartbeat"]
     A --> P8b["registerBootTask backgroundTasks\ndrive/auto-scan"]
     A --> P8c["registerBootTask backgroundTasks\ndata/audio-cache-eviction"]
-    A --> P8d["registerBootTask backgroundTasks\nlibrary/reingest-wave"]
-    A --> P8e["registerBootTask backgroundTasks\ngoogle/social-login"]
+    A --> P8d["registerBootTask backgroundTasks\ndata/embedding-cache-eviction"]
+    A --> P8e["registerBootTask backgroundTasks\nlibrary/reingest-wave"]
+    A --> P8f["registerBootTask backgroundTasks\nsearch/embedding-backfill"]
+    A --> P8g["registerBootTask backgroundTasks\nsearch/artifact-publisher"]
+    A --> P8h["registerBootTask backgroundTasks\nsearch/artifact-sweeper"]
+    A --> P8i["registerBootTask backgroundTasks\ngoogle/social-login"]
 
     style P1 fill:#f9f,stroke:#333
     style P2 fill:#f9f,stroke:#333
@@ -279,6 +287,10 @@ graph TD
     style P8c fill:#faa,stroke:#333
     style P8d fill:#faa,stroke:#333
     style P8e fill:#faa,stroke:#333
+    style P8f fill:#faa,stroke:#333
+    style P8g fill:#faa,stroke:#333
+    style P8h fill:#faa,stroke:#333
+    style P8i fill:#faa,stroke:#333
 ```
 
 ---
@@ -423,11 +435,11 @@ const profile: DeviceProfile = {
 
 ### 5.8 backgroundTasks
 
-**Source:** [src/app/boot/backgroundTasks.ts](../../src/app/boot/backgroundTasks.ts), [src/app/boot/socialLogin.ts](../../src/app/boot/socialLogin.ts)
-**Task names:** `device/heartbeat`, `drive/auto-scan`, `data/audio-cache-eviction`, `library/reingest-wave`, `google/social-login`
+**Source:** [src/app/boot/backgroundTasks.ts](../../src/app/boot/backgroundTasks.ts), [src/app/boot/embeddingBackfill.ts](../../src/app/boot/embeddingBackfill.ts), [src/app/boot/artifactPublisher.ts](../../src/app/boot/artifactPublisher.ts), [src/app/boot/artifactSweeper.ts](../../src/app/boot/artifactSweeper.ts), [src/app/boot/socialLogin.ts](../../src/app/boot/socialLogin.ts)
+**Task names:** `device/heartbeat`, `drive/auto-scan`, `data/audio-cache-eviction`, `data/embedding-cache-eviction`, `library/reingest-wave`, `search/embedding-backfill`, `search/artifact-publisher`, `search/artifact-sweeper`, `google/social-login`
 **Phase:** `backgroundTasks`
 
-Five tasks run in this phase. All of them either fire-and-forget or start background intervals; none block on network operations.
+Nine tasks run in this phase. All of them either fire-and-forget, start background intervals, or schedule work on the next idle slot; none block on network operations. The four semantic-search/shared-cache tasks (`data/embedding-cache-eviction`, `search/embedding-backfill`, `search/artifact-publisher`, `search/artifact-sweeper`) were added alongside the embeddings and Artifact Lane work; each is **heartbeat-active gated** (it bails unless this device's heartbeat is recent, reusing `ACTIVE_DEVICE_WINDOW_MS`, so an idle or locked device never spends quota, uploads, or sweeps) and **idle-gated** (scheduled on `requestIdleCallback`, falling back to a macrotask, so it never competes with the boot path or interactive work).
 
 **`deviceHeartbeatTask`** (`device/heartbeat`): Starts a 5-minute interval (`HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000`) that calls `useDeviceStore.getState().touchDevice(deviceId)`. Registers `stopDeviceHeartbeat` as cleanup via `ctx.addCleanup`. The heartbeat deliberately starts AFTER device registration (pre-C11 it raced registration from a parallel effect). `stopDeviceHeartbeat` is also called directly by the `wireSyncEvents` `obsolete` handler — an obsolete client must stop announcing itself even while the UI lock is displayed.
 
@@ -435,7 +447,15 @@ Five tasks run in this phase. All of them either fire-and-forget or start backgr
 
 **`audioCacheEvictionTask`** (`data/audio-cache-eviction`): Fire-and-forget chain. First runs `audioCache.backfillSizesOnce()` (the v25 one-time `size` field backfill; flag-guarded so it runs once and retries on failure). Then runs `audioCache.runEviction()` for the LRU sweep. If the backfill fails, the eviction still runs (it falls back to `audio.byteLength`). Neither operation is awaited; boot must not wait for storage maintenance.
 
+**`embeddingCacheEvictionTask`** (`data/embedding-cache-eviction`): Fire-and-forget, mirroring `audioCacheEvictionTask` for the v27 `cache_embeddings` store. The sweep streams a readonly cursor and deletes through the embeddings write gate, so it can never overlap an indexer write. The recency signal is **injected at the task level** (the repo stays store-free, per `data-no-upward`): the task builds a `Map<bookId, lastReadMs>` from the reading-state store's per-book progress so recently-read books evict last; books with no valid progress rank oldest. The task also shapes the **never-evict-unconfirmed-upload protected set** (`computeProtectedBookIds`, the Artifact Lane Phase D guardrail) before calling `embeddingsRepo.runEviction(recency, undefined, protectedIds)`. That set is empty — zero added cost, no HEAD probes — whenever the `shareAiCaches` switch is OFF or no artifact backend is connected; when it is ON and connected, for each candidate book the task derives the content-addressed key and HEAD-probes the backend, and a HEAD **miss** (upload not yet confirmed) **protects** the book so eviction never destroys the only copy of a cache the user opted to share. The probe is **fail-safe**: a throw (offline blip, permission error) also protects the book.
+
 **`reingestWaveTask`** (`library/reingest-wave`): Checks a `versicle_reingest_defer` localStorage flag. If set, logs and returns. Otherwise, schedules `runReingestWave(...)` after a 10-second idle delay (`REINGEST_START_DELAY_MS = 10_000`), keeping it entirely off the critical boot path. The wave uses stamp-based candidacy and processes books through the `ImportOrchestrator` at `'idle'` priority (user imports always preempt). Registers cleanup that cancels both the timer and signals `shouldContinue: () => !cancelled` to stop the wave if the component unmounts.
+
+**`embeddingBackfillTask`** (`search/embedding-backfill`): Pre-embeds the library for semantic search so books are searchable **without** first being opened in the reader. On the next idle slot it constructs its own long-lived `EmbeddingIndexer` (the foreground indexer is created per reader session) and trickles loaded-but-unread books — local binary present, synced reading progress below `UNREAD_PROGRESS_CEILING` (0.05) — through the indexer on the **background quota lane** (`{ interactive: false, lane: 'bg' }`; an idle path never takes the interactive bypass). The trickle is doubly consent-gated: it runs only when the default-OFF library-wide `preEmbedLibrary` opt-in is ON (the consent that grants this background egress, wired through the consent resolver in [src/app/google/aiConsent.ts](../../src/app/google/aiConsent.ts)) **and** the embedding client `isConfigured()`. Before spending any quota on a book it first consults the shared Artifact Lane cache (`getArtifactConsult().probeArtifact` / `hydrateFromArtifact`): a cache hit downloads a peer's vectors for free and skips the embed, so even a device that has exhausted its quota still reuses peer-embedded books. On a miss it checks the app-layer cross-device daily-request budget and stops the trickle when this device's share of the shared daily quota is used up; a `NetRateLimitedError` (pre-network backpressure from the cross-provider quota governor) also stops the pass to resume on the next idle/boot. The whole pass bails unless this device's heartbeat is recent. The core `runEmbeddingBackfill` is pure/injectable; the boot task wires the real store/repo/governor seams and registers a cleanup that cancels the idle callback and signals `shouldContinue: () => false`.
+
+**`artifactPublisherTask`** (`search/artifact-publisher`): The upload half of the Artifact Lane (shared AI-cache Phase C). On idle it mirrors each locally-embedded book's whole-corpus int8 vectors into the user's **own** BYO Cloud Storage (a content-addressed blob `embeddings/{key}.bin` under the workspace prefix) plus a small companion HEAD record, so a sibling device downloads them for free instead of re-spending Gemini quota. It runs only when the default-OFF **"Share AI caches across my devices"** opt-in (`shareAiCaches`) is ON; the per-book upload consent is built from the **same consent predicate** the download path uses (`makeArtifactConsentGate`: `shareAiCaches` ANDed with library pre-embed or per-book consent), so a book that may be downloaded by a peer is exactly one that may be uploaded. It is a silent no-op when no backend handle is connected (sync off / not connected / no active workspace), read fresh per call. The blob key is derived from the embedding **row's** stamp (`{model, dims, quant, extractionVersion}`), not live config, so the object is addressed by what was actually embedded and a peer re-derives the same key from the blob header; `putArtifact` is **idempotent** (head-before-put, write-if-absent), so racing devices write byte-identical content harmlessly. Per-book failures are best-effort (log and continue; the next idle/boot retries). Cleanup cancels the idle callback and sets `shouldContinue` false.
+
+**`artifactSweeperTask`** (`search/artifact-sweeper`): The cloud garbage-collector for the shared embedding cache (Artifact Lane Phase D), kept **separate** from `data/embedding-cache-eviction` because it is the companion to the per-book cloud-delete policy: deleting a book drops only its HEAD record and leaves the content-addressed blob for this sweeper to reclaim once it ages past the TTL (a sibling device may still need it). On idle it calls `backend.sweepArtifacts(...)` with a 30-day `ARTIFACT_TTL_MS` and the embeddings cache byte budget — each HEAD record past the TTL (and, when the bucket is over budget, oldest-first beyond that) is deleted along with its sibling blob. It is a silent no-op when no backend is connected, and best-effort: a thrown sweep is logged and swallowed (the next boot retries; the sweep is idempotent). **CI-PENDING caveat:** like every Artifact Lane cloud round-trip (`headArtifact` / `putArtifact` / `getArtifact` / `deleteArtifactHead` / `sweepArtifacts` and the HEAD-after-Storage ordering), the sweep is verified against `MockBackend` but its Firestore+Storage-emulator path auto-skips without local emulators, so the cloud GC is code-complete but not yet proven end-to-end against real Firebase.
 
 **`socialLoginTask`** (`google/social-login`): Calls `SocialLogin.initialize(...)` with the configured Google client IDs, fire-and-forget. Subscribes to `useGoogleServicesStore` to re-initialize when the user changes the client IDs in settings. The subscription is registered once per page load (guarded by a module-level `subscribed` flag) and its unsubscribe is registered via `ctx.addCleanup`.
 
@@ -627,6 +647,9 @@ Tasks that register cleanups:
 | `device/heartbeat` | `stopDeviceHeartbeat` — clears the 5-minute interval |
 | `sync/initialize` | `wireSyncEvents()` return value — unsubscribes from the SyncEvent bus |
 | `library/reingest-wave` | `() => { cancelled = true; clearTimeout(timer); }` — stops the 10-second idle timer and signals the wave to stop |
+| `search/embedding-backfill` | `() => { cancelled = true; cancelIdle(); }` — cancels the idle callback and signals the trickle to stop |
+| `search/artifact-publisher` | `() => { cancelled = true; cancelIdle(); }` — cancels the idle callback and signals the upload pass to stop |
+| `search/artifact-sweeper` | `() => { cancelled = true; cancelIdle(); }` — cancels the idle callback before the cloud sweep fires |
 | `google/social-login` | `() => { subscribed = false; unsubscribe(); }` — unsubscribes from `useGoogleServicesStore` |
 
 `useBootSequence`'s cleanup effect calls `handle.dispose()`, so all of these run when `App` unmounts. In practice the React root never unmounts in production use, but the contract matters for test isolation and for future scenarios like a full PWA re-initialization.
@@ -721,7 +744,7 @@ The following invariants are enforced structurally (import-banning, test pinning
 
 7. **The migration interceptor is the FIRST phase.** It must see the migration state before the database is opened, before Yjs persistence starts, and before any migration or sync runs. Running it last would create exactly the race it exists to prevent.
 
-8. **`backgroundTasks` is the LAST phase.** All background tasks depend on the device being registered (heartbeat) or on the library being hydrated (reingest wave, Drive scan). They must run after all data phases.
+8. **`backgroundTasks` is the LAST phase.** All background tasks depend on the device being registered (heartbeat) or on the library being hydrated (reingest wave, Drive scan, embedding backfill, artifact publish/sweep). They must run after all data phases. The four semantic-search/shared-cache tasks add their own self-gating on top of phase order: each is heartbeat-active gated (it bails unless this device's heartbeat is recent) and idle-scheduled, so they never spend quota, upload, or sweep from an idle device or on the critical boot path.
 
 9. **Wipe hooks are registered at composition time, not boot success.** If the app crashes before the boot sequence starts, the hooks are still registered (and are no-ops because the writers never started).
 
@@ -739,11 +762,12 @@ The boot system touches nearly every other part of Versicle:
 - **[Schema and migrations (IDB)](21-schema-and-migrations-idb.md)** — the `EpubLibraryDB` connection lifecycle; the `openDB` boot phase's `getConnection()` call.
 - **[CRDT format and migrations](22-crdt-format-and-migrations.md)** — the `CRDT_MIGRATIONS` chain, `runCrdtMigrationsOnDoc`, and the `MigrationError` type that routes boot to `CriticalMigrationFailureView`.
 - **[Backup and restore](23-backup-and-restore.md)** — `CheckpointService.createCheckpoint` (pre-migration protection), `CheckpointService.restoreCheckpoint` (the `RESTORING_BACKUP` boot path), and `wipeAllData`.
-- **[Domain sync](36-domain-sync.md)** — the sync orchestrator, `isSyncEnabled`, `getSyncOrchestratorAsync`, `wireSyncEvents`, and the `obsolete` quarantine event.
+- **[Domain sync](36-domain-sync.md)** — the sync orchestrator, `isSyncEnabled`, `getSyncOrchestratorAsync`, `wireSyncEvents`, and the `obsolete` quarantine event; the Artifact Lane's five additive `SyncBackend` methods (`headArtifact` / `putArtifact` / `getArtifact` / `deleteArtifactHead` / `sweepArtifacts`) and the `getConnectedArtifactBackend()` handle the publisher/sweeper/eviction tasks read fresh per pass.
+- **[Domain search](38-domain-search.md)** — the `EmbeddingIndexer` the `search/embedding-backfill` task drives on the background lane, RRF fusion and int8 cosine ranking, the content-addressed artifact key (`contentKey`), and the blob serialize/parse codec (`serializeArtifactBlob`) the publisher uses.
 - **[TTS app integration](51-tts-app-integration.md)** — `getTtsController().initialize()` in the `deviceRegistration` phase.
 - **[PWA and service worker](61-pwa-and-service-worker.md)** — the service-worker gate (`useServiceWorkerGate`), `waitForServiceWorkerController`, and `notifyServiceWorkerDegradedOnce`.
 - **[Domain library](37-domain-library.md)** — `getLibrary().service.hydrate()` in the `hydrateStaticMetadataTask` and `getLibrary().orchestrator.reprocess()` in `reingestWaveTask`.
-- **[Domain Google](39-domain-google.md)** — `wireGoogleDomain()` (runs before boot phases), `getDriveLibrarySync().scanAndIndex()` (`drive/auto-scan`), and `SocialLogin.initialize()` (`google/social-login`).
+- **[Domain Google](39-domain-google.md)** — `wireGoogleDomain()` (runs before boot phases), `getDriveLibrarySync().scanAndIndex()` (`drive/auto-scan`), `SocialLogin.initialize()` (`google/social-login`), `getEmbeddingClient()` (the embedding facade the backfill task wires), the `getArtifactConsult()` consult adapter, and the consent resolver (`aiConsent.ts`) behind the `preEmbedLibrary` / `shareAiCaches` opt-ins.
 - **[Error handling and recovery](15-error-handling-and-recovery.md)** — `SafeModeView`, `CriticalMigrationFailureView`, `MigrationError`, `AppError`, and `installGlobalErrorHandlers`.
 - **[Observability and diagnostics](74-observability-and-diagnostics.md)** — boot task names as diagnostic labels (`<subsystem>/<action>` convention), the `createLogger('Boot')` pattern used across all boot modules.
 
@@ -801,5 +825,9 @@ classDiagram
 | `backgroundTasks` | `device/heartbeat` | backgroundTasks.ts | no | Starts 5-min interval; registers cleanup |
 | `backgroundTasks` | `drive/auto-scan` | backgroundTasks.ts | partial | Awaits `shouldAutoSync()`; scan is fire-and-forget |
 | `backgroundTasks` | `data/audio-cache-eviction` | backgroundTasks.ts | no | Fire-and-forget |
+| `backgroundTasks` | `data/embedding-cache-eviction` | backgroundTasks.ts | no | Fire-and-forget; injects recency + never-evict-unconfirmed-upload set |
 | `backgroundTasks` | `library/reingest-wave` | backgroundTasks.ts | no | 10 s idle delay; registers cleanup |
+| `backgroundTasks` | `search/embedding-backfill` | embeddingBackfill.ts | no | Idle-scheduled; heartbeat-active + `preEmbedLibrary` gated; registers cleanup |
+| `backgroundTasks` | `search/artifact-publisher` | artifactPublisher.ts | no | Idle-scheduled; heartbeat-active + `shareAiCaches` gated; registers cleanup |
+| `backgroundTasks` | `search/artifact-sweeper` | artifactSweeper.ts | no | Idle-scheduled; cloud GC (MockBackend-verified, emulator CI-pending); registers cleanup |
 | `backgroundTasks` | `google/social-login` | socialLogin.ts | no | Fire-and-forget init; cleanup on unmount |

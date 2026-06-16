@@ -251,6 +251,163 @@ describe('SearchEngine', () => {
         });
     });
 
+    describe('int8 quantize/cosine compute (Increment B §2.3/§4.4 pure helpers)', () => {
+        /** Reference float32 cosine for the recall-tolerance comparison. */
+        const floatCosine = (a: Float32Array, b: Float32Array): number => {
+            let dot = 0;
+            let aSq = 0;
+            let bSq = 0;
+            for (let i = 0; i < a.length; i++) {
+                dot += a[i] * b[i];
+                aSq += a[i] * a[i];
+                bSq += b[i] * b[i];
+            }
+            if (aSq === 0 || bSq === 0) return 0;
+            return dot / (Math.sqrt(aSq) * Math.sqrt(bSq));
+        };
+
+        it('quantize/dequantize round-trips within one int8 step', () => {
+            const vec = new Float32Array([0.5, -0.25, 1.0, -1.0, 0.1, 0.0]);
+            const { vectors, scale } = engine.quantizeInt8PerVector(vec);
+
+            // scale = max(|v|)/127 = 1.0/127, so the dequantized value is
+            // within ±scale (half-step rounding) of the original.
+            expect(scale).toBeCloseTo(1.0 / 127, 12);
+            for (let i = 0; i < vec.length; i++) {
+                expect(Math.abs(vectors[i] * scale - vec[i])).toBeLessThanOrEqual(scale);
+            }
+            // The max-magnitude component maps to the int8 extreme.
+            expect(vectors[2]).toBe(127);
+            expect(vectors[3]).toBe(-127);
+        });
+
+        it('treats an all-zero vector as scale 0 with a zero int8 row', () => {
+            const { vectors, scale } = engine.quantizeInt8PerVector(new Float32Array([0, 0, 0]));
+            expect(scale).toBe(0);
+            expect(Array.from(vectors)).toEqual([0, 0, 0]);
+        });
+
+        it('int8 cosine ≈ reference float32 cosine within recall tolerance', () => {
+            const cases: [number[], number[]][] = [
+                [[1, 0, 0, 0], [1, 0, 0, 0]], // identical unit vectors → 1
+                [[1, 0, 0, 0], [0, 1, 0, 0]], // orthogonal → 0
+                [[1, 1, 0, 0], [1, 0, 0, 0]], // 45° → ~0.707
+                [[0.2, -0.7, 0.5, 0.1], [0.1, -0.6, 0.55, 0.3]], // near, non-unit
+                [[-3, 4, 0, 0], [3, -4, 0, 0]], // anti-parallel → -1
+            ];
+
+            for (const [aArr, bArr] of cases) {
+                const a = Float32Array.from(aArr);
+                const b = Float32Array.from(bArr);
+                const qa = engine.quantizeInt8PerVector(a);
+                const qb = engine.quantizeInt8PerVector(b);
+
+                const reference = floatCosine(a, b);
+                // int8Cosine returns the BEST cosine; non-negative cases match
+                // directly. Anti-parallel collapses to 0 (best of a single
+                // negative row) — assert the sign-aware single-row formula
+                // instead by checking against a clamped reference.
+                const got = engine.int8Cosine(qa.vectors, qa.scale, qb.vectors, qb.scale, a.length);
+                const expected = Math.max(0, reference);
+                expect(Math.abs(got - expected)).toBeLessThan(0.02);
+            }
+        });
+
+        it('returns the BEST cosine across a packed multi-row corpus', () => {
+            const dims = 3;
+            // Two packed query candidate rows: one orthogonal, one identical.
+            const target = Float32Array.from([1, 0, 0]);
+            const qt = engine.quantizeInt8PerVector(target);
+
+            const orthogonal = engine.quantizeInt8PerVector(Float32Array.from([0, 1, 0]));
+            const identical = engine.quantizeInt8PerVector(Float32Array.from([1, 0, 0]));
+
+            const packed = new Int8Array(dims * 2);
+            packed.set(orthogonal.vectors, 0);
+            packed.set(identical.vectors, dims);
+            // A single shared scale is fine here (both rows are unit-magnitude).
+            const best = engine.int8Cosine(packed, identical.scale, qt.vectors, qt.scale, dims);
+            expect(best).toBeCloseTo(1, 2);
+        });
+
+        it('treats a zero-scale operand as a cosine of 0', () => {
+            const a = engine.quantizeInt8PerVector(Float32Array.from([0, 0, 0]));
+            const b = engine.quantizeInt8PerVector(Float32Array.from([1, 2, 3]));
+            expect(engine.int8Cosine(a.vectors, a.scale, b.vectors, b.scale, 3)).toBe(0);
+            expect(engine.int8Cosine(b.vectors, b.scale, a.vectors, a.scale, 3)).toBe(0);
+        });
+
+        describe('rankInt8 (Increment D §2: search-side top-k cosine ranking)', () => {
+            it('ranks packed rows by cosine, top-k descending, matching a float reference', () => {
+                const dims = 4;
+                // Corpus rows in deliberately scrambled relevance order vs the query.
+                const corpus = [
+                    Float32Array.from([0, 1, 0, 0]),       // orthogonal → 0
+                    Float32Array.from([0.9, 0.1, 0, 0]),   // near the query → high
+                    Float32Array.from([1, 0, 0, 0]),       // identical → best
+                    Float32Array.from([0.4, 0.6, 0.2, 0]), // middling
+                ];
+                const query = Float32Array.from([1, 0, 0, 0]);
+
+                const packed = new Int8Array(corpus.length * dims);
+                const scales = new Float32Array(corpus.length);
+                corpus.forEach((vec, i) => {
+                    const { vectors, scale } = engine.quantizeInt8PerVector(vec);
+                    packed.set(vectors, i * dims);
+                    scales[i] = scale;
+                });
+                const q = engine.quantizeInt8PerVector(query);
+
+                const ranked = engine.rankInt8(packed, scales, q.vectors, q.scale, dims, 3);
+
+                // Reference float ranking: row 2 (identical) > row 1 (near) > row 3.
+                // Row 0 is orthogonal (cosine ~0) → excluded from the top-3.
+                expect(ranked.map((r) => r.row)).toEqual([2, 1, 3]);
+
+                // Each returned cosine ≈ the float reference within the int8 tolerance
+                // the existing int8Cosine test uses (<0.02).
+                for (const { row, cosine } of ranked) {
+                    const reference = floatCosine(corpus[row], query);
+                    expect(Math.abs(cosine - Math.max(0, reference))).toBeLessThan(0.02);
+                }
+            });
+
+            it('respects the limit and drops zero-cosine rows', () => {
+                const dims = 3;
+                const corpus = [
+                    Float32Array.from([1, 0, 0]),  // identical
+                    Float32Array.from([0, 1, 0]),  // orthogonal → 0, dropped
+                    Float32Array.from([0.7, 0.7, 0]),
+                ];
+                const query = Float32Array.from([1, 0, 0]);
+                const packed = new Int8Array(corpus.length * dims);
+                const scales = new Float32Array(corpus.length);
+                corpus.forEach((vec, i) => {
+                    const { vectors, scale } = engine.quantizeInt8PerVector(vec);
+                    packed.set(vectors, i * dims);
+                    scales[i] = scale;
+                });
+                const q = engine.quantizeInt8PerVector(query);
+
+                // limit 1 keeps only the best row.
+                expect(engine.rankInt8(packed, scales, q.vectors, q.scale, dims, 1).map((r) => r.row)).toEqual([0]);
+
+                // limit 10: the orthogonal row (cosine 0) is excluded, so only 2 survive.
+                const all = engine.rankInt8(packed, scales, q.vectors, q.scale, dims, 10);
+                expect(all.map((r) => r.row)).toEqual([0, 2]);
+            });
+
+            it('returns [] for a zero-scale query or a non-positive limit/dims', () => {
+                const dims = 3;
+                const corpus = engine.quantizeInt8PerVector(Float32Array.from([1, 0, 0]));
+                const q = engine.quantizeInt8PerVector(Float32Array.from([1, 0, 0]));
+                expect(engine.rankInt8(corpus.vectors, Float32Array.from([corpus.scale]), q.vectors, 0, dims, 5)).toEqual([]);
+                expect(engine.rankInt8(corpus.vectors, Float32Array.from([corpus.scale]), q.vectors, q.scale, dims, 0)).toEqual([]);
+                expect(engine.rankInt8(corpus.vectors, Float32Array.from([corpus.scale]), q.vectors, q.scale, 0, 5)).toEqual([]);
+            });
+        });
+    });
+
     describe('regression: linear-scan throughput budget (absorbed from search-engine.perf.test.ts)', () => {
         it('scans a 2M-char no-match corpus within budget', () => {
             // No matches: early returns would hide the full-scan cost.

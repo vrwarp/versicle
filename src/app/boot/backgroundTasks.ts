@@ -14,9 +14,17 @@ import { useDriveStore } from '@store/useDriveStore';
 import { getDriveLibrarySync } from '@domains/google';
 import { GoogleAuthRequiredError } from '@domains/google';
 import { audioCache } from '@data/repos/audioCache';
+import { embeddingsRepo } from '@data/repos/embeddings';
 import { bookContent } from '@data/repos/bookContent';
+import { contentKey, CURRENT_QUANT } from '@domains/search';
+import { TTS_EXTRACTION_VERSION } from '@lib/ingestion/sentence-extraction';
+import { peekSyncOrchestrator } from '@app/sync/createSync';
+import { useGenAIStore } from '@store/useGenAIStore';
+import { useReadingStateStore, getMostRecentProgress } from '@store/useReadingStateStore';
+import { useBookStore } from '@store/useBookStore';
 import { runReingestWave, derivedContentSane } from '@domains/library/reingest';
 import { getLibrary } from '../library/createLibrary';
+import type { SyncBackend } from '@domains/sync';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
@@ -76,6 +84,118 @@ export const audioCacheEvictionTask: BootTask = {
       .then(() => audioCache.runEviction())
       .catch((err) => {
         logger.warn('Audio cache eviction sweep failed at boot:', err);
+      });
+  },
+};
+
+/** The injected seams for the never-evict-unconfirmed-upload protected set. */
+export interface ProtectedBookIdsDeps {
+  /** The shareAiCaches master switch (useGenAIStore.shareAiCaches). */
+  isShareEnabled(): boolean;
+  /**
+   * The connected artifact backend handle, or null (sync off / not connected).
+   * A null handle means there is no cloud to confirm against → nothing to
+   * protect (eviction proceeds as today).
+   */
+  getBackend(): { backend: SyncBackend; workspaceId: string } | null;
+  /** Candidate book ids (the eviction set — the recency map keys). */
+  bookIds: string[];
+  /** Resolve bookId → contentHash via the manifest (absent on pre-P7 books). */
+  getContentHash(bookId: string): Promise<string | undefined>;
+  /** The live embedding-space stamp ({model,dims} fresh from the GenAI store). */
+  getStamp(): { model: string; dims: number };
+}
+
+/**
+ * Build the never-evict-unconfirmed-upload protected set (Phase D, GUARDRAILS).
+ * EMPTY when shareAiCaches is OFF (evict exactly as today) or no backend is
+ * connected. When ON + connected, for each book it derives the contentKey and
+ * HEAD-probes the backend; a HEAD MISS means the upload is NOT yet confirmed,
+ * so the book is PROTECTED (eviction must never destroy the only copy of a
+ * cache the user opted to share).
+ *
+ * FAIL-SAFE on a probe throw: PROTECT the book (an offline blip must not be
+ * mistaken for a confirmed upload — never evict the only copy). This is the
+ * OPPOSITE polarity to isWorkspaceAlive's alive-on-error: here the conservative
+ * default is "keep", not "proceed".
+ */
+export async function computeProtectedBookIds(
+  deps: ProtectedBookIdsDeps,
+): Promise<Set<string>> {
+  const protectedIds = new Set<string>();
+  if (!deps.isShareEnabled()) return protectedIds;
+
+  const handle = deps.getBackend();
+  if (!handle) return protectedIds;
+
+  const stamp = deps.getStamp();
+  for (const bookId of deps.bookIds) {
+    try {
+      const contentHash = await deps.getContentHash(bookId);
+      // No content identity (pre-P7) → no content-addressed key → nothing the
+      // publisher could have uploaded; not a candidate for protection.
+      if (!contentHash) continue;
+      const key = await contentKey({
+        contentHash,
+        model: stamp.model,
+        dims: stamp.dims,
+        quant: CURRENT_QUANT,
+        extractionVersion: TTS_EXTRACTION_VERSION,
+      });
+      const head = await handle.backend.headArtifact(
+        handle.workspaceId,
+        `embedCache/${key}`,
+      );
+      // HEAD miss → upload unconfirmed → protect (never evict the only copy).
+      if (head === null) protectedIds.add(bookId);
+    } catch (err) {
+      // Fail-safe: a probe throw (offline/permission) protects the book.
+      logger.warn(`Eviction-protection probe failed for ${bookId}; protecting:`, err);
+      protectedIds.add(bookId);
+    }
+  }
+  return protectedIds;
+}
+
+export const embeddingCacheEvictionTask: BootTask = {
+  name: 'data/embedding-cache-eviction',
+  run: () => {
+    // Fire-and-forget, mirroring audioCacheEvictionTask: the sweep streams a
+    // readonly cursor and deletes through the write gate, so it can never
+    // overlap an indexer write, and boot must not wait on it.
+    //
+    // The recency signal is INJECTED here (the repo stays store-free,
+    // data-no-upward): build Map<bookId, lastReadMs> from the reading-state
+    // store's per-book progress (getMostRecentProgress(...).lastRead) so
+    // recently-read books evict LAST. Books with no valid progress are absent
+    // from the map and rank oldest (0) inside runEviction.
+    const { progress } = useReadingStateStore.getState();
+    const bookIds = Object.keys(useBookStore.getState().books);
+    const recency = new Map<string, number>();
+    for (const bookId of bookIds) {
+      const recent = getMostRecentProgress(progress[bookId]);
+      if (recent) recency.set(bookId, recent.lastRead);
+    }
+
+    // Shape the never-evict-unconfirmed-upload protected set at the TASK level
+    // (the repo stays pure). shareAiCaches OFF / no backend → empty set → zero
+    // added cost (no HEAD probes) and eviction runs exactly as today.
+    void computeProtectedBookIds({
+      isShareEnabled: () => useGenAIStore.getState().shareAiCaches,
+      getBackend: () => peekSyncOrchestrator()?.getConnectedArtifactBackend() ?? null,
+      bookIds,
+      getContentHash: async (bookId) => {
+        const manifest = await bookContent.getManifest(bookId);
+        return manifest?.contentHash;
+      },
+      getStamp: () => {
+        const s = useGenAIStore.getState();
+        return { model: s.embeddingModel, dims: s.embeddingDims };
+      },
+    })
+      .then((protectedIds) => embeddingsRepo.runEviction(recency, undefined, protectedIds))
+      .catch((err) => {
+        logger.warn('Embedding cache eviction sweep failed at boot:', err);
       });
   },
 };

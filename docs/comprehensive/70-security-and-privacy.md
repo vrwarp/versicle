@@ -27,7 +27,9 @@ The product's privacy property rests on three structural facts:
    bytes — to the user's own Firebase project.
 2. **Every remote connection is opt-in.** Cloud TTS requires choosing a provider and entering
    an API key. GenAI features require enabling a global toggle _and_ granting per-book consent.
-   Google Drive import requires an OAuth flow.
+   Semantic-search embedding follows the same per-book gate; bulk pre-embedding of the unread
+   library and mirroring embeddings to the cloud each require their own _separate_ default-OFF
+   opt-in. Google Drive import requires an OAuth flow.
 3. **User-owned infrastructure.** Firestore stores go to the user's own Firebase project.
    Credentials (API keys for TTS/GenAI, Firebase config) are stored locally in the user's
    own `localStorage`, not on any Versicle server.
@@ -42,6 +44,9 @@ The product's privacy property rests on three structural facts:
 | Unauthorized cross-workspace reads | Firestore rules: strict `uid`-path ownership; no shared collections |
 | Zombie updates to deleted workspaces | Tombstone invariant in Firestore rules: `isDeleted == true` gates all writes |
 | Production code triggering AI egress without consent | Per-book `aiConsent` gate in the NetworkGateway; `NET_CONSENT_REQUIRED` blocks fetch before bytes leave |
+| Background-embedding an unread book the user never consented to | Default-OFF library-wide pre-embed opt-in wired into the consent resolver; until it is on the background lane is inert _and_ the resolver default-denies |
+| Reusing/uploading a peer device's embeddings without consent | App-layer `makeArtifactConsentGate` ANDs a default-OFF "Share AI caches across my devices" switch into the per-book predicate; it gates both consult (download) and upload |
+| One device exhausting the shared per-project Gemini free quota | Cross-provider QuotaGovernor enforces RPM/TPM/RPD at egress admission; `NET_RATE_LIMITED` refuses before bytes leave; the daily budget is reconciled across the synced device mesh |
 | Raw-fetch escape hatch bypassing gateway | ESLint bans `fetch`, `XMLHttpRequest`, and `navigator.sendBeacon` outside `src/kernel/net/` |
 | Test backdoors in production | `__VERSICLE_SANITIZATION_DISABLED__` kill-switch unreachable in production builds by construction |
 | GenAI log data persisted to localStorage | Explicit `partialize` allowlist excludes `logs`; in-memory ring buffer only; v0→v1 migration strips legacy persisted logs |
@@ -53,6 +58,8 @@ The product's privacy property rests on three structural facts:
 | End-to-end encryption of synced Yjs data | Not implemented (no `encrypt` hit in `src/lib/sync`). Data at Firestore is readable by the user's Firebase project owner (Google). |
 | WebSpeech "Google" voices are network-backed | The `WebSpeechProvider` maps all `speechSynthesis` voices with no `localService` filter. Chrome's "Google US English" streams text to Google. |
 | Android Capacitor vs nginx CSP | The nginx headers apply only to web deploys. The Capacitor build-time `<meta>` tag now covers Android (Phase 8 §H). |
+| Cross-_user_ sharing of embedding caches | Explicitly deferred. The Artifact Lane is **cross-device only** (same uid, same BYO project); a global commons (the "VEC" candidate) was scored and killed on privacy, BYO-fit, and licensing grounds (§10a). |
+| Adversarial embedding blob swap by a bucket-write holder | No per-blob HMAC/fidelity checksum is implemented (deferred, accept-risk). A download trusts the writer of the content-keyed object; anyone with bucket write-access (compromised device token, shared family project, leaked service-account key) could substitute adversarial vectors. The residual requires full account compromise (§10a). |
 
 ---
 
@@ -246,6 +253,21 @@ Gemini-generated table narration strings. None of this is encrypted end-to-end b
 Firestore. The user's Firebase project owner (ultimately Google) can read it. This is
 documented as a known limitation; E2E encryption of Yjs update blobs is a future project.
 
+**The Artifact Lane (shared AI cache).** When the user turns on the default-OFF "Share AI
+caches across my devices" opt-in, the same BYO Firebase project also holds the AI-derived
+**embedding cache**: a content-addressed Cloud Storage blob per book
+(`embeddings/{key}.bin`, ~251 KB of int8 vectors + scales) plus a tiny Firestore HEAD doc
+(`embedCache/{key}`) used as a cheap existence/stamp probe — both under the workspace prefix
+`users/{uid}/versicle/{workspaceId}/`. This is the same data class (`book-derived`,
+whole-corpus embeddings of book text) and the same uid-isolated, server-rule-protected store
+as the rest of sync; it is **cross-device only** (a book embedded once on one device is
+downloaded by the user's other devices instead of re-spending Gemini quota). It is _not_
+end-to-end encrypted and, like the rest of sync, is readable by the project owner. The blobs
+themselves are **not** Yjs CRDT updates — they live outside the synced doc (too large for the
+1 MB y-cinder update ceiling) — so they add no CRDT schema surface. The cloud round-trips are
+verified against `MockBackend` but the real-Firebase emulator suite is CI-pending (see §10a),
+so these paths are code-complete but not yet proven end-to-end.
+
 ---
 
 ## 6. Network Egress Architecture
@@ -292,6 +314,22 @@ The complete registry as of the current branch:
 Note that `remote-code` no longer appears in the registry. Phase 5a vendored onnxruntime into
 `/public/piper/` (same-origin), eliminating the previous cdnjs dependency that imported remote
 JavaScript into the Piper web worker.
+
+**No new destinations for embeddings or the Artifact Lane.** Semantic-search embedding reuses
+the existing `gemini` destination: the new `EmbeddingClient`
+([src/domains/google/genai/embedding/](../../src/domains/google/genai/embedding/)) routes its
+`embedContent` calls through `egress('gemini', ...)` exactly as `GeminiClient` does, so the
+embedding egress is the same `book-content`, `per-book` row — and is now joined on that row by
+the cloud TTS providers and the embedding client as the three rate-limited GenAI consumers
+(see §6.6). The Artifact Lane reuses the existing `firebase` destination
+(`book-derived`/`oauth`, `via: 'sdk'`): its embedding-cache blob/HEAD round-trips are
+firebase-SDK-owned and so cannot route through `egress()` at all (the gateway throws for
+`via !== 'gateway'`). To reflect the wider payload, the `firebase` entry's `purpose` string was
+extended — it now states that, _when "Share AI caches across my devices" is ON_, the project
+also stores "the AI-derived content-addressed full-book embedding cache (Cloud Storage
+`embeddings/{key}.bin` blobs + their Firestore `embedCache/{key}` HEAD docs)" alongside the
+Yjs doc and snapshots. This `purpose` string is the disclosure-UI source of truth, so the
+extension is the registry-side half of the §10a disclosure requirement.
 
 ### 6.2 NetworkGateway enforcement steps
 
@@ -354,13 +392,21 @@ The resolver logic ([aiConsent.ts](../../src/app/google/aiConsent.ts)) applies i
 
 1. Interactive calls (explicit user gesture) → always allowed
 2. No `bookId` supplied → allowed (legacy posture for user-initiated surfaces like Smart TOC)
-3. `aiConsent[bookId] === false` (explicit denial) → denied
-4. `aiConsent[bookId] === true` (explicit grant) → allowed
-5. Book already has `contentAnalysis` records (grandfathered) → allowed
-6. Otherwise → **default-deny** (the consent prompt UI is the affordance)
+3. Library-wide **pre-embed opt-in** is ON (`useGenAIStore.preEmbedLibrary`) → allowed. This is
+   the §8.4.1 background-grant path: turning the opt-in on _is_ the user's consent for bulk
+   background embedding of unread books. It is checked **before** the per-book default-deny so an
+   un-prompted, never-opened book can be backfilled; because step 1 already short-circuited
+   interactive calls, this only ever grants **background** (`interactive: false`) calls — it
+   never widens any foreground grant.
+4. `aiConsent[bookId] === false` (explicit denial) → denied
+5. `aiConsent[bookId] === true` (explicit grant) → allowed
+6. Book already has `contentAnalysis` records (grandfathered) → allowed
+7. Otherwise → **default-deny** (the consent prompt UI is the affordance)
 
 This closes the pre-overhaul finding (D2) where content analysis for unvisited chapters fired
-for every book the global AI toggle was on for.
+for every book the global AI toggle was on for. The pre-embed opt-in defaults **OFF**, so until
+the user turns it on the background embedding lane is inert _and_ the resolver default-denies
+every unread book — "books are never background-embedded merely by being in the library."
 
 **Observe mode:** Before `wireGoogleDomain()` runs (early boot), `consentResolver` is `null`.
 The gateway treats `null` resolver as "observe: allow and count, do not enforce." This
@@ -401,6 +447,36 @@ const rawEgressSelectors = [
 The only carve-out is `src/kernel/net/` itself (the gateway implementation) and test files
 (which use `vi.stubGlobal('fetch', ...)` for mocking). TTS provider fetch sites and the
 previously-unbundled `public/piper/piper_worker.js` have migrated onto gateway routes.
+
+### 6.6 Cross-provider quota governor
+
+Source: [src/kernel/quota/](../../src/kernel/quota/) (`QuotaGovernor` + the `ptDay` helper +
+the index barrel)
+
+A new kernel subsystem paces _every_ GenAI/TTS call to keep the user inside the provider's
+free-tier budget. It tracks three windows per lane (`fg` / `bg`): sliding-60s **requests-** and
+**tokens-per-minute** plus a persisted **requests-per-day** counter that resets at midnight
+Pacific. It is enforced at the same chokepoint as consent — admission happens **inside**
+`NetworkGateway.egress` at `acquire()` time (recording the request _before_ any bytes leave),
+so throttling cannot be bypassed by forgetting to call a side-car. A `commit()` step run by the
+client afterward reconciles the token estimate to the actual. When a budget is spent the
+gateway refuses the call **before** the network with the new typed `AppError`
+**`NET_RATE_LIMITED`** ([src/types/errors.ts](../../src/types/errors.ts), `retryable: true`,
+carries `retryAfterMs`) — distinct from a server-sent 429, and branchable by `code`, never
+message substrings.
+
+Like consent, the kernel owns only the math: `kernel-imports-nothing` means the governor keeps
+its windows in memory and persists the daily counter through an injected `QuotaStore` port,
+wired at the composition root to [src/data/repos/quotaCounter.ts](../../src/data/repos/quotaCounter.ts),
+which writes a single key in the existing `app_metadata` store (**no new store**). Because the
+free-tier ceiling is per-Google-Cloud-**project** (not per device), the daily budget is
+reconciled across the synced device mesh: each device publishes its rolling daily spend as an
+additive `embedSpend` field on its existing `DeviceInfo` CRDT record (**no CRDT format
+change**), and the governor sums the active devices' spend before issuing. Editable per-lane
+limits, a master "pause all GenAI" switch, and live used-vs-limit meters live in the GenAI
+settings tab. Consumers are `GeminiClient`, the cloud TTS providers, and the embedding client;
+model rotation-on-429 stays in `GeminiClient` (embeddings must never rotate — model/dims changes
+invalidate the embedding space).
 
 ---
 
@@ -810,6 +886,58 @@ The `__VERSICLE_SANITIZATION_DISABLED__` flag still exists in
 `epubSecurity.ts` only consults it when `bypassReachable` is true — which requires a DEV or
 VITE_E2E build and `allowTestBypass: true`.
 
+### 9.6 Embedding egress and the Artifact Lane
+
+Semantic search adds a second flavor of `gemini` egress: book text, sub-chunked into
+~320-token sentence-snapped windows, is embedded with Gemini Embedding 2 through the
+`EmbeddingClient` and routed through `egress('gemini', ...)`. Every embed call threads
+`consent: { bookId, interactive }` and runs the same `redactPayload` over its own log entries
+before the in-memory ring buffer — the embedding client does not inherit `GeminiClient`'s
+logging for free. The egress is therefore **book-derived data on the existing gemini
+destination**, under the existing per-book consent gate (plus the §6.3 background-grant path for
+the bulk-backfill lane). Vectors are int8-quantized in the search worker and stored in the new
+regenerable CACHE stores `cache_embeddings` + `cache_embed_jobs` (device-local IDB, never
+synced through the CRDT; added in an additive `migrateToV27` step — these stores took the v27
+bump, since the reserved-for-`sync_log`/SW-cover v27 cleanup was never done and is now the next,
+v28, bump). When semantic search is off / unconfigured / quota-exhausted / a book isn't yet
+embedded, regex full-text is the graceful default and **nothing leaves the device** — the
+privacy default.
+
+The **Artifact Lane** is the consent-gated cross-device reuse path for those embeddings. Two
+app-layer adapters bracket the quota gate:
+
+- **`ArtifactConsult`** ([src/app/google/artifactConsult.ts](../../src/app/google/artifactConsult.ts))
+  probes (`headArtifact`) and hydrates (`getArtifact`) a peer device's blob **before** the
+  quota gate, so a cache hit materializes ~251 KB of vectors locally and spends **zero Gemini
+  quota**. On hydrate it reconciles each section's `sectionTextHash` against the live corpus and
+  re-derives the content key from the blob's own stamp (a swap/bit-rot guard) before writing.
+- **`ArtifactPublisher`** ([src/app/boot/artifactPublisher.ts](../../src/app/boot/artifactPublisher.ts))
+  is a background boot task that uploads (idempotent, head-before-put) a locally-embedded book's
+  blob so the user's other devices can reuse it.
+
+Both the **consult (download) and the upload** are gated by the **same** consent predicate
+(`makeArtifactConsentGate`), which ANDs a **default-OFF "Share AI caches across my devices"**
+switch into the per-book/pre-embed/interactive predicate the embed they replace would require.
+With the switch off, every book is denied — reusing a peer's blob is forbidden even when the
+user just opened the book. This is the read-path consent requirement (shared-ai-cache design
+§2.6): a hydrated row is indistinguishable from a self-generated one, so downloading it is
+consent-equivalent to embedding it. The `firebase` download is `via: 'sdk'`/`oauth`, so the
+gateway's per-book gate is structurally unreachable for it — the gate is enforced in the app
+layer instead.
+
+These ride **five** additive methods on the C3 `SyncBackend` contract
+([SyncBackend.ts](../../src/domains/sync/backend/SyncBackend.ts)) — `headArtifact` / `putArtifact`
+/ `getArtifact` (probe / write / read) plus `deleteArtifactHead` / `sweepArtifacts` (GC), grown
+from the originally-planned trio. `FirestoreBackend` (the sole `firebase/storage` importer) gained
+`uploadBytes` + `getBytes`, widening it from delete-only to read/write; `MockBackend` carries an
+in-memory implementation. As a lifecycle add, `embedCache` was wired into the backend's
+`PURGE_SUBCOLLECTIONS` so a workspace delete leaves no orphaned HEAD docs (done in Phase A, ahead
+of the lifecycle phase), and per-book cloud delete drops only the HEAD doc — the content-addressed
+blob is left for the TTL/quota sweeper, since a sibling device may still need it.
+
+The Artifact Lane cloud round-trips are **MockBackend-verified and CI-pending** against real
+Firebase — see §10a for the caveat and the deferred items.
+
 ---
 
 ## 10. Data Egress Matrix
@@ -822,6 +950,7 @@ graph LR
     App["Versicle App"]
 
     App -->|"book text / table images\nper-book consent required\n60s timeout"| Gemini["generativelanguage\n.googleapis.com\n(Gemini)"]
+    App -->|"book text chunks (embeddings)\nper-book + bulk opt-in consent\nquota-throttled"| Gemini
     App -->|"full book text sentence-by-sentence\nprovider selection consent\n30s timeout"| GTTS["texttospeech\n.googleapis.com\n(Google TTS)"]
     App -->|"full book text\n30s timeout"| OpenAI["api.openai.com\n(OpenAI TTS)"]
     App -->|"full book text\n30s timeout"| LF["api.lemonfox.ai\n(LemonFox TTS)"]
@@ -830,6 +959,7 @@ graph LR
     App -->|"Drive file listings + EPUB downloads\nOAuth consent"| Drive["www.googleapis.com\n(Google Drive v3)"]
     App -->|"OAuth popup/native\nSDK-mediated"| GAuth["accounts.google.com"]
     App -->|"Yjs CRDT: library, progress, annotations,\ntable narrations\nSDK-mediated, BYO project"| FB["user's Firebase\n(Firestore + Storage)"]
+    App -->|"embedding cache blobs + HEAD docs\n'Share AI caches' opt-in\nSDK-mediated, BYO project"| FB
 ```
 
 **Egress by destination and data sensitivity:**
@@ -837,6 +967,7 @@ graph LR
 | # | Destination | Data sent | Trigger | Consent mechanism |
 |---|---|---|---|---|
 | 1 | Gemini | Book text excerpts (truncated), table screenshots | TTS content analysis (automatic), Smart TOC (user-initiated), Smart Link (user-initiated) | Per-book `aiConsent` bit for automatic; user gesture for interactive |
+| 1a | Gemini (embeddings) | Book text chunks (~320-token windows) for Gemini Embedding 2 | Foreground indexer (open book), background backfill (unread library) — quota-throttled | Per-book `aiConsent` (foreground); default-OFF library-wide pre-embed opt-in (background) |
 | 2 | Google TTS | Full book text, sentence by sentence | TTS provider selected + playback started | Provider selection |
 | 3 | OpenAI TTS | Full book text | TTS provider selected + playback | Provider selection |
 | 4 | LemonFox TTS | Full book text | TTS provider selected + playback | Provider selection |
@@ -845,6 +976,7 @@ graph LR
 | 7 | Google Drive | Folder/file listings, EPUB file bytes | User connects Drive and browses/imports | Google OAuth |
 | 8 | Google OAuth | Auth tokens | User connects Google account | OAuth consent screen |
 | 9 | Firebase (BYO project) | Yjs doc: library metadata, reading positions, annotations (selected text + notes), contentAnalysis results, device registry | Sync enabled + Firebase config entered | Explicit BYO setup; no E2E encryption |
+| 9a | Firebase (Artifact Lane) | Embedding-cache blobs (`embeddings/{key}.bin`, whole-book int8 vectors) + Firestore HEAD docs (`embedCache/{key}`) | "Share AI caches across my devices" on; upload (publisher) + consult/download (consult) | Default-OFF share opt-in ANDed with the per-book/pre-embed predicate; app-layer gated (SDK lane); no E2E encryption; MockBackend-verified, real-Firebase CI-pending |
 
 **Local-only flows (not egress):**
 
@@ -852,6 +984,48 @@ graph LR
 - Sample book: `fetch('/books/alice.epub')` — same-origin
 - Chinese dictionary: `fetch('/dict/cedict.json')` — same-origin
 - Piper WASM assets: `/public/piper/*` — same-origin (vendored in Phase 5a)
+
+### 10a. Artifact Lane privacy stance and CI-pending status
+
+The shared embedding cache (the **Artifact Lane**, Phases A–D) is implemented and unit + full-suite
+verified (3,296 tests green), but its privacy boundary is deliberately scoped and one verification
+gate remains open.
+
+**Privacy stance:**
+
+- **Cross-_device_ only.** The lane mirrors embeddings within the user's own uid/BYO project so a
+  book embedded once is reused on the user's other devices. There is **no cross-_user_ commons**:
+  the "VEC" candidate (a global commons of vectors derived from many users' books) was evaluated
+  and **deferred** — it scored highest on raw savings but was killed on privacy (every existence
+  probe is a membership/ownership oracle), BYO-fit (no app-operated backend exists), and licensing
+  (a cross-user store of vectors derived from copyrighted text). The C3 method shape is left open
+  to back a future app-operated backend, but it is not built.
+- **Consent gates both ends.** Upload (publisher) and consult/download both go through the one
+  `makeArtifactConsentGate` predicate, which requires the **default-OFF "Share AI caches across my
+  devices"** switch ANDed with the per-book/pre-embed/interactive consent the underlying embed
+  requires (§9.6; shared-ai-cache design §2.6).
+- **Disclosure.** The `firebase` destination's `purpose` string was extended to name the AI cache
+  payload (§6.1), since the whole-corpus embeddings are heavier than annotation sync and the prior
+  string mentioned no AI cache.
+- **Residual trust note (per-blob HMAC deferred).** The trust boundary is narrower than VEC but
+  **not zero**. A download trusts the **writer of the bucket object**; with no per-blob
+  HMAC/fidelity checksum (deferred, accept-risk), anyone with bucket write-access (a compromised
+  device token, a shared family project, or a leaked service-account key) could swap a
+  content-keyed blob for adversarial vectors that every device trusts as self-generated — and a
+  ~251 KB int8 blob is opaque, unlike human-readable annotations. The residual requires full
+  account compromise; the mitigation (a per-blob HMAC keyed by a device-local secret) is designed
+  but not implemented.
+
+**CI-pending caveat.** Every Artifact Lane **cloud round-trip** — the Firestore+Storage emulator
+put / head / get / delete / sweep cases and the HEAD-after-Storage ordering, plus the
+security-rules suite — **auto-skips when local emulators are unreachable**. The cross-device
+behavior is therefore verified against `MockBackend` only: the cloud paths are **code-complete and
+unit-verified but NOT yet proven end-to-end against real Firebase**. The emulator suite must run in
+CI before these guarantees are proven on default runs.
+
+**Also deferred:** TTS-audio cache sharing (its key is provider-blind and would collide across
+providers), the live `batchEmbedContents` request-counting probe, and the `usageMetadata` token
+reconcile.
 
 ---
 
@@ -954,6 +1128,20 @@ stateDiagram-v2
 | D12: Sync egress unencrypted | Medium | Open | BYO project mitigates; E2E encryption is future work |
 | D13: No privacy documentation | Medium | Fixed | This document |
 | D14: GenAI model id duplication | Low | Fixed | Single `GeminiClient`; `GENAI_ROTATION_MODELS` constant; config per-call |
+
+**Beyond the overhaul (semantic search + Artifact Lane).** The semantic-search and shared-AI-cache
+work on branch `claude/objective-euclid-d1d269` is implemented and full-suite verified, and carries
+its own open items distinct from D1–D14:
+
+| Item | Severity | Status | Note |
+|---|---|---|---|
+| Embedding egress without quota control | High | Fixed | `src/kernel/quota/` QuotaGovernor enforced at egress admission; `NET_RATE_LIMITED`; per-project budget reconciled across the device mesh via `embedSpend` (§6.6) |
+| Background-embedding an unread book without consent | High | Fixed | Default-OFF library-wide pre-embed opt-in wired into the consent resolver (§6.3) |
+| Reusing/uploading a peer's embeddings without consent | High | Fixed | App-layer `makeArtifactConsentGate` (default-OFF share switch) gates consult + upload (§9.6, §10a) |
+| Artifact Lane real-Firebase round-trips | — | CI-pending | MockBackend-verified; the Firestore+Storage emulator + security-rules suites auto-skip locally (§10a) |
+| Cross-_user_ embedding commons (VEC) | — | Deferred | Privacy/BYO-fit/licensing blockers; C3 method shape left open (§10a) |
+| Per-blob HMAC / fidelity checksum | Medium | Deferred | Accept-risk; residual bucket-write-access trust note (§10a) |
+| TTS-audio cache sharing | — | Deferred | Provider-blind key would collide across providers (§10a) |
 
 ---
 

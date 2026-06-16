@@ -31,6 +31,26 @@ export interface LibraryServiceDeps {
   projection: LibraryProjectionPort;
   persistence: LibraryPersistence;
   orchestrator: ImportOrchestrator;
+  /**
+   * Best-effort cleanup of a removed book's shared cloud embeddings. The app
+   * shares a book's embeddings to the user's other devices via the cloud, keyed
+   * by content hash; each device that has the book also publishes a small
+   * directory record (`embedCache/{key}`) pointing at the shared blob. When a
+   * book is removed locally, this injected app-layer port drops THIS device's
+   * directory record. It deliberately does NOT delete the shared blob itself — a
+   * sibling device may still need it; a background sweeper reclaims the blob once
+   * no device references it. The adapter (createLibrary.ts) resolves the content
+   * hash, derives the key, and calls the backend, so LibraryService stays free
+   * of any store/backend dependency.
+   *
+   * MUST run BEFORE `persistence.deleteBook`, because the content hash lives on
+   * the manifest row that deleteBook's transaction destroys. A rejection is
+   * logged but NEVER aborts the local delete (best-effort degrade — an orphaned
+   * directory record is reclaimed by the sweeper's TTL). Undefined when no
+   * adapter is wired (no cloud backend, or an older book with no shared artifact
+   * is a clean no-op there).
+   */
+  purgeBookArtifact?(bookId: string): Promise<void>;
 }
 
 export class LibraryService {
@@ -155,6 +175,18 @@ export class LibraryService {
         inventory.remove(bookId);
         projection.removeStatic(bookId);
         projection.removeOffloaded(bookId);
+        // Drop this device's shared-embeddings directory record for the book.
+        // The adapter reads the content hash off the manifest, so this MUST run
+        // BEFORE deleteBook destroys that manifest row. A failure is logged but
+        // NEVER aborts the local delete — the orphaned directory record is later
+        // reclaimed by the cloud sweeper's TTL.
+        if (this.deps.purgeBookArtifact) {
+          try {
+            await this.deps.purgeBookArtifact(bookId);
+          } catch (err) {
+            logger.warn('Best-effort cloud-artifact purge failed; deleting locally anyway:', err);
+          }
+        }
         await persistence.deleteBook(bookId);
       });
     } catch (err) {

@@ -12,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import imageCompression from 'browser-image-compression';
 import { extractBook } from './extract';
+import { cheapHash } from './identity';
 import { extractCoverPalette } from '@lib/cover-palette';
 import { extractContentOffscreen } from '@domains/reader/engine/offscreen/offscreen-renderer';
 import { CancellationError } from '@lib/cancellable-task-runner';
@@ -133,7 +134,16 @@ describe('extractBook', () => {
 
     expect(full.searchText).toEqual({
       extractionVersion: TTS_EXTRACTION_VERSION,
-      sections: [{ href: 'chapter1.html', title: 'Mock Chapter 1', text: 'Chapter Content.' }],
+      sections: [
+        {
+          href: 'chapter1.html',
+          title: 'Mock Chapter 1',
+          text: 'Chapter Content.',
+          // sectionTextHash is stamped at import (Increment C §3): cheapHash of
+          // the UTF-8 bytes of the section text.
+          sectionTextHash: cheapHash(new TextEncoder().encode('Chapter Content.').buffer),
+        },
+      ],
     });
     expect(full.inventory).toMatchObject({
       bookId: 'mock-uuid',

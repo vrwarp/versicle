@@ -25,7 +25,10 @@ import { whenHydratedTask, hydrateStaticMetadataTask } from './whenHydrated';
 import { crdtMigrationsTask } from './crdtMigrations';
 import { syncInitTask } from './syncInit';
 import { ttsInitializeTask, deviceRegistrationTask } from './deviceRegistration';
-import { deviceHeartbeatTask, driveAutoScanTask, audioCacheEvictionTask, reingestWaveTask } from './backgroundTasks';
+import { deviceHeartbeatTask, driveAutoScanTask, audioCacheEvictionTask, embeddingCacheEvictionTask, reingestWaveTask } from './backgroundTasks';
+import { embeddingBackfillTask } from './embeddingBackfill';
+import { artifactPublisherTask } from './artifactPublisher';
+import { artifactSweeperTask } from './artifactSweeper';
 import { socialLoginTask } from './socialLogin';
 import { wireGoogleDomain } from '../google/wireGoogle';
 import { applyDocumentLanguage } from '@kernel/locale/uiLocale';
@@ -79,6 +82,10 @@ export function registerAppBootTasks(): void {
   registerBootTask('backgroundTasks', deviceHeartbeatTask);
   registerBootTask('backgroundTasks', driveAutoScanTask);
   registerBootTask('backgroundTasks', audioCacheEvictionTask);
+  registerBootTask('backgroundTasks', embeddingCacheEvictionTask);
   registerBootTask('backgroundTasks', reingestWaveTask);
+  registerBootTask('backgroundTasks', embeddingBackfillTask);
+  registerBootTask('backgroundTasks', artifactPublisherTask);
+  registerBootTask('backgroundTasks', artifactSweeperTask);
   registerBootTask('backgroundTasks', socialLoginTask);
 }
