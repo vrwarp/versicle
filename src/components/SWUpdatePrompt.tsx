@@ -22,6 +22,14 @@ const logger = createLogger('SWUpdatePrompt');
  *    SKIP_WAITING to the waiting worker (handled in src/sw.ts) and reloads
  *    the page once it takes control.
  *
+ * **Capacitor path**: inside the Capacitor WebView (`https://localhost`),
+ * `cap sync` replaces files on disk but the old SW precache serves stale
+ * assets. The SW detects Capacitor and calls `skipWaiting()` unconditionally
+ * (see src/sw.ts). Since the SW skips waiting immediately, workbox-window's
+ * prompt flow never fires `needRefresh` (the `waiting` event is suppressed
+ * when the SW activates within 200ms). Instead, we listen for
+ * `controllerchange` directly and reload — giving the user the fresh build.
+ *
  * Mounted in App.tsx ABOVE the router gate, beside ToastHost: even a
  * boot-blocked client can accept the update — the recovery path for a bad
  * deploy is exactly this prompt (prep risk #1 mitigation).
@@ -42,6 +50,29 @@ export const SWUpdatePrompt: FC = () => {
     },
   });
 
+  // ── Capacitor auto-reload ──────────────────────────────────────────────
+  // On Capacitor the SW calls skipWaiting() unconditionally, so the prompt
+  // flow is bypassed. Instead, detect the new controller and reload once.
+  useEffect(() => {
+    if (location.hostname !== 'localhost') return;       // web — use prompt
+    if (!('serviceWorker' in navigator)) return;
+
+    // Only reload when a DIFFERENT controller replaces the current one
+    // (i.e. an update, not the first install where controller was null).
+    const hadController = !!navigator.serviceWorker.controller;
+    const onControllerChange = () => {
+      if (hadController) {
+        logger.info('Capacitor: new service worker took control — reloading.');
+        window.location.reload();
+      }
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+    return () => {
+      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+    };
+  }, []);
+
+  // ── Web prompt flow ────────────────────────────────────────────────────
   useEffect(() => {
     if (!needRefresh) return;
     // Persistent (duration ∞) keyed toast; dedupe-by-message in the queue
@@ -56,3 +87,4 @@ export const SWUpdatePrompt: FC = () => {
 
   return null;
 };
+

@@ -97,15 +97,21 @@ describe('regression: sw.ts update-flow source contract (prep risk #1)', () => {
   const swSource = readFileSync(join(repoRoot, 'src', 'sw.ts'), 'utf8');
   const viteConfig = readFileSync(join(repoRoot, 'vite.config.ts'), 'utf8');
 
-  it('never regains an unconditional self.skipWaiting()', () => {
-    // Exactly ONE occurrence in CODE (comments stripped), and it must sit
-    // inside the SKIP_WAITING message listener — the prompt flow's
-    // activation handshake.
+  it('skipWaiting is gated: Capacitor path + web prompt path, no ungated calls', () => {
+    // Two occurrences in CODE (comments stripped):
+    //  1. Capacitor branch — unconditional but gated by `isCapacitor`
+    //  2. Web branch — inside the SKIP_WAITING message listener
     const codeOnly = swSource
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '');
     const occurrences = codeOnly.match(/self\.skipWaiting\(\)/g) ?? [];
-    expect(occurrences).toHaveLength(1);
+    expect(occurrences).toHaveLength(2);
+
+    // Capacitor gate exists
+    expect(codeOnly).toContain("self.location.hostname === 'localhost'");
+    expect(codeOnly).toContain('isCapacitor');
+
+    // Web prompt gate still works — SKIP_WAITING listener is in the else branch
     const listenerStart = codeOnly.indexOf("self.addEventListener('message'");
     expect(listenerStart).toBeGreaterThanOrEqual(0);
     const listenerBlock = codeOnly.slice(listenerStart, codeOnly.indexOf('clientsClaim()'));
