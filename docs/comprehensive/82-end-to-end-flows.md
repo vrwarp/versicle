@@ -1,8 +1,8 @@
 # End-to-End Flows
 
-This document traces six critical cross-cutting user journeys through every layer of the Versicle codebase — from the UI gesture down to the IndexedDB transaction and back up to the rendered screen. Each journey is covered as a detailed sequence diagram followed by a prose walkthrough of the key implementation decisions, data shapes, and failure modes.
+This document traces eight critical cross-cutting user journeys through every layer of the Versicle codebase — from the UI gesture down to the IndexedDB transaction and back up to the rendered screen. Each journey is covered as a detailed sequence diagram followed by a prose walkthrough of the key implementation decisions, data shapes, and failure modes.
 
-The six journeys are:
+The eight journeys are:
 
 1. **Import a book** — file → extraction pipeline → IDB persistence → CRDT inventory write → library UI
 2. **Open, read, and annotate** — book tap → epub.js lifecycle → location recording → annotation CRDT write
@@ -10,6 +10,8 @@ The six journeys are:
 4. **Cross-device sync** — local edit on Device A → Yjs CRDT → Firestore → Device B store patch
 5. **Backup and restore** — snapshot capture → IDB checkpoint → validate-before-destroy → reload
 6. **Staged workspace switch** — switch gesture → download → durable staging → boot-time apply → confirmation
+7. **Semantic search of an open book** — embed-on-open → quota-throttled at the gateway → int8 cosine + RRF fusion → lazy CFI jump
+8. **Cross-device cache hit** — Device A embeds + uploads → Device B consults the HEAD doc before the quota gate → hydrates the blob → zero Gemini quota
 
 Before reading this document, familiarise yourself with the module boundaries in [Layering and boundaries](11-layering-and-boundaries.md), the CRDT store model in [State management](13-state-management-crdt.md), and the bootstrap sequence in [Bootstrap and lifecycle](14-bootstrap-and-lifecycle.md).
 
@@ -695,9 +697,366 @@ The failure table from [`src/domains/sync/workspaces/stagedSwap.ts`](../../src/d
 
 ---
 
-## 8. Cross-Cutting Architecture Observations
+## 8. Journey 7 — Semantic Search of an Open Book
 
-### 8.1 The Three-Layer Write Pattern
+### 8.1 Design Intent
+
+Semantic search must never degrade the search the user already has: regex full-text is the
+**default path** and stays untouched: the embedding-cosine ranking is **purely additive**, fused on
+top via reciprocal-rank fusion only when it is available. Embedding the open book costs Gemini API
+quota, so the spend is paced by the cross-provider quota governor at the egress chokepoint — it can
+never be bypassed — and is ordered outward from the reading position so the current chapter is
+searchable first. CFIs are *not* computed at index time (the chunker has no live reader view); a hit
+maps to char offsets at index time and the exact in-book CFI is resolved lazily at click time.
+
+### 8.2 Architecture
+
+The path spans the **search** and **google** domains plus app wiring:
+
+```
+ReaderView search box
+  └─ app reader controller
+       ├─ SearchSession.enqueueEmbedding(bookId, currentCfi)   src/domains/search/SearchSession.ts
+       │    └─ EmbeddingIndexer.enqueue()                       src/domains/search/EmbeddingIndexer.ts
+       │         ├─ chunkSection() (~320-token windows)         src/domains/search/chunker.ts
+       │         ├─ EmbeddingClient.embed() (lazy facade)       src/domains/google/genai/embedding/
+       │         │    └─ egress('gemini')  ── QuotaGovernor.acquire ──  src/kernel/quota/
+       │         ├─ quantize int8 @ 768 (search worker)         src/workers/search.worker.ts
+       │         └─ embeddings repo (packed blob)               src/data/repos/embeddings.ts
+       └─ SearchSession.search(bookId, query)
+            ├─ regex SearchEngine.searchDetailed()  (always runs — the default)
+            ├─ semanticRank() — int8 cosine, query-embed cached  src/domains/search/semanticRank.ts
+            ├─ fuseRrf()                                         src/domains/search/rrf.ts
+            └─ resolveResultCfi() at click time                 src/app/reader/searchNavigation.ts
+```
+
+The two embedding CACHE stores (`cache_embeddings`, `cache_embed_jobs`) were added at **IDB
+`DB_VERSION` 27** by the additive `migrateToV27` step. (This is a deviation from the original design,
+which reserved v27 for retiring the `sync_log` store / SW legacy-cover fallback; that cleanup was
+never done, so the embedding stores *are* the v27 bump and the retirement cleanup becomes the next,
+**v28**, bump.)
+
+### 8.3 Sequence Diagram — Embed and Search
+
+```mermaid
+sequenceDiagram
+    participant RV as "ReaderView"
+    participant SS as "SearchSession"
+    participant IDX as "EmbeddingIndexer"
+    participant EC as "EmbeddingClient"
+    participant GW as "NetworkGateway.egress"
+    participant QG as "QuotaGovernor"
+    participant W as "search worker"
+    participant ER as "embeddings repo"
+    participant SR as "semanticRank + fuseRrf"
+    participant NAV as "searchNavigation"
+
+    RV->>SS: "enqueueEmbedding(bookId, currentCfi)"
+    SS->>IDX: "enqueue(bookId, currentCfi, { interactive: true, lane: 'fg' })"
+    IDX->>IDX: "orderOutward(sections, spineOrdinalFrom(cfi))"
+    loop "per not-yet-embedded section"
+        IDX->>IDX: "chunkSection() → ~320-token chunks"
+        IDX->>EC: "embed(chunks, { profile: 'document', bookId, lane: 'fg' })"
+        EC->>GW: "egress('gemini', …, { estTokens, lane: 'fg' })"
+        GW->>QG: "acquire('fg', estTokens)"
+        alt "RPD/cooldown exhausted"
+            QG-->>GW: "throw NET_RATE_LIMITED"
+            GW-->>EC: "(propagates; pass resumes next session)"
+        else "admitted"
+            QG-->>GW: "(recorded at admission)"
+            GW-->>EC: "Response → vectors"
+            EC->>EC: "client commit(actualTokens) reconcile"
+        end
+        IDX->>W: "quantize int8 @ 768 (per-vector scale)"
+        IDX->>ER: "put(packed blob) + putJob(resume journal)"
+    end
+    RV->>SS: "search(bookId, query)"
+    SS->>SS: "regex searchDetailed() (always)"
+    SS->>SR: "semanticRank() — query embed cached, int8 cosine"
+    SR-->>SS: "ranked chunk hits (char offsets)"
+    SS->>SR: "fuseRrf(regex, semantic) — RRF k=60"
+    SS-->>RV: "fused results"
+    RV->>NAV: "user clicks a hit"
+    NAV->>NAV: "resolveResultCfi(charOffset) → cfiFromRange → display(cfi)"
+```
+
+### 8.4 Foreground Embed-on-Open (Outward from the Reading Position)
+
+The app reader controller calls `SearchSession.enqueueEmbedding(bookId, currentCfi)` —
+`bookId`/CFI are passed as **arguments**, never read from a store inside the domain (the
+`domains-no-store` boundary). `SearchSession` forwards to the injected `EmbeddingIndexer`, whose
+`enqueue()` ([`src/domains/search/EmbeddingIndexer.ts`](../../src/domains/search/EmbeddingIndexer.ts)):
+
+1. Loads the book's extracted text via the injected `SearchTextSource` (the `cache_search_text`
+   corpus extraction already produces at import).
+2. Orders sections **outward from the reading position** (`orderOutward()` over the spine ordinal
+   `spineOrdinalFrom(currentCfi, …)`, falling back to section 0 when the CFI is absent or
+   unparseable) — the page the reader is on becomes searchable first, then the pass fans out.
+3. Per section, **resume-skips** any `{href, sectionTextHash}` the `cache_embed_jobs` journal already
+   records as fully embedded *and* whose vectors are actually present in the persisted row — a
+   section the journal marks complete but whose vectors are missing is treated as a miss and
+   re-embedded (the corrupt-resume guard).
+4. Chunks the section into **~320-token sentence-snapped windows** (`chunkSection()`), embeds the
+   chunks through the injected `EmbeddingClient`, **quantizes each float32 vector to int8 at 768 dims
+   with a per-vector scale** (the search worker's quantizer, passed as a port so the domain never
+   deep-imports the worker), packs the int8 rows + float32 scales into one blob per section, and
+   persists the embeddings row plus the resume journal incrementally so a mid-pass abort leaves
+   resumable progress.
+
+Each embed threads `consent: { bookId, interactive }` and a quota `lane` to the gateway. The
+foreground reader pass is `{ interactive: true, lane: 'fg' }`; the background backfill (Journey 8's
+sibling, the `embeddingBackfillTask` boot task) passes `{ interactive: false, lane: 'bg' }` so an
+idle path never claims a user gesture and is paced on the slow background lane. Per-chunk
+`charStart`/`charEnd` are persisted, but `cfiStart`/`cfiEnd` are left empty — the chunker works on
+plain text and cannot produce a CFI without the live reader view (a deviation noted in the design:
+chunk→CFI is resolved lazily at click time).
+
+### 8.5 Gateway-Enforced Quota Throttle
+
+Throttling is enforced **inside** `NetworkGateway.egress()`
+([`src/kernel/net/NetworkGateway.ts`](../../src/kernel/net/NetworkGateway.ts)), not as a side-car
+each client must remember to call, so it cannot be bypassed. The `gemini` destination carries a
+`rateLimit` policy; `egress()` applies admission as an ordered pre-flight by calling the injected
+`QuotaScheduler.acquire(lane, estTokens)`. The scheduler is the **cross-provider quota governor**
+(`src/kernel/quota/` — `QuotaGovernor` + the `ptDay` midnight-Pacific day-key helper + an index
+barrel), installed at the composition root via `setQuotaScheduler`. The governor:
+
+- Tracks three windows per lane — sliding-60s **RPM** and **TPM** buckets plus a persisted daily
+  **RPD** counter that resets at midnight Pacific (`ptDayString`).
+- **Records the spend at admission (`acquire`)**, not at commit, so embeddings — which never call
+  `commit` — still count and still persist. This is a deviation from the original design (which
+  recorded at commit). `commit(actualTokens)` only reconciles that already-recorded event's token
+  estimate to the actual cost; `release()` only frees the foreground claim and is called exactly once
+  per egress in the gateway's `finally`.
+- Reads its per-lane limits **fresh on every `acquire`** (never cached), so a settings edit takes
+  effect on the next call; foreground leases preempt background.
+- Persists RPD through an **injected `QuotaStore` port** (kernel touches no storage — the
+  `kernel-imports-nothing` rule), wired at the composition root to
+  [`src/data/repos/quotaCounter.ts`](../../src/data/repos/quotaCounter.ts), which writes a key in the
+  existing `app_metadata` store — **no new store**.
+
+When the daily budget is exhausted or a 429 cooldown is active, `acquire` refuses **before any
+network call** by throwing `NetRateLimitedError` (the typed `NET_RATE_LIMITED` AppError, in
+[`src/types/errors.ts`](../../src/types/errors.ts), `retryable: true` with a `retryAfterMs` —
+deviation: it lives in the AppError taxonomy home, not `kernel/net`). The embedding pass stops and
+resumes on the next reading session. The governor's consumers are `GeminiClient`, the cloud TTS
+providers, and the embedding client; model rotation on 429 stays in `GeminiClient`, never the
+governor (embeddings must not rotate — EM2 and `-001` are incompatible spaces). The free-tier quota
+is **per-Google-Cloud-project**, so it is reconciled across the synced device mesh via an additive
+`embedSpend` field on each `DeviceInfo` record (no CRDT format change). Editable per-lane limits, a
+pause-all switch, and live used-vs-limit meters live in the GenAI settings tab.
+
+### 8.6 Hybrid Ranking and RRF Fusion
+
+`SearchSession.search()` always runs the regex `SearchEngine.searchDetailed()` first
+([`src/domains/search/SearchSession.ts`](../../src/domains/search/SearchSession.ts)). The semantic
+branch is entered **only** when all of: the semantic ports were injected, semantic search is ON, the
+embedding client reports configured, and the book has a non-empty embedded row. When entered,
+`semanticRank()` embeds the query once with the *query* profile (the result is **cached** per session
+in a `QueryEmbeddingCache` so a repeated query never re-burns the shared daily budget), runs int8
+cosine over the book's packed vectors in the worker, and maps each hit to char offsets (re-running
+the deterministic chunker only for older rows that lack persisted offsets). The semantic hits are
+then fused into the regex result via `fuseRrf()`
+([`src/domains/search/rrf.ts`](../../src/domains/search/rrf.ts)): each list contributes
+`1/(k + rank)` (standard `k = 60`), summed across both lists, deduped by `${href}|${charOffset}`
+with the regex hit's richer fields winning the tie. Exact-match regex wins (names, quotes) survive
+while "find the passage about X" semantic hits join, never displacing them.
+
+**Regex is the graceful default** in every off-ramp. When semantic search is off, unconfigured, the
+book is not yet embedded, or the semantic path throws an *expected* quota/network error
+(`NET_RATE_LIMITED`, a GenAI 429/5xx, or a raw network failure), `search()` returns the regex result
+**unchanged** — semantic is purely additive and can never break or regress full-text search. An
+*unexpected* error (a genuine bug in the semantic path) is rethrown rather than silently swallowed.
+
+### 8.7 Lazy CFI Jump
+
+A search result carries `charOffset`/`matchLength`, not a CFI. When the user clicks a hit,
+`searchNavigation.resolveResultCfi()`
+([`src/app/reader/searchNavigation.ts`](../../src/app/reader/searchNavigation.ts)) resolves the char
+offsets to a DOM `Range` against the live rendered section, the view's `cfiFromRange` produces the
+occurrence CFI, and `display(cfi)` lands the reader on the page containing the match (also adding a
+transient highlight). If resolution fails (e.g. re-rendered content), it degrades to the
+section-level `display(href)` landing. This keeps the index free of an IDB format change: the
+expensive, view-dependent CFI is computed once, at click time, for the one hit the user chose.
+
+### 8.8 Failure Modes
+
+| Failure | Behavior |
+|---------|----------|
+| Daily RPD / TPM / RPM exhausted, or 429 cooldown active | `QuotaGovernor.acquire` throws `NET_RATE_LIMITED` **before** the network call; the foreground pass stops and resumes on the next reading session; `search()` falls back to regex. |
+| Book not yet embedded (pass still running) | The semantic branch sees an empty/absent embedded row → regex result returned unchanged. |
+| Crash mid-pass | The `cache_embed_jobs` resume journal + the present-vectors guard let the next session pick up where it left off; a journal-complete-but-vectors-absent section re-embeds. |
+| Stamp mismatch (`{model, dims, quant}` changed) | The whole book re-embeds (vectors in the old space can never be converted); the prior resume journal is discarded. |
+| Embedding client unconfigured | `enqueue()` and the semantic branch are both no-ops; regex full-text is the path. |
+
+---
+
+## 9. Journey 8 — Cross-Device Cache Hit (the Artifact Lane)
+
+### 9.1 Design Intent
+
+Embedding a book costs Gemini quota; embedding the **same** book again on a second device wastes it.
+The "Artifact Lane" mirrors a book's expensive embedding blob into the user's **own** BYO Cloud
+Storage (a content-addressed object) plus a small Firestore HEAD-doc directory, so a book embedded
+once on Device A is **downloaded** by the user's other devices instead of re-spending quota. The
+load-bearing win is placement: the consult runs **before** the quota gate, so a cache hit hydrates
+~251 KB and spends **zero** Gemini quota — the consult/download is firebase-SDK-owned and by
+construction cannot route through `egress()`, so it never reaches `QuotaGovernor.acquire`. Sharing is
+**cross-device only** (same uid, same BYO project); cross-*user* sharing and TTS-audio sharing are
+explicitly deferred.
+
+> [!IMPORTANT]
+> **CI-PENDING caveat.** Every cloud round-trip — the Firestore+Storage emulator
+> put/head/get/delete/sweep, the HEAD-after-Storage ordering, and the `storage.rules` security suite —
+> auto-skips when no local emulators are reachable. The Artifact Lane is **code-complete and
+> unit-verified against `MockBackend`** (3,296 tests green) but is **NOT yet proven end-to-end against
+> real Firebase**. The descriptions below reflect the implemented contract; the real-cloud paths are
+> MockBackend-verified, not yet emulator-verified in CI.
+
+### 9.2 Architecture
+
+The lane spans the **sync**, **search**, and **app** layers, implemented in Phases A–D:
+
+```
+Device A (upload):
+  artifactPublisherTask (boot, idle/heartbeat/share-opt-in)  src/app/boot/artifactPublisher.ts
+    ├─ contentKey(contentHash | model | dims | quant | extractionVersion)
+    ├─ serializeArtifactBlob(row)                             src/domains/search/artifactBlob.ts
+    └─ SyncBackend.putArtifact()  (uploadBytes THEN HEAD doc) src/domains/sync/backend/
+
+Device B (consult, before the quota gate):
+  embeddingBackfillTask / reader indexer
+    └─ ArtifactConsult                                        src/app/google/artifactConsult.ts
+         ├─ probeArtifact()  → SyncBackend.headArtifact()     (Firestore getDoc — cheap)
+         └─ hydrateFromArtifact() → SyncBackend.getArtifact() (Storage getBytes)
+              ├─ parseArtifactBlob()                          src/domains/search/artifactBlob.ts
+              ├─ reconcile sectionTextHash vs live corpus
+              └─ putHydrated(row, jobRow)  (one atomic txn)   src/data/repos/embeddings.ts
+```
+
+The C3 `SyncBackend` interface gained **five** additive artifact methods — a deviation from the
+originally-planned trio: `headArtifact` / `putArtifact` / `getArtifact` (probe / write / read) from
+Phase A, plus `deleteArtifactHead` / `sweepArtifacts` (GC) from Phase D. `FirestoreBackend` (the sole
+`firebase/storage` importer) gained `uploadBytes` + `getBytes`, widening it from delete-only to
+read/write; `MockBackend` carries an in-memory implementation (the only one the test suite exercises
+without emulators).
+
+Two cloud tiers, neither in the CRDT — both inside the workspace prefix so the blob is swept by the
+existing `purgeStoragePrefix`:
+
+```
+users/{uid}/versicle/{workspaceId}/embeddings/{contentKey}.bin   ← payload  (Cloud Storage, ~251 KB)
+users/{uid}/versicle/{workspaceId}/embedCache/{contentKey}        ← HEAD doc (Firestore, tiny)
+```
+
+### 9.3 Sequence Diagram — Device A Uploads, Device B Hydrates
+
+```mermaid
+sequenceDiagram
+    participant A as "Device A: artifactPublisherTask"
+    participant AE as "Device A: embeddings repo"
+    participant BE as "SyncBackend (Firestore + Storage)"
+    participant B as "Device B: embeddingBackfill loop"
+    participant AC as "Device B: ArtifactConsult"
+    participant QG as "Device B: QuotaGovernor"
+    participant BR as "Device B: embeddings repo"
+
+    Note over A: "share opt-in ON, heartbeat-active, idle"
+    A->>AE: "getRow(bookId) (locally embedded)"
+    A->>A: "contentKey(contentHash | model | dims | quant | extractionVersion)"
+    A->>A: "serializeArtifactBlob(row)"
+    A->>BE: "putArtifact (head-before-put no-op if present)"
+    Note over BE: "uploadBytes to Storage FIRST, then setDoc HEAD"
+
+    Note over B: "loaded-but-unread book"
+    B->>AC: "probeArtifact(bookId, { interactive: false })"
+    AC->>AC: "consent gate + manifest contentHash + key"
+    AC->>BE: "headArtifact('embedCache/{key}')"
+    BE-->>AC: "ArtifactHead (hit)"
+    AC-->>B: "true"
+    B->>AC: "hydrateFromArtifact(bookId)"
+    AC->>BE: "getArtifact('embeddings/{key}.bin')"
+    BE-->>AC: "ArrayBuffer (~251 KB)"
+    AC->>AC: "parse + re-derive key (swap guard) + reconcile hashes"
+    AC->>BR: "putHydrated(row, jobRow) — one atomic txn"
+    AC-->>B: "row (hydrated)"
+    B->>B: "continue — embed() NEVER called, QuotaGovernor untouched"
+    Note over QG: "acquire never reached → zero Gemini quota"
+```
+
+### 9.4 Upload — the ArtifactPublisher (Phase C)
+
+`artifactPublisherTask`
+([`src/app/boot/artifactPublisher.ts`](../../src/app/boot/artifactPublisher.ts)) is a
+`backgroundTasks`-phase boot task that runs on idle, only on a heartbeat-active device, only when the
+default-OFF **"Share AI caches across my devices"** opt-in is on, and is a silent no-op when no cloud
+backend is connected. For each locally-embedded, upload-consented book it derives the content key
+from the embedding **row's** stamp (not live config, so the object is addressed by what was actually
+embedded), serializes the blob via `serializeArtifactBlob`
+([`src/domains/search/artifactBlob.ts`](../../src/domains/search/artifactBlob.ts)), and calls
+`putArtifact` — which is **idempotent** (head-before-put: an already-present key is a no-op) and
+writes **blob-to-Storage first, HEAD-doc second**, so a HEAD hit always implies the bytes landed.
+
+### 9.5 Consult Before the Quota Gate (Phase B)
+
+`ArtifactConsult` ([`src/app/google/artifactConsult.ts`](../../src/app/google/artifactConsult.ts)) is
+the app-layer adapter that holds the store/manifest/backend edges the store-free codec and the
+injected backend cannot reach. Two operations, both consulted **before** any embed:
+
+- **`probeArtifact`** — consent gate first, then resolve `bookId → contentHash` via the manifest,
+  derive the content-addressed `contentKey`, and `headArtifact` the `embedCache/{key}` doc (a cheap
+  Firestore `getDoc`, never a Storage `list`). A `null` HEAD is a miss.
+- **`hydrateFromArtifact`** — `getArtifact` the blob, parse the header, **re-derive the content key
+  from the blob's own stamp and assert it matches** (a swap/bit-rot guard), reconcile each blob
+  section's `sectionTextHash` against the live local corpus (dropping sections whose text has since
+  changed — they re-embed next pass), then write the local embeddings row + job row in **one atomic
+  transaction** via `putHydrated` (so a crash can never leave a section marked complete with absent
+  vectors).
+
+The crucial placement is in the **background backfill loop**: `runEmbeddingBackfill`
+([`src/app/boot/embeddingBackfill.ts`](../../src/app/boot/embeddingBackfill.ts)) probes + hydrates
+**before** its cross-device `remaining <= 0` quota gate, so even a device that has used up its daily
+share still reuses a peer's embeddings for free. (The foreground reader path consults inside the
+indexer's `enqueue`, which has no such gate.) Because `headArtifact`/`getArtifact` are SDK-mediated
+(`via: 'sdk'`, not `'gateway'`), they cannot route through `egress()` and therefore never reach
+`QuotaGovernor.acquire` — a full hit provably spends zero Gemini quota.
+
+**Read-path consent is a hard requirement.** Downloading a peer's blob persists Google-derived
+full-text vectors locally — consent-equivalent to a freshly-embedded row — but the firebase download
+is `consent: 'oauth'`/`via: 'sdk'`, so the gateway's per-book gate is structurally unreachable.
+Therefore both `probeArtifact` and `hydrateFromArtifact` are gated in the app layer by the **same
+predicate** the embed they replace would require: the `makeArtifactConsentGate` helper ANDs the
+share-AI-caches master switch into `(interactive || preEmbedLibrary || perBook === true)`. With
+sharing OFF, every book is denied regardless of gesture or per-book bit. The upload path and the
+consult path share this one consent predicate.
+
+### 9.6 Lifecycle and GC (Phase D)
+
+| Concern | Behavior |
+|---------|----------|
+| Per-book cloud delete | `LibraryService.remove` ([`src/domains/library/LibraryService.ts`](../../src/domains/library/LibraryService.ts)) resolves `contentHash` off the manifest and deletes the HEAD doc (`deleteArtifactHead`) **before** `deleteBook` destroys that manifest row; best-effort, never aborts the local delete. The content-addressed **blob is deliberately left** for the sweeper, since a sibling device may still need those bytes. |
+| Persist-on-evict | Local IDB LRU eviction never touches the cloud mirror, with a **never-evict-a-book-whose-upload-is-unconfirmed** rule (the upload is opt-in/best-effort and may never have run — evicting would destroy the only copy). |
+| Cloud sweeper | A separate `artifactSweeperTask` boot task ([`src/app/boot/artifactSweeper.ts`](../../src/app/boot/artifactSweeper.ts)) calls `sweepArtifacts(workspaceId, { ttlMs, now, budgetBytes })`, deleting both the HEAD doc and its sibling blob past TTL or over budget. |
+| Workspace purge | `embedCache` is in `FirestoreBackend`'s `PURGE_SUBCOLLECTIONS` (deviation: wired in **Phase A**, not Phase D as originally scheduled), so a workspace delete sweeps the HEAD docs along with the blobs. |
+| Drift metric | `hydrateFromArtifact` counts a HEAD-hit-but-object-absent observation (`getArtifactDriftCount`), self-heals by deleting the stale HEAD doc, and re-embeds — so steady-state drift is observable. |
+
+### 9.7 Failure Modes
+
+| Failure | Behavior |
+|---------|----------|
+| Consent denied (share off, no per-book bit) | `probeArtifact` → `false`, `hydrateFromArtifact` → `null`; the book is embedded normally (or, on a quota-exhausted bg device, skipped). |
+| No backend / no `contentHash` (older book) | Cheap no-network short-circuit → `false`/`null`; falls through to per-device embed (no benefit, no error). |
+| Definitive miss (`storage/object-not-found`) | `getArtifact` returns `null` → re-embed. |
+| Transient / permission error on `getArtifact` | **Rethrown** — never mistake an offline blip for a miss and waste quota re-embedding (opposite polarity to `isWorkspaceAlive`'s fail-safe). |
+| Stamp mismatch (re-derived key ≠ requested) | Blob rejected (swap/bit-rot guard) → `null` → re-embed. |
+| HEAD present but blob absent | Drift counted + logged, stale HEAD self-healed, returns `null` → re-embed. |
+| Section text diverged since upload | That section is dropped on reconcile and re-embedded next pass (partial reuse); the job row marks only the survivors complete. |
+
+---
+
+## 10. Cross-Cutting Architecture Observations
+
+### 10.1 The Three-Layer Write Pattern
 
 All journeys follow the same three-layer write pattern, which enforces the layering invariants ([Layering and boundaries](11-layering-and-boundaries.md)):
 
@@ -714,7 +1073,7 @@ graph TD
 2. **Validate before destroy** — every snapshot or import write that replaces existing data validates the incoming bytes on a scratch object first.
 3. **Domain isolation** — domain modules never import stores. Store handles (inventory port, reading state port, etc.) are injected by the composition root (`src/app/library/createLibrary.ts`, `src/app/sync/createSync.ts`).
 
-### 8.2 The FIFO Queue Pattern
+### 10.2 The FIFO Queue Pattern
 
 Two FIFO queues appear in the codebase:
 - `ImportOrchestrator` normal/idle queue: serializes import, restore, reprocess, and reingest jobs globally with two priority classes.
@@ -722,17 +1081,22 @@ Two FIFO queues appear in the codebase:
 
 Both use the same `pumping` flag guard pattern: a single boolean ensures only one async pump is in flight at a time.
 
-### 8.3 Yjs as the Sync Backbone
+### 10.3 Yjs as the Sync Backbone
 
 All journeys that produce user-visible state changes write through Yjs:
 - Import → `inventory.upsert()` → Y.Map → Firestore → Device B
 - Annotation → `useAnnotationStore.add()` → Y.Map → Firestore → Device B
 - TTS progress → `updateTTSProgress()` → Y.Map → Firestore → Device B
 - Workspace switch (target data) → `applySnapshot(blob)` → y-idb → Device B reads on boot
+- Cross-device AI spend → `embedSpend` nested field on `DeviceInfo` → Y.Map → Firestore → other devices
 
-The one exception is static book content (EPUB binary, extracted TTS prep, search corpus) which lives only in `EpubLibraryDB` (IndexedDB) and is never replicated through Yjs or Firestore. This is intentional: binary content is too large for a CRDT document.
+The one exception is static book content (EPUB binary, extracted TTS prep, search corpus) which lives only in `EpubLibraryDB` (IndexedDB) and is never replicated through Yjs or Firestore. This is intentional: binary content is too large for a CRDT document. The embedding vectors (Journeys 7–8) are the same shape — device-local regenerable CACHE in IDB; the **only** cross-device coordination they need rides the existing synced device mesh (`embedSpend`) and the cloud Artifact Lane (Firestore HEAD docs + Cloud Storage blobs), neither of which touches the CRDT (the terminal v9 schema is unchanged).
 
-### 8.4 Ephemeral vs. Persisted vs. Synced State
+### 10.4 Quota and the Egress Chokepoint
+
+Journeys 7–8 add a second policy that, like consent, is enforced **inside** `NetworkGateway.egress()` so no client can forget it: cross-provider quota admission. The `QuotaGovernor` (`src/kernel/quota/`) keeps in-memory RPM/TPM windows + a persisted RPD counter, records spend at `acquire`, and refuses backpressured calls with the typed `NET_RATE_LIMITED` AppError *before* any network call. The placement is what makes the Artifact Lane's cost win possible: the consult/hydrate path is SDK-mediated (`via: 'sdk'`), so it cannot route through `egress()` and never reaches `acquire` — a cache hit is provably zero-quota.
+
+### 10.5 Ephemeral vs. Persisted vs. Synced State
 
 | State | Store | Synced | Persisted |
 |-------|-------|--------|-----------|
@@ -744,10 +1108,13 @@ The one exception is static book content (EPUB binary, extracted TTS prep, searc
 | Reader UI state | `useReaderUIStore` | No | No (ephemeral) |
 | Static book metadata | `libraryViewStore` projection | No | No (IDB only, non-CRDT) |
 | Sync connection status | `useSyncStore` (partial) | Partial | Yes (Yjs, some fields) |
+| Embedding vectors / resume journal | `cache_embeddings` / `cache_embed_jobs` | No | No (IDB only, regenerable CACHE) |
+| Cross-device AI spend | `useDeviceStore` (`embedSpend` on `DeviceInfo`) | Yes (Yjs) | Yes (y-idb) |
+| Quota daily counter (RPD) | `quotaCounter` repo (`app_metadata` key) | No | Yes (IDB only, non-CRDT) |
 
 ---
 
-## 9. Related Documents
+## 11. Related Documents
 
 For deeper coverage of individual subsystems touched by these journeys:
 
@@ -756,9 +1123,11 @@ For deeper coverage of individual subsystems touched by these journeys:
 - [Storage gateway](20-storage-gateway.md) — IDB connection lifecycle, write gate, and the data layer.
 - [Domain library](37-domain-library.md) — the full import/offload/restore domain.
 - [Reader engine](30-domain-reader-engine.md) — epub.js engine, location system, and selection bridge.
+- [Domain search](38-domain-search.md) — the search worker, regex engine, embedding indexer, RRF fusion, and the Artifact Lane codec.
+- [Domain google](39-domain-google.md) — the GenAI four-part client pattern, the embedding client, and the quota governor's wiring.
 - [TTS engine](32-domain-audio-tts-engine.md) — the TTS engine, worker bridge, and provider model.
 - [TTS app integration](51-tts-app-integration.md) — `TtsController`, `useAudioCommands`, boot wiring.
-- [Domain sync](36-domain-sync.md) — `SyncOrchestrator`, `WorkspaceService`, quarantine layers.
+- [Domain sync](36-domain-sync.md) — `SyncOrchestrator`, `WorkspaceService`, quarantine layers, the C3 `SyncBackend` (incl. the five artifact methods).
 - [Backup and restore](23-backup-and-restore.md) — checkpoint format, pruning, and recovery flows.
 - [Error handling and recovery](15-error-handling-and-recovery.md) — failure modes, `SafeModeView`, migration failure view.
 - [E2E verification](64-e2e-verification.md) — the Playwright test harness for the workspace switch crash-safety matrix.

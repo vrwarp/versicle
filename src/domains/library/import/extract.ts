@@ -39,7 +39,7 @@ import { extractCoverPalette } from '@lib/cover-palette';
 import { createLogger } from '@lib/logger';
 import { normalizeLanguageCode } from '@lib/language-utils';
 import { localFetch } from '@kernel/net';
-import { computeContentHash, computeLegacyFingerprint } from './identity';
+import { cheapHash, computeContentHash, computeLegacyFingerprint } from './identity';
 import { getSanitizedBookMetadata } from './metadata';
 import { validateZipSignature } from './validate';
 
@@ -52,6 +52,13 @@ interface SearchTextSection {
   href: string;
   title: string;
   text: string;
+  /**
+   * Invalidation/skip key for the embedding indexer (Increment C §3): a
+   * cheapHash of the section text stamped at import. The indexer resumes on the
+   * `{href, sectionTextHash}` pair (design §2.1). Optional for backward
+   * compatibility with corpora extracted before this field existed.
+   */
+  sectionTextHash?: string;
 }
 
 /** The extractor's search output; persisted per book by the searchText repo. */
@@ -286,7 +293,15 @@ export function mapChapters(bookId: string, chapters: ProcessedChapter[]): Chapt
       });
     }
 
-    searchSections.push({ href: chapter.href, title, text: chapter.textContent });
+    // Stamp the embedding indexer's {href, sectionTextHash} skip key at import
+    // (Increment C §3): cheapHash lives in this same domain (identity.ts:20 —
+    // no cross-domain import), and the chunker stays free of any hash import.
+    searchSections.push({
+      href: chapter.href,
+      title,
+      text: chapter.textContent,
+      sectionTextHash: cheapHash(new TextEncoder().encode(chapter.textContent).buffer),
+    });
   });
 
   return { syntheticToc, sections, ttsContentBatches, tableBatches, searchSections, totalChars };

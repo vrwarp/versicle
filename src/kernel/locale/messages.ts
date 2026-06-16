@@ -44,6 +44,8 @@ const errorMessages: ErrorMessages = {
   'errors.GENAI_UNKNOWN': 'The AI request failed.',
   'errors.GENAI_NOT_CONFIGURED': 'Add a Gemini API key in Settings to use AI features.',
   'errors.GENAI_INVALID_RESPONSE': 'The AI returned an unusable response.',
+  'errors.GENAI_EMBEDDING_NOT_CONFIGURED':
+    'Add a Gemini API key in Settings to use semantic search.',
   'errors.DRIVE_UNKNOWN': 'Google Drive request failed.',
   'errors.DRIVE_API_ERROR': 'Google Drive returned an error.',
   'errors.INGEST_UNKNOWN': 'Import failed.',
@@ -60,6 +62,7 @@ const errorMessages: ErrorMessages = {
   'errors.NET_CONSENT_REQUIRED': 'This feature needs your consent before sending data.',
   'errors.NET_TIMEOUT': 'The request timed out.',
   'errors.NET_OFFLINE': 'You appear to be offline.',
+  'errors.NET_RATE_LIMITED': 'Rate limit reached. Please wait a moment and try again.',
   'errors.BACKUP_SNAPSHOT_INVALID': 'The backup file is invalid.',
   'errors.GOOGLE_AUTH_REQUIRED': 'Sign in with Google to continue.',
   'errors.GOOGLE_AUTH_REVOKED': 'Google access was revoked. Reconnect to continue.',

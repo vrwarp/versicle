@@ -457,6 +457,30 @@ export class SyncOrchestrator {
   isSignedIn(): boolean {
     return this.getAuthStatus() === 'signed-in';
   }
+
+  /**
+   * Hand the app layer the backend + workspace it needs to look up a cached
+   * embedding set before recomputing one. Read-only — it exposes ONLY the
+   * `{ backend, workspaceId }` pair the lookup needs to call headArtifact /
+   * getArtifact.
+   *
+   * Returns `null` unless the orchestrator is live on a definite destination:
+   * connected AND signed-in (a current user) AND an active workspace selected.
+   * The null-gate is deliberate — it ensures the returned backend is bound to
+   * the right uid and the path is scoped to the right workspace, so a lookup
+   * can never read a cached embedding under the wrong account/workspace. Adds NO
+   * new backend method (the three sync contract suites stay green); it only
+   * re-exposes the existing {@link getBackend} + {@link getActiveWorkspaceId}
+   * the connect path already uses. (design: plan/shared-ai-cache-design.md)
+   */
+  getConnectedArtifactBackend(): { backend: SyncBackend; workspaceId: string } | null {
+    if (!this.isConnected()) return null;
+    const user = this.getCurrentUser();
+    if (!user) return null;
+    const workspaceId = this.getActiveWorkspaceId();
+    if (!workspaceId) return null;
+    return { backend: this.getBackend(user.uid), workspaceId };
+  }
 }
 
 /**

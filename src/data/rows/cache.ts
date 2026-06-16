@@ -161,6 +161,14 @@ const searchTextSectionSchema = z.looseObject({
   href: z.string(),
   title: z.string(),
   text: z.string(),
+  /**
+   * Fast change-detection stamp: a cheap hash of this section's text,
+   * computed at import. The embedding builder compares it against the hash it
+   * recorded to skip re-embedding sections whose text is unchanged. Additive
+   * on this row — rows written before this field existed simply lack it and
+   * get re-extracted (no migration, no schema-version bump).
+   */
+  sectionTextHash: z.string().optional(),
 });
 /**
  * @public C1 row contract: no parse call site yet — kept exported as the
@@ -174,7 +182,122 @@ export const cacheSearchTextRowSchema = z.looseObject({
 export type CacheSearchTextRow = {
   bookId: string;
   extractionVersion: number;
-  sections: { href: string; title: string; text: string }[];
+  sections: { href: string; title: string; text: string; sectionTextHash?: string }[];
+};
+
+/** A persisted binary field: canonically ArrayBuffer (WebKit-safe structured
+ *  clone), same guard as cacheAudioBlobRowSchema.audio. Read paths re-wrap the
+ *  buffer as the typed-array view the compute layer expects. */
+const embeddingBinarySchema = z.custom<ArrayBuffer>((v) => v instanceof ArrayBuffer, {
+  message: 'Expected ArrayBuffer',
+});
+
+const embeddingChunkSchema = z.looseObject({
+  /** CFI (EPUB position locator) of the chunk start — filled in by the
+   *  embedding builder, which runs in the reader and can resolve text spans to
+   *  CFIs; the background text-chunker cannot derive a CFI from raw text. */
+  cfiStart: z.string(),
+  cfiEnd: z.string(),
+  tokenCount: z.number(),
+  /** Inclusive/exclusive character offsets of the chunk within the section
+   *  text, recorded when embeddings are built so search can highlight the
+   *  matched span without re-splitting the section into chunks again. Additive:
+   *  rows written before these fields existed lack them and fall back to
+   *  re-splitting — no migration, no DB_VERSION bump. (Any change to the
+   *  extraction version re-embeds the book, so these never silently go stale.) */
+  charStart: z.number().optional(),
+  charEnd: z.number().optional(),
+});
+
+const embeddingSectionSchema = z.looseObject({
+  href: z.string(),
+  /** Invalidation stamp: cheapHash of the section text, computed at import. */
+  sectionTextHash: z.string(),
+  chunks: z.array(embeddingChunkSchema),
+  /** Packed int8 vectors (one row per chunk), persisted as the raw .buffer;
+   *  re-wrapped to Int8Array on read. */
+  vectors: embeddingBinarySchema,
+  /** Per-vector float32 quantization scales, persisted as the raw .buffer;
+   *  re-wrapped to Float32Array on read. */
+  scales: embeddingBinarySchema,
+});
+
+/**
+ * `cache_embeddings` row (key: bookId) — the precomputed embedding vectors
+ * that power semantic ("meaning-based") in-book search. One row per book; each
+ * spine section carries its packed int8 vectors plus the per-vector scales
+ * needed to dequantize them. The {model, dims, quant, extractionVersion} stamp
+ * lets search detect when the vectors were built with a now-outdated model or
+ * settings and must be rebuilt. Cache-domain, device-local, never synced.
+ *
+ * @public B1 row contract: no parse call site yet — kept exported as the
+ * drift-guard anchor (`_EmbeddingsSchemaMatches` below pins it).
+ */
+export const cacheEmbeddingsRowSchema = z.looseObject({
+  bookId: z.string().min(1),
+  model: z.string(),
+  dims: z.number(),
+  /** Quantization scheme stamp (currently the int8 per-vector scheme). */
+  quant: z.literal('int8-pervec'),
+  extractionVersion: z.number(),
+  sections: z.array(embeddingSectionSchema),
+});
+export type CacheEmbeddingsRow = {
+  bookId: string;
+  model: string;
+  dims: number;
+  quant: 'int8-pervec';
+  extractionVersion: number;
+  sections: {
+    href: string;
+    sectionTextHash: string;
+    chunks: {
+      cfiStart: string;
+      cfiEnd: string;
+      tokenCount: number;
+      /** Additive char offsets (see embeddingChunkSchema): legacy rows omit them. */
+      charStart?: number;
+      charEnd?: number;
+    }[];
+    vectors: ArrayBuffer;
+    scales: ArrayBuffer;
+  }[];
+};
+
+/**
+ * `cache_embed_jobs` row (key: bookId) — per-section progress for the
+ * background job that builds a book's embeddings. Records how far each section
+ * got so the job can resume mid-book after an interruption instead of
+ * re-embedding sections already written to `cache_embeddings`. Deleted
+ * together with the book and its vectors in the same gated delete transaction.
+ *
+ * @public B1 row contract: no parse call site yet — kept exported as the
+ * drift-guard anchor (`_EmbedJobsSchemaMatches` below pins it).
+ */
+export const cacheEmbedJobsRowSchema = z.looseObject({
+  bookId: z.string().min(1),
+  extractionVersion: z.number(),
+  sections: z.array(
+    z.looseObject({
+      href: z.string(),
+      embeddedThroughChunk: z.number(),
+      /**
+       * The text hash this section was embedded against, paired with `href` as
+       * the resume key. On resume, the builder skips a section whose recorded
+       * hash still matches the current text and re-embeds it on mismatch (the
+       * section was re-extracted). Additive — rows written before this field
+       * existed lack it and re-embed (no migration).
+       */
+      sectionTextHash: z.string().optional(),
+    }),
+  ),
+  updatedAt: z.number(),
+});
+export type CacheEmbedJobsRow = {
+  bookId: string;
+  extractionVersion: number;
+  sections: { href: string; embeddedThroughChunk: number; sectionTextHash?: string }[];
+  updatedAt: number;
 };
 
 // ── Compile-time drift guards (see rows/static.ts for the pattern) ────────
@@ -185,6 +308,8 @@ type _PrepSchemaMatches = z.infer<typeof cacheTtsPreparationRowSchema> extends C
 type _QueueSchemaMatches = z.infer<typeof ttsQueueItemSchema> extends TTSQueueItem ? true : never;
 type _TimepointSchemaMatches = z.infer<typeof timepointSchema> extends Timepoint ? true : never;
 type _SearchTextSchemaMatches = z.infer<typeof cacheSearchTextRowSchema> extends CacheSearchTextRow ? true : never;
+type _EmbeddingsSchemaMatches = z.infer<typeof cacheEmbeddingsRowSchema> extends CacheEmbeddingsRow ? true : never;
+type _EmbedJobsSchemaMatches = z.infer<typeof cacheEmbedJobsRowSchema> extends CacheEmbedJobsRow ? true : never;
 type _AudioRound = CacheAudioBlobRow extends CacheAudioBlob ? true : never;
 type _SessionRound = CacheSessionStateRow extends CacheSessionState ? true : never;
 type _PrepRound = CacheTtsPreparationRow extends CacheTtsPreparation ? true : never;
@@ -196,10 +321,12 @@ const _schemaChecks: [
   _QueueSchemaMatches,
   _TimepointSchemaMatches,
   _SearchTextSchemaMatches,
+  _EmbeddingsSchemaMatches,
+  _EmbedJobsSchemaMatches,
   _AudioRound,
   _SessionRound,
   _PrepRound,
-] = [true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true, true];
 void _schemaChecks;
 
 function _rowTypeDriftGuard(

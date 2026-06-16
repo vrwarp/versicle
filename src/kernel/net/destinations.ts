@@ -98,6 +98,20 @@ export interface EgressDestination {
    *                  serve a cached copy (documented caller policy).
    */
   offline: 'fail' | 'cache-fallback';
+  /**
+   * Rate-limit governance. When present, NetworkGateway.egress() runs the
+   * injected throttle on this `lane` before any bytes leave, rejecting requests
+   * that exceed the provider's per-minute/per-day budget. Putting it on the
+   * destination (rather than at each call site) makes throttling unbypassable,
+   * just like the host-allowlist/offline/consent checks; the caller no longer
+   * has to remember to ask. Absent ⇒ no throttling for this destination.
+   *
+   * NOTE: the lane union is spelled out here rather than imported from the
+   * quota module because this file's "NO imports" rule (see top) feeds the
+   * CSP-generator's Node type-stripping path, which cannot resolve path aliases.
+   * It must stay in sync with the quota module's `Lane` type.
+   */
+  rateLimit?: { lane: 'fg' | 'bg' };
 }
 
 /**
@@ -122,6 +136,7 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
     consent: 'per-book',
     timeoutMs: 60_000,
     offline: 'fail',
+    rateLimit: { lane: 'fg' },
   },
   {
     id: 'google-tts',
@@ -132,6 +147,7 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
     consent: 'provider-selection',
     timeoutMs: 30_000,
     offline: 'fail',
+    rateLimit: { lane: 'fg' },
   },
   {
     id: 'openai-tts',
@@ -142,6 +158,7 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
     consent: 'provider-selection',
     timeoutMs: 30_000,
     offline: 'fail',
+    rateLimit: { lane: 'fg' },
   },
   {
     id: 'lemonfox-tts',
@@ -152,6 +169,7 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
     consent: 'provider-selection',
     timeoutMs: 30_000,
     offline: 'fail',
+    rateLimit: { lane: 'fg' },
   },
   {
     id: 'hf-piper-catalog',
@@ -216,7 +234,7 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
     ],
     via: 'sdk', // firebase SDK owns the HTTP/WebChannel transport
     purpose:
-      "Sync to the user's own Firebase project: Yjs doc (library inventory, progress, annotations incl. selected text), checkpoints, Cloud Storage snapshots",
+      "Sync to the user's own Firebase project: Yjs doc (library inventory, progress, annotations incl. selected text), checkpoints, Cloud Storage snapshots, and — when 'Share AI caches across my devices' is ON — the AI-derived content-addressed full-book embedding cache (Cloud Storage embeddings/{key}.bin blobs + their Firestore embedCache/{key} HEAD docs)",
     dataClass: 'book-derived',
     consent: 'oauth',
     timeoutMs: null,

@@ -100,21 +100,21 @@ graph TD
         SW -- "CacheFirst routes" --> CS
     end
     subgraph "External Services"
-        FB["Firebase\n(Firestore + Auth +\nCloud Storage)"]
+        FB["Firebase\n(Firestore + Auth +\nCloud Storage\n+ Artifact Lane mirror)"]
         GTTS["Google Cloud TTS"]
         OAI["OpenAI TTS"]
         LF["LemonFox TTS"]
         HF["HuggingFace\n(Piper voice models)"]
         GAPI["Google APIs\n(Drive, OAuth)"]
-        GEM["Gemini API"]
+        GEM["Gemini API\n(generate + Embedding 2)"]
     end
     MT -- "firebase SDK (sdk via)" --> FB
-    MT -- "NetworkGateway.egress()" --> GTTS
-    MT -- "NetworkGateway.egress()" --> OAI
-    MT -- "NetworkGateway.egress()" --> LF
+    MT -- "NetworkGateway.egress()\n(quota-governed)" --> GTTS
+    MT -- "NetworkGateway.egress()\n(quota-governed)" --> OAI
+    MT -- "NetworkGateway.egress()\n(quota-governed)" --> LF
     MT -- "NetworkGateway.egress()" --> HF
     MT -- "NetworkGateway.egress()" --> GAPI
-    MT -- "NetworkGateway.egress()" --> GEM
+    MT -- "NetworkGateway.egress()\n(quota-governed)" --> GEM
 ```
 
 Key observations from this diagram:
@@ -129,6 +129,14 @@ Key observations from this diagram:
 4. **Comlink bridges the main-thread/worker boundary** for both the TTS and Search workers.
    The worker closures exclude `zustand`/`yjs`/`store/**` — asserted by a build-time chunk
    content test (C12 rule 6).
+5. **Every Gemini and cloud-TTS egress is paced by the kernel quota governor** before it
+   leaves the device — admission is recorded *inside* `NetworkGateway.egress()` so it cannot
+   be bypassed (see §7.1). The newest external consumer is **Gemini Embedding 2**, used by the
+   semantic-search pipeline (§5.5).
+6. **Firebase carries a second, content-addressed payload** — the **Artifact Lane** mirrors
+   expensive embedding blobs into the user's own Cloud Storage with a small Firestore
+   HEAD-doc directory, so a book embedded once is hydrated for free on the user's other
+   devices instead of re-spending Gemini quota (§7.2).
 
 ---
 
@@ -230,6 +238,11 @@ two consumers. Modules:
   (date/relative/bytes/collator), `LiveAnnouncer`, `uiLocale`. Worker-safe — no DOM.
 - [`net/`](../../src/kernel/net/) — `NetworkGateway` + egress destination registry +
   generated-CSP renderer (see §7 for full details).
+- [`quota/`](../../src/kernel/quota/) — `QuotaGovernor`: the cross-provider rate throttle
+  (RPM/TPM/RPD sliding windows per `fg`/`bg` lane) plus the `ptDay` midnight-Pacific helper.
+  Pure math: it keeps in-memory windows and persists the daily counter through an injected
+  `QuotaStore` port (kernel touches no storage). Its ≥2-consumer admission bar is met by the
+  GenAI clients and the cloud-TTS providers. See §7.1.
 
 **`src/data/` (L1) — the ONLY IndexedDB subsystem**
 
@@ -240,14 +253,16 @@ complete persistence surface:
 - [`connection.ts`](../../src/data/connection.ts) — `openDB` with blocked/blocking/terminated
   handlers and reset-on-failure.
 - [`schema.ts`](../../src/data/schema.ts) — typed `DBSchema` + versioned migration registry
-  (`DB_VERSION = 26`).
+  (`DB_VERSION = 27`).
 - [`write-gate.ts`](../../src/data/write-gate.ts) — `navigator.locks` exclusive writer
   spanning workers/tabs. The synchronous-callback API structurally bans intra-transaction
   `await`s (which cause WebKit IDB deadlocks — a documented invariant in the code).
 - [`rows/`](../../src/data/rows/) — zod schemas per store; `z.infer` row types are the
   single validation source for backup/Android/Firestore ingress.
 - [`repos/`](../../src/data/repos/) — `bookContent`, `playbackCache`, `audioCache` (with LRU
-  eviction), `searchText`, `diagnostics`, `checkpoints`.
+  eviction), `searchText`, `diagnostics`, `checkpoints`, `embeddings` (packed int8 vectors +
+  resumable job state, with LRU eviction), `quotaCounter` (the governor's daily-counter
+  persistence port — the only IDB touch for quota).
 - [`snapshot/`](../../src/data/snapshot/) — `YjsSnapshotService` (one capture/validate/apply
   implementation replacing three previous mechanisms).
 - [`wipe.ts`](../../src/data/wipe.ts) — `wipeAllData()`: closes + deletes both databases
@@ -278,11 +293,11 @@ at error/0):
 | Domain | Key responsibilities |
 |---|---|
 | `chinese/` | Pinyin geometry engine, IDB dictionary service, vocabulary store |
-| `google/` | `GoogleAuthClient` (per-service tokens), `DriveClient`, `GenAIClient` |
+| `google/` | `GoogleAuthClient` (per-service tokens), `DriveClient`, `GenAIClient`, `EmbeddingClient` (Gemini Embedding 2, four-part GenAI pattern) |
 | `library/` | `ImportOrchestrator` job queue, `LibraryService` (keyed mutex), SHA-256 identity |
 | `reader/` | `ReaderEngine` port, `EpubJsEngine`, overlay manager, session recorder |
-| `search/` | `SearchSession` over the search worker, persisted `searchText` repo |
-| `sync/` | `SyncBackend` port (Firestore or Mock), `SyncOrchestrator`, typed `SyncEvent` bus |
+| `search/` | `SearchSession` over the search worker, persisted `searchText` repo; the semantic-search pipeline (`EmbeddingIndexer`, int8 vector ranking, RRF fusion, artifact blob codec) |
+| `sync/` | `SyncBackend` port (Firestore or Mock), `SyncOrchestrator`, typed `SyncEvent` bus; the Artifact Lane method set (head/put/get + delete/sweep) |
 
 **`src/lib/` — legacy-geography keepers**
 
@@ -330,12 +345,19 @@ classDiagram
         observeDoc()
         persistDoc()
         deleteWorkspace()
+        headArtifact()
+        putArtifact()
+        getArtifact()
+        deleteArtifactHead()
+        sweepArtifacts()
     }
     class FirestoreBackend {
         -ProviderConnection connection
+        -sole firebase/storage importer
     }
     class MockBackend {
         -in-memory state
+        -in-memory Storage tier
     }
     SyncBackend <|.. FirestoreBackend
     SyncBackend <|.. MockBackend
@@ -383,6 +405,15 @@ BOTH implementations must pass. For TTS the spec is 23 scenarios × 2 transports
 For sync it is a `describeSyncBackendContract` run against MockBackend on every test run and
 against FirestoreBackend on the Firestore emulator (C3).
 
+The C3 interface grew by **five** additive methods for the Artifact Lane (§7.2):
+`headArtifact` / `putArtifact` / `getArtifact` (probe / write / read) and
+`deleteArtifactHead` / `sweepArtifacts` (GC). This widened `FirestoreBackend` — the *sole*
+`firebase/storage` importer — from delete-only to read/write (it gained `uploadBytes` +
+`getBytes`); `MockBackend` carries an in-memory Storage tier. The cloud round-trips
+(emulator put/head/get/delete/sweep, HEAD-after-Storage ordering, the `storage.rules`
+security suite) are **CI-PENDING**: they auto-skip without local emulators, so the cloud paths
+are MockBackend-verified and code-complete but not yet proven end-to-end against real Firebase.
+
 ### 4.2 Modular-monolith: why not microservices
 
 The modular-monolith choice is deliberate. The analysis showed that the problems were about
@@ -412,7 +443,7 @@ and may be rewritten freely.
 ```mermaid
 graph LR
     subgraph "Persistence contracts"
-        C1["C1\nIndexedDB schema\nsrc/data/schema.ts\nDB v26"]
+        C1["C1\nIndexedDB schema\nsrc/data/schema.ts\nDB v27"]
         C2["C2\nCRDT document schema\nsrc/store/registry.ts\nCRDT v9"]
     end
     subgraph "Transport contracts"
@@ -450,7 +481,7 @@ sequenceDiagram
     Note over MT: App.tsx boot sequence
     MT->>MT: registerAppBootTasks()
     MT->>MT: runBootSequence() — 8 phases
-    MT->>IDB: openDB (EpubLibraryDB v26)
+    MT->>IDB: openDB (EpubLibraryDB v27)
     MT->>IDB: startYjsPersistence (versicle-yjs)
     MT->>MT: whenHydrated() — await CRDT load
     MT->>MT: migrations coordinator (CRDT v9)
@@ -529,6 +560,12 @@ The search worker holds the full-text index for the currently open book. The
 interface over Comlink. The index is not rebuilt on every reader session because extracted
 text is persisted in `data/repos/searchText` (C1 store `cache_search_text`).
 
+The worker also carries the **semantic** half of search (§5.5): it int8-quantizes embedding
+vectors and runs int8-cosine top-k ranking (`SearchEngine.rankInt8`) over typed arrays
+transferred from the main thread — pure compute, no IDB. The worker stays free of
+`store`/`yjs`/`zustand` (the `worker-no-state-typegraph` ratchet, baseline 16, holds; the
+emitted-chunk gate `check:worker-chunk` is TTS-only today).
+
 ### 5.4 Service worker (`src/sw.ts`)
 
 The service worker uses Workbox and handles:
@@ -543,6 +580,34 @@ The service worker uses Workbox and handles:
 - **Prompt-style SW updates** — the unconditional `self.skipWaiting()` was replaced in Phase 8
   with a SKIP_WAITING message handler: the new SW waits until the user accepts the in-app
   update toast before activating.
+
+### 5.5 Semantic-search / embeddings pipeline (search + google + worker)
+
+Semantic search spans three threads and three layers, hung off the existing regex search:
+
+1. **Chunk** (main thread) — the plain text already in `cache_search_text` is sub-chunked into
+   ~320-token, sentence-snapped windows; a per-section `sectionTextHash` is stamped at import so
+   only changed sections re-embed. Per-chunk char offsets (`charStart`/`charEnd`) are persisted;
+   the EPUB CFI jump-target is resolved lazily at click time.
+2. **Embed** (`domains/google`) — `EmbeddingClient` (the four-part GenAI pattern: contract,
+   `GeminiEmbeddingClient` impl, holder with a NOT-CONFIGURED default, lazy facade, barrel-exported
+   from `src/domains/google/index.ts`) calls Gemini Embedding 2 through `egress('gemini', …)`, so
+   it inherits the consent + quota lane (§7.1). An `EmbeddingIndexer` (`domains/search`, injected
+   ports only — no store/sibling-domain import) drives a **foreground** lane that embeds the open
+   book outward from the reading position (resumable) and a **background** backfill of
+   loaded-but-unread books, gated by a default-OFF library-wide opt-in wired into the consent
+   resolver.
+3. **Quantize + rank** (search worker) — vectors are int8-quantized at 768 dims (per-vector scale)
+   and stored as a packed blob in the new `cache_embeddings` CACHE store; resumable job state lives
+   in `cache_embed_jobs`. The query embedding is cached; int8-cosine ranking (`rankInt8`) is fused
+   with the regex engine via **reciprocal-rank fusion** (`src/domains/search/rrf.ts`) inside
+   `SearchSession`.
+
+**Regex full-text remains the graceful default** whenever semantic search is off, unconfigured,
+quota-exhausted, or the book is not yet embedded — and is the privacy default (nothing leaves the
+device). The pipeline took the IDB **v27** bump for its two CACHE stores (`migrateToV27`, additive);
+the previously reserved-for-`sync_log`/SW-cover v27 cleanup was never done and is now the **next**
+(v28) bump. See [Search Domain](38-domain-search.md) and [Google Domain](39-domain-google.md).
 
 ---
 
@@ -578,13 +643,13 @@ stateDiagram-v2
 | # | Phase | Key tasks registered |
 |---|---|---|
 | 1 | `interceptMigration` | Workspace-migration interceptor — may `ctx.halt()` for user confirmation |
-| 2 | `openDB` | Open `EpubLibraryDB` through migration registry (v26) |
+| 2 | `openDB` | Open `EpubLibraryDB` through migration registry (v27) |
 | 3 | `startYjsPersistence` | Start `y-idb` persistence for the workspace Y.Doc |
 | 4 | `whenHydrated` | IDB load + per-store hydration handles; static-metadata projection |
 | 5 | `migrations` | CRDT migration coordinator — checkpoint, transform, atomic bump (→ v9) |
 | 6 | `syncInit` | `SyncOrchestrator` boot (skipped if `ctx.syncAllowed === false`) |
 | 7 | `deviceRegistration` | TTS engine init + device-mesh registration |
-| 8 | `backgroundTasks` | Device heartbeat, Drive auto-scan, audio-cache LRU eviction, re-ingest wave, social login |
+| 8 | `backgroundTasks` | Device heartbeat, Drive auto-scan, audio-cache LRU eviction, re-ingest wave, social login, embedding backfill (opt-in), Artifact Lane publisher + sweeper (opt-in) |
 
 **Boot task contract** (from `src/app/bootstrap.ts`):
 
@@ -647,19 +712,99 @@ Gateway enforcement steps (from `NetworkGateway.ts`):
    composition root to the synced per-book `aiConsent` map.
 6. Per-destination `AbortController` timeout, composed with the caller's signal.
 
-The nine declared destinations (from `architecture.md` §6):
+The nine declared destinations (from `architecture.md` §6). The `rateLimit` column marks the
+destinations whose egress is paced by the quota governor (§7.1):
 
-| Id | Via | Data class | Consent | Timeout |
-|---|---|---|---|---|
-| `gemini` | gateway | book-content | per-book | 60 s |
-| `google-tts` | gateway | book-content | provider-selection | 30 s |
-| `openai-tts` | gateway | book-content | provider-selection | 30 s |
-| `lemonfox-tts` | gateway | book-content | provider-selection | 30 s |
-| `hf-piper-catalog` | gateway | metadata | provider-selection | 30 s |
-| `hf-piper-models` | gateway | binary-asset | provider-selection | unbounded (abortable) |
-| `drive` | gateway | binary-asset | oauth | unbounded (abortable) |
-| `google-oauth` | sdk | auth | oauth | unbounded |
-| `firebase` | sdk | book-derived | oauth | unbounded |
+| Id | Via | Data class | Consent | Timeout | rateLimit |
+|---|---|---|---|---|---|
+| `gemini` | gateway | book-content | per-book | 60 s | yes (generate + Embedding 2) |
+| `google-tts` | gateway | book-content | provider-selection | 30 s | yes |
+| `openai-tts` | gateway | book-content | provider-selection | 30 s | yes |
+| `lemonfox-tts` | gateway | book-content | provider-selection | 30 s | yes |
+| `hf-piper-catalog` | gateway | metadata | provider-selection | 30 s | — |
+| `hf-piper-models` | gateway | binary-asset | provider-selection | unbounded (abortable) | — |
+| `drive` | gateway | binary-asset | oauth | unbounded (abortable) | — |
+| `google-oauth` | sdk | auth | oauth | unbounded | — |
+| `firebase` | sdk | book-derived | oauth | unbounded | — |
+
+### 7.1 The cross-provider quota governor
+
+The free-tier ceilings on Gemini and the cloud-TTS providers are real, shared, and undocumented
+(Google defers the per-model numbers to the AI Studio dashboard), so a single throttle paces all
+GenAI and cloud-TTS egress. `QuotaGovernor` (`src/kernel/quota/`) tracks three windows per lane —
+**requests-per-minute**, **tokens-per-minute** (sliding 60 s), and **requests-per-day** (RPD,
+reset at midnight Pacific via the `ptDay` helper) — in two lanes: `fg` (foreground, the book being
+read + query embeds) and `bg` (background backfill, capped to leave foreground headroom).
+
+The governor is a **kernel service callers funnel into** (a downward dependency, like `egress`),
+not a layer above the clients — `GeminiClient`, the `EmbeddingClient`, and the cloud-TTS providers
+all import `@kernel/quota`. Because `kernel-imports-nothing` is error/0, it keeps only in-memory
+windows and persists the daily counter through an injected `QuotaStore` port, wired at the
+composition root to `src/data/repos/quotaCounter.ts` (which writes a single key in the existing
+`app_metadata` store — **no new store**).
+
+Two design decisions make it unbypassable and honest:
+
+- **Admission is recorded at `acquire`, inside `NetworkGateway.egress()`** (the same chokepoint
+  that owns host-allowlist/offline/consent). The gateway holds a `QuotaScheduler` seam installed
+  via `setQuotaScheduler` (mirroring `setConsentResolver`), so a caller cannot forget to throttle.
+  RPM/TPM/RPD are debited at admission — important because embeddings never `commit`, so
+  admission-time recording is what makes them count. The gateway is the single owner of the
+  once-per-egress claim release (try/finally). `commit()` is a client-side step that reconciles
+  the token *estimate* to the actual.
+- **Backpressure is a typed pre-network error.** When a lane is exhausted the governor refuses
+  *before* any network call, so the existing 429 `isResourceExhausted` check cannot match it. A
+  new `AppError` subclass, **`NET_RATE_LIMITED`** (in `src/types/errors.ts`, the taxonomy home,
+  with `retryable: true` + `retryAfterMs`), signals this; meters and graceful-degradation branch
+  on the code, never message substrings.
+
+Because the free-tier quota is **per-Google-Cloud-project, not per-device**, the governor
+reconciles the budget across the synced device mesh: each device publishes its rolling daily spend
+as an **additive nested `embedSpend` field** on its existing `DeviceInfo` record (no CRDT format
+change — it rides below the `devices` synced key, which is root-only-gated), and the background
+lane subtracts the sum of heartbeat-active siblings' spend from the project ceiling before issuing.
+429-backoff is the convergence safety net for CRDT/heartbeat lag.
+
+**Model rotation stays in `GeminiClient`** (the EM2 / `-001` embedding spaces are incompatible, so
+embeddings must never rotate); the governor owns only rate-buckets, backoff, cooldown, and
+`Retry-After`. Editable per-lane limits, a master "pause all GenAI" switch, and live
+used-vs-limit meters (fed by `governor.snapshot()` through `useGenAIStore`) live in the `genai`
+settings tab.
+
+### 7.2 The shared AI-cache (Artifact Lane)
+
+Embedding a book is the single most quota-expensive operation in the app, and the result
+(~251 KB of int8 vectors) is identical on every device that owns the same book. The **Artifact
+Lane** mirrors that blob into the user's own BYO cloud so a book embedded once is downloaded by
+the user's *other* devices instead of re-spending Gemini quota. It is two tiers, neither in the
+CRDT:
+
+- **Payload** — a content-addressed object `embeddings/{key}.bin` under the workspace prefix in
+  the user's BYO **Cloud Storage** (too large for the 1 MB CRDT doc budget).
+- **HEAD directory** — one tiny `embedCache/{key}` doc per artifact in the user's BYO
+  **Firestore**, for a cheap existence/stamp probe with no Storage `list`.
+
+The flow hangs off the C3 artifact methods (§4.1) and the app layer:
+
+- **Consult (read)** — `ArtifactConsult` (`src/app/google/artifactConsult.ts`) probes
+  (`headArtifact`) and hydrates (`getArtifact` → `putHydrated`) **before** the quota gate. Because
+  the `firebase` download is `via: 'sdk'` it never routes through `egress()`, so a full cache hit
+  spends **zero** Gemini quota. The download obeys the **same per-book consent predicate** the
+  governed embed would (`src/app/google/aiConsent.ts`).
+- **Publish (write)** — an `ArtifactPublisher` boot task uploads (idempotent, head-before-put,
+  Storage-then-HEAD ordering) when the default-OFF **"Share AI caches across my devices"** opt-in
+  is on. Consult and upload share the same consent predicate.
+- **Lifecycle** — per-book cloud delete is an *app-layer* concern (`LibraryService.remove` deletes
+  the HEAD doc before `deleteBook` destroys the manifest carrying the content hash, and leaves the
+  content-addressed blob for the sweeper since a sibling device may still need it); IDB LRU is
+  persist-on-evict with a never-evict-an-unconfirmed-upload rule; a separate cloud TTL/quota
+  **sweeper** boot task bounds the bucket; `embedCache` is in `PURGE_SUBCOLLECTIONS` (wired in
+  Phase A); and a HEAD-hit-but-object-missing **drift metric** self-heals the stale HEAD doc.
+
+The blob serialize/parse codec is `src/domains/search/artifactBlob.ts`. The cloud round-trips and
+the security-rules suite are **CI-PENDING** (MockBackend-verified, code-complete, not yet proven
+against real Firebase — §4.1). Cross-*user* sharing (a global commons) and TTS-audio cache sharing
+are explicitly **deferred**.
 
 ---
 
@@ -815,7 +960,7 @@ enforcement mechanism and severity:
 | 4 | Domain UI reads via published hooks; writes via services/controllers | store-registry README + projection-port pattern | process |
 | 5 | `getState()` outside `store/` + `app/` | `domains-no-store` error + `lib-not-to-store` ratchet at 19 | error + ratchet |
 | 6 | Worker import closure free of `zustand`/`yjs`/`store/` | `check:worker-chunk` check 1 on emitted chunk | error + ratchet |
-| 7 | All egress via `NetworkGateway.egress()`; CSP generated from registry | fetch/XHR ban + CSP generation + registry==CSP test | error |
+| 7 | All egress via `NetworkGateway.egress()`; CSP generated from registry; quota throttle enforced at the same chokepoint | fetch/XHR ban + CSP generation + registry==CSP test | error |
 | 8 | `epubjs` only in reader engine; synthesis SDKs only in providers; singletons only in `app/` | runtime-epubjs import ban at error with named carve-outs | error |
 | 9 | Mock seams reachable only from composition root behind DEV/VITE_E2E | `check:worker-chunk` check 2: no MockBackend source in prod chunk | error |
 | 10 | TS project references per layer + all test code typechecked | `tsc -b` solution build covering app + test + e2e + packages | partial |
@@ -890,6 +1035,7 @@ graph TD
         DIAG["kernel/diagnostics/"]
         LOC["kernel/locale/"]
         NET["kernel/net/"]
+        QUO["kernel/quota/"]
         TYPES["types/"]
     end
 
@@ -924,15 +1070,18 @@ graph TD
     CHN --> CONN
     CHN --> ROWS
     GOO --> NET
+    GOO --> QUO
     LIB2 --> REPOS2
     LIB2 --> ROWS
     RDR --> ROWS
     SRCH --> REPOS2
+    SRCH --> GOO
     SYN --> CONN
     SYN --> SNAP
     LTTS --> REPOS2
     LTTS --> ROWS
     LTTS --> NET
+    LTTS --> QUO
 
     REG --> STORES
     YJP --> WG
@@ -978,7 +1127,7 @@ panels lazy-load on first activation:
 |---|---|---|---|
 | `general` | 10 | — | Font, theme, flow mode |
 | `tts` | 20 | — | Provider, voices, lexicon |
-| `genai` | 30 | — | Gemini API key, per-book consent |
+| `genai` | 30 | — | Gemini API key, per-book consent, semantic search + embedding opt-ins, quota per-lane limits + pause-all + live meters |
 | `sync` | 40 | — | Firebase config, device mesh |
 | `devices` | 50 | — | Device registration and heartbeat |
 | `dictionary` | 60 | — | CC-CEDICT import status |
@@ -999,7 +1148,7 @@ Three independent persistence layers, each with its own versioned migration stra
 graph LR
     subgraph "IndexedDB EpubLibraryDB"
         direction TB
-        IDB1["DB_VERSION = 26\nsrc/data/schema.ts\nversioned migration registry\nappend-only steps"]
+        IDB1["DB_VERSION = 27\nsrc/data/schema.ts\nversioned migration registry\nappend-only steps"]
     end
     subgraph "IndexedDB versicle-yjs"
         direction TB
@@ -1016,9 +1165,11 @@ graph LR
 ```
 
 **IndexedDB `EpubLibraryDB` (C1):**
-- Schema v26 (two steps past the v24 baseline: `migrateToV25`, `migrateToV26`).
+- Schema v27 (three steps past the v24 baseline: `migrateToV25`, `migrateToV26`, `migrateToV27`).
 - Stores classified as STATIC (immutable book content), CACHE (regenerable), APP (sync state).
-- `sync_log` frozen at its current size (dead store, riding the next IDB bump at v27).
+- `migrateToV27` adds the regenerable CACHE stores `cache_embeddings` + `cache_embed_jobs`
+  (additive). This took the slot once reserved for the `sync_log` drop / SW-cover cleanup; that
+  cleanup was never done, so it now rides the **next** IDB bump at v28.
 
 **Yjs CRDT (C2):**
 - Schema v9 (eight migration steps from v1; the last format change of the overhaul program).
@@ -1048,7 +1199,7 @@ common failure modes first:
 |---|---|---|
 | 1 | `npm run lint` | 0 errors (warnings are ratchets) |
 | 2 | `npx tsc -b` | Type check: app + tests + e2e + packages |
-| 3 | `npm test` | 3,103 unit/integration tests (307 files) |
+| 3 | `npm test` | 3,296 unit/integration tests (the embeddings/quota/Artifact-Lane work is full-suite-gated; the Artifact Lane's cloud round-trips + security-rules suite are CI-PENDING and auto-skip without local emulators) |
 | 4 | `npm run build` | Production bundle succeeds |
 | 5 | `npm run depcruise:check` | Dependency boundary counts ≤ baseline |
 | 6 | `npm run lintdebt:check` | lint-debt counts match `lint-debt-allowlist.json` |

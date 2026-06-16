@@ -13,6 +13,7 @@ import {
 } from './errors';
 import type { GenAIConfig } from './contract';
 import type { EgressFn } from '@kernel/net';
+import { NetRateLimitedError } from '~types/errors';
 import type { GenAILogEntry } from './logging';
 
 function geminiResponse(text: string, status = 200): Response {
@@ -101,6 +102,40 @@ describe('GeminiClient', () => {
     );
     await expect(client.generateText('prompt')).rejects.toMatchObject({ status: 429 });
     expect(calls).toHaveLength(GENAI_ROTATION_MODELS.length);
+  });
+
+  it('regression: rotates through the remaining models when a 429 cooldown makes the sibling acquire NetRateLimitedError', async () => {
+    // Production failure being pinned: model A's network 429 sets a governor
+    // cooldown; model B's pre-network gateway acquire then throws
+    // NetRateLimitedError. The rotation continue-predicate (isRetryableForRotation)
+    // must treat that pre-network backpressure as retryable so rotation still
+    // tries the remaining model instead of aborting. Here the FIRST attempt's
+    // pre-network step throws NetRateLimitedError (the cooldown) and the SECOND
+    // model succeeds — without the fix, the loop would rethrow and never reach it.
+    const calls: string[] = [];
+    let attempt = 0;
+    const egress = vi.fn(async (_id: string, url: string) => {
+      attempt += 1;
+      calls.push(url);
+      if (attempt === 1) {
+        // The gateway acquire backpressured (sibling 429 cooldown) — pre-network.
+        throw new NetRateLimitedError(1000, { lane: 'fg', reason: 'cooldown' });
+      }
+      return geminiResponse('recovered');
+    }) as unknown as EgressFn;
+    const client = new GeminiClient({
+      getConfig: () => ({
+        apiKey: 'fake-key',
+        model: 'unused',
+        rotationEnabled: true,
+      }),
+      egress,
+    });
+
+    await expect(client.generateText('prompt')).resolves.toBe('recovered');
+    expect(calls).toHaveLength(2); // two models tried; the second succeeded
+    const model = (url: string) => url.match(/models\/([^:]+):/)?.[1];
+    expect(model(calls[0])).not.toBe(model(calls[1]));
   });
 
   it('throws GENAI_NOT_CONFIGURED (legacy message) without an API key', async () => {

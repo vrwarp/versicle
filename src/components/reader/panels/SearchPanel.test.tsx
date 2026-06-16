@@ -138,6 +138,7 @@ describe('SearchPanel', () => {
         const engine: SearchEngineProtocol = {
             initIndex: () => {},
             addDocuments: () => {},
+            rankInt8: () => [],
             searchDetailed: () =>
                 new Promise((resolve) => {
                     resolveSearch = resolve;

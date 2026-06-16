@@ -92,6 +92,8 @@ describe('Sync Schema Exhaustion', () => {
         'cache_tts_preparation',
         'cache_table_images',
         'cache_search_text', // v26 (Phase 7 §F): local, rebuildable search corpus
+        'cache_embeddings',  // v27: local, rebuildable embedding vectors (device-local, never synced)
+        'cache_embed_jobs',  // v27: local, resumable embedding-job progress (device-local, never synced)
 
         // App Level
         'checkpoints',      // Local recovery

@@ -18,6 +18,7 @@ recorded here by regeneration.
 | `diagnostics/` | flight-recorder ring-buffer core (namespaced buffers per subsystem) |
 | `locale/` | typed MessageKey catalog, cached Intl formatters, LiveAnnouncer, uiLocale |
 | `net/` | NetworkGateway + egress destination registry + generated-CSP renderer |
+| `quota/` | QuotaGovernor rate/spend math — in-memory RPM/TPM windows + injected-port daily RPD |
 
 ## The egress destination registry (C9)
 

@@ -82,6 +82,7 @@ export const APP_ERROR_CODES = [
   'GENAI_UNKNOWN',
   'GENAI_NOT_CONFIGURED',
   'GENAI_INVALID_RESPONSE',
+  'GENAI_EMBEDDING_NOT_CONFIGURED',
   // DRIVE_* — Google Drive HTTP boundary.
   'DRIVE_UNKNOWN',
   'DRIVE_API_ERROR',
@@ -102,6 +103,9 @@ export const APP_ERROR_CODES = [
   'NET_CONSENT_REQUIRED',
   'NET_TIMEOUT',
   'NET_OFFLINE',
+  // Request refused locally by the rate/spend governor before any network call
+  // (distinct from a server-sent 429). Append-only.
+  'NET_RATE_LIMITED',
   // BACKUP_* — backup/snapshot capture, validation, and restore.
   'BACKUP_SNAPSHOT_INVALID',
   // GOOGLE_* — Google OAuth boundary (GoogleAuthClient, Phase 7).
@@ -300,5 +304,34 @@ export class WorkspaceDeletedError extends AppError {
   constructor(message: string = 'This workspace has been deleted.') {
     super(message, { code: 'SYNC_WORKSPACE_DELETED' });
     this.name = 'WorkspaceDeletedError';
+  }
+}
+
+/**
+ * Raised by the rate/spend governor when it refuses a request **before any
+ * network call** — the daily request budget is exhausted, an earlier 429 put
+ * the endpoint in cooldown, or the rolling per-minute request/token budget is
+ * spent.
+ *
+ * Distinct from a server-sent 429 (the `GenAIHttpError` / `isResourceExhausted`
+ * path): that one means the server pushed back; this one means we throttled
+ * ourselves first. Like {@link NetTimeoutError}/{@link NetOfflineError} it is
+ * `retryable: true`, and it carries `retryAfterMs` in `context` so callers and
+ * meters can branch on `code === 'NET_RATE_LIMITED'` (never message substrings)
+ * and schedule a retry.
+ *
+ * It extends {@link AppError} directly (not `NetworkGatewayError`, which lives in
+ * `kernel/net`) because the throw site — `kernel/quota` — is bound by
+ * `kernel-imports-nothing` (kernel may import only `~types`); `kernel/net`
+ * re-exports it so the net layer can reference it under its own surface.
+ */
+export class NetRateLimitedError extends AppError {
+  constructor(retryAfterMs: number, context: Record<string, unknown> = {}) {
+    super('Rate limited: request refused before egress (quota backpressure).', {
+      code: 'NET_RATE_LIMITED',
+      context: { retryAfterMs, ...context },
+      retryable: true,
+    });
+    this.name = 'NetRateLimitedError';
   }
 }

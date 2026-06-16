@@ -56,6 +56,8 @@ import {
 const CURRENT_STORE_SET = [
   'app_metadata',
   'cache_audio_blobs',
+  'cache_embed_jobs',
+  'cache_embeddings',
   'cache_render_metrics',
   'cache_search_text',
   'cache_session_state',
@@ -321,5 +323,41 @@ describe('M.7 v26 search-text store (Phase 7 §F — additive, cache-domain)', (
     const tx = db.transaction('cache_search_text');
     expect(tx.store.keyPath).toBe('bookId');
     await tx.done;
+  });
+});
+
+describe('M.8 v27 embedding stores (Increment B — additive, cache-domain)', () => {
+  it('creates EMPTY cache_embeddings + cache_embed_jobs on upgrade from v24 without touching data', async () => {
+    await buildV24Fixture();
+    const db = await getConnection();
+
+    expect(Array.from(db.objectStoreNames)).toContain('cache_embeddings');
+    expect(Array.from(db.objectStoreNames)).toContain('cache_embed_jobs');
+    expect(await db.count('cache_embeddings')).toBe(0);
+    expect(await db.count('cache_embed_jobs')).toBe(0);
+
+    // Both are keyed by bookId.
+    const embTx = db.transaction('cache_embeddings');
+    expect(embTx.store.keyPath).toBe('bookId');
+    await embTx.done;
+    const jobTx = db.transaction('cache_embed_jobs');
+    expect(jobTx.store.keyPath).toBe('bookId');
+    await jobTx.done;
+
+    // Adjacent cache data is untouched by the additive step.
+    expect(await db.get('cache_tts_preparation', v24Rows.ttsPrep.id)).toEqual(v24Rows.ttsPrep);
+    expect(await db.get('cache_search_text', 'bk-1')).toBeUndefined();
+    expect(await db.get('cache_render_metrics', 'bk-1')).toEqual(v24Rows.renderMetrics);
+  });
+
+  it('creates both stores on fresh installs and keys rows by bookId', async () => {
+    const db = await getConnection();
+
+    const embTx = db.transaction('cache_embeddings');
+    expect(embTx.store.keyPath).toBe('bookId');
+    await embTx.done;
+    const jobTx = db.transaction('cache_embed_jobs');
+    expect(jobTx.store.keyPath).toBe('bookId');
+    await jobTx.done;
   });
 });

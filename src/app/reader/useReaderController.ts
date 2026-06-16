@@ -24,12 +24,17 @@ import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
 import { ReadingSessionRecorder } from '@domains/reader/session/ReadingSessionRecorder';
 import type { ReaderCommands } from '@domains/reader/ui/ReaderCommands';
-import { SearchSession, createWorkerSearchEngineFactory } from '@domains/search';
+import { SearchSession, createWorkerSearchEngineFactory, EmbeddingIndexer } from '@domains/search';
+import { getEmbeddingClient, type EmbeddingClient } from '@domains/google';
+import { getArtifactConsult } from '@app/google/artifactConsult';
 import { registerChineseReading, getBookBaseLanguage } from '@domains/chinese';
 import type { PinyinPosition } from '@domains/chinese/types';
 import type { BookMetadata } from '~types/book';
 import type { DetailedSearchResult } from '~types/search';
 import { searchTextRepo } from '@data/repos/searchText';
+import { embeddingsRepo } from '@data/repos/embeddings';
+import { SearchEngine } from '@lib/search-engine';
+import { useGenAIStore } from '@store/useGenAIStore';
 import { useReadingStateStore } from '@store/useReadingStateStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
@@ -44,6 +49,12 @@ import { createLogger } from '@lib/logger';
 const logger = createLogger('ReaderController');
 
 const DEFAULT_CUSTOM_THEME = { bg: '#ffffff', fg: '#000000' };
+
+// The int8 quantizer (SearchEngine.quantizeInt8PerVector) for the foreground
+// embedding indexer — a pure compute helper, instantiated once and passed in as
+// a port so the search domain never deep-imports the worker. The instance holds
+// no per-book state for quantization.
+const embeddingQuantizer = new SearchEngine();
 
 export interface ReaderController {
   engine: ReaderEngine | null;
@@ -276,9 +287,55 @@ export function useReaderController(
   // crashes reset the session and surface a toast (search.md #6).
   const searchSessionRef = useRef<SearchSession | null>(null);
   if (!searchSessionRef.current) {
+    // Foreground document-embedding indexer: ports wired from the lazy embedding
+    // client facade + the searchText/embeddings repos + the int8 quantizer.
+    // bookId/CFI flow as arguments through enqueueEmbedding, so the search domain
+    // never reaches into a store.
+    const embeddingClient: EmbeddingClient = getEmbeddingClient();
+    const embeddingIndexer = new EmbeddingIndexer({
+      embeddingClient,
+      textSource: searchTextRepo,
+      embeddingsRepo,
+      quantize: (vec) => embeddingQuantizer.quantizeInt8PerVector(vec),
+      getConfig: () => {
+        const s = useGenAIStore.getState();
+        return { model: s.embeddingModel, dims: s.embeddingDims };
+      },
+      // Before spending Gemini quota to embed this book on reader-open, check
+      // whether another of the user's devices already uploaded its embeddings to
+      // the user's own cloud, and if so download them instead. interactive: true
+      // marks the reader-open as the user gesture that authorizes the cloud read.
+      // When sync/Google is not composed, the probe resolves false and we fall
+      // back to embedding locally, so the no-sync reader path is unchanged.
+      consult: {
+        probe: (bookId) =>
+          getArtifactConsult()?.probeArtifact(bookId, { interactive: true }) ??
+          Promise.resolve(false),
+        hydrate: async (bookId) => {
+          const row = await getArtifactConsult()?.hydrateFromArtifact(bookId, {
+            interactive: true,
+          });
+          return row != null;
+        },
+      },
+    });
     searchSessionRef.current = new SearchSession({
       engineFactory: createWorkerSearchEngineFactory(),
       textSource: searchTextRepo,
+      embeddingIndexer,
+      // Ports for semantic (meaning-based) search queries; plain text/regex
+      // search stays the default. Reuse the SAME embedding client + repo +
+      // quantizer the indexer was wired from; the semantic on/off flag and
+      // {model,dims} arrive via the injected thunk reading the GenAI store
+      // (mirrors the getConfig thunk above), so the search domain reaches no
+      // store directly.
+      embeddingClient,
+      embeddingsSource: embeddingsRepo,
+      quantize: (vec) => embeddingQuantizer.quantizeInt8PerVector(vec),
+      getSemanticConfig: () => {
+        const s = useGenAIStore.getState();
+        return { enabled: s.isEnabled, model: s.embeddingModel, dims: s.embeddingDims };
+      },
       onError: (error) => {
         logger.error('Search engine failed; session reset', error);
         useToastStore.getState().showToast('Search failed', 'error');
@@ -299,6 +356,22 @@ export function useReaderController(
       logger.error('Search navigation failed', e);
     }
   }, []);
+
+  // Once the reader is open, embed the book's text OUTWARD from the current
+  // reading position so semantic search covers what the user is reading first.
+  // The trigger is reader-open per bookId: the CFI is captured at RUN time, so
+  // the section title is NOT a dependency — re-running on every section change
+  // would only re-walk the resume-skip over already-embedded sections. The
+  // indexer no-ops when the embedding client is unconfigured. bookId/CFI are
+  // passed as arguments, so the trigger context stays here in app/, never in the
+  // search domain.
+  useEffect(() => {
+    if (!isReady || !bookId) return;
+    const currentCfi = useReadingStateStore.getState().getProgress(bookId)?.currentCfi;
+    void searchSession.enqueueEmbedding(bookId, currentCfi).catch((e) => {
+      logger.error('Embedding indexer failed', e);
+    });
+  }, [isReady, bookId, searchSession]);
 
   // Chinese reading registration (Phase 6 §7, PR-10): the app layer wires
   // the feature module to the engine's content seam — and ONLY for books

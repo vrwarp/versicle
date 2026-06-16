@@ -41,6 +41,8 @@ graph TD
             DX["diagnostics.ts"]
             CP["checkpoints.ts"]
             ST["searchText.ts"]
+            EMB["embeddings.ts"]
+            QC["quotaCounter.ts"]
             DICT["dictionary.ts"]
         end
     end
@@ -53,16 +55,22 @@ graph TD
     WG --> DX
     WG --> CP
     WG --> ST
+    WG --> EMB
+    WG --> QC
     ROWS --> AC
     ROWS --> PC
     ROWS --> BC
     ROWS --> DX
     ROWS --> CP
     ROWS --> ST
+    ROWS --> EMB
+    ROWS --> QC
     ERR --> AC
     ERR --> BC
     ERR --> PC
     ERR --> ST
+    ERR --> EMB
+    ERR --> QC
     SNAP --> WG
     SW --> SCH
     WIPE --> CXN
@@ -81,15 +89,17 @@ The layering rule is absolute: `src/data` imports from `~types/*`, `@lib/logger`
 
 ---
 
-## The database: EpubLibraryDB at v26
+## The database: EpubLibraryDB at v27
 
-The database is named `EpubLibraryDB` (constant `DB_NAME` in [schema.ts](../../src/data/schema.ts)) and lives at version 26 ([`DB_VERSION = 26`](../../src/data/schema.ts#L80)). It holds three domains:
+The database is named `EpubLibraryDB` (constant `DB_NAME` in [schema.ts](../../src/data/schema.ts)) and lives at version 27 ([`DB_VERSION = 27`](../../src/data/schema.ts#L87)). It holds three domains:
 
 | Domain | Stores | Nature |
 |--------|--------|--------|
 | **STATIC** | `static_manifests`, `static_resources`, `static_structure` | Immutable book content; written at import, deleted with the book |
-| **CACHE** | `cache_render_metrics`, `cache_audio_blobs`, `cache_session_state`, `cache_tts_preparation`, `cache_table_images`, `cache_search_text` | Ephemeral, regenerable; can be wiped without data loss |
+| **CACHE** | `cache_render_metrics`, `cache_audio_blobs`, `cache_session_state`, `cache_tts_preparation`, `cache_table_images`, `cache_search_text`, `cache_embeddings`, `cache_embed_jobs` | Ephemeral, regenerable; can be wiped without data loss |
 | **APP** | `checkpoints`, `sync_log`, `flight_snapshots`, `app_metadata` | Sync infrastructure and schema-evolution envelope |
+
+The v27 stores `cache_embeddings` and `cache_embed_jobs` back semantic (meaning-based) search and are device-local and rebuildable like the rest of the CACHE domain. They are described under [Schema and migrations](#schema-and-migrations) and [searchText / embeddings](#embeddings-reposembeddingsts) below. The free-tier AI rate limiter's persisted daily counter does **not** get a store of its own — it lives as a single `quota-daily-usage` key in the existing `app_metadata` store (see [quotaCounter](#quotacounter-reposquotacounterts)).
 
 All user data — library inventory, reading progress, annotations, vocabulary, reading lists — lives in the separate `versicle-yjs` IndexedDB database, managed by the vendored `y-idb` fork. That database is outside this module's connection scope but is enumerated by `wipeAllData()` and managed by `YjsSnapshotService`.
 
@@ -296,7 +306,9 @@ export interface EpubLibraryDB extends DBSchema {
   cache_audio_blobs:     { key: string; value: CacheAudioBlobRow; indexes: { by_lastAccessed: number } }
   cache_session_state:   { key: string; value: CacheSessionStateRow }
   cache_tts_preparation: { key: string; value: CacheTtsPreparationRow; indexes: { by_bookId: string } }
-  cache_search_text:     { key: string; value: CacheSearchTextRow }  // v26
+  cache_search_text:     { key: string; value: CacheSearchTextRow }    // v26
+  cache_embeddings:      { key: string; value: CacheEmbeddingsRow }    // v27 (key IS bookId, no index)
+  cache_embed_jobs:      { key: string; value: CacheEmbedJobsRow }     // v27 (key IS bookId, no index)
   // APP domain
   checkpoints:      { key: number; value: SyncCheckpointRow; indexes: { by_timestamp: number } }
   sync_log:         { key: number; value: SyncLogEntryRow; indexes: { by_timestamp: number } }
@@ -313,6 +325,9 @@ Migrations are append-only `IdbMigration` entries in the `MIGRATIONS` array. A r
 |-------------|-------------|
 | 25 | Straggler guard (snapshot surviving v17/v18 user-data stores before deletion), legacy-store deletion loop, `by_lastAccessed` index on `cache_audio_blobs` |
 | 26 | Creates the empty `cache_search_text` store (Phase 7 §F; additive, cache-domain, rebuildable) |
+| 27 | Creates the empty `cache_embeddings` + `cache_embed_jobs` stores (`migrateToV27`; additive, cache-domain, device-local, rebuildable). Each create is `contains()`-guarded; no existing data is read or moved |
+
+The v27 step is **decoupled** from the long-reserved `sync_log`/SW-cover cleanup. That cleanup was never carried out, so semantic search took the next free additive bump (v27) rather than waiting on it — the cleanup is now the **next** bump (v28). On an older build the two v27 stores simply do not exist, which the embeddings repo treats as "never embedded" and re-derives, so the rollback story is trivial.
 
 The `upgradeSchema` function runs:
 1. `ensureBaselineStores()` — idempotent create-if-missing for every active store (the v24 baseline kept verbatim so any pre-24 straggler still converges)
@@ -338,7 +353,7 @@ The `rows/` directory defines Zod schemas as the single source of truth for ever
 | Module | Stores covered |
 |--------|----------------|
 | [static.ts](../../src/data/rows/static.ts) | `static_manifests`, `static_resources`, `static_structure` |
-| [cache.ts](../../src/data/rows/cache.ts) | `cache_render_metrics`, `cache_audio_blobs`, `cache_session_state`, `cache_tts_preparation`, `cache_table_images`, `cache_search_text` |
+| [cache.ts](../../src/data/rows/cache.ts) | `cache_render_metrics`, `cache_audio_blobs`, `cache_session_state`, `cache_tts_preparation`, `cache_table_images`, `cache_search_text`, `cache_embeddings`, `cache_embed_jobs` |
 | [app.ts](../../src/data/rows/app.ts) | `checkpoints`, `sync_log` (frozen), `flight_snapshots`, `app_metadata` envelope |
 | [backup.ts](../../src/data/rows/backup.ts) | Backup-manifest restore ingress shapes |
 
@@ -382,15 +397,22 @@ This means a TypeScript build fails immediately when a Zod schema change and a d
 
 **`CacheSessionStateRow`** embeds `TTSQueueItem[]` as the `playbackQueue`. The persisted queue-item shape lives in `rows/cache.ts` (imported by `AudioPlayerService` — the dependency arrow points inward toward data, not outward from it).
 
-**`AppMetadataValue`** is a union: `SchemaHistoryEntry[] | LegacyRecoveryRecord | boolean`. Readers narrow by key using `APP_METADATA_KEYS`:
+**`CacheEmbeddingsRow`** (v27) is one row per book, keyed by `bookId`, carrying a `{model, dims, quant, extractionVersion}` stamp so search can detect vectors built with a now-outdated model or settings and rebuild them. Each spine `section` holds its packed **int8** `vectors` and the per-vector float32 `scales` needed to dequantize them — both persisted as raw `ArrayBuffer`s (the typed array's `.buffer`) via an `embeddingBinarySchema` that, unlike the audio `binaryValueSchema`, accepts **only** `ArrayBuffer` (WebKit IDB cannot store typed-array views directly here). Per-chunk `cfiStart`/`cfiEnd` locators plus additive `charStart`/`charEnd` character offsets ride alongside; legacy rows lacking the offsets fall back to re-splitting (no migration). `quant` is pinned to the literal `'int8-pervec'`.
+
+**`CacheEmbedJobsRow`** (v27) is the resumable build-progress companion, also keyed by `bookId`: per-section `embeddedThroughChunk` plus an optional `sectionTextHash` resume key (re-embed on mismatch). It dies with the book and its vectors in the same gated delete transaction.
+
+**`AppMetadataValue`** is a union: `SchemaHistoryEntry[] | LegacyRecoveryRecord | QuotaDailyUsageRow | boolean`. Readers narrow by key using `APP_METADATA_KEYS`:
 
 ```typescript
 export const APP_METADATA_KEYS = {
   schemaHistory: 'schemaHistory',
   legacyRecoveryV25: 'legacy-recovery-v25',
   audioSizeBackfillV25: 'audio-size-backfill-v25',
+  quotaDailyUsage: 'quota-daily-usage',  // cross-provider quota governor's per-day counter
 } as const;
 ```
+
+The `quota-daily-usage` key is the only one written outside a migration: it is the cross-provider AI rate limiter's persisted daily request count for the current Pacific-time day (a stored row whose day-string differs from today counts as zero — once-a-day rollover). It deliberately reuses `app_metadata` so the quota governor needs **no dedicated store and no DB version bump**; only the per-minute request/token windows the limiter tracks stay in memory and never reach disk. Read and written solely by [quotaCounter](#quotacounter-reposquotacounterts).
 
 ---
 
@@ -462,15 +484,32 @@ classDiagram
         +delete(bookId) void
     }
 
+    class EmbeddingsRepo {
+        +get(bookId) CacheEmbeddingsView
+        +getJob(bookId) CacheEmbedJobsRow
+        +put(row) void
+        +putJob(row) void
+        +putHydrated(row, jobRow) void
+        +delete(bookId) void
+        +runEviction(recencyByBookId, budget?, protected?) deleted+freedBytes
+    }
+
+    class QuotaCounterRepo {
+        +load() QuotaDailyUsageRow
+        +save(usage) void
+    }
+
     AudioCacheRepo --> WriteGate : write()
     PlaybackCacheRepo --> WriteGate : runExclusiveIdbWrite()
     BookContentRepo --> WriteGate : write()
     CheckpointsRepo --> WriteGate : runExclusiveIdbWrite() + write()
     DiagnosticsRepo --> WriteGate : write()
     SearchTextRepo --> WriteGate : write()
+    EmbeddingsRepo --> WriteGate : write()
+    QuotaCounterRepo --> WriteGate : write()
 ```
 
-All repositories are singletons exported as lowercase constants (`audioCache`, `playbackCache`, `bookContent`, `checkpoints`, `diagnostics`, `searchTextRepo`). They are stateless except for `PlaybackCacheRepo` (which holds the in-memory session mirror) and `AudioCacheRepo` (which counts puts since the last eviction sweep).
+All repositories are singletons exported as lowercase constants (`audioCache`, `playbackCache`, `bookContent`, `checkpoints`, `diagnostics`, `searchTextRepo`, `embeddingsRepo`, `quotaCounterRepo`). They are stateless except for `PlaybackCacheRepo` (which holds the in-memory session mirror) and `AudioCacheRepo` (which counts puts since the last eviction sweep).
 
 ---
 
@@ -553,13 +592,14 @@ In `mode: 'add'`, a duplicate book triggers a `ConstraintError` which aborts the
 
 **`replaceDerivedContent(bookId, replacement)`** absorbs what was previously raw transaction code in `lib/ingestion.ts`. It reads old index keys _outside_ the gate (D1 recipe), then in one synchronous `write()` drops old TTS prep and table image rows and writes the new ones.
 
-**`deleteBook(id)`** spans all per-book stores including the v26 `cache_search_text` store — the persisted search corpus dies with its book:
+**`deleteBook(id)`** spans all per-book stores including the v26 `cache_search_text` corpus and the v27 `cache_embeddings` + `cache_embed_jobs` stores — the persisted search corpus, its embedding vectors, and the resumable build-job state all die with the book, so no vectors leak past deletion:
 
 ```typescript
 await write([
   'static_manifests', 'static_resources', 'static_structure',
   'cache_render_metrics', 'cache_session_state', 'cache_tts_preparation',
-  'cache_table_images', 'cache_search_text'
+  'cache_table_images', 'cache_search_text',
+  'cache_embeddings', 'cache_embed_jobs'
 ], (tx) => { /* ... */ });
 ```
 
@@ -595,6 +635,22 @@ Owns `flight_snapshots` — the TTS flight-recorder ring-buffer snapshots. Zero 
 ### searchText ([repos/searchText.ts](../../src/data/repos/searchText.ts))
 
 The simplest repository. Owns `cache_search_text` — the per-book plain-text search corpus (v26, Phase 7 §F). Written at import as a free output of the unified text extractor, lazily on first search for pre-existing books. Cache-domain: absence triggers re-extraction. The book-deletion path (`bookContent.deleteBook`) deletes the row in its own multi-store transaction; `searchTextRepo.delete()` is for explicit manual deletion.
+
+### embeddings ([repos/embeddings.ts](../../src/data/repos/embeddings.ts))
+
+Owns the two v27 stores `cache_embeddings` and `cache_embed_jobs` — the per-book int8 embedding vectors that power semantic search and the resumable progress of the job that computes them. Both are keyed by `bookId`, device-local, never synced as ordinary user data, and deleted with the book. Worker-safe like every repo: writes go through the gate, failures funnel through `handleDbError`. (Design: `plan/semantic-search-design.md`, `plan/shared-ai-cache-design.md`.)
+
+**The view boundary.** `get(bookId)` re-wraps each section's stored ArrayBuffers as the typed-array views the cosine-ranking worker consumes — `vectors` → `Int8Array`, `scales` → `Float32Array` — and returns the wrapped shape (`CacheEmbeddingsView`). Persisting always uses the ArrayBuffer-shaped `CacheEmbeddingsRow`. Centralizing the wrap here means a wrong-view bug cannot leak past this boundary. `getJob(bookId)` reads as stored (no binary fields).
+
+**`putHydrated(row, jobRow)`** writes the embedding row **and** its companion `complete` job row in **one** gated cross-store transaction. This is the cloud-refill path (the **Artifact Lane** hydrates a book another device already embedded into the user's own cloud, avoiding a re-spend of Gemini quota — see [Sync domain](36-domain-sync.md)). Atomicity is the point: the plain single-store `put`/`putJob` are two independent transactions, so a crash between them could mark a section done in the job row while its vectors are absent — and the resume logic, seeing it "done", would skip it forever. The caller's `jobRow` must mark only the sections actually present in `row` as complete, so a partial fill stays correct.
+
+**`delete(bookId)`** removes the vectors **and** the resumable job state in one gated two-store transaction (the job progress must die with the vectors). The book-deletion path clears both inline in its own cascade as well.
+
+**`runEviction(recencyByBookId, budgetBytes = 256 MiB, protectedBookIds = ∅)`** is the same streaming-cursor + gated-batch-delete shape as the audio cache, but `cache_embeddings` has **no** `lastAccessed` field or recency index — so the recency signal is **injected** by the caller (built from each book's last-read time), which keeps the repo store-free. Pass 1 streams a readonly cursor summing `section.vectors.byteLength + section.scales.byteLength` off the **stored** ArrayBuffers (never the re-wrapped view — re-wrapping multi-KB blobs just to measure them would defeat the streaming goal). Pass 2 deletes least-recently-read-first (a book absent from the map ranks 0 → evicts first), removing both stores per `bookId` in batches of `EVICTION_DELETE_BATCH` (50) until under budget. The budget is deliberately tighter than the 512 MiB audio budget because vectors are int8-packed and re-derivable from `cache_search_text` plus the embedding API. The injected `protectedBookIds` set is **never** evicted (its bytes still count toward the total): it is how the caller pins a book whose embeddings exist only on this device and have not yet reached the user's cloud, so eviction can never destroy the last copy before the upload completes (the "never-evict-unconfirmed-upload" rule). When AI-cache sharing is off, the set is empty and everything is evictable.
+
+### quotaCounter ([repos/quotaCounter.ts](../../src/data/repos/quotaCounter.ts))
+
+Persists the cross-provider AI rate limiter's daily request count so the per-day cap survives reloads and is shared across this app's tabs. It writes **no dedicated store** — `save(usage)` puts a single `QuotaDailyUsageRow` under the `quota-daily-usage` key of the existing `app_metadata` store, and `load()` reads it back and narrows the envelope to that key's shape. The limiter keeps its per-minute request/token windows in memory and reaches disk only through this one record; the short-window counters are never persisted. The quota governor that consumes it (the `QuotaGovernor` kernel subsystem in `src/kernel/quota/`, recorded at admission inside `NetworkGateway.egress` so throttling cannot be bypassed) is documented in [Architecture overview](10-architecture-overview.md) and [Google domain](39-domain-google.md); this repo is only its persistence port.
 
 ### dictionary ([repos/dictionary.ts](../../src/data/repos/dictionary.ts))
 
@@ -832,6 +888,8 @@ flowchart LR
         R3["bookContent ingest→read, delete cascades"]
         R4["checkpoints protected-flag invariants"]
         R5["diagnostics prune-at-cap"]
+        R6["embeddings view re-wrap, putHydrated atomicity, injected-recency LRU + protected-set"]
+        R7["quotaCounter daily round-trip, last-write-wins, optional tpm"]
     end
 ```
 
@@ -859,6 +917,8 @@ The connection suite ([connection.test.ts](../../src/data/connection.test.ts)) m
 
 7. **Row types are drift-guarded.** Compile-time assertions in each `rows/*.ts` file ensure schema output, row alias, and domain interface stay in sync. A broken guard causes a TypeScript build failure.
 
+8. **Embedding binaries are persisted as raw ArrayBuffers.** `cache_embeddings` `vectors`/`scales` are stored as the typed array's `.buffer` and re-wrapped (`Int8Array`/`Float32Array`) only on read, inside `embeddingsRepo.get`. The `embeddingBinarySchema` accepts `ArrayBuffer` only (not `Blob`), and the eviction scan sizes rows off the stored buffers, never the re-wrapped views.
+
 ### Known edge cases
 
 **`static_manifests` `coverBlob` may be `ArrayBuffer | Blob | {}`.** Pre-Phase-3 backup restores could write `coverBlob: {}` (JSON-serialized `ArrayBuffer`). `MaintenanceService.repairCorruptCoverBlobsOnce()` scans for and removes these on first boot after restoration. The `staticManifestRowSchema` does not accept `{}` — rows corrupted this way fail validation at restore ingress and are handled by the restore sanitizer.
@@ -866,6 +926,8 @@ The connection suite ([connection.test.ts](../../src/data/connection.test.ts)) m
 **`sync_log` is a dead store.** It is defined in the schema with zero production readers or writers. Its schema is frozen in `rows/app.ts` for P4 to adopt (the SyncEvent design) or P9 to delete.
 
 **`app_metadata` keys are append-only.** Never reuse a retired key for a different shape — readers narrow by key string, and reusing a key would silently corrupt the typed union.
+
+**The v27 bump is decoupled from the reserved cleanup.** v27 was meant to be the long-reserved `sync_log`/SW-cover cleanup, but that cleanup was never done, so semantic search took v27 for its two additive cache stores instead. The reserved cleanup is therefore now the **next** bump, v28. Because the v27 stores are device-local and rebuildable, a build that predates them (or an evicted/missing row) simply re-embeds — there is no migration to reverse and no synced format to break.
 
 **Dictionary writes bypass the write gate.** `versicle-dict` is a separate database from `EpubLibraryDB`. Dictionary writes (`bulkPutEntries`, `clearAll`) do NOT go through the `'versicle-idb-write'` lock — the dictionary is never written concurrently with the main database, and the lock's entire purpose is to prevent overlapping `readwrite` transactions on EpubLibraryDB and the Yjs database.
 
@@ -881,6 +943,9 @@ The connection suite ([connection.test.ts](../../src/data/connection.test.ts)) m
 - The Yjs CRDT format and its own migration registry are covered in [CRDT Format and Migrations](22-crdt-format-and-migrations.md).
 - Backup and restore flows that call `YjsSnapshotService` and `bookContent` are in [Backup and Restore](23-backup-and-restore.md).
 - The TTS audio pipeline's use of `audioCache` and `bookContent` (TTS prep rows) is in [TTS Content Pipeline](34-tts-content-pipeline.md).
+- Semantic search — int8 quantization, `SearchEngine.rankInt8`, reciprocal-rank fusion, and the foreground/background embedding indexers that fill `cache_embeddings`/`cache_embed_jobs` — is in [Search domain](38-domain-search.md).
+- The `EmbeddingClient`, the `GeminiClient`, and the `QuotaGovernor`/`NetworkGateway` admission path that the `quotaCounter` repo persists for are in [Google domain](39-domain-google.md); the kernel `NetworkGateway.egress()` boundary itself is in [Architecture overview](10-architecture-overview.md).
+- The Artifact Lane (the shared AI-cache that hydrates `cache_embeddings` via `embeddingsRepo.putHydrated` from the user's own cloud) and the `SyncBackend` artifact methods are in [Sync domain](36-domain-sync.md).
 - The service worker's use of `sw-contract.ts` and `covers.ts` is in [PWA and Service Worker](61-pwa-and-service-worker.md).
 - The bootstrap sequence that calls `getConnection()` and wires `configureConnectionEvents` is in [Bootstrap and Lifecycle](14-bootstrap-and-lifecycle.md).
 - The layering rule that makes `src/data` the floor of the import graph is explained in [Layering and Boundaries](11-layering-and-boundaries.md).

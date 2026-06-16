@@ -4,13 +4,18 @@ Versicle is a **local-first EPUB reader and TTS audiobook player**, delivered as
 Web App with Capacitor bindings for Android and iOS. Your library, reading position,
 annotations, and vocabulary live on-device in IndexedDB and a Yjs CRDT, and sync across your
 devices through a Firebase project *you* own (BYO-Firebase) — no first-party server, privacy as
-a hard constraint, full offline operation. The codebase is a **contract-first modular monolith**:
-vertical domain modules stacked in strictly-ordered layers (kernel → data → store → domains →
-app → UI), with every cross-module seam frozen as a versioned, runtime-validated contract and
-every boundary mechanically enforced by CI. This documentation set is the deep, narrative
-companion to the machine-generated [`architecture.md`](../../architecture.md): 44 documents
-(~2.0 MB) that explain *what* the system is, *why* it is shaped this way, and *how* every part
-fits together — from governing design principles down to file-level implementation detail.
+a hard constraint, full offline operation. Optional, BYO-keyed AI features extend this: **semantic
+search** embeds book text with Gemini and fuses it with the regex engine; a **cross-provider quota
+governor** paces every GenAI call against the per-project free-tier ceiling; and a **shared
+AI-cache** mirrors expensive embedding blobs into your own Cloud Storage so a book embedded once
+on one device costs zero Gemini quota on the others — all default-off and consent-gated. The
+codebase is a **contract-first modular monolith**: vertical domain modules stacked in
+strictly-ordered layers (kernel → data → store → domains → app → UI), with every cross-module
+seam frozen as a versioned, runtime-validated contract and every boundary mechanically enforced
+by CI. This documentation set is the deep, narrative companion to the machine-generated
+[`architecture.md`](../../architecture.md): 44 documents (~2.0 MB) that explain *what* the system
+is, *why* it is shaped this way, and *how* every part fits together — from governing design
+principles down to file-level implementation detail.
 
 > **Source of truth.** [`architecture.md`](../../architecture.md) at the repo root is generated
 > from the live code registries and drift-gated by `npm test`. Where these prose documents and
@@ -66,8 +71,8 @@ You do not need to read all 44 documents. Pick a path:
 
 | Document | What it covers |
 |---|---|
-| [20 — Storage Gateway](20-storage-gateway.md) | `src/data/` as the only IndexedDB subsystem; `EpubLibraryDB` at v26. |
-| [21 — IndexedDB Schema & Migrations](21-schema-and-migrations-idb.md) | The schema, the row type system, and IDB migrations. |
+| [20 — Storage Gateway](20-storage-gateway.md) | `src/data/` as the only IndexedDB subsystem; `EpubLibraryDB` at v27. |
+| [21 — IndexedDB Schema & Migrations](21-schema-and-migrations-idb.md) | The schema, the row type system, and IDB migrations through `migrateToV27` (the additive `cache_embeddings`/`cache_embed_jobs` stores). |
 | [22 — CRDT Format & Migrations](22-crdt-format-and-migrations.md) | The versioned CRDT document structure and its migration timeline. |
 | [23 — Backup & Restore](23-backup-and-restore.md) | Manifest-versioned export/import of the full local dataset. |
 
@@ -81,24 +86,24 @@ You do not need to read all 44 documents. Pick a path:
 | [33 — TTS Providers & Platform](33-tts-providers-and-platform.md) | The provider abstraction and registry (Piper, Google, OpenAI, LemonFox). |
 | [34 — TTS Content Pipeline](34-tts-content-pipeline.md) | How book text becomes the utterance stream the engine speaks. |
 | [35 — Chinese Domain](35-domain-chinese.md) | Lexicon, pinyin, and vocabulary subsystem. |
-| [36 — Sync Domain](36-domain-sync.md) | Firestore multi-device sync and the `SyncBackend` seam (C3). |
+| [36 — Sync Domain](36-domain-sync.md) | Firestore multi-device sync and the `SyncBackend` seam (C3), incl. the five Artifact-Lane methods that mirror AI-cache blobs to BYO Cloud Storage. |
 | [37 — Library Domain](37-domain-library.md) | EPUB import and library management. |
-| [38 — Search Domain](38-domain-search.md) | The search worker, index, and query data shapes. |
-| [39 — Google Services](39-domain-google.md) | Auth, Drive, and GenAI (Gemini) integration. |
+| [38 — Search Domain](38-domain-search.md) | The search worker and query data shapes; regex full-text plus int8 semantic ranking fused by reciprocal-rank fusion. |
+| [39 — Google Services](39-domain-google.md) | Auth, Drive, and GenAI (Gemini + the embedding client) integration. |
 
 ### UI & Shell
 
 | Document | What it covers |
 |---|---|
 | [40 — UI Design System](40-ui-design-system.md) | The design system, technology stack, and UI boundaries. |
-| [41 — Settings Shell & Panels](41-settings-shell.md) | The settings shell architecture and panel registry. |
+| [41 — Settings Shell & Panels](41-settings-shell.md) | The settings shell architecture and panel registry; the GenAI panel hosts the per-lane quota limits, pause-all switch, live used-vs-limit meters, and the default-off AI opt-ins. |
 | [42 — App Shell & Routing](42-app-shell-and-routing.md) | The two render layers, the boot state machine, and routing. |
 
 ### Composition
 
 | Document | What it covers |
 |---|---|
-| [50 — Composition Root](50-composition-root.md) | `src/app/` wiring: boot tasks, adapters, controllers, repositories. |
+| [50 — Composition Root](50-composition-root.md) | `src/app/` wiring: boot tasks (incl. embedding backfill, the Artifact-Lane publisher/sweeper), adapters (the quota store and artifact-consult), controllers, repositories. |
 | [51 — TTS Application Integration](51-tts-app-integration.md) | How the TTS engine is composed into the running application. |
 
 ### Platform, Build & Test
@@ -117,7 +122,7 @@ You do not need to read all 44 documents. Pick a path:
 
 | Document | What it covers |
 |---|---|
-| [70 — Security & Privacy](70-security-and-privacy.md) | The threat model, four-layer security model, and Firestore rules. |
+| [70 — Security & Privacy](70-security-and-privacy.md) | The threat model, four-layer security model, Firestore/Storage rules, and the app-layer consent gate the Artifact-Lane download shares with the embed it replaces. |
 | [71 — Internationalization](71-internationalization.md) | The "i18n-ready, English-only" posture and the locale kernel. |
 | [72 — Accessibility](72-accessibility.md) | The a11y checkpoint flow and the axe gate. |
 | [73 — Performance](73-performance.md) | Caching layers and the IndexedDB write gate. |
@@ -147,7 +152,7 @@ graph TD
         L4["L4 app: composition root (boot tasks, adapters, controllers, repositories, routes)"]
         L3["L3 domains: chinese / google / library / reader / search / sync (+ lib keepers)"]
         L2["L2 store: Zustand + Yjs CRDT (synced / local-persisted / ephemeral tiers)"]
-        L1["L1 data: IndexedDB gateway (EpubLibraryDB v26, repos, write-gate)"]
+        L1["L1 data: IndexedDB gateway (EpubLibraryDB v27, repos, write-gate)"]
         L0k["L0 kernel: cfi / diagnostics / locale / net (imports nothing internal)"]
         L0t["L0 types: pure type definitions"]
         UI --> L4

@@ -41,3 +41,17 @@ export { makeLazyGenAIClient } from './genai/lazyClient';
 export { MockGenAIClient, type MockGenAIFixture } from './genai/MockGenAIClient';
 export { getGenAIClient, setGenAIClient } from './genai/holder';
 export { type GenAILogEntry } from './genai/logging';
+
+// --- GenAI embedding (Increment C §1) ---
+// Same first-use discipline as the GenAI client: the barrel exports ONLY the
+// LAZY facade + holder + contract types (never GeminiEmbeddingClient — check 4
+// of scripts/check-worker-chunk.mjs pins the impl out of the entry chunk).
+// MockEmbeddingClient is exported for tests only (alongside MockGenAIClient).
+export { makeLazyEmbeddingClient } from './genai/embedding/lazyClient';
+export { getEmbeddingClient, setEmbeddingClient } from './genai/embedding/holder';
+export type {
+  EmbeddingClient,
+  EmbeddingConfig,
+  EmbeddingProfile,
+} from './genai/embedding/contract';
+export { MockEmbeddingClient } from './genai/embedding/MockEmbeddingClient';

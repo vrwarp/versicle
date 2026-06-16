@@ -88,6 +88,45 @@ export interface PurgeReport {
   blobsDeleted: number;
 }
 
+// ─── Shared embedding cache ───────────────────────────────────────────────────
+//
+// Embeddings are expensive to compute, so a book embedded on one device is
+// uploaded to the user's cloud storage and reused by their other devices
+// (and, opt-in, shared with other users). Each cached embedding set is stored
+// as two siblings keyed by the same content `{key}`: a large blob of vector
+// bytes in Cloud Storage (`embeddings/{key}.bin`), and a tiny Firestore "head"
+// record (`embedCache/{key}`) holding its stamp + byte size. The head exists so
+// a device can check "do we already have this?" with one cheap document read,
+// never an expensive Storage listing.
+// (design: plan/shared-ai-cache-design.md)
+
+/**
+ * The head record of one cached embedding set: a cheap existence/stamp probe
+ * (one `getDoc` on the `embedCache/{key}` doc) that avoids a Storage `list`.
+ * `exists` is always `true` on a returned head — a head miss is `null`, never
+ * `{ exists: false }`. Because {@link SyncBackend.putArtifact} writes the head
+ * AFTER the Storage blob, a head hit implies the bytes are present.
+ */
+export interface ArtifactHead {
+  exists: true;
+  /** Identifies which embedding space (model/dims/quant) produced the bytes. */
+  stamp: string;
+  /** Byte length of the blob the head record points at. */
+  size: number;
+}
+
+/**
+ * Derive the head-record path tail (`embedCache/{key}`) from a blob path tail
+ * (`embeddings/{key}.bin`) — both siblings share the same `{key}`. Used by
+ * {@link SyncBackend.putArtifact} implementations to write the companion head
+ * record alongside the Storage blob. Shared so both backends derive the sibling
+ * tail identically.
+ */
+export function artifactHeadTail(blobRelPath: string): string {
+  const key = blobRelPath.replace(/^embeddings\//, '').replace(/\.bin$/, '');
+  return `embedCache/${key}`;
+}
+
 export interface SyncBackend {
   /** The authenticated user this backend is bound to (post-auth). */
   readonly uid: string;
@@ -129,6 +168,87 @@ export interface SyncBackend {
    * blobs must survive). Idempotent and re-runnable.
    */
   purgeWorkspace(workspaceId: string): Promise<PurgeReport>;
+  /**
+   * Cheap existence/stamp probe of a cached embedding set. `relPath` is the
+   * in-workspace tail of the head record (`embedCache/{key}`); the backend
+   * prefixes it with its own `users/{uid}/versicle/{workspaceId}/` root.
+   * Returns the head projection ({@link ArtifactHead}) or `null` on a miss.
+   * Reads the Firestore head record only — never a Storage `list`. Because the
+   * head is written AFTER the Storage blob (see {@link putArtifact}), a hit
+   * implies the bytes are present.
+   */
+  headArtifact(workspaceId: string, relPath: string): Promise<ArtifactHead | null>;
+  /**
+   * Upload one embedding set so the user's other devices can reuse it instead
+   * of recomputing it. `relPath` is the in-workspace tail of the blob
+   * (`embeddings/{key}.bin`); the backend prefixes it with its own
+   * `users/{uid}/versicle/{workspaceId}/` root and writes the companion head
+   * record at the sibling `embedCache/{key}` tail.
+   *
+   * **Skip-if-present (idempotent):** checks the head first — when it already
+   * exists this is a no-op. The key is derived from the embedding inputs, so
+   * identical inputs always produce byte-identical content; a concurrent
+   * duplicate upload is therefore harmless.
+   *
+   * **Ordering — blob first, head second:** `uploadBytes` to Cloud Storage
+   * FIRST, THEN write the head record, so a head hit always implies the bytes
+   * landed (a crash between the two leaves a recoverable blob with no head,
+   * never a head pointing at absent bytes).
+   */
+  putArtifact(
+    workspaceId: string,
+    relPath: string,
+    bytes: ArrayBuffer | Uint8Array,
+    meta: { stamp: string; size: number }
+  ): Promise<void>;
+  /**
+   * Download a cached embedding set's bytes. `relPath` is the in-workspace tail
+   * of the blob (`embeddings/{key}.bin`); the backend prefixes it with its own
+   * workspace root.
+   *
+   * **Miss vs error — OPPOSITE polarity to {@link isWorkspaceAlive}'s
+   * fail-safe:** a definitive miss (`storage/object-not-found`) returns `null`
+   * so the caller recomputes the embeddings; a transient/permission error
+   * THROWS, because an offline blip or denied read must NOT be mistaken for a
+   * miss — recomputing embeddings is expensive, so never do it on a network
+   * hiccup.
+   */
+  getArtifact(workspaceId: string, relPath: string): Promise<ArrayBuffer | null>;
+  /**
+   * When a book is removed, drop this device's claim on its cached embeddings:
+   * a best-effort delete of the `embedCache/{key}` head record ONLY. `relPath`
+   * is the head-record tail (`embedCache/{key}`, mirroring {@link headArtifact});
+   * the backend prefixes it with its own `users/{uid}/versicle/{workspaceId}/`
+   * root.
+   *
+   * **The shared blob is DELIBERATELY left in place** — another device may
+   * still need those bytes, and because the blob is keyed by content (identical
+   * inputs → byte-identical content) leaving it is safe and re-derivable.
+   * Reclaiming the orphaned blob is the {@link sweepArtifacts} TTL sweeper's job
+   * (delete-head-now + leave-blob-to-the-sweeper is simpler and safer than
+   * reference-counting).
+   *
+   * Best-effort: an already-gone head record is a clean no-op (never an error).
+   * Removing YOUR OWN head record for a removed book is always safe regardless
+   * of the cache-sharing opt-in (that opt-in governs upload/lookup, not delete).
+   */
+  deleteArtifactHead(workspaceId: string, relPath: string): Promise<void>;
+  /**
+   * Bound the cloud cache so it never grows without limit (this is the cloud
+   * garbage collector; runEviction is the separate device-local IDB cleanup).
+   * For each `embedCache` head record whose `createdAt < now - ttlMs` (and,
+   * when `budgetBytes` is set, oldest-first by `createdAt` until the surviving
+   * total `size` is under budget), deletes BOTH the head record AND its sibling
+   * `embeddings/{key}.bin` blob — reusing the {@link purgeWorkspace}
+   * `deleteObject` + `storage/object-not-found`-tolerant recursion shape.
+   *
+   * Returns the counts actually removed. Idempotent and re-runnable (a re-run
+   * after a crash mid-sweep reports smaller numbers, never an error).
+   */
+  sweepArtifacts(
+    workspaceId: string,
+    opts: { ttlMs: number; now: number; budgetBytes?: number }
+  ): Promise<{ headsDeleted: number; blobsDeleted: number }>;
   /**
    * Attach a Y.Doc to the workspace's replicated document. Synchronous —
    * providers connect in the background and announce themselves via the

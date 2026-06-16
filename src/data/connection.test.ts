@@ -75,11 +75,13 @@ describe('navigator.storage.persist()', () => {
 describe('connection schema parity', () => {
   it('opens EpubLibraryDB at the current version with the exact store set', async () => {
     const db = await getConnection();
-    expect(DB_VERSION).toBe(26); // v26 = Phase 7 §F cache_search_text (additive)
+    expect(DB_VERSION).toBe(27); // v27 = cache_embeddings + cache_embed_jobs (additive, semantic search)
     expect(db.version).toBe(DB_VERSION);
     expect(Array.from(db.objectStoreNames).sort()).toEqual([
       'app_metadata',
       'cache_audio_blobs',
+      'cache_embed_jobs',
+      'cache_embeddings',
       'cache_render_metrics',
       'cache_search_text',
       'cache_session_state',

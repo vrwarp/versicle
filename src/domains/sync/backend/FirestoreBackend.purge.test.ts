@@ -10,14 +10,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const h = vi.hoisted(() => {
-  /** Firestore residual docs: collection path → fake doc refs. */
-  const docsByPath = new Map<string, Array<{ id: number }>>();
+  /**
+   * Firestore residual docs: collection path → fake doc refs. Each ref carries
+   * a string `id` and an optional `data` payload (the sweep cases read
+   * `createdAt`/`size` off it; the purge cases ignore it).
+   */
+  const docsByPath = new Map<
+    string,
+    Array<{ id: string; data?: Record<string, unknown> }>
+  >();
   /** Storage tree: folder path → { items: file names, prefixes: subfolder names }. */
   const storageTree = new Map<string, { items: string[]; prefixes: string[] }>();
   return {
     docsByPath,
     storageTree,
     deletedBlobs: [] as string[],
+    deletedDocs: [] as string[],
     failingBlobs: new Set<string>(),
     batchCommits: [] as number[],
     setDocCalls: [] as Array<{ path: string; data: Record<string, unknown> }>,
@@ -38,6 +46,19 @@ vi.mock('firebase/firestore', () => ({
   setDoc: vi.fn(async (ref: { path: string }, data: Record<string, unknown>) => {
     h.setDocCalls.push({ path: ref.path, data });
   }),
+  // The sweep path's per-doc HEAD delete (deleteDoc on `…/embedCache/{key}`):
+  // record the path and drop the doc from its parent collection.
+  deleteDoc: vi.fn(async (ref: { path: string }) => {
+    h.deletedDocs.push(ref.path);
+    const idx = ref.path.lastIndexOf('/');
+    const collectionPath = ref.path.slice(0, idx);
+    const id = ref.path.slice(idx + 1);
+    const docs = h.docsByPath.get(collectionPath) ?? [];
+    h.docsByPath.set(
+      collectionPath,
+      docs.filter((d) => d.id !== id)
+    );
+  }),
   collection: vi.fn((_db: unknown, path: string) => ({ path })),
   query: vi.fn((ref: { path: string }, lim: { n: number }) => ({ path: ref.path, limit: lim.n })),
   limit: vi.fn((n: number) => ({ n })),
@@ -48,15 +69,16 @@ vi.mock('firebase/firestore', () => ({
       size: page.length,
       empty: page.length === 0,
       docs: page.map((d) => ({
+        id: d.id,
         ref: { __collection: q.path, __id: d.id },
-        data: () => ({}),
+        data: () => d.data ?? {},
       })),
     };
   }),
   writeBatch: vi.fn(() => {
-    const pending: Array<{ __collection: string; __id: number }> = [];
+    const pending: Array<{ __collection: string; __id: string }> = [];
     return {
-      delete: (ref: { __collection: string; __id: number }) => pending.push(ref),
+      delete: (ref: { __collection: string; __id: string }) => pending.push(ref),
       commit: async () => {
         for (const ref of pending) {
           const docs = h.docsByPath.get(ref.__collection) ?? [];
@@ -103,7 +125,21 @@ const root = `users/${UID}/versicle/${WS}`;
 const seedDocs = (path: string, count: number): void => {
   h.docsByPath.set(
     path,
-    Array.from({ length: count }, (_, i) => ({ id: i }))
+    Array.from({ length: count }, (_, i) => ({ id: String(i) }))
+  );
+};
+
+/** Seed embedCache HEAD docs (id = content key) with createdAt/size for sweep. */
+const seedHeads = (
+  workspaceRoot: string,
+  heads: { key: string; createdAt: number; size: number }[]
+): void => {
+  h.docsByPath.set(
+    `${workspaceRoot}/embedCache`,
+    heads.map((head) => ({
+      id: head.key,
+      data: { createdAt: head.createdAt, size: head.size },
+    }))
   );
 };
 
@@ -114,6 +150,7 @@ describe('FirestoreBackend.purgeWorkspace (P4-6 honest delete)', () => {
     h.docsByPath.clear();
     h.storageTree.clear();
     h.deletedBlobs.length = 0;
+    h.deletedDocs.length = 0;
     h.failingBlobs.clear();
     h.batchCommits.length = 0;
     h.setDocCalls.length = 0;
@@ -205,5 +242,124 @@ describe('FirestoreBackend.purgeWorkspace (P4-6 honest delete)', () => {
     expect(h.setDocCalls[1].data).toMatchObject({ deletedAt: expect.any(Number) });
     // Tombstoning closes the workspace; the residual sweep is purge's job.
     expect(h.docsByPath.get(`${root}/updates`)).toHaveLength(2);
+  });
+});
+
+describe('FirestoreBackend.deleteArtifactHead (Phase D per-book cloud delete)', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    h.docsByPath.clear();
+    h.storageTree.clear();
+    h.deletedBlobs.length = 0;
+    h.deletedDocs.length = 0;
+    h.failingBlobs.clear();
+    h.batchCommits.length = 0;
+    h.setDocCalls.length = 0;
+    h.storageBroken = false;
+  });
+
+  it('deletes the HEAD doc and DELIBERATELY leaves the shared blob (§2.7 reference-safety)', async () => {
+    // The blob exists in Storage; deleteArtifactHead must NOT touch it.
+    h.storageTree.set(root, { items: ['k1.bin'], prefixes: [] });
+
+    await new FirestoreBackend(UID).deleteArtifactHead(WS, 'embedCache/k1');
+
+    // The HEAD doc was deleted at exactly the embedCache/{key} path…
+    expect(h.deletedDocs).toEqual([`${root}/embedCache/k1`]);
+    // …and NO Storage blob was deleted (the shared blob survives for the sweeper).
+    expect(h.deletedBlobs).toEqual([]);
+  });
+});
+
+describe('FirestoreBackend.sweepArtifacts (Phase D cloud TTL/quota GC)', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    h.docsByPath.clear();
+    h.storageTree.clear();
+    h.deletedBlobs.length = 0;
+    h.deletedDocs.length = 0;
+    h.failingBlobs.clear();
+    h.batchCommits.length = 0;
+    h.setDocCalls.length = 0;
+    h.storageBroken = false;
+  });
+
+  it('deletes past-TTL HEAD-doc+blob pairs and keeps fresh ones', async () => {
+    const NOW = 1_000_000_000;
+    const TTL = 1000;
+    // stale: createdAt well before now-TTL → swept. fresh: createdAt = now → kept.
+    seedHeads(root, [
+      { key: 'stale', createdAt: NOW - 5000, size: 10 },
+      { key: 'fresh', createdAt: NOW, size: 10 },
+    ]);
+    h.storageTree.set(root, { items: ['stale.bin', 'fresh.bin'], prefixes: [] });
+
+    const report = await new FirestoreBackend(UID).sweepArtifacts(WS, {
+      ttlMs: TTL,
+      now: NOW,
+    });
+
+    expect(report).toEqual({ headsDeleted: 1, blobsDeleted: 1 });
+    expect(h.deletedDocs).toEqual([`${root}/embedCache/stale`]);
+    expect(h.deletedBlobs).toEqual([`${root}/embeddings/stale.bin`]);
+    // The fresh HEAD doc survives.
+    expect(h.docsByPath.get(`${root}/embedCache`)?.map((d) => d.id)).toEqual(['fresh']);
+  });
+
+  it('over-budget sweep deletes oldest-by-createdAt first', async () => {
+    const NOW = 1_000_000_000;
+    // Three 4-byte heads, none past-TTL (huge ttlMs); a 4-byte budget admits
+    // exactly one (the newest k3); the two oldest (k1, k2) evict oldest-first.
+    seedHeads(root, [
+      { key: 'k1', createdAt: NOW - 300, size: 4 },
+      { key: 'k2', createdAt: NOW - 200, size: 4 },
+      { key: 'k3', createdAt: NOW - 100, size: 4 },
+    ]);
+
+    const report = await new FirestoreBackend(UID).sweepArtifacts(WS, {
+      ttlMs: 30 * 24 * 60 * 60 * 1000,
+      now: NOW,
+      budgetBytes: 4,
+    });
+
+    expect(report.headsDeleted).toBe(2);
+    expect(h.deletedDocs.sort()).toEqual([
+      `${root}/embedCache/k1`,
+      `${root}/embedCache/k2`,
+    ]);
+    // k3 (newest, under budget) survives.
+    expect(h.docsByPath.get(`${root}/embedCache`)?.map((d) => d.id)).toEqual(['k3']);
+  });
+
+  it('a project without Storage still sweeps the HEAD docs (blobs reported 0)', async () => {
+    const NOW = 1_000_000_000;
+    seedHeads(root, [{ key: 'stale', createdAt: NOW - 5000, size: 10 }]);
+    h.storageBroken = true;
+
+    const report = await new FirestoreBackend(UID).sweepArtifacts(WS, {
+      ttlMs: 1000,
+      now: NOW,
+    });
+
+    expect(report).toEqual({ headsDeleted: 1, blobsDeleted: 0 });
+    expect(h.deletedDocs).toEqual([`${root}/embedCache/stale`]);
+  });
+
+  it('tolerates an already-gone blob (object-not-found) while still deleting the HEAD doc', async () => {
+    const NOW = 1_000_000_000;
+    seedHeads(root, [{ key: 'stale', createdAt: NOW - 5000, size: 10 }]);
+    h.storageTree.set(root, { items: ['stale.bin'], prefixes: [] });
+    h.failingBlobs.add(`${root}/embeddings/stale.bin`);
+
+    const report = await new FirestoreBackend(UID).sweepArtifacts(WS, {
+      ttlMs: 1000,
+      now: NOW,
+    });
+
+    // The HEAD doc was deleted; the gone blob is deleted-by-someone-else (0).
+    expect(report).toEqual({ headsDeleted: 1, blobsDeleted: 0 });
+    expect(h.deletedDocs).toEqual([`${root}/embedCache/stale`]);
   });
 });

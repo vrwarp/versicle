@@ -44,6 +44,14 @@ interface DeviceState {
     renameDevice: (deviceId: string, name: string) => void;
 
     /**
+     * Publishes THIS device's rolling daily GenAI spend onto its own synced
+     * record (design §3.4) for the project-wide cross-device quota sum. Writes
+     * ONLY the given device's record via an immutable spread — never clobbers
+     * another device's entry.
+     */
+    publishEmbedSpend: (deviceId: string, spend: { day: string; rpd: number; tpm?: number }) => void;
+
+    /**
      * Removes a device from the sync mesh.
      */
     deleteDevice: (deviceId: string) => void;
@@ -91,7 +99,14 @@ export const useDeviceStore = create<DeviceState>()(
                                 appVersion: packageJson.version,
                                 created: existing ? existing.created : now,
                                 lastActive: now,
-                                profile
+                                profile,
+                                // Carry the device's own embedSpend forward:
+                                // registerCurrentDevice runs on EVERY boot
+                                // (deviceRegistration.ts) and rebuilds from a
+                                // fresh literal — without this it would DELETE
+                                // this device's own published spend each boot
+                                // (the §3.4 self-clobber).
+                                embedSpend: existing?.embedSpend
                             }
                         }
                     };
@@ -130,6 +145,21 @@ export const useDeviceStore = create<DeviceState>()(
                             [deviceId]: {
                                 ...existing,
                                 name
+                            }
+                        }
+                    };
+                }),
+
+            publishEmbedSpend: (deviceId, spend) =>
+                set((state) => {
+                    const existing = state.devices[deviceId];
+                    if (!existing) return state;
+                    return {
+                        devices: {
+                            ...state.devices,
+                            [deviceId]: {
+                                ...existing,
+                                embedSpend: spend
                             }
                         }
                     };

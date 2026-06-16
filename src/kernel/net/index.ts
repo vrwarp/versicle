@@ -7,8 +7,10 @@ export { findDestination, type DestinationId } from './destinations';
 export {
   egress,
   setConsentResolver,
+  setQuotaScheduler,
   type EgressFn,
+  type EgressOptions,
   type ConsentResolver,
 } from './NetworkGateway';
-export { NetConsentRequiredError } from './errors';
+export { NetConsentRequiredError, retryAfterMs } from './errors';
 export { localFetch } from './local';

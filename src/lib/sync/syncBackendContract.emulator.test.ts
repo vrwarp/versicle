@@ -35,7 +35,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import type * as Y from 'yjs';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
@@ -56,6 +56,7 @@ import {
   connectStorageEmulator,
   ref,
   uploadBytes,
+  getBytes,
   listAll,
 } from 'firebase/storage';
 import type { StorageReference } from 'firebase/storage';
@@ -173,8 +174,24 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
 
   const rootPath = (workspaceId: string) => `users/${uid}/versicle/${workspaceId}`;
 
-  /** The four y-cinder subcollections an honest delete sweeps (P4-6). */
-  const PURGE_SUBCOLLECTIONS = ['updates', 'history', 'maintenance', 'metadata'] as const;
+  /**
+   * The Firestore subcollections an honest delete sweeps. Mirrors the SUT's
+   * FirestoreBackend.PURGE_SUBCOLLECTIONS: the four y-cinder subcollections
+   * (P4-6) plus `embedCache`, the artifact-lane HEAD-doc subcollection
+   * (shared-ai-cache-design.md §2.7, H-3). Both copies must include
+   * `embedCache` or countResiduals would under-count the HEAD-doc residual.
+   */
+  const PURGE_SUBCOLLECTIONS = [
+    'updates',
+    'history',
+    'maintenance',
+    'metadata',
+    'embedCache',
+  ] as const;
+
+  // The artifact-lane tails the trio cases exercise (§2.1).
+  const ARTIFACT_BLOB_REL_PATH = 'embeddings/contract-key.bin';
+  const ARTIFACT_HEAD_REL_PATH = 'embedCache/contract-key';
 
   /** Recursive object count under a Storage prefix (mirrors the purge sweep). */
   const countStorageObjects = async (prefix: StorageReference): Promise<number> => {
@@ -249,8 +266,13 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
     // delete left behind) plus the Cloud Storage blobs the provider
     // offloads (a compacted snapshot + a large_updates spill) — the
     // Storage-emulator half the P4 §Follow-ups deferred to this collapse.
+    // Plus the artifact-lane residual: a real putArtifact lands an
+    // `embedCache/{key}` HEAD doc (swept by the new PURGE_SUBCOLLECTIONS
+    // entry) AND an `embeddings/{key}.bin` blob (swept by purgeStoragePrefix
+    // under the workspace prefix) — pins the H-3 fix end-to-end.
     seedResiduals: async (workspaceId) => {
       for (const sub of PURGE_SUBCOLLECTIONS) {
+        if (sub === 'embedCache') continue; // seeded via the real putArtifact below
         await addDoc(collection(db, `${rootPath(workspaceId)}/${sub}`), {
           residual: sub,
           createdAt: Date.now(),
@@ -263,6 +285,11 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
         ref(storage, `${rootPath(workspaceId)}/large_updates/u1.bin`),
         blob
       );
+      // The artifact residual (HEAD doc + blob) via the real backend path.
+      await backend.putArtifact(workspaceId, ARTIFACT_BLOB_REL_PATH, blob, {
+        stamp: 'residual-stamp',
+        size: blob.byteLength,
+      });
     },
 
     countResiduals: async (workspaceId) => {
@@ -287,6 +314,99 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
         return true; // rules denied it
       }
     },
+
+    // The artifact lane (C3 trio) against the real Cloud Storage + Firestore
+    // HEAD-doc path (the production code under test).
+    putArtifact: (workspaceId, relPath, bytes, meta) =>
+      backend.putArtifact(workspaceId, relPath, bytes, meta),
+    headArtifact: (workspaceId, relPath) => backend.headArtifact(workspaceId, relPath),
+    getArtifact: (workspaceId, relPath) => backend.getArtifact(workspaceId, relPath),
+    // Phase-D lifecycle/GC — the real cloud delete/sweep round-trips (delete
+    // HEAD doc + LEAVE the shared blob; sweep past-TTL HEAD+blob pairs). These
+    // are the round-trips the mock cannot model (no Storage tier) — CI-PENDING,
+    // auto-skip when the emulator trio is unreachable (EMULATOR HONESTY).
+    deleteArtifactHead: (workspaceId, relPath) =>
+      backend.deleteArtifactHead(workspaceId, relPath),
+    sweepArtifacts: (workspaceId, opts) => backend.sweepArtifacts(workspaceId, opts),
+  });
+
+  // ── Artifact-lane emulator cases (CI-PENDING) ──────────────────────────
+  // These exercise the REAL Firestore+Storage round trip and the
+  // HEAD-after-Storage write ordering the MockBackend cannot model (no
+  // Storage tier). They live INSIDE the describe.skipIf(!emulatorUp) block,
+  // so they auto-skip when the emulator trio is unreachable — DO NOT report
+  // them green unless the emulator suite actually ran (shared-ai-cache-
+  // design.md §4a, M-2/M-3).
+  describe('artifact lane (emulator: real Storage + HEAD-after-Storage ordering)', () => {
+    let workspaceId: string;
+    let backendRef: FirestoreBackend;
+    let nextLocalId = 0;
+
+    beforeEach(() => {
+      workspaceId = `ws_artifact_${nextLocalId++}`;
+      backendRef = backend;
+    });
+
+    it('put → head → get round-trip over real Cloud Storage', async () => {
+      const payload = new TextEncoder().encode('int8-vectors-and-scales');
+      await backendRef.putArtifact(workspaceId, ARTIFACT_BLOB_REL_PATH, payload, {
+        stamp: 'model-a|dims-256|q8',
+        size: payload.byteLength,
+      });
+
+      const head = await backendRef.headArtifact(workspaceId, ARTIFACT_HEAD_REL_PATH);
+      expect(head).not.toBeNull();
+      expect(head!.stamp).toBe('model-a|dims-256|q8');
+      expect(head!.size).toBe(payload.byteLength);
+
+      const got = await backendRef.getArtifact(workspaceId, ARTIFACT_BLOB_REL_PATH);
+      expect(got).not.toBeNull();
+      expect(Array.from(new Uint8Array(got!))).toEqual(Array.from(payload));
+    });
+
+    it('getArtifact returns null on a definitive Storage miss (object-not-found)', async () => {
+      await expect(
+        backendRef.getArtifact(workspaceId, ARTIFACT_BLOB_REL_PATH)
+      ).resolves.toBeNull();
+    });
+
+    it('HEAD-after-Storage: after putArtifact both the Storage blob AND the Firestore HEAD doc are present', async () => {
+      const payload = new Uint8Array([9, 8, 7, 6]);
+      await backendRef.putArtifact(workspaceId, ARTIFACT_BLOB_REL_PATH, payload, {
+        stamp: 'ordering-stamp',
+        size: payload.byteLength,
+      });
+
+      // Storage blob present (the bytes landed FIRST).
+      const blobBytes = await getBytes(
+        ref(getStorage(app), `${rootPath(workspaceId)}/${ARTIFACT_BLOB_REL_PATH}`)
+      );
+      expect(Array.from(new Uint8Array(blobBytes))).toEqual(Array.from(payload));
+
+      // HEAD doc present (written AFTER the blob, so a hit implies the bytes).
+      const headSnap = await getDocs(
+        collection(db, `${rootPath(workspaceId)}/embedCache`)
+      );
+      expect(headSnap.size).toBe(1);
+    });
+
+    it('putArtifact is idempotent (ifAbsent): a second put with the same key does not overwrite', async () => {
+      const original = new TextEncoder().encode('original-bytes');
+      await backendRef.putArtifact(workspaceId, ARTIFACT_BLOB_REL_PATH, original, {
+        stamp: 'stamp-1',
+        size: original.byteLength,
+      });
+      const overwrite = new TextEncoder().encode('different-bytes');
+      await backendRef.putArtifact(workspaceId, ARTIFACT_BLOB_REL_PATH, overwrite, {
+        stamp: 'stamp-2',
+        size: overwrite.byteLength,
+      });
+
+      const head = await backendRef.headArtifact(workspaceId, ARTIFACT_HEAD_REL_PATH);
+      expect(head!.stamp).toBe('stamp-1');
+      const got = await backendRef.getArtifact(workspaceId, ARTIFACT_BLOB_REL_PATH);
+      expect(Array.from(new Uint8Array(got!))).toEqual(Array.from(original));
+    });
   });
 
   describeSyncBackendContract({
@@ -303,6 +423,8 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
       // Honest-delete purge under the real rules, BOTH halves: Firestore
       // residuals and the Cloud Storage blobs (storage emulator wired).
       purge: true,
+      // The artifact-lane trio against real Storage + HEAD docs.
+      artifacts: true,
     },
     makeHarness,
   });
