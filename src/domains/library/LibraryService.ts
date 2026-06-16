@@ -32,18 +32,23 @@ export interface LibraryServiceDeps {
   persistence: LibraryPersistence;
   orchestrator: ImportOrchestrator;
   /**
-   * Best-effort per-book cloud-artifact GC (Artifact Lane Phase D, §2.7): an
-   * injected APP-LAYER port that drops THIS device's `embedCache/{key}` HEAD
-   * doc for a removed book (the content-addressed shared blob is deliberately
-   * left for the cloud sweeper — a sibling device may still need it). The
-   * adapter (createLibrary.ts) resolves contentHash + derives the key + calls
-   * the backend, so LibraryService stays store/backend-free (domains-no-store).
+   * Best-effort cleanup of a removed book's shared cloud embeddings. The app
+   * shares a book's embeddings to the user's other devices via the cloud, keyed
+   * by content hash; each device that has the book also publishes a small
+   * directory record (`embedCache/{key}`) pointing at the shared blob. When a
+   * book is removed locally, this injected app-layer port drops THIS device's
+   * directory record. It deliberately does NOT delete the shared blob itself — a
+   * sibling device may still need it; a background sweeper reclaims the blob once
+   * no device references it. The adapter (createLibrary.ts) resolves the content
+   * hash, derives the key, and calls the backend, so LibraryService stays free
+   * of any store/backend dependency.
    *
-   * MUST run BEFORE `persistence.deleteBook` so the manifest row carrying the
-   * contentHash is still present (it dies in deleteBook's tx). A rejection is
-   * logged but NEVER aborts the local delete (best-effort degrade — the
-   * orphaned HEAD doc is reclaimed by the sweeper's TTL). Undefined when no
-   * adapter is wired (a null backend / pre-P7 book is a clean no-op there).
+   * MUST run BEFORE `persistence.deleteBook`, because the content hash lives on
+   * the manifest row that deleteBook's transaction destroys. A rejection is
+   * logged but NEVER aborts the local delete (best-effort degrade — an orphaned
+   * directory record is reclaimed by the sweeper's TTL). Undefined when no
+   * adapter is wired (no cloud backend, or an older book with no shared artifact
+   * is a clean no-op there).
    */
   purgeBookArtifact?(bookId: string): Promise<void>;
 }
@@ -170,10 +175,11 @@ export class LibraryService {
         inventory.remove(bookId);
         projection.removeStatic(bookId);
         projection.removeOffloaded(bookId);
-        // Best-effort cloud-artifact GC (Phase D): the adapter resolves
-        // contentHash from the manifest, so this MUST run BEFORE deleteBook (the
-        // manifest row dies in that tx). A failure is logged but NEVER aborts
-        // the local delete — the orphaned HEAD doc is reclaimed by the sweeper.
+        // Drop this device's shared-embeddings directory record for the book.
+        // The adapter reads the content hash off the manifest, so this MUST run
+        // BEFORE deleteBook destroys that manifest row. A failure is logged but
+        // NEVER aborts the local delete — the orphaned directory record is later
+        // reclaimed by the cloud sweeper's TTL.
         if (this.deps.purgeBookArtifact) {
           try {
             await this.deps.purgeBookArtifact(bookId);

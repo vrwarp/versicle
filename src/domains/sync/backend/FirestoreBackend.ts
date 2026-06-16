@@ -10,20 +10,21 @@
  * `firebase/storage` (boundary: every other sync module talks
  * `SyncBackend`). The storage import was delete-only (the P4-6 honest
  * delete's blob purge: `getStorage`/`ref`/`listAll`/`deleteObject`); the
- * artifact lane (shared-ai-cache-design.md §2.1, M-1) WIDENS it to
- * read/write by ADDING `uploadBytes`/`getBytes` for putArtifact/getArtifact.
- * FirestoreBackend remains the sole `firebase/storage` importer — no other
- * sync module gains a storage import.
+ * shared embedding cache WIDENS it to read/write by ADDING
+ * `uploadBytes`/`getBytes` for putArtifact/getArtifact. FirestoreBackend
+ * remains the sole `firebase/storage` importer — no other sync module gains a
+ * storage import.
  *
  * Paths (the live layout — `~types/workspace.ts` documents the same):
  *   - metadata directory: `users/{uid}/workspaces/{workspaceId}`
  *   - replicated doc:     `users/{uid}/versicle/{workspaceId}` (+ `updates`,
  *     `history`, `maintenance`, `metadata` subcollections, managed by
  *     y-cinder)
- *   - artifact blob:      `users/{uid}/versicle/{workspaceId}/embeddings/{key}.bin`
+ *   - cached-embedding blob: `users/{uid}/versicle/{workspaceId}/embeddings/{key}.bin`
  *     (Cloud Storage; swept by purgeStoragePrefix under the workspace prefix)
- *   - artifact HEAD doc:  `users/{uid}/versicle/{workspaceId}/embedCache/{key}`
- *     (Firestore; swept by the `embedCache` PURGE_SUBCOLLECTIONS entry)
+ *   - cached-embedding head: `users/{uid}/versicle/{workspaceId}/embedCache/{key}`
+ *     (Firestore; the tiny record probed before downloading the blob; swept by
+ *     the `embedCache` PURGE_SUBCOLLECTIONS entry)
  */
 import type * as Y from 'yjs';
 import { FireProvider } from 'y-cinder';
@@ -66,12 +67,11 @@ const logger = createLogger('FirestoreBackend');
 /**
  * The Firestore subcollections an honest delete must sweep. The first four
  * are y-cinder-managed (firestore.rules documents the same; the legacy
- * delete purged only `updates` — sync.md debt #2). `embedCache` is the
- * artifact-lane HEAD-doc subcollection (shared-ai-cache-design.md §2.7, H-3):
- * `purgeStoragePrefix` is Storage-only and sweeps the blob for free under
- * the workspace prefix, but the Firestore HEAD doc is NOT swept "for free" —
- * it needs this explicit entry so a workspace delete leaves no orphaned
- * HEAD docs.
+ * delete purged only `updates` — sync.md debt #2). `embedCache` holds the
+ * cached-embedding head records: `purgeStoragePrefix` is Storage-only and
+ * sweeps the blob for free under the workspace prefix, but the Firestore head
+ * record is NOT swept "for free" — it needs this explicit entry so a workspace
+ * delete leaves no orphaned head records.
  */
 const PURGE_SUBCOLLECTIONS = [
   'updates',
@@ -105,12 +105,11 @@ export class FirestoreBackend implements SyncBackend {
   }
 
   /**
-   * The full path of an artifact-lane object (blob or HEAD doc) from its
+   * The full path of a cached-embedding object (blob or head record) from its
    * in-workspace tail (`embeddings/{key}.bin` or `embedCache/{key}`):
-   * `users/{uid}/versicle/{workspaceId}/{relPath}` (shared-ai-cache-design.md
-   * §2.1). Both tiers live inside the workspace prefix so the blob is swept
-   * by purgeStoragePrefix and the HEAD doc by the `embedCache`
-   * PURGE_SUBCOLLECTIONS entry.
+   * `users/{uid}/versicle/{workspaceId}/{relPath}`. Both live inside the
+   * workspace prefix so the blob is swept by purgeStoragePrefix and the head
+   * record by the `embedCache` PURGE_SUBCOLLECTIONS entry.
    */
   private artifactPath(workspaceId: string, relPath: string): string {
     return `${this.docPath(workspaceId)}/${relPath}`;
@@ -294,7 +293,7 @@ export class FirestoreBackend implements SyncBackend {
     const db = getFirestoreDb();
     if (!db) throw new Error('Firestore not initialized');
 
-    // relPath is the HEAD-doc tail (`embedCache/{key}`) — a Firestore getDoc,
+    // relPath is the head-record tail (`embedCache/{key}`) — a Firestore getDoc,
     // never a Storage list.
     const snapshot = await getDoc(doc(db, this.artifactPath(workspaceId, relPath)));
     if (!snapshot.exists()) return null;
@@ -311,22 +310,22 @@ export class FirestoreBackend implements SyncBackend {
     const db = getFirestoreDb();
     if (!db) throw new Error('Firestore not initialized');
 
-    // relPath is the blob tail (`embeddings/{key}.bin`); the companion HEAD
-    // doc is the sibling `embedCache/{key}` tail (§2.1).
+    // relPath is the blob tail (`embeddings/{key}.bin`); the companion head
+    // record is the sibling `embedCache/{key}` tail.
     const headRelPath = artifactHeadTail(relPath);
 
-    // ifAbsent: head-before-put. A HEAD hit means the bytes already landed
-    // (HEAD-after-Storage), so this is a no-op — content-addressed writes are
-    // byte-idempotent (§2.5).
+    // Skip-if-present: a head hit means the bytes already landed (head is
+    // written after the blob), so this is a no-op. The key is derived from the
+    // embedding inputs, so re-uploading the same content is byte-identical.
     if (await this.headArtifact(workspaceId, headRelPath)) return;
 
     const app = getFirebaseApp();
     if (!app) throw new Error('Firebase app not available');
     const storage = getStorage(app);
 
-    // HEAD-after-Storage: upload the bytes FIRST, then write the HEAD doc, so
-    // a HEAD hit always implies the blob is present (a crash between the two
-    // leaves a recoverable blob with no HEAD doc).
+    // Blob first, head second: upload the bytes FIRST, then write the head
+    // record, so a head hit always implies the blob is present (a crash between
+    // the two leaves a recoverable blob with no head record).
     await uploadBytes(ref(storage, this.artifactPath(workspaceId, relPath)), bytes);
     await setDoc(doc(db, this.artifactPath(workspaceId, headRelPath)), {
       stamp: meta.stamp,
@@ -347,9 +346,10 @@ export class FirestoreBackend implements SyncBackend {
     try {
       return await getBytes(ref(storage, this.artifactPath(workspaceId, relPath)));
     } catch (error) {
-      // §2.7 taxonomy (OPPOSITE polarity to isWorkspaceAlive's fail-safe): a
-      // definitive miss => null (caller re-embeds); transient/permission =>
-      // rethrow (never mistake an offline blip for a miss and burn quota).
+      // Miss vs error (OPPOSITE polarity to isWorkspaceAlive's fail-safe): a
+      // definitive miss => null (caller recomputes the embeddings);
+      // transient/permission => rethrow (never mistake an offline blip for a
+      // miss and pay to recompute).
       if ((error as { code?: string })?.code === 'storage/object-not-found') return null;
       throw error;
     }
@@ -359,10 +359,11 @@ export class FirestoreBackend implements SyncBackend {
     const db = getFirestoreDb();
     if (!db) throw new Error('Firestore not initialized');
 
-    // relPath is the HEAD-doc tail (`embedCache/{key}`). Delete the HEAD doc
-    // ONLY — the content-addressed shared blob is deliberately left for
-    // sweepArtifacts (§2.7: never destroy bytes a sibling device may still
-    // need). Best-effort: an already-gone doc is a clean no-op.
+    // relPath is the head-record tail (`embedCache/{key}`). Delete the head
+    // record ONLY — the shared blob is deliberately left for sweepArtifacts
+    // (never destroy bytes another device may still need; the blob is keyed by
+    // content so it is safe to leave). Best-effort: an already-gone record is a
+    // clean no-op.
     try {
       await deleteDoc(doc(db, this.artifactPath(workspaceId, relPath)));
     } catch (error) {
@@ -380,9 +381,9 @@ export class FirestoreBackend implements SyncBackend {
     const db = getFirestoreDb();
     if (!db) throw new Error('Firestore not initialized');
 
-    // 1. List the embedCache HEAD docs (batched like purgeSubcollection, but
-    // we keep each doc's createdAt/size to pick victims rather than blanket-
-    // deleting). Each doc id is the content `{key}`.
+    // 1. List the embedCache head records (batched like purgeSubcollection, but
+    // we keep each record's createdAt/size to pick victims rather than blanket-
+    // deleting). Each record's id is the content `{key}`.
     const headColPath = `${this.docPath(workspaceId)}/embedCache`;
     const heads: { key: string; createdAt: number; size: number }[] = [];
     {
@@ -418,10 +419,10 @@ export class FirestoreBackend implements SyncBackend {
       }
     }
 
-    // 4. Delete each victim's HEAD doc AND its sibling blob (reusing the
+    // 4. Delete each victim's head record AND its sibling blob (reusing the
     // object-not-found-tolerant deleteObject shape from purgeStoragePrefix;
     // wrap Storage in the same getFirebaseApp() guard as purgeWorkspace so
-    // BYO-Firestore-only projects degrade — the HEAD docs still go).
+    // projects without a Storage bucket degrade — the head records still go).
     let headsDeleted = 0;
     let blobsDeleted = 0;
 

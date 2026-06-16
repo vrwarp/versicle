@@ -103,8 +103,8 @@ export const APP_ERROR_CODES = [
   'NET_CONSENT_REQUIRED',
   'NET_TIMEOUT',
   'NET_OFFLINE',
-  // Pre-network backpressure raised by the kernel QuotaGovernor before egress
-  // (distinct from a network 429 — Phase A). Append-only.
+  // Request refused locally by the rate/spend governor before any network call
+  // (distinct from a server-sent 429). Append-only.
   'NET_RATE_LIMITED',
   // BACKUP_* — backup/snapshot capture, validation, and restore.
   'BACKUP_SNAPSHOT_INVALID',
@@ -308,13 +308,14 @@ export class WorkspaceDeletedError extends AppError {
 }
 
 /**
- * Pre-network backpressure raised by the kernel {@link AppError} consumers
- * (the QuotaGovernor, Phase A) when a request is refused **before any egress** —
- * RPD-exhausted, an active 429 cooldown, or the rolling RPM/TPM minute budget.
+ * Raised by the rate/spend governor when it refuses a request **before any
+ * network call** — the daily request budget is exhausted, an earlier 429 put
+ * the endpoint in cooldown, or the rolling per-minute request/token budget is
+ * spent.
  *
- * Distinct from a network 429 (the `GenAIHttpError` / `isResourceExhausted`
- * path): that one means the server pushed back; this one means the governor
- * pushed back first. Like {@link NetTimeoutError}/{@link NetOfflineError} it is
+ * Distinct from a server-sent 429 (the `GenAIHttpError` / `isResourceExhausted`
+ * path): that one means the server pushed back; this one means we throttled
+ * ourselves first. Like {@link NetTimeoutError}/{@link NetOfflineError} it is
  * `retryable: true`, and it carries `retryAfterMs` in `context` so callers and
  * meters can branch on `code === 'NET_RATE_LIMITED'` (never message substrings)
  * and schedule a retry.

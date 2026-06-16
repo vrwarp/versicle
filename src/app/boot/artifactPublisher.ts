@@ -1,36 +1,34 @@
 /**
- * `artifactPublisherTask` — the Artifact Lane Phase C WRITE side (the upload
- * boot task, shared-ai-cache-design.md §2.1/§2.3/§3). It mirrors a locally-
- * embedded book's whole-corpus int8 vectors into the user's OWN cloud
- * (Cloud Storage `embeddings/{key}.bin` + the companion Firestore HEAD doc)
- * so the user's OTHER devices hydrate them quota-free via the Phase-B consult,
- * instead of re-spending Gemini embedding quota per device.
+ * `artifactPublisherTask` — uploads a locally-embedded book's vectors to the
+ * user's OWN cloud so their OTHER devices can reuse them instead of paying to
+ * re-embed. Embeddings are expensive to regenerate (per-device Gemini quota),
+ * so once a book is embedded on one device its whole-corpus int8 vectors are
+ * mirrored to a content-addressed blob (`embeddings/{key}.bin`) plus a small
+ * companion HEAD record, and a sibling device downloads them for free.
  *
  * Privacy posture (the load-bearing gates — see GUARDRAILS):
  *  - it runs ONLY when the user turned the default-OFF "Share AI caches across
  *    my devices" opt-in ON (useGenAIStore.shareAiCaches) — surfaced as the
- *    {@link ArtifactPublisherDeps.isUploadConsented} gate built from the SAME
- *    makeArtifactConsentGate the consult uses (consult+upload share semantics);
- *  - it runs ONLY on the heartbeat-active device (§3.4 gate, reusing
- *    isSelfActive + ACTIVE_DEVICE_WINDOW_MS) so an idle/locked device never
- *    uploads;
+ *    {@link ArtifactPublisherDeps.isUploadConsented} gate, built from the same
+ *    consent helper the download path uses so upload and download stay in sync;
+ *  - it runs ONLY on a device whose heartbeat is recent (isSelfActive +
+ *    ACTIVE_DEVICE_WINDOW_MS) so an idle/locked device never uploads;
  *  - it runs on requestIdleCallback (setTimeout fallback) so it never competes
- *    with the boot path or interactive work — best-effort, off the FG latency
- *    path;
+ *    with the boot path or interactive work — best-effort, off the latency path;
  *  - it is a SILENT no-op when getBackend() is null (sync off / not connected /
  *    no active workspace) — the cheap no-network short-circuit;
- *  - putArtifact is ifAbsent (head-before-put no-op): idempotent and content-
- *    addressed, so racing devices write byte-identical content harmlessly.
+ *  - putArtifact only writes if the key is absent (a head-before-put no-op), so
+ *    it is idempotent and racing devices write byte-identical content harmlessly.
  *
- * The contentKey is derived from the ROW's stamp ({model, dims, quant,
- * extractionVersion}), NOT live config, so the published object is content-
- * addressed by what was ACTUALLY embedded — the indexer's §8.2 stamp-mismatch
- * guard re-embeds a stale row before the publisher ever sees it, keeping the
- * writer/reader keys aligned (a peer re-derives the key from the blob header).
+ * The blob key is derived from the embedding ROW's stamp ({model, dims, quant,
+ * extractionVersion}), NOT live config, so the object is addressed by what was
+ * ACTUALLY embedded — the indexer re-embeds a stale row before the publisher
+ * ever sees it, keeping the writer's and reader's keys aligned (a peer
+ * re-derives the same key from the blob's own header).
  *
- * The core {@link runArtifactPublish} is PURE/injectable (mirrors
- * runEmbeddingBackfill): every store/IDB/backend edge arrives as a dep, so the
- * suite drives it with fakes. The boot task wires the real seams.
+ * The core {@link runArtifactPublish} is PURE/injectable: every store/IDB/
+ * backend edge arrives as a dep, so the suite drives it with fakes. The boot
+ * task wires the real seams. (design: plan/shared-ai-cache-design.md)
  */
 import type { BootTask } from '../bootstrap';
 import { ACTIVE_DEVICE_WINDOW_MS } from '@app/quota/embedSpendReconciler';
@@ -57,9 +55,11 @@ const logger = createLogger('ArtifactPublisher');
 /** The injected seams (the boot task binds the real stores/repos/backend). */
 export interface ArtifactPublisherDeps {
   /**
-   * The Phase-C upload gate (the makeArtifactConsentGate result, interactive:
-   * false posture): shareAiCaches ON AND (preEmbed OR per-book consent). Built
-   * from the SAME helper the consult uses, so consult+upload share semantics.
+   * Upload consent for a book: shareAiCaches ON AND (library pre-embed OR
+   * per-book consent). Built from the same consent helper the download path
+   * uses, so a book that may be downloaded by a peer is exactly one that may be
+   * uploaded. (No interactive bypass here — a background upload is never a
+   * user gesture.)
    */
   isUploadConsented(bookId: string): boolean;
   /** The embedding client currently holds a usable config (API key). */
@@ -79,10 +79,10 @@ export interface ArtifactPublisherDeps {
    * — passes straight through; {@link serializeArtifactBlob} byte-reads either.
    */
   getRow(bookId: string): Promise<SerializableEmbeddingRow | undefined>;
-  /** Resolve bookId → contentHash via the manifest (absent on pre-P7 books). */
+  /** Resolve bookId → contentHash via the manifest (absent on older books). */
   getContentHash(bookId: string): Promise<string | undefined>;
   /**
-   * The artifact-lane backend handle, or `null` when sync is off / not
+   * The cloud-storage backend handle, or `null` when sync is off / not
    * connected / no active workspace. Read FRESH per call so a connect/disconnect
    * takes effect immediately; a `null` handle is the silent no-network no-op.
    */
@@ -91,7 +91,7 @@ export interface ArtifactPublisherDeps {
   shouldContinue(): boolean;
 }
 
-/** This device is heartbeat-active within the §3.4 recency window. */
+/** This device sent a heartbeat within the recent-activity window. */
 function isSelfActive(deps: ArtifactPublisherDeps): boolean {
   const self = deps.getDevices()[deps.selfId];
   if (!self) return false;
@@ -113,9 +113,9 @@ export async function runArtifactPublish(deps: ArtifactPublisherDeps): Promise<v
   for (const bookId of deps.listBooks()) {
     if (!deps.shouldContinue()) return;
 
-    // The Phase-C upload gate (shareAiCaches ON + preEmbed/per-book). interactive
-    // is false: a background boot path is NEVER an interactive gesture, so the
-    // shareAiCaches AND-term is the only thing that can grant the bg upload.
+    // Upload only books the user has consented to share (shareAiCaches ON plus
+    // library pre-embed or per-book consent). A background pass is never a user
+    // gesture, so the shareAiCaches switch is the only thing that can grant it.
     if (!deps.isUploadConsented(bookId)) continue;
 
     try {
@@ -123,8 +123,8 @@ export async function runArtifactPublish(deps: ArtifactPublisherDeps): Promise<v
       const row = await deps.getRow(bookId);
       if (!row) continue;
 
-      // contentHash is OPTIONAL on pre-P7 manifests — its absence is a CLEAN
-      // degrade (no content identity → no content-addressed key → skip).
+      // Older manifests may lack a contentHash — without a content identity
+      // there is no content-addressed key to publish under, so skip cleanly.
       const contentHash = await deps.getContentHash(bookId);
       if (!contentHash) continue;
 
@@ -173,18 +173,19 @@ function scheduleIdle(cb: () => void): () => void {
 }
 
 /**
- * The Phase-C boot task: registered in the `backgroundTasks` phase after
- * embeddingBackfillTask, so it runs as a sibling bg/idle task in the same phase.
- * Builds the upload gate from the SAME makeArtifactConsentGate the consult uses
- * (shareAiCaches + preEmbed + per-book), and uploads each locally-embedded
- * book's blob (ifAbsent) into the connected BYO backend on idle.
+ * The publisher boot task: registered in the `backgroundTasks` phase after the
+ * embedding-backfill task, so it runs as a sibling idle task. Builds the upload
+ * consent gate from the same helper the download path uses (shareAiCaches +
+ * library pre-embed + per-book consent) and, on idle, uploads each locally-
+ * embedded book's blob (write-if-absent) into the connected cloud backend.
  */
 export const artifactPublisherTask: BootTask = {
   name: 'search/artifact-publisher',
   run: (ctx) => {
-    // The SAME gate the consult wires (design §3): shareAiCaches ANDed with the
-    // §2.6 preEmbed/per-book predicate. interactive is always false here (a bg
-    // boot path), so shareAiCaches OFF → every book denied → zero uploads.
+    // The same consent gate the download path uses: the shareAiCaches master
+    // switch ANDed with the per-book/library-pre-embed predicate. interactive is
+    // always false here (a background path), so shareAiCaches OFF means every
+    // book is denied and nothing is uploaded.
     const uploadGate = makeArtifactConsentGate({
       isShareEnabled: () => useGenAIStore.getState().shareAiCaches,
       isPreEmbedEnabled: () => useGenAIStore.getState().preEmbedLibrary,

@@ -61,21 +61,23 @@ interface GeminiResponseBody {
 }
 
 /**
- * The slice of the kernel QuotaGovernor the GenAI egress lane uses. A `Pick`
- * keeps the dep minimal and makes the seam trivially fakeable. Since A4
- * (design §3.2) the pre-flight `acquire` + the failure-path `release` are the
- * NetworkGateway's job (unbypassable at the chokepoint, via setQuotaScheduler),
- * so the client keeps only the post-response reconcile steps — `commit` and the
- * 429 `recordCooldown` — both of which need the parsed response body the gateway
- * never reads. Rotation stays in {@link GeminiClient.executeWithRetry}
- * (decision §3.6) so the governor never owns retry/rotation.
+ * The slice of the AI-API rate limiter this client touches. A `Pick` keeps the
+ * dependency minimal and the seam easy to fake in tests. The limiter's
+ * pre-flight admission check (reserve quota before the request) and its
+ * failure-path refund are enforced one layer down at the network chokepoint,
+ * where they cannot be bypassed; this client is left with only the two steps
+ * that need the parsed response body the network layer never reads — `commit`
+ * (record the actual tokens spent) and `recordCooldown` (start a back-off after
+ * a 429 rate-limit reply). Retrying with a different model on a 429 stays in
+ * {@link GeminiClient.executeWithRetry}, so the limiter never owns retries.
  */
 export type GenAIQuotaGovernor = Pick<QuotaGovernor, 'commit' | 'recordCooldown'>;
 
 /**
- * A coarse token estimate for the pre-flight {@link GenAIQuotaGovernor.acquire}
- * (the reconcile to the real cost happens on commit from usageMetadata). The
- * usual ~4-chars-per-token heuristic over the serialized prompt.
+ * A coarse up-front token estimate so the rate limiter can reserve quota
+ * before the request goes out; the actual cost is reconciled afterward from
+ * the response's usage report. Uses the usual ~4-characters-per-token
+ * heuristic over the serialized prompt.
  */
 function estTokens(prompt: GenAIPrompt): number {
   const text = typeof prompt === 'string' ? prompt : JSON.stringify(prompt.contents);
@@ -92,8 +94,9 @@ export interface GeminiClientDeps {
   /** Activity-log sink (entries arrive pre-redacted). */
   onLog?: GenAILogSink;
   /**
-   * Pre-egress rate/spend governor (Phase A). Optional: when absent the client
-   * behaves exactly as before (the rotation tests construct it without one).
+   * The AI-API rate/spend limiter. Optional: when absent the client behaves
+   * exactly as before, with no quota accounting (the rotation tests construct
+   * it without one).
    */
   governor?: GenAIQuotaGovernor;
 }
@@ -188,13 +191,13 @@ export class GeminiClient implements GenAIClient {
         ? [{ role: 'user', parts: [{ text: prompt }] }]
         : prompt.contents;
 
-    // Admission/backpressure moved to the NetworkGateway chokepoint (A4, design
-    // §3.2): the gateway awaits the injected scheduler's acquire('fg', estTokens)
-    // BEFORE the network call (unbypassable) and owns the failure-path release.
-    // The client declares its lane + estimate through the egress opts and keeps
-    // only the post-response reconcile (commit) + the 429 cooldown — both read
-    // the parsed body the gateway never touches. Rotation stays in
-    // executeWithRetry (decision §3.6).
+    // Rate-limit admission lives one layer down at the network chokepoint: the
+    // network layer reserves quota (by lane + token estimate) before the call
+    // goes out and refunds it on failure, so it cannot be bypassed. This client
+    // just declares its lane and estimate via the egress options and handles the
+    // two steps that need the parsed response body — recording the real token
+    // cost (commit) and starting a back-off on a 429. Model-rotation retries
+    // stay in executeWithRetry.
     const estimate = estTokens(prompt);
     let committed = false;
     const commit = (tokens: number): void => {

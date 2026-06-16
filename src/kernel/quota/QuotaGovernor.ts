@@ -1,39 +1,42 @@
 /**
- * QuotaGovernor (Phase A) — pure kernel rate/spend math for the GenAI + cloud
- * TTS egress lanes. L0: imports ONLY `~types` (kernel-imports-nothing/error).
+ * QuotaGovernor — pure rate/spend bookkeeping for the AI + cloud-TTS egress
+ * lanes, keeping the app within each provider's request/token budget. Imports
+ * only `~types` so it stays free of any storage or platform dependency.
  *
- * Three windows per lane:
- *  - RPM / TPM — sliding 60 s buckets held IN-MEMORY (process-lifetime).
- *  - RPD       — a persisted daily counter behind an INJECTED {@link QuotaStore}
- *    port (the kernel never touches IndexedDB; the app composition root maps
- *    the port onto a data/ repo — keeps the kernel store-free).
+ * Three budgets are tracked per lane:
+ *  - requests-per-minute / tokens-per-minute — sliding 60 s windows held
+ *    IN-MEMORY (reset when the process restarts).
+ *  - requests-per-day — a persisted daily counter behind an INJECTED
+ *    {@link QuotaStore} port, because it must survive restarts; the governor
+ *    never touches IndexedDB itself (the app wires the port to a storage repo).
  *
- * Design points (each one a plan/decision constraint):
- *  - GG-8: limits are read FRESH per `acquire()` from the injected config
- *    provider — never snapshotted at construction, never cached. Mutating the
- *    provider between calls takes effect on the next acquire.
- *  - The CLOCK is injectable (`now`): the midnight-PT RPD reset is a
- *    day-string compare against the injected clock, so the reset is
- *    unit-testable without touching the wall clock.
- *  - fg preempts bg: background acquisitions are refused once a foreground
- *    claim is in flight OR the bg fraction of the RPM/TPM budget is spent, so
- *    interactive work is never starved by background spend (decision §3.6).
- *  - acquire RECORDS the spend; commit RECONCILES estimate→actual; release
- *    frees the fg claim only. `acquire(estTokens)` admits against the estimate
- *    AND, once admitted, records the rolling RPM/TPM window event plus bumps +
- *    persists the daily RPD — so a request that never commits (e.g. an
- *    embedding, which has no governor commit) STILL counts and still publishes
- *    via the store. `commit(actualTokens)` only reconciles that already-recorded
- *    event's token cost (est→actual) + the daily.tpm delta; it records no new
- *    event and never bumps RPD. `release()` frees the fg claim only and never
- *    undoes the acquire-recorded window/daily event.
- *  - cooldown: a 429 feeds `recordCooldown(retryAfterMs)`; acquire throws
- *    {@link NetRateLimitedError} (pre-network backpressure) while a cooldown is
- *    active or the RPD is exhausted.
+ * Behavior:
+ *  - Limits are read FRESH on every `acquire()` from the injected provider —
+ *    never snapshotted at construction, never cached — so changing the limits
+ *    takes effect on the next acquire.
+ *  - The CLOCK is injectable (`now`): the daily reset is a midnight-Pacific
+ *    day-string compare against that clock, so the rollover is unit-testable
+ *    without waiting for real midnight.
+ *  - Foreground preempts background: a background acquire is refused while any
+ *    foreground request is in flight, or once background work has spent its
+ *    capped fraction of the minute budget, so interactive work is never starved
+ *    by automatic prefetch/embedding spend.
+ *  - acquire RECORDS the spend, commit RECONCILES the estimate to the actual
+ *    cost, release frees the foreground claim. `acquire(estTokens)` checks the
+ *    estimate against the budget and, once admitted, records the minute-window
+ *    event and bumps + persists the daily counter — so a request that never
+ *    calls commit (e.g. an embedding) still counts and still persists.
+ *    `commit(actualTokens)` only corrects that already-recorded event's token
+ *    cost (estimate→actual) plus the daily token delta; it records no new event
+ *    and never bumps the daily request count. `release()` only frees the
+ *    foreground claim and never undoes a recorded spend.
+ *  - Cooldown: a 429 from the provider feeds `recordCooldown(retryAfterMs)`;
+ *    until that cooldown elapses (or once the daily request budget is spent)
+ *    acquire throws {@link NetRateLimitedError} before any network call.
  *
- * Cross-device note: the QuotaStore port is the single seam where a later
- * multi-device embedSpend sum slots in (A6) with ZERO kernel change — the
- * governor only ever asks the port for "today's usage".
+ * Cross-device note: the QuotaStore port is the single seam where, later, a sum
+ * of spend across the user's other devices can be folded in without changing
+ * the governor — it only ever asks the port for "today's usage".
  */
 import { NetRateLimitedError } from '~types/errors';
 import { ptDayString } from './ptDay';
@@ -41,7 +44,7 @@ import { ptDayString } from './ptDay';
 /** Foreground (interactive) or background (prefetch/auto) egress lane. */
 export type Lane = 'fg' | 'bg';
 
-/** Per-lane limits, read fresh per acquire (GG-8). */
+/** Per-lane limits, re-read on every acquire (never cached). */
 export interface QuotaLimits {
   /** Requests per rolling minute. */
   rpm: number;
@@ -52,8 +55,8 @@ export interface QuotaLimits {
 }
 
 /**
- * The config seam: limits read fresh on every acquire. Mutating what this
- * returns between calls is honored on the next acquire (GG-8 — no caching).
+ * The config seam: limits are read fresh on every acquire. Whatever this
+ * returns between calls is honored on the next acquire (no caching).
  */
 export type QuotaLimitsProvider = () => QuotaLimits;
 
@@ -138,8 +141,9 @@ interface WindowEvent {
 const WINDOW_MS = 60_000;
 
 /**
- * The fraction of the RPM/TPM minute budget background work may consume before
- * it is refused — leaves headroom for foreground (decision §3.6, fg preempts).
+ * The fraction of the per-minute request/token budget background work may
+ * consume before it is refused — leaves headroom so foreground work is not
+ * starved by automatic background spend.
  */
 const BG_FRACTION = 0.5;
 
@@ -157,7 +161,7 @@ export class QuotaGovernor {
   private cooldownUntil = 0;
 
   /**
-   * @param getLimits Per-lane limits, read FRESH on every acquire (GG-8).
+   * @param getLimits Per-lane limits, read FRESH on every acquire (never cached).
    * @param now Injectable clock; defaults to `Date.now` (tests control it).
    */
   constructor(
@@ -217,12 +221,12 @@ export class QuotaGovernor {
    *    (background lanes are additionally capped at the bg fraction and refused
    *    while a foreground claim is in flight — fg preempts bg).
    *
-   * Limits are read FRESH here (GG-8). On success a foreground claim is held
-   * until the matching {@link commit}/{@link release}, AND the spend is RECORDED
-   * here (the rolling RPM/TPM window event + the persisted daily RPD/TPM): this
-   * is the single recorder, so a request that never commits (every embedding —
-   * the embedding client has no governor) still counts toward RPM/TPM/RPD and
-   * still persists+publishes via the store. {@link commit} only reconciles the
+   * Limits are read FRESH here (never cached). On success a foreground claim is
+   * held until the matching {@link release}, AND the spend is RECORDED here (the
+   * rolling per-minute window event + the persisted daily request/token count):
+   * this is the single recorder, so a request that never commits (e.g. an
+   * embedding, whose client has no governor) still counts toward every budget
+   * and still persists via the store. {@link commit} only reconciles the
    * recorded estimate to the actual cost.
    */
   async acquire(lane: Lane, estTokens: number): Promise<void> {

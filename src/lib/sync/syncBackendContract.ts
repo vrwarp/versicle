@@ -53,10 +53,12 @@ const SYNC_CONNECTION_ERROR_EVENTS = [
 ] as const satisfies readonly SyncConnectionEventName[];
 
 /**
- * The artifact-lane tails the C3 trio cases exercise (shared-ai-cache-design.md
- * §2.1): the blob tail for put/get, the sibling HEAD-doc tail for head. The
- * `{key}` (`contract-key`) is the residual the extended purge case seeds and
- * the embedCache PURGE_SUBCOLLECTIONS entry must sweep (H-3).
+ * In-workspace paths the artifact round-trip cases exercise. An artifact is a
+ * cached embedding stored as two records: the raw bytes ("blob", used by
+ * put/get) and a small sibling metadata record ("HEAD doc", used by head). The
+ * shared key (`contract-key`) is also what the workspace-delete purge case
+ * seeds so it can assert the HEAD doc gets swept along with everything else.
+ * (design: plan/shared-ai-cache-design.md)
  */
 const ARTIFACT_BLOB_REL_PATH = 'embeddings/contract-key.bin';
 const ARTIFACT_HEAD_REL_PATH = 'embedCache/contract-key';
@@ -122,11 +124,12 @@ export interface SyncBackendContractHarness {
    */
   attemptWriteToTombstoned?(workspaceId: string): Promise<boolean>;
   /**
-   * Artifact lane (C3 method trio; shared-ai-cache-design.md §2.1). `relPath`
-   * is the in-workspace tail — the blob tail (`embeddings/{key}.bin`) for
-   * put/get, the HEAD-doc tail (`embedCache/{key}`) for head. Required when
+   * Cached-embedding storage (put/head/get). `relPath` is the in-workspace
+   * path — the raw-bytes blob (`embeddings/{key}.bin`) for put/get, the small
+   * metadata record (`embedCache/{key}`) for head. Required when
    * capabilities.artifacts is on; both backends implement it (the mock via an
-   * in-memory Map, FirestoreBackend via Cloud Storage + a Firestore HEAD doc).
+   * in-memory Map, the Firestore backend via Cloud Storage for the blob plus a
+   * Firestore doc for the metadata record).
    */
   putArtifact?(
     workspaceId: string,
@@ -140,13 +143,15 @@ export interface SyncBackendContractHarness {
   ): Promise<{ exists: true; stamp: string; size: number } | null>;
   getArtifact?(workspaceId: string, relPath: string): Promise<ArrayBuffer | null>;
   /**
-   * Phase-D lifecycle/GC (shared-ai-cache-design.md §2.7). `deleteArtifactHead`
-   * deletes the `embedCache/{key}` HEAD doc ONLY (the shared blob is left for
-   * the sweeper). `sweepArtifacts` bounds the bucket by deleting past-TTL HEAD-
-   * doc+blob pairs (and over-budget oldest-first). Required when
-   * capabilities.artifacts is on; both backends implement them (the mock
-   * collapses HEAD doc + blob into one Map entry, so the leave-the-blob
-   * guarantee is pinned ONLY by the emulator path).
+   * Cached-embedding garbage collection. `deleteArtifactHead` deletes the
+   * `embedCache/{key}` metadata record ONLY, leaving the raw-bytes blob for the
+   * sweeper to reclaim later (the blob may be shared, so it is not safe to
+   * delete eagerly). `sweepArtifacts` bounds total storage by deleting
+   * metadata+blob pairs that are past their TTL, and evicting oldest-first when
+   * over a byte budget. Required when capabilities.artifacts is on; both
+   * backends implement them (the mock collapses metadata record + blob into one
+   * Map entry, so the leave-the-blob guarantee is pinned ONLY by the emulator
+   * path). (design: plan/shared-ai-cache-design.md)
    */
   deleteArtifactHead?(workspaceId: string, relPath: string): Promise<void>;
   sweepArtifacts?(
@@ -195,10 +200,11 @@ interface SyncBackendContractCapabilities {
    */
   purge: boolean;
   /**
-   * The artifact-lane trio (headArtifact/putArtifact/getArtifact) is
+   * The cached-embedding round-trip (headArtifact/putArtifact/getArtifact) is
    * exercisable here. True for both backends; the mock runs the round-trip
-   * over an in-memory Map (no real Storage tier), so HEAD-after-Storage
-   * ordering + crash fail-safes are pinned ONLY by the emulator suite.
+   * over an in-memory Map (no real Storage tier), so the ordering guarantee
+   * (write the blob before its metadata record) and crash fail-safes are pinned
+   * ONLY by the emulator suite.
    */
   artifacts: boolean;
 }
@@ -494,11 +500,11 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
           await harness.seedResiduals!(doomed.workspaceId);
           expect(await harness.countResiduals!(doomed.workspaceId)).toBeGreaterThan(0);
 
-          // shared-ai-cache-design.md §2.7 (H-3): the artifact HEAD doc is
-          // swept by the `embedCache` PURGE_SUBCOLLECTIONS entry — seedResiduals
-          // planted one (an `embedCache/{key}` doc + its blob); assert it is
-          // present before delete and gone after. purgeStoragePrefix sweeps the
-          // blob; this pins the HEAD-doc half that is NOT free.
+          // A workspace delete must also remove cached embeddings. seedResiduals
+          // planted one (an `embedCache/{key}` metadata record + its blob);
+          // assert it is present before the delete and gone after. The blob is
+          // reclaimed by the storage-prefix purge; this case pins the metadata-
+          // record half, which is not removed automatically with it.
           if (capabilities.artifacts) {
             await expect(
               harness.headArtifact!(doomed.workspaceId, ARTIFACT_HEAD_REL_PATH)
@@ -549,12 +555,12 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
       }
     });
 
-    // The C3 additive method trio (shared-ai-cache-design.md §2.1, Phase A):
-    // content-addressed put/head/get over the workspace prefix. Behavioral
-    // cases run against BOTH backends (the mock's in-memory Map and, in CI,
-    // the real Firestore+Storage emulator). HEAD-after-Storage write ordering
-    // and the §2.7 offline-vs-miss fail-safe are pinned ONLY by the emulator
-    // suite (the mock has no real Storage tier) — see capabilities.artifacts.
+    // Cached-embedding storage: content-addressed put/head/get under the
+    // workspace's path. Behavioral cases run against BOTH backends (the mock's
+    // in-memory Map and, in CI, the real Firestore+Storage emulator). The write
+    // ordering guarantee (blob first, then its metadata record) and the
+    // offline-vs-genuine-miss fail-safe are pinned ONLY by the emulator suite
+    // (the mock has no real Storage tier) — see capabilities.artifacts.
     describe('artifact lane (C3 method trio)', () => {
       if (!capabilities.artifacts) {
         it.todo('headArtifact/putArtifact/getArtifact round-trip');
@@ -604,8 +610,9 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
           size: original.byteLength,
         });
 
-        // Second put with the SAME key (head-before-put → no-op). Different
-        // bytes/meta must NOT overwrite the content-addressed original.
+        // Second put with the SAME key is a no-op (put checks for an existing
+        // metadata record first). Different bytes/meta must NOT overwrite the
+        // content-addressed original.
         const overwrite = bytesOf('different-bytes-should-be-ignored');
         await harness.putArtifact!(ws.workspaceId, ARTIFACT_BLOB_REL_PATH, overwrite, {
           stamp: 'stamp-2',
@@ -637,12 +644,13 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
         ).resolves.toBeNull();
       });
 
-      // ── Phase D lifecycle/GC (shared-ai-cache-design.md §2.7) ─────────────
-      // NOTE: the MockBackend collapses HEAD doc + blob into one Map entry (no
-      // Storage tier), so the "delete the HEAD doc but KEEP the shared blob"
-      // reference-safety guarantee CANNOT be proven on the mock — these cases
-      // pin HEAD-removal semantics on the mock; blob-survival is pinned only on
-      // the FirestoreBackend/emulator path (capabilities not yet wired there).
+      // ── Cached-embedding garbage collection ───────────────────────────────
+      // NOTE: the MockBackend collapses metadata record + blob into one Map
+      // entry (no Storage tier), so the "delete the metadata record but KEEP the
+      // shared blob" reference-safety guarantee CANNOT be proven on the mock —
+      // these cases pin metadata-record-removal semantics on the mock;
+      // blob-survival is pinned only on the Firestore/emulator path (capability
+      // not yet wired there).
       it('deleteArtifactHead removes the HEAD doc; an untouched second key survives', async () => {
         const ws = await harness.createWorkspace('Artifacts');
         const SECOND_BLOB = 'embeddings/second-key.bin';

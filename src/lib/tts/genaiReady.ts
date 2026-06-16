@@ -1,19 +1,18 @@
 /**
- * ensureGenAIReady — the ONE GenAI availability/configuration gate for the
- * TTS content pipeline (Phase 5c; phase5-tts-strangler.md §5c.2). Replaces
- * the duplicated `canUseGenAI` + `'gemini-1.5-flash'` fallback blocks in
- * AudioContentPipeline and TableAdaptationProcessor.
+ * ensureGenAIReady — the single GenAI availability/configuration gate for the
+ * TTS content pipeline. Callers (AudioContentPipeline, TableAdaptationProcessor)
+ * route through it instead of each repeating their own enabled-check plus
+ * fallback-model wiring.
  *
- * The `mockGenAIResponse` localStorage seam this module used to honor died
- * at the Phase 7 merge (GG-4/privacy D9): nothing sets the key anymore —
- * E2E/dev mocks install a MockGenAIClient at the composition root via
- * `window.__versicleTest.genai.setMock(...)` (src/test-api.ts), and the
- * port's isConfigured() reflects it transparently.
+ * Test/dev mocks no longer go through any localStorage seam: they install a
+ * MockGenAIClient at the composition root via
+ * `window.__versicleTest.genai.setMock(...)` (src/test-api.ts), and the port's
+ * isConfigured() reflects that transparently.
  *
- * Post-P7 note: the production port's configure() is a documented no-op
- * (config is read per call from the composition-root provider — GG-8), so
- * the configure branch below only matters for injected fakes; it stays
- * until the EngineContext GenAI port is narrowed (P7 follow-up).
+ * In production the port's configure() is a deliberate no-op: real config is
+ * read fresh per call from the composition-root provider, so the configure()
+ * branch below only does anything for injected fakes. It stays until the
+ * EngineContext GenAI port is narrowed.
  */
 import type { GenAIPort } from './engine/EngineContext';
 

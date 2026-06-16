@@ -1,42 +1,40 @@
 /**
- * Artifact-blob codec (shared-ai-cache-design.md §2.2/§2.6) — the PURE,
- * store-free content-addressing key + self-describing blob header for the
- * shared AI-cache "Artifact Lane". Phase B implemented the PARSE side
- * (download/consult); Phase C now adds the SERIALIZE side ({@link
- * serializeArtifactBlob}, the ArtifactPublisher upload boot task) — the exact
- * inverse, reusing the header types + byte layout pinned here verbatim.
- *
- * No store/IDB import (domains-no-store holds): the app layer reads the
- * stores/manifest and injects the bytes; this module only turns a stamp into a
- * key and a byte buffer into a header + per-section vector views.
+ * Codec for the cloud blob that carries a book's embeddings between the user's
+ * devices. Pure and store-free: it turns an embedding-space stamp into a
+ * content-addressing key, serializes an embeddings row into a self-describing
+ * byte blob ({@link serializeArtifactBlob}), and parses that blob back
+ * ({@link parseArtifactBlob}) — exact inverses sharing the header types and byte
+ * layout defined here. The app layer reads the stores/manifest and injects the
+ * bytes; this module never touches a store.
  *
  * ── contentKey ─────────────────────────────────────────────────────────────
- * The whole-book bundle key (§2.2):
+ * The whole-book key that addresses a blob in the shared cache:
  *   contentKey = sha256hex(contentHash | model | dims | quant | extractionVersion)
- * `contentHash` is the EPUB's content identity (static.ts:67), the rest the
- * embedding-space stamp — a change in ANY field yields a different key, so a
- * stale-space blob is a structural miss (a different object), never converted.
- * The hex digest mirrors identity.ts:54-59 (crypto.subtle.digest('SHA-256')).
+ * `contentHash` is the EPUB's content identity; the rest is the embedding-space
+ * stamp. A change in ANY field yields a different key, so embeddings made for a
+ * different model/dimensionality are simply a different object — a miss, never
+ * silently reinterpreted.
  *
- * ── Byte layout (versioned Cloud format; Phase C serializes to it) ──────────
+ * ── Byte layout ─────────────────────────────────────────────────────────────
  *   [headerLen: u32 little-endian]
  *   [header JSON: UTF-8, headerLen bytes]
  *   [packed body: per-section int8 vectors then float32 scales, concatenated
  *    in the header's `sections` order]
  *
- * Each section's `{byteOffset, byteLen}` address its slice of the packed body
+ * Each section's `{byteOffset, byteLen}` addresses its slice of the packed body
  * (relative to the body start, i.e. AFTER the u32 + JSON header). Inside a
  * section slice the int8 vectors come FIRST (`vectorsByteLen` bytes) and the
- * float32 scales SECOND (the remainder, `byteLen - vectorsByteLen`); the
- * float32 scales region is 4-byte aligned because each section slice begins on
- * a 4-byte boundary (the writer pads — see {@link parseArtifactBlob} which
- * slices, never reinterpret-casts, so a misaligned read cannot occur).
+ * float32 scales SECOND (the remainder, `byteLen - vectorsByteLen`); the float32
+ * scales region is 4-byte aligned because each section slice begins on a 4-byte
+ * boundary (the writer pads — and {@link parseArtifactBlob} slices rather than
+ * reinterpret-casts, so a misaligned read cannot occur regardless).
  */
 import type { CacheEmbeddingsRow } from '@data/rows/cache';
 
 /**
- * The embedding-space stamp baked into {@link contentKey} and re-asserted on
- * consult (§2.2). A change in any field → a different key → a structural miss.
+ * The embedding-space stamp baked into {@link contentKey} and re-checked when a
+ * blob is downloaded. A change in any field yields a different key, so a blob
+ * from a different embedding space is a miss, never reinterpreted.
  */
 export interface ArtifactStamp {
   model: string;
@@ -55,13 +53,13 @@ export async function contentKey(args: { contentHash: string } & ArtifactStamp):
 }
 
 /**
- * The self-describing header carried in the blob (§2.2): the embedding-space
- * stamp (re-derived into a {@link contentKey} on consult as a bit-rot guard)
- * plus the per-section index. `sectionTextHash` lets a partially re-extracted
- * book reconcile section-by-section on download (drop the diverged sections,
- * re-embed only those). `byteOffset`/`byteLen` address the section's slice of
- * the packed body; `vectorsByteLen` splits that slice into the int8 vectors
- * (first) and the float32 scales (rest).
+ * The self-describing header carried in the blob: the embedding-space stamp
+ * (re-derived into a {@link contentKey} on download to catch a corrupted/wrong
+ * object) plus the per-section index. `sectionTextHash` lets a book whose text
+ * has partially changed reconcile section-by-section on download (keep the
+ * matching sections, re-embed only the diverged ones). `byteOffset`/`byteLen`
+ * address the section's slice of the packed body; `vectorsByteLen` splits that
+ * slice into the int8 vectors (first) and the float32 scales (rest).
  */
 export interface ArtifactBlobHeader {
   /** Header schema version — bumped if this layout ever changes. */
@@ -99,8 +97,8 @@ export interface ArtifactSectionBytes {
  * ArrayBuffers (`.slice` — never a reinterpret-cast over the source buffer, so
  * the read is alignment-safe and the caller can persist the buffers directly).
  * Throws on a structurally invalid blob (too small, bad headerLen, unknown
- * version, out-of-range section span) so the consult treats a corrupt object as
- * a definitive non-hit at the app layer.
+ * version, out-of-range section span) so the caller treats a corrupt download as
+ * a miss and falls back to re-embedding.
  */
 export function parseArtifactBlob(bytes: ArrayBuffer): {
   header: ArtifactBlobHeader;
@@ -195,27 +193,27 @@ export type SerializableEmbeddingRow = Pick<
 };
 
 /**
- * Serialize a persisted `cache_embeddings` row into the header-format blob the
- * {@link parseArtifactBlob} reader consumes (§2.2) — the EXACT inverse of the
- * parse side, byte-for-byte to the documented layout.
+ * Serialize an embeddings row into the blob the {@link parseArtifactBlob} reader
+ * consumes — the exact inverse of the parse side, byte-for-byte to the layout
+ * documented at the top of this file.
  *
  * The body concatenates, per section in row order, the int8 vectors FIRST
  * (`section.vectors`) then the float32 scales SECOND (`section.scales`), padding
- * the body so the next section slice begins on a 4-byte boundary (the scales
- * region stays 4-byte aligned — matching the parse-side alignment-safe slicing).
- * The header stamp ({model, dims, quant, extractionVersion}) comes from the ROW,
- * NOT live config, so the published object is content-addressed by what was
- * actually embedded — the indexer's §8.2 stamp-mismatch guard re-embeds a stale
- * row before the publisher ever sees it, keeping the writer/reader keys aligned.
+ * so the next section slice begins on a 4-byte boundary (keeping the scales
+ * region 4-byte aligned, matching the parse side's alignment-safe slicing). The
+ * header stamp ({model, dims, quant, extractionVersion}) comes from the ROW, not
+ * live config, so the published blob is keyed by what was actually embedded; a
+ * row in a stale embedding space is re-embedded before it ever reaches here, so
+ * the writer's and reader's content keys stay aligned.
  *
- * PURE/store-free: the bytes are read off the row's buffers (honoring
- * `byteOffset`/`byteLength` defensively whether the row carries raw
- * ArrayBuffers or the repo's re-wrapped typed-array views) — NO re-quant.
+ * Pure and store-free: bytes are read off the row's buffers (honoring
+ * `byteOffset`/`byteLength` whether the row carries raw ArrayBuffers or the
+ * repo's re-wrapped typed-array views) with no re-quantization.
  *
  * Accepts both the persisted {@link CacheEmbeddingsRow} (binaries are
  * ArrayBuffers) AND the embeddings repo's read view (binaries are
  * Int8Array/Float32Array) via the {@link SerializableEmbeddingRow} structural
- * type, so the publisher passes `embeddingsRepo.get(...)` straight through.
+ * type, so the caller can pass `embeddingsRepo.get(...)` straight through.
  */
 export function serializeArtifactBlob(row: SerializableEmbeddingRow): ArrayBuffer {
   const bodyChunks: Uint8Array[] = [];

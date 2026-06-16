@@ -17,12 +17,12 @@
  *  - `__VERSICLE_WORKSPACES__`: JSON WorkspaceMetadata[] directory
  *  - `versicle_mock_firestore_snapshot`: per-path doc snapshots/tombstones
  *
- * Artifact lane (shared-ai-cache-design.md §2.1): the trio is an in-memory
- * `Map` round-trip (no real Cloud Storage tier — purgeWorkspace still
- * reports `blobsDeleted:0`). It gives the shared C3 contract cases real
- * put/head/get semantics WITHOUT an emulator, but the HEAD-after-Storage
- * write ordering and the crash/offline fail-safes (§2.5/§2.7) are pinned
- * ONLY by the emulator suite (syncBackendContract.emulator.test.ts).
+ * Shared embedding cache: the head/put/get/delete methods are an in-memory
+ * `Map` round-trip (no real Cloud Storage tier — purgeWorkspace still reports
+ * `blobsDeleted:0`). It gives the shared C3 contract cases real put/head/get
+ * semantics WITHOUT an emulator, but the blob-before-head write ordering and
+ * the crash/offline fail-safes are pinned ONLY by the emulator suite
+ * (syncBackendContract.emulator.test.ts).
  */
 import type * as Y from 'yjs';
 import { createLogger } from '@lib/logger';
@@ -62,19 +62,19 @@ const writeSnapshots = (snapshots: Record<string, MockSnapshotEntry>): void =>
   localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshots));
 
 /**
- * The artifact-lane in-memory store (shared-ai-cache-design.md §2.1): the
- * mock has no real Cloud Storage tier, so the put/head/get round-trip is one
- * `Map` keyed by the full artifact path. Module-level (not localStorage:
- * ArrayBuffers don't serialize and the lane is test-only here);
- * {@link clearMockArtifacts} wipes it for the harness's per-test reset,
- * mirroring MockFireProvider.clearMockStorage.
+ * The in-memory store for the shared embedding cache: the mock has no real
+ * Cloud Storage tier, so the put/head/get round-trip is one `Map` keyed by the
+ * full artifact path. Module-level (not localStorage: ArrayBuffers don't
+ * serialize and this store is test-only here); {@link clearMockArtifacts} wipes
+ * it for the harness's per-test reset, mirroring
+ * MockFireProvider.clearMockStorage.
  */
 const artifactStore = new Map<
   string,
   { bytes: ArrayBuffer; stamp: string; size: number; createdAt: number }
 >();
 
-/** Wipe the artifact-lane store (per-test reset; mirrors clearMockStorage). */
+/** Wipe the embedding-cache store (per-test reset; mirrors clearMockStorage). */
 export const clearMockArtifacts = (): void => {
   artifactStore.clear();
 };
@@ -92,7 +92,7 @@ export class MockBackend implements SyncBackend {
     return `users/${this.uid}/versicle/${workspaceId}`;
   }
 
-  /** Full artifact path from an in-workspace tail (§2.1; mirrors FirestoreBackend). */
+  /** Full artifact path from an in-workspace tail (mirrors FirestoreBackend). */
   private artifactPath(workspaceId: string, relPath: string): string {
     return `${this.docPath(workspaceId)}/${relPath}`;
   }
@@ -159,10 +159,10 @@ export class MockBackend implements SyncBackend {
       delete entry.snapshotBase64;
       writeSnapshots(snapshots);
     }
-    // Sweep the artifact-lane HEAD docs (+ their in-Map "blobs") under this
-    // workspace's prefix — the mock mirror of the real backend's `embedCache`
-    // PURGE_SUBCOLLECTIONS entry (§2.7, H-3). Each Map entry stands in for one
-    // HEAD doc; counted as a doc (the mock has no separate Storage tier).
+    // Sweep the cached-embedding head records (+ their in-Map "blobs") under
+    // this workspace's prefix — the mock mirror of the real backend's
+    // `embedCache` PURGE_SUBCOLLECTIONS entry. Each Map entry stands in for one
+    // head record; counted as a doc (the mock has no separate Storage tier).
     const prefix = `${this.docPath(workspaceId)}/`;
     let artifactDocs = 0;
     for (const key of [...artifactStore.keys()]) {
@@ -172,20 +172,21 @@ export class MockBackend implements SyncBackend {
       }
     }
     logger.info(`[Mock] Workspace purged: ${workspaceId} (hadData=${hadData})`);
-    // The mock's "subcollections" are its one snapshot blob + artifact HEAD
-    // docs; no Storage tier.
+    // The mock's "subcollections" are its one snapshot blob + cached-embedding
+    // head records; no Storage tier.
     return { docsDeleted: (hadData ? 1 : 0) + artifactDocs, blobsDeleted: 0 };
   }
 
-  // Artifact lane (§2.1). The store is keyed by the HEAD-doc path so head/put/
-  // get all resolve to one canonical entry; put/get pass the blob tail and
-  // derive the sibling HEAD tail via artifactHeadTail (same as FirestoreBackend).
+  // Shared embedding cache. The store is keyed by the head-record path so
+  // head/put/get all resolve to one canonical entry; put/get pass the blob tail
+  // and derive the sibling head tail via artifactHeadTail (same as
+  // FirestoreBackend).
 
   async headArtifact(
     workspaceId: string,
     relPath: string
   ): Promise<ArtifactHead | null> {
-    // relPath is the HEAD-doc tail (`embedCache/{key}`).
+    // relPath is the head-record tail (`embedCache/{key}`).
     const entry = artifactStore.get(this.artifactPath(workspaceId, relPath));
     if (!entry) return null;
     return { exists: true, stamp: entry.stamp, size: entry.size };
@@ -198,16 +199,17 @@ export class MockBackend implements SyncBackend {
     meta: { stamp: string; size: number }
   ): Promise<void> {
     // relPath is the blob tail (`embeddings/{key}.bin`); key by the sibling
-    // HEAD-doc path so headArtifact finds it.
+    // head-record path so headArtifact finds it.
     const headPath = this.artifactPath(workspaceId, artifactHeadTail(relPath));
-    // ifAbsent: a no-op if the key already exists (§2.5 content-addressed).
+    // Skip-if-present: a no-op if the key already exists (the key is derived
+    // from the embedding inputs, so identical inputs mean identical content).
     if (artifactStore.has(headPath)) return;
     artifactStore.set(headPath, {
       bytes: toArrayBuffer(bytes),
       stamp: meta.stamp,
       size: meta.size,
-      // createdAt drives the Phase-D sweepArtifacts TTL/budget math (mirrors
-      // the FirestoreBackend HEAD-doc createdAt field).
+      // createdAt drives the sweepArtifacts TTL/budget math (mirrors the
+      // FirestoreBackend head-record createdAt field).
       createdAt: Date.now(),
     });
   }
@@ -216,18 +218,19 @@ export class MockBackend implements SyncBackend {
     workspaceId: string,
     relPath: string
   ): Promise<ArrayBuffer | null> {
-    // relPath is the blob tail (`embeddings/{key}.bin`).
+    // relPath is the blob tail (`embeddings/{key}.bin`); look it up by its
+    // sibling head-record path.
     const headPath = this.artifactPath(workspaceId, artifactHeadTail(relPath));
     return artifactStore.get(headPath)?.bytes ?? null;
   }
 
   async deleteArtifactHead(workspaceId: string, relPath: string): Promise<void> {
-    // relPath is the HEAD-doc tail (`embedCache/{key}`). The mock has no
-    // separate Storage tier, so the single Map entry collapses HEAD doc + blob:
-    // deleting it removes both. The "delete HEAD doc but KEEP the shared blob"
-    // guarantee therefore CANNOT be proven on the mock — that reference-safety
+    // relPath is the head-record tail (`embedCache/{key}`). The mock has no
+    // separate Storage tier, so the single Map entry collapses head record +
+    // blob: deleting it removes both. The "delete the head record but KEEP the
+    // shared blob" guarantee therefore CANNOT be proven on the mock — that
     // invariant is pinned only on the FirestoreBackend/emulator path; the mock
-    // pins the HEAD-removal semantics.
+    // pins the head-removal semantics.
     artifactStore.delete(this.artifactPath(workspaceId, relPath));
   }
 
@@ -235,9 +238,9 @@ export class MockBackend implements SyncBackend {
     workspaceId: string,
     opts: { ttlMs: number; now: number; budgetBytes?: number }
   ): Promise<{ headsDeleted: number; blobsDeleted: number }> {
-    // Iterate the HEAD-doc-keyed Map entries under this workspace's prefix; the
-    // mock collapses HEAD doc + blob into one entry, so blobsDeleted mirrors
-    // headsDeleted (counted once per entry).
+    // Iterate the head-record-keyed Map entries under this workspace's prefix;
+    // the mock collapses head record + blob into one entry, so blobsDeleted
+    // mirrors headsDeleted (counted once per entry).
     const prefix = `${this.docPath(workspaceId)}/embedCache/`;
     const entries: { path: string; createdAt: number; size: number }[] = [];
     for (const [path, entry] of artifactStore) {

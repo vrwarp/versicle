@@ -16,16 +16,17 @@ export {
 } from './SearchSession';
 export { createWorkerSearchEngineFactory } from './workerFactory';
 export {  resolveResultCfi } from './offsetRange';
-// Increment C §4: the foreground document-embedding indexer + the chunker, so
-// app/ can construct the indexer and any in-domain consumer reaches the chunker
-// via the published surface.
+// The foreground document-embedding indexer + the chunker, so app/ can
+// construct the indexer and any in-domain consumer reaches the chunker via the
+// published surface.
 export { EmbeddingIndexer } from './EmbeddingIndexer';
 export { chunkSection } from './chunker';
-// Artifact Lane Phase B/C (shared-ai-cache-design.md §2.2/§2.6): the PURE
-// content-key + blob-header codec, so app/ reaches it via the published surface
-// (mirrors the EmbeddingIndexer/chunkSection exports above). Phase B exported
-// the PARSE side (consult/hydrate); Phase C adds the SERIALIZE side +
-// ARTIFACT_HEADER_VERSION for the ArtifactPublisher upload boot task.
+// The pure codec for the shared embedding cache: contentKey hashes a book's
+// embedding inputs into a content-addressed key, and the blob (de)serializers
+// pack/unpack the stored vector rows with a versioned header. Exported so app/
+// can both read a downloaded cache blob and serialize one for upload (mirrors
+// the EmbeddingIndexer/chunkSection exports above). ARTIFACT_HEADER_VERSION
+// stamps the on-the-wire format. (design: plan/shared-ai-cache-design.md)
 export {
   contentKey,
   parseArtifactBlob,
@@ -37,6 +38,10 @@ export type {
   ArtifactBlobHeader,
   SerializableEmbeddingRow,
 } from './artifactBlob';
-// The quant stamp literal the artifact contentKey folds in (app/ builds the
-// ArtifactStamp from the live config — useGenAIStore {model,dims} + this).
+// The current vector quantization scheme, named so it can identify which
+// embedding space a cached blob belongs to. The cache key is computed from the
+// embedding {model, dims} plus this, so a change here makes old cached blobs
+// miss and be recomputed rather than be read in the wrong space. Exported so
+// app/ can fold it into the stamp it builds from the live config
+// (useGenAIStore {model, dims} + this).
 export { CURRENT_QUANT } from './embeddingPort';

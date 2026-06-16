@@ -50,10 +50,10 @@ const logger = createLogger('ReaderController');
 
 const DEFAULT_CUSTOM_THEME = { bg: '#ffffff', fg: '#000000' };
 
-// The B3 int8 quantizer port (SearchEngine.quantizeInt8PerVector) for the
-// foreground embedding indexer — a pure compute helper, instantiated once and
-// passed as a port so domains/search never deep-imports the worker (Increment
-// C §4 guardrail). The instance holds no per-book state for quantization.
+// The int8 quantizer (SearchEngine.quantizeInt8PerVector) for the foreground
+// embedding indexer — a pure compute helper, instantiated once and passed in as
+// a port so the search domain never deep-imports the worker. The instance holds
+// no per-book state for quantization.
 const embeddingQuantizer = new SearchEngine();
 
 export interface ReaderController {
@@ -287,10 +287,10 @@ export function useReaderController(
   // crashes reset the session and surface a toast (search.md #6).
   const searchSessionRef = useRef<SearchSession | null>(null);
   if (!searchSessionRef.current) {
-    // Foreground document-embedding indexer (Increment C §4): ports wired from
-    // the @domains/google lazy embedding facade + the searchText/embeddings
-    // repos + the B3 quantize port. bookId/CFI flow as arguments through
-    // enqueueEmbedding — no store edge in domains/search.
+    // Foreground document-embedding indexer: ports wired from the lazy embedding
+    // client facade + the searchText/embeddings repos + the int8 quantizer.
+    // bookId/CFI flow as arguments through enqueueEmbedding, so the search domain
+    // never reaches into a store.
     const embeddingClient: EmbeddingClient = getEmbeddingClient();
     const embeddingIndexer = new EmbeddingIndexer({
       embeddingClient,
@@ -301,11 +301,12 @@ export function useReaderController(
         const s = useGenAIStore.getState();
         return { model: s.embeddingModel, dims: s.embeddingDims };
       },
-      // Shared-AI-cache consult (Artifact Lane B-7/B-10): consult the BYO cloud
-      // cache BEFORE spending Gemini quota on a reader-open embed. interactive:
-      // true — the reader-open IS the user gesture that satisfies the §2.6
-      // read-path consent gate. Unwired (sync/Google not composed) → probe false
-      // → degrade to embed, so the no-sync reader path is unchanged.
+      // Before spending Gemini quota to embed this book on reader-open, check
+      // whether another of the user's devices already uploaded its embeddings to
+      // the user's own cloud, and if so download them instead. interactive: true
+      // marks the reader-open as the user gesture that authorizes the cloud read.
+      // When sync/Google is not composed, the probe resolves false and we fall
+      // back to embedding locally, so the no-sync reader path is unchanged.
       consult: {
         probe: (bookId) =>
           getArtifactConsult()?.probeArtifact(bookId, { interactive: true }) ??
@@ -322,11 +323,12 @@ export function useReaderController(
       engineFactory: createWorkerSearchEngineFactory(),
       textSource: searchTextRepo,
       embeddingIndexer,
-      // Increment D — hybrid semantic query ports (additive; regex stays the
-      // default). Reuse the SAME embedding client + repo + quantizer the
-      // indexer was wired from; semantic on/off + {model,dims} arrive via the
-      // injected thunk reading useGenAIStore (mirrors the getConfig thunk
-      // above) — no store edge inside domains/search.
+      // Ports for semantic (meaning-based) search queries; plain text/regex
+      // search stays the default. Reuse the SAME embedding client + repo +
+      // quantizer the indexer was wired from; the semantic on/off flag and
+      // {model,dims} arrive via the injected thunk reading the GenAI store
+      // (mirrors the getConfig thunk above), so the search domain reaches no
+      // store directly.
       embeddingClient,
       embeddingsSource: embeddingsRepo,
       quantize: (vec) => embeddingQuantizer.quantizeInt8PerVector(vec),
@@ -355,14 +357,14 @@ export function useReaderController(
     }
   }, []);
 
-  // Foreground document embedding (Increment C §4): once the reader is open,
-  // embed the document corpus OUTWARD from the current reading position.
-  // Reader-open per bookId is the trigger (cleanup #9): the CFI is captured at
-  // RUN time via useReadingStateStore.getState(), so the section title is NOT a
-  // dependency — re-running on every section change only re-walked the
-  // resume-skip for already-embedded sections. The indexer no-ops when the
-  // embedding client is unconfigured. bookId/CFI are passed as ARGUMENTS — the
-  // trigger context lives here in app/, never in domains/search.
+  // Once the reader is open, embed the book's text OUTWARD from the current
+  // reading position so semantic search covers what the user is reading first.
+  // The trigger is reader-open per bookId: the CFI is captured at RUN time, so
+  // the section title is NOT a dependency — re-running on every section change
+  // would only re-walk the resume-skip over already-embedded sections. The
+  // indexer no-ops when the embedding client is unconfigured. bookId/CFI are
+  // passed as arguments, so the trigger context stays here in app/, never in the
+  // search domain.
   useEffect(() => {
     if (!isReady || !bookId) return;
     const currentCfi = useReadingStateStore.getState().getProgress(bookId)?.currentCfi;

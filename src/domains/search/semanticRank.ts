@@ -1,30 +1,32 @@
 /**
- * semanticRank (Increment D §2) — the search-side semantic ranking pass.
+ * semanticRank — the search-side semantic (meaning-based) ranking pass that
+ * complements plain regex search.
  *
  * Embeds the query ONCE (memoized by the QueryEmbeddingCache), quantizes it to
- * int8 (the B3 per-vector quantizer, injected as a port), loads the book's
- * packed int8 vectors (injected embeddings repo), and ranks each section's
- * chunk rows via `engine.rankInt8` (which crosses the worker seam like
- * searchDetailed). The per-section rankInt8 calls run CONCURRENTLY (Promise.all
- * over the Comlink seam, cleanup #8) but results are assembled in embedded-
- * section ORDER, so the fused ordering is byte-identical to the sequential pass.
- * Each `{ href, row, cosine }` hit is mapped back to a DetailedSearchResult by
- * reading the chunk's PERSISTED charStart/charEnd (cleanup #10b — written by the
- * indexer) → charOffset/matchLength + excerpt; LEGACY rows lacking the offsets
- * fall back to RE-RUNNING the deterministic {@link chunkSection} on the
- * section's text (same boundaries as the indexer → row `r` ↔ chunk `r`).
+ * int8 (an injected per-vector quantizer port), loads the book's packed int8
+ * vectors (injected embeddings repo), and ranks each section's chunk rows via
+ * `engine.rankInt8` (which crosses the worker seam like searchDetailed). The
+ * per-section rankInt8 calls run CONCURRENTLY (Promise.all over the worker seam)
+ * but results are assembled in embedded-section ORDER, so the fused ordering is
+ * byte-identical to a sequential pass. Each `{ href, row, cosine }` hit is
+ * mapped back to a DetailedSearchResult by reading the chunk's PERSISTED
+ * charStart/charEnd (written by the indexer) → charOffset/matchLength + excerpt;
+ * older rows lacking those offsets fall back to RE-RUNNING the deterministic
+ * {@link chunkSection} on the section's text (same boundaries as the indexer →
+ * row `r` ↔ chunk `r`).
  *
- * CFI is left UNSET — resolved lazily at click time by
- * app/reader/searchNavigation.ts (resolveResultCfi against the live view), so
- * no live-reader plumbing enters the session. This fills the Phase-C-deferred
- * chunk→CFI gap (empty cfiStart/cfiEnd at EmbeddingIndexer.ts:127) WITHOUT an
- * IDB format change.
+ * CFI (the precise in-book location) is left UNSET here — resolved lazily at
+ * click time by app/reader/searchNavigation.ts (resolveResultCfi against the
+ * live view), so no live-reader plumbing enters the session. The indexer cannot
+ * compute CFIs at index time, so this maps a hit to char offsets now and defers
+ * the CFI to click time, WITHOUT an IDB format change.
  *
- * Guards (design risk notes):
- *  - skips a section whose re-chunk count != persisted row count (stale corpus
- *    vs vectors) — that section degrades to regex-only;
- *  - skips the whole book when the embedded row's extractionVersion != the
- *    live corpus extractionVersion (stamp mismatch, design §8.2).
+ * Guards: returns nothing for a section/book whose stored vectors no longer
+ * describe the current text, so the caller falls back to regex-only —
+ *  - skips a section whose re-chunk count != persisted row count (the text was
+ *    re-extracted and no longer aligns with the stored vectors);
+ *  - skips the whole book when the embedded row's extractionVersion != the live
+ *    corpus extractionVersion (the text was re-extracted under a new version).
  *
  * Imports only sibling search modules + ~types + the shared @lib/search-engine
  * excerpt helper (the domains→lib edge workerFactory.ts already uses) — no
@@ -73,16 +75,17 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
   const corpus = await textSource.get(bookId);
   if (!corpus) return [];
 
-  // Stamp-mismatch invalidation (design §8.2): a re-extraction after the
-  // vectors were written would mean the re-derived offsets no longer describe
-  // the indexed chunks. Degrade the whole book to regex-only.
+  // The book's text was re-extracted after the vectors were written, so the
+  // re-derived offsets no longer describe the indexed chunks. Degrade the whole
+  // book to regex-only.
   if (embedded.extractionVersion !== corpus.extractionVersion) return [];
 
-  // Embedding-space mismatch (design §8.2): a stored row whose {model, dims,
-  // quant} no longer matches the live config is an INCOMPATIBLE space — the
-  // cosine is meaningless and vectors are NEVER converted. Degrade the whole
-  // book to regex-only (the index path re-embeds it). quant is the single
-  // literal today, guarded against the shared constant for completeness.
+  // The stored vectors live in a different embedding space than the live config:
+  // a row whose {model, dims, quant} no longer matches means cosine similarity
+  // against the current query is meaningless, and vectors are NEVER converted
+  // between spaces. Degrade the whole book to regex-only (the index path
+  // re-embeds it). quant is the single literal today, guarded against the
+  // shared constant for completeness.
   if (
     embedded.model !== config.model ||
     embedded.dims !== config.dims ||
@@ -133,8 +136,8 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
 
     const rowCount = Math.floor(section.vectors.length / dims);
 
-    // Prefer the PERSISTED char offsets (cleanup #10b): when EVERY chunk row
-    // carries them (new rows) we recover charOffset/matchLength with NO
+    // Prefer the PERSISTED char offsets: when EVERY chunk row carries them (rows
+    // the indexer wrote with offsets) we recover charOffset/matchLength with NO
     // re-segmentation. Presence is checked with `typeof === 'number'` (NOT
     // truthiness) since charStart=0 is valid for the first chunk. The alignment
     // guard becomes `chunks.length === rowCount` — one chunk entry per vector
@@ -157,10 +160,10 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
       continue;
     }
 
-    // LEGACY rows (no persisted offsets): re-run the deterministic chunker with
+    // Older rows (no persisted offsets): re-run the deterministic chunker with
     // the SAME defaults the indexer used (EmbeddingIndexer — no options) so row
-    // r ↔ chunk r aligns. Stale corpus vs vectors (re-chunk count != row count)
-    // degrades this section to regex-only.
+    // r ↔ chunk r aligns. If the text changed since indexing (re-chunk count !=
+    // row count) this section degrades to regex-only.
     const { chunks } = chunkSection({ href: section.href, title: source.title, text: source.text });
     if (chunks.length !== rowCount) continue;
     resolved.push({
@@ -173,9 +176,9 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
     });
   }
 
-  // Rank every section CONCURRENTLY across the Comlink worker seam (cleanup #8),
-  // then consume the resolved `top` arrays in their ORIGINAL section order so the
-  // result ordering is byte-identical to the prior sequential loop.
+  // Rank every section CONCURRENTLY across the worker seam, then consume the
+  // resolved `top` arrays in their ORIGINAL section order so the result ordering
+  // is byte-identical to a sequential loop.
   const tops = await Promise.all(
     resolved.map((r) =>
       Promise.resolve(

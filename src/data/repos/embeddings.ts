@@ -1,26 +1,29 @@
 /**
- * Repo for `cache_embeddings` + `cache_embed_jobs` — the per-book int8
- * embedding vectors and resumable embed-job progress (Increment B; stores
- * created by the v27 migration step).
+ * Repo for `cache_embeddings` + `cache_embed_jobs` — the per-book int8 embedding
+ * vectors (used for semantic search) and the resumable progress of the job that
+ * computes them.
  *
- * Device-local CACHE domain: rebuildable, never synced, and DELETED with the
- * book (bookContent.deleteBook removes both rows in the same gated
- * transaction). Absence simply means the (Phase-C) indexer re-embeds.
+ * Device-local cache: rebuildable, never synced as ordinary user data, and
+ * DELETED with the book (book deletion removes both rows in the same gated
+ * transaction). Absence simply means the indexer re-embeds the book.
  *
- * Persisted format (§6.1 convention): each section's `vectors`/`scales` are
- * stored as raw ArrayBuffers (the typed array's `.buffer`); the read path
- * re-wraps them as the Int8Array/Float32Array views the Phase-C worker cosine
- * ranking expects, so a wrong-view bug cannot leak past this boundary.
+ * Persisted format: each section's `vectors`/`scales` are stored as raw
+ * ArrayBuffers (the typed array's `.buffer`); the read path re-wraps them as the
+ * Int8Array/Float32Array views the cosine-ranking worker expects, so a
+ * wrong-view bug cannot leak past this boundary.
  *
  * Worker-safe like every repo: no store/UI imports; writes go through the
  * navigator.locks write-gate.
  *
- * Artifact Lane Phase B (§2.8): {@link EmbeddingsRepo.putHydrated} writes the
- * embeddings row AND its `complete` job row in ONE gated cross-store
- * transaction, so a cloud hydrate (consult-hit refill) can never leave a
- * section the job marks done with absent vectors — the §2.8 skip-but-empty
- * crash window that the two independent {@link EmbeddingsRepo.put}/
+ * {@link EmbeddingsRepo.putHydrated} exists for the case where another device
+ * already embedded this book and shared the vectors via the user's own cloud:
+ * it writes the embeddings row AND its `complete` job row in ONE gated
+ * cross-store transaction. That atomicity means a refill from the cloud can
+ * never leave a section the job marks done while its vectors are absent — the
+ * crash window the two independent {@link EmbeddingsRepo.put} /
  * {@link EmbeddingsRepo.putJob} transactions could otherwise open.
+ *
+ * (design: plan/shared-ai-cache-design.md)
  */
 import { getConnection } from '../connection';
 import { write } from '../write-gate';
@@ -51,8 +54,8 @@ const EMPTY_PROTECTED: ReadonlySet<string> = new Set();
  * the ArrayBuffer-shaped {@link CacheEmbeddingsRow}.
  *
  * Internal for now (knip's "every export needs a consumer" policy): callers
- * get it via inference on {@link EmbeddingsRepo.get}'s return type. The
- * Phase-C indexer/worker that consume it directly will export it then.
+ * get it via inference on {@link EmbeddingsRepo.get}'s return type. It will be
+ * exported once the indexer/search worker consume it by name directly.
  */
 type CacheEmbeddingsView = Omit<CacheEmbeddingsRow, 'sections'> & {
   sections: (Omit<CacheEmbeddingsRow['sections'][number], 'vectors' | 'scales'> & {
@@ -124,16 +127,18 @@ class EmbeddingsRepo {
   }
 
   /**
-   * Hydrate a book from a cloud artifact (Artifact Lane §2.8): write the
-   * embedding row AND its companion `complete` job row in ONE gated cross-store
-   * transaction (the SAME `write(['cache_embeddings','cache_embed_jobs'], …)`
-   * shape as {@link EmbeddingsRepo.delete}). Atomicity is the point: the legacy
-   * {@link EmbeddingsRepo.put}/{@link EmbeddingsRepo.putJob} are two
-   * INDEPENDENT single-store transactions, so a crash between them on the
-   * hydrate path could mark a section done in the job row while its vectors are
-   * absent — and resume-skip would `continue` it forever (silently
-   * un-searchable). One tx closes that window; the jobRow must mark ONLY the
-   * sections actually present in `row` complete (partial-hydrate correctness).
+   * Fill in a book's embeddings from a copy another device uploaded to the
+   * user's own cloud (avoids re-spending Gemini quota to recompute them). Writes
+   * the embedding row AND its companion `complete` job row in ONE gated
+   * cross-store transaction (the same two-store `write(...)` shape as
+   * {@link EmbeddingsRepo.delete}). Atomicity is the point: the plain
+   * {@link EmbeddingsRepo.put} / {@link EmbeddingsRepo.putJob} are two
+   * INDEPENDENT single-store transactions, so a crash between them here could
+   * mark a section done in the job row while its vectors are absent — and the
+   * resume logic, seeing it "done", would skip it forever (silently
+   * un-searchable). One transaction closes that window. The caller's `jobRow`
+   * must mark ONLY the sections actually present in `row` as complete, so a
+   * partial fill stays correct.
    */
   async putHydrated(row: CacheEmbeddingsRow, jobRow: CacheEmbedJobsRow): Promise<void> {
     try {
@@ -163,35 +168,33 @@ class EmbeddingsRepo {
   }
 
   /**
-   * LRU eviction over `cache_embeddings` (design §6/§8.3) — the same
-   * streaming-cursor + gated-batch-delete shape as
-   * {@link AudioCacheRepo.runEviction}, but with NO per-row `lastAccessed`
-   * field or `by_lastAccessed` index. `cache_embeddings` is keyed by bookId
-   * (no secondary index), so the recency signal is INJECTED: the boot task
-   * builds `recencyByBookId` from the reading-state store's progress
-   * (`getMostRecentProgress(...).lastRead`) and passes it in — the repo stays
-   * store-free (data-no-upward). Recently-read books evict LAST; an unknown
-   * bookId ranks oldest (0) and evicts FIRST.
+   * Least-recently-read eviction over `cache_embeddings` to keep it under a byte
+   * budget — the same streaming-cursor + gated-batch-delete shape as the audio
+   * cache eviction, but with NO per-row `lastAccessed` field or recency index.
+   * `cache_embeddings` is keyed by bookId only, so the recency signal is INJECTED
+   * by the caller: it builds `recencyByBookId` from each book's last-read time
+   * and passes it in, which keeps this repo store-free. Recently-read books evict
+   * LAST; a book absent from the map ranks oldest (0) and evicts FIRST.
    *
    * Pass 1 streams a readonly cursor collecting `{bookId, size}`, reading
    * `section.vectors.byteLength + section.scales.byteLength` straight off the
    * STORED ArrayBuffers (never the re-wrapped {@link CacheEmbeddingsView} —
-   * re-wrapping multi-KB blobs just to size them would defeat the streaming
-   * goal, exactly as the audio scan avoids touching blobs). Pass 2 deletes
-   * least-recently-read-first via the {@link EmbeddingsRepo.delete} semantics
-   * (both `cache_embeddings` and `cache_embed_jobs` in the gated tx) until the
-   * total is under budget. Vectors are re-derivable (cache_search_text + the
-   * API), so an evicted book simply re-embeds on next read — absence is the
-   * not-embedded state.
+   * re-wrapping multi-KB blobs just to measure them would defeat the streaming
+   * goal). Pass 2 deletes least-recently-read-first via the same two-store
+   * delete semantics as {@link EmbeddingsRepo.delete} (both `cache_embeddings`
+   * and `cache_embed_jobs` in one gated transaction) until the total is under
+   * budget. Vectors are re-derivable from the cached search text plus the
+   * embedding API, so an evicted book simply re-embeds on next read.
    *
-   * `protectedBookIds` (Phase D): any candidate in this set is NEVER evicted
-   * (skipped in pass 2 even when oldest/over-budget). The repo stays pure/
-   * store-free — the set is INJECTED by the boot task exactly like
-   * recencyByBookId. The never-evict-unconfirmed-upload INVARIANT lives at the
-   * TASK level: when shareAiCaches is OFF the set is empty (evict as today);
-   * when ON, the task probes the connected backend's headArtifact per locally-
-   * embedded book and protects books whose upload is NOT yet confirmed (a
-   * HEAD miss), so eviction can never destroy the only copy of a shared cache.
+   * `protectedBookIds`: any book in this set is NEVER evicted (skipped in pass 2
+   * even when oldest/over-budget); its bytes still count toward the total. Like
+   * `recencyByBookId`, the set is INJECTED so this repo stays store-free. It is
+   * how the caller protects a book whose embeddings exist ONLY on this device:
+   * when the user has opted in to sharing AI caches across their devices, the
+   * caller checks whether each locally-embedded book has been uploaded yet and
+   * protects the ones that have not, so eviction can never destroy the last
+   * remaining copy before it reaches the cloud. When sharing is off, the set is
+   * empty and everything is evictable as usual.
    */
   async runEviction(
     recencyByBookId: Map<string, number>,
@@ -253,9 +256,9 @@ class EmbeddingsRepo {
 
       for (const entry of candidates) {
         if (remaining <= budgetBytes) break;
-        // Never-evict-unconfirmed-upload (Phase D): skip a protected book even
-        // when it is oldest/over-budget; its bytes stay counted in `remaining`,
-        // so the loop keeps looking for an evictable candidate.
+        // Skip a protected book (e.g. one not yet uploaded to the user's cloud)
+        // even when it is oldest/over-budget; its bytes stay counted in
+        // `remaining`, so the loop keeps looking for an evictable candidate.
         if (protectedBookIds.has(entry.bookId)) continue;
         batch.push(entry.bookId);
         deleted += 1;

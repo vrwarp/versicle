@@ -116,10 +116,11 @@ export const APP_METADATA_KEYS = {
   /** `true` once the post-open idle audio `size` backfill completed (v25). */
   audioSizeBackfillV25: 'audio-size-backfill-v25',
   /**
-   * `QuotaDailyUsageRow` — the QuotaGovernor's persisted daily (RPD) counter
-   * for the current PT day (Phase A). Lives under the existing app_metadata KV
-   * (NO new store, NO DB bump): last-write-wins, rolls over on a day-string
-   * mismatch. The only IDB touch for the governor (src/data/repos/quotaCounter.ts).
+   * `QuotaDailyUsageRow` — the AI-API rate limiter's persisted daily request
+   * count for the current Pacific-time day. Lives under this existing
+   * key-value store (no dedicated store, no DB bump): last-write-wins, and a
+   * stored row whose day-string differs from today counts as zero (daily
+   * rollover). Read/written only by src/data/repos/quotaCounter.ts.
    */
   quotaDailyUsage: 'quota-daily-usage',
 } as const;
@@ -174,11 +175,11 @@ export type LegacyRecoveryRecord = {
 };
 
 /**
- * The `quota-daily-usage` record (Phase A): the QuotaGovernor's persisted
- * daily counter. Structurally matches the kernel's `DailyUsage` shape
- * (`@kernel/quota`) — the app-layer `makeQuotaStore` adapter maps between them.
- * `day` is the midnight-PT day key (`YYYY-MM-DD`); a stored row whose `day`
- * differs from today is treated as zero (rollover).
+ * The `quota-daily-usage` record: the AI-API rate limiter's persisted daily
+ * request count. `day` is the Pacific-time day key (`YYYY-MM-DD`); a stored
+ * row whose `day` differs from today is treated as zero, giving a once-a-day
+ * rollover. Mirrors the in-memory usage shape the limiter tracks, so the
+ * adapter that owns the limiter can map between them.
  * @public C1 row contract: parsed via the quotaCounter repo; pinned to the type
  * by `_QuotaSchemaMatches` below.
  */

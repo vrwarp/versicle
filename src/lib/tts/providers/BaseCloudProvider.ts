@@ -9,14 +9,14 @@ import { TTSCache } from '../TTSCache';
 const SYNTHESIS_TIMEOUT_MS = 30_000;
 
 /**
- * The slice of the kernel QuotaGovernor the cloud-TTS egress lane uses (Phase
- * A) — the SECOND kernel/quota consumer (audio domain), which together with
- * GeminiClient satisfies the ≥2-domain kernel-admission bar (C12). Since A4
- * (design §3.2) the pre-flight `acquire` + the failure-path `release` are the
- * NetworkGateway's job (unbypassable at the chokepoint), so this slice keeps
- * only the post-response reconcile steps — `commit` and the 429
- * `recordCooldown` — both of which read the parsed response the gateway never
- * touches.
+ * The slice of the shared rate/spend governor that the cloud-TTS request path
+ * needs. Reserving budget before a request (`acquire`) and refunding it when the
+ * request fails (`release`) are handled centrally in the NetworkGateway, where
+ * every outbound request must pass through and so cannot bypass the limit. That
+ * leaves this path only the after-the-fact bookkeeping: `commit` to record what
+ * a successful response actually spent, and `recordCooldown` to honor a server
+ * 429's back-off — both of which need the parsed response the gateway never
+ * inspects.
  */
 type TtsQuotaGovernor = Pick<QuotaGovernor, 'commit' | 'recordCooldown'>;
 
@@ -25,18 +25,18 @@ type TtsQuotaGovernor = Pick<QuotaGovernor, 'commit' | 'recordCooldown'>;
  * (src/app/google/wireGoogle.ts via {@link setTtsQuotaGovernor}). A holder
  * rather than a constructor param keeps {@link BaseCloudProvider}'s signature
  * (and every subclass `super()` + every direct-construction provider unit test)
- * untouched while still routing every cloud-TTS egress through the governor.
+ * untouched while still routing every cloud-TTS request through the governor.
  * `null` (the default) makes the governor a no-op, so provider tests that never
  * install one behave exactly as before.
  */
 let ttsGovernor: TtsQuotaGovernor | null = null;
 
-/** Install the cloud-TTS rate/spend governor (composition root, Phase A). */
+/** Install the cloud-TTS rate/spend governor (called once at the composition root). */
 export function setTtsQuotaGovernor(governor: TtsQuotaGovernor | null): void {
   ttsGovernor = governor;
 }
 
-/** ~4-chars-per-token estimate for the pre-flight acquire (commit reconciles). */
+/** ~4-chars-per-token estimate for the up-front budget reservation (commit corrects it). */
 function estTtsTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
@@ -265,13 +265,14 @@ export abstract class BaseCloudProvider implements ITTSProvider {
   protected async fetchAudio(destinationId: DestinationId, url: string, body: unknown, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<Blob> {
     const payload = JSON.stringify(body);
 
-    // Admission/backpressure moved to the NetworkGateway chokepoint (A4, design
-    // §3.2): the gateway awaits the injected scheduler's acquire('fg', estTokens)
-    // BEFORE the network call (unbypassable) and owns the failure-path release.
-    // This call declares its lane + estimate through the egress opts and keeps
-    // only the post-response reconcile (commit) + the 429 cooldown — both read
-    // the parsed response the gateway never touches. The governor holder is a
-    // no-op when unset (e.g. direct-construction provider unit tests).
+    // Rate-limiting/back-pressure lives in the NetworkGateway, the single point
+    // every outbound request passes through: it reserves budget (acquire) before
+    // the network call and refunds it on failure (release), so nothing can skip
+    // the limit. This call just declares its lane (foreground) and token
+    // estimate via the egress opts, then does the after-the-fact bookkeeping
+    // below — commit on success, cooldown on a 429 — using the parsed response
+    // the gateway never inspects. The governor holder is a no-op when unset
+    // (e.g. direct-construction provider unit tests).
     const estimate = estTtsTokens(payload);
 
     const response = await egress(

@@ -1,13 +1,14 @@
 /**
- * The shared midnight-PT day-key helper (Phase A DRY). L0: imports NOTHING
- * internal — only the `Intl` global — so it honors kernel-imports-nothing the
- * same way the rest of kernel/quota does.
+ * Shared helper that turns an epoch time into a midnight-Pacific calendar-day
+ * key. Imports nothing internal — only the `Intl` global — so kernel modules can
+ * use it without violating the import rule.
  *
- * The day key is the single source of truth for the RPD-reset / cross-device
- * embedSpend stamp: the kernel QuotaGovernor and the app-layer
- * embedSpendReconciler MUST produce structurally identical keys (a mismatch
- * would silently drop sibling spend), so both consume THIS helper instead of
- * carrying their own copy.
+ * This key is the single source of truth for two things that must agree: when
+ * the daily request budget resets, and the per-day stamp used to sum AI spend
+ * across the user's devices. The governor here and the app-side cross-device
+ * reconciler MUST produce identical keys — a mismatch would silently drop a
+ * sibling device's spend — so both call THIS helper instead of each rolling
+ * their own.
  */
 
 /** Pad an integer to two digits for the day string. */
@@ -17,8 +18,8 @@ function pad2(n: number): string {
 
 /**
  * The midnight-PT day key (`YYYY-MM-DD` in America/Los_Angeles) for an epoch.
- * Uses `Intl` formatting so DST is handled by the runtime rather than a
- * hand-rolled offset (the off-by-one/DST hazard the plan calls out).
+ * Uses `Intl` formatting so the runtime handles daylight-saving transitions,
+ * avoiding the off-by-one errors a hand-rolled UTC offset would introduce.
  */
 export function ptDayString(epochMs: number): string {
   const parts = new Intl.DateTimeFormat('en-CA', {

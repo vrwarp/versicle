@@ -162,10 +162,11 @@ const searchTextSectionSchema = z.looseObject({
   title: z.string(),
   text: z.string(),
   /**
-   * Embedding-indexer skip key (Increment C §3): cheapHash of the section
-   * text, stamped at import. Optional/additive on this CACHE `z.looseObject`
-   * row — legacy rows extracted before the field rebuild cleanly (no
-   * migration, no schema-version bump).
+   * Fast change-detection stamp: a cheap hash of this section's text,
+   * computed at import. The embedding builder compares it against the hash it
+   * recorded to skip re-embedding sections whose text is unchanged. Additive
+   * on this row — rows written before this field existed simply lack it and
+   * get re-extracted (no migration, no schema-version bump).
    */
   sectionTextHash: z.string().optional(),
 });
@@ -192,17 +193,18 @@ const embeddingBinarySchema = z.custom<ArrayBuffer>((v) => v instanceof ArrayBuf
 });
 
 const embeddingChunkSchema = z.looseObject({
-  /** CFI of the chunk start — populated by the Phase-C indexer (which has
-   *  reader/Range access); the chunker/worker cannot emit CFI from text. */
+  /** CFI (EPUB position locator) of the chunk start — filled in by the
+   *  embedding builder, which runs in the reader and can resolve text spans to
+   *  CFIs; the background text-chunker cannot derive a CFI from raw text. */
   cfiStart: z.string(),
   cfiEnd: z.string(),
   tokenCount: z.number(),
-  /** Inclusive/exclusive CHAR offsets of the chunk in the section text, written
-   *  by the indexer from the chunker output so the read path (semanticRank) need
-   *  not re-segment to recover charOffset/matchLength. ADDITIVE on this
-   *  `z.looseObject` cache row: legacy rows lack them and fall back to
-   *  re-segmentation — no migration, no DB_VERSION bump. (A stamp/
-   *  extractionVersion change still re-embeds, so they never go stale silently.) */
+  /** Inclusive/exclusive character offsets of the chunk within the section
+   *  text, recorded when embeddings are built so search can highlight the
+   *  matched span without re-splitting the section into chunks again. Additive:
+   *  rows written before these fields existed lack them and fall back to
+   *  re-splitting — no migration, no DB_VERSION bump. (Any change to the
+   *  extraction version re-embeds the book, so these never silently go stale.) */
   charStart: z.number().optional(),
   charEnd: z.number().optional(),
 });
@@ -221,14 +223,15 @@ const embeddingSectionSchema = z.looseObject({
 });
 
 /**
- * `cache_embeddings` row (key: bookId) — per-book int8 embedding vectors
- * (Increment B, the storage foundation). One row per book; each spine section
- * carries its packed int8 vectors + per-vector scales plus the {model, dims,
- * quant, extractionVersion} stamp that the Phase-F consumer uses to decide
- * re-embedding. Cache-domain, device-local, never synced.
+ * `cache_embeddings` row (key: bookId) — the precomputed embedding vectors
+ * that power semantic ("meaning-based") in-book search. One row per book; each
+ * spine section carries its packed int8 vectors plus the per-vector scales
+ * needed to dequantize them. The {model, dims, quant, extractionVersion} stamp
+ * lets search detect when the vectors were built with a now-outdated model or
+ * settings and must be rebuilt. Cache-domain, device-local, never synced.
  *
- * @public B1 row contract: no parse call site in Phase B — kept exported as
- * the drift-guard anchor (`_EmbeddingsSchemaMatches` below pins it).
+ * @public B1 row contract: no parse call site yet — kept exported as the
+ * drift-guard anchor (`_EmbeddingsSchemaMatches` below pins it).
  */
 export const cacheEmbeddingsRowSchema = z.looseObject({
   bookId: z.string().min(1),
@@ -262,13 +265,14 @@ export type CacheEmbeddingsRow = {
 };
 
 /**
- * `cache_embed_jobs` row (key: bookId) — resumable per-section embed progress
- * (Increment B). Lets the Phase-E backfill lane resume mid-book without
- * re-embedding what is already in `cache_embeddings`. Dies with the book (and
- * with the vectors) in the same gated delete transaction.
+ * `cache_embed_jobs` row (key: bookId) — per-section progress for the
+ * background job that builds a book's embeddings. Records how far each section
+ * got so the job can resume mid-book after an interruption instead of
+ * re-embedding sections already written to `cache_embeddings`. Deleted
+ * together with the book and its vectors in the same gated delete transaction.
  *
- * @public B1 row contract: no parse call site in Phase B — kept exported as
- * the drift-guard anchor (`_EmbedJobsSchemaMatches` below pins it).
+ * @public B1 row contract: no parse call site yet — kept exported as the
+ * drift-guard anchor (`_EmbedJobsSchemaMatches` below pins it).
  */
 export const cacheEmbedJobsRowSchema = z.looseObject({
   bookId: z.string().min(1),
@@ -278,10 +282,11 @@ export const cacheEmbedJobsRowSchema = z.looseObject({
       href: z.string(),
       embeddedThroughChunk: z.number(),
       /**
-       * The {href, sectionTextHash} resume key (Increment C §4): the indexer
-       * skips a section whose recorded hash matches the live corpus hash, and
-       * re-embeds on mismatch (a re-extracted section). Optional/additive on
-       * this CACHE `z.looseObject` row — legacy rows re-embed (no migration).
+       * The text hash this section was embedded against, paired with `href` as
+       * the resume key. On resume, the builder skips a section whose recorded
+       * hash still matches the current text and re-embeds it on mismatch (the
+       * section was re-extracted). Additive — rows written before this field
+       * existed lack it and re-embed (no migration).
        */
       sectionTextHash: z.string().optional(),
     }),

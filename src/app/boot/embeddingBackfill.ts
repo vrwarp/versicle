@@ -1,27 +1,28 @@
 /**
- * `embeddingBackfillTask` — the Increment E2 BACKGROUND embedding lane (design
- * §4.3, §3.4). It trickles the FULL TEXT of loaded-but-unread books through the
- * EmbeddingIndexer on the bg quota lane during idle time, so the library can be
- * pre-embedded for semantic search WITHOUT a foreground reader session.
+ * `embeddingBackfillTask` — pre-embeds the library for semantic search in the
+ * background, so books are searchable WITHOUT first being opened in the reader.
+ * During idle time it trickles the full text of loaded-but-unread books through
+ * the EmbeddingIndexer on the low-priority background quota lane.
  *
  * Privacy posture (the load-bearing gates — see GUARDRAILS):
  *  - it runs ONLY when the user turned the library-wide opt-in ON
  *    (useGenAIStore.preEmbedLibrary) AND the embedding client isConfigured();
  *  - every embed is `{ interactive: false, lane: 'bg' }` — NEVER interactive
- *    (the interactive:true bypass is forbidden from an idle path); the §8.4.1
- *    consent grant in aiConsent.ts is what lets the bg egress through;
- *  - it runs ONLY on the heartbeat-active device (net-new §3.4 gate, reusing
+ *    (an idle path must not take the interactive bypass); the library-wide
+ *    opt-in is what grants the consent for this background egress;
+ *  - it runs ONLY on a device whose heartbeat is recent (reusing
  *    ACTIVE_DEVICE_WINDOW_MS) so an idle/locked device never spends quota;
  *  - it runs on requestIdleCallback (setTimeout fallback) so it never competes
  *    with the boot path or interactive work;
- *  - an app-layer CROSS-DEVICE RPD pre-flight (makeBackgroundQuotaLimits vs the
- *    governor's bg.rpd snapshot) stops the trickle when the A6 cross-device
- *    ceiling is reached — the kernel governor enforces fg-preempt + bg-fraction
- *    on the bg lane, but the cross-device ceiling is an admission gate here.
+ *  - before each embed it checks an app-layer cross-device daily-request budget
+ *    and stops the trickle when this device's share of the shared daily quota is
+ *    used up. (The kernel quota governor still enforces foreground-preempt and
+ *    the background fraction on the lane itself; this is the extra
+ *    cross-device admission check on top of that.)
  *
- * The core {@link runEmbeddingBackfill} is PURE/injectable (mirrors
- * runReingestWave): every store/IDB/governor edge arrives as a dep, so the
- * suite drives it with fakes. The boot task wires the real seams.
+ * The core {@link runEmbeddingBackfill} is PURE/injectable: every store/IDB/
+ * governor edge arrives as a dep, so the suite drives it with fakes. The boot
+ * task wires the real seams. (design: plan/shared-ai-cache-design.md)
  */
 import type { BootTask } from '../bootstrap';
 import { ACTIVE_DEVICE_WINDOW_MS } from '@app/quota/embedSpendReconciler';
@@ -45,9 +46,10 @@ import { createLogger } from '@lib/logger';
 const logger = createLogger('EmbeddingBackfill');
 
 /**
- * "Unread enough to backfill": a book whose synced progress is below this
- * fraction is treated as loaded-but-unread. The §4.3 trickle targets the books
- * the reader has NOT opened (the FG indexer already covers the open book).
+ * "Unread enough to backfill": a book whose synced reading progress is below
+ * this fraction is treated as loaded-but-unread. The background trickle targets
+ * books the reader has NOT opened — the open book is already embedded by the
+ * foreground indexer in the reader session.
  */
 const UNREAD_PROGRESS_CEILING = 0.05;
 
@@ -68,30 +70,34 @@ export interface EmbeddingBackfillDeps {
   getProgress(bookId: string): number | null;
   /** True when the local binary is present (getOffloadedStatus === false). */
   hasLocalBinary(bookId: string): Promise<boolean>;
-  /** The BG-lane effective limits (makeBackgroundQuotaLimits — A6 ceiling). */
+  /**
+   * This device's effective background-lane quota limits — the base daily
+   * request limit reduced by what other active devices have already spent today.
+   */
   getBgLimits(): QuotaLimits;
-  /** Requests counted against today's bg lane (governor.snapshot().bg.rpd). */
+  /** Requests already counted against today's background lane. */
   getBgUsedRpd(): number;
-  /** Embed one book's corpus on the bg lane (EmbeddingIndexer.enqueue port). */
+  /** Embed one book's corpus on the background lane (EmbeddingIndexer.enqueue port). */
   enqueue(bookId: string, opts: { interactive: false; lane: 'bg' }): Promise<void>;
   /**
-   * Shared-AI-cache HEAD probe (Artifact Lane B-6/H-1): does a hydratable
-   * artifact exist for this book? Consulted BEFORE the cross-device RPD gate so
-   * a SATURATED-quota run still hydrates probe-hit books quota-free. Returns
-   * `false` (degrade to embed) when sync is off / not connected / no contentHash
-   * / consult unwired.
+   * Cheap existence check: does a reusable embedding blob for this book already
+   * exist in the shared cloud cache? Checked BEFORE the cross-device quota gate
+   * so that even a device that has exhausted its quota can still reuse a peer's
+   * embeddings for free. Returns `false` (fall through to embed) when sync is
+   * off / not connected / there is no contentHash / the cache adapter is unwired.
    */
   probeArtifact(bookId: string): Promise<boolean>;
   /**
-   * Download + materialize the local row from the artifact (quota-free).
-   * Returns `true` on a successful hydrate; `false` falls through to embed.
+   * Download the shared blob and write the local embedding row from it (no
+   * quota spent). Returns `true` on a successful reuse; `false` falls through to
+   * embed.
    */
   hydrateFromArtifact(bookId: string): Promise<boolean>;
   /** Cooperative cancel + live re-check (opt-in flipped off / shutdown). */
   shouldContinue(): boolean;
 }
 
-/** This device is heartbeat-active within the §3.4 recency window. */
+/** This device sent a heartbeat within the recent-activity window. */
 function isSelfActive(deps: EmbeddingBackfillDeps): boolean {
   const self = deps.getDevices()[deps.selfId];
   if (!self) return false;
@@ -101,9 +107,10 @@ function isSelfActive(deps: EmbeddingBackfillDeps): boolean {
 /**
  * Run one backfill pass (PURE — no store/IDB/governor edge; everything is a
  * dep). Bails unless opt-in ON + client configured + THIS device active; then
- * trickles loaded-but-unread books through the bg-lane indexer until the
- * cross-device bg RPD headroom is exhausted, a book hits NetRateLimitedError
- * (stop and resume next idle/boot), or shouldContinue() goes false.
+ * trickles loaded-but-unread books through the background-lane indexer until
+ * this device's share of the daily request budget is exhausted, a book hits
+ * NetRateLimitedError (stop and resume next idle/boot), or shouldContinue()
+ * goes false.
  */
 export async function runEmbeddingBackfill(deps: EmbeddingBackfillDeps): Promise<void> {
   if (!deps.isOptInEnabled()) return;
@@ -113,29 +120,29 @@ export async function runEmbeddingBackfill(deps: EmbeddingBackfillDeps): Promise
   for (const bookId of deps.listBooks()) {
     if (!deps.shouldContinue()) return;
 
-    // Loaded-but-unread: a local binary is present AND progress is below the
-    // ceiling (the FG indexer targets the open/read books). getOffloadedStatus
-    // is an async IDB read — done lazily per candidate to avoid a boot burst.
-    // Filtered BEFORE the RPD gate so the shared-cache consult below only ever
-    // probes the books the bg lane would actually embed.
+    // Loaded-but-unread: the book's binary is present locally AND its progress
+    // is below the ceiling (the open/read books are handled by the foreground
+    // indexer). The local-binary check is an async IDB read, done lazily per
+    // candidate to avoid a burst at boot. Filtered BEFORE the quota gate so the
+    // shared-cache check below only runs for books this lane would actually embed.
     const progress = deps.getProgress(bookId) ?? 0;
     if (progress >= UNREAD_PROGRESS_CEILING) continue;
     if (!(await deps.hasLocalBinary(bookId))) continue;
 
-    // Shared-AI-cache consult — HOISTED ABOVE THE A6 GATE (Artifact Lane H-1,
-    // §2.4): a probe-hit book takes the quota-free hydrate path and is `continue`d
-    // BEFORE the cross-device RPD pre-flight, so a SATURATED-quota run
-    // (remaining<=0) still hydrates peer-embedded books at zero cost — the exact
-    // case this design exists for. Only a probe-miss / partial / failed hydrate
-    // falls through to the RPD gate + embed.
+    // Reuse a peer's embeddings before spending any quota — and do this BEFORE
+    // the cross-device quota gate below. A book whose embeddings already exist in
+    // the shared cloud cache is downloaded for free and skipped, so even a device
+    // that has used up its quota share still reuses peer-embedded books at zero
+    // cost (the whole point of the shared cache). Only a miss / partial / failed
+    // download falls through to the quota gate and an actual embed.
     if (await deps.probeArtifact(bookId)) {
       if (await deps.hydrateFromArtifact(bookId)) continue;
     }
 
-    // Cross-device RPD pre-flight (A6): the governor uses ONE full-projectRPD
-    // provider for both lanes, so the cross-device ceiling is enforced HERE as
-    // an admission gate (remaining = bgLimits.rpd - bg.rpd already spent). Only
-    // probe-miss/partial books that fell through the consult above reach it.
+    // Cross-device daily-request budget: stop once this device's share of the
+    // shared daily quota is used up (remaining = this device's effective daily
+    // limit minus what its background lane has already spent today). Only books
+    // that missed the shared cache above reach this check.
     const remaining = deps.getBgLimits().rpd - deps.getBgUsedRpd();
     if (remaining <= 0) {
       logger.info('Background embedding paused: cross-device bg RPD ceiling reached.');
@@ -143,7 +150,7 @@ export async function runEmbeddingBackfill(deps: EmbeddingBackfillDeps): Promise
     }
 
     try {
-      // ALWAYS interactive:false (the §8.4.1 invariant) on the bg lane.
+      // A background embed is ALWAYS interactive:false — never the user-gesture path.
       await deps.enqueue(bookId, { interactive: false, lane: 'bg' });
     } catch (err) {
       if (err instanceof NetRateLimitedError) {
@@ -173,18 +180,20 @@ function scheduleIdle(cb: () => void): () => void {
 }
 
 /**
- * The Increment E2 boot task: registered in the `backgroundTasks` phase after
- * reingestWaveTask. It constructs its OWN long-lived EmbeddingIndexer in app/
- * (the FG indexer is per reader session) and schedules the bg trickle on idle.
- * The {href, sectionTextHash} resume-skip in the indexer + the loaded-but-unread
- * filter keep the bg pass from double-embedding the open book.
+ * The backfill boot task: registered in the `backgroundTasks` phase after the
+ * reingest-wave task. It constructs its OWN long-lived EmbeddingIndexer (the
+ * foreground indexer is created per reader session) and schedules the background
+ * trickle on idle. The indexer's per-section resume-skip (keyed by href +
+ * section text hash) plus the loaded-but-unread filter keep the background pass
+ * from re-embedding the open book.
  */
 export const embeddingBackfillTask: BootTask = {
   name: 'search/embedding-backfill',
   run: (ctx) => {
-    // A long-lived indexer for the bg lane (mirrors useReaderController's FG
-    // wiring): the lazy embedding facade + the searchText/embeddings repos + the
-    // B3 quantize port. bookId/lane flow as arguments — no store edge in domains.
+    // A long-lived indexer for the background lane (mirrors the reader's
+    // foreground wiring): the lazy embedding facade, the search-text/embeddings
+    // repos, and the int8 quantize port. bookId/lane flow as arguments — the
+    // domain layer holds no store edges.
     const quantizer = new SearchEngine();
     const indexer = new EmbeddingIndexer({
       embeddingClient: getEmbeddingClient(),
@@ -213,19 +222,20 @@ export const embeddingBackfillTask: BootTask = {
           const status = await bookContent.getOffloadedStatus([bookId]);
           return status.get(bookId) === false;
         },
-        // The A6 cross-device bg ceiling + the governor's live bg.rpd, read
-        // through the in-memory seam wireGoogle installed (no governor import).
-        // A zero ceiling when unwired (boot ran before wireGoogle) stops the
-        // trickle — the next idle pass picks it up once the seam is present.
+        // This device's effective background daily limit + its live spend so far,
+        // read through the in-memory seam wireGoogle installed (so this task
+        // never imports the quota governor). When the seam is absent (boot ran
+        // before wireGoogle) the limit reads as zero, which stops the trickle;
+        // the next idle pass picks it up once the seam is present.
         getBgLimits: () =>
           useGenAIStore.getState().getBgQuotaLimits?.() ?? { rpm: 0, tpm: 0, rpd: 0 },
         getBgUsedRpd: () => useGenAIStore.getState().getBgUsedRpd?.() ?? 0,
         enqueue: (bookId, opts) => indexer.enqueue(bookId, undefined, opts),
-        // Shared-AI-cache consult (B-6/B-11): hoisted into the loop ABOVE the A6
-        // gate. interactive:false (a background path is NEVER interactive:true,
-        // the §8.4.1 invariant) and the adapter's §2.6 gate is preEmbed-OR-
-        // per-book. Unwired (sync/Google not composed) → probe false → degrade
-        // to embed, so the consult never blocks the bg lane.
+        // Shared-cache check, run inside the loop before the quota gate.
+        // interactive:false (a background path is never a user gesture) and the
+        // adapter's own consent gate covers library-pre-embed-OR-per-book. When
+        // the cache adapter is unwired (sync/Google not composed) the probe
+        // returns false, so the lane simply embeds — the check never blocks it.
         probeArtifact: (bookId) =>
           getArtifactConsult()?.probeArtifact(bookId, { interactive: false }) ??
           Promise.resolve(false),

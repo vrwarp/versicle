@@ -88,30 +88,39 @@ export interface PurgeReport {
   blobsDeleted: number;
 }
 
-// ─── Artifact lane (C3 method trio; shared-ai-cache-design.md §2.1) ───────────
+// ─── Shared embedding cache ───────────────────────────────────────────────────
+//
+// Embeddings are expensive to compute, so a book embedded on one device is
+// uploaded to the user's cloud storage and reused by their other devices
+// (and, opt-in, shared with other users). Each cached embedding set is stored
+// as two siblings keyed by the same content `{key}`: a large blob of vector
+// bytes in Cloud Storage (`embeddings/{key}.bin`), and a tiny Firestore "head"
+// record (`embedCache/{key}`) holding its stamp + byte size. The head exists so
+// a device can check "do we already have this?" with one cheap document read,
+// never an expensive Storage listing.
+// (design: plan/shared-ai-cache-design.md)
 
 /**
- * The HEAD-doc projection of one cached artifact: a cheap existence/stamp
- * probe (`getDoc` on the `embedCache/{key}` doc) that avoids a Storage
- * `list`. `exists` is always `true` on a returned head — a HEAD-doc miss is
- * `null`, never `{ exists: false }`. Because {@link SyncBackend.putArtifact}
- * writes the HEAD doc AFTER the Storage blob (HEAD-after-Storage), a HEAD hit
- * implies the bytes are present.
+ * The head record of one cached embedding set: a cheap existence/stamp probe
+ * (one `getDoc` on the `embedCache/{key}` doc) that avoids a Storage `list`.
+ * `exists` is always `true` on a returned head — a head miss is `null`, never
+ * `{ exists: false }`. Because {@link SyncBackend.putArtifact} writes the head
+ * AFTER the Storage blob, a head hit implies the bytes are present.
  */
 export interface ArtifactHead {
   exists: true;
-  /** The content stamp re-asserted on consult (embedding-space stamp). */
+  /** Identifies which embedding space (model/dims/quant) produced the bytes. */
   stamp: string;
-  /** Byte length of the blob the HEAD doc points at. */
+  /** Byte length of the blob the head record points at. */
   size: number;
 }
 
 /**
- * Derive the HEAD-doc tail (`embedCache/{key}`) from a blob tail
- * (`embeddings/{key}.bin`) — shared-ai-cache-design.md §2.1 keys both tiers
- * by the same `{key}`. Used by {@link SyncBackend.putArtifact}
- * implementations to write the companion HEAD doc alongside the Storage
- * blob. Shared so both backends derive the sibling tail identically.
+ * Derive the head-record path tail (`embedCache/{key}`) from a blob path tail
+ * (`embeddings/{key}.bin`) — both siblings share the same `{key}`. Used by
+ * {@link SyncBackend.putArtifact} implementations to write the companion head
+ * record alongside the Storage blob. Shared so both backends derive the sibling
+ * tail identically.
  */
 export function artifactHeadTail(blobRelPath: string): string {
   const key = blobRelPath.replace(/^embeddings\//, '').replace(/\.bin$/, '');
@@ -160,31 +169,31 @@ export interface SyncBackend {
    */
   purgeWorkspace(workspaceId: string): Promise<PurgeReport>;
   /**
-   * Cheap existence/stamp probe of a cached artifact (the artifact lane —
-   * shared-ai-cache-design.md §2.1). `relPath` is the in-workspace tail of
-   * the HEAD doc (`embedCache/{key}`); the backend prefixes it with its own
-   * `users/{uid}/versicle/{workspaceId}/` root. Returns the HEAD-doc
-   * projection ({@link ArtifactHead}) or `null` on a HEAD-doc miss. Reads the
-   * Firestore HEAD doc only — never a Storage `list`. Because the HEAD doc is
-   * written AFTER the Storage blob (see {@link putArtifact}), a hit implies
-   * the bytes are present.
+   * Cheap existence/stamp probe of a cached embedding set. `relPath` is the
+   * in-workspace tail of the head record (`embedCache/{key}`); the backend
+   * prefixes it with its own `users/{uid}/versicle/{workspaceId}/` root.
+   * Returns the head projection ({@link ArtifactHead}) or `null` on a miss.
+   * Reads the Firestore head record only — never a Storage `list`. Because the
+   * head is written AFTER the Storage blob (see {@link putArtifact}), a hit
+   * implies the bytes are present.
    */
   headArtifact(workspaceId: string, relPath: string): Promise<ArtifactHead | null>;
   /**
-   * Mirror one content-addressed artifact into the workspace's BYO backend
-   * (shared-ai-cache-design.md §2.1/§2.3). `relPath` is the in-workspace tail
-   * of the blob (`embeddings/{key}.bin`); the backend prefixes it with its
-   * own `users/{uid}/versicle/{workspaceId}/` root and writes the companion
-   * HEAD doc at the sibling `embedCache/{key}` tail.
+   * Upload one embedding set so the user's other devices can reuse it instead
+   * of recomputing it. `relPath` is the in-workspace tail of the blob
+   * (`embeddings/{key}.bin`); the backend prefixes it with its own
+   * `users/{uid}/versicle/{workspaceId}/` root and writes the companion head
+   * record at the sibling `embedCache/{key}` tail.
    *
-   * **ifAbsent (idempotent / content-addressed):** head-before-put — when the
-   * HEAD doc is already present this is a no-op (§2.5: identical inputs →
-   * byte-identical content, so a concurrent duplicate upload is harmless).
+   * **Skip-if-present (idempotent):** checks the head first — when it already
+   * exists this is a no-op. The key is derived from the embedding inputs, so
+   * identical inputs always produce byte-identical content; a concurrent
+   * duplicate upload is therefore harmless.
    *
-   * **Ordering is HEAD-after-Storage:** `uploadBytes` to Cloud Storage FIRST,
-   * THEN `setDoc` the HEAD doc, so a HEAD hit always implies the bytes
-   * landed (a crash between the two leaves a recoverable blob with no HEAD
-   * doc, never a HEAD doc pointing at absent bytes).
+   * **Ordering — blob first, head second:** `uploadBytes` to Cloud Storage
+   * FIRST, THEN write the head record, so a head hit always implies the bytes
+   * landed (a crash between the two leaves a recoverable blob with no head,
+   * never a head pointing at absent bytes).
    */
   putArtifact(
     workspaceId: string,
@@ -193,44 +202,45 @@ export interface SyncBackend {
     meta: { stamp: string; size: number }
   ): Promise<void>;
   /**
-   * Fetch a cached artifact's bytes (shared-ai-cache-design.md §2.4).
-   * `relPath` is the in-workspace tail of the blob (`embeddings/{key}.bin`);
-   * the backend prefixes it with its own workspace root.
+   * Download a cached embedding set's bytes. `relPath` is the in-workspace tail
+   * of the blob (`embeddings/{key}.bin`); the backend prefixes it with its own
+   * workspace root.
    *
-   * **Error taxonomy (§2.7) — OPPOSITE polarity to {@link isWorkspaceAlive}'s
-   * fail-safe:** a definitive miss (`storage/object-not-found`) returns
-   * `null` (the caller re-embeds); a transient/permission error THROWS (an
-   * offline blip or denied read must NOT be mistaken for a miss — never burn
-   * quota on a network hiccup).
+   * **Miss vs error — OPPOSITE polarity to {@link isWorkspaceAlive}'s
+   * fail-safe:** a definitive miss (`storage/object-not-found`) returns `null`
+   * so the caller recomputes the embeddings; a transient/permission error
+   * THROWS, because an offline blip or denied read must NOT be mistaken for a
+   * miss — recomputing embeddings is expensive, so never do it on a network
+   * hiccup.
    */
   getArtifact(workspaceId: string, relPath: string): Promise<ArrayBuffer | null>;
   /**
-   * Per-book cloud GC (Phase D, §2.7 reference-safety): best-effort delete of
-   * the `embedCache/{key}` HEAD doc ONLY. `relPath` is the HEAD-doc tail
-   * (`embedCache/{key}`, mirroring {@link headArtifact}); the backend prefixes
-   * it with its own `users/{uid}/versicle/{workspaceId}/` root.
+   * When a book is removed, drop this device's claim on its cached embeddings:
+   * a best-effort delete of the `embedCache/{key}` head record ONLY. `relPath`
+   * is the head-record tail (`embedCache/{key}`, mirroring {@link headArtifact});
+   * the backend prefixes it with its own `users/{uid}/versicle/{workspaceId}/`
+   * root.
    *
-   * **The content-addressed shared blob is DELIBERATELY left in place** — a
-   * sibling device may still need those bytes, and the blob is keyed by
-   * content (identical inputs → byte-identical content), so leaving it is
-   * safe and re-derivable. Reclaiming the orphaned blob is the
-   * {@link sweepArtifacts} TTL sweeper's job (the design endorses
-   * delete-HEAD-doc + leave-blob-to-sweeper over reference-counting for v1).
+   * **The shared blob is DELIBERATELY left in place** — another device may
+   * still need those bytes, and because the blob is keyed by content (identical
+   * inputs → byte-identical content) leaving it is safe and re-derivable.
+   * Reclaiming the orphaned blob is the {@link sweepArtifacts} TTL sweeper's job
+   * (delete-head-now + leave-blob-to-the-sweeper is simpler and safer than
+   * reference-counting).
    *
-   * Best-effort: an already-gone HEAD doc is a clean no-op (never an error).
-   * Removing YOUR OWN HEAD doc for a removed book is always safe regardless of
-   * the shareAiCaches gate (the gate governs UPLOAD/consult, not delete).
+   * Best-effort: an already-gone head record is a clean no-op (never an error).
+   * Removing YOUR OWN head record for a removed book is always safe regardless
+   * of the cache-sharing opt-in (that opt-in governs upload/lookup, not delete).
    */
   deleteArtifactHead(workspaceId: string, relPath: string): Promise<void>;
   /**
-   * Cloud TTL/quota sweeper — the REQUIRED Phase-D cloud GC that bounds the
-   * bucket so the shared cache never grows unbounded (separate from
-   * runEviction, which is device-local IDB eviction). For each `embedCache`
-   * HEAD doc whose `createdAt < now - ttlMs` (and, when `budgetBytes` is set,
-   * oldest-first by `createdAt` until the total `size` is under budget),
-   * deletes BOTH the HEAD doc AND its sibling `embeddings/{key}.bin` blob —
-   * reusing the {@link purgeWorkspace} `deleteObject` +
-   * `storage/object-not-found`-tolerant recursion shape.
+   * Bound the cloud cache so it never grows without limit (this is the cloud
+   * garbage collector; runEviction is the separate device-local IDB cleanup).
+   * For each `embedCache` head record whose `createdAt < now - ttlMs` (and,
+   * when `budgetBytes` is set, oldest-first by `createdAt` until the surviving
+   * total `size` is under budget), deletes BOTH the head record AND its sibling
+   * `embeddings/{key}.bin` blob — reusing the {@link purgeWorkspace}
+   * `deleteObject` + `storage/object-not-found`-tolerant recursion shape.
    *
    * Returns the counts actually removed. Idempotent and re-runnable (a re-run
    * after a crash mid-sweep reports smaller numbers, never an error).

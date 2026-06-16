@@ -1,14 +1,11 @@
 /**
- * `app_metadata['quota-daily-usage']` repository — the QuotaGovernor's
- * persisted daily (RPD) counter (Phase A). The ONLY IDB touch for the
- * governor: the kernel holds the in-memory RPM/TPM windows itself and reaches
- * persistence through an injected `QuotaStore` port (`@kernel/quota`); the
- * app-layer adapter (`src/app/quota/makeQuotaStore.ts`) maps that port onto
- * this repo.
- *
- * No new store and no DB bump — the value lives under the EXISTING
- * `app_metadata` key-value store as an append-only key (same pattern as
- * `audioSizeBackfillV25`; see src/data/rows/app.ts APP_METADATA_KEYS).
+ * Persists the rate limiter's daily request count for outbound AI API calls,
+ * so the per-day cap survives reloads and is shared across this app's tabs.
+ * Stored as a single `quota-daily-usage` record in the `app_metadata`
+ * key-value store (no dedicated store, no DB version bump). The limiter keeps
+ * the short-window (per-minute request/token) counters in memory and reaches
+ * disk only through this one record — the per-minute windows are never
+ * persisted.
  *
  * Worker-safe like every repo: no store/UI imports; writes go through the
  * navigator.locks write-gate, and every failure funnels through

@@ -32,7 +32,11 @@ export interface QuotaMeters {
     fg: LaneUsage;
     /** Background-lane live usage (the shared snapshot shape). */
     bg: LaneUsage;
-    /** Project-wide RPD: this device's bg.rpd + the A6 cross-device sum. */
+    /**
+     * Today's requests-per-day spent against the shared Gemini project budget
+     * across ALL the user's devices: this device's background spend plus the sum
+     * reported by the user's other active devices.
+     */
     projectRpd: number;
     /** Foreground-lane time-to-exhaustion hints. */
     etas: QuotaMeterEtas;
@@ -123,7 +127,7 @@ export interface GenAISettingsTabProps {
     onMaxLogsChange: (max: number) => void;
     onDownloadLogs: () => void;
     onClearLogs: () => void;
-    // Quota & Usage (A7)
+    // Quota & Usage
     quotaLimits: QuotaLimits;
     onQuotaLimitsChange: (limits: QuotaLimits) => void;
     bgThrottlePercent: number;
@@ -133,10 +137,13 @@ export interface GenAISettingsTabProps {
     pauseAllGenAI: boolean;
     onPauseAllGenAIChange: (paused: boolean) => void;
     meters: QuotaMeters;
-    // Semantic Search — library-wide background pre-embed opt-in (E3)
+    // Opt-in: embed the whole library in the background so semantic search can
+    // find passages by meaning (default off).
     preEmbedLibrary: boolean;
     onPreEmbedLibraryChange: (enabled: boolean) => void;
-    // Shared AI cache — cross-device embedding-blob upload opt-in (Phase C, §8.4)
+    // Opt-in: upload this device's embedding vectors to the user's own cloud so
+    // their other devices can reuse them instead of re-spending Gemini quota
+    // (default off).
     shareAiCaches: boolean;
     onShareAiCachesChange: (enabled: boolean) => void;
 }

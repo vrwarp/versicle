@@ -1,8 +1,9 @@
 /**
- * kernel/quota public surface (Phase A). Admission per C12: zero internal
- * imports beyond ~types/errors (the NET_RATE_LIMITED backpressure error it
- * throws); consumed by ≥2 domains (google/genai + the audio domain at
- * lib/tts). `@kernel/quota` is the import path consumers use.
+ * Public surface of the quota module. It imports nothing internal beyond
+ * `~types/errors` (the rate-limit backpressure error it throws) and is shared by
+ * more than one feature area — the AI/Gemini code and the audio/TTS code — which
+ * is why it lives in the dependency-free kernel layer. Consumers import it as
+ * `@kernel/quota`.
  */
 export {
   QuotaGovernor,
@@ -10,18 +11,17 @@ export {
   type QuotaStore,
   type DailyUsage,
   type QuotaLimits,
-  // Promoted onto the barrel for A6: the app-layer embedSpend reconciler
-  // (app/quota/embedSpendReconciler.ts) returns one as the BG-lane limits
-  // provider. Has a real production consumer (wireGoogle), so not knip-dead.
+  // Exported for the app-side cross-device spend reconciler
+  // (app/quota/embedSpendReconciler.ts), which returns one as the background-lane
+  // limits provider.
   type QuotaLimitsProvider,
-  // Promoted onto the barrel for A7: the settings quota meters consume it as
-  // `snapshot()`'s per-lane shape. Real production consumers are the
-  // GenAIPanel `useQuotaMeters` hook + the presentational GenAISettingsTab
-  // props (both typed by it), so it is no longer a knip-dead export.
+  // Exported for the settings quota meters: it is `snapshot()`'s per-lane shape,
+  // consumed by the GenAI panel's `useQuotaMeters` hook and the GenAI settings
+  // tab props.
   type LaneUsage,
 } from './QuotaGovernor';
-// The shared midnight-PT day key (Phase A DRY). Re-exported so the app-layer
-// embedSpendReconciler imports the SAME helper the kernel governor uses (its
-// cross-device stamps must match the kernel structurally). Consumer:
-// app/quota/embedSpendReconciler.ts — knip-clean.
+// Re-export the midnight-Pacific day-key helper so the app-side cross-device
+// spend reconciler (app/quota/embedSpendReconciler.ts) uses the EXACT SAME
+// helper the governor uses — their per-day stamps must match or a sibling
+// device's spend would be silently dropped.
 export { ptDayString } from './ptDay';

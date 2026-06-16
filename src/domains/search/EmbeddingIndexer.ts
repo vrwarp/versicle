@@ -1,27 +1,27 @@
 /**
- * EmbeddingIndexer (Increment C §4) — the FOREGROUND document-embedding pass.
+ * EmbeddingIndexer — the foreground document-embedding pass that turns a book's
+ * text into the vectors semantic search runs over.
  *
- * Constructor-injected ports ONLY (mirrors SearchSession's engineFactory /
- * textSource seam at SearchSession.ts:63): the embedding client, the persisted
- * corpus source, the embeddings repo, and the int8 quantizer (the B3
- * `SearchEngine.quantizeInt8PerVector`, passed as a port so this domain never
- * deep-imports the worker). bookId/CFI flow as ARGUMENTS — never read from a
- * store (domains-no-store guardrail).
+ * Takes constructor-injected ports only — the embedding client, the persisted
+ * corpus source, the embeddings repo, and the int8 quantizer (passed as a port
+ * so this domain never deep-imports the search worker). bookId and the reading
+ * position (CFI) flow in as arguments, never read from a store.
  *
  * `enqueue(bookId, currentCfi?, opts?)`:
- *  - loads `cache_search_text` via the injected textSource,
- *  - orders sections OUTWARD from the current reading position (the CFI's
- *    spine ordinal, derived via @kernel/cfi parseCfiTokens; falls back to
- *    section 0 when absent/unparseable),
- *  - per section: skips when `cache_embed_jobs` already records the
- *    {href, sectionTextHash} fully embedded (resume), else chunks → embeds
- *    (FG, consent + lane threaded through the client → gateway) → quantizes
- *    each vector → packs int8 rows + float32 scales → persists via the repo,
- *    updating `cache_embed_jobs` per section for resumability.
+ *  - loads the book's extracted search text via the injected textSource,
+ *  - orders sections OUTWARD from the current reading position (so the page the
+ *    reader is on becomes searchable first), derived from the position CFI;
+ *    falls back to section 0 when the CFI is absent/unparseable,
+ *  - per section: skips it when the resume journal already records this section
+ *    (keyed by href + text hash) as fully embedded; otherwise chunks the text,
+ *    embeds the chunks (threading consent + quota lane through the client to the
+ *    gateway), quantizes each vector to int8, packs the int8 rows + float32
+ *    scales, persists them, and updates the resume journal per section so an
+ *    interrupted pass can pick up where it left off.
  *
- * CFI population is deferred to Phase D (the chunker cannot emit CFI from text;
- * cache.ts:188), so chunk CFIs are persisted as empty strings here — char
- * offsets are recoverable from `cache_search_text`.
+ * Chunk CFIs are persisted as empty strings here: the chunker works on plain
+ * text and cannot produce a CFI without the live reader view. The char offsets
+ * ARE persisted, and the read path recovers CFIs from those at query time.
  */
 import { parseCfiTokens, tryParseCfiPoint } from '@kernel/cfi';
 import { chunkSection } from './chunker';
@@ -46,13 +46,15 @@ interface EmbeddingClientPort {
 }
 
 /**
- * The persisted-row stamp the indexer compares against the live config to
- * decide a whole-book re-embed (design §8.2), WIDENED with the prior row's
- * `sections` so the indexer can read-modify-write `cache_embeddings` and carry
- * forward resume-skipped sections' vectors (rather than overwriting the row with
- * only this-pass sections). `sections` is optional/lightweight — the buffers it
- * carries are the already-materialized vectors/scales (the production repo hands
- * them back as typed-array views, which we re-pack to ArrayBuffers on write).
+ * The persisted row's embedding-space stamp ({model, dims, quant}), compared
+ * against the live config to decide whether the whole book must be re-embedded
+ * (a stamp change means the stored vectors live in an incompatible space). It is
+ * widened with the prior row's `sections` so the indexer can read-modify-write
+ * the embeddings row and carry forward the vectors of sections it resume-skips,
+ * rather than overwriting the row with only this pass's sections. `sections` is
+ * optional/lightweight — the buffers it carries are the already-materialized
+ * vectors/scales (the production repo hands them back as typed-array views, which
+ * we re-pack to ArrayBuffers on write).
  */
 type EmbeddedRowStamp = Pick<CacheEmbeddingsRow, 'model' | 'dims' | 'quant'> & {
   sections?: PriorEmbeddedSection[];
@@ -89,23 +91,24 @@ interface EmbeddingsRepoPort {
   putJob(row: CacheEmbedJobsRow): Promise<void>;
 }
 
-/** The int8 quantizer port (B3 SearchEngine.quantizeInt8PerVector). */
+/** The int8 quantizer port (the search worker's per-vector int8 quantizer). */
 type QuantizePort = (vec: Float32Array) => { vectors: Int8Array; scale: number };
 
 /**
- * The OPTIONAL shared-AI-cache consult port (Artifact Lane B-7): an injected
- * app-layer adapter that probes the BYO cloud cache and, on a hit, hydrates the
- * local `cache_embeddings`/`cache_embed_jobs` rows from the downloaded blob —
- * BEFORE any Gemini quota is spent. Optional so existing indexer constructions
- * (which pass no consult) compile and behave exactly as before. Both calls are
- * the app layer's responsibility to consent-gate (§2.6) and to short-circuit to
- * `false` cheaply when there is no connected backend (the common no-sync case
- * adds zero latency).
+ * Optional port for reusing embeddings the user already generated on another
+ * device. Embeddings are expensive to regenerate (they cost API quota), so when
+ * the user has the same book embedded elsewhere and synced to their cloud, the
+ * indexer can download those vectors instead of re-embedding from scratch.
+ * `probe` is a cheap availability check; `hydrate` downloads the blob and writes
+ * the local embedding rows. It is optional so indexer constructions that pass no
+ * port compile and behave exactly as before. The app layer owns the consent
+ * gate and must make both calls short-circuit to `false` cheaply when no cloud
+ * backend is connected, so the common no-sync case adds zero latency.
  */
 interface EmbeddingConsultPort {
-  /** Cheap HEAD probe: is a hydratable artifact available for this book? */
+  /** Cheap availability check: are reusable embeddings present for this book? */
   probe(bookId: string): Promise<boolean>;
-  /** Download + materialize the row; `true` when the local row was hydrated. */
+  /** Download + write the local rows; `true` when the local row was hydrated. */
   hydrate(bookId: string): Promise<boolean>;
 }
 
@@ -117,9 +120,10 @@ interface EmbeddingIndexerDeps {
   /** Embedding stamp config (read once per enqueue). */
   getConfig: () => { model: string; dims: number };
   /**
-   * The optional shared-AI-cache consult (B-7). When present, `enqueue`
-   * consults it BEFORE the embed loop; on a full hit it hydrates and RETURNS
-   * without calling {@link EmbeddingClientPort.embed} — the FG zero-quota path.
+   * Optional reuse of embeddings generated on another device. When present,
+   * `enqueue` checks it BEFORE the embed loop; on a full hit it downloads those
+   * vectors and RETURNS without calling {@link EmbeddingClientPort.embed},
+   * spending no API quota.
    */
   consult?: EmbeddingConsultPort;
 }
@@ -131,11 +135,11 @@ export class EmbeddingIndexer {
    * Embed `bookId`'s document corpus, outward from `currentCfi`. No-op when the
    * client is unconfigured or the book has no persisted corpus.
    *
-   * `opts` selects the consent/lane posture (default `{ interactive: true,
-   * lane: 'fg' }`, preserving the committed FOREGROUND reader behavior). The
-   * Increment E background backfill passes `{ interactive: false, lane: 'bg' }`
-   * so the embed rides the bg lane and is gated by the §8.4.1 consent grant —
-   * never `interactive: true` from a background path.
+   * `opts` selects the consent/quota-lane posture (default `{ interactive:
+   * true, lane: 'fg' }`, the foreground reader behavior). The background
+   * backfill passes `{ interactive: false, lane: 'bg' }` so the embed uses the
+   * slow background quota lane and never claims a user gesture from a background
+   * path.
    */
   async enqueue(
     bookId: string,
@@ -147,13 +151,13 @@ export class EmbeddingIndexer {
     const corpus = await this.deps.textSource.get(bookId);
     if (!corpus || corpus.sections.length === 0) return;
 
-    // Shared-AI-cache consult (B-7 / §2.4): BEFORE the embed loop, ask the
-    // injected adapter whether a hydratable artifact exists; on a full hit the
-    // adapter materializes the local rows and we RETURN without ever calling
-    // embed() — no acquire, no quota spend (the FG zero-quota path). The adapter
-    // owns the consent gate (§2.6) and short-circuits cheaply when no backend is
-    // connected, so the common no-sync case adds no latency. A probe-miss or a
-    // partial/failed hydrate falls through to the normal embed loop below.
+    // Before embedding anything, try to reuse vectors the user already generated
+    // for this book on another device. If the injected adapter reports they are
+    // available and successfully downloads + writes them into the local rows, we
+    // RETURN here without ever calling embed() — spending no API quota. The
+    // adapter owns the consent gate and short-circuits cheaply when no cloud
+    // backend is connected, so the common no-sync case adds no latency. A miss,
+    // or a partial/failed download, falls through to the normal embed loop below.
     if (this.deps.consult && (await this.deps.consult.probe(bookId))) {
       if (await this.deps.consult.hydrate(bookId)) return;
     }
@@ -163,12 +167,11 @@ export class EmbeddingIndexer {
 
     const config = this.deps.getConfig();
 
-    // Whole-row stamp-mismatch guard (design §8.2): when the persisted row's
-    // {model, dims, quant} no longer matches the live config, the stored
-    // vectors live in an INCOMPATIBLE space — they are NEVER converted. Discard
-    // the prior job so EVERY section re-embeds (the whole-book re-embed
-    // fallback), rather than resume-skipping stale-space vectors on the
-    // {href, sectionTextHash} key below.
+    // Stamp-mismatch guard: when the persisted row's {model, dims, quant} no
+    // longer matches the live config, the stored vectors live in an
+    // INCOMPATIBLE space and can never be converted. Discard the prior resume
+    // journal so EVERY section re-embeds, rather than resume-skipping vectors
+    // from the old space on the {href, sectionTextHash} key below.
     const persisted = await this.deps.embeddingsRepo.get(bookId);
     const stampMismatch =
       persisted !== undefined &&
@@ -198,11 +201,11 @@ export class EmbeddingIndexer {
         : [];
     const jobSections: CacheEmbedJobsRow['sections'] = job ? [...job.sections] : [];
 
-    // §2.8 resume-skip defensive guard (Artifact Lane B-3): the set of hrefs
-    // whose VECTORS actually live in the persisted embeddings row. A section the
-    // job marks complete but that is ABSENT here is the skip-but-empty crash
-    // window (a crash between the legacy put/putJob, or a partial hydrate) — it
-    // must be treated as a MISS and re-embed, NOT resume-skipped forever.
+    // The set of hrefs whose VECTORS actually live in the persisted embeddings
+    // row. A section the resume journal marks complete but that is ABSENT here is
+    // a corrupt-resume window (a crash between writing the journal and writing
+    // the vectors, or a partial download) — it must be treated as a MISS and
+    // re-embedded, NOT resume-skipped forever.
     const persistedHrefs = new Set(
       (!stampMismatch && persisted?.sections ? persisted.sections : []).map((s) => s.href),
     );
@@ -211,11 +214,11 @@ export class EmbeddingIndexer {
       const section = sections[idx];
       const sectionTextHash = section.sectionTextHash ?? '';
 
-      // Resume-skip: the job already records this {href, sectionTextHash} as
-      // fully embedded (design §2.1) AND its vectors are present in the
-      // persisted row (the B-3 guard above). A re-extracted section (hash
-      // mismatch), a legacy job row without the stamp, OR a job-complete-but-
-      // vectors-absent section (§2.8) falls through and re-embeds.
+      // Resume-skip: the journal already records this {href, sectionTextHash}
+      // as fully embedded AND its vectors are present in the persisted row (the
+      // guard above). A re-extracted section (text-hash mismatch), an older
+      // journal row without a hash, OR a section the journal marks complete but
+      // whose vectors are missing all fall through and re-embed.
       const prior = job?.sections.find((s) => s.href === section.href);
       if (
         prior &&
@@ -243,7 +246,7 @@ export class EmbeddingIndexer {
         },
       );
 
-      // Quantize each returned float32 vector to int8 + a per-vector scale (B3),
+      // Quantize each returned float32 vector to int8 plus a per-vector scale,
       // then pack the int8 rows back-to-back and the float32 scales alongside.
       const dims = vectors[0]?.length ?? config.dims;
       const packed = new Int8Array(vectors.length * dims);
@@ -257,10 +260,10 @@ export class EmbeddingIndexer {
       const embeddedSection = {
         href: section.href,
         sectionTextHash,
-        // CFI population is Phase D (the chunker cannot emit CFI from text);
-        // the CHAR offsets ARE persisted (additive, no IDB bump) so the read
-        // path (semanticRank) can recover charOffset/matchLength WITHOUT
-        // re-segmenting. Legacy rows lack them and fall back to re-segmentation.
+        // CFIs are left empty: the chunker works on plain text and cannot
+        // produce a CFI without the live reader view. The CHAR offsets ARE
+        // persisted so the read path can recover the char offset/length without
+        // re-segmenting. Older rows lack them and fall back to re-segmentation.
         chunks: chunks.map((c) => ({
           cfiStart: '',
           cfiEnd: '',
@@ -311,7 +314,7 @@ export class EmbeddingIndexer {
  * Derive the 0-based spine-section ordinal from a position CFI, clamped to
  * `[0, count)`. Uses the standard EPUB even-step spine encoding (`/6/14…` →
  * the spine step `/14` maps to ordinal `(14 - 2) / 2`). Returns 0 when the CFI
- * is absent/unparseable (the section-0-first fallback — design risk note).
+ * is absent/unparseable (the section-0-first fallback).
  */
 function spineOrdinalFrom(currentCfi: string | undefined, count: number): number {
   if (!currentCfi) return 0;

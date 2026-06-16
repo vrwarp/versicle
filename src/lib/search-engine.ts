@@ -3,9 +3,9 @@ import type { SearchSection, DetailedSearchResult, SearchBatchResult } from '~ty
 /**
  * Build a context excerpt around a match, sliced from the ORIGINAL string with
  * the ORIGINAL match offsets (so excerpts stay aligned even when lowercasing
- * would change length — the Turkish-İ hazard). Shared (Increment cleanup #10a)
- * by {@link SearchEngine.searchDetailed} (the regex path) and the search-side
- * semantic ranker (semanticRank.ts), which previously kept a verbatim copy.
+ * would change length — the Turkish-İ hazard). Shared by
+ * {@link SearchEngine.searchDetailed} (the literal-scan path) and the semantic
+ * ranker (semanticRank.ts) so the excerpt-windowing logic lives in one place.
  *
  * @param text - The full text the match was found in.
  * @param index - The start index of the match.
@@ -140,13 +140,15 @@ export class SearchEngine {
     }
 
     /**
-     * §2.3/§4.4 pure-compute helpers consumed by the Phase-C worker cosine
-     * ranking. They operate ONLY over transferred typed arrays (no IDB, no
-     * store/yjs/zustand edge), so the worker stays pure: all embedding I/O is
-     * main-thread via the repos, and the worker only ever receives the packed
-     * vectors. Quantization is per-vector: `scale = max(|v|)/127`, so each row
-     * keeps its own dynamic range and the cosine is a single int32 dot product
-     * rescaled by the two float32 scales once.
+     * Pure-compute helpers for ranking text chunks by semantic similarity to a
+     * query, run inside the search worker. They operate ONLY over transferred
+     * typed arrays (no IndexedDB, no store/yjs/zustand access), so the worker
+     * stays pure: all embedding storage I/O happens on the main thread and the
+     * worker only ever receives the packed int8 vectors. Embeddings are stored
+     * quantized to int8 to cut memory/transfer ~4x; quantization is per-vector
+     * (`scale = max(|v|)/127`) so each vector keeps its own dynamic range, and a
+     * cosine is then a single integer dot product rescaled by the two float
+     * scales once.
      */
 
     /**
@@ -213,7 +215,8 @@ export class SearchEngine {
             if (aSq === 0) continue; // zero row → cosine 0
             // Apply the two float32 scales once: the scales cancel in the
             // cosine ratio's numerator/denominator, but keeping them explicit
-            // mirrors the §4.4 formula and stays exact for non-unit vectors.
+            // matches the textbook cosine formula and stays exact for non-unit
+            // vectors.
             const aNorm = aScale * Math.sqrt(aSq);
             const cosine = (aScale * bScale * dot) / (aNorm * bNorm);
             if (cosine > best) best = cosine;
@@ -223,16 +226,15 @@ export class SearchEngine {
 
     /**
      * Rank the packed int8 corpus rows by cosine against an int8 query vector,
-     * returning the top-`limit` rows as `{ row, cosine }` descending (Increment
-     * D §2, the search-side semantic ranking). `packedVecs` packs one
-     * `dims`-length int8 row per chunk back-to-back; `scales[r]` is row `r`'s
-     * per-vector float32 scale. Each row's cosine is computed via the SAME
-     * {@link int8Cosine} formula on a single-row view — so int8Cosine gains a
-     * real production consumer (it was previously only self-tested) and the two
-     * code paths can never drift.
+     * returning the top-`limit` rows as `{ row, cosine }` descending — the
+     * semantic-search ranking step. `packedVecs` packs one `dims`-length int8
+     * row per chunk back-to-back; `scales[r]` is row `r`'s per-vector float
+     * scale. Each row's cosine is computed via the SAME {@link int8Cosine}
+     * formula on a single-row view, so the per-row and batch paths can never
+     * drift.
      *
-     * Pure compute over typed arrays only (no IDB/store edge): it crosses the
-     * Comlink worker seam exactly like {@link searchDetailed}.
+     * Pure compute over typed arrays only (no IndexedDB/store access): it
+     * crosses the worker boundary exactly like {@link searchDetailed}.
      */
     rankInt8(
         packedVecs: Int8Array,

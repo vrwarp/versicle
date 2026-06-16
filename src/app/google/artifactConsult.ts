@@ -1,30 +1,33 @@
 /**
- * ArtifactConsult — the app-layer READ-side adapter for the shared AI-cache
- * "Artifact Lane" (shared-ai-cache-design.md §2.4/§2.6/§2.7, Phase B).
+ * ArtifactConsult — the read side of the shared embedding cache: before a device
+ * spends Gemini quota to embed a book, it checks whether another of the user's
+ * devices already embedded the same book and uploaded the result, and if so
+ * downloads and reuses it for free.
  *
- * It holds the store/manifest/backend edges the pure domains/search codec and
- * the C3 SyncBackend cannot reach (domains-no-store; the codec is store-free,
- * the backend is injected), and exposes two operations the bg backfill loop and
- * the FG indexer consult BEFORE spending Gemini quota:
+ * This adapter holds the store/manifest/backend edges that the pure embedding
+ * codec and the cloud backend cannot reach (the codec is store-free, the backend
+ * is injected). It exposes two operations the background backfill loop and the
+ * foreground reader indexer call before embedding:
  *
  *  - {@link ArtifactConsult.probeArtifact}: resolve bookId → contentHash via the
- *    manifest, derive the {@link contentKey}, and HEAD-probe the BYO backend.
+ *    manifest, derive the content-addressed {@link contentKey}, and check
+ *    (HEAD request) whether a blob exists for it in the user's cloud backend.
  *  - {@link ArtifactConsult.hydrateFromArtifact}: download the blob, parse its
- *    header, reconcile each section's `sectionTextHash` against the LIVE corpus
- *    (drop diverged sections — they re-embed next pass), re-derive the
- *    contentKey from the blob's OWN stamp and assert it matches the requested
- *    key (bit-rot guard), then write the local rows via the atomic
- *    {@link ArtifactConsultDeps.putHydrated} (§2.8) and return the row.
+ *    header, reconcile each section's text hash against the LIVE local corpus
+ *    (drop sections whose text has since changed — they re-embed next pass),
+ *    re-derive the content key from the blob's OWN stamp and assert it matches
+ *    the requested key (a corruption/swap guard), then write the local rows in
+ *    one atomic transaction via {@link ArtifactConsultDeps.putHydrated}.
  *
- * Consent (§2.6, hard requirement): BOTH operations are gated by the SAME
- * predicate `makeAiConsentResolver` applies to the embed they replace — the
- * adapter calls {@link ArtifactConsultDeps.isConsented} first and short-circuits
- * (probe → false, hydrate → null) when it is not granted. A hydrate while the
- * opt-in is OFF and there is no per-book bit is FORBIDDEN.
+ * Consent (hard requirement): BOTH operations are gated by the SAME consent the
+ * embed they replace would require — the adapter calls
+ * {@link ArtifactConsultDeps.isConsented} first and short-circuits (probe →
+ * false, hydrate → null) when it is not granted. Downloading another device's
+ * embeddings while sharing is off and there is no per-book consent is FORBIDDEN.
  *
  * The holder ({@link setArtifactConsult}/{@link getArtifactConsult}) mirrors the
- * embedding-client holder so wireGoogle installs the singleton and the boot loop
- * + reader controller inject the consult port — one knip consumer chain.
+ * embedding-client holder: wireGoogle installs the singleton, and the boot loop
+ * and reader controller inject the port. (design: plan/shared-ai-cache-design.md)
  */
 import {
   contentKey,
@@ -43,38 +46,38 @@ import { createLogger } from '@lib/logger';
 const logger = createLogger('ArtifactConsult');
 
 /**
- * Steady-state HEAD-vs-object drift counter (Phase D, L-3): incremented when a
- * hydrate finds a present HEAD doc but an ABSENT object (the HEAD-after-Storage
- * invariant says this should never happen — a HEAD hit implies the bytes
- * landed). A non-zero count means a stale HEAD doc was observed (a crash
- * between blob-delete and HEAD-delete elsewhere, or a sweeper/blob race); each
- * occurrence opportunistically self-heals (deletes the stale HEAD doc) so the
- * drift is transient. Observable via {@link getArtifactDriftCount} (test/meter).
+ * Counts a specific inconsistency: a hydrate that finds the HEAD record present
+ * but its blob object ABSENT. The blob is always written before its HEAD record,
+ * so a HEAD hit should imply the bytes exist; a non-zero count therefore means a
+ * stale HEAD record was observed (e.g. a crash between deleting the blob and
+ * deleting its HEAD elsewhere, or a sweeper/blob race). Each occurrence
+ * self-heals by deleting the stale HEAD record, so the drift is transient.
+ * Observable via {@link getArtifactDriftCount} (tests/metrics).
  */
 let driftCount = 0;
 
-/** Read the in-module HEAD-vs-object drift counter (Phase D observability). */
+/** Read the in-module count of stale-HEAD-record observations (observability). */
 export function getArtifactDriftCount(): number {
   return driftCount;
 }
 
-/** Whether the read-path consult is consented for a book (§2.6). */
+/** Whether the read path is consented to reuse a shared blob for a book. */
 type ConsentGate = (bookId: string, opts: { interactive: boolean }) => boolean;
 
 /**
- * Build the shared Artifact-Lane consent gate (Phase C, design §3). It ANDs the
- * "Share AI caches across my devices" master switch into the §2.6 read-path
- * predicate, so BOTH the consult (probe + hydrate) AND the publisher upload gate
- * require shareAiCaches ON:
+ * Build the consent gate shared by the cache read path AND the upload path. It
+ * ANDs the "Share AI caches across my devices" master switch into the per-book
+ * consent predicate, so both reusing a peer's blob and uploading your own
+ * require that switch to be ON:
  *
  *   gate(bookId, {interactive}) =
  *     isShareEnabled() && (interactive || isPreEmbedEnabled() || perBook === true)
  *
- * shareAiCaches OFF → DENIED regardless of interactive/preEmbed/per-book consent
- * (the Phase-B consult is TIGHTENED: a hydrate while shareAiCaches is OFF is now
- * forbidden even on an interactive gesture). PURE/store-free — app/ injects the
- * three store reads; reused by the consult wiring (wireGoogle) and the
- * ArtifactPublisher boot task so consult+upload share one gating semantics.
+ * With sharing OFF every book is DENIED regardless of the interactive gesture,
+ * library pre-embed, or per-book consent — reusing another device's embeddings
+ * while sharing is off is forbidden even when the user just opened the book.
+ * PURE/store-free: app/ injects the three store reads. Reused by both the read
+ * adapter (wireGoogle) and the upload boot task so they share one gating rule.
  */
 export function makeArtifactConsentGate(deps: {
   isShareEnabled(): boolean;
@@ -88,21 +91,21 @@ export function makeArtifactConsentGate(deps: {
 
 export interface ArtifactConsultDeps {
   /**
-   * The artifact-lane backend handle, or `null` when sync is off / not
-   * connected (SyncOrchestrator.getConnectedArtifactBackend). Read fresh per
-   * call so a connect/disconnect takes effect immediately; a `null` handle is
-   * the cheap no-network short-circuit (probe → false, hydrate → null).
+   * The cloud-storage backend handle, or `null` when sync is off / not
+   * connected. Read fresh per call so a connect/disconnect takes effect
+   * immediately; a `null` handle is the cheap no-network short-circuit (probe →
+   * false, hydrate → null).
    */
   getBackend(): { backend: SyncBackend; workspaceId: string } | null;
   /** Resolve bookId → manifest (carries the optional `contentHash`). */
   getManifest(bookId: string): Promise<StaticManifestRow | undefined>;
-  /** The live embedding-space stamp (useGenAIStore + CURRENT_QUANT + extractionVersion). */
+  /** The live embedding-space stamp ({model, dims}, quant literal, extraction version). */
   getStamp(): ArtifactStamp;
-  /** The live persisted corpus, for section-hash reconciliation (§2.4). */
+  /** The live persisted local corpus, used to reconcile per-section text hashes. */
   getLiveCorpus(bookId: string): Promise<CacheSearchTextRow | undefined>;
-  /** The atomic cross-store hydrate write (§2.8). */
+  /** Write the hydrated embedding row + its job row in one atomic transaction. */
   putHydrated(row: CacheEmbeddingsRow, jobRow: CacheEmbedJobsRow): Promise<void>;
-  /** The §2.6 read-path consent gate (mirrors makeAiConsentResolver). */
+  /** Consent gate: the same consent the embed this would replace requires. */
   isConsented: ConsentGate;
 }
 
@@ -115,11 +118,11 @@ export interface ArtifactConsult {
    */
   probeArtifact(bookId: string, opts: { interactive: boolean }): Promise<boolean>;
   /**
-   * Download + materialize the local row from the artifact, or `null` on any
-   * clean non-hydrate (consent denied, no backend, definitive miss, stamp
-   * mismatch, no reconcilable sections). A transient/permission error from
-   * {@link SyncBackend.getArtifact} is RETHROWN (§2.7: never mistake an offline
-   * blip for a miss and burn quota).
+   * Download the shared blob and write the local embedding row from it, or
+   * `null` on any clean non-reuse (consent denied, no backend, definitive miss,
+   * stamp mismatch, no reconcilable sections). A transient/permission error from
+   * {@link SyncBackend.getArtifact} is RETHROWN — never mistake a temporary
+   * offline blip for a miss and waste quota re-embedding.
    */
   hydrateFromArtifact(
     bookId: string,
@@ -133,8 +136,8 @@ export function makeArtifactConsult(deps: ArtifactConsultDeps): ArtifactConsult 
     bookId: string,
     opts: { interactive: boolean },
   ): Promise<{ backend: SyncBackend; workspaceId: string; key: string } | null> {
-    // §2.6 consent gate FIRST — a denied consult never touches the manifest or
-    // the network.
+    // Consent gate FIRST — a denied request never touches the manifest or the
+    // network.
     if (!deps.isConsented(bookId, opts)) return null;
 
     // No connected backend → cheap no-network short-circuit (the common
@@ -142,9 +145,9 @@ export function makeArtifactConsult(deps: ArtifactConsultDeps): ArtifactConsult 
     const handle = deps.getBackend();
     if (!handle) return null;
 
-    // contentHash is OPTIONAL on pre-P7 manifests (static.ts:67); its absence
-    // is a CLEAN degrade (no benefit, no throw, no quota) — fall through to a
-    // per-device embed.
+    // Older manifests may have no contentHash; without it there is no
+    // content-addressed key to look up, so fall through to a per-device embed
+    // (no benefit, no error, no quota spent).
     const manifest = await deps.getManifest(bookId);
     const contentHash = manifest?.contentHash;
     if (!contentHash) return null;
@@ -158,7 +161,7 @@ export function makeArtifactConsult(deps: ArtifactConsultDeps): ArtifactConsult 
       const resolved = await resolve(bookId, opts);
       if (!resolved) return false;
       const { backend, workspaceId, key } = resolved;
-      // HEAD doc tail is `embedCache/{key}` (§2.1). A null HEAD is a miss.
+      // The HEAD record lives at `embedCache/{key}`. A null result is a miss.
       const head = await backend.headArtifact(workspaceId, `embedCache/${key}`);
       return head !== null;
     },
@@ -168,22 +171,23 @@ export function makeArtifactConsult(deps: ArtifactConsultDeps): ArtifactConsult 
       if (!resolved) return null;
       const { backend, workspaceId, key } = resolved;
 
-      // HEAD probe FIRST (§2.1: HEAD doc tail `embedCache/{key}`) so we can tell
-      // a clean miss (no HEAD doc → not drift, re-embed) from steady-state drift
-      // (HEAD hit but absent object — the HEAD-after-Storage invariant says this
-      // can't happen, so it signals a stale HEAD doc to self-heal). A null HEAD
-      // is a clean miss.
+      // Check the HEAD record FIRST (at `embedCache/{key}`) so we can tell a
+      // clean miss (no HEAD record → just re-embed) from the inconsistent case
+      // (HEAD present but blob absent — see driftCount). A null HEAD is a clean
+      // miss.
       const head = await backend.headArtifact(workspaceId, `embedCache/${key}`);
       if (head === null) return null;
 
-      // Blob tail is `embeddings/{key}.bin` (§2.1). §2.7 taxonomy: a definitive
-      // miss is `null` (re-embed); a transient/permission error THROWS from the
-      // backend and we let it propagate (never burn quota on an offline blip).
+      // Fetch the blob at `embeddings/{key}.bin`. A definitive miss returns
+      // `null` (re-embed); a transient/permission error THROWS from the backend
+      // and we let it propagate — never waste quota re-embedding on an offline
+      // blip.
       const bytes = await backend.getArtifact(workspaceId, `embeddings/${key}.bin`);
       if (!bytes) {
-        // HEAD-hit-but-object-missing: steady-state DRIFT (L-3). Count + log it
-        // (stable search key), opportunistically delete the stale HEAD doc so a
-        // future probe re-embeds instead of false-hitting, and return null.
+        // HEAD record present but blob absent — the inconsistency tracked by
+        // driftCount. Count + log it (stable search key), opportunistically
+        // delete the stale HEAD record so a future probe re-embeds instead of
+        // falsely hitting, and return null.
         driftCount += 1;
         logger.warn(
           `[artifact-head-object-drift] HEAD doc present but object absent for ${bookId} ` +
@@ -208,13 +212,13 @@ export function makeArtifactConsult(deps: ArtifactConsultDeps): ArtifactConsult 
       }
       const { header } = parsed;
 
-      // Corruption guard (§2.4): RE-DERIVE the contentKey from the blob's OWN
-      // stamp (the header's {model,dims,quant,extractionVersion}) folded with
-      // this book's contentHash, and assert it equals the requested `key`. A
-      // mismatch means the object stored under this content-addressed key does
-      // not describe this stamp/content (a swap or bit-rot) — reject. The
-      // contentHash came from `resolve` (the manifest); re-read it (cheap cached
-      // IDB) so the re-key uses the SAME content identity the request did.
+      // Corruption guard: RE-DERIVE the content key from the blob's OWN stamp
+      // (the header's {model, dims, quant, extractionVersion}) folded with this
+      // book's contentHash, and assert it equals the requested `key`. A mismatch
+      // means the object stored under this content-addressed key does not
+      // describe this stamp/content (a swap or bit-rot) — reject it. Re-read the
+      // contentHash (a cheap cached IDB read) so the re-derivation uses the same
+      // content identity the request did.
       const manifest = await deps.getManifest(bookId);
       const contentHash = manifest?.contentHash;
       if (!contentHash) return null;
@@ -232,11 +236,12 @@ export function makeArtifactConsult(deps: ArtifactConsultDeps): ArtifactConsult 
         return null;
       }
 
-      // Reconcile each header section's sectionTextHash against the LIVE corpus
-      // (§2.4): keep only sections whose hash still matches the local corpus —
-      // a diverged/absent section is DROPPED so the indexer re-embeds just those
-      // on the next pass (partial hydrate). The jobRow below marks ONLY the
-      // survivors complete (so the dropped ones are NOT resume-skipped).
+      // Reconcile each blob section's text hash against the LIVE local corpus:
+      // keep only sections whose hash still matches, since a section whose text
+      // has since changed (or is now absent locally) would carry stale vectors.
+      // Dropped sections are left for the indexer to re-embed on the next pass
+      // (a partial reuse). The job row below marks ONLY the survivors complete,
+      // so the dropped ones are not skipped on resume.
       const corpus = await deps.getLiveCorpus(bookId);
       const liveHashByHref = new Map<string, string | undefined>(
         (corpus?.sections ?? []).map((s) => [s.href, s.sectionTextHash]),
@@ -253,20 +258,20 @@ export function makeArtifactConsult(deps: ArtifactConsultDeps): ArtifactConsult 
         sections.push({
           href: hs.href,
           sectionTextHash: hs.sectionTextHash,
-          // CFI/char offsets are not carried in the v1 blob header (Phase D
-          // populates CFI; char offsets re-segment from cache_search_text). An
-          // empty chunks list is a valid persisted state (semanticRank falls
-          // back to re-segmentation), so the hydrated row is searchable.
+          // The v1 blob header does not carry per-chunk CFI/char offsets; the
+          // ranker re-segments from the local search-text corpus when chunks are
+          // empty, so an empty list is a valid persisted state and the hydrated
+          // row is still searchable.
           chunks: [],
           vectors: bytesForSection.vectors,
           scales: bytesForSection.scales,
         });
         jobSections.push({
           href: hs.href,
-          // embeddedThroughChunk is the resume cursor; the section is fully
-          // hydrated, so mark it complete. The exact count is unknown from the
-          // blob (chunks aren't carried), but any positive value paired with the
-          // present vectors + the B-3 guard makes this section resume-skippable.
+          // embeddedThroughChunk is the resume cursor; this section is fully
+          // hydrated, so mark it complete. The exact chunk count is unknown from
+          // the blob (chunks aren't carried), but any positive value paired with
+          // the present vectors lets the indexer skip this section on resume.
           embeddedThroughChunk: 1,
           sectionTextHash: hs.sectionTextHash,
         });
@@ -290,8 +295,8 @@ export function makeArtifactConsult(deps: ArtifactConsultDeps): ArtifactConsult 
         sections: jobSections,
         updatedAt: Date.now(),
       };
-      // §2.8 ATOMIC write: both stores in one gated cross-store tx, so a crash
-      // can never leave a job-complete section with absent vectors.
+      // ATOMIC write: both rows in one cross-store transaction, so a crash can
+      // never leave a section marked complete in the job row but with no vectors.
       await deps.putHydrated(row, jobRow);
       return row;
     },

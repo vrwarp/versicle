@@ -1,22 +1,24 @@
 /**
- * GeminiEmbeddingClient (Increment C §1) — the production EmbeddingClient over
- * the Gemini REST `:embedContent` endpoint, routed through
- * `NetworkGateway.egress('gemini', …)`. Mirrors GeminiClient.ts (config read
- * per call, gateway routing with consent + lane + estTokens, redacted logging
- * before the injected sink), narrowed to the embedding shape.
- *
- * Design points (design §1/§5.2, §8.1):
- *  - ONE `:embedContent` POST PER text (batching off by design §0/§8.1).
- *  - Config read PER CALL from the injected provider (GG-8): a settings edit
- *    takes effect on the very next embed, no mutable-singleton clobber.
- *  - `profile` mapping: gemini-embedding-001 sets `taskType` (the matched
- *    RETRIEVAL_DOCUMENT/RETRIEVAL_QUERY pair); gemini-embedding-2 prepends a
- *    profile instruction to the text (the EM2 contract).
- *  - `outputDimensionality: dims` requests the truncated embedding.
- *  - Logs are redacted BEFORE they reach the injected sink (privacy D3),
- *    exactly like GeminiClient.log (GeminiClient.ts:119).
- *  - Returns FLOAT32 vectors; int8 quantization is the indexer/worker's job
- *    (B3), never this client's.
+ * GeminiEmbeddingClient — the production EmbeddingClient over the Gemini REST
+ * `:embedContent` endpoint, routed through `NetworkGateway.egress('gemini', …)`
+ * so every request passes the same consent + quota-lane + token-estimate
+ * admission checks as the chat client. Mirrors GeminiClient.ts, narrowed to the
+ * embedding shape:
+ *  - By default, ONE `:embedContent` POST per text (the batch endpoint is
+ *    opt-in; see {@link embed}).
+ *  - Config is read PER CALL from the injected provider, never cached, so a
+ *    settings edit (model, dims, API key) takes effect on the very next embed
+ *    with no stale-singleton state to clobber.
+ *  - `profile` mapping for the two model families: gemini-embedding-001 sends a
+ *    `taskType` field (RETRIEVAL_DOCUMENT vs RETRIEVAL_QUERY); gemini-embedding-2
+ *    instead prepends a profile instruction to the text. The matched
+ *    document/query pair is what makes the asymmetric retrieval cosine work.
+ *  - `outputDimensionality: dims` requests a truncated embedding.
+ *  - Log payloads are redacted before they reach the injected sink, so book
+ *    text never lands in the activity log.
+ *  - Returns FLOAT32 vectors; int8 quantization is the indexer/worker's job,
+ *    never this client's, so the wire format stays one concern of the storage
+ *    layer.
  */
 import { egress, type EgressFn } from '@kernel/net';
 import { GenAIHttpError } from '../errors';
@@ -32,7 +34,7 @@ const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 /** The EM2 model id whose profile is carried by a prepended instruction. */
 const EM2_MODEL = 'gemini-embedding-2';
 
-/** Max contents packed into ONE :batchEmbedContents call (design §9/§11.3). */
+/** Max contents packed into ONE :batchEmbedContents call. */
 const BATCH_MAX = 100;
 
 /** The `taskType` enum values for the asymmetric retrieval embedding pair. */
@@ -48,10 +50,10 @@ const EM2_INSTRUCTION: Record<EmbeddingProfile, string> = {
 };
 
 /**
- * A coarse token estimate for the pre-flight gateway admission window — the
- * usual ~4-chars-per-token heuristic, identical to GeminiClient.estTokens
- * (GeminiClient.ts:80). The reconcile to the real cost via usageMetadata is a
- * Phase-D/F refinement (this fg lane debits only the estimate).
+ * A coarse token estimate for the gateway's pre-flight admission check — the
+ * usual ~4-chars-per-token heuristic, identical to GeminiClient.estTokens. The
+ * gateway debits this estimate up front; reconciling to the real cost from the
+ * response is not done here.
  */
 function estTokens(text: string): number {
   return Math.ceil(text.length / 4);
@@ -115,19 +117,14 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
       signal?: AbortSignal;
     },
   ): Promise<{ vectors: Float32Array[] }> {
-    // §11.3 PROBE PROCEDURE (run ONCE, manually, against a real free-tier key
-    // on the default project before flipping useBatchEmbedding on by default):
-    //   1. With useBatchEmbedding=false, issue 5 single :embedContent calls and
-    //      read the daily REQUEST counter delta to calibrate (should be +5).
-    //   2. With useBatchEmbedding=true, issue ONE 50-content :batchEmbedContents
-    //      call and re-read the counter.
-    //   3. If the delta is +1, Google counts a batch as a single request →
-    //      adopt useBatchEmbedding=true (the structural N→1 RPD win). If the
-    //      delta is ~+50, the batch is billed per-content → REVERT to false.
-    // The swap below makes the CLIENT issue 1 egress call per <=100 window vs
-    // N per single; the gateway debits RPD once per egress acquire, so the
-    // 1-vs-N RPD difference is structural — whether Google's quota agrees is
-    // exactly the unconfirmed question this probe answers. Default stays false.
+    // Batch endpoint, off by default. When enabled, the client packs up to 100
+    // texts into ONE :batchEmbedContents POST instead of one :embedContent POST
+    // per text. Because the gateway debits one daily-request unit per egress
+    // call, batching would cut N requests down to 1 — but only if Google's quota
+    // also counts a batch as a single request, which is unconfirmed. Until that
+    // is verified against a real free-tier key (issue a 50-content batch and
+    // check whether the daily request counter goes up by 1 or by 50), the safe
+    // default is the per-text path so we never silently blow the quota.
     const { useBatchEmbedding } = this.deps.getConfig();
     if (useBatchEmbedding) {
       return this.embedBatch(texts, opts);
@@ -141,12 +138,12 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
   }
 
   /**
-   * Batched path (default-off scaffolding, §9/§11.3): pack up to {@link
-   * BATCH_MAX} texts into ONE `:batchEmbedContents` POST per window — one
-   * egress call (= one gateway RPD debit) per <=100 texts, vs N for the single
-   * path. `embeddings[]` is parsed back to N Float32Array, positionally aligned
-   * with the requests. The profile shaping (EM2 instruction vs taskType,
-   * outputDimensionality) is identical to the single path, applied per request.
+   * Batched path (opt-in): pack up to {@link BATCH_MAX} texts into ONE
+   * `:batchEmbedContents` POST per window — one egress call (one gateway
+   * daily-request debit) per <=100 texts, versus N for the per-text path.
+   * `embeddings[]` is parsed back to N Float32Array, positionally aligned with
+   * the requests. Profile shaping (EM2 instruction vs taskType,
+   * outputDimensionality) is identical to the per-text path, applied per request.
    */
   private async embedBatch(
     texts: string[],
@@ -178,7 +175,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
       signal?: AbortSignal;
     },
   ): Promise<Float32Array[]> {
-    // Config read PER CALL (GG-8).
+    // Read config fresh each call so a settings edit applies to the next embed.
     const config = this.deps.getConfig();
     const isEm2 = config.model === EM2_MODEL;
 
@@ -210,8 +207,8 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
         signal: opts.signal,
         consent: { bookId: opts.bookId, interactive: opts.interactive },
         lane: opts.lane ?? 'fg',
-        // The window's combined estimate (one acquire window, like the single
-        // path's per-text estTokens).
+        // One combined token estimate for the whole batch, since the batch is a
+        // single egress call (like the per-text path's per-text estimate).
         estTokens: contents.reduce((sum, c) => sum + estTokens(c), 0),
       },
     );
@@ -243,12 +240,12 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
       signal?: AbortSignal;
     },
   ): Promise<Float32Array> {
-    // Config read PER CALL (GG-8).
+    // Read config fresh each call so a settings edit applies to the next embed.
     const config = this.deps.getConfig();
     const isEm2 = config.model === EM2_MODEL;
 
-    // Profile mapping (design §1/§5.2): EM2 prepends an instruction to the
-    // text; gemini-embedding-001 carries a taskType field. The matched
+    // Profile mapping: gemini-embedding-2 prepends an instruction to the text;
+    // gemini-embedding-001 carries a taskType field instead. The matched
     // document/query pair is what makes the asymmetric cosine meaningful.
     const content = isEm2 ? `${EM2_INSTRUCTION[opts.profile]}${text}` : text;
     const payload: Record<string, unknown> = {

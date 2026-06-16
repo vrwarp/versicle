@@ -103,57 +103,56 @@ export function wireGoogleDomain(): void {
     }),
   );
 
-  // QuotaGovernor (Phase A): ONE kernel governor shared by the GenAI egress
-  // lane (below) and the cloud-TTS lane (the audio domain holder). Limits are
-  // read FRESH per acquire (GG-8) from this provider — A7 sources them from the
-  // user-editable GenAI settings (useGenAIStore.quotaLimits), read fresh inside
-  // the closure so a settings edit takes effect on the very next acquire. When
-  // pauseAllGenAI is on, limits collapse to zero so acquire throws
-  // NetRateLimitedError PRE-network (a master pause with no kernel change). RPD
-  // is persisted through the injected store onto the quotaCounter repo (the only
-  // IDB touch); RPM/TPM live in-memory in the governor.
+  // ONE kernel quota governor, shared by the GenAI egress lane (below) and the
+  // cloud-TTS lane (the audio domain holder). Limits come from the user-editable
+  // GenAI settings (useGenAIStore.quotaLimits) and are read FRESH per acquire
+  // inside this closure, so a settings edit takes effect on the very next
+  // acquire. When pauseAllGenAI is on, limits collapse to zero so acquire throws
+  // NetRateLimitedError before any network call (a master pause with no kernel
+  // change). The daily request count is persisted through the injected store
+  // onto the quotaCounter repo (the only IDB touch); per-minute counts live
+  // in-memory in the governor.
   const getQuotaLimits = (): QuotaLimits => {
     const s = useGenAIStore.getState();
     return s.pauseAllGenAI ? { rpm: 0, tpm: 0, rpd: 0 } : s.quotaLimits;
   };
-  // A6 (design §3.4): saveDailyUsage — the single chokepoint where the governor
-  // reports today's usage — ALSO publishes THIS device's own spend onto its
-  // synced DeviceInfo record, for the project-wide cross-device quota sum.
+  // saveDailyUsage — the single chokepoint where the governor reports today's
+  // usage — ALSO publishes THIS device's own spend onto its synced DeviceInfo
+  // record, so every device can sum the whole project's daily quota usage.
   setQuotaStore(
     makeQuotaStore(quotaCounterRepo, (usage) =>
       useDeviceStore.getState().publishEmbedSpend(getDeviceId(), usage),
     ),
   );
-  // A6 BG-lane-only effective ceiling: base RPD reduced by the sum of OTHER
-  // active-today devices' published spend. Read FRESH per acquire (GG-8) so the
-  // kernel is UNTOUCHED (the QuotaGovernor.ts:29 seam). bg-only division is
-  // enforced by routing ONLY the bg lane through this provider; the Phase-E2
-  // embedding backfill task consumes it (below) as the cross-device admission
-  // pre-flight (the single governor uses ONE full-projectRPD provider for both
-  // lanes, so the cross-device ceiling is an app-layer admission gate).
+  // The background lane's effective daily ceiling: the base daily request limit
+  // reduced by the sum of what OTHER devices active today have already spent, so
+  // the shared daily quota is divided across devices. Read FRESH per acquire so
+  // the kernel governor is untouched. Only the background lane is routed through
+  // this reduced provider; the embedding-backfill task (below) reads it as a
+  // cross-device admission check before each background embed.
   const getBackgroundQuotaLimits = makeBackgroundQuotaLimits(
     getQuotaLimits,
     () => useDeviceStore.getState().devices,
     getDeviceId(),
   );
-  // The fg/query provider (getQuotaLimits, full projectRPD) and this governor
-  // stay UNCHANGED so foreground + query embeds are never rate-divided
-  // (guardrail #4).
+  // The foreground/query provider (getQuotaLimits, full daily limit) and this
+  // governor stay UNCHANGED, so foreground and query embeds are never divided
+  // across devices.
   const governor = new QuotaGovernor(getQuotaLimits);
-  // A4 (design §3.2): the SAME governor instance enforces admission at the
-  // NetworkGateway chokepoint (acquire/release — unbypassable, like consent)
-  // AND receives the post-response commit/recordCooldown from the clients.
+  // The SAME governor instance enforces admission at the NetworkGateway
+  // chokepoint (acquire/release — unbypassable, like consent) AND receives the
+  // post-response commit/recordCooldown from the clients.
   setQuotaScheduler(governor);
   setTtsQuotaGovernor(governor);
-  // A7: the READ-direction mirror of the `onLog: addLog` injection below — the
-  // settings quota meters poll this provider for live per-lane usage. The
+  // Expose the governor's live per-lane usage to the settings quota meters. The
   // governor stays the single source of truth; the store only re-exposes its
   // snapshot to the UI layer (no kernel→store edge).
   useGenAIStore.getState().setQuotaSnapshotProvider(() => governor.snapshot());
-  // E2: install the BG-budget seam the embeddingBackfillTask reads for its
-  // cross-device RPD pre-flight — the A6 reduced bg ceiling + the governor's
-  // live bg.rpd. In-memory (never persisted, same contract as the snapshot
-  // provider) so the boot task never imports the kernel governor.
+  // Install the in-memory seam the embedding-backfill task reads for its
+  // cross-device admission check: this device's reduced background daily ceiling
+  // plus the governor's live background daily count. Never persisted (same
+  // contract as the snapshot provider), so the boot task never imports the
+  // kernel governor.
   useGenAIStore
     .getState()
     .setBgBudgetProvider(getBackgroundQuotaLimits, () => governor.snapshot().bg.rpd);
@@ -181,14 +180,13 @@ export function wireGoogleDomain(): void {
     }),
   );
 
-  // GenAI embedding (Increment C §1): the LAZY embedding facade —
-  // GeminiEmbeddingClient (and its egress plumbing) loads on the first embed
-  // call, kept out of the entry chunk (check 4). Config is read PER CALL from
-  // the store (GG-8: an embeddingModel/embeddingDims edit takes effect on the
-  // next embed); log entries arrive pre-redacted into the same in-memory ring
-  // buffer as the GenAI client. The fg-lane acquire at the gateway already
-  // throttles it (no governor commit is wired here — the embedContent
-  // usageMetadata reconcile is a Phase-D/F refinement).
+  // The embedding client, installed as a LAZY facade so the real
+  // GeminiEmbeddingClient (and its egress plumbing) loads only on the first
+  // embed call, keeping it out of the entry chunk. Config is read PER CALL from
+  // the store, so an embeddingModel/embeddingDims edit takes effect on the next
+  // embed; log entries arrive pre-redacted into the same in-memory log buffer as
+  // the GenAI client. The foreground-lane acquire at the gateway already
+  // throttles it, so no governor commit is wired here.
   setEmbeddingClient(
     makeLazyEmbeddingClient({
       getConfig: (): EmbeddingConfig => {
@@ -197,7 +195,7 @@ export function wireGoogleDomain(): void {
           apiKey: s.apiKey,
           model: s.embeddingModel,
           dims: s.embeddingDims,
-          // §11.3 probe flag, read per call (GG-8) — default-off scaffolding.
+          // Opt-in batch-embedding probe flag, read per call; default-off.
           useBatchEmbedding: s.useBatchEmbedding,
         };
       },
@@ -214,30 +212,30 @@ export function wireGoogleDomain(): void {
         Object.keys(useContentAnalysisStore.getState().sections).some((key) =>
           key.startsWith(`${bookId}/`),
         ),
-      // E1 (§8.4.1): the library-wide opt-in is the user's consent for bulk
-      // BACKGROUND embedding — granted before the per-book default-deny so an
-      // unread book can be backfilled. Read fresh so a settings flip takes
-      // effect on the next egress.
+      // The library-wide opt-in is the user's consent for bulk BACKGROUND
+      // embedding: it grants egress for an unread book that has no per-book
+      // consent of its own, so the background backfill can pre-embed it. Read
+      // fresh so a settings flip takes effect on the next egress.
       isLibraryPreEmbedEnabled: () => useGenAIStore.getState().preEmbedLibrary,
     }),
   );
 
-  // Shared-AI-cache READ-side adapter (Artifact Lane Phase B, shared-ai-cache-
-  // design.md §2.4/§2.6): consult the BYO cloud cache BEFORE spending Gemini
-  // quota and hydrate the local row on a hit. The store/manifest/backend edges
-  // live HERE (README §2 rule 3); the boot loop + reader controller inject the
-  // installed singleton's port. READ-ONLY in Phase B — no upload (Phase C).
+  // The read side of the shared embedding cache: before spending Gemini quota to
+  // embed a book, check the user's own cloud cache and, on a hit, download and
+  // reuse another device's embeddings. The store/manifest/backend edges live
+  // HERE; the boot loop and reader controller inject the installed singleton's
+  // port. This is read-only — uploads are handled by the publisher boot task.
   setArtifactConsult(
     makeArtifactConsult({
-      // The connected backend handle, or null when sync is off / not connected.
-      // peekSyncOrchestrator never CREATES the orchestrator (no-sync = null =
+      // The connected cloud backend, or null when sync is off / not connected.
+      // peekSyncOrchestrator never CREATES the orchestrator (no sync = null =
       // cheap no-network short-circuit). Read fresh per call.
       getBackend: () => peekSyncOrchestrator()?.getConnectedArtifactBackend() ?? null,
       getManifest: (bookId) => bookContent.getManifest(bookId),
-      // The live embedding-space stamp: {model,dims} from the GenAI settings
-      // (read fresh, GG-8), the int8 quant literal, and the current extraction
-      // version (the same TTS_EXTRACTION_VERSION the corpus rows are stamped
-      // with — see extract.ts) so the contentKey matches the publisher's.
+      // The live embedding-space stamp: {model, dims} from the GenAI settings
+      // (read fresh), the int8 quant literal, and the current extraction version
+      // (the same one the corpus rows are stamped with), so the derived cache key
+      // matches the one the publisher wrote.
       getStamp: () => {
         const s = useGenAIStore.getState();
         return {
@@ -249,12 +247,12 @@ export function wireGoogleDomain(): void {
       },
       getLiveCorpus: (bookId) => searchTextRepo.get(bookId),
       putHydrated: (row, jobRow) => embeddingsRepo.putHydrated(row, jobRow),
-      // §2.6 read-path consent gate, TIGHTENED in Phase C (design §3): the §2.6
-      // predicate (per-book aiConsent bit OR the library preEmbed opt-in (bg) OR
-      // the interactive reader-open gesture (FG)) ANDed with the shareAiCaches
-      // master switch. shareAiCaches OFF → DENIED even on an interactive gesture
-      // — consult+upload share ONE gate (the ArtifactPublisher boot task builds
-      // its upload gate from the SAME makeArtifactConsentGate helper).
+      // Consent gate: the per-book consent predicate (per-book consent bit OR the
+      // library pre-embed opt-in for background OR the interactive reader-open
+      // gesture for foreground) ANDed with the shareAiCaches master switch. With
+      // sharing OFF every book is DENIED even when the user just opened it. The
+      // upload (publisher) path is built from this SAME helper so the two share
+      // one gating rule.
       isConsented: makeArtifactConsentGate({
         isShareEnabled: () => useGenAIStore.getState().shareAiCaches,
         isPreEmbedEnabled: () => useGenAIStore.getState().preEmbedLibrary,

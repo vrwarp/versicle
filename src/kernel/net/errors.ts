@@ -5,13 +5,14 @@
  */
 import { AppError, type AppErrorOptions } from '~types/errors';
 
-// Pre-network rate-limit backpressure (Phase A) is `NetRateLimitedError` in
-// `~types/errors`. Its canonical home is the types layer — NOT here — because
-// its throw site, the `kernel/quota` QuotaGovernor, is bound by
-// `kernel-imports-nothing` (kernel may import only `~types`, never a sibling
-// kernel module like `kernel/net`). It is therefore imported directly from
-// `~types/errors` by consumers; gateway-level enforcement (A4) will surface it
-// alongside the NET_* errors here when that increment lands.
+// The rate-limit backpressure error thrown when a request is rejected before it
+// hits the network (the provider's budget is spent) is `NetRateLimitedError`,
+// and it lives in `~types/errors`, NOT here. Its throw site is the quota
+// governor under `kernel/quota`, and kernel modules may import only `~types`,
+// never a sibling kernel module like `kernel/net` — so it cannot live here and
+// be reached from there. Consumers import it directly from `~types/errors`. The
+// gateway surfaces it alongside the NET_* errors below once it enforces the
+// throttle.
 
 /** Base class for gateway policy failures. */
 export class NetworkGatewayError extends AppError {
@@ -82,12 +83,12 @@ export class NetOfflineError extends NetworkGatewayError {
 }
 
 /**
- * Parse a 429's `Retry-After` (delta-seconds) header into milliseconds, falling
- * back to `defaultMs` when the header is missing/unparseable/negative (Phase A
- * DRY). The default is a PARAMETER — each caller keeps its own named constant
- * (GeminiClient: DEFAULT_COOLDOWN_MS; cloud-TTS: SYNTHESIS_TIMEOUT_MS) — so this
- * helper never bakes one in. Imports NOTHING internal (`Response` is a DOM
- * global) → honors kernel-imports-nothing.
+ * Parse a 429 response's `Retry-After` (delta-seconds) header into milliseconds,
+ * falling back to `defaultMs` when the header is missing, unparseable, or
+ * negative. The fallback is a PARAMETER so this one helper can serve callers
+ * with different defaults (each keeps its own named constant) rather than baking
+ * one in. Imports nothing internal (`Response` is a DOM global), so kernel
+ * modules can use it without violating the import rule.
  */
 export function retryAfterMs(response: Response, defaultMs: number): number {
   const header = response.headers.get('Retry-After');

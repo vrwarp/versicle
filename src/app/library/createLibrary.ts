@@ -77,23 +77,24 @@ export function buildProjectionPort(): LibraryProjectionPort {
 }
 
 /**
- * The app-layer per-book cloud-artifact GC adapter (Artifact Lane Phase D,
- * §2.7), injected as LibraryService's `purgeBookArtifact` port. It holds the
- * store/backend/manifest edges the store-free LibraryService cannot reach:
+ * When a book is removed, drop this device's pointer to its entry in the shared
+ * embedding cache. Injected as LibraryService's `purgeBookArtifact` port because
+ * it holds the store/backend/manifest edges the store-free LibraryService cannot
+ * reach:
  *
- *  (a) read the connected backend (peekSyncOrchestrator; null => no-op);
- *  (b) bookContent.getManifest(bookId) for contentHash (absent/pre-P7 => no-op
- *      — getManifest is called BEFORE LibraryService runs deleteBook, so the
- *      manifest row carrying the hash is still present);
- *  (c) derive the contentKey via the LIVE stamp (useGenAIStore {model,dims} +
- *      CURRENT_QUANT + TTS_EXTRACTION_VERSION — the SAME stamp wireGoogle's
- *      consult uses, so the key matches what the publisher wrote);
- *  (d) best-effort backend.deleteArtifactHead(workspaceId, `embedCache/{key}`)
- *      — the HEAD doc only; the shared blob is left for the sweeper.
+ *  (a) read the connected cloud backend (null => no-op);
+ *  (b) read the book's manifest for its contentHash (absent => no-op; the
+ *      manifest is read BEFORE LibraryService deletes the book, so the row
+ *      carrying the hash is still present);
+ *  (c) derive the cache key from the LIVE embedding stamp ({model, dims} +
+ *      quant literal + extraction version — the SAME stamp the read adapter uses,
+ *      so the key matches what the publisher wrote);
+ *  (d) best-effort delete of the HEAD record at `embedCache/{key}` ONLY; the
+ *      shared blob is left for the cloud sweeper to reclaim once it ages out.
  *
- * shareAiCaches gating is irrelevant to delete (removing YOUR OWN HEAD doc for
- * a removed book is always safe). A null backend / no contentHash / pre-P7 book
- * is a clean no-op; a backend throw is logged (LibraryService also degrades).
+ * The shareAiCaches switch is irrelevant here — removing your OWN pointer for a
+ * book you deleted is always safe. A null backend / missing contentHash is a
+ * clean no-op; a backend error is logged (LibraryService degrades too).
  */
 async function purgeBookArtifact(bookId: string): Promise<void> {
   const handle = peekSyncOrchestrator()?.getConnectedArtifactBackend() ?? null;
@@ -150,8 +151,8 @@ export function getLibrary(): LibraryComposition {
     projection,
     persistence,
     orchestrator,
-    // Phase D per-book cloud GC: drop THIS device's HEAD doc on book removal
-    // (the shared blob is left for the sweeper). Store/backend edges live here.
+    // On book removal, drop THIS device's HEAD record in the shared embedding
+    // cache (the shared blob is left for the sweeper). Edges live in this file.
     purgeBookArtifact,
   });
 

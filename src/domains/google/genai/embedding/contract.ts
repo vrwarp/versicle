@@ -1,13 +1,12 @@
 /**
- * EmbeddingClient contract (Increment C §1) — the GenAI EMBEDDING capability,
- * a sibling of the GenAIClient family (contract.ts:61). Implementations:
- * GeminiEmbeddingClient (REST `:embedContent` via the kernel NetworkGateway)
- * and MockEmbeddingClient (composition-root/test builds only — boundary
- * rule 9, like MockGenAIClient).
+ * EmbeddingClient contract — the GenAI text-embedding capability, a sibling of
+ * the GenAIClient (chat) family. Implementations: GeminiEmbeddingClient (REST
+ * `:embedContent` via the kernel NetworkGateway) and MockEmbeddingClient
+ * (composition-root/test builds only).
  *
  * The client returns FLOAT32 vectors; quantization to int8 is the
- * indexer/worker's job (B3 — `SearchEngine.quantizeInt8PerVector`), never the
- * client's, so the wire format stays a single concern of the storage layer.
+ * indexer/worker's job, never the client's, so the wire format stays a single
+ * concern of the storage layer.
  */
 
 /**
@@ -21,13 +20,13 @@ export type EmbeddingProfile = 'document' | 'query';
 
 export interface EmbeddingClient {
   /**
-   * Embed `texts` under `opts.profile`. One `:embedContent` POST per text
-   * (batching off by design §0/§8.1). The returned `vectors` are float32 and
-   * positionally aligned with `texts`. `bookId`/`interactive` thread the
-   * gateway's per-book consent gate; `signal` cancels. `lane` selects the
-   * gateway quota lane (default `'fg'`) — the Increment E background backfill
-   * passes `lane: 'bg'` + `interactive: false`; the matched profile + consent
-   * semantics are otherwise unchanged.
+   * Embed `texts` under `opts.profile`. By default, one `:embedContent` POST
+   * per text. The returned `vectors` are float32 and positionally aligned with
+   * `texts`. `bookId`/`interactive` thread the gateway's per-book consent gate;
+   * `signal` cancels. `lane` selects the gateway quota lane (default `'fg'`):
+   * the background backfill passes `lane: 'bg'` + `interactive: false` so it
+   * uses the slow quota lane and never claims a user gesture; the profile and
+   * consent semantics are otherwise unchanged.
    */
   embed(
     texts: string[],
@@ -52,18 +51,19 @@ export interface EmbeddingConfig {
   /** Requested output dimensionality (`outputDimensionality`). */
   dims: number;
   /**
-   * §11.3 probe flag (Increment F), read PER CALL (GG-8). When falsy (the
+   * Batch-endpoint toggle, read fresh on every embed call. When falsy (the
    * default), the client issues one `:embedContent` POST per text. When true,
    * it packs up to 100 texts into ONE `:batchEmbedContents` requests[] call.
-   * Default-off because per-request RPD counting for the batch endpoint is
-   * unconfirmed (design §9/§11.3) — batching ships as scaffolding only.
+   * Default-off because it is unconfirmed whether Google's daily-request quota
+   * counts a batch as one request or as one per content — until verified,
+   * enabling it could silently blow the quota.
    */
   useBatchEmbedding?: boolean;
 }
 
 /**
- * Read per call (never cached): mirrors {@link GenAIConfigProvider}
- * (contract.ts:80, GG-8) — a settings edit takes effect on the very next
- * embed call, with no mutable-singleton clobber.
+ * Read per call, never cached (mirrors {@link GenAIConfigProvider}) — a
+ * settings edit takes effect on the very next embed call, with no stale
+ * singleton state to clobber.
  */
 export type EmbeddingConfigProvider = () => EmbeddingConfig;

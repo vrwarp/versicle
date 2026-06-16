@@ -99,16 +99,17 @@ export interface EgressDestination {
    */
   offline: 'fail' | 'cache-fallback';
   /**
-   * Quota governance (Phase A §3.2). When present, NetworkGateway.egress()
-   * applies the injected QuotaScheduler's admission/backpressure on this
-   * `lane` before any bytes leave — making throttling structurally
-   * unbypassable (the caller no longer has to remember to ask), exactly like
-   * the host-allowlist/offline/consent checks. Absent ⇒ ungoverned egress.
+   * Rate-limit governance. When present, NetworkGateway.egress() runs the
+   * injected throttle on this `lane` before any bytes leave, rejecting requests
+   * that exceed the provider's per-minute/per-day budget. Putting it on the
+   * destination (rather than at each call site) makes throttling unbypassable,
+   * just like the host-allowlist/offline/consent checks; the caller no longer
+   * has to remember to ask. Absent ⇒ no throttling for this destination.
    *
-   * NOTE: the lane union is INLINED (not imported from @kernel/quota) because
-   * this module's hard "NO imports" constraint (above) feeds the generate-csp
-   * Node type-stripping path, which cannot resolve path aliases. It mirrors
-   * `Lane` in @kernel/quota.
+   * NOTE: the lane union is spelled out here rather than imported from the
+   * quota module because this file's "NO imports" rule (see top) feeds the
+   * CSP-generator's Node type-stripping path, which cannot resolve path aliases.
+   * It must stay in sync with the quota module's `Lane` type.
    */
   rateLimit?: { lane: 'fg' | 'bg' };
 }

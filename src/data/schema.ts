@@ -76,13 +76,13 @@ export const DB_NAME = 'EpubLibraryDB';
  * fallback the P7 prep doc names ("additive v26 through P3's versioned
  * migration registry"): it only CREATES the empty `cache_search_text` store
  * — cache-domain, rebuildable, no data is touched, absence on older builds
- * simply means search re-extracts (current behavior). v27 (Increment B) is
- * the same shape of additive bump for the semantic-search foundation: it only
- * CREATES the empty `cache_embeddings` + `cache_embed_jobs` stores —
- * cache-domain, device-local, rebuildable; absence on older builds simply
- * means the (Phase-C) indexer re-embeds. This bump is DECOUPLED from the
- * reserved sync_log/SW cleanup, which was never done and would take v28. The
- * next IDB bump must add a MIGRATIONS step, never edit an existing one.
+ * simply means search re-extracts (current behavior). v27 is the same shape of
+ * additive bump for semantic (meaning-based) search: it only CREATES the empty
+ * `cache_embeddings` + `cache_embed_jobs` stores — cache-domain, device-local,
+ * rebuildable; on an older build their absence just means the book gets
+ * re-embedded. This bump is DECOUPLED from the reserved sync_log/SW cleanup,
+ * which was never done and would take v28. The next IDB bump must add a
+ * MIGRATIONS step, never edit an existing one.
  */
 export const DB_VERSION = 27;
 
@@ -142,15 +142,16 @@ export interface EpubLibraryDB extends DBSchema {
     key: string;
     value: CacheSearchTextRow;
   };
-  /** v27 (Increment B): per-book int8 embedding vectors (one row per book,
-   *  keyPath bookId). Device-local, never synced; deleted with the book. The
-   *  key IS the bookId, so no secondary index (mirrors cache_search_text). */
+  /** v27: per-book embedding vectors that power semantic search (one row per
+   *  book, keyPath bookId). Device-local, never synced; deleted with the book.
+   *  The key IS the bookId, so no secondary index (mirrors cache_search_text). */
   cache_embeddings: {
     key: string;
     value: CacheEmbeddingsRow;
   };
-  /** v27 (Increment B): resumable per-section embed progress (keyPath bookId),
-   *  so a backfill can resume mid-book. Dies with the book and its vectors. */
+  /** v27: per-section progress for the embedding-build job (keyPath bookId), so
+   *  it can resume mid-book after an interruption. Dies with the book and its
+   *  vectors. */
   cache_embed_jobs: {
     key: string;
     value: CacheEmbedJobsRow;
@@ -374,13 +375,13 @@ function migrateToV26(db: IDBPDatabase<EpubLibraryDB>): void {
 }
 
 /**
- * The v27 step (Increment B): create the EMPTY `cache_embeddings` +
- * `cache_embed_jobs` stores — the per-book int8 embedding vectors and the
- * resumable embed-job progress, both keyed by bookId. Purely additive: no
- * existing data is read or moved, and each create is guarded by
- * `contains()`. Cache-domain, device-local and rebuildable, so the rollback
- * story is trivial (the stores are re-embedded if ever lost). Decoupled from
- * the reserved sync_log/SW cleanup (never done; that would take v28).
+ * The v27 step: create the EMPTY `cache_embeddings` + `cache_embed_jobs`
+ * stores — the per-book semantic-search vectors and the embedding-build job
+ * progress, both keyed by bookId. Purely additive: no existing data is read or
+ * moved, and each create is guarded by `contains()`. Cache-domain,
+ * device-local and rebuildable, so the rollback story is trivial (the stores
+ * are re-embedded if ever lost). Decoupled from the reserved sync_log/SW
+ * cleanup (never done; that would take v28).
  */
 function migrateToV27(db: IDBPDatabase<EpubLibraryDB>): void {
   if (!db.objectStoreNames.contains('cache_embeddings')) {
@@ -448,7 +449,7 @@ function ensureBaselineStores(
     ttsPrep.createIndex('by_bookId', 'bookId');
   }
 
-  // v27 (Increment B): the embedding stores. KeyPath IS bookId, so no
+  // v27: the semantic-search embedding stores. KeyPath IS bookId, so no
   // secondary index (mirrors cache_search_text/cache_render_metrics).
   createStore('cache_embeddings', { keyPath: 'bookId' });
   createStore('cache_embed_jobs', { keyPath: 'bookId' });

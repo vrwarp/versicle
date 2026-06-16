@@ -1,21 +1,18 @@
 /**
- * chunkSection (Increment C §2; was deferred from B4) — split a search
- * section's concatenated plain text into sentence-snapped, ~target-token
- * windows with ~15% overlap, recording CHARACTER OFFSETS into the section's
- * text (the exact offset space `findRangeForOffset`/`resolveResultCfi` consume,
- * offsetRange.ts:20,63).
+ * chunkSection — split a search section's plain text into sentence-snapped,
+ * ~target-token windows with ~15% overlap, recording the CHARACTER OFFSETS of
+ * each window into the section's text. Those offsets are the exact space the
+ * read path uses to resolve a result back to a range/CFI in the book.
  *
- * Boundaries are snapped to sentence ends via `getCachedSegmenter`
- * (@kernel/locale/segmenterCache:15 — domains may import kernel); windows are
- * sized with the ~4-chars/token heuristic that GeminiClient.estTokens uses
- * (GeminiClient.ts:80). Pure: NO cheapHash (sectionTextHash is stamped at
- * import, extract.ts) and NO CFI (the chunker cannot emit CFI from text —
- * cache.ts:188; real CFI needs the live reader view, injected at query time,
- * deferred to Phase D).
+ * Boundaries snap to sentence ends via the locale segmenter; window size uses
+ * the same ~4-chars/token heuristic the chat client estimates tokens with. Pure:
+ * it does not compute the section's text hash (that is stamped at import) and
+ * does not emit CFIs — a real CFI needs the live reader view, so CFIs are filled
+ * in later at query time.
  */
 import { getCachedSegmenter } from '@kernel/locale/segmenterCache';
 
-/** ~4 chars per token (matches GeminiClient.estTokens, GeminiClient.ts:80). */
+/** ~4 chars per token (matches the chat client's token estimate). */
 const CHARS_PER_TOKEN = 4;
 
 export interface SectionChunk {

@@ -27,28 +27,28 @@ import type { QuotaLimits, LaneUsage } from '@kernel/quota';
  * The store no longer configures any singleton: the GeminiClient reads
  * config PER CALL via the provider wired in src/app/google/wireGoogle.ts.
  *
- * A7 quota config: the plain-data quota fields (`quotaLimits`,
+ * Quota config: the plain-data quota fields (`quotaLimits`,
  * `bgThrottlePercent`, `fgRpdHeadroom`, `pauseAllGenAI`) ARE in the allowlist
- * — settings the user edits in the GenAI tab. `getQuotaSnapshot` is the
- * READ-direction mirror of the `addLog` injection: an IN-MEMORY injected
- * provider (wireGoogle installs `() => governor.snapshot()`), so it is NEVER
- * persisted — a function in localStorage would serialize to garbage, the same
- * logs/snapshot exclusion contract above.
+ * — settings the user edits in the GenAI tab to cap request rate/spend.
+ * `getQuotaSnapshot` is a live read-back of current usage: an IN-MEMORY
+ * provider function injected at startup (wireGoogle installs
+ * `() => governor.snapshot()`), so it is NEVER persisted — a function in
+ * localStorage would serialize to garbage, the same exclusion as logs above.
  */
 interface GenAIState {
   apiKey: string;
   model: string;
-  /** Embedding model id (Increment C §7), read per embed call by the client. */
+  /** Embedding model id, read per embed call by the client. */
   embeddingModel: string;
-  /** Requested embedding output dimensionality (Increment C §7). */
+  /** Requested embedding output dimensionality (vector length). */
   embeddingDims: number;
   /**
-   * §11.3 probe flag (Increment F): when ON, the embedding client packs up to
-   * 100 texts into one `:batchEmbedContents` call instead of N
-   * `:embedContent` calls. Default OFF — per-request RPD counting for the
-   * batch endpoint is UNCONFIRMED (a batch may debit N, not 1), so batching is
-   * scaffolding only until the live probe (design §11.3) confirms a delta of 1.
-   * Additive field — tolerated by older persist blobs (no migrate).
+   * When ON, the embedding client packs up to 100 texts into one
+   * `:batchEmbedContents` call instead of N separate `:embedContent` calls.
+   * Default OFF: it is not yet confirmed whether the batch endpoint counts as
+   * one request against the daily quota or N, so batching could silently blow
+   * the budget — it stays off until measured live. Additive field — tolerated
+   * by older persisted blobs (no migration needed).
    */
   useBatchEmbedding: boolean;
   isEnabled: boolean;
@@ -61,7 +61,7 @@ interface GenAIState {
   /** In-memory ring buffer (never persisted; pre-redacted entries). */
   logs: GenAILogEntry[];
   maxLogs: number;
-  /** Persisted per-lane quota limits, read fresh per acquire (GG-8). */
+  /** Persisted per-lane quota limits, read fresh on every budget reservation. */
   quotaLimits: QuotaLimits;
   /** Persisted fraction (%) of the budget background work may consume. */
   bgThrottlePercent: number;
@@ -70,21 +70,23 @@ interface GenAIState {
   /** Persisted master pause — zeroes limits so acquire backpressures pre-network. */
   pauseAllGenAI: boolean;
   /**
-   * Persisted, default-OFF library-wide opt-in (Increment E §8.4): the single
-   * source of truth read by BOTH the consent resolver (the §8.4.1 background
-   * grant path) AND the embeddingBackfillTask. When ON, the FULL TEXT of
-   * loaded-but-unread books may be embedded by Google during idle time on the
-   * bg lane. Additive field — tolerated by older persist blobs (no migrate).
+   * Persisted, default-OFF library-wide opt-in for proactively embedding books.
+   * When ON, the FULL TEXT of loaded-but-unread books may be sent to Google for
+   * embedding during idle time on the background (low-priority) request lane, so
+   * semantic search is ready before the user opens the book. The single source
+   * of truth read by both the consent check and the background backfill task.
+   * Additive field — tolerated by older persisted blobs (no migration needed).
    */
   preEmbedLibrary: boolean;
   /**
-   * Persisted, default-OFF "Share AI caches across my devices" opt-in (Artifact
-   * Lane Phase C, shared-ai-cache-design.md §3). When ON it GATES UPLOAD (the
-   * ArtifactPublisher boot task that mirrors a book's whole-corpus embeddings
-   * into the user's OWN cloud so peers hydrate quota-free) AND tightens the
-   * Phase-B consult (the read path requires it too — consult+upload share the
-   * AND-shareAiCaches semantics). localStorage flag like preEmbedLibrary — NO
-   * IDB/CRDT change. Additive — tolerated by older persist blobs (no migrate).
+   * Persisted, default-OFF "Share AI caches across my devices" opt-in.
+   * Embeddings are expensive to regenerate (they cost API quota), so a book
+   * embedded on one device should be reusable on the user's other devices. When
+   * ON, this gates BOTH halves of that: uploading this device's book embeddings
+   * into the user's OWN cloud storage, AND reading another device's uploaded
+   * embeddings instead of recomputing. A localStorage flag like preEmbedLibrary
+   * — no IndexedDB/CRDT change. Additive — tolerated by older persisted blobs
+   * (no migration needed). (design: plan/shared-ai-cache-design.md)
    */
   shareAiCaches: boolean;
   /**
@@ -93,11 +95,12 @@ interface GenAIState {
    */
   getQuotaSnapshot?: () => Record<'fg' | 'bg', LaneUsage>;
   /**
-   * In-memory injected BG-budget seam (Increment E2): wireGoogle installs the
-   * A6 cross-device bg-lane ceiling (makeBackgroundQuotaLimits) and the
-   * governor's live bg.rpd, so the embeddingBackfillTask reads the admission
-   * pre-flight WITHOUT importing the kernel governor. NEVER persisted (the same
-   * exclusion contract as getQuotaSnapshot — a function serializes to garbage).
+   * In-memory injected seam exposing the background lane's budget: wireGoogle
+   * installs the background-lane ceiling and the governor's live
+   * background-requests-today count, so the background backfill task can check
+   * whether it has room to embed more WITHOUT importing the kernel governor.
+   * NEVER persisted (same reason as getQuotaSnapshot — a function serializes to
+   * garbage).
    */
   getBgQuotaLimits?: () => QuotaLimits;
   getBgUsedRpd?: () => number;
@@ -123,7 +126,7 @@ interface GenAIState {
   setPreEmbedLibrary: (enabled: boolean) => void;
   setShareAiCaches: (enabled: boolean) => void;
   setQuotaSnapshotProvider: (provider: () => Record<'fg' | 'bg', LaneUsage>) => void;
-  /** Install the E2 BG-budget seam (in-memory; never persisted). */
+  /** Install the background-lane budget read-back seam (in-memory; never persisted). */
   setBgBudgetProvider: (getBgQuotaLimits: () => QuotaLimits, getBgUsedRpd: () => number) => void;
 }
 
