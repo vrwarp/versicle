@@ -1,6 +1,6 @@
 # Google Services: Auth, Drive & GenAI
 
-Versicle integrates three distinct Google APIs — OAuth/social login, Drive v3 REST, and the Gemini generative AI REST endpoint — through a unified domain layer introduced in Phase 7 (§G and §H of the overhaul program). Each integration has a precisely scoped responsibility: authentication manages token lifetimes per service, Drive manages EPUB library sync from user-chosen folders, and GenAI powers content analysis features (smart table-of-contents titles, end-of-chapter reference detection, table-to-narration adaptation, and reading-list mapping).
+Versicle integrates three distinct Google APIs — OAuth/social login, Drive v3 REST, and the Gemini generative AI REST endpoint — through a unified domain layer introduced in Phase 7 (§G and §H of the overhaul program). Each integration has a precisely scoped responsibility: authentication manages token lifetimes per service, Drive manages EPUB library sync from user-chosen folders, and GenAI powers content analysis features (smart table-of-contents titles, end-of-chapter reference detection, table-to-narration adaptation, and reading-list mapping). The GenAI subsystem also exposes a sibling **text-embedding** capability (a separate `EmbeddingClient` family over Gemini's `:embedContent` endpoint) that feeds the semantic-search index; both the chat and embedding egress are now governed by a cross-provider **quota governor** at the kernel gateway.
 
 This document covers the design intent, full architecture, concrete implementation details, edge cases, and privacy posture for all three subsystems. See also [Architecture overview](10-architecture-overview.md) for the layering context, [Bootstrap and lifecycle](14-bootstrap-and-lifecycle.md) for how wiring fires at startup, and [TTS app integration](51-tts-app-integration.md) for how the GenAI port feeds the TTS content pipeline.
 
@@ -45,6 +45,13 @@ graph TD
         GENAIHOLDER["genai/holder.ts"]
         LOGGING["genai/logging.ts"]
 
+        subgraph "genai/embedding"
+            EMBCONTRACT["contract.ts"]
+            EMBGEMINI["GeminiEmbeddingClient.ts"]
+            EMBLAZY["lazyClient.ts"]
+            EMBHOLDER["holder.ts"]
+        end
+
         subgraph "genai/features"
             REF["referenceDetection.ts"]
             TOC["tocTitles.ts"]
@@ -64,15 +71,18 @@ graph TD
     end
 
     subgraph "Kernel"
-        NET["@kernel/net egress + ConsentResolver"]
+        NET["@kernel/net egress + ConsentResolver + QuotaScheduler"]
+        QUOTA["@kernel/quota QuotaGovernor"]
     end
 
     WIRE --> AUTH
     WIRE --> DRIVECLIENT
     WIRE --> DRIVELIB
     WIRE --> LAZY
+    WIRE --> EMBLAZY
     WIRE --> CONSENT
     WIRE --> NET
+    WIRE --> QUOTA
 
     PORT --> GENAIHOLDER
     PORT --> REF
@@ -90,6 +100,14 @@ graph TD
     LAZY --> GEMINI
     GENAIHOLDER --> LAZY
     GENAIHOLDER --> MOCK
+
+    EMBGEMINI --> NET
+    EMBGEMINI --> LOGGING
+    EMBLAZY --> EMBGEMINI
+    EMBHOLDER --> EMBLAZY
+    EMBGEMINI --> EMBCONTRACT
+
+    NET --> QUOTA
 
     REF --> CONTRACT
     TOC --> CONTRACT
@@ -556,9 +574,79 @@ The holder deliberately does not statically import `GeminiClient` — doing so w
 |---|---|---|---|
 | `GenAINotConfiguredError` | `GENAI_NOT_CONFIGURED` | false | `apiKey` is empty |
 | `GenAIInvalidResponseError` | `GENAI_INVALID_RESPONSE` | false | JSON parse fails or `validate()` throws |
-| `GenAIHttpError` | `GENAI_UNKNOWN` | `status === 429 \|\| status >= 500` | HTTP-level failure from Gemini endpoint |
+| `GenAIHttpError` | `GENAI_UNKNOWN` | `status === 429 \|\| status >= 500` | HTTP-level failure from Gemini endpoint (chat **and** embedding) |
+| `EmbeddingNotConfiguredError` | `GENAI_EMBEDDING_NOT_CONFIGURED` | false | `embed()` called on the NOT-CONFIGURED holder default ([embedding/errors.ts](../../src/domains/google/genai/embedding/errors.ts)) |
 
 `isResourceExhausted(error)` tests `error instanceof GenAIHttpError && error.status === 429` — typed detection replacing the legacy `error.message?.includes('429') || error.toString().includes('RESOURCE_EXHAUSTED')` substring check.
+
+### Quota governance at the gateway
+
+All GenAI egress — both `GeminiClient` (chat) and the embedding client (below) — is now metered by a cross-provider **quota governor** living in the kernel: [src/kernel/quota/QuotaGovernor.ts](../../src/kernel/quota/QuotaGovernor.ts), exported as `@kernel/quota` (with the `ptDay` midnight-Pacific day-key helper and an `index.ts` barrel). The governor is dependency-free (`~types` only) and shared by the GenAI lane and the cloud-TTS lane, so a single budget covers every Gemini-family request.
+
+The governor tracks three budgets **per lane** (foreground / background):
+
+| Budget | Window | Where held |
+|---|---|---|
+| requests-per-minute (`rpm`) | sliding 60 s | in-memory (resets on process restart) |
+| tokens-per-minute (`tpm`) | sliding 60 s | in-memory |
+| requests-per-day (`rpd`) | midnight-Pacific calendar day | persisted via an injected `QuotaStore` port |
+
+The decisive design point is **where the spend is recorded**: the governor is wired into the gateway as a `QuotaScheduler` (`acquire`/`release`), and `acquire()` runs at **admission — before any network call — inside `NetworkGateway.egress`**, so throttling cannot be bypassed by a client that forgets to report its cost. `acquire(lane, estTokens)` checks the estimate against the budget and, once admitted, records the rolling minute-window event and bumps + persists the daily counter — the single recorder. `commit(actualTokens)` only **reconciles** that already-recorded event's token estimate to the actual cost (`GeminiClient` calls it with `usageMetadata.totalTokenCount`); `release()` only frees the foreground claim. The split means a request that never commits — every embedding call has no governor wired — still counts toward every budget purely from the admission record.
+
+When `acquire()` refuses (a prior 429 set a cooldown via `recordCooldown`, the daily request budget is exhausted, or the rolling minute budget cannot fit the request), it throws the new typed `NetRateLimitedError` (code `NET_RATE_LIMITED`, in [src/types/errors.ts](../../src/types/errors.ts)) — `retryable: true`, carrying `retryAfterMs`. This is **pre-network backpressure**, structurally distinct from a server-sent 429 (the `GenAIHttpError` / `isResourceExhausted` path): one means we throttled ourselves first, the other means Google pushed back. Foreground preempts background — a background acquire is refused while any foreground claim is in flight or once background work has spent its capped fraction (`BG_FRACTION = 0.5`) of the minute budget — so interactive work is never starved by automatic embedding/prefetch spend.
+
+Persistence flows through an injected `QuotaStore` port (the governor never touches IndexedDB itself). The composition root wires it to [src/data/repos/quotaCounter.ts](../../src/data/repos/quotaCounter.ts), which writes a single key into the **existing `app_metadata` store** — no new store. Because the free-tier quota is per-Google-Cloud-**project** (not per-device), the daily counter is reconciled across the synced device mesh via an additive `embedSpend` field on the `DeviceInfo` record (no CRDT format change): `saveDailyUsage` publishes this device's own spend, and the **background** lane reads a reduced daily ceiling — the base limit minus what other devices active today already spent — so the shared project quota is divided across devices. The foreground/query lane keeps the full limit.
+
+Limits are read **fresh on every acquire** from the user-editable GenAI settings (`useGenAIStore.quotaLimits`); a `pauseAllGenAI` master switch collapses the limits to `{ rpm: 0, tpm: 0, rpd: 0 }` so every acquire throws `NetRateLimitedError` before any network call — a kernel-free master pause. The GenAI settings tab surfaces editable per-lane limits, the pause-all switch, and live used-vs-limit meters fed by `governor.snapshot()` (re-exposed to the store via a snapshot provider, never a kernel→store edge).
+
+> **Caveat — deferred.** The live `batchEmbedContents` daily-request counting probe and the `usageMetadata`-driven token reconcile for embeddings are deferred; embeddings keep their acquire-time estimate (the admission record is what makes them count). Per-blob HMAC is likewise deferred (see the Artifact Lane caveat in [Domain: sync](36-domain-sync.md)).
+
+### Embedding client (semantic search)
+
+[src/domains/google/genai/embedding/](../../src/domains/google/genai/embedding/) is a **four-part** sibling of the `GenAIClient` chat family, added for semantic search. It produces text-embedding vectors over Gemini's `:embedContent` endpoint; it is barrel-exported from [src/domains/google/index.ts](../../src/domains/google/index.ts). The four parts mirror the chat client's seams exactly:
+
+| Part | File | Role |
+|---|---|---|
+| Contract | `embedding/contract.ts` | `EmbeddingClient` interface (`embed`, `isConfigured`), `EmbeddingProfile`, `EmbeddingConfig` + per-call `EmbeddingConfigProvider` |
+| Impl | `embedding/GeminiEmbeddingClient.ts` | Production REST client over `:embedContent`, routed through `NetworkGateway.egress('gemini', …)` |
+| Holder | `embedding/holder.ts` | Singleton holder; default is a **NOT-CONFIGURED** client (`isConfigured() === false`, `embed()` throws `EmbeddingNotConfiguredError`) |
+| Lazy facade | `embedding/lazyClient.ts` | One-time dynamic-import facade so the impl stays out of the entry chunk |
+
+`MockEmbeddingClient.ts` (hash-seeded deterministic unit vectors keyed by `(text, profile)`) is the test double, barrel-exported but reachable only from test builds — the same boundary discipline as `MockGenAIClient`.
+
+#### Contract
+
+```typescript
+export interface EmbeddingClient {
+  embed(
+    texts: string[],
+    opts: {
+      profile: EmbeddingProfile;   // 'document' (corpus) | 'query' (search-time)
+      bookId?: string;
+      interactive?: boolean;
+      lane?: 'fg' | 'bg';          // gateway quota lane; default 'fg'
+      signal?: AbortSignal;
+    },
+  ): Promise<{ vectors: Float32Array[] }>;
+  isConfigured(): boolean;
+}
+```
+
+The client returns **float32** vectors; int8 quantization is the indexer/worker's concern, never the client's, so the wire format stays a single responsibility of the storage layer. The `profile` is the asymmetric-retrieval task hint — the matched `document`/`query` pair is what makes the cosine meaningful. For `gemini-embedding-001` this is sent as a `taskType` field (`RETRIEVAL_DOCUMENT` vs `RETRIEVAL_QUERY`); for `gemini-embedding-2` it is a prepended profile instruction on the text. `outputDimensionality: dims` requests a truncated embedding.
+
+#### GeminiEmbeddingClient
+
+The production impl narrows `GeminiClient`'s shape to the embedding case. Like the chat client, **config is read per call** from the injected provider (model, dims, API key) — never cached — so a settings edit takes effect on the very next embed. By default it issues **one `:embedContent` POST per text**; a `useBatchEmbedding` flag (read per call, **default-off**) packs up to 100 texts into one `:batchEmbedContents` call. The flag is off because it is unconfirmed whether Google's daily-request quota counts a batch as one request or one per content — enabling it before that is verified could silently blow the quota (the live counting probe is the deferred item noted above).
+
+Every request goes through `NetworkGateway.egress('gemini', …)` with `consent: { bookId, interactive }`, `lane` (default `'fg'`), and an `estTokens` estimate — so it passes the **same consent + quota-lane + token-estimate admission checks as the chat client**. The background backfill passes `lane: 'bg'` + `interactive: false` so it uses the slow background quota lane and never claims a user gesture; the query embed runs on `'fg'`.
+
+#### Redacted logging and per-book consent threading
+
+The embedding client shares the chat client's `logging.ts` redaction: every log payload runs through `redactPayload()` before reaching the injected `onLog` sink, so **book text never lands in the activity log** (entries record only `{ model, profile, dims, … }`, with any `inlineData` bytes stripped). The composition root wires the sink to the same in-memory log buffer as the chat client (never persisted — the `partialize` allowlist excludes `logs`).
+
+Consent is threaded the same way as chat: the `bookId`/`interactive` pair flows into the gateway's per-book consent gate. Two new grant paths feed the embedding case (see [Per-book AI consent gate](#per-book-ai-consent-gate)): the foreground query/indexer rides the interactive bypass, while the **background backfill** of unread books is granted by the library-wide **default-OFF** "pre-embed my library" opt-in (`useGenAIStore.preEmbedLibrary`), which the resolver checks before the per-book default-deny. With the opt-in off, an un-prompted unread book is refused at the egress boundary with `NET_CONSENT_REQUIRED`, exactly as a chat call would be.
+
+The vector pipeline, int8 quantization, reciprocal-rank fusion with regex search, and the foreground/background indexers live in the search domain — see [Domain: search](38-domain-search.md) for the ranking detail, and [Domain: sync](36-domain-sync.md) for the **Artifact Lane** (the shared embedding cache that lets one device's embeddings be reused on another instead of re-spending Gemini quota).
 
 ### GenAI content analysis flow
 
@@ -577,7 +665,9 @@ flowchart TD
 
     GEMINI --> CONSENT_GATE["NetworkGateway\negress('gemini', ...)\nconsent gate"]
     CONSENT_GATE --> |"bookId present,\nnot interactive"| RESOLVER["aiConsent.ts\nmakeAiConsentResolver()"]
-    RESOLVER --> |"allow"| GEMINI_API["Gemini REST\ngenerativelanguage.googleapis.com"]
+    RESOLVER --> |"allow"| QUOTA_GATE["QuotaGovernor.acquire(lane, estTokens)\nrecord-at-admission"]
+    QUOTA_GATE --> |"admit"| GEMINI_API["Gemini REST\ngenerativelanguage.googleapis.com"]
+    QUOTA_GATE --> |"refuse"| RATELIMIT["NetRateLimitedError\n(pre-network backpressure)"]
 
     GEMINI_API --> GEMINI
     GEMINI --> |"JSON-mode response"| VALIDATE["request.validate(parsed)\nzod schema + range clamp"]
@@ -733,7 +823,47 @@ setGenAIClient(
 );
 ```
 
-The config is read live on every request from the store. Adding the lazy facade here (rather than a `GeminiClient` directly) keeps the GenAI implementation out of the entry chunk.
+The config is read live on every request from the store. Adding the lazy facade here (rather than a `GeminiClient` directly) keeps the GenAI implementation out of the entry chunk. The same `governor` instance constructed earlier in `wireGoogle.ts` is passed in so `GeminiClient.commit()`/`recordCooldown()` reconcile the gateway-recorded spend.
+
+### Quota wiring
+
+`wireGoogle.ts` constructs **one** `QuotaGovernor` and installs it as both the gateway's `QuotaScheduler` (`setQuotaScheduler(governor)` — admission `acquire`/`release`) and the cloud-TTS governor (`setTtsQuotaGovernor(governor)`):
+
+```typescript
+const getQuotaLimits = (): QuotaLimits => {
+  const s = useGenAIStore.getState();
+  return s.pauseAllGenAI ? { rpm: 0, tpm: 0, rpd: 0 } : s.quotaLimits;
+};
+setQuotaStore(
+  makeQuotaStore(quotaCounterRepo, (usage) =>
+    useDeviceStore.getState().publishEmbedSpend(getDeviceId(), usage),
+  ),
+);
+const governor = new QuotaGovernor(getQuotaLimits);
+setQuotaScheduler(governor);
+setTtsQuotaGovernor(governor);
+```
+
+`getQuotaLimits` is the live read (limits + master pause). `setQuotaStore` persists the daily counter onto `quotaCounter` (the single IDB touch) and, at the same chokepoint, publishes this device's spend onto its `DeviceInfo` record for cross-device reconciliation. The background lane reads a reduced provider (`makeBackgroundQuotaLimits`) that subtracts other devices' same-day spend; the foreground/query lane keeps the full limit.
+
+### Embedding wiring
+
+The embedding client is installed as the lazy facade, with config read live from the store (`embeddingModel`, `embeddingDims`, `useBatchEmbedding`) and the redacting `onLog` sink pointed at the same in-memory log buffer as the chat client:
+
+```typescript
+setEmbeddingClient(
+  makeLazyEmbeddingClient({
+    getConfig: (): EmbeddingConfig => {
+      const s = useGenAIStore.getState();
+      return { apiKey: s.apiKey, model: s.embeddingModel, dims: s.embeddingDims,
+               useBatchEmbedding: s.useBatchEmbedding };
+    },
+    onLog: (entry) => useGenAIStore.getState().addLog(entry),
+  }),
+);
+```
+
+No `governor` is passed to the embedding client — the foreground-lane `acquire` at the gateway already throttles and **records** each embed (an embedding never commits; the admission record is what counts).
 
 ### Consent resolver wiring
 
@@ -745,11 +875,13 @@ setConsentResolver(
       Object.keys(useContentAnalysisStore.getState().sections).some((key) =>
         key.startsWith(`${bookId}/`),
       ),
+    // The library-wide opt-in is the user's consent for bulk BACKGROUND embedding.
+    isLibraryPreEmbedEnabled: () => useGenAIStore.getState().preEmbedLibrary,
   }),
 );
 ```
 
-This installs the per-book AI consent gate into the kernel `NetworkGateway`. All `egress('gemini', …)` calls now go through this resolver for non-interactive calls carrying a `bookId`.
+This installs the per-book AI consent gate into the kernel `NetworkGateway`. All `egress('gemini', …)` calls — chat **and** embedding — now go through this resolver for non-interactive calls carrying a `bookId`. The third dep, `isLibraryPreEmbedEnabled`, threads the default-OFF library-wide pre-embed opt-in so the background embedding backfill can be granted (see the consent gate's resolution order below).
 
 ---
 
@@ -761,13 +893,14 @@ This installs the per-book AI consent gate into the kernel `NetworkGateway`. All
 
 Resolution order:
 
-1. **No `bookId`**: allow (legacy posture for smart TOC / smart link, which are user-initiated and don't yet thread `bookId`).
-2. **`interactive === true`**: allow (belt-and-braces; the gateway already bypasses interactive calls).
-3. **Explicit per-book bit** (`usePreferencesStore.aiConsent[bookId]`): return it (true = allow, false = deny).
-4. **Existing analysis records**: if `useContentAnalysisStore` has any key starting with `${bookId}/`, allow (grandfathering — books that received analysis before the consent gate exists keep working).
-5. **Default-deny**: return false. The egress blocks with `NET_CONSENT_REQUIRED`.
+1. **`interactive === true`**: allow (belt-and-braces; the gateway already bypasses interactive calls).
+2. **No `bookId`**: allow (legacy posture for smart TOC / smart link, which are user-initiated and don't yet thread `bookId`).
+3. **Library-wide pre-embed opt-in on** (`useGenAIStore.preEmbedLibrary`): allow. This is the §8.4.1 **background grant** — checked *before* the per-book default-deny so the background embedding backfill can pre-embed an unread book that was never prompted. Because interactive calls are already short-circuited above, this only ever grants **background** calls; the opt-in does not widen any foreground grant.
+4. **Explicit per-book bit** (`usePreferencesStore.aiConsent[bookId]`): return it (true = allow, false = deny).
+5. **Existing analysis records**: if `useContentAnalysisStore` has any key starting with `${bookId}/`, allow (grandfathering — books that received analysis before the consent gate exists keep working).
+6. **Default-deny**: return false. The egress blocks with `NET_CONSENT_REQUIRED`.
 
-This policy means that a book whose text the model has never seen, and which the user hasn't explicitly consented to, will not have its content sent to Google. The consent prompt (below) is the affordance to grant permission.
+This policy means that a book whose text the model has never seen, and which the user hasn't explicitly consented to (and which the user hasn't opted into bulk pre-embedding), will not have its content sent to Google. The consent prompt (below) is the affordance to grant permission for the foreground (TTS analysis) path; the default-OFF library-wide opt-in is the affordance for bulk background embedding.
 
 ### Per-book consent prompt
 
@@ -822,9 +955,9 @@ The API key itself is stored in `useGenAIStore.apiKey` (persisted to `localStora
 All Google network calls are labeled for the kernel gateway:
 
 - `egress('drive', url, ...)` — Drive v3 calls
-- `egress('gemini', url, ..., { consent: { bookId, interactive } })` — Gemini calls
+- `egress('gemini', url, ..., { consent: { bookId, interactive }, lane, estTokens })` — Gemini calls (both chat generation and `:embedContent`)
 
-The consent object on Gemini calls provides the `bookId` the consent resolver reads, and the `interactive` flag that bypasses per-book consent for user-initiated calls (e.g. smart TOC title generation, smart link mapping).
+The consent object on Gemini calls provides the `bookId` the consent resolver reads, and the `interactive` flag that bypasses per-book consent for user-initiated calls (e.g. smart TOC title generation, smart link mapping). The `lane` (`'fg'`/`'bg'`) and `estTokens` fields drive the quota governor's admission check (the background embedding backfill passes `lane: 'bg'`); the gateway debits the estimate at `acquire` and the chat client reconciles it at `commit`.
 
 ---
 
@@ -929,10 +1062,25 @@ classDiagram
         +isConfigured() boolean
     }
 
+    class EmbeddingClient {
+        <<interface>>
+        +embed(texts, opts) Float32Array[]
+        +isConfigured() boolean
+    }
+
+    class GeminiEmbeddingClient {
+        -deps: GeminiEmbeddingClientDeps
+        +embed(texts, opts) Float32Array[]
+        +isConfigured() boolean
+        -embedOne(text, opts) Float32Array
+        -embedWindow(texts, opts) Float32Array[]
+    }
+
     DriveClient --> GoogleAuthClient : "auth"
     DriveLibrarySync --> DriveClient : "client port"
     GeminiClient ..|> GenAIClient
     MockGenAIClient ..|> GenAIClient
+    GeminiEmbeddingClient ..|> EmbeddingClient
 ```
 
 ---
@@ -970,6 +1118,12 @@ it('regression (GG-5): -2 and other out-of-range indices throw instead of flaggi
 
 The `MockGenAIClient` feeds the bad response through the same `validate` function the real client calls, so the test proves end-to-end that the poisoning path is closed.
 
+### Embedding and quota tests
+
+- [src/domains/google/genai/embedding/GeminiEmbeddingClient.test.ts](../../src/domains/google/genai/embedding/GeminiEmbeddingClient.test.ts) — per-text vs batch path, profile mapping (taskType vs EM2 instruction), per-call config read, log redaction, `lane`/`estTokens` threaded into the egress.
+- [src/kernel/quota/QuotaGovernor.test.ts](../../src/kernel/quota/QuotaGovernor.test.ts) — admission/record-at-acquire, commit reconcile, fg-preempts-bg, daily rollover, cooldown, `NetRateLimitedError`.
+- [src/kernel/net/NetworkGateway.test.ts](../../src/kernel/net/NetworkGateway.test.ts) — `acquire` runs before fetch, the single-owner `release`, and a pre-network `NetRateLimitedError` is not counted.
+
 ### Drive tests
 
 - [src/domains/google/drive/DriveClient.test.ts](../../src/domains/google/drive/DriveClient.test.ts) — pagination, 401 retry, 403-scope retry, `escapeDriveQueryValue`.
@@ -993,6 +1147,7 @@ Lazy fallbacks:
 - **`DriveClient`**: constructed with the auth holder's lazy client.
 - **`DriveLibrarySync`**: **throws** if accessed before wiring — it needs store-backed ports that do not have meaningful defaults.
 - **`GenAIClient`**: `notConfiguredClient` that throws `GenAINotConfiguredError` on every call.
+- **`EmbeddingClient`**: an inline NOT-CONFIGURED client (`isConfigured() === false`, `embed()` throws `EmbeddingNotConfiguredError`) — a stray import degrades exactly like a missing API key. Like the GenAI holder, it deliberately does **not** statically import `GeminiEmbeddingClient` (that would defeat the first-use chunk split, check 4).
 
 The DriveLibrarySync throw-on-access pattern is intentional: the orchestrator's store ports have no safe no-op fallback, so accessing it before `wireGoogle.ts` runs is a programming error that should fail loudly in development.
 
@@ -1017,7 +1172,8 @@ The Phase 7 overhaul left several elements in place for the P9 deletion-audit:
 - [TTS content pipeline](34-tts-content-pipeline.md) — reference detection and table adaptation feed the `AudioContentPipeline` via the `EngineContext` GenAI port.
 - [TTS app integration](51-tts-app-integration.md) — `genaiPort.ts` is the app-layer bridge between the TTS engine and the GenAI domain.
 - [Security and privacy](70-security-and-privacy.md) — per-book consent, log redaction, API key storage.
-- [Error handling and recovery](15-error-handling-and-recovery.md) — `GoogleAuthRequiredError`, `DriveApiError`, `GenAIInvalidResponseError` all extend `AppError`.
-- [Architecture overview](10-architecture-overview.md) — the kernel `NetworkGateway.egress()` boundary that routes Drive and Gemini HTTP.
-- [Composition root](50-composition-root.md) — where `wireGoogle.ts` fits in the boot sequence.
-- [Domain: sync](36-domain-sync.md) — `useSyncStore.firebaseUserEmail` is the login hint source injected into `GoogleAuthClient`.
+- [Error handling and recovery](15-error-handling-and-recovery.md) — `GoogleAuthRequiredError`, `DriveApiError`, `GenAIInvalidResponseError`, `EmbeddingNotConfiguredError`, and the kernel `NetRateLimitedError` all extend `AppError`.
+- [Architecture overview](10-architecture-overview.md) — the kernel `NetworkGateway.egress()` boundary that routes Drive and Gemini HTTP, and the `QuotaScheduler` admission seam.
+- [Composition root](50-composition-root.md) — where `wireGoogle.ts` fits in the boot sequence (auth, Drive, GenAI, embedding, quota governor, and Artifact Lane consult wiring).
+- [Domain: search](38-domain-search.md) — consumes the `EmbeddingClient`'s float32 vectors: int8 quantization, cosine ranking, reciprocal-rank fusion with the regex engine, and the foreground/background indexers.
+- [Domain: sync](36-domain-sync.md) — `useSyncStore.firebaseUserEmail` is the login hint source injected into `GoogleAuthClient`; also the **Artifact Lane** (the shared AI-cache that downloads another device's embeddings rather than re-spending Gemini quota) and the C3 `SyncBackend` artifact methods. The cloud round-trips there are MockBackend-verified but CI-pending against real Firebase emulators.

@@ -46,10 +46,10 @@ The current namespaces are:
 | `DB` | IndexedDB / local persistence |
 | `SYNC` | Firestore / Yjs sync |
 | `TTS` | Speech engine and providers |
-| `GENAI` | Gemini structured-output boundary |
+| `GENAI` | Gemini structured-output + embedding boundary |
 | `DRIVE` | Google Drive HTTP boundary |
 | `INGEST` | Book import / EPUB ingestion |
-| `NET` | Network/fetch failures, egress gateway |
+| `NET` | Network/fetch failures, egress gateway, quota-governor backpressure |
 | `BACKUP` | Backup snapshot capture and restore |
 | `GOOGLE` | Google OAuth boundary |
 | `SEARCH` | In-book search engine/session |
@@ -102,7 +102,10 @@ Domain-level error subclasses live next to their boundary:
 - [`src/kernel/net/errors.ts`](../../src/kernel/net/errors.ts) — `NetworkGatewayError`, `UnknownDestinationError`, `HostNotAllowedError`, `NetConsentRequiredError`, `NetTimeoutError` (retryable), `NetOfflineError` (retryable).
 - [`src/domains/google/auth/errors.ts`](../../src/domains/google/auth/errors.ts) — `GoogleAuthRequiredError`, `GoogleUnknownServiceError`.
 - [`src/domains/google/genai/errors.ts`](../../src/domains/google/genai/errors.ts) — `GenAINotConfiguredError`, `GenAIInvalidResponseError`, `GenAIHttpError` (retryable at 429 / ≥500).
+- [`src/domains/google/genai/embedding/errors.ts`](../../src/domains/google/genai/embedding/errors.ts) — `EmbeddingNotConfiguredError` (code `GENAI_EMBEDDING_NOT_CONFIGURED`), thrown by the embedding holder's NOT-CONFIGURED default so a stray import degrades exactly like a missing API key rather than crashing.
 - [`src/domains/google/drive/errors.ts`](../../src/domains/google/drive/errors.ts) — `DriveApiError` (retryable at 429 / ≥500), plus the `handleDriveError` boundary mapper.
+
+`NetRateLimitedError` (code `NET_RATE_LIMITED`, retryable) is the one exception to the "subclass lives next to its boundary" rule. It is declared in [`src/types/errors.ts`](../../src/types/errors.ts) itself, not in `kernel/net/errors.ts`, because its throw site is the new quota governor under `src/kernel/quota/` and kernel modules may import only `~types` — they cannot reach a sibling kernel module like `kernel/net`. `kernel/net/errors.ts` documents the placement and the gateway surfaces it alongside the `NET_*` errors. See §2.5.
 
 ### 2.4 `toJSON` / `fromJSON` — Worker boundary crossing
 
@@ -122,6 +125,21 @@ export interface SerializedAppError {
 ```
 
 On the receiving side, `fromJSON` rebuilds a base `AppError` (subclass identity is not revived — `code` is always sufficient) and re-chains the cause messages as nested plain `Error`s so the revived error re-serializes identically. The cycle-detection guard (`seen: Set<unknown>`) and the `MAX_CAUSE_CHAIN_LENGTH = 16` cap prevent infinite loops or runaway allocation when pathological cause cycles exist (this is tested in [src/types/errors.test.ts](../../src/types/errors.test.ts)).
+
+### 2.5 `NET_RATE_LIMITED` — pre-network quota backpressure
+
+The cross-provider quota governor ([`src/kernel/quota/QuotaGovernor.ts`](../../src/kernel/quota/QuotaGovernor.ts)) tracks requests-per-minute, tokens-per-minute, and requests-per-day per egress lane (`fg` foreground / `bg` background). When it refuses a request **before any bytes leave the device** it throws `NetRateLimitedError` ([`src/types/errors.ts`](../../src/types/errors.ts)). This is a deliberately distinct signal from a server-sent 429:
+
+| | `NET_RATE_LIMITED` (`NetRateLimitedError`) | server-sent 429 (`GenAIHttpError` / `DriveApiError`) |
+|---|---|---|
+| Origin | Local governor refuses admission **before egress** | The provider pushed back **after** the request reached it |
+| `retryable` | `true` | `true` at 429 / ≥500 |
+| Extra context | `retryAfterMs` (+ `lane`, `reason`) | `status` |
+| Counted as egress? | No — rejected at the gate, never recorded | Yes — the request was sent |
+
+The throw happens inside `NetworkGateway.egress` ([`src/kernel/net/NetworkGateway.ts`](../../src/kernel/net/NetworkGateway.ts) — the gateway's `acquire(lane, estTokens)` call): admission is awaited **before** `recordEgress`/`fetch`, so a request that exceeds the provider's budget surfaces `NetRateLimitedError` and is never counted. `NetRateLimitedError` carries `retryAfterMs` in `context` so callers and the GenAI settings meters can branch on `code === 'NET_RATE_LIMITED'` (never message substrings) and schedule a retry. The governor raises it for four `reason`s: an active cooldown started by a prior 429 (`recordCooldown`), the per-day request budget exhausted, the rolling per-minute request/token budget spent, or — on the `bg` lane only — foreground preemption / the background-fraction cap (so interactive work is never starved by automatic embedding/prefetch spend).
+
+Because admission is recorded at the gate (not on completion), throttling cannot be bypassed: even a request that never `commit()`s its actual token cost — every embedding — still counts toward every budget. The companion code `GENAI_EMBEDDING_NOT_CONFIGURED` (§2.3) covers the orthogonal "no key" degradation. The round-trip and the `retryAfterMs`-in-context invariant are pinned in [`src/types/errors.test.ts`](../../src/types/errors.test.ts).
 
 ---
 
@@ -175,6 +193,11 @@ classDiagram
         +retryable boolean
         +code GENAI_UNKNOWN
     }
+    class NetRateLimitedError {
+        +retryAfterMs number
+        +retryable true
+        +code NET_RATE_LIMITED
+    }
     AppError <|-- DatabaseError
     AppError <|-- DuplicateBookError
     AppError <|-- WorkspaceDeletedError
@@ -182,10 +205,13 @@ classDiagram
     AppError <|-- NetworkGatewayError
     AppError <|-- DriveApiError
     AppError <|-- GenAIHttpError
+    AppError <|-- NetRateLimitedError
     DatabaseError <|-- StorageFullError
     NetworkGatewayError <|-- NetTimeoutError
     NetworkGatewayError <|-- NetOfflineError
 ```
+
+`NetRateLimitedError` extends `AppError` **directly**, not `NetworkGatewayError` (which lives in `kernel/net`) — the kernel import rule keeps its `kernel/quota` throw site to `~types` only (§2.5).
 
 ---
 
@@ -292,6 +318,44 @@ export function presentError(error: unknown): string {
 The `MESSAGES` map is currently an `en`-only static object. The module comment notes that when the Phase 8 message catalog (`src/kernel/locale/messages.ts`) reaches full coverage of error codes, `presentError` will become a catalog lookup keyed `errors.<code>` (matching the `ErrorMessages = { [C in AppErrorCode as \`errors.${C}\`]: string }` mapped type already defined there). The catalog already carries an entry for every `AppErrorCode` — the compile-time exhaustiveness is enforced by the mapped type — but `presentError` hasn't migrated to it yet.
 
 `presentError` is called at import-site toast invocations in [`src/components/library/LibraryView.tsx`](../../src/components/library/LibraryView.tsx) and [`src/components/library/FileUploader.tsx`](../../src/components/library/FileUploader.tsx).
+
+Note that `NET_RATE_LIMITED` has **no** `MESSAGES` entry, and that is deliberate: quota backpressure on the semantic-search path is never surfaced as a user-facing error — it is absorbed by the graceful-degradation path (§6.5), which silently keeps regex full-text results. A code with no entry resolves to the generic `FALLBACK`, but `NET_RATE_LIMITED` never reaches `presentError` from the search path because it is caught and swallowed upstream.
+
+### 6.5 Graceful degradation — semantic search falls back to regex
+
+Semantic (embedding-cosine) search is **purely additive**: regex full-text is the default, and the semantic ranking is fused into it only when everything is healthy. [`src/domains/search/SearchSession.ts`](../../src/domains/search/SearchSession.ts) always runs the regex `searchDetailed` first, then enters the semantic branch only when all of {the semantic ports were injected, semantic search is enabled, the embedding client reports configured, the query is non-empty} hold. On success it fuses the two rankings via reciprocal-rank fusion ([`src/domains/search/rrf.ts`](../../src/domains/search/rrf.ts), `fuseRrf`, `k=60`) so a hit found by both paths merges into one and regex exact-matches are never displaced. On **any** miss (off / unconfigured / book not yet embedded / no hits) **or any expected thrown error**, the regex result is returned unchanged:
+
+```typescript
+// src/domains/search/SearchSession.ts — search()
+try {
+  const semantic = await semanticRank({ ... });
+  if (semantic.length === 0) return regex;
+  return fuseRrf(regex.results, semantic, { truncated: regex.truncated });
+} catch (error) {
+  if (isExpectedSearchFallbackError(error)) return regex;
+  throw error;  // a genuine bug in the semantic path still surfaces
+}
+```
+
+`isExpectedSearchFallbackError` branches **structurally** (it must not import the google-domain `GenAIHttpError` class across the domains barrier): it tolerates a pre-network `NetRateLimitedError` (`NET_RATE_LIMITED`), the GenAI HTTP 429/5xx path (an `AppError` whose `code === 'GENAI_UNKNOWN'` or that is `retryable`), and raw network failures (a `DOMException` `AbortError` or a fetch `TypeError`). Anything else — a real defect in the embedding pipeline — is rethrown rather than silently swallowed. The effect: when quota is exhausted, the network is down, or the book has not been embedded yet, search keeps working on regex full-text with no error toast and no regression.
+
+The model-rotation path treats the same backpressure as retryable. [`src/domains/google/genai/GeminiClient.ts`](../../src/domains/google/genai/GeminiClient.ts) rotates to the next model when `isRetryableForRotation(error)` is true, and that predicate ([`src/domains/google/genai/errors.ts`](../../src/domains/google/genai/errors.ts)) returns true for both a server 429 (`GenAIHttpError.status === 429`) **and** a pre-network `NetRateLimitedError` — a sibling model's 429 sets the governor cooldown, so this model's gateway `acquire` backpressures before the network, and rotation moves on to a model that may still have budget. A 429 the server does send is fed back to the governor via `recordCooldown(retryAfterMs(response, …))` and then re-thrown so the rotation loop still sees it.
+
+### 6.6 Artifact-lane consult — failure modes of the shared embedding cache
+
+Before the quota gate is even reached, the artifact-lane consult adapter ([`src/app/google/artifactConsult.ts`](../../src/app/google/artifactConsult.ts)) tries to download an embedding blob the user already produced on another device (content-addressed `embeddings/{key}.bin` in their own BYO Cloud Storage, directory-indexed by an `embedCache/{key}` Firestore HEAD doc). A hit hydrates the cached vectors and spends **zero** Gemini quota; the failure modes are handled so a cache miss never costs correctness or quota:
+
+| Condition | Behavior |
+|-----------|----------|
+| No HEAD doc (clean miss) | Returns `null` → re-embed locally |
+| HEAD present, blob present | Hydrate the parsed row in one transaction |
+| HEAD present, blob **absent** (drift) | Count + log `[artifact-head-object-drift]`, self-heal by deleting the stale HEAD doc, return `null` → re-embed |
+| Transient / permission error from the backend | **Propagated** — never re-embed on an offline blip and waste quota |
+| Structurally corrupt blob | Treated as a definitive non-hit (not transient) → re-embed |
+
+The HEAD-after-Storage write ordering means a HEAD hit *should* imply the bytes exist; the drift case is the steady-state violation of that invariant. It is observable via `getArtifactDriftCount()` and self-heals (the next probe re-embeds rather than falsely hitting). The C3 `SyncBackend` surface that backs this grew to **five** additive methods — `headArtifact` / `putArtifact` / `getArtifact` plus `deleteArtifactHead` / `sweepArtifacts` (GC) — not the originally-planned trio.
+
+> **CI-PENDING caveat.** Every artifact-lane *cloud* round-trip (the Firestore + Storage emulator put / head / get / delete / sweep and the HEAD-after-Storage ordering) and the security-rules suite auto-skip when local emulators are unreachable. These paths are verified against `MockBackend` only — they are code-complete and unit-verified but **not yet proven end-to-end against real Firebase**. The drift/self-heal recovery above is therefore pinned by the mock-backed test, not by an emulator run. See [`plan/shared-ai-cache-design.md`](../../plan/shared-ai-cache-design.md).
 
 ---
 
@@ -757,6 +821,8 @@ This means `wipeAllData` can throw even though it cleared localStorage and cache
 | UI never renders `error.message` directly | [`src/app/errors/presentError.ts`](../../src/app/errors/presentError.ts) | Convention, ESLint in future |
 | Boundary mappers rethrow AppErrors unchanged | `handleDbError`, `handleDriveError` | Code review + integration tests |
 | `retryable` defaults to false | `AppError` constructor | Type default |
+| Quota backpressure throws before egress, never counted | [`src/kernel/net/NetworkGateway.ts`](../../src/kernel/net/NetworkGateway.ts) (`acquire` awaited before `recordEgress`/`fetch`) | Pinned in [`src/kernel/net/NetworkGateway.test.ts`](../../src/kernel/net/NetworkGateway.test.ts) |
+| Semantic search degrades to regex on quota/network errors | [`src/domains/search/SearchSession.ts`](../../src/domains/search/SearchSession.ts) (`isExpectedSearchFallbackError`) | Structural type/`code` branch; rethrows genuine defects |
 | Safe Mode reset routes through `wipeAllData` | [`src/App.tsx`](../../src/App.tsx) | Pinned by regression test in [`src/App_SW_Wait.test.tsx`](../../src/App_SW_Wait.test.tsx) |
 | `confirmDialog` used (not native `confirm`) | `App.tsx` `handleReset` | Lint rule banning native dialog APIs |
 | Pre-migration checkpoint taken before any transform | [`src/app/migrations.ts`](../../src/app/migrations.ts) | Coordinator design, tested in `migrations.test.ts` |
@@ -783,6 +849,10 @@ graph TD
     O["Yjs sync sees future schema"] --> P["useUIStore.obsoleteLock = true"]
     P --> Q["ObsoleteLockView overlay"]
     R["User action: any error toast"] --> S["presentError maps code to string"]
+    T["Governor refuses egress (NET_RATE_LIMITED)\nor network/429 on semantic path"] --> U{"isExpectedSearchFallbackError?"}
+    U -- Yes --> V["Regex result returned unchanged\n(no toast — graceful)"]
+    U -- No --> W["Rethrown (genuine defect surfaces)"]
+    T2["GeminiClient rotation + NET_RATE_LIMITED/429"] --> X["isRetryableForRotation → next model"]
 ```
 
 ---
@@ -791,8 +861,11 @@ graph TD
 
 | Test file | What it covers |
 |-----------|---------------|
-| [`src/types/errors.test.ts`](../../src/types/errors.test.ts) | Code registry exhaustiveness, `toJSON`/`fromJSON` round-trips, cause chains, cycle detection |
+| [`src/types/errors.test.ts`](../../src/types/errors.test.ts) | Code registry exhaustiveness (incl. `NET_RATE_LIMITED`, `GENAI_EMBEDDING_NOT_CONFIGURED`), `toJSON`/`fromJSON` round-trips, cause chains, cycle detection, `NetRateLimitedError` carrying `retryAfterMs` + `retryable: true` |
 | [`src/data/repos/quota-mapping.test.ts`](../../src/data/repos/quota-mapping.test.ts) | `handleDbError` maps both `DOMException` and `Error.name === 'QuotaExceededError'` shapes to `StorageFullError` |
+| [`src/kernel/quota/QuotaGovernor.test.ts`](../../src/kernel/quota/QuotaGovernor.test.ts) | Governor admits/refuses per RPM/TPM/RPD; throws `NetRateLimitedError` on cooldown / day-exhaustion / fg-preempt / bg-fraction; daily rollover; record-at-acquire vs. commit reconcile |
+| [`src/kernel/net/NetworkGateway.test.ts`](../../src/kernel/net/NetworkGateway.test.ts) | `acquire(lane, estTokens)` awaited before `fetch`; pre-network `NetRateLimitedError` rejects and is **not** counted as egress; lane override; release exactly once per egress |
+| [`src/domains/search/SearchSession.test.ts`](../../src/domains/search/SearchSession.test.ts), [`src/domains/search/rrf.test.ts`](../../src/domains/search/rrf.test.ts) | Semantic→regex graceful fallback on quota/network errors; genuine defects rethrown; RRF fusion / dedup |
 | [`src/App_MigrationFailure.test.tsx`](../../src/App_MigrationFailure.test.tsx) | `MigrationError` → `CriticalMigrationFailureView`; non-migration boot errors → `SafeModeView` |
 | [`src/App_SW_Wait.test.tsx`](../../src/App_SW_Wait.test.tsx) | Safe Mode reset routes through `wipeAllData`; confirm/cancel behavior |
 | [`src/App_Boot.test.tsx`](../../src/App_Boot.test.tsx) | Boot interceptor state machine; zombie checkpoint GC; non-fatal repair failure |
@@ -809,3 +882,5 @@ graph TD
 - [Storage Gateway](20-storage-gateway.md) — `EpubLibraryDB` schema, connection lifecycle, write-gate mechanics.
 - [Observability & Diagnostics](74-observability-and-diagnostics.md) — `RingRecorder`, `TTSFlightRecorder`, flight snapshot persistence.
 - [E2E Verification](64-e2e-verification.md) — the full Playwright journey suite including `test_safe_mode.spec.ts`.
+- [`plan/semantic-search-design.md`](../../plan/semantic-search-design.md) — the embeddings / quota-governor design and its implementation-status notes. Per the deviation note there, embeddings took **IDB v27** (the reserved-for-`sync_log`/SW-cover v27 cleanup was never done, so that cleanup is now the *next*, v28, bump).
+- [`plan/shared-ai-cache-design.md`](../../plan/shared-ai-cache-design.md) — the artifact-lane (shared AI-cache) design, the five-method C3 surface, the CI-PENDING cloud round-trips, and the `embedCache` `PURGE_SUBCOLLECTIONS` wiring (done in Phase A).

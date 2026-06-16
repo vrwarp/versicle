@@ -459,7 +459,33 @@ Connects `useGenAIStore` for all configuration. Handler concerns:
 
 **Log download**: Formats `GenAILog[]` records to a timestamped plain-text file and exports via `exportFile`. Each log entry is formatted as `[ISO timestamp] TYPE (method) \n {JSON payload}`.
 
-The presentational component exposes: enable/disable toggle, Gemini API key, model selection (Gemini Flash-Lite Latest, 2.5 Flash-Lite, 2.0 Flash, 1.5 Flash, 1.5 Pro), free-tier model rotation toggle (randomly alternates between flash models to spread quota usage), content type detection with skip-type checkboxes, table teleprompter toggle, debug mode toggle, and a scrollable debug log viewer with max-log control and download/clear buttons.
+**Live quota meters**: The panel composes `useQuotaMeters` ([src/app/settings/panels/useQuotaMeters.ts](../../src/app/settings/panels/useQuotaMeters.ts)) and passes the result down as the `meters` prop. The hook polls the store-injected `getQuotaSnapshot` (a live mirror of `governor.snapshot()` installed by `wireGoogle`) on a 1-second interval — the same poll pattern `DiagnosticsTab` uses for `exportDiagnostics`. The project-wide "today's spend" figure is this device's background RPD plus the cross-device sibling sum from `sumActiveDeviceSpend` (the reconciler excludes this device, so there is no double-count). Every number it renders is derived from the snapshot; nothing is fabricated. The hook is co-located with the panel (not inlined) so the panel module's only export stays the component, keeping fast-refresh clean in the error-level `app/settings/` directory.
+
+The presentational component exposes: enable/disable toggle, Gemini API key, model selection (Gemini Flash-Lite Latest, 2.5 Flash-Lite, 2.0 Flash, 1.5 Flash, 1.5 Pro), free-tier model rotation toggle (randomly alternates between flash models to spread quota usage), content type detection with skip-type checkboxes, table teleprompter toggle, debug mode toggle, a scrollable debug log viewer with max-log control and download/clear buttons, plus the Quota & Usage and Semantic Search sections described below.
+
+**Quota & Usage section**: This block is the settings face of the cross-provider Quota Governor (kernel subsystem [src/kernel/quota/](../../src/kernel/quota/) — `QuotaGovernor` + the midnight-Pacific `ptDay` helper + an `index` barrel). The governor tracks requests-per-minute, tokens-per-minute, and requests-per-day per lane (foreground / background), recorded at *admission* inside `NetworkGateway.egress` so throttling cannot be bypassed; a pre-network refusal surfaces as the typed `NetRateLimitedError` (`AppError` code `NET_RATE_LIMITED`, in `src/types/errors.ts`). Its consumers are `GeminiClient`, the cloud TTS providers, and the new embedding client; model rotation stays inside `GeminiClient`. The plain-data quota fields persist through the `useGenAIStore` allowlist; the live snapshot is an in-memory read-back and is never persisted (a function does not serialize).
+
+The controls, all rendered only while AI features are enabled:
+
+| Control | Store field | Notes |
+|---|---|---|
+| Pause All AI Requests | `pauseAllGenAI` | A switch. "Stops every outgoing AI request before it leaves this device." Default off. |
+| Requests / min, Tokens / min, Requests / day | `quotaLimits.{rpm,tpm,rpd}` | Editable per-lane limits, read *fresh* by the governor on every acquire (defaults `{ rpm: 100, tpm: 30000, rpd: 1000 }`). |
+| Background Throttle (%) | `bgThrottlePercent` | "Share of the budget background work may use before it yields to foreground." Default 50. |
+| Foreground RPD Headroom | `fgRpdHeadroom` | "Daily requests reserved for interactive use." Default 0. |
+
+Below the inputs, a **Live Usage** block renders one `UsageBar` per metered figure — foreground RPM/TPM/RPD and background RPM/TPM — each a `role="progressbar"` carrying `aria-valuenow/min/max` (jsx-a11y clean) with a `used / limit` label. A separate "Today's spend (this project, all devices)" row (`data-testid="genai-project-rpd"`) shows the reconciled project-wide RPD against the daily limit, because the free-tier quota is per-Google-Cloud-*project* and is reconciled across the synced device mesh via an additive `embedSpend` field on the `DeviceInfo` record (no CRDT format change). Three time-to-exhaustion hints ("RPM/TPM/RPD exhausts: ~N min") are computed from the window fill rate, rendered as a dash when a lane is idle.
+
+**Semantic Search section**: Two default-OFF opt-ins gate the embeddings and shared-cache features. Both are switches with long disclosure copy:
+
+| Opt-in | Store field | Disclosure substance |
+|---|---|---|
+| Pre-embed my library for semantic search | `preEmbedLibrary` | When ON, the *full text* of loaded-but-unread books is sent to Google during idle time to build search embeddings, and *search query terms* leave the device whenever a semantic search runs. The copy explicitly contrasts this with the narrower per-book TTS consent (short excerpts only). |
+| Share AI caches across my devices | `shareAiCaches` | When ON, the *whole-book embeddings* a device builds (~251 KB per book, far heavier than normal annotation/progress sync) upload to the user's *own* cloud so their other devices hydrate them without re-spending Gemini quota. The copy stresses nothing is shared with anyone else — the cache lands only in the user's own Firebase project, content-addressed by book and embedding stamp. |
+
+`preEmbedLibrary` is the library-wide background-grant consent wired into the AI consent resolver ([src/app/google/aiConsent.ts](../../src/app/google/aiConsent.ts)): a background, bookId-carrying egress is granted when this opt-in is ON, checked *before* the per-book default-deny so an un-prompted unread book can be backfilled (it never widens a foreground grant). `shareAiCaches` is the consent predicate shared by *both* the cache read path (`ArtifactConsult`, which probes/hydrates a peer's blob before the quota gate) and the upload path (the `ArtifactPublisher` boot task) — one predicate, so reusing another device's embeddings and uploading your own are governed identically.
+
+> **Caveat (CI-pending).** The "Share AI caches" cloud round-trips — the Firestore + Storage `head`/`put`/`get`/`delete`/`sweep` paths behind this opt-in — are currently MockBackend-verified and code-complete but **not yet proven end-to-end against real Firebase** (the emulator and security-rules suites auto-skip without local emulators). The toggle and its disclosure copy are shipped; the cloud transport behind it is the deferred-to-CI surface. Cross-*user* cache sharing and TTS-audio cache sharing are explicitly out of scope.
 
 ### Sync & Cloud Panel
 
@@ -791,5 +817,6 @@ See also [Testing strategy](63-testing-strategy.md) for the absorption ledger pa
 - **[Domain sync](36-domain-sync.md)**: RecoveryPanel calls `CheckpointService` and the presentational component calls `CheckpointInspector.diffCheckpoint` and `stopSyncConnections` (pauses sync before restore).
 - **[Error handling](15-error-handling-and-recovery.md)**: DataPanel uses `useConfirm` for all destructive confirmations — consistent with the Phase 8 native-dialog ban (no `window.confirm`).
 - **[Observability](74-observability-and-diagnostics.md)**: DiagnosticsTab reads TTS flight recorder data through `useAudioCommands` to avoid the module-instance problem (worker vs. main thread singleton).
+- **[Domain: Google](39-domain-google.md)**: The GenAIPanel Quota & Usage section is the settings face of the `src/kernel/quota/` governor enforced inside `NetworkGateway.egress`; the `Pre-embed my library` and `Share AI caches` opt-ins gate the embedding/artifact paths in [Domain: search](38-domain-search.md).
 - **[App shell](42-app-shell-and-routing.md)**: The `/settings/:tab?` route in `routes.tsx` renders `LibraryView` as the background with the `SettingsShell` modal on top.
 - **[UI design system](40-ui-design-system.md)**: All panels use `Modal`, `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`, `Button`, `Select`, `Input`, `PasswordInput`, `Switch`, `Checkbox`, `Slider`, `Progress`, and `ScrollArea` from `src/components/ui/`.

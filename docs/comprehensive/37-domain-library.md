@@ -196,13 +196,49 @@ export function getLibrary(): LibraryComposition {
     }),
   });
 
-  const service = new LibraryService({ mutex, inventory, projection, persistence, orchestrator });
+  const service = new LibraryService({
+    mutex, inventory, projection, persistence, orchestrator,
+    purgeBookArtifact,  // app-layer cloud HEAD-doc cleanup on remove
+  });
   instance = { mutex, orchestrator, service };
   return instance;
 }
 ```
 
 The `extractionOptions` lambda captures TTS settings **per job** rather than at construction time, severing the `useTTSSettingsStore.getState()` reach-ins that previously lived inside `lib/ingestion.ts` (coupling #2 in the analysis).
+
+### The `purgeBookArtifact` Adapter
+
+The composition root is also where the `purgeBookArtifact` port (consumed by `LibraryService.remove`) is implemented, because it holds the store/backend/manifest edges that the store-free `LibraryService` cannot reach:
+
+```typescript
+// Simplified from createLibrary.ts
+async function purgeBookArtifact(bookId: string): Promise<void> {
+  const handle = peekSyncOrchestrator()?.getConnectedArtifactBackend() ?? null;
+  if (!handle) return;                              // no cloud backend → no-op
+
+  const manifest = await bookContent.getManifest(bookId);
+  const contentHash = manifest?.contentHash;
+  if (!contentHash) return;                         // older book / no artifact → no-op
+
+  const s = useGenAIStore.getState();
+  const key = await contentKey({
+    contentHash, model: s.embeddingModel, dims: s.embeddingDims,
+    quant: CURRENT_QUANT, extractionVersion: TTS_EXTRACTION_VERSION,
+  });
+  try {
+    await handle.backend.deleteArtifactHead(handle.workspaceId, `embedCache/${key}`);
+  } catch (err) {
+    logger.warn(`Cloud HEAD-doc delete failed for ${bookId}; sweeper will reclaim it:`, err);
+  }
+}
+```
+
+The adapter does four things `LibraryService` deliberately cannot: (a) read the connected backend via `peekSyncOrchestrator().getConnectedArtifactBackend()` (returns `null` unless connected + signed-in + a workspace is selected); (b) read the book's manifest for its `contentHash` — done **before** `LibraryService` deletes the book, while the row still exists; (c) derive the cache key from the **live** embedding stamp (`{model, dims}` + the `CURRENT_QUANT` literal + `TTS_EXTRACTION_VERSION`), the same stamp the read/publish adapters use, so the key matches what the publisher wrote; (d) delete the HEAD record at `embedCache/{key}` **only**, leaving the shared blob for the cloud sweeper.
+
+The `shareAiCaches` opt-in is irrelevant here — dropping your **own** pointer for a book you deleted is always safe, regardless of whether you ever shared caches. A null backend or a missing `contentHash` is a clean no-op; a backend error is logged and swallowed (`LibraryService` degrades the same way on its side). `deleteArtifactHead` is one of the five additive C3 `SyncBackend` artifact methods (`headArtifact` / `putArtifact` / `getArtifact` for probe/write/read, plus `deleteArtifactHead` / `sweepArtifacts` for GC) — see [Domain: sync](36-domain-sync.md).
+
+> **Caveat (CI-PENDING):** the cloud round-trip this adapter performs is verified against `MockBackend` only. The Firestore+Storage emulator suite (and the `storage.rules` security suite) auto-skips without local emulators, so the cloud delete path is code-complete and unit-verified but **not yet proven end-to-end against real Firebase.**
 
 The controller hook [src/app/library/useImportController.ts](../../src/app/library/useImportController.ts) provides the stable surface that all components call. It re-maps the orchestrator's `'duplicate'` result into a `DuplicateBookError` throw to preserve the pre-P7 signal that `ReplaceBookDialog` flows are built around.
 
@@ -551,7 +587,7 @@ This absorbs the former `BookImportService.importBookWithId` id-rewrite (ledger 
 
 ## The LibraryService and Its Invariants
 
-[src/domains/library/LibraryService.ts](../../src/domains/library/LibraryService.ts) owns the non-import book lifecycle: `start` (inventory subscription), `hydrate`, `updateBook`, `remove`, `offload`, and `restore` routing.
+[src/domains/library/LibraryService.ts](../../src/domains/library/LibraryService.ts) owns the non-import book lifecycle: `start` (inventory subscription), `hydrate`, `updateBook`, `remove`, `offload`, and `restore` routing. Its deps include one optional injected port beyond the four ledgered for Phase 7 — `purgeBookArtifact?(bookId)`, the app-layer cloud-cleanup hook described under [`remove`](#removebookid) below.
 
 ### `start()` — Delta Subscription (D16 Fix)
 
@@ -606,6 +642,15 @@ async remove(bookId: string): Promise<void> {
     inventory.remove(bookId);         // Yjs
     projection.removeStatic(bookId);
     projection.removeOffloaded(bookId);
+    // Drop THIS device's shared-embeddings HEAD doc — BEFORE deleteBook
+    // destroys the manifest the adapter reads contentHash from.
+    if (this.deps.purgeBookArtifact) {
+      try {
+        await this.deps.purgeBookArtifact(bookId);
+      } catch (err) {
+        logger.warn('Best-effort cloud-artifact purge failed; deleting locally anyway:', err);
+      }
+    }
     await persistence.deleteBook(bookId);  // IDB
   });
   // On failure: setError + re-hydrate
@@ -613,6 +658,18 @@ async remove(bookId: string): Promise<void> {
 ```
 
 Runs under the book's mutex, so an in-flight restore or import for the same ID is guaranteed to complete before the delete starts. On failure it re-hydrates to restore the projection to a consistent state.
+
+#### The Cloud-Artifact Purge Port
+
+The optional `purgeBookArtifact(bookId)` dependency drops this device's pointer into the shared AI-cache (the Artifact Lane — see [Domain: search](38-domain-search.md) for the embedding cache, and [Domain: sync](36-domain-sync.md) for the C3 backend surface). A book's expensive embedding blob is content-addressed and mirrored into the user's own BYO Cloud Storage, with a small Firestore HEAD doc (`embedCache/{key}`) per device pointing at it, so a book embedded once on one device is downloaded by the user's other devices instead of re-spending Gemini quota. When a book is removed locally, this device's HEAD doc is the only cloud record it owns for that book.
+
+The call has three load-bearing properties, all enforced inside `remove`:
+
+- **Ordering**: it MUST run **before** `persistence.deleteBook`. The adapter resolves `bookId → contentHash` by reading the `static_manifests` row, and `deleteBook` destroys that row in the same transaction — so once the local delete runs, the key material the cloud delete needs is gone.
+- **Best-effort degrade**: a rejection is caught and logged (`logger.warn`) but **never** aborts the local delete. An orphaned HEAD doc is reclaimed later by the cloud TTL/quota sweeper; refusing to delete the book locally because a cloud round-trip failed would be the wrong trade.
+- **HEAD-only delete**: the adapter deletes the HEAD doc **only**. It deliberately leaves the content-addressed blob in Cloud Storage, because a sibling device may still reference it — the same blob is shared across the device mesh. The blob is reclaimed by the sweeper once no device references it.
+
+`purgeBookArtifact` is `undefined` when no cloud backend is wired; the guard makes the whole block a clean no-op in that case. Keeping it an injected port preserves the domain boundary: `LibraryService` carries no store, backend, or `contentHash`-key knowledge. The adapter that holds those edges lives in the composition root (see [The Composition Root](#the-composition-root)).
 
 ### `offload(bookId)` — Optimistic with I-4 Revert
 
@@ -699,6 +756,8 @@ stateDiagram-v2
 ```
 
 A "ghost" book has a Yjs inventory entry (`useBookStore`) but no row in `staticMetadata` (checked via `projection.staticIds()`). The `ContentMissingDialog` is shown when the user tries to open a ghost or offloaded book. The offloaded state is tracked in `useLibraryStore.offloadedBookIds` (a `Set<string>`), which is authoritative for the current session and re-hydrated from IDB on startup and on inventory changes.
+
+Each of the three `remove()` transitions also runs the [`purgeBookArtifact`](#the-cloud-artifact-purge-port) hook (when a cloud backend is wired) to drop this device's shared-embeddings HEAD doc before the local delete — the content-addressed blob is left for the cloud sweeper. `offload()` does **not** touch the cloud mirror: offload keeps the book in inventory (only the binary leaves), so its embeddings stay valid and may still serve a sibling device.
 
 ---
 
@@ -841,7 +900,7 @@ Both follow the same pattern: receive the book as a prop, call the relevant cont
 
 ## Ports Reference
 
-[src/domains/library/ports.ts](../../src/domains/library/ports.ts) defines the full injected-port surface:
+[src/domains/library/ports.ts](../../src/domains/library/ports.ts) defines the core injected-port surface (the last row below is the one optional port that lives on `LibraryServiceDeps` in `LibraryService.ts` rather than in `ports.ts`):
 
 | Port | Interface | Backed by |
 |---|---|---|
@@ -850,6 +909,7 @@ Both follow the same pattern: receive the book as a prop, call the relevant cont
 | `LibraryProjectionPort` | per-key static/offloaded writes, progress, error | `useLibraryStore` |
 | `LibraryPersistence` | ingest / delete / offload / restore / manifest / hash / metadata / reprocess | `bookContent` repo + `searchTextRepo` |
 | `ExtractionOptionsProvider` | `() => ExtractionOptions` | `() => useTTSSettingsStore.getState()` |
+| `purgeBookArtifact` (optional, on `LibraryServiceDeps`) | `(bookId) => Promise<void>` — best-effort cloud HEAD-doc drop on remove | `peekSyncOrchestrator` + `bookContent.getManifest` + `useGenAIStore` (the composition-root adapter) |
 
 The `LibraryPersistence` interface deliberately omits `getBookIdByFilename` from the bulk-read group because it is synchronous (IDB index kept in memory by the repository), while the rest are async. The optional methods (`getBookMetadataBulk`, `getAvailableResourceIds`) allow the persistence implementation to provide more efficient paths when available, with the service falling back gracefully if absent.
 
@@ -883,7 +943,7 @@ The `ExtractionOptionsProvider` lambda (captured per job in `extractionOptions: 
 
 | File | What it covers |
 |---|---|
-| [LibraryService.invariants.test.ts](../../src/domains/library/LibraryService.invariants.test.ts) | I-1..I-5 property and regression proofs; property test with 16 seeds |
+| [LibraryService.invariants.test.ts](../../src/domains/library/LibraryService.invariants.test.ts) | I-1..I-5 property and regression proofs; property test with 16 seeds; `remove()` cloud-artifact purge (contentHash resolved BEFORE `deleteBook`, rejection swallowed, no-port no-op) |
 | [importFlows.characterization.test.ts](../../src/domains/library/importFlows.characterization.test.ts) | Full import pipeline characterization: single, batch, ghost, replace, restore, ZIP; reading-list entry creation |
 | [reingest.test.ts](../../src/domains/library/reingest.test.ts) | NFKD restamp fast path; R4 self-check; idle skipping; no-binary skip |
 | [mutex.test.ts](../../src/domains/library/mutex.test.ts) | FIFO order; cross-key concurrency; failure isolation; GC |

@@ -1,8 +1,8 @@
 # Search Domain
 
-In-book full-text search: `SearchSession`, the persisted text corpus, the `SearchEngine` worker, offset-to-range resolution, and CFI-based exact-occurrence navigation.
+In-book full-text search: `SearchSession`, the persisted text corpus, the `SearchEngine` worker, offset-to-range resolution, and CFI-based exact-occurrence navigation. Plus the **semantic-search subsystem** layered on top: the `EmbeddingIndexer`, the chunker, int8-quantized cosine ranking in the worker, reciprocal-rank fusion of meaning-based hits into the regex results, and the search-side of the shared-AI-cache "Artifact Lane".
 
-Related documents: [Architecture overview](10-architecture-overview.md) · [Reader engine](30-domain-reader-engine.md) · [Reader UI and overlays](31-reader-ui-and-overlays.md) · [Storage gateway](20-storage-gateway.md) · [Schema and migrations](21-schema-and-migrations-idb.md) · [Domain library](37-domain-library.md) · [Bootstrap and lifecycle](14-bootstrap-and-lifecycle.md)
+Related documents: [Architecture overview](10-architecture-overview.md) · [Reader engine](30-domain-reader-engine.md) · [Reader UI and overlays](31-reader-ui-and-overlays.md) · [Storage gateway](20-storage-gateway.md) · [Schema and migrations](21-schema-and-migrations-idb.md) · [Domain library](37-domain-library.md) · [Bootstrap and lifecycle](14-bootstrap-and-lifecycle.md) · [Domain Google / GenAI](40-domain-google-genai.md) · [Domain sync](36-domain-sync.md)
 
 ---
 
@@ -16,6 +16,12 @@ When a user opens the search sidebar inside the reader they need to locate a wor
 4. Degrade gracefully: if the worker crashes, if the corpus has not yet been extracted, or if CFI resolution fails, the system falls back to a sensible lesser capability without throwing.
 
 The search domain is deliberately narrow. It does not index across multiple books, does not persist query history, and does not share anything with library metadata search (which is a plain `Array.filter` in the library view) or notes search (a separate controlled input). Cross-linking those features is listed as a future follow-on once the persisted corpus makes it cheap.
+
+### Semantic search (the embeddings subsystem)
+
+On top of that exact-literal regex engine, the domain hosts an **opt-in semantic ("meaning-based") search**: the same `cache_search_text` corpus is sub-chunked, each chunk is embedded with Gemini Embedding 2, the vectors are stored int8-quantized in a new `cache_embeddings` store, and a query is ranked by int8 cosine. The semantic hits are **fused into** the regex results via reciprocal-rank fusion (RRF) — they never *replace* full-text search. Regex full-text remains the graceful **default** path whenever semantic is off, unconfigured, quota-exhausted, or the book is not yet embedded, so the privacy/cost-free baseline is always available and nothing leaves the device unless semantic search is explicitly enabled. The full design (chunk sizing, int8@768 quantization, the cross-provider quota governor, the consent model, and the shared-AI-cache "Artifact Lane") lives in [plan/semantic-search-design.md](../../plan/semantic-search-design.md) and [plan/shared-ai-cache-design.md](../../plan/shared-ai-cache-design.md).
+
+The expensive part of semantic search is the embedding API spend. To avoid re-paying it, the **Artifact Lane** mirrors a book's embedding blob into the user's own BYO cloud and lets the user's *other* devices download it instead of re-embedding (this domain owns the pure blob codec and the int8 vectors; the cloud round-trips themselves live in the [sync domain](36-domain-sync.md) and the app layer). The cross-provider **quota governor** that paces all embedding (and other GenAI) traffic lives in the kernel — see [Domain Google / GenAI](40-domain-google-genai.md); this document covers only the search-side consumers of those subsystems.
 
 ---
 
@@ -56,16 +62,20 @@ graph TD
 
 | Layer | Module | Responsibility |
 |---|---|---|
-| Domain | `src/domains/search/` | `SearchSession`, `workerFactory`, `offsetRange` — no store imports, no React |
-| Engine (worker-side) | `src/lib/search-engine.ts` | `SearchEngine` class: in-memory store, escaped-literal scan, excerpt generation |
-| Worker entry | `src/workers/search.worker.ts` | 5-line file: `Comlink.expose(new SearchEngine())` |
+| Domain | `src/domains/search/` | `SearchSession`, `workerFactory`, `offsetRange`, `protocol` — no store imports, no React |
+| Domain (semantic) | `src/domains/search/` | `EmbeddingIndexer`, `chunker`, `semanticRank`, `rrf`, `queryEmbeddingCache`, `embeddingPort`, `artifactBlob` — injected ports only; no store, no `google/`, no React |
+| Engine (worker-side) | `src/lib/search-engine.ts` | `SearchEngine` class: in-memory store, escaped-literal scan, excerpt generation, **int8 quantize + cosine + `rankInt8`** |
+| Worker entry | `src/workers/search.worker.ts` | 5-line file: `Comlink.expose(new SearchEngine())` (now also proxies `rankInt8`) |
 | Data | `src/data/repos/searchText.ts` | `SearchTextRepo`: IDB CRUD for `cache_search_text` |
-| App layer | `src/app/reader/useReaderController.ts` | Wires `SearchSession` + `SearchNavigator`; reader controller owns the lifecycle |
+| Data (semantic) | `src/data/repos/embeddings.ts` | `EmbeddingsRepo`: IDB CRUD for `cache_embeddings` + `cache_embed_jobs`; `putHydrated`, `runEviction` |
+| App layer | `src/app/reader/useReaderController.ts` | Wires `SearchSession` + `SearchNavigator` + the `EmbeddingIndexer` + the semantic query ports; reader controller owns the lifecycle |
 | App layer | `src/app/reader/searchNavigation.ts` | `createSearchNavigator`: CFI resolve → display → highlight |
+| App layer (semantic) | `src/app/google/artifactConsult.ts` | `ArtifactConsult`: probe/hydrate the shared embedding cache before the quota gate (the store/manifest/backend edges the codec can't reach) |
+| App layer (semantic) | `src/app/boot/embeddingBackfill.ts`, `artifactPublisher.ts`, `artifactSweeper.ts` | Background backfill, upload publisher, cloud TTL/quota sweeper boot tasks |
 | UI | `src/components/reader/panels/SearchPanel.tsx` | React panel; drives indexing, querying, result display |
 | Types | `src/types/search.ts` | `DetailedSearchResult`, `SearchBatchResult`, `SearchSection` |
 
-The domain boundary is enforced by `depcruise domains-no-store`: nothing inside `src/domains/search/` may import stores, React, or `app/`. The reader controller (`app/`) bridges those layers by passing injected collaborators (`textSource`, `engineFactory`) into the session.
+The domain boundary is enforced by `depcruise domains-no-store`: nothing inside `src/domains/search/` may import stores, React, or `app/`. The reader controller (`app/`) bridges those layers by passing injected collaborators (`textSource`, `engineFactory`, and — for semantic — `embeddingClient`, `embeddingsSource`, `quantize`, `getSemanticConfig`, the `EmbeddingIndexer`, and the consult adapter) into the session. The same rule keeps the search domain from deep-importing `@domains/google`: the embedding client arrives as an injected port (`EmbeddingClientPort`), never a concrete dependency, so the GenAI impl stays out of the entry chunk.
 
 ---
 
@@ -121,11 +131,64 @@ The `truncated` flag replaces the old silent 50-result cap: the UI surfaces "Sho
 export type CacheSearchTextRow = {
   bookId: string;
   extractionVersion: number;   // TTS_EXTRACTION_VERSION (currently 3)
-  sections: { href: string; title: string; text: string }[];
+  sections: { href: string; title: string; text: string; sectionTextHash?: string }[];
 };
 ```
 
 One row per book, keyed by `bookId` in the `cache_search_text` IDB object store (v26 migration, see [Schema and migrations](21-schema-and-migrations-idb.md)). The row is written at import time by the library persistence layer and deleted atomically with the book's other rows. `extractionVersion` is the invalidation stamp; rows below the current extraction version cause re-extraction.
+
+`sectionTextHash` is an **additive** per-section field stamped at import (a `cheapHash` over the section's text bytes — computed in the app/import layer, not in the store-free domain). It is the embedding indexer's fine-grained re-embed key: a section whose `{href, sectionTextHash}` is unchanged is resume-skipped, so the two `extractionVersion` bumps in project history (both segmenter/CFI changes that left section *body text* untouched) re-embed nothing. Rows written before this field existed simply lack it and fall back to re-extraction/re-embed — no migration, no `DB_VERSION` bump.
+
+### The embedding rows — `CacheEmbeddingsRow` and `CacheEmbedJobsRow`
+
+```typescript
+// src/data/rows/cache.ts
+export type CacheEmbeddingsRow = {
+  bookId: string;
+  model: string;            // 'gemini-embedding-2' (the embedding-space stamp …)
+  dims: number;             // 768
+  quant: 'int8-pervec';     // … with quant and extractionVersion
+  extractionVersion: number;
+  sections: {
+    href: string;
+    sectionTextHash: string;
+    chunks: {
+      cfiStart: string;     // always '' — CFIs are resolved lazily at click time
+      cfiEnd: string;       // always ''
+      tokenCount: number;
+      charStart?: number;   // additive: char offsets the read path recovers
+      charEnd?: number;
+    }[];
+    vectors: ArrayBuffer;   // packed int8: chunks.length * dims, row-major
+    scales: ArrayBuffer;    // packed float32: one per-vector scale per chunk
+  }[];
+};
+
+export type CacheEmbedJobsRow = {
+  bookId: string;
+  extractionVersion: number;
+  sections: { href: string; embeddedThroughChunk: number; sectionTextHash?: string }[];
+  updatedAt: number;
+};
+```
+
+`cache_embeddings` is **one row per book**, each spine section carrying its packed int8 vectors plus the per-vector float32 scales needed to dequantize them. The `{model, dims, quant, extractionVersion}` stamp is the embedding-space identity: spaces are incompatible across `{model, dims}`, so a stamp mismatch on read **invalidates and re-embeds the whole book** — vectors are never converted between spaces. At the int8@768 default a ~130K-token novel is ~251 KB (≈43% of the text corpus it indexes); see the size budget in [plan/semantic-search-design.md §2.4](../../plan/semantic-search-design.md).
+
+`cache_embed_jobs` is the **resume journal**: `embeddedThroughChunk` records how far each section got, keyed by `{href, sectionTextHash}`, so an interrupted indexing pass resumes mid-book instead of restarting. The binaries are persisted as raw `ArrayBuffer` (a `z.custom<ArrayBuffer>` guard, the dominant blob convention) and re-wrapped as `Int8Array`/`Float32Array` views on read (`embeddings.ts` `CacheEmbeddingsView`).
+
+Both stores live in the regenerable **CACHE** domain — device-local, never synced, evictable under storage pressure (LRU budget `EMBEDDING_CACHE_BUDGET_BYTES = 256 MiB`), re-derivable from `cache_search_text` + the API at any time. They were created by the **v27** IDB migration (`migrateToV27`, additive, `contains()`-guarded). Note the deviation from the design as written: the design reserved v27 for retiring old surface (a `sync_log` drop / SW legacy-cover cleanup) and scheduled the embedding stores for a later bump — but that cleanup was never done, so the embedding stores *are* the v27 bump and the `sync_log`/SW cleanup is now the *next* (v28) bump. See [Schema and migrations](21-schema-and-migrations-idb.md).
+
+### The Artifact-Lane blob — `SerializableEmbeddingRow` and the header
+
+`src/domains/search/artifactBlob.ts` is the pure, store-free codec for the cloud blob that ships a book's embeddings between the user's own devices:
+
+```typescript
+// src/domains/search/artifactBlob.ts
+contentKey = sha256hex( contentHash | model | dims | quant | extractionVersion )
+// byte layout: [headerLen: u32 LE][header JSON: UTF-8][packed body]
+```
+
+`contentKey` content-addresses the whole-book bundle: `contentHash` is the EPUB's content identity (from the `static_manifests` row), folded with the embedding-space stamp. A change in any field yields a different key, so a blob from a different model/dimensionality is a clean *miss*, never silently reinterpreted. The body concatenates each section's int8 vectors (first) then float32 scales (second), 4-byte aligned; the JSON header carries the stamp plus a per-section index (`href`, `sectionTextHash`, `byteOffset`, `byteLen`, `vectorsByteLen`) so a partially re-extracted book reconciles section-by-section on download. `parseArtifactBlob` throws on a structurally invalid blob (so a corrupt download is treated as a miss), and `serializeArtifactBlob` accepts both the persisted `CacheEmbeddingsRow` shape and the repo's re-wrapped typed-array view. `ARTIFACT_HEADER_VERSION` (currently `1`) stamps the on-the-wire format; v1 blobs do not carry per-chunk CFI/char offsets, so a hydrated row's `chunks` is empty and the ranker re-segments from the local corpus (see [`semanticRank`](#semanticrankts--meaning-based-ranking)).
 
 ---
 
@@ -187,6 +250,25 @@ private getExcerpt(text: string, index: number, length: number): string {
 
 ±40 characters around the match in the **original** string at the **original** `match.index`. Leading/trailing ellipses are added only when the window is not at the document boundary. No whitespace normalization is applied (see [Known limitations](#known-limitations)).
 
+`getExcerpt` is a free function (not a method), exported from `search-engine.ts` so the semantic ranker — which runs in the domain, not the worker — reuses the *exact same* excerpt window when it maps a chunk hit back to a `DetailedSearchResult`. This is the one `domains → lib` edge `semanticRank.ts` takes, the same edge `workerFactory.ts` already uses.
+
+### int8 quantization and cosine ranking (semantic)
+
+The same `SearchEngine` class carries the pure numeric kernel of semantic search — three methods that operate only on transferred typed arrays, no DOM, no IDB, so they cross the worker seam exactly like `searchDetailed`:
+
+```typescript
+// src/lib/search-engine.ts
+quantizeInt8PerVector(vec: Float32Array): { vectors: Int8Array; scale: number };
+int8Cosine(aVecs, aScale, bVec, bScale, dims): number;       // best cosine across packed rows
+rankInt8(packedVecs, scales, queryVec, queryScale, dims, limit): { row; cosine }[];
+```
+
+- **`quantizeInt8PerVector`** — per-vector *symmetric* scale: `scale = max(|v|) / 127`, `q[i] = round(v[i] / scale)`, clamped to the signed-int8 range. One `float32` scale per vector (+4 bytes), no calibration corpus, fully incremental. An all-zero vector yields a zero row and `scale === 0`. EM2 auto-normalizes its output, so the values sit in a narrow band and per-vector scaling is near-lossless. This is the `QuantizePort` the indexer and the read path both inject.
+- **`int8Cosine`** — cosine as an **integer dot product** (`int8·int8` accumulated in a JS number that stays exact well within ±2⁵³), with the two float32 scales applied **once** at the end, never per element. No float vectors are stored and nothing is dequantized per comparison. A zero-scale row contributes a cosine of 0.
+- **`rankInt8`** — ranks the packed corpus rows for one section against an int8 query vector, returning the top-`limit` rows as `{ row, cosine }` descending. Each row is scored through a single-row `subarray` view of `int8Cosine`, so the per-row and batch paths can never drift. This is the method `semanticRank` proxies across the worker seam (`SearchEngineProtocol.rankInt8`).
+
+The worker-side numeric suite (`search-engine.test.ts`) asserts int8 cosine ≈ reference float cosine within recall tolerance and round-trips quantize/dequantize.
+
 ---
 
 ## The Comlink worker
@@ -201,7 +283,7 @@ const engine = new SearchEngine();
 Comlink.expose(engine);
 ```
 
-The entire worker is five lines. One `SearchEngine` instance lives for the worker's lifetime. All methods (`initIndex`, `addDocuments`, `searchDetailed`) are transparently proxied by Comlink — the caller on the main thread receives promises for every method call. This is the same Comlink transport used by the TTS worker; the patterns are intentionally uniform across both subsystems.
+The entire worker is five lines. One `SearchEngine` instance lives for the worker's lifetime. All methods (`initIndex`, `addDocuments`, `searchDetailed`, and the semantic `rankInt8`) are transparently proxied by Comlink — the caller on the main thread receives promises for every method call. This is the same Comlink transport used by the TTS worker; the patterns are intentionally uniform across both subsystems. The structural worker-boundary guard for the search worker is the `worker-no-state-typegraph` depcruise ratchet (no edge to `store`/`zustand`/`yjs`); the semantic additions keep it under its baseline.
 
 ---
 
@@ -262,6 +344,11 @@ export class SearchSession {
 - `engineFactory` — in production: the result of `createWorkerSearchEngineFactory()`. In tests: a factory that returns a real `SearchEngine` running in-process, with no worker.
 - `textSource` — in production: `searchTextRepo` (the IDB repo). Tests inject a mock `SearchTextSource` with `get` returning fixture data or `undefined`.
 - `onError` — in production: a callback that logs and shows a toast. Tests inject a `vi.fn()` to assert crash recovery.
+
+The remaining options are the **semantic ports — all optional** so the regex-only and test constructions are untouched (when absent, `enqueueEmbedding` is a no-op and `search` returns the pure regex result):
+
+- `embeddingIndexer` — the `EmbeddingIndexer` the reader controller wires from the embedding facade + repos. `enqueueEmbedding(bookId, currentCfi)` delegates to it; `bookId`/CFI flow as arguments, never read from a store.
+- `embeddingClient`, `embeddingsSource`, `quantize`, `getSemanticConfig` — the hybrid-query ports. `embeddingClient` is the `EmbeddingClientPort` (the injected `@domains/google` facade), `embeddingsSource` is the `embeddings` repo's read view, `quantize` is the worker's `quantizeInt8PerVector`, and `getSemanticConfig` is a thunk reading the GenAI store (`{ enabled, model, dims }`) per call. Only when **all four** are present *and* semantic is on, configured, and the book is embedded does `search` fuse a semantic ranking into the regex result.
 
 The `SearchTextSource` interface is minimal:
 
@@ -353,7 +440,30 @@ private reset(): void {
 }
 ```
 
-`reset()` is called by both `dispose()` and `handleEngineFailure()`. It is unconditional: caches are cleared even if `this.handle` is null (the engine was never actually created). This avoids the old singleton bug where `indexedBooks` survived a `terminate()` call on an injected handle. After reset, the next `index()` or `search()` call triggers `this.engine()` which calls `this.opts.engineFactory()` — a fresh worker allocation.
+`reset()` is called by both `dispose()` and `handleEngineFailure()`. It is unconditional: caches are cleared even if `this.handle` is null (the engine was never actually created). This avoids the old singleton bug where `indexedBooks` survived a `terminate()` call on an injected handle. After reset, the next `index()` or `search()` call triggers `this.engine()` which calls `this.opts.engineFactory()` — a fresh worker allocation. `reset()` also clears the per-session query-embedding cache and corpus cache (below).
+
+### Hybrid search: regex default, semantic fused
+
+`search(bookId, query)` always runs the regex `searchDetailed` first — **regex full-text is the default and can never disappear**. The semantic branch is entered *only* when all four semantic ports were injected, `getSemanticConfig().enabled` is true, the embedding client reports `isConfigured()`, and the trimmed query is non-empty. When it runs, [`semanticRank`](#semanticrankts--meaning-based-ranking) returns a per-section cosine ranking, which is **fused into** the regex result via [`fuseRrf`](#rrfts--reciprocal-rank-fusion). On any miss (off / unconfigured / not-embedded / no hits) the pure regex result is returned unchanged.
+
+Error handling is deliberately asymmetric. Only **expected** quota/network errors fall back to regex — a pre-network `NetRateLimitedError` (`code === 'NET_RATE_LIMITED'`, the governor's backpressure signal), a GenAI HTTP `AppError` (`code === 'GENAI_UNKNOWN'` or `retryable`), or a raw `AbortError`/fetch `TypeError`. These are matched **structurally** (`isExpectedSearchFallbackError`), never by importing the `google` error class (which would trip the domains barrier). Anything else — a genuine bug in the semantic path — is rethrown, so it surfaces instead of being silently swallowed. Semantic search is purely additive: it can never break or regress full-text.
+
+### Per-session caches (query embedding + corpus)
+
+Two small, bounded in-memory caches protect against repeated work in one reading session and are cleared on `reset()`:
+
+- **`QueryEmbeddingCache`** (`queryEmbeddingCache.ts`) — memoizes the query *embedding* so a repeated search reuses the cached float32 vector with **no second `embed` call**. Because every query embedding draws on the same shared daily RPD budget, query caching is *budget protection, not polish*. Keyed by `model | dims | profile | bookId | query` (query trimmed + lowercased); the *promise* is memoized so concurrent identical queries share one in-flight call, and a rejected computation is evicted so a retry recomputes. FIFO-capped at 64 entries.
+- **The corpus cache** (`SearchSession.memoizingTextSource`) — promise-memoizes the full-corpus `textSource.get(bookId)` read so a stream of semantic queries in one session doesn't re-load the entire book text on every keystroke. FIFO-capped at 8 books; a rejected read is evicted. The `extractionVersion` stamp guard inside `semanticRank` still invalidates on corpus drift, so this never serves a semantically stale corpus past a re-extraction.
+
+### `enqueueEmbedding` — the foreground indexing trigger
+
+```typescript
+async enqueueEmbedding(bookId: string, currentCfi?: string): Promise<void> {
+  await this.opts.embeddingIndexer?.enqueue(bookId, currentCfi);
+}
+```
+
+A thin delegate to the injected `EmbeddingIndexer` (no-op when none was injected). `bookId` and the reading-position CFI are **arguments** — the trigger context comes from the app reader controller (which fires it once per reader-open per `bookId`), never from a store inside the domain. See [`EmbeddingIndexer`](#embeddingindexerts--foreground-document-embedding).
 
 ---
 
@@ -540,6 +650,101 @@ This handles EPUB paths where the view's href includes a directory prefix that t
 
 ---
 
+## `chunker.ts` — sentence-snapped windows
+
+[src/domains/search/chunker.ts](../../src/domains/search/chunker.ts)
+
+`chunkSection` splits a section's plain text into the windows that become individual embedding vectors. It is **pure** — no store, no token estimator import beyond the chars-per-token heuristic, no CFI:
+
+- **~320-token windows, ~15% overlap, snapped to sentence boundaries.** Window size uses a ~4-chars/token heuristic (the same estimate the chat client uses); sentence spans come from the locale segmenter (`@kernel/locale/segmenterCache`), with each span's `end` trimmed of trailing whitespace so a boundary lands right after the terminator. When `Intl.Segmenter` is unavailable the whole text is one span.
+- **Char offsets round-trip the source.** Each `SectionChunk` carries `{ text, charStart, charEnd, tokenCount }`, and `text === text.slice(charStart, charEnd)` exactly. Those offsets are the contract between index time and query time: the read path recovers a chunk's position from `charStart/charEnd` without re-segmenting.
+- **Oversized-sentence handling.** When a single sentence exceeds the target window (so a sentence-snapped overlap is impossible), the next window continues from a *mid-sentence* offset inside the overlap zone, preserving ~`overlapChars` of shared context while still guaranteeing forward progress.
+
+The chunker shipped in the indexer increment (not the data increment) because a CFI cannot be derived from plain text — it had no consumer until the indexer existed.
+
+---
+
+## `EmbeddingIndexer.ts` — foreground document embedding
+
+[src/domains/search/EmbeddingIndexer.ts](../../src/domains/search/EmbeddingIndexer.ts)
+
+The `EmbeddingIndexer` is the foreground pass that turns a book's text into the vectors semantic search ranks over. It takes **constructor-injected ports only** — an `EmbeddingClientPort`, the corpus `SearchTextSource`, an `EmbeddingsRepoPort`, the `QuantizePort`, a `getConfig` thunk, and an optional `EmbeddingConsultPort` — so the domain never deep-imports the worker, the GenAI impl, or a store.
+
+### `enqueue(bookId, currentCfi?, opts?)`
+
+The default posture is `{ interactive: true, lane: 'fg' }` (the foreground reader); the background backfill passes `{ interactive: false, lane: 'bg' }`. The pass:
+
+1. **No-ops** when the embedding client is unconfigured or the book has no persisted corpus.
+2. **Consults the shared cache first.** When a `consult` port is injected and `probe(bookId)` reports a hit, `hydrate(bookId)` downloads another device's vectors and, on a full hit, **returns without ever calling `embed()`** — spending zero Gemini quota. The consult adapter owns the consent gate and short-circuits cheaply when no cloud backend is connected, so the common no-sync case adds no latency. (This is the FG-reader leg of the Artifact Lane; the background leg lives in the backfill loop — see [the Artifact Lane](#the-artifact-lane-search-side).)
+3. **Orders sections outward from the reading position.** `orderOutward(count, center)` fans out `center, center+1, center-1, center+2, …`, where `center` is the spine ordinal derived from `currentCfi` (`spineOrdinalFrom`: the last `/N` step before the first `!` indirection → `(N-2)/2`, clamped). So the page the reader is on becomes searchable first, then coverage fans out. Falls back to section-0-first when the CFI is absent or unparseable.
+4. **Stamp-mismatch guard.** When the persisted row's `{model, dims, quant}` no longer matches the live config, the prior resume journal is discarded so *every* section re-embeds — vectors in an incompatible space are never resume-skipped.
+5. **Per section:** resume-skip when the journal records this `{href, sectionTextHash}` complete **and** its vectors are actually present in the persisted row (a section the journal marks done but whose vectors are absent — a crash between the two writes, or a partial download — is treated as a miss and re-embedded, never skipped forever). Otherwise chunk the text, `embed` the chunks (threading `consent: { bookId, interactive }` + the quota `lane` through the client to the gateway), quantize each returned float32 vector to int8 + a per-vector scale, pack the int8 rows and float32 scales, and persist.
+6. **Resumable + read-modify-write.** Progress is persisted **incrementally per section** (`embeddings.put` + `embeddings.putJob`) so a mid-pass abort leaves resumable progress. The embeddings accumulator is *seeded* from the prior persisted row so a resumed pass carries forward already-embedded sections' vectors rather than overwriting the row with only this pass's sections.
+
+### CFIs are deferred
+
+Chunk CFIs are persisted as empty strings: the chunker works on plain text and cannot produce a CFI without the live reader view. The **char offsets** (`charStart/charEnd`) *are* persisted, and the read path resolves the EPUB CFI jump-target lazily at click time (via `resolveResultCfi`, exactly as the regex path does). This was an intentional deviation from the design's `cfiStart/cfiEnd` fields — they stay empty, char offsets carry the position.
+
+---
+
+## `semanticRank.ts` — meaning-based ranking
+
+[src/domains/search/semanticRank.ts](../../src/domains/search/semanticRank.ts)
+
+`semanticRank` is the read-side cosine ranking that `SearchSession.search` fuses into the regex result. It embeds the query **once** (memoized by the `QueryEmbeddingCache`), quantizes it, loads the book's packed int8 vectors, and ranks each section's rows via `engine.rankInt8` across the worker seam. The per-section `rankInt8` calls run **concurrently** (`Promise.all`), but results are assembled in embedded-section order, so the fused ordering is byte-identical to a sequential pass.
+
+Each `{ href, row, cosine }` hit becomes a `DetailedSearchResult`:
+
+- **Position recovery — persisted offsets first.** When every chunk row carries `charStart/charEnd` (rows the indexer wrote with offsets) they are read directly — no re-segmentation. Presence is checked with `typeof === 'number'` (not truthiness, since `charStart = 0` is valid). Older rows lacking offsets fall back to **re-running the deterministic `chunkSection`** on the section's text with the same defaults the indexer used, so row `r` ↔ chunk `r` aligns.
+- **`charOffset`/`matchLength`/`excerpt`** are derived from those offsets via the shared `getExcerpt` helper; `occurrence` is the 1-based chunk-row ordinal. CFI is left **unset** — resolved lazily at click time by `searchNavigation`, identical to the regex path, so no live-reader plumbing enters the session.
+
+`semanticRank` returns `[]` (and the caller degrades to regex-only) on any drift: the book is not embedded, the corpus is missing, the embedded `extractionVersion` differs from the live corpus, the `{model, dims, quant}` stamp differs from the live config, or a section's re-chunk count no longer matches its persisted row count. The module imports only sibling search modules + `~types` + the `@lib/search-engine` excerpt helper — no store/kernel-state edge.
+
+---
+
+## `rrf.ts` — reciprocal-rank fusion
+
+[src/domains/search/rrf.ts](../../src/domains/search/rrf.ts)
+
+`fuseRrf(regex, semantic)` combines the two ranked lists into one. Each list contributes `1 / (k + rank)` per result (rank 1-based, `k = 60` — the standard RRF constant that damps the head so a #1 in one list doesn't dwarf a strong #2/#3 in the other), summed across both lists for results that appear in both. The dedup key is `${href}|${charOffset}`, so the same occurrence found by both paths fuses into one hit. **Regex accumulates first**, so on a dedup tie the regex hit's richer fields (its per-section `occurrence`) win. The result is exact-match regex wins (names, quotes) surviving while "find the passage about X" semantic hits join — never displacing the exact matches. `truncated` is carried through from the regex scan's honest cap. The module is pure: it imports only `~types/search`.
+
+---
+
+## The Artifact Lane (search side)
+
+The Artifact Lane mirrors a book's expensive embedding blob into the user's own BYO Cloud Storage so a book embedded once on one device is *downloaded* by the user's other devices instead of re-spending Gemini quota. The search domain owns the **pure blob codec** ([`artifactBlob.ts`](#the-artifact-lane-blob--serializableembeddingrow-and-the-header), above); the cloud round-trips live in the [sync domain](36-domain-sync.md) and the orchestration in the app layer. This section covers the read (consult/hydrate) path because it is the one that protects the search budget; the upload, lifecycle, and cloud GC are summarized in [Domain sync](36-domain-sync.md) and the design docs.
+
+### `ArtifactConsult` — probe + hydrate before the quota gate
+
+[src/app/google/artifactConsult.ts](../../src/app/google/artifactConsult.ts)
+
+`ArtifactConsult` holds the store/manifest/backend edges the store-free codec and the injected backend cannot reach. It exposes two operations the FG indexer and the BG backfill loop call **before** spending quota:
+
+- **`probeArtifact(bookId, { interactive })`** — resolve `bookId → contentHash` via the manifest, derive the content-addressed `contentKey`, and `headArtifact` (a cheap Firestore HEAD-doc `getDoc`) to check existence. Never spends quota; returns `false` on any clean degrade (consent denied, absent `contentHash`, no backend).
+- **`hydrateFromArtifact(bookId, { interactive })`** — `getArtifact` the blob, parse its header, **re-derive the content key from the blob's own stamp and assert it matches** (a swap/bit-rot guard), reconcile each section's `sectionTextHash` against the live corpus (drop diverged sections — they re-embed next pass), and write the local rows in one **atomic** `putHydrated` cross-store transaction (so a crash can never leave a section marked complete in the job row but with no vectors).
+
+**Why a full hit provably spends zero quota:** `QuotaGovernor.acquire` debits *inside* `NetworkGateway.egress`, downstream of `embeddingClient.embed()`; skipping `embed` never reaches `acquire`. The `headArtifact`/`getArtifact` calls are firebase-SDK-owned and cannot route through `egress()` (which throws for non-gateway traffic), so they carry zero gateway accounting.
+
+**Consent is a hard requirement on the read path.** Both operations are gated in the app layer by the **same predicate** `makeAiConsentResolver` applies to the embed they replace: per-book `aiConsent` bit, OR the library `preEmbedLibrary` opt-in (bg lane), OR an interactive gesture (fg) — *all* ANDed under the default-OFF "Share AI caches across my devices" master switch (`makeArtifactConsentGate`). The firebase download is `consent: 'oauth'`/`via: 'sdk'`, so the gateway's per-book gate is structurally unreachable; gating in the app layer closes the leak. Without it, a background consult could materialize the full derived index for an unopened, never-consented book — inverting "books are never background-embedded merely by being in the library."
+
+### Where the consult runs
+
+| Path | Trigger | Consult site |
+|---|---|---|
+| Foreground reader | reader-open per `bookId` | inside `EmbeddingIndexer.enqueue` (the FG path has no per-book quota gate to precede), via the injected `consult` port — `interactive: true` |
+| Background backfill | idle, leftover-budget trickle | hoisted into `embeddingBackfill.ts` **before** the cross-device admission gate, so a saturated-quota device still hydrates a peer-embedded book for free — `interactive: false` |
+
+### Read-path drift metric
+
+`hydrateFromArtifact` tracks a **HEAD-hit-but-object-missing** drift count: the blob is always written before its HEAD doc, so a HEAD hit should imply the bytes exist. A `getArtifact` returning `null` after a HEAD hit means a stale HEAD doc was observed; each occurrence self-heals (delete the stale HEAD doc, treat as a miss and re-embed) and increments the count (`getArtifactDriftCount`, for tests/metrics). A *transient* or *permission* error from `getArtifact` is **rethrown** — never mistaken for a miss — so an offline blip never wastes quota re-embedding.
+
+> [!NOTE]
+> **CI-PENDING caveat.** The Artifact Lane is code-complete and unit-verified, but its cloud round-trips are verified only against the in-memory `MockBackend`. The Firestore+Storage emulator suite (put/head/get/delete/sweep, HEAD-after-Storage ordering) and the `storage.rules` security-rules suite **auto-skip without local emulators**, so the cloud paths are **not yet proven end-to-end against real Firebase**. The full-suite verification (3296 tests green) covers the codec, the consult adapter, and the consent gating against the mock — not the live cloud. See [plan/shared-ai-cache-design.md](../../plan/shared-ai-cache-design.md).
+
+The C3 `SyncBackend` artifact surface grew from the originally-planned **method trio** to **five** additive methods — `headArtifact` / `putArtifact` / `getArtifact` (probe / write / read) plus `deleteArtifactHead` / `sweepArtifacts` (GC) — and `embedCache` was wired into `PURGE_SUBCOLLECTIONS` in Phase A (earlier than the design scheduled). Details live in [Domain sync](36-domain-sync.md).
+
+---
+
 ## Persistence: the `cache_search_text` store
 
 [src/data/repos/searchText.ts](../../src/data/repos/searchText.ts) · [src/data/rows/cache.ts](../../src/data/rows/cache.ts)
@@ -563,7 +768,7 @@ Created by the v26 migration step in `src/data/schema.ts`. Absence of a row is v
 | Book deleted (`bookContent.deleteBook`) | Row deleted in the same gated write transaction |
 | Pre-corpus book (first search) | `session.index()` returns `'no-text'`; `SearchPanel` calls `importController.reprocessBook(bookId)`; then retries |
 
-Deletion is co-located with the book deletion transaction (in `bookContent.ts`) so the corpus row cannot survive a deleted book — there is no orphan-cleanup job needed.
+Deletion is co-located with the book deletion transaction (in `bookContent.ts`) so the corpus row cannot survive a deleted book — there is no orphan-cleanup job needed. The same gated transaction also deletes the book's `cache_embeddings` and `cache_embed_jobs` rows, so the local embeddings never leak past a deleted book. The book's **cloud** mirror (the Artifact-Lane blob + HEAD doc) is a separate, app-layer concern — `deleteBook` is worker-safe, store-free, and holds no backend handle, so per-book cloud delete lives in `LibraryService.remove`, which deletes the HEAD doc and leaves the content-addressed blob for the sweeper (a sibling device may still need it). The cloud paths are `MockBackend`-verified / CI-pending against real Firebase; see [Domain sync](36-domain-sync.md).
 
 ### Write path (import)
 
@@ -677,12 +882,41 @@ The indeterminate progress bar during indexing replaced the old percentage bar (
 [src/app/reader/useReaderController.ts](../../src/app/reader/useReaderController.ts)
 
 ```typescript
-// SearchSession per open reader — worker lifecycle owned here
+// SearchSession per open reader — worker lifecycle owned here. The semantic
+// ports are wired from the lazy @domains/google embedding facade + the
+// searchText/embeddings repos + the worker's int8 quantizer, plus the
+// foreground EmbeddingIndexer (which consults the Artifact Lane before embedding).
 const searchSessionRef = useRef<SearchSession | null>(null);
 if (!searchSessionRef.current) {
+  const embeddingClient = getEmbeddingClient();
+  const embeddingIndexer = new EmbeddingIndexer({
+    embeddingClient,
+    textSource: searchTextRepo,
+    embeddingsRepo,
+    quantize: (vec) => embeddingQuantizer.quantizeInt8PerVector(vec),
+    getConfig: () => {
+      const s = useGenAIStore.getState();
+      return { model: s.embeddingModel, dims: s.embeddingDims };
+    },
+    consult: {
+      probe: (bookId) =>
+        getArtifactConsult()?.probeArtifact(bookId, { interactive: true })
+          ?? Promise.resolve(false),
+      hydrate: async (bookId) =>
+        (await getArtifactConsult()?.hydrateFromArtifact(bookId, { interactive: true })) != null,
+    },
+  });
   searchSessionRef.current = new SearchSession({
     engineFactory: createWorkerSearchEngineFactory(),
     textSource: searchTextRepo,
+    embeddingIndexer,
+    embeddingClient,
+    embeddingsSource: embeddingsRepo,
+    quantize: (vec) => embeddingQuantizer.quantizeInt8PerVector(vec),
+    getSemanticConfig: () => {
+      const s = useGenAIStore.getState();
+      return { enabled: s.isEnabled, model: s.embeddingModel, dims: s.embeddingDims };
+    },
     onError: (error) => {
       logger.error('Search engine failed; session reset', error);
       useToastStore.getState().showToast('Search failed', 'error');
@@ -696,6 +930,8 @@ if (!searchNavigatorRef.current) {
   searchNavigatorRef.current = createSearchNavigator(() => engineRef.current);
 }
 ```
+
+The `embeddingClient` is shared between the indexer (document profile) and the session's semantic-query ports (query profile). `getConfig`/`getSemanticConfig` read the GenAI store *per call*, so a settings edit takes effect on the next embed/search with no stale snapshot. A separate effect fires `searchSession.enqueueEmbedding(bookId, currentCfi)` once per reader-open per `bookId` — the CFI is captured at run time, so a section change doesn't re-run it (the resume-skip would only re-walk already-embedded sections). The `embeddingQuantizer` is a module-level `new SearchEngine()` used purely as a pure-function quantizer (no worker), so the indexer's main-thread quantize step doesn't round-trip the worker.
 
 Both refs are initialised on first render and never replaced (they are stable for the reader's lifetime). Cleanup runs on unmount:
 
@@ -747,13 +983,28 @@ Exercises `findRangeForOffset` and `resolveResultCfi` with a JSDOM-backed `docum
 
 [src/lib/search-engine.test.ts](../../src/lib/search-engine.test.ts) · [src/lib/search-engine.fuzz.test.ts](../../src/lib/search-engine.fuzz.test.ts)
 
-Core engine behavior, edge cases (empty query, unknown book, multi-occurrence, regex special chars in query), and seeded fuzzing. The fuzz suite uses `src/test/fuzz-utils.ts` for deterministic seeded random inputs (regex chars, Unicode, malformed XML). The historical zero-width RegExp mock test has been removed; the current engine does not construct a pattern from user input in a way that would permit zero-width matches, so the guard is structural.
+Core engine behavior, edge cases (empty query, unknown book, multi-occurrence, regex special chars in query), and seeded fuzzing. The fuzz suite uses `src/test/fuzz-utils.ts` for deterministic seeded random inputs (regex chars, Unicode, malformed XML). The historical zero-width RegExp mock test has been removed; the current engine does not construct a pattern from user input in a way that would permit zero-width matches, so the guard is structural. The semantic numeric kernel is also pinned here: int8 cosine ≈ reference float cosine within recall tolerance, and the quantize/dequantize round-trip.
 
 ### `searchNavigation.test.ts`
 
 [src/app/reader/searchNavigation.test.ts](../../src/app/reader/searchNavigation.test.ts)
 
 Runs against `FakeReaderEngine` — a test double that tracks `display()` calls, content views, and annotation operations. Tests: exact-occurrence highlight, degraded section-level landing when no view resolves, highlight replacement on re-navigation, `dispose()` clears pending highlight and timer.
+
+### Semantic-search suites
+
+| Suite | What it pins |
+|---|---|
+| [`chunker.test.ts`](../../src/domains/search/chunker.test.ts) | char offsets reconstruct the source slice exactly; ~320-token windows snapped to sentence ends; ~15% overlap; oversized-sentence overlap continuation; whole-section coverage |
+| [`EmbeddingIndexer.test.ts`](../../src/domains/search/EmbeddingIndexer.test.ts) | outward CFI ordering (`orderOutward`); section-0 fallback; `{href, sectionTextHash}` resume-skip; the skip-but-empty self-heal; re-extracted-section re-embed; read-modify-write of prior sections; whole-row stamp-mismatch re-embed; consent `{bookId, interactive}` + document profile threading; `bg` lane never claims `interactive: true`; int8 pack/scale round-trip; the **Artifact-Lane consult full-hit returns without calling `embed()`** |
+| [`semanticRank.test.ts`](../../src/domains/search/semanticRank.test.ts) | stamp-mismatch / dims / extractionVersion drift → `[]` (degrade to regex); persisted char-offset read path with no re-segmentation; legacy-row re-segmentation fallback |
+| [`rrf.test.ts`](../../src/domains/search/rrf.test.ts) | summed reciprocal-rank fusion; `href + charOffset` dedup keeps the regex occurrence; distinct occurrences stay separate; truncation propagation |
+| [`artifactBlob.test.ts`](../../src/domains/search/artifactBlob.test.ts) | serialize/parse round-trip; content-key stamping; corrupt-blob throws (treated as a miss); section-byte slicing |
+| [`artifactConsult.test.ts`](../../src/app/google/artifactConsult.test.ts) | consent-gated probe/hydrate; HEAD-then-blob ordering; stamp re-derivation guard; section-hash reconciliation; HEAD-hit-but-object-missing drift + self-heal; transient-error rethrow |
+
+`SearchSession.test.ts` additionally covers the hybrid path: regex-is-the-default when semantic is off/unconfigured, RRF fusion when on, and the expected-error fallback (quota/network → regex, unexpected → rethrow).
+
+> Everything above is unit- and full-suite-verified (3296 tests green). The **Artifact Lane cloud round-trips** (the Firestore+Storage emulator put/head/get/delete/sweep + HEAD-after-Storage ordering) and the **security-rules suite** are **CI-PENDING** — they auto-skip without local emulators, so the cloud paths are `MockBackend`-verified and code-complete but not yet proven against real Firebase.
 
 ---
 
@@ -789,13 +1040,18 @@ stateDiagram-v2
 | `dispose()` during in-flight index | `assertLive(generation)` throws `SEARCH_SESSION_DISPOSED` | Pending `index()` promise rejects; `SearchPanel` mounted flag suppresses UI updates |
 | Query returns truncated results | `SearchBatchResult.truncated === true` | Panel shows "Showing the first N matches" notice |
 | Search fails (engine error mid-query) | Comlink promise rejects | `SearchPanel.handleSearch` catches, shows error toast |
+| Semantic off / unconfigured / not embedded | port guard / `getSemanticConfig().enabled` / empty embedded row | `search` returns the pure regex result (regex is the default) |
+| Embedding-space drift (model/dims/quant/extractionVersion mismatch) | stamp guard in `semanticRank` (read) / `EmbeddingIndexer` (write) | `semanticRank` returns `[]` → regex-only; the index path re-embeds the whole book |
+| Quota exhausted / network failure mid-semantic-query | `NetRateLimitedError`, GenAI `AppError`, `AbortError`/`TypeError` | `isExpectedSearchFallbackError` → regex result returned unchanged (unexpected errors rethrow) |
+| Artifact cache: HEAD hit but blob missing | `getArtifact` returns `null` after a HEAD hit | drift counter++, stale HEAD doc self-healed, treat as miss + re-embed |
+| Artifact cache: transient/permission download error | `getArtifact` throws | rethrown — never mistaken for a miss; no quota wasted re-embedding |
 
 ---
 
 ## The `SearchEngineProtocol` interface
 
 ```typescript
-// src/domains/search/SearchSession.ts
+// src/domains/search/protocol.ts (re-exported from SearchSession.ts)
 export interface SearchEngineProtocol {
   initIndex(bookId: string): void | Promise<void>;
   addDocuments(bookId: string, sections: SearchSection[]): void | Promise<void>;
@@ -804,10 +1060,17 @@ export interface SearchEngineProtocol {
     query: string,
     opts?: { limit?: number },
   ): SearchBatchResult | Promise<SearchBatchResult>;
+  rankInt8(
+    packedVecs: Int8Array, scales: Float32Array,
+    queryVec: Int8Array, queryScale: number,
+    dims: number, limit: number,
+  ): { row: number; cosine: number }[] | Promise<{ row: number; cosine: number }[]>;
 }
 ```
 
-`SearchSession` only calls these three methods. The real Comlink remote satisfies this interface because Comlink wraps every method to return a `Promise`. The in-process `SearchEngine` also satisfies it (its methods return synchronously but TypeScript accepts synchronous returns where `void | Promise<void>` is expected). This dual satisfaction is what makes the test factory (no Comlink, no worker) behaviorally identical to production.
+`SearchSession` and `semanticRank` call these four methods. The real Comlink remote satisfies this interface because Comlink wraps every method to return a `Promise`. The in-process `SearchEngine` also satisfies it (its methods return synchronously but TypeScript accepts synchronous returns where `void | Promise<void>` is expected). This dual satisfaction is what makes the test factory (no Comlink, no worker) behaviorally identical to production. `rankInt8` returns `{ row, cosine }[]` like `searchDetailed` returns `SearchBatchResult`, so it crosses the worker seam the same way.
+
+The protocol declarations live in their own module (`protocol.ts`) and are re-exported from `SearchSession.ts` so the published `index.ts` surface is unchanged — splitting them out broke the `SearchSession ↔ semanticRank` import cycle (both depend on the port types without depending on each other).
 
 The `SearchEngineHandle` interface adds lifecycle:
 
@@ -876,9 +1139,19 @@ sequenceDiagram
 export { SearchSession, type SearchEngineProtocol } from './SearchSession';
 export { createWorkerSearchEngineFactory } from './workerFactory';
 export { resolveResultCfi } from './offsetRange';
+// Semantic / Artifact-Lane additions:
+export { EmbeddingIndexer } from './EmbeddingIndexer';
+export { chunkSection } from './chunker';
+export {
+  contentKey, parseArtifactBlob, serializeArtifactBlob, ARTIFACT_HEADER_VERSION,
+} from './artifactBlob';
+export type {
+  ArtifactStamp, ArtifactBlobHeader, SerializableEmbeddingRow,
+} from './artifactBlob';
+export { CURRENT_QUANT } from './embeddingPort';
 ```
 
-Consumers outside the domain import only these three exports. `findRangeForOffset` is not re-exported (it is an implementation detail of `offsetRange.ts` consumed by `resolveResultCfi` and tested directly in `offsetRange.test.ts`). `SearchEngineHandle`, `SearchEngineFactory`, `SearchTextSource`, and `IndexOutcome` are exported from `SearchSession.ts` directly but not from the barrel; they are consumed by `useReaderController.ts` via named imports from the domain path.
+The original three exports are joined by the semantic surface: the `EmbeddingIndexer` (so `app/` can construct it) and `chunkSection` (reached via the published barrier), the pure `artifactBlob` codec (so `app/` can both serialize a blob for upload and parse a downloaded one — the search domain owns the codec; the app layer injects the bytes), and `CURRENT_QUANT` (so `app/` can fold the quantization stamp into the content key it builds from the live `{model, dims}` config). `findRangeForOffset` is still not re-exported (it is an implementation detail of `offsetRange.ts`). `SearchEngineHandle`, `SearchEngineFactory`, `SearchTextSource`, `IndexOutcome`, and the `embeddingPort` types (`EmbeddingClientPort`, `EmbeddingsSourcePort`, `QuantizePort`, `SemanticConfigPort`) are exported from their modules directly but not from the barrel; they are consumed by `useReaderController.ts` via named imports from the domain path. `semanticRank`, `fuseRrf`, and `QueryEmbeddingCache` are domain-internal — only `SearchSession` calls them.
 
 ---
 
@@ -895,6 +1168,14 @@ The following limitations are documented in [plan/overhaul/analysis/search.md](.
 **`LARGE_INDEX_THRESHOLD` warning.** The 2 000-section threshold console-warn in the worker fires where no user-visible tooling watches. A production book reaching this would log silently. This is low priority because a 2 000-section EPUB would be pathological.
 
 **Indeterminate progress.** The indexing progress bar in `SearchPanel` is indeterminate (pulsing). The old per-section progress callback was removed when the corpus-fed path eliminated per-section DOM parsing in the panel. Restoring per-section progress would require the session to expose a progress stream, which adds complexity for a typically sub-second operation.
+
+The semantic subsystem carries its own carried-forward deferrals (full designs in [plan/semantic-search-design.md](../../plan/semantic-search-design.md) / [plan/shared-ai-cache-design.md](../../plan/shared-ai-cache-design.md)):
+
+**Artifact Lane cloud paths are CI-PENDING.** The Firestore+Storage emulator round-trips and the security-rules suite auto-skip without local emulators, so the cloud paths are `MockBackend`-verified and code-complete but not yet proven end-to-end against real Firebase.
+
+**`batchEmbedContents` batching is set aside.** The free path ships one `embedContent` per chunk; only a default-OFF `useBatchEmbedding` flag/scaffold shipped. Whether N contents in one call debit the request counter by 1 or N is unconfirmed, so the throughput unlock is gated behind a one-off empirical probe (and the live counting probe + `usageMetadata` token reconcile are deferred).
+
+**Cross-user sharing and TTS-cache sharing are deferred.** The Artifact Lane is embeddings-only and cross-*device* only. A cross-*user* commons (VEC) was evaluated and killed on privacy/poisoning/licensing; TTS-audio cache sharing is blocked on its provider-blind cache key. Per-blob HMAC is also accept-risk-deferred.
 
 ---
 

@@ -1,8 +1,8 @@
 # Observability & Diagnostics
 
-This document covers how Versicle is observed and debugged at runtime: the scoped logger, the TTS flight recorder and its ring-buffer kernel, the detection telemetry pipeline for GenAI reference-section analysis, the GenAI activity log, the Diagnostics settings panel, and the debug overlays that surface content-analysis results in the reader.
+This document covers how Versicle is observed and debugged at runtime: the scoped logger, the TTS flight recorder and its ring-buffer kernel, the detection telemetry pipeline for GenAI reference-section analysis, the GenAI activity log, the cross-provider quota usage meters, the shared AI-cache drift metric, the Diagnostics settings panel, and the debug overlays that surface content-analysis results in the reader.
 
-Cross-cutting references: [Architecture overview](10-architecture-overview.md), [TTS engine](32-domain-audio-tts-engine.md), [TTS providers](33-tts-providers-and-platform.md), [Settings shell](41-settings-shell.md), [Bootstrap and lifecycle](14-bootstrap-and-lifecycle.md), [Testing strategy](63-testing-strategy.md).
+Cross-cutting references: [Architecture overview](10-architecture-overview.md), [TTS engine](32-domain-audio-tts-engine.md), [TTS providers](33-tts-providers-and-platform.md), [Settings shell](41-settings-shell.md), [Bootstrap and lifecycle](14-bootstrap-and-lifecycle.md), [Testing strategy](63-testing-strategy.md), [Semantic search](plan/semantic-search-design.md), [Shared AI-cache](plan/shared-ai-cache-design.md).
 
 ---
 
@@ -596,6 +596,8 @@ addLog: (log) =>
 
 Log entries are pre-redacted before they enter the store. The `redactPayload` function in [`src/domains/google/genai/logging.ts`](../../src/domains/google/genai/logging.ts) deep-copies every `inlineData: { data: "<base64>", mimeType }` node and replaces it with `{ byteCount, hash, mimeType }` — where `hash` is an FNV-1a hex of the base64 content. This prevents full-resolution table screenshot bytes (sent to Gemini for table adaptation) from ever landing in localStorage, even transiently during a crash.
 
+The redaction pass runs on **every** logged payload, not just the chat client's. The new embedding client ([`src/domains/google/genai/embedding/GeminiEmbeddingClient.ts`](../../src/domains/google/genai/embedding/GeminiEmbeddingClient.ts)) does **not** inherit `GeminiClient`'s redaction for free — it wires its own `redactPayload(payload)` call through the same `onLog` sink before the entry reaches the store, so the book text it embeds (the request payload) never lands in the activity log. The embedding egress is therefore redacted in logs by the same mechanism as the chat egress; only the `embedContent` method name, model id, and response batch count survive into a log entry.
+
 Because the store's persistence version is 1, older localStorage blobs containing `logs` or `usageStats` are stripped on rehydrate (the migration is documented as strip-only, making it tolerated by older code that reads a smaller blob).
 
 ### GenAI Settings Tab Log Viewer
@@ -658,7 +660,88 @@ The legend is the primary developer tool for characterizing the content-analysis
 
 ---
 
-## 11. The `window.__versicleTest` API
+## 11. Quota Usage Meters (`src/kernel/quota/QuotaGovernor.ts`)
+
+The cross-provider quota governor ([`src/kernel/quota/QuotaGovernor.ts`](../../src/kernel/quota/QuotaGovernor.ts)) is primarily an admission gate — it throttles AI and cloud-TTS egress so the app stays inside each provider's request/token budget — but it doubles as an observability surface. The same in-memory counter that decides whether to admit a request is the one the settings panel reads to draw live used-vs-limit meters, so a meter can never drift from the counter.
+
+### The Single Shared Usage Shape
+
+`QuotaGovernor.snapshot()` returns `Record<Lane, LaneUsage>`, one entry per egress lane (`fg` foreground / interactive, `bg` background / prefetch + embedding). `LaneUsage` is the **single** shape consumed by both the governor and the meters:
+
+```typescript
+export interface LaneUsage {
+    rpm: number;          // requests in the current rolling minute
+    tpm: number;          // tokens in the current rolling minute
+    rpd: number;          // requests counted against today (persisted RPD)
+    limits: QuotaLimits;  // the limits in force at snapshot time (read fresh)
+}
+```
+
+`rpm`/`tpm` are read off the governor's in-memory sliding 60 s windows (reset on process restart); `rpd` is the persisted daily counter. The spend is **recorded at admission** (`acquire`) inside `NetworkGateway.egress`, not at the call site, so a request that never calls `commit()` — every embedding — still counts toward every meter. `limits` are re-read fresh on every snapshot, so editing a per-lane limit in settings moves the meter denominators on the next poll.
+
+### The Snapshot Seam
+
+The governor itself is store-free (`kernel-imports-nothing`), so the snapshot is exposed to the UI through a function injected into `useGenAIStore`:
+
+```typescript
+getQuotaSnapshot?: () => Record<'fg' | 'bg', LaneUsage>;
+```
+
+`wireGoogle` installs `() => governor.snapshot()` at startup via `setQuotaSnapshotProvider`. Like the GenAI `logs` array, the provider is a function and is therefore **excluded from persistence** — a function in localStorage would serialize to garbage. Until `wireGoogle` runs, the selector is `undefined` and the meters render zeros against zero limits.
+
+### Live Meters in the GenAI Settings Tab
+
+[`src/app/settings/panels/useQuotaMeters.ts`](../../src/app/settings/panels/useQuotaMeters.ts) polls `getQuotaSnapshot()` every 1,000 ms (the same polling pattern the `DiagnosticsTab` uses for `exportDiagnostics`) and feeds a `QuotaMeters` object to the GenAI settings tab's **Live Usage** panel. The tab renders one `UsageBar` (a `role="progressbar"` with `aria-valuenow`/`min`/`max` carrying the exact figures) per metric:
+
+| Meter | Source | Denominator |
+|---|---|---|
+| Foreground RPM / TPM / RPD | `snapshot().fg.{rpm,tpm,rpd}` | `fg.limits.{rpm,tpm,rpd}` |
+| Background RPM / TPM | `snapshot().bg.{rpm,tpm}` | `bg.limits.{rpm,tpm}` |
+| Today's spend (this project, all devices) | `bg.rpd + sumActiveDeviceSpend(...)` | `fg.limits.rpd` |
+
+The panel also derives per-metric time-to-exhaustion hints (`RPM/TPM/RPD exhausts: ~N min`) from the snapshot's fill rate — purely presentational, computed in the wiring layer; the tab fabricates nothing, every number is a prop.
+
+### The Project-Wide Cross-Device Sum
+
+The free-tier Gemini RPD cap is per Google-Cloud **project**, but every device sharing one API key spends against that single budget. The "Today's spend (this project, all devices)" meter therefore adds this device's own `bg.rpd` to the spend reported by the user's **other** active devices. The cross-device sum comes from [`src/app/quota/embedSpendReconciler.ts`](../../src/app/quota/embedSpendReconciler.ts), which sums `embedSpend.rpd` over sibling `DeviceInfo` records that are heartbeat-active (touched within a 10-minute window) and stamped with today's midnight-PT day key — and **excludes this device** (whose own spend already sits in the governor counter), so the meter never double-counts. `embedSpend` is an additive optional field on the synced `DeviceInfo` record (no CRDT format change); the same reconciler feeds `makeBackgroundQuotaLimits`, which shrinks the background lane's RPD ceiling by the sibling sum so the meter and the actual admission ceiling track the same number.
+
+The companion controls in the same panel are plain persisted settings, not observability: editable per-lane limits (`quotaLimits`), a background-throttle percentage (`bgThrottlePercent`), a foreground RPD headroom (`fgRpdHeadroom`), and a **pause-all** switch (`pauseAllGenAI`). When pause-all is on, `wireGoogle` makes `acquire` throw `NetRateLimitedError` before any network call (a master pause with no kernel change — a typed `AppError` whose `code === 'NET_RATE_LIMITED'` signals pre-network backpressure; meters and callers branch on that code, never a message substring).
+
+---
+
+## 12. Shared AI-Cache Drift Metric (`src/app/google/artifactConsult.ts`)
+
+The shared AI-cache (the "Artifact Lane") mirrors expensive embedding blobs into the user's own BYO Cloud Storage (a content-addressed object `embeddings/{key}.bin`) plus a small Firestore HEAD-doc directory (`embedCache/{key}`), so a book embedded once on one device is downloaded by the user's other devices instead of re-spending Gemini quota. The blob is **always written before its HEAD record**, so a HEAD hit should imply the bytes exist. When that invariant is violated, the read path observes it through a drift counter.
+
+### The HEAD-Hit-But-Object-Missing Counter
+
+[`src/app/google/artifactConsult.ts`](../../src/app/google/artifactConsult.ts) holds a module-level `driftCount`, readable via `getArtifactDriftCount()` (a tests/metrics seam, mirroring the way the flight recorder exposes `getStats()`). During `hydrateFromArtifact`, the adapter checks the HEAD record **first**, then fetches the blob:
+
+```typescript
+const head = await backend.headArtifact(workspaceId, `embedCache/${key}`);
+if (head === null) return null;                     // clean miss → re-embed
+
+const bytes = await backend.getArtifact(workspaceId, `embeddings/${key}.bin`);
+if (!bytes) {
+    // HEAD doc present but blob absent — the tracked inconsistency.
+    driftCount += 1;
+    logger.warn(`[artifact-head-object-drift] HEAD doc present but object absent ...`);
+    await backend.deleteArtifactHead(workspaceId, `embedCache/${key}`);  // self-heal
+    return null;                                     // fall through to re-embed
+}
+```
+
+Checking the HEAD first is what lets the adapter distinguish a **clean miss** (no HEAD doc → just re-embed, drift unchanged) from the **inconsistent case** (HEAD present but `getArtifact` returns a definitive `null` — a stale HEAD doc left behind by, e.g., a crash between deleting a blob and deleting its HEAD elsewhere, or a sweeper/blob race). A transient or permission error from `getArtifact` **throws** and is never mistaken for a miss, so it never increments drift nor wastes quota re-embedding on an offline blip.
+
+### Self-Heal
+
+Each drift occurrence is **self-healing and transient**: the adapter logs it under the stable search key `[artifact-head-object-drift]` (the embedding egress redaction in §9 means no book content appears in the message) and opportunistically deletes the stale HEAD doc, so the next probe re-embeds instead of falsely hitting again. A non-zero `getArtifactDriftCount()` therefore measures **steady-state** drift — the lifecycle design's stated exit criterion ("steady-state drift observable"). A standalone cloud TTL/quota sweeper boot task ([`src/app/boot/artifactSweeper.ts`](../../src/app/boot/artifactSweeper.ts)) reclaims the orphaned blob left behind by the self-heal once it ages past its TTL.
+
+> **CI-pending caveat.** The drift counter and HEAD self-heal are exercised against `MockBackend` (in-memory) and are unit-verified, but the real cloud round-trips — the Firestore + Storage emulator put/head/get/delete/sweep cases and the HEAD-after-Storage write ordering that the drift metric depends on — **auto-skip locally without emulators** and are CI-pending. The Artifact Lane is code-complete and unit-verified but **not yet proven end-to-end against real Firebase**.
+
+---
+
+## 13. The `window.__versicleTest` API
 
 [`src/test-api.ts`](../../src/test-api.ts) installs a typed API at `window.__versicleTest` in DEV and `VITE_E2E` builds. While primarily a testing seam, it is also a diagnostic surface for developers:
 
@@ -687,7 +770,7 @@ This is the authoritative surface for E2E tests instead of scattered `window.__*
 
 ---
 
-## 12. Worker Smoke Tests
+## 14. Worker Smoke Tests
 
 Two additional debug hooks are installed on `window` in main.tsx for verifying the worker-backed engine in headless environments:
 
@@ -699,7 +782,7 @@ These exist primarily for the CI verification suite but are also useful for manu
 
 ---
 
-## 13. Flight Recorder Event Anatomy and Diagnostic Patterns
+## 15. Flight Recorder Event Anatomy and Diagnostic Patterns
 
 The `FlightEvent` shape is defined in [`src/types/flight-recorder.ts`](../../src/types/flight-recorder.ts) and is structurally compatible with `RingEvent<FlightEventSource>`:
 
@@ -793,7 +876,7 @@ cat snapshot.json | jq '
 
 ---
 
-## 14. Configuration and Extension
+## 16. Configuration and Extension
 
 ### Adjusting Log Verbosity
 
@@ -832,7 +915,7 @@ Pass your implementation as the second argument to `new ReferenceSectionDetector
 
 ---
 
-## 15. Diagnostic Surface Map
+## 17. Diagnostic Surface Map
 
 ```mermaid
 classDiagram
@@ -927,7 +1010,9 @@ classDiagram
 | Flight recorder snapshot | `DiagnosticsRepo` / `flight_snapshots` IDB | No (triggered) | Yes (10 max) | Post-mortem debugging; survives app restarts |
 | TaskSequencer watchdog | `TaskSequencer` | Yes | Via snapshot | Alerts on hung async tasks (>30s) |
 | Detection telemetry | `detectionTelemetry.ts` → `useGenAIStore` | When GenAI enabled | No (in-memory) | Reference-section detection audit trail |
-| GenAI activity log | `useGenAIStore.logs` | When GenAI enabled | No | Model call inspection; downloadable |
+| GenAI activity log | `useGenAIStore.logs` | When GenAI enabled | No | Model call inspection; downloadable (chat + embedding egress both redacted) |
+| Quota usage meters | `QuotaGovernor.snapshot()` → `useQuotaMeters` | When GenAI configured | No (in-memory; RPD persisted) | Live per-lane used-vs-limit + project-wide cross-device RPD sum |
+| Artifact-Lane drift metric | `getArtifactDriftCount()` / `artifactConsult.ts` | When sharing on | No (in-memory) | Counts HEAD-hit-but-object-missing (self-heals); steady-state drift (MockBackend-verified, cloud CI-pending) |
 | Debug highlight layer | `DebugHighlightLayer` | When debug mode on | No | Visual overlay of `referenceStartCfi` in reader |
 | Content analysis legend | `ContentAnalysisLegend` | When debug mode on | No | Developer panel for GenAI analysis output |
 | `window.__ttsFlightRecorder` | `TTSFlightRecorder` module | In browser | No | DevTools inspection of main-thread recorder |

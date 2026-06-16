@@ -87,7 +87,7 @@ The table below is the quick-reference index for the root:
 | `bundle-baseline.json` | Worker-chunk size floor. `npm run check:worker-chunk` enforces this. |
 | `lint-debt-allowlist.json` | Frozen lint warning counts per rule. `npm run lintdebt:check` enforces this. |
 | `knip.jsonc` | Knip dead-code configuration. `npm run knip` finds unused exports/imports. |
-| `firestore.rules` / `storage.rules` | Firebase security rules. Changes trigger the emulator-gated rule suite. |
+| `firestore.rules` / `storage.rules` | Firebase security rules (now covering the `embedCache` HEAD docs + `embeddings/` blobs). Changes trigger the emulator-gated rule suite — which is CI-PENDING for the Artifact Lane (auto-skips without local emulators). |
 | `firebase.json` | Firebase CLI config (hosting, emulator ports). |
 | `nginx.conf` | Nginx config for the Docker preview/deploy container. Injects the CSP header. |
 | `Dockerfile` | Production web container (nginx). |
@@ -186,6 +186,7 @@ graph LR
     CFI["cfi/"]
     LOCALE["locale/"]
     DIAG["diagnostics/"]
+    QUOTA["quota/"]
     NET --> DESTINATIONS["destinations.ts"]
     NET --> NGW["NetworkGateway.ts"]
     NET --> CSP["csp.ts"]
@@ -198,6 +199,8 @@ graph LR
     LOCALE --> FORMAT["format.ts"]
     LOCALE --> ANNOUNCER["announcer.ts"]
     DIAG --> RING["ringRecorder.ts"]
+    QUOTA --> QGOV["QuotaGovernor.ts"]
+    QUOTA --> PTDAY["ptDay.ts"]
 ```
 
 ### src/kernel/cfi/
@@ -239,14 +242,26 @@ The network egress gateway and the egress destination registry (C9 contract).
 
 | File | Purpose |
 |---|---|
-| [`destinations.ts`](../../src/kernel/net/destinations.ts) | The single source of truth for all external hosts the app may contact. Nine destination ids with hosts, timeout, offline policy, purpose string, and consent requirement. Raw `fetch` is lint-banned everywhere else. |
-| [`NetworkGateway.ts`](../../src/kernel/net/NetworkGateway.ts) | `NetworkGateway.egress(destinationId, url, init)` — the ONLY permitted production fetch path. Checks every outbound request against the registry. |
+| [`destinations.ts`](../../src/kernel/net/destinations.ts) | The single source of truth for all external hosts the app may contact. Nine destination ids with hosts, timeout, offline policy, purpose string, consent requirement, and an optional `rateLimit.lane` (`'fg'`/`'bg'`) that routes the destination through the quota governor. Raw `fetch` is lint-banned everywhere else. |
+| [`NetworkGateway.ts`](../../src/kernel/net/NetworkGateway.ts) | `NetworkGateway.egress(destinationId, url, init)` — the ONLY permitted production fetch path. Checks every outbound request against the registry. For a destination carrying a `rateLimit` (or a per-call `lane`/`estTokens` override) it `acquire`s on the injected `QuotaScheduler` at ADMISSION (before any bytes leave) and `release`s the foreground claim exactly once in `try/finally` — so throttling cannot be bypassed. The scheduler is injected via `setQuotaScheduler` (composition root); with none installed the gateway is in OBSERVE mode (no throttling). |
 | [`csp.ts`](../../src/kernel/net/csp.ts) | `renderCsp()` — generates a Content-Security-Policy string from `destinations.ts`. Used by `vite.config.ts` (build-time meta tag), `nginx.conf`, and the CSP test. |
 | [`index.ts`](../../src/kernel/net/index.ts) | Public barrel. |
 | [`local.ts`](../../src/kernel/net/local.ts) | Local (same-origin) fetch helper not subject to egress registry. |
 | [`errors.ts`](../../src/kernel/net/errors.ts) | Network-specific error types. |
 
 The CSP test (`csp.test.ts`) pins `renderCsp()` output against the registry so the two cannot drift. The registry is the source; `generate-csp.mjs` writes the nginx header at deploy time.
+
+### src/kernel/quota/
+
+The cross-provider quota governor — pure rate/spend bookkeeping for the AI + cloud-TTS egress lanes. It imports only `~types/errors` and is shared by more than one feature area (the Gemini/embedding code and the cloud-TTS code), which is why it earns the dependency-free kernel layer (C12 anti-junk-drawer rule satisfied). It is `acquire`d inside `NetworkGateway.egress`, so throttling cannot be bypassed.
+
+| File | Purpose |
+|---|---|
+| [`QuotaGovernor.ts`](../../src/kernel/quota/QuotaGovernor.ts) | Tracks three budgets per lane (foreground / background): requests-per-minute and tokens-per-minute (in-memory sliding 60 s windows) and requests-per-day (a persisted daily counter behind an injected `QuotaStore` port). `acquire(lane, estTokens)` reads limits FRESH, RECORDS the spend at admission (so a request that never commits — every embedding — still counts), and throws the typed `NetRateLimitedError` for cooldown / rpd-exhausted / rpm-tpm-exhausted / fg-preempt / bg-fraction backpressure; `commit(actualTokens)` reconciles the recorded estimate to the actual; `release(lane)` frees the foreground claim; `recordCooldown(retryAfterMs)` arms a post-429 backoff; `snapshot()` returns the per-lane `LaneUsage`. Foreground preempts background (bg refused while any fg claim is in flight, and capped at a fraction of the minute budget). |
+| [`ptDay.ts`](../../src/kernel/quota/ptDay.ts) | `ptDayString(epochMs)` — the midnight-Pacific `YYYY-MM-DD` day key (via `Intl`, DST-safe). The single source of truth for both the daily-budget reset boundary and the per-day stamp the cross-device spend reconciler sums on, so the two cannot disagree. |
+| [`index.ts`](../../src/kernel/quota/index.ts) | Public barrel (`@kernel/quota`): `QuotaGovernor`, `setQuotaStore`, the `QuotaStore`/`DailyUsage`/`QuotaLimits`/`QuotaLimitsProvider`/`LaneUsage` types, and the re-exported `ptDayString`. |
+
+Persistence is via the injected `QuotaStore` port (the governor never touches IndexedDB); the composition root wires it to `data/repos/quotaCounter.ts`, which writes a single key in the existing `app_metadata` store (no new store, no DB bump). The free-tier RPD cap is per-Google-Cloud-PROJECT, so it is reconciled across the synced device mesh by `app/quota/embedSpendReconciler.ts` reducing the background lane's limit by other active devices' spend.
 
 ---
 
@@ -261,13 +276,13 @@ The former god type `db.ts` was dissolved by domain in Phase 1a (plan/overhaul) 
 | [`book.ts`](../../src/types/book.ts) | Static (immutable, file-derived) book rows: `StaticBookManifest`, `StaticResource`, `StaticStructure`, `NavigationItem`, `PerceptualPalette`, legacy v17 rows, `SectionMetadata`, AI analysis types. |
 | [`user-data.ts`](../../src/types/user-data.ts) | Mutable user-authored rows synced via Yjs: `UserInventoryItem`, `UserProgress`, `UserAnnotation`, `UserOverrides`, reading sessions, `ReadingListEntry`. |
 | [`tts.ts`](../../src/types/tts.ts) | `TTSQueueItem`, `Timepoint`, persisted `TTSState`/`TTSPosition`/`TTSContent`. |
-| [`cache.ts`](../../src/types/cache.ts) | Transient cache rows: `CacheRenderMetrics`, `CacheAudioBlob`, `CacheSessionState`, `CacheTtsPreparation`, `CitationMarker`. |
+| [`cache.ts`](../../src/types/cache.ts) | Transient cache rows: `CacheRenderMetrics`, `CacheAudioBlob`, `CacheSessionState`, `CacheTtsPreparation`, `CitationMarker`, the embedding rows (`CacheEmbeddingsRow` with its `{model, dims, quant, extractionVersion}` stamp + per-chunk `charStart`/`charEnd`, `CacheEmbedJobsRow`), and the `sectionTextHash` on the search-text section. |
 | [`flight-recorder.ts`](../../src/types/flight-recorder.ts) | TTS diagnostics: `FlightEvent`, `FlightEventSource`, `FlightSnapshot`. |
 | [`sync.ts`](../../src/types/sync.ts) | Sync wire/recovery shapes: `SyncManifest`, `SyncCheckpoint`, `SyncLogEntry`. |
 | [`content-analysis.ts`](../../src/types/content-analysis.ts) | `AnalysisStatus`, `ContentTypeResult` (AI content-analysis primitives). |
-| [`errors.ts`](../../src/types/errors.ts) | Application error taxonomy (C10 contract). |
-| [`device.ts`](../../src/types/device.ts) | Device identity types. |
-| [`search.ts`](../../src/types/search.ts) | Search types (`SearchMatch`, `SearchOptions`). |
+| [`errors.ts`](../../src/types/errors.ts) | Application error taxonomy (C10 contract). Includes `NET_RATE_LIMITED` / `NetRateLimitedError` — the typed, retryable pre-network backpressure the quota governor throws before any bytes leave. |
+| [`device.ts`](../../src/types/device.ts) | Device identity types. `DeviceInfo` carries an additive `embedSpend` field (today's per-device daily AI spend) so the per-project Gemini quota reconciles across the device mesh — no CRDT format change. |
+| [`search.ts`](../../src/types/search.ts) | Search types (`DetailedSearchResult`, `SearchBatchResult`, `SearchSection`) — shared by the regex and semantic paths and the RRF fusion. |
 | [`workspace.ts`](../../src/types/workspace.ts) | Sync workspace shape. |
 | [`assets.d.ts`](../../src/types/assets.d.ts) | Module declaration for static asset imports (SVG, EPUB, audio). |
 | [`epubjs-epubcfi.d.ts`](../../src/types/epubjs-epubcfi.d.ts) | Custom augmentation of the epubjs types: missing `Rendition` hooks, `Book` properties. |
@@ -280,7 +295,7 @@ The former god type `db.ts` was dissolved by domain in Phase 1a (plan/overhaul) 
 
 The storage gateway layer. **All** IndexedDB access in the entire app must go through this directory's repos. The `idb` import and `'readwrite'` transaction literals are lint-banned everywhere else (production and tests). Additionally every write passes through the `write-gate.ts` navigator.locks gate, whose synchronous-callback API makes an `await` inside a transaction unrepresentable — the WebKit hang discipline is structural, not documented.
 
-The primary database is `EpubLibraryDB` at **v26** (schema.ts). A separate `versicle-yjs` database is owned by the vendored `y-idb` package; a third `versicle-dict` database holds the Chinese dictionary. See [Storage gateway](20-storage-gateway.md) and [Schema and migrations](21-schema-and-migrations-idb.md) for full detail.
+The primary database is `EpubLibraryDB` at **v27** (schema.ts). A separate `versicle-yjs` database is owned by the vendored `y-idb` package; a third `versicle-dict` database holds the Chinese dictionary. See [Storage gateway](20-storage-gateway.md) and [Schema and migrations](21-schema-and-migrations-idb.md) for full detail.
 
 ```mermaid
 erDiagram
@@ -293,6 +308,8 @@ erDiagram
         json cache_session_state
         json cache_tts_preparation
         json cache_search_text
+        blob cache_embeddings
+        json cache_embed_jobs
         json app_metadata
         json app_sync_log
         json app_checkpoints
@@ -303,7 +320,7 @@ erDiagram
 
 | File | Purpose |
 |---|---|
-| [`schema.ts`](../../src/data/schema.ts) | Store map, `DB_VERSION = 26`, the append-only versioned migration registry (C1 contract). The v25 step added straggler guard, `app_metadata` envelope, and the LRU index. |
+| [`schema.ts`](../../src/data/schema.ts) | Store map, `DB_VERSION = 27`, the append-only versioned migration registry (C1 contract). The v25 step added straggler guard, `app_metadata` envelope, and the LRU index. v26 added the `cache_search_text` store; v27 (`migrateToV27`) is the same additive shape — it only CREATES the empty `cache_embeddings` + `cache_embed_jobs` semantic-search stores (cache-domain, device-local, rebuildable). **Deviation:** v27 was spent on embeddings rather than the originally-reserved `sync_log`/SW-cover cleanup, which was never done — that cleanup is now the NEXT (v28) bump. |
 | [`connection.ts`](../../src/data/connection.ts) | Hardened `openWithRetry()`: blocked/blocking/terminated handlers, retry-with-reset, `storage.persist()` call. |
 | [`covers.ts`](../../src/data/covers.ts) | Shared `coverUrl()` for the service-worker–served cover endpoint. |
 | [`errors.ts`](../../src/data/errors.ts) | `handleDbError()` — maps IDB errors onto the C10 error taxonomy. |
@@ -322,8 +339,10 @@ The repository surface — the only place transactions are opened.
 | [`checkpoints.ts`](../../src/data/repos/checkpoints.ts) | `app_checkpoints` | Pre-danger Y.Doc checkpoints (backup/restore/migrations). |
 | [`diagnostics.ts`](../../src/data/repos/diagnostics.ts) | `app_metadata` | Flight-recorder persistence. |
 | [`dictionary.ts`](../../src/data/repos/dictionary.ts) | `versicle-dict` DB | Separate Chinese dictionary database. |
+| [`embeddings.ts`](../../src/data/repos/embeddings.ts) | `cache_embeddings`, `cache_embed_jobs` | Per-book int8 embedding vectors + the resumable embed-job progress. Re-wraps stored ArrayBuffers as Int8Array/Float32Array views on read; `putHydrated` atomically writes the vectors AND a `complete` job row in one cross-store tx (for a cloud refill); `delete` drops both; `runEviction` runs a budget-bounded least-recently-read sweep with injected recency + a never-evict protected set (the book whose only copy hasn't yet reached the cloud). |
 | [`playbackCache.ts`](../../src/data/repos/playbackCache.ts) | `cache_session_state` | Session/playback cache (WebKit-safe write pattern preserved verbatim). |
-| [`searchText.ts`](../../src/data/repos/searchText.ts) | `cache_search_text` | Persisted search corpus consumed by the search worker. |
+| [`quotaCounter.ts`](../../src/data/repos/quotaCounter.ts) | `app_metadata` | The quota governor's persisted daily request/token counter, one `quota-daily-usage` record in the existing `app_metadata` store (no dedicated store, no DB bump). Per-minute windows are never persisted. |
+| [`searchText.ts`](../../src/data/repos/searchText.ts) | `cache_search_text` | Persisted search corpus consumed by the search worker. Each section now carries a `sectionTextHash` stamped at import (the embedding indexer's skip key). |
 
 ### src/data/rows/
 
@@ -375,7 +394,7 @@ stateDiagram-v2
 | `useContentAnalysisStore` | `contentAnalysis` | audio |
 | `useDeviceStore` | `devices` | sync |
 
-**Local-persisted stores** (six) use `zustand/persist` into `localStorage`. They hold device-local settings: TTS provider config, Firebase config, Drive folder link, GenAI key.
+**Local-persisted stores** (six) use `zustand/persist` into `localStorage`. They hold device-local settings: TTS provider config, Firebase config, Drive folder link, GenAI key. `useGenAIStore` also holds the editable per-lane quota limits (`quotaLimits`), the background-throttle / fg-headroom knobs, the `pauseAllGenAI` switch, and the two default-OFF library-wide opt-ins (`preEmbedLibrary` for background pre-embedding, `shareAiCaches` for the cross-device cache).
 
 **Ephemeral stores** (seven) are plain in-memory stores that die with the tab. They include the library metadata projection (`useLibraryStore`), reader UI state, toast queue, and the TTS playback mirror (`useTTSPlaybackStore`).
 
@@ -433,7 +452,7 @@ EPUB import, inventory management, and the re-ingest driver.
 
 | File | Purpose |
 |---|---|
-| [`LibraryService.ts`](../../src/domains/library/LibraryService.ts) | Top-level orchestrator: per-book keyed mutex, import deduplication, delete flow. |
+| [`LibraryService.ts`](../../src/domains/library/LibraryService.ts) | Top-level orchestrator: per-book keyed mutex, import deduplication, delete flow. `remove` also best-effort deletes the book's cloud HEAD doc (`embedCache/{key}`) via the injected artifact adapter, leaving the shared blob for the sweeper's TTL (a sibling device may still need it). |
 | [`ports.ts`](../../src/domains/library/ports.ts) | `InventoryPort`, `ReadingListPort`, `StaticContentPort` — the store seams injected by `app/library/createLibrary.ts`. |
 | [`mutex.ts`](../../src/domains/library/mutex.ts) | Per-key async mutex (one concurrent operation per book). |
 | [`reingest.ts`](../../src/domains/library/reingest.ts) | Reprocesses existing books (re-extracts sentences after format upgrades). |
@@ -444,14 +463,16 @@ EPUB import, inventory management, and the re-ingest driver.
 
 Firestore synchronization with the SyncBackend port (C3 contract), `SyncOrchestrator`, workspace management, and the typed `SyncEvent` bus. The SyncBackend port has two implementations: the Firestore real backend (in `backend/`) and the mock (in `lib/sync/syncBackendContract.mock.test.ts`).
 
+The C3 `SyncBackend` interface gained FIVE additive methods for the Artifact Lane (the shared AI cache): `headArtifact` / `putArtifact` / `getArtifact` (probe / write / read of a content-addressed embedding blob `embeddings/{key}.bin` plus its tiny Firestore HEAD doc `embedCache/{key}`) and `deleteArtifactHead` / `sweepArtifacts` (GC). `putArtifact` writes the Storage blob FIRST then the HEAD (so a HEAD hit implies the bytes exist) and is skip-if-present idempotent; `getArtifact` returns `null` on a definitive miss but THROWS on a transient/permission error (so an offline blip never triggers a costly re-embed). **Deviation:** the originally-planned trio became FIVE methods (the two GC methods were added). `embedCache` was wired into `PURGE_SUBCOLLECTIONS` in Phase A.
+
 | Subdirectory | Contents |
 |---|---|
-| `backend/` | Firestore `SyncBackend` implementation |
+| `backend/` | `SyncBackend` C3 contract (`SyncBackend.ts`, incl. the artifact method docs + `ArtifactHead`/`artifactHeadTail` helpers), the production `FirestoreBackend` (the SOLE `firebase/firestore`/`firebase/storage` importer — the storage import was delete-only and is WIDENED to read/write by adding `uploadBytes`+`getBytes` for put/getArtifact), and `MockBackend` (an in-memory artifact implementation). **CI-PENDING:** the cloud round-trips (emulator put/head/get/delete/sweep + HEAD-after-Storage ordering) and the `storage.rules` security suite auto-skip without local emulators — the cloud paths are MockBackend-verified and code-complete but not yet proven end-to-end against real Firebase. |
 | `checkpoints/` | Pre-sync Y.Doc checkpoint management |
 | `core/` | `SyncOrchestrator` |
 | `workspaces/` | Workspace entity management |
 | [`events.ts`](../../src/domains/sync/events.ts) | Typed `SyncEvent` discriminated union bus |
-| [`index.ts`](../../src/domains/sync/index.ts) | Public barrel (zero cross-domain consumers at overhaul close) |
+| [`index.ts`](../../src/domains/sync/index.ts) | Public barrel (now also exports the `SyncBackend` type for the app-layer artifact adapters) |
 
 ### src/domains/chinese/
 
@@ -473,19 +494,40 @@ Google integrations: OAuth, Drive, and GenAI (Gemini).
 |---|---|
 | `auth/` | `GoogleAuthClient` — per-service OAuth token management |
 | `drive/` | `DriveClient` — file listing, download, folder management |
-| `genai/` | `GenAIClient` — Gemini API calls with per-book consent gating |
-| [`index.ts`](../../src/domains/google/index.ts) | Public barrel |
+| `genai/` | `GenAIClient` — Gemini API calls with per-book consent gating + the quota governor (lane + token estimate declared via egress, `commit`/`recordCooldown` reconciled after; model rotation stays here). Now also hosts the embedding client family (`genai/embedding/`, below). |
+| [`index.ts`](../../src/domains/google/index.ts) | Public barrel (re-exports `getEmbeddingClient` for the indexer/backfill) |
 
-### src/domains/search/
+#### src/domains/google/genai/embedding/
 
-Full-text search session over the search worker.
+The text-embedding capability — a sibling of the `GenAIClient` (chat) family. Four production parts (contract, impl, holder, lazy facade) plus a typed error and a test mock. The client returns FLOAT32 vectors; int8 quantization is the indexer/worker's job, so the wire format stays a single concern of the storage layer.
 
 | File | Purpose |
 |---|---|
-| [`SearchSession.ts`](../../src/domains/search/SearchSession.ts) | Manages search worker lifecycle + result streaming. |
+| [`contract.ts`](../../src/domains/google/genai/embedding/contract.ts) | The `EmbeddingClient` interface (`embed(texts, {profile, bookId, interactive, lane, signal})`, `isConfigured()`), `EmbeddingProfile` (`document`/`query` asymmetric pair), and the per-call `EmbeddingConfig`/`EmbeddingConfigProvider` (read fresh, never cached). |
+| [`GeminiEmbeddingClient.ts`](../../src/domains/google/genai/embedding/GeminiEmbeddingClient.ts) | Production impl over Gemini REST `:embedContent`, routed through `NetworkGateway.egress('gemini', …)` so every request passes the same consent + quota-lane + token-estimate admission as the chat client. Redacts log payloads so book text never lands in the activity log. |
+| [`holder.ts`](../../src/domains/google/genai/embedding/holder.ts) | The singleton holder (`set`/`getEmbeddingClient`). Default is an inline NOT-CONFIGURED client whose `embed()` throws `EmbeddingNotConfiguredError` — a stray import degrades exactly like a missing key. |
+| [`lazyClient.ts`](../../src/domains/google/genai/embedding/lazyClient.ts) | First-use-splitting facade: dynamic-imports `GeminiEmbeddingClient` on the first embed call so it never enters the entry chunk (asserted by `check:worker-chunk` check 4). `isConfigured()` is answered locally. |
+| [`errors.ts`](../../src/domains/google/genai/embedding/errors.ts) | `EmbeddingNotConfiguredError` (append-only `GENAI_EMBEDDING_NOT_CONFIGURED`). |
+| [`MockEmbeddingClient.ts`](../../src/domains/google/genai/embedding/MockEmbeddingClient.ts) | Deterministic hash-seeded fixture (test-only; outside the production import graph). |
+
+### src/domains/search/
+
+Full-text (regex) search fused with semantic (embedding) ranking, both over the search worker. Regex full-text is the graceful default whenever semantic is off, unconfigured, quota-exhausted, or not yet embedded; when all the optional semantic ports are injected and the book is embedded, the cosine ranking is fused into the regex result via reciprocal-rank fusion. (Designs: plan/semantic-search-design.md, plan/shared-ai-cache-design.md.)
+
+| File | Purpose |
+|---|---|
+| [`SearchSession.ts`](../../src/domains/search/SearchSession.ts) | Manages search worker lifecycle + result streaming. The optional semantic ports (embedding client, embeddings repo, B3 quantizer, semantic config) are injected; when present and enabled+configured+embedded, `search()` fuses a `semanticRank` cosine pass into the regex result via `fuseRrf`; on any miss/failure the regex result is returned unchanged. Caches the per-book corpus read. |
+| [`semanticRank.ts`](../../src/domains/search/semanticRank.ts) | The semantic ranking pass: embeds the query once (memoized), int8-quantizes it, loads the book's packed vectors, and ranks each section's chunk rows via `engine.rankInt8` (across the worker seam, concurrently, assembled in section order). Maps each hit back to a `DetailedSearchResult` via the persisted `charStart`/`charEnd`; CFI is left unset (resolved lazily at click time). Guards skip a section/book whose stored vectors no longer describe the current text (re-chunk-count or extractionVersion drift → regex-only fallback). |
+| [`rrf.ts`](../../src/domains/search/rrf.ts) | `fuseRrf` — reciprocal-rank fusion (`1/(k+rank)`, `k=60`) of the regex and semantic lists into one ranked list, deduped by `${href}|${charOffset}` (regex wins the tie, keeping its richer fields). |
+| [`chunker.ts`](../../src/domains/search/chunker.ts) | `chunkSection` — pure sentence-snapped, ~320-token windows with ~15% overlap, recording each window's character offsets. Deterministic, so the read path can re-derive the same boundaries for older rows lacking persisted offsets. Emits no CFIs (no live view) and no text hash (stamped at import). |
+| [`EmbeddingIndexer.ts`](../../src/domains/search/EmbeddingIndexer.ts) | The foreground document-embedding pass. Constructor-injected ports only (embedding client, corpus source, embeddings repo, int8 quantizer). `enqueue(bookId, currentCfi?)` orders sections OUTWARD from the reading position, skips sections the resume journal records as embedded (keyed by href + text hash), chunks + embeds + quantizes + packs + persists, and updates the journal per section so an interrupted pass resumes. |
+| [`embeddingPort.ts`](../../src/domains/search/embeddingPort.ts) | The embedding/repo PORT shapes the semantic query path consumes — declared here (not imported from `@domains/google`) so search stays in its own boundary; the app injects the real facade + repos. Holds `CURRENT_QUANT` (`'int8-pervec'`, the quantization-scheme stamp), `EmbeddingClientPort`, `EmbeddingsSourcePort`/`EmbeddedRowView`, the `QuantizePort`, and `SemanticConfigPort`. |
+| [`queryEmbeddingCache.ts`](../../src/domains/search/queryEmbeddingCache.ts) | `QueryEmbeddingCache` — memoizes the query embedding promise (FIFO-bounded, store-free) so a repeated search reuses the vector with no second `embed` call, protecting the daily RPD budget. |
+| [`protocol.ts`](../../src/domains/search/protocol.ts) | The engine + corpus PORT contracts the session and `semanticRank` share — `SearchEngineProtocol` (adds `rankInt8` to the existing search methods), `SearchEngineHandle`/`Factory`, and `SearchTextSource` (the corpus read, now carrying `sectionTextHash`). Its own module to break the session↔ranker import cycle. |
+| [`artifactBlob.ts`](../../src/domains/search/artifactBlob.ts) | The pure store-free codec for the shared-AI-cache cloud blob: `contentKey` (sha256 of `contentHash \| model \| dims \| quant \| extractionVersion` — a content-addressing key), and `serializeArtifactBlob`/`parseArtifactBlob` (a self-describing `[u32 headerLen][header JSON][packed int8 vectors + float32 scales]` byte layout). The app layer reads the stores and injects the bytes. |
 | [`workerFactory.ts`](../../src/domains/search/workerFactory.ts) | Creates the Comlink-wrapped `SearchEngine` worker. |
-| [`offsetRange.ts`](../../src/domains/search/offsetRange.ts) | Offset-range arithmetic for hit highlighting. |
-| [`index.ts`](../../src/domains/search/index.ts) | Public barrel. |
+| [`offsetRange.ts`](../../src/domains/search/offsetRange.ts) | Offset-range arithmetic for hit highlighting; `resolveResultCfi` resolves a result's char offsets to a CFI against the live view at click time. |
+| [`index.ts`](../../src/domains/search/index.ts) | Public barrel (adds `EmbeddingIndexer`, `chunkSection`, `contentKey`, the blob (de)serializers, and `CURRENT_QUANT`). |
 
 ---
 
@@ -607,7 +649,7 @@ Text processing before synthesis.
 | [`MaintenanceService.ts`](../../src/lib/MaintenanceService.ts) | Orphan scan/repair over data repos. |
 | [`ingestion.ts`](../../src/lib/ingestion.ts) + `ingestion/` | EPUB import parsing + C8 sentence-extraction artifact (`ingestion/sentence-extraction.ts`, extraction v3, raw-at-rest). |
 | [`sanitizer.ts`](../../src/lib/sanitizer.ts) | Sanitize-at-serialize XSS boundary: strips remote EPUB resources. CSP is the second layer. |
-| [`search-engine.ts`](../../src/lib/search-engine.ts) | Escaped-literal linear scan engine hosted by `workers/search.worker.ts`. |
+| [`search-engine.ts`](../../src/lib/search-engine.ts) | `SearchEngine` hosted by `workers/search.worker.ts`: the escaped-literal linear scan, the `getExcerpt` helper, plus `quantizeInt8PerVector` (B3 per-vector int8 quantizer) and `rankInt8` (int8 cosine ranking) for semantic search. |
 | `sync/` | Firebase config/presence helpers + the C3 SyncBackend contract suites. |
 | `genai/` | Text-matching helpers for GenAI features. |
 | `reader/` | Title-resolution helpers. |
@@ -669,7 +711,10 @@ sequenceDiagram
 | [`crdtMigrations.ts`](../../src/app/boot/crdtMigrations.ts) | `migrations` | CRDT migration coordinator helper. |
 | [`syncInit.ts`](../../src/app/boot/syncInit.ts) | `syncInit` | Initializes Firestore sync if configured and `syncAllowed`. |
 | [`deviceRegistration.ts`](../../src/app/boot/deviceRegistration.ts) | `deviceRegistration` | Writes/updates this device's entry in `useDeviceStore`. |
-| [`backgroundTasks.ts`](../../src/app/boot/backgroundTasks.ts) | `backgroundTasks` | Schedules post-boot idle work (maintenance, audio cache LRU). |
+| [`backgroundTasks.ts`](../../src/app/boot/backgroundTasks.ts) | `backgroundTasks` | Schedules post-boot idle work (device heartbeat, Drive auto-scan, audio cache LRU, the `cache_embeddings` eviction sweep, the reingest wave). |
+| [`embeddingBackfill.ts`](../../src/app/boot/embeddingBackfill.ts) | `backgroundTasks` | Trickles loaded-but-unread books through the `EmbeddingIndexer` on the background quota lane during idle time, so books are semantic-searchable without first being opened. Runs only when the default-OFF `preEmbedLibrary` opt-in is on (its consent for bulk background egress), the client is configured, and this device's heartbeat is recent; every embed is `{interactive:false, lane:'bg'}` and honors the cross-device daily-request budget. |
+| [`artifactPublisher.ts`](../../src/app/boot/artifactPublisher.ts) | `backgroundTasks` | Uploads a locally-embedded book's vectors to the user's own cloud (`putArtifact`, idempotent head-before-put) so sibling devices reuse them instead of re-spending quota. Runs only when the default-OFF `shareAiCaches` opt-in is on (same consent predicate as the read path), heartbeat is recent, and a backend is connected (silent no-op otherwise). The blob key derives from the embedding ROW's stamp, not live config. |
+| [`artifactSweeper.ts`](../../src/app/boot/artifactSweeper.ts) | `backgroundTasks` | Cloud TTL/quota GC for the shared cache (`sweepArtifacts`): the companion to the per-book delete policy (delete drops only this device's HEAD doc and leaves the content-addressed blob), reclaiming HEAD + blob past the 30-day TTL (or oldest-first when over budget). Silent no-op when no backend; best-effort + idempotent. |
 | [`globalErrorHandlers.ts`](../../src/app/boot/globalErrorHandlers.ts) | (setup) | Registers `window.onerror` / `unhandledrejection` handlers. |
 | [`useBootSequence.ts`](../../src/app/boot/useBootSequence.ts) | (React hook) | React hook that drives `bootstrap.ts` and exposes boot state to `App.tsx`. |
 | [`useServiceWorkerGate.ts`](../../src/app/boot/useServiceWorkerGate.ts) | (React hook) | Waits for the active service worker before rendering (PWA update flow). |
@@ -681,9 +726,10 @@ sequenceDiagram
 |---|---|
 | `docs/` | `registryDocs.ts` — renders `AGENTS.md`, `architecture.md`, and domain/kernel/data/store READMEs from live registries. `docs.test.ts` drift-gates all generated files. |
 | `errors/` | `presentError.ts` — maps C10 errors to user-facing messages. |
-| `google/` | `wireGoogle.ts` (composition root for Google domain), `aiConsent.ts`/`aiConsentPrompt.ts` (per-book AI consent gating). |
+| `google/` | `wireGoogle.ts` (composition root for Google domain — installs the GenAI + embedding clients and the `ArtifactConsult` singleton), `aiConsent.ts`/`aiConsentPrompt.ts` (per-book AI consent gating; `aiConsent.ts` adds the §8.4.1 BACKGROUND GRANT path — the default-OFF `preEmbedLibrary` opt-in is the consent for bulk background embedding), and `artifactConsult.ts` (the Artifact Lane read side: `probeArtifact` + `hydrateFromArtifact` run BEFORE the quota gate so a cache hit hydrates the vectors and spends ZERO Gemini quota; both gated by the same consent predicate as the upload path; exposes the HEAD-hit-but-object-missing drift metric). |
 | `library/` | `createLibrary.ts` (composition root: wires store-backed ports into `LibraryService`), `useImportController.ts`. |
-| `reader/` | `useReaderController.ts` (composition root for the reader), `searchNavigation.ts`. |
+| `quota/` | `makeQuotaStore.ts` (the single `data/`↔`kernel/quota` edge — maps the kernel `QuotaStore` port onto `quotaCounterRepo`, and on each persist mirrors this device's own daily spend onto its synced device record), `embedSpendReconciler.ts` (pure cross-device math: sums other active devices' `embedSpend` and reduces the background lane's RPD ceiling so the whole mesh stays under the per-project Gemini cap). |
+| `reader/` | `useReaderController.ts` (composition root for the reader; injects the semantic search ports + foreground `EmbeddingIndexer`), `searchNavigation.ts` (resolves a result's char offsets to a CFI at click time). |
 | `repositories/` | `BookRepository.ts`, `ContentAnalysisRepository.ts` — app-layer repos that bridge stores and domain logic. |
 | `settings/` | `SettingsShell.tsx` (the `/settings/:tab` route overlay), `registry.ts` (panel registry), `panels/` (lazy-loaded setting panels). |
 | `shortcuts/` | `KeyboardShortcutService.ts`, `KeyboardShortcutHost.tsx`, `readerShortcuts.ts`, `useShortcut.ts`, `ShortcutHelpSheet.tsx`. |
@@ -752,7 +798,7 @@ Sub-directories: `panels/` (TOC, annotations, search, audio panels), `pills/` (s
 
 ### src/components/settings/
 
-Settings panel components: `DataManagementTab`, `DataRecoveryView`, `DiagnosticsTab`, `GenAISettingsTab`, `GeneralSettingsTab`, `RecoverySettingsTab`, `StorageUsageSummary`, `SyncSettingsTab`, `TTSSettingsTab`, `JsonDiffViewer`, `CheckpointDiffView`.
+Settings panel components: `DataManagementTab`, `DataRecoveryView`, `DiagnosticsTab`, `GenAISettingsTab`, `GeneralSettingsTab`, `RecoverySettingsTab`, `StorageUsageSummary`, `SyncSettingsTab`, `TTSSettingsTab`, `JsonDiffViewer`, `CheckpointDiffView`. The `GenAISettingsTab` is presentational over the quota governor: it surfaces the editable per-lane limits, the pause-all switch, the two default-OFF opt-ins (pre-embed library, share AI caches across my devices), and live used-vs-limit meters derived from `governor.snapshot()`'s per-lane `LaneUsage`.
 
 ### Other component subdirectories
 
@@ -812,7 +858,7 @@ Two worker entry points. Both use Comlink for typed RPC.
 | File | Purpose |
 |---|---|
 | [`tts.worker.ts`](../../src/workers/tts.worker.ts) | TTS worker entry: `Comlink.expose(new WorkerTtsEngine())`. The `check:worker-chunk` script asserts this chunk imports no Zustand/Yjs/`src/store/` code. |
-| [`search.worker.ts`](../../src/workers/search.worker.ts) | Search worker entry: Comlink-exposes `SearchEngine` (the escaped-literal linear scan). Lifecycle managed by `domains/search/SearchSession`. |
+| [`search.worker.ts`](../../src/workers/search.worker.ts) | Search worker entry: Comlink-exposes `SearchEngine` (the escaped-literal linear scan, plus the int8 per-vector quantizer and `rankInt8` cosine ranking for semantic search). Lifecycle managed by `domains/search/SearchSession`. |
 
 ---
 

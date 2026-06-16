@@ -67,7 +67,7 @@ graph TD
     subgraph "Composition manifest (registerBootTasks.ts)"
         Register --> WireGoogle["wireGoogleDomain()"]
         Register --> WipeHooks["registerWipeHook(sync/stop)\nregisterWipeHook(yjs-persistence)"]
-        Register --> BootTasks["registerBootTask() x 12 tasks"]
+        Register --> BootTasks["registerBootTask() x 18 tasks"]
     end
 
     subgraph "Boot phases (sequential)"
@@ -78,7 +78,7 @@ graph TD
         P4 --> P5["migrations (CRDT)"]
         P5 --> P6["syncInit"]
         P6 --> P7["deviceRegistration\n(ttsInitialize + device/register)"]
-        P7 --> P8["backgroundTasks\n(heartbeat, drive, eviction,\nreingest, socialLogin)"]
+        P7 --> P8["backgroundTasks\n(heartbeat, drive, audio+embed\neviction, reingest, embed backfill,\nartifact publish/sweep, socialLogin)"]
     end
 
     subgraph "Singleton wiring (synchronous, pre-boot)"
@@ -86,6 +86,9 @@ graph TD
         WireGoogle --> DriveClient["DriveClient"]
         WireGoogle --> DriveSync["DriveLibrarySync"]
         WireGoogle --> GenAI["GenAIClient (lazy)"]
+        WireGoogle --> Embed["EmbeddingClient (lazy)"]
+        WireGoogle --> Quota["QuotaGovernor\n(setQuotaScheduler + setQuotaStore)"]
+        WireGoogle --> Consult["ArtifactConsult"]
         WireGoogle --> ConsentResolver["setConsentResolver()"]
     end
 ```
@@ -123,7 +126,10 @@ function does three things in order:
    ever started, and missing a hook stops nothing that actually ran.
 
 3. **Boot task registration** — calls `registerBootTask(phase, task)` for each
-   of the twelve boot tasks across the seven phases.
+   of the eighteen boot tasks across the seven phases (nine of them in the final
+   `backgroundTasks` phase, which the semantic-search and shared-AI-cache work
+   grew with the embedding backfill, the artifact publisher, and the artifact
+   sweeper).
 
 ### Why the sequencer stays subsystem-free
 
@@ -157,7 +163,7 @@ sequenceDiagram
     Manifest->>Manifest: "wireGoogleDomain() [sync]"
     Manifest->>Manifest: "applyDocumentLanguage() [sync]"
     Manifest->>Manifest: "registerWipeHooks()"
-    Manifest->>Boot: "registerBootTask() x12"
+    Manifest->>Boot: "registerBootTask() x18"
     App->>Boot: "runBootSequence()"
     Boot-->>App: "BootHandle { promise, dispose }"
 
@@ -190,7 +196,7 @@ page).
 | 5 | `migrations` | Runs `runCrdtMigrations()` (the coordinator in `src/app/migrations.ts`): reads doc schema version, checkpoints before any transform, runs steps sequentially, bumps version atomically inside the same `doc.transact` as the transform. |
 | 6 | `syncInit` | Calls `configureSyncBackendSelection()` (idempotent), registers `wireSyncEvents()` as a cleanup, then — if `ctx.syncAllowed` and `isSyncEnabled()` — fires `getSyncOrchestratorAsync().then(o => o.start())` intentionally unawaited (boot must never block on network). |
 | 7 | `deviceRegistration` | Two tasks: `tts/initialize` calls `getTtsController().initialize()` (engine→store mirror, store→engine settings sync, rehydrated-settings replay); `device/register` assembles the device profile and calls `deviceStore.registerCurrentDevice()`. |
-| 8 | `backgroundTasks` | Five tasks: device heartbeat interval (every 5 min); Drive auto-scan (weekly policy); audio-cache LRU eviction sweep (fire-and-forget, with v25 size backfill); re-ingest wave (10 s idle delay, stamp-based candidacy); social login renewal. |
+| 8 | `backgroundTasks` | Nine tasks: device heartbeat interval (every 5 min); Drive auto-scan (weekly policy); audio-cache LRU eviction sweep (fire-and-forget, with v25 size backfill); embedding-cache eviction (persist-on-evict, never-evict-an-unconfirmed-upload rule); re-ingest wave (10 s idle delay, stamp-based candidacy); embedding backfill (pre-embeds loaded-but-unread books outward, gated by the default-OFF library opt-in and the cross-device background budget); artifact publisher (idempotent head-before-put upload of embedding blobs when Share AI caches is on); artifact sweeper (cloud TTL/quota GC of orphaned blobs); social login renewal. |
 
 ### The `BootContext` interface
 
@@ -508,6 +514,7 @@ flowchart LR
     RLPort["ReadingListPort\n← useReadingListStore"]
     ProjPort["LibraryProjectionPort\n← useLibraryStore"]
     BookRep["bookRepository"]
+    PurgePort["purgeBookArtifact\n← peekSyncOrchestrator\n+ bookContent"]
 
     UI --> LC
     LC --> GL
@@ -525,6 +532,7 @@ flowchart LR
     SVC --> InvPort
     SVC --> ProjPort
     SVC --> PERS
+    SVC --> PurgePort
 ```
 
 [`createLibrary.ts`](../../src/app/library/createLibrary.ts) is the **lazy library composition
@@ -546,6 +554,22 @@ perspective; components read it directly.
 **`createLibraryPersistence()`** wraps the three `BookRepository` methods
 (`getBookMetadata`, `getBookMetadataBulk`, `getBookIdByFilename`) so the
 domain-layer persistence object has no store dependency.
+
+**`purgeBookArtifact()`** is the shared-AI-cache lifecycle edge, injected into
+`LibraryService` as its `purgeBookArtifact` port because the store-free service
+cannot reach the backend/manifest edges it needs. When a book is removed it: reads
+the connected cloud backend (`peekSyncOrchestrator()?.getConnectedArtifactBackend()`
+— `null` is a clean no-op); reads the book's manifest for its `contentHash`
+**before** the service deletes the row (absent hash → no-op); derives the cache key
+from the *same* live embedding stamp the read adapter uses (`{model, dims}` +
+`CURRENT_QUANT` + `TTS_EXTRACTION_VERSION`); and does a best-effort
+`backend.deleteArtifactHead(workspaceId, embedCache/{key})` — deleting **only**
+this device's HEAD record. The content-addressed blob is deliberately left for the
+cloud sweeper to reclaim, since a sibling device may still need it. The
+`shareAiCaches` switch is irrelevant here — dropping your own pointer to a book you
+deleted is always safe — and a backend error is logged, not thrown (the service
+degrades the same way). Like the consult read path, this cloud round-trip is
+MockBackend-verified but the emulator suite is CI-pending.
 
 One subtlety in the `ImportOrchestrator` construction:
 ```typescript
@@ -626,14 +650,18 @@ task, so it is automatically torn down on unmount.
 
 `wireGoogleDomain()` ([src/app/google/wireGoogle.ts](../../src/app/google/wireGoogle.ts)) runs
 synchronously in `registerAppBootTasks()` before any boot phase. It constructs
-and installs the four singletons in `src/domains/google`:
+and installs the domain singletons in `src/domains/google` (and, with the
+semantic-search and shared-AI-cache work, two kernel/cross-domain singletons too):
 
 | Singleton | Injected dependencies |
 |-----------|----------------------|
 | `GoogleAuthClient` | `getLoginHint` ← `useSyncStore.firebaseUserEmail`; `onConnected/onDisconnected` hooks ← `useGoogleServicesStore` |
 | `DriveClient` | `auth: GoogleAuthClient` |
 | `DriveLibrarySync` | `driveIndex` ← `useDriveStore`; `library.addBook/replaceFile` ← `libraryController` |
-| `GenAIClient` (lazy) | `getConfig` ← `useGenAIStore`; `onLog` ← `useGenAIStore.addLog` |
+| `GenAIClient` (lazy) | `getConfig` ← `useGenAIStore`; `onLog` ← `useGenAIStore.addLog`; `governor` ← the shared `QuotaGovernor` |
+| `EmbeddingClient` (lazy) | `getConfig` ← `useGenAIStore` (`embeddingModel`/`embeddingDims`/`useBatchEmbedding`); `onLog` ← `useGenAIStore.addLog` |
+| `QuotaGovernor` | `getLimits` ← `useGenAIStore.quotaLimits` (collapsed to zero when `pauseAllGenAI`); `QuotaStore` ← `quotaCounterRepo` via `makeQuotaStore`; cross-device spend ← `useDeviceStore.publishEmbedSpend` |
+| `ArtifactConsult` | `getBackend` ← `peekSyncOrchestrator().getConnectedArtifactBackend()`; `getManifest` ← `bookContent`; `getStamp`/`isConsented` ← `useGenAIStore` + `usePreferencesStore`; `putHydrated` ← `embeddingsRepo` |
 
 The GenAI client is installed as a **lazy facade** via `makeLazyGenAIClient()`.
 The real `GeminiClient` and its egress plumbing load on the first `generate`
@@ -642,6 +670,127 @@ call — keeping the GenAI implementation out of the entry chunk (check 4).
 The consent resolver is installed via `setConsentResolver(makeAiConsentResolver({...}))`.
 The resolver checks `usePreferencesStore.aiConsent[bookId]` and
 `useContentAnalysisStore.sections` to gate AI calls on per-book user consent.
+A third predicate, `isLibraryPreEmbedEnabled() ← useGenAIStore.preEmbedLibrary`,
+grants egress for an unread book that has no per-book consent of its own — the
+default-OFF library opt-in that lets the background backfill (the
+`embeddingBackfill` task in Phase 8) pre-embed the rest of the library. Each
+predicate is read fresh, so a settings flip takes effect on the next egress.
+
+### The cross-provider quota governor
+
+The semantic-search work introduced a **single kernel quota subsystem**,
+`src/kernel/quota/` ([`QuotaGovernor.ts`](../../src/kernel/quota/QuotaGovernor.ts),
+the `ptDay` midnight-Pacific day-key helper, and an `index.ts` barrel imported as
+`@kernel/quota`). It tracks three budgets — requests-per-minute, tokens-per-minute,
+and requests-per-day — **per lane** (`fg` foreground / `bg` background), and is
+shared across every paid Google egress path: `GeminiClient`, the cloud-TTS
+providers (via `setTtsQuotaGovernor`), and the new embedding client.
+
+`wireGoogleDomain()` constructs **one** `QuotaGovernor` and installs it three ways:
+
+1. **As the gateway's `QuotaScheduler`** via `setQuotaScheduler(governor)`. The
+   governor's `acquire()`/`release()` run inside `NetworkGateway.egress` at
+   **admission** — before any bytes leave — so throttling cannot be bypassed (the
+   same dependency-inversion seam as `setConsentResolver`; see §9 and
+   [Layering and boundaries](11-layering-and-boundaries.md)). `acquire()` is the
+   **single recorder**: it both checks the estimate against the budget and records
+   the spend, so a request that never `commit()`s (every embedding — the embedding
+   client carries no governor reference) still counts toward every budget.
+   `commit()` only reconciles the acquire-time token estimate to the actual.
+2. **As the cloud-TTS lane's governor** via `setTtsQuotaGovernor(governor)`, so
+   the audio domain's `BaseCloudProvider` shares the same per-lane budget.
+3. **As the persistence + reconcile owner.** `setQuotaStore(makeQuotaStore(...))`
+   wires the daily (RPD) counter — the only budget that must survive a restart —
+   to `src/data/repos/quotaCounter.ts`, which writes a single key in the
+   **existing `app_metadata` store** (no new IDB store; the per-minute windows
+   stay in-memory in the governor). The same `saveDailyUsage` chokepoint also
+   calls `useDeviceStore.publishEmbedSpend(getDeviceId(), usage)`, publishing this
+   device's spend onto its synced `DeviceInfo` record via an **additive
+   `embedSpend` field** (no CRDT format change). Because the free-tier quota is
+   per-Google-Cloud-**project**, the background lane's effective daily ceiling is
+   reduced by the sum of what the user's *other* devices spent today
+   (`makeBackgroundQuotaLimits` in `@app/quota/embedSpendReconciler`), dividing
+   the shared quota across the device mesh. Foreground and query embeds use the
+   full limit and are never divided.
+
+When `getQuotaLimits()` reads `pauseAllGenAI`, it collapses the limits to
+`{ rpm: 0, tpm: 0, rpd: 0 }`, so `acquire()` throws `NetRateLimitedError` (the
+new typed `AppError NET_RATE_LIMITED` in [`src/types/errors.ts`](../../src/types/errors.ts),
+signalling pre-network backpressure) — a master pause-all switch with no kernel
+change. Editable per-lane limits, the pause-all switch, and live used-vs-limit
+meters live in the GenAI settings tab; the governor stays the single source of
+truth, re-exposing its `snapshot()` to the UI through
+`useGenAIStore.setQuotaSnapshotProvider` and `setBgBudgetProvider` (no kernel→store
+edge). Model rotation stays inside `GeminiClient` — the governor governs spend,
+not model selection.
+
+### The embedding client
+
+The embedding client is installed exactly like the GenAI client — a **lazy
+facade** (`makeLazyEmbeddingClient()`) over a one-time dynamic import of
+`GeminiEmbeddingClient`, so the implementation stays out of the entry chunk
+(check 4). Config (`embeddingModel`, `embeddingDims`, the opt-in batch-embedding
+probe flag) is read per call from `useGenAIStore`; log entries land pre-redacted
+in the same in-memory ring buffer as the GenAI client. No `governor` is wired
+into it: the foreground-lane `acquire()` at the gateway already records its spend,
+and an embedding never commits. The domain side is a four-part module
+(`src/domains/google/genai/embedding/`: `contract`, the `GeminiEmbeddingClient`
+impl, a `holder` whose fallback is an inline NOT-CONFIGURED client — `embed()`
+throws `GENAI_EMBEDDING_NOT_CONFIGURED` so stray imports degrade like a missing
+API key, and the lazy facade), barrel-exported from `@domains/google`. See
+[Domain: Search](38-domain-search.md) for how vectors are quantized and ranked.
+
+The two regenerable cache stores the embedding path writes (`cache_embeddings`
+and `cache_embed_jobs`) ship as an additive `migrateToV27` step in the data
+layer's versioned migration registry that the `openDB` phase (§4 Phase 2) opens
+through. A deviation worth recording: the embeddings took **IDB v27**, the slot
+that was originally reserved for the `sync_log`-drop / service-worker-cover
+cleanup. That cleanup was never done, so it is now the *next* (v28) bump. The IDB
+schema itself remains data-layer-owned — see
+[CRDT format and migrations](22-crdt-format-and-migrations.md) and `src/data/`.
+
+### The shared AI-cache read adapter (ArtifactConsult)
+
+`setArtifactConsult(makeArtifactConsult({...}))` installs the **read side** of the
+shared embedding cache (the Artifact Lane). Before a device spends Gemini quota to
+embed a book, `ArtifactConsult` ([src/app/google/artifactConsult.ts](../../src/app/google/artifactConsult.ts))
+probes the user's *own* BYO Cloud Storage and, on a hit, downloads another
+device's embeddings instead of re-spending quota — a cache hit hydrates ~251 KB
+and spends **zero** Gemini quota. The store/manifest/backend edges live in
+`wireGoogle`; the boot loop and reader controller inject the installed singleton's
+port (the holder mirrors the embedding-client holder). The injected deps:
+
+- `getBackend` ← `peekSyncOrchestrator()?.getConnectedArtifactBackend() ?? null` —
+  read fresh, and `peek` (never `get`) so the no-sync case is a cheap no-network
+  `null` short-circuit and never composes the firebase chunk just to look.
+- `getManifest` ← `bookContent.getManifest` (for the `contentHash` that addresses
+  the cache key) and `getLiveCorpus` ← `searchTextRepo.get` (to reconcile each
+  section's `sectionTextHash` against the live corpus on hydrate).
+- `getStamp` ← the live embedding-space stamp (`{model, dims}` from settings, the
+  int8 `CURRENT_QUANT` literal, and `TTS_EXTRACTION_VERSION`), so the derived
+  content key matches the one the publisher wrote.
+- `putHydrated` ← `embeddingsRepo.putHydrated` (one atomic cross-store write of the
+  embedding row + its job row).
+- `isConsented` ← `makeArtifactConsentGate({...})`, which ANDs the default-OFF
+  **Share AI caches across my devices** master switch (`useGenAIStore.shareAiCaches`)
+  into the per-book consent predicate. With sharing OFF every book is DENIED even
+  when the user just opened it. The upload (publisher) boot task is built from this
+  **same** helper, so consult and upload share one gating rule.
+
+The consult adapter probes + hydrates **before** the quota gate, so a cache hit
+never reaches `acquire()`. Lifecycle (delete, persist-on-evict, the cloud TTL
+sweeper, the HEAD-hit-but-object-missing drift metric) lives in the boot tasks and
+in `createLibrary`'s `purgeBookArtifact` port (§8). The C3 `SyncBackend` surface
+the adapter calls — `headArtifact` / `getArtifact` for read, plus
+`deleteArtifactHead` for the stale-HEAD self-heal — is documented in
+[Domain: Sync](36-domain-sync.md). A deviation worth recording: the C3 artifact
+surface landed as **five** additive methods, not the originally-planned trio —
+`headArtifact` / `putArtifact` / `getArtifact` (probe / write / read) plus
+`deleteArtifactHead` / `sweepArtifacts` (the GC pair). Those cloud round-trips are
+MockBackend-verified and code-complete, but the Firestore+Storage emulator suite
+(put/head/get/delete/sweep + HEAD-after-Storage ordering) and the security-rules
+suite are **CI-pending** (they auto-skip without local emulators), so the cloud
+paths are **not yet proven end-to-end against real Firebase**.
 
 Drive imports flow through the **same `ImportOrchestrator` queue** as every
 other entry point — ghost matching and reading-list registration included.
@@ -848,8 +997,11 @@ stateDiagram-v2
 - The ordering and wiring of every subsystem (not the behavior)
 - Port adapter construction: the thunks that close over real stores
 - The single call to every singleton constructor (`GoogleAuthClient`,
-  `DriveClient`, `DriveLibrarySync`, `KeyedMutex`, `ImportOrchestrator`,
-  `LibraryService`, `TtsController`, `WorkerEngineHandle`)
+  `DriveClient`, `DriveLibrarySync`, `QuotaGovernor`, `ArtifactConsult`,
+  `KeyedMutex`, `ImportOrchestrator`, `LibraryService`, `TtsController`,
+  `WorkerEngineHandle`) and the install of every kernel/domain port the
+  composition fills (`setQuotaScheduler`, `setQuotaStore`, `setEmbeddingClient`,
+  `setArtifactConsult`, `setConsentResolver`)
 - The CRDT migration coordinator (business rules for the chain, ordering,
   checkpointing, atomic bump) — but NOT the Y.Doc schema itself (that is
   `src/store/registry.ts`)
@@ -878,6 +1030,13 @@ stateDiagram-v2
    check 1 asserts the emitted chunk.
 6. Every `EngineStateUpdate` kind has exactly one entry in `replicationSpec.ts` —
    enforced at compile time by `Record<EngineStateUpdate['kind'], ...]>`.
+7. One `QuotaGovernor` instance gates every paid Google egress lane. It is
+   installed at the `NetworkGateway` admission seam (`setQuotaScheduler`), so the
+   throttle cannot be bypassed — the same unbypassable-at-the-gate property as the
+   consent resolver. The kernel stays store-free: its only persistence and
+   cross-device edges are the injected `QuotaStore` and the
+   `setQuotaSnapshotProvider`/`setBgBudgetProvider` re-exposure (no kernel→store
+   import).
 
 ---
 
@@ -898,7 +1057,9 @@ stateDiagram-v2
 - [Domain: Audio TTS engine](32-domain-audio-tts-engine.md) — the worker-resident
   `PlaybackController` and `WorkerTtsEngine`
 - [Domain: Google](39-domain-google.md) — `GoogleAuthClient`, `DriveClient`,
-  `DriveLibrarySync`, `GenAIClient`
+  `DriveLibrarySync`, `GenAIClient`, `EmbeddingClient`
+- [Domain: Search](38-domain-search.md) — int8 quantization, `SearchEngine.rankInt8`,
+  reciprocal-rank fusion, the artifact blob codec, the cross-provider quota governor
 - [Domain: Reader engine](30-domain-reader-engine.md) — `ReaderEngine` port,
   `EpubJsEngine`, `useEpubReader`
 - [CRDT format and migrations](22-crdt-format-and-migrations.md) — the Y.Doc
