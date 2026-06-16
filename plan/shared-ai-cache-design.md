@@ -9,6 +9,29 @@
 > sharing is evaluated and **deferred** (§3).
 > **Companion:** [semantic-search-design.md](semantic-search-design.md).
 
+> [!IMPORTANT]
+> **Implementation status (updated 2026-06-14): Artifact Lane v1 (Phases A–D) IMPLEMENTED** on branch
+> `claude/objective-euclid-d1d269`, each increment gate-verified + full-suite-gated (3,296 tests green).
+> Phase → commit:
+> - **A** `ae4fd01e` — C3 `SyncBackend` artifact methods + Firestore/Mock impls + contract suite
+> - **B** `a662e0fa` — consult/hydrate hoisted before the quota gate + atomic `putHydrated` + read-path consent
+> - **C** `78b224cc` — upload publisher + blob serialize + default-OFF "Share AI caches" opt-in + disclosure
+> - **D** `731f9ac9` — app-layer per-book cloud delete + persist-on-evict + TTL/quota sweeper + drift metric
+>
+> **Deviations from this proposal as written:**
+> - **The C3 surface grew from a "method trio" (§4) to FIVE methods.** A added `head/put/getArtifact`;
+>   D added `deleteArtifactHead` + `sweepArtifacts`.
+> - **`embedCache` was added to `PURGE_SUBCOLLECTIONS` in Phase A** (§2.7 had scheduled it under D).
+>
+> **Not implemented / deferred (as this proposal recommends):** Phase E (TTS — blocked on the
+> provider/format-stamped key, §6a); cross-user VEC (§3); per-blob HMAC (M-5, accept-risk); the
+> real-2-device end-to-end exit test.
+>
+> **⚠️ CI-PENDING (cannot run locally — no emulators):** EVERY cloud round-trip — the Firestore+Storage
+> emulator put/head/get/delete/sweep + HEAD-after-Storage ordering, and the security-rules suite —
+> auto-skips locally. Cross-device behavior is verified against `MockBackend` only; the Artifact Lane
+> is **code-complete and unit-verified but NOT yet proven end-to-end against real Firebase.**
+
 > [!NOTE]
 > **What the critique changed (v1 → v2).** The three load-bearing theses held: content-addressed
 > blobs in the user's BYO backend, ~zero CRDT/format-change surface, and quota-check upstream of

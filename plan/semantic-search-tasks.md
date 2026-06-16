@@ -3,9 +3,21 @@
 Companion to [semantic-search-design.md](semantic-search-design.md) (v3.1, loop-converged GO).
 Dependency-ordered phases; each task carries its **gates** (the tests/ratchets/docs that must be
 green before it merges) and the design section it implements. Format-change rule 4 is respected:
-the one IDB bump (Phase B) lands *after* the reserved v27 cleanup ships.
+the one IDB bump (Phase B) lands ~~*after* the reserved v27 cleanup ships~~ **AS v27** (see status below).
 
 Legend: **▸ depends on** · 🧪 test gate · 📐 ratchet/docs gate · §ref → design section.
+
+> [!IMPORTANT]
+> **Status (updated 2026-06-14): all phases A–F IMPLEMENTED** on `claude/objective-euclid-d1d269`,
+> each gate-verified + full-suite-gated (latest 3,296 tests green). Phase → commit:
+> **A** `a30f7114`/`78e107fe`/`565d7e14`/`16dc76b9` · **B** `e814ed1d` (+`082072d9`) · **C** `c32f96d9` ·
+> **D** `0355bfaf` · **E** `1ca8c74f` · **F** `5e1e0e8c`; plus a post-review quota-lifecycle fix
+> `375397f7` and an efficiency/DRY cleanup `e2b6dd49`.
+>
+> **Deviation:** the IDB bump landed as **v27**, NOT "after the reserved v27 cleanup" — that cleanup
+> (`sync_log` drop / SW-cover) was never done, so the embedding stores ARE v27 and the cleanup is now
+> the next (v28) bump. Other deviations (admission-time quota recording, the chunker moving B→C,
+> partial chunk→CFI) are listed in the design doc's implementation-status note.
 
 ---
 

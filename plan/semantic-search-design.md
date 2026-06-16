@@ -10,6 +10,40 @@
 > **Scope:** on-device semantic search over book text using Gemini Embedding 2, sized to stay
 > within the free quota, plus a cross-provider quota governor reused by all GenAI calls.
 
+> [!IMPORTANT]
+> **Implementation status (updated 2026-06-14): IMPLEMENTED (Phases A–F)** on branch
+> `claude/objective-euclid-d1d269`. The §9 build order is landed, each increment independently
+> gate-verified and full-suite-gated at phase boundaries (latest 3,296 tests green). Commit map:
+>
+> | Build step | Status | Commit(s) |
+> |---|---|---|
+> | A — quota governor + gateway-enforced throttle + multi-device + config/meters | ✅ | `a30f7114`, `78e107fe`, `565d7e14`, `16dc76b9` |
+> | B — `cache_embeddings`/`cache_embed_jobs` + worker int8 quantize/cosine | ✅ | `e814ed1d` (+ `082072d9` schema-gate fixes) |
+> | C — EmbeddingClient (four-part) + foreground indexer + chunker | ✅ | `c32f96d9` |
+> | D — hybrid query path (RRF + query cache) | ✅ | `0355bfaf` |
+> | E — background backfill + §8.4.1 consent-resolver opt-in | ✅ | `1ca8c74f` |
+> | F — eviction + stamp-mismatch re-embed + batch scaffold | ✅ | `5e1e0e8c` |
+> | (post-review) unify quota acquire/commit/release lifecycle | ✅ | `375397f7` |
+> | (post-review) efficiency/DRY cleanup (#8–10) | ✅ | `e2b6dd49` |
+>
+> **Deviations from this design as written:**
+> - **IDB version — embeddings took v27, NOT "a bump after the reserved v27 cleanup" (§6.2).** That
+>   cleanup (`sync_log` drop / SW-cover fallback) was never done, so the embedding stores ARE the v27
+>   bump; the `sync_log`/SW cleanup is now the *next* (v28) bump.
+> - **Quota recording moved to admission (`acquire`), not `commit` (was §3.3).** The post-review fix
+>   records RPM/TPM/RPD at admission so embeddings — which never `commit` — still count; `commit`
+>   became a token estimate→actual reconcile and `NetworkGateway.egress` is the single owner of claim
+>   release. This fixed a real `fgClaims`-leak merge-blocker the §10 tests had missed (`375397f7`).
+> - **`NET_RATE_LIMITED` lives in `~types/errors.ts`** (the AppError taxonomy home), not `kernel/net`.
+> - **The chunker shifted from Phase B to Phase C** (CFI can't be derived from plain text; it had no
+>   consumer until the indexer).
+> - **Chunk→CFI is partial:** `charStart/charEnd` are persisted (the cleanup increment) but
+>   `cfiStart/cfiEnd` stay empty — CFI is resolved lazily at click time, as §5.2 anticipated.
+>
+> **Not implemented (deferred, as this design marks them):** the live `batchEmbedContents` counting
+> probe (§11.3 — only the default-OFF `useBatchEmbedding` flag/scaffold shipped; the empirical run
+> needs a real key); the `usageMetadata` token reconcile; and §8.5 multimodal.
+
 > [!NOTE]
 > **What the critique changed (v1 → v2).** The search *mechanics* (int8@768 quantization, chunk
 > reuse, hybrid RRF fusion, worker/main split) survived intact. Four architectural bets were
