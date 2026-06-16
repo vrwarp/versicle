@@ -12,36 +12,24 @@ declare const self: ServiceWorkerGlobalScope
 cleanupOutdatedCaches()
 
 /**
- * Capacitor-aware update flow.
+ * Prompt-style update flow (Phase 8 §G). The unconditional
+ * `self.skipWaiting()` died here: a new SW now WAITS until the user accepts
+ * the in-app update toast (SWUpdatePrompt → `updateServiceWorker()` →
+ * workbox-window posts SKIP_WAITING to the waiting worker). Handoff from
+ * the fielded autoUpdate SW is one-way safe: the OLD worker still
+ * skipWaiting-s itself out, so it activates the first prompt-build
+ * immediately; every later update prompts (prep risk #1).
  *
- * Inside a Capacitor WebView the androidScheme is 'https' on 'localhost'
- * (see capacitor.config.ts). There is no real server to trigger the SW
- * update lifecycle — `cap sync` replaces files on disk, but the old
- * precache keeps serving stale assets. Detect this environment and force
- * skipWaiting so the freshly-synced assets take effect on the next launch.
- *
- * On the web the prompt-style flow (Phase 8 §G) remains: a new SW WAITS
- * until the user accepts the in-app update toast (SWUpdatePrompt →
- * `updateServiceWorker()` → workbox-window posts SKIP_WAITING).
- *
- * `clientsClaim()` stays in both paths: on FIRST install the fresh SW
- * takes control of the already-open page without a reload (covers are
- * served through the fetch handler below, so an uncontrolled first session
- * would show no cover images — see useServiceWorkerGate's degraded notice).
+ * `clientsClaim()` stays: on FIRST install the fresh SW takes control of
+ * the already-open page without a reload (covers are served through the
+ * fetch handler below, so an uncontrolled first session would show no
+ * cover images — see useServiceWorkerGate's degraded notice).
  */
-const isCapacitor = self.location.hostname === 'localhost'
-
-if (isCapacitor) {
-  // Native: always activate immediately so cap-sync'd assets are served.
-  void self.skipWaiting()
-} else {
-  // Web: wait for the user to accept the update prompt.
-  self.addEventListener('message', (event) => {
-    if (event.data && event.data.type === 'SKIP_WAITING') {
-      void self.skipWaiting()
-    }
-  })
-}
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    void self.skipWaiting()
+  }
+})
 clientsClaim()
 
 precacheAndRoute(self.__WB_MANIFEST)
