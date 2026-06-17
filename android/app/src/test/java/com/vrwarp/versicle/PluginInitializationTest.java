@@ -71,8 +71,10 @@ public class PluginInitializationTest {
         PluginHandle mediaSessionPlugin = activity.getBridge().getPlugin("MediaSession");
         assertNotNull("MediaSession plugin should be initialized", mediaSessionPlugin);
 
-        // Verify FirebaseAuthentication plugin
-        PluginHandle authPlugin = activity.getBridge().getPlugin("FirebaseAuthentication");
-        assertNotNull("FirebaseAuthentication plugin should be initialized", authPlugin);
+        // Verify the auth plugin. Versicle authenticates via @capgo/capacitor-social-login
+        // (registered as "SocialLogin"); there is no @capacitor-firebase/authentication
+        // dependency, so the former "FirebaseAuthentication" assertion could never pass.
+        PluginHandle authPlugin = activity.getBridge().getPlugin("SocialLogin");
+        assertNotNull("SocialLogin plugin should be initialized", authPlugin);
     }
 }

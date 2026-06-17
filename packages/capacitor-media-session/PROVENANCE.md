@@ -28,6 +28,14 @@ the install-time build fragility.
 - **`dist/` is committed** and the upstream `dist` `.gitignore` entry removed —
   a `file:` dependency does not run `prepare`, so the prebuilt output must be present.
 - **`scripts.prepare` removed** from `package.json` for the same reason.
+- **`android/src/test/.../MediaSessionPluginTest.java` removed** — it verifies Capacitor's
+  `protected` `notifyListeners(String, JSObject)` directly, which compiles under the fork's
+  Capacitor 6 devDeps but NOT against versicle's Capacitor 7 (protected access from a
+  non-subclass test). versicle's Android CI runs `./gradlew test` across all modules, so an
+  uncompilable test sourceset would break it. The fork repo retains this test for its
+  Capacitor-6 matrix; coverage of the plugin under Capacitor 7 lives in versicle's own
+  `android/app/src/test/.../MediaSessionPluginTest.java` (Bridge-driven) plus the new
+  `ArtworkScalingTest`.
 - **`devDependencies` removed** from `package.json` — a `file:` directory dependency
   otherwise installs the target's devDeps (the upstream eslint 7 / rollup 2 / swiftlint /
   docgen toolchain) into versicle's `node_modules` on every install. The package is a

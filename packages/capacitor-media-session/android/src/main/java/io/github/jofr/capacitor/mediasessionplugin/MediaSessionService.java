@@ -9,8 +9,16 @@ import androidx.annotation.Nullable;
 import androidx.media3.common.Player;
 import androidx.media3.session.MediaSession;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 public class MediaSessionService extends androidx.media3.session.MediaSessionService {
     private static final String TAG = "MediaSessionService";
+
+    // Media3 requires every live MediaSession in the process to have a unique id; the
+    // default is the empty string, which collides (IllegalStateException "Session ID must
+    // be unique") if a second service instance builds a session before the previous one is
+    // released — a service-recreate race on device, and routine across tests sharing a JVM.
+    private static final AtomicInteger SESSION_COUNTER = new AtomicInteger(0);
 
     private MediaSession mediaSession;
     private WebViewProxyPlayer player;
@@ -28,7 +36,9 @@ public class MediaSessionService extends androidx.media3.session.MediaSessionSer
         super.onCreate();
         Log.i(TAG, "Service onCreate() fired. Building MediaSession.");
         this.player = new WebViewProxyPlayer();
-        this.mediaSession = new MediaSession.Builder(this, player).build();
+        this.mediaSession = new MediaSession.Builder(this, player)
+                .setId("VersicleMediaSession-" + SESSION_COUNTER.getAndIncrement())
+                .build();
         // Register the session with the service. This is what attaches Media3's
         // MediaNotificationManager (and its internal notification controller) to the
         // session, which drives onUpdateNotification -> startForeground. Without it,
