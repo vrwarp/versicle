@@ -52,8 +52,9 @@ playwright-report/
 stats.html
 stats-worker.html
 
-# Compiled CC-CEDICT artifacts — built by `npm run compile-dict` (CI) from
-# the release pinned in scripts/cedict.lock.json; never committed
+# Compiled CC-CEDICT artifacts — generated offline by `npm run compile-dict`
+# from the vendored snapshot scripts/cedict-source.zip (pinned in
+# scripts/cedict.lock.json); the compiled JSON is never committed
 # (Phase 6 PR-12, plan/overhaul/prep/phase6-reader-engine.md §7.6).
 public/dict/cedict.json
 public/dict/cedict.meta.json

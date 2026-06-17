@@ -33,17 +33,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Restore compiled dictionary
-        # cedict.json left git at Phase 6 PR-12: built from the release
-        # pinned in scripts/cedict.lock.json, cached by its hash.
-        id: dict-cache
-        uses: actions/cache@v4
-        with:
-          path: public/dict
-          key: cedict-${{ hashFiles('scripts/cedict.lock.json') }}
-
-      - name: Compile dictionary (pinned release, checksum-verified)
-        if: steps.dict-cache.outputs.cache-hit != 'true'
+      - name: Compile dictionary (vendored snapshot, checksum-verified)
+        # cedict.json left git at Phase 6 PR-12; compiled offline from the
+        # CC-CEDICT snapshot vendored in-repo (scripts/cedict-source.zip,
+        # pinned by scripts/cedict.lock.json). No mdbg.net download — upgrades
+        # land via the reviewed monthly PR (.github/workflows/update-dict.yml).
         run: npm run compile-dict
 
       - name: Build

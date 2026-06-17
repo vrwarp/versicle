@@ -59,12 +59,12 @@
     },
     {
       "name": "CC-CEDICT (compiled Chinese-English dictionary)",
-      "version": "pinned MDBG release per scripts/cedict.lock.json (sha256-verified; exact release date/entry count shipped in the public/dict/cedict.meta.json sidecar — release 2026-06-12 at pinning time)",
+      "version": "vendored MDBG snapshot scripts/cedict-source.zip, pinned + sha256-verified by scripts/cedict.lock.json (exact release date/entry count shipped in the public/dict/cedict.meta.json sidecar — release 2026-06-16 at vendoring time)",
       "source": "https://www.mdbg.net/chinese/dictionary?page=cc-cedict",
       "license": "CC-BY-SA-4.0",
-      "provenance": "Compiled at build time by scripts/compile-dict.cjs from the mdbg.net CC-CEDICT export pinned in scripts/cedict.lock.json (sha256 + release date); the '#' header (license declaration + release metadata) is parsed and RETAINED as the cedict.meta.json sidecar. The silent mock-dictionary fallback was deleted (failure is fatal; --mock writes only the test fixture src/test/fixtures/dict/cedict.mock.json).",
-      "path": "public/dict/cedict.json + cedict.meta.json (generated, git-ignored since Phase 6 PR-12; built in CI and dev bootstrap via `npm run compile-dict`; ships in dist/dict/)",
-      "modifications": "Format conversion to JSON lookup table; license/provenance header retained as sidecar (gap report D5 closed at Phase 6 PR-12).",
+      "provenance": "The source export is VENDORED in-repo (scripts/cedict-source.zip), pinned + sha256-verified by scripts/cedict.lock.json; the original CC-BY-SA license/copyright header rides inside the .zip so the license accompanies the redistributed copy. Compiled OFFLINE at build time by scripts/compile-dict.cjs (no mdbg.net dependency — MDBG rotates its 'latest' export ~daily, so pinning that moving URL was fragile); the '#' header (license declaration + release metadata) is parsed and RETAINED as the cedict.meta.json sidecar. Upgrades are a deliberate, reviewed step (compile-dict.cjs --update-lock, automated monthly via .github/workflows/update-dict.yml). The silent mock-dictionary fallback was deleted (failure is fatal; --mock writes only the test fixture src/test/fixtures/dict/cedict.mock.json).",
+      "path": "scripts/cedict-source.zip (vendored source, committed) → public/dict/cedict.json + cedict.meta.json (generated offline, git-ignored since Phase 6 PR-12; built in CI and dev bootstrap via `npm run compile-dict`; ships in dist/dict/)",
+      "modifications": "Format conversion to JSON lookup table; license/provenance header retained as sidecar (gap report D5 closed at Phase 6 PR-12). Source export vendored in-repo for reproducible, offline builds.",
       "distribution": [
         "web",
         "android"
