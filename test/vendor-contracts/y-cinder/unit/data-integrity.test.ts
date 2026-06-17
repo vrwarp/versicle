@@ -11,7 +11,7 @@
 
 import { describe, it, expect } from 'vitest';
 import * as Y from 'yjs';
-import { mergeUpdatesAsync } from '../../src/merge-utils';
+import { mergeUpdatesAsync } from 'y-cinder';
 
 describe('Data Integrity: mergeUpdatesAsync validation', () => {
 

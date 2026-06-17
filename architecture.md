@@ -27,10 +27,6 @@ were rebuilt in place without the (pure-motion) relocation to
 `domains/audio/` — see the close-out notes in the master plan.
 
 ```
-packages/                  # vendored forks as npm workspaces (peer-dep singletons; see check:single-instance)
-  zustand-middleware-yjs/  # P2 fork surgeries: syncedKeys, merge-defaults hydration, scopedDiff, api.yjs
-  y-idb/                   # P3 fork: flush(), writeSnapshot(), readSnapshot(), durable `synced`
-  y-cinder/                # P9 vendoring: Firestore Yjs provider, `saved` flush events
 src/
   kernel/                  # L0 — imports nothing internal (admission: zero deps + ≥2 consumers, C12)
     cfi/                   # canonical CFI algebra — parse, contains, group, merge, locale-aware sentence snap
@@ -67,7 +63,6 @@ Other repo roots:
 
 | Path | What it is |
 | --- | --- |
-| `packages/` | vendored forks as npm workspaces (peer-dep singletons; see check:single-instance) |
 | `verification/` | Playwright journey suite (Docker lane; see TESTING.md) |
 | `scripts/` | operator tooling: gates, generators, codemods, fixture capture (scripts/README.md) |
 | `third-party/` | vendored runtime artifacts (piper) + the license inventory |
@@ -116,7 +111,7 @@ review/test-enforced. Source audit: plan/overhaul/prep/phase9-close.md §3.
 | 10 | TS project references per layer + all test code typechecked | `tsc -b` solution build: app + test + e2e + node + 3 vendored packages | partial | per-LAYER references NOT implemented (`composite` forces declaration emit, conflicting with the bundler-mode posture); dependency DIRECTION is enforced by the depcruise error rules instead — documented exception |
 
 Ratchet counters (live, from the committed baselines): dependency-cruiser
-total **35** (`lib-not-to-store` 19 + `worker-no-state-typegraph` 16; every other rule at
+total **34** (`lib-not-to-store` 19 + `worker-no-state-typegraph` 15; every other rule at
 error/0), lint-debt allowlist **20** `any`-sites +
 **25** disables (`lint-debt-allowlist.json`), coverage
 floor `coverage-baseline.json`, bundle budget `bundle-baseline.json`.

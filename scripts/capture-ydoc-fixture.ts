@@ -41,8 +41,55 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as Y from 'yjs';
-import { objectToYMap } from '../packages/zustand-middleware-yjs/src/mapping.ts';
 import { seedFor, FIXTURE_ERAS, type FixtureEra } from '../src/test/fixtures/ydoc/seed.ts';
+
+// objectToYMap + helpers, inlined verbatim from zustand-middleware-yjs's
+// internal src/mapping.ts. The package now ships only its built dist, so this
+// internal mapping is no longer importable; v4+ fixture encoding must match the
+// middleware's plain-string mapping exactly, so we keep a faithful copy here.
+type MappingOptions = { atomicKeys?: string[]; disableYText?: boolean; yTextKeys?: string[] };
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' &&
+  value !== null &&
+  !Array.isArray(value) &&
+  !(value instanceof Y.AbstractType) &&
+  !(value instanceof Y.Doc);
+const stringToYText = (value: string): Y.Text => new Y.Text(value);
+const arrayToYArray = (
+  array: unknown[],
+  { atomicKeys = [], disableYText = false, yTextKeys = [] }: MappingOptions = {}
+): Y.Array<unknown> => {
+  const options = { atomicKeys, disableYText, yTextKeys };
+  const yarray = new Y.Array<unknown>();
+  const mappedArray: unknown[] = [];
+  for (const value of array) {
+    if (typeof value === 'function') continue;
+    if (typeof value === 'string') mappedArray.push(options.disableYText ? value : stringToYText(value));
+    else if (Array.isArray(value)) mappedArray.push(arrayToYArray(value, options));
+    else if (isObject(value)) mappedArray.push(objectToYMap(value, options));
+    else mappedArray.push(value);
+  }
+  yarray.insert(0, mappedArray);
+  return yarray;
+};
+const objectToYMap = (
+  object: Record<string, unknown>,
+  { atomicKeys = [], disableYText = false, yTextKeys = [] }: MappingOptions = {}
+): Y.Map<unknown> => {
+  const options = { atomicKeys, disableYText, yTextKeys };
+  const ymap = new Y.Map<unknown>();
+  for (const [key, value] of Object.entries(object)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype' || typeof value === 'function') continue;
+    if (typeof value === 'string') {
+      const isWantsYText = options.disableYText ? options.yTextKeys.includes(key) : !options.atomicKeys.includes(key);
+      if (isWantsYText) ymap.set(key, stringToYText(value));
+      else ymap.set(key, value);
+    } else if (Array.isArray(value)) ymap.set(key, arrayToYArray(value, options));
+    else if (isObject(value)) ymap.set(key, objectToYMap(value, options));
+    else ymap.set(key, value);
+  }
+  return ymap;
+};
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixtureDir = join(repoRoot, 'src', 'test', 'fixtures', 'ydoc');

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { FireProvider } from '../../src/provider';
+import { FireProvider } from 'y-cinder';
 import * as Y from 'yjs';
 
 // Mock dependencie to avoid full initialization

@@ -4,9 +4,6 @@
   "version": "0.0.0",
   "license": "GPL-3.0-or-later",
   "type": "module",
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -30,7 +27,8 @@
     "tests": "vitest run",
     "coverage": "vitest run --coverage",
     "preview": "vite preview",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "test:emulator": "firebase emulators:exec --only auth,firestore,storage --project demo-versicle-sync-contract 'vitest run src/lib/sync/syncBackendContract.emulator.test.ts src/lib/sync/security-rules.test.ts'"
   },
   "dependencies": {
     "@capacitor-community/safe-area": "^7.0.0",
@@ -80,13 +78,13 @@
     "ua-parser-js": "^2.0.8",
     "uuid": "^13.0.0",
     "vite-plugin-pwa": "^1.2.0",
-    "y-cinder": "file:packages/y-cinder",
-    "y-idb": "file:packages/y-idb",
+    "y-cinder": "git+https://github.com/vrwarp/y-cinder.git#e1e946408928119837c3a68b474da2def6bf0a69",
+    "y-idb": "git+https://github.com/vrwarp/y-idb.git#60379ae5e4af7efd8305969db4cb9db8dcc89efb",
     "y-protocols": "^1.0.7",
     "yjs": "^13.6.20",
     "zod": "^4.3.5",
     "zustand": "^5.0.9",
-    "zustand-middleware-yjs": "file:packages/zustand-middleware-yjs"
+    "zustand-middleware-yjs": "git+https://github.com/vrwarp/zustand-middleware-yjs.git#6a0cff9d9c5f890f6f0fa8f0aec389febe4e6779"
   },
   "engines": {
     "node": ">=25 <26"
@@ -119,6 +117,7 @@
     "eslint-plugin-react-refresh": "^0.4.26",
     "fake-indexeddb": "^6.2.5",
     "fflate": "^0.8.3",
+    "firebase-tools": "^15.4.0",
     "globals": "^16.5.0",
     "jsdom": "^27.4.0",
     "knip": "^6.16.1",
