@@ -57,12 +57,12 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 
 ### CC-CEDICT (compiled Chinese-English dictionary)
 
-- **Version:** pinned MDBG release per scripts/cedict.lock.json (sha256-verified; exact release date/entry count shipped in the public/dict/cedict.meta.json sidecar — release 2026-06-12 at pinning time)
+- **Version:** vendored MDBG snapshot scripts/cedict-source.zip, pinned + sha256-verified by scripts/cedict.lock.json (exact release date/entry count shipped in the public/dict/cedict.meta.json sidecar — release 2026-06-16 at vendoring time)
 - **License:** CC-BY-SA-4.0
 - **Source:** https://www.mdbg.net/chinese/dictionary?page=cc-cedict
-- **Path:** public/dict/cedict.json + cedict.meta.json (generated, git-ignored since Phase 6 PR-12; built in CI and dev bootstrap via `npm run compile-dict`; ships in dist/dict/)
-- **Provenance:** Compiled at build time by scripts/compile-dict.cjs from the mdbg.net CC-CEDICT export pinned in scripts/cedict.lock.json (sha256 + release date); the '#' header (license declaration + release metadata) is parsed and RETAINED as the cedict.meta.json sidecar. The silent mock-dictionary fallback was deleted (failure is fatal; --mock writes only the test fixture src/test/fixtures/dict/cedict.mock.json).
-- **Modifications:** Format conversion to JSON lookup table; license/provenance header retained as sidecar (gap report D5 closed at Phase 6 PR-12).
+- **Path:** scripts/cedict-source.zip (vendored source, committed) → public/dict/cedict.json + cedict.meta.json (generated offline, git-ignored since Phase 6 PR-12; built in CI and dev bootstrap via `npm run compile-dict`; ships in dist/dict/)
+- **Provenance:** The source export is VENDORED in-repo (scripts/cedict-source.zip), pinned + sha256-verified by scripts/cedict.lock.json; the original CC-BY-SA license/copyright header rides inside the .zip so the license accompanies the redistributed copy. Compiled OFFLINE at build time by scripts/compile-dict.cjs (no mdbg.net dependency — MDBG rotates its 'latest' export ~daily, so pinning that moving URL was fragile); the '#' header (license declaration + release metadata) is parsed and RETAINED as the cedict.meta.json sidecar. Upgrades are a deliberate, reviewed step (compile-dict.cjs --update-lock, automated monthly via .github/workflows/update-dict.yml). The silent mock-dictionary fallback was deleted (failure is fatal; --mock writes only the test fixture src/test/fixtures/dict/cedict.mock.json).
+- **Modifications:** Format conversion to JSON lookup table; license/provenance header retained as sidecar (gap report D5 closed at Phase 6 PR-12). Source export vendored in-repo for reproducible, offline builds.
 - **Notes:** Attribution + ShareAlike statement present in README.md and two in-app credits surfaces; cedict.meta.json carries sourceUrl/license/releaseDate/entry counts/sha256s for the credits surfaces (P8 reads it).
 
 ### trad2simp single-character table (derived from OpenCC dictionary data via opencc-js)
@@ -172,7 +172,7 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 
 ## Bundled npm packages (production dependency tree)
 
-574 packages, grouped by license. The private
+576 packages, grouped by license. The private
 vendored forks `zustand-middleware-yjs` and `y-idb` (both MIT) are
 excluded from the scan and recorded in the inventory section above.
 
@@ -348,7 +348,7 @@ excluded from the scan and recorded in the inventory section above.
 - `yaml@2.9.0` — Copyright Eemeli Aro <eemeli@gmail.com> — <https://github.com/eemeli/yaml>
 - `yargs-parser@21.1.1` — Copyright (c) 2016, Contributors — <https://github.com/yargs/yargs-parser>
 
-### MIT (441)
+### MIT (442)
 
 - `@alloc/quick-lru@5.2.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com) — <https://github.com/sindresorhus/quick-lru>
 - `@apideck/better-ajv-errors@0.3.6` — Copyright (c) 2021 Apideck — <https://github.com/apideck-libraries/better-ajv-errors>
@@ -450,7 +450,7 @@ excluded from the scan and recorded in the inventory section above.
 - `@capacitor/filesystem@7.1.6` — Copyright (c) 2025 Ionic — <https://github.com/ionic-team/capacitor-filesystem>
 - `@capacitor/share@7.0.3` — Copyright 2020-present Ionic. https://ionic.io — <https://github.com/ionic-team/capacitor-plugins>
 - `@capawesome-team/capacitor-android-battery-optimization@7.0.0` — Copyright (c) 2022 Robin Genz — <https://github.com/capawesome-team/capacitor-plugins>
-- `@esbuild/darwin-x64@0.27.2` — <https://github.com/evanw/esbuild>
+- `@esbuild/linux-x64@0.27.2` — <https://github.com/evanw/esbuild>
 - `@floating-ui/core@1.7.3` — Copyright (c) 2021-present Floating UI contributors — <https://github.com/floating-ui/floating-ui>
 - `@floating-ui/dom@1.7.4` — Copyright (c) 2021-present Floating UI contributors — <https://github.com/floating-ui/floating-ui>
 - `@floating-ui/react-dom@2.1.6` — Copyright (c) 2021-present Floating UI contributors — <https://github.com/floating-ui/floating-ui>
@@ -506,9 +506,11 @@ excluded from the scan and recorded in the inventory section above.
 - `@rollup/plugin-replace@6.0.3` — Copyright (c) 2019 RollupJS Plugin Contributors (https://github.com/rollup/plugins/graphs/contributors) — <https://github.com/rollup/plugins>
 - `@rollup/plugin-terser@1.0.0` — Copyright (c) 2019 RollupJS Plugin Contributors (https://github.com/rollup/plugins/graphs/contributors) — <https://github.com/rollup/plugins>
 - `@rollup/pluginutils@5.4.0` — Copyright (c) 2019 RollupJS Plugin Contributors (https://github.com/rollup/plugins/graphs/contributors) — <https://github.com/rollup/plugins>
-- `@rollup/rollup-darwin-x64@4.61.1` — Copyright Lukas Taegert-Atkinson — <https://github.com/rollup/rollup>
+- `@rollup/rollup-linux-x64-gnu@4.61.1` — Copyright Lukas Taegert-Atkinson — <https://github.com/rollup/rollup>
+- `@rollup/rollup-linux-x64-musl@4.61.1` — Copyright Lukas Taegert-Atkinson — <https://github.com/rollup/rollup>
 - `@tailwindcss/node@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
-- `@tailwindcss/oxide-darwin-x64@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
+- `@tailwindcss/oxide-linux-x64-gnu@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
+- `@tailwindcss/oxide-linux-x64-musl@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
 - `@tailwindcss/oxide@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
 - `@tailwindcss/postcss@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
 - `@types/babel__core@7.20.5` — <https://github.com/DefinitelyTyped/DefinitelyTyped>
@@ -594,7 +596,6 @@ excluded from the scan and recorded in the inventory section above.
 - `file-saver@2.0.5` — Copyright © 2016 [Eli Grey][1]. — <https://github.com/eligrey/FileSaver.js>
 - `for-each@0.3.5` — Copyright (c) 2012 Raynos. — <https://github.com/Raynos/for-each>
 - `fs-extra@9.1.0` — Copyright (c) 2011-2017 JP Richardson — <https://github.com/jprichardson/node-fs-extra>
-- `fsevents@2.3.3` — Copyright (C) 2010-2020 by Philipp Dunkel, Ben Noordhuis, Elan Shankar, Paul Miller — <https://github.com/fsevents/fsevents>
 - `function-bind@1.1.2` — Copyright (c) 2013 Raynos. — <https://github.com/Raynos/function-bind>
 - `function.prototype.name@1.1.8` — Copyright (c) 2016 Jordan Harband — <https://github.com/es-shims/Function.prototype.name>
 - `functions-have-names@1.2.3` — Copyright (c) 2019 Jordan Harband — <https://github.com/inspect-js/functions-have-names>
@@ -646,7 +647,7 @@ excluded from the scan and recorded in the inventory section above.
 - `isarray@1.0.0` — Copyright (c) 2013 Julian Gruber &lt;julian@juliangruber.com&gt; — <https://github.com/juliangruber/isarray>
 - `isarray@2.0.5` — Copyright (c) 2013 Julian Gruber <julian@juliangruber.com> — <https://github.com/juliangruber/isarray>
 - `isomorphic.js@0.2.5` — Copyright (c) 2020 Kevin Jahns <kevin.jahns@protonmail.com>. — <https://github.com/dmonad/isomorphic.js>
-- `jiti@2.6.1` — Copyright (c) Pooya Parsa <pooya@pi0.io> — <https://github.com/unjs/jiti>
+- `jiti@2.7.0` — Copyright (c) Pooya Parsa <pooya@pi0.io> — <https://github.com/unjs/jiti>
 - `js-tokens@4.0.0` — Copyright (c) 2014, 2015, 2016, 2017, 2018 Simon Lydell — <https://github.com/lydell/js-tokens>
 - `jsesc@3.1.0` — Copyright Mathias Bynens <https://mathiasbynens.be/> — <https://github.com/mathiasbynens/jsesc>
 - `json-schema-traverse@1.0.0` — Copyright (c) 2017 Evgeny Poberezkin — <https://github.com/epoberezkin/json-schema-traverse>
@@ -739,7 +740,7 @@ excluded from the scan and recorded in the inventory section above.
 - `tapable@2.3.3` — Copyright JS Foundation and other contributors — <https://github.com/webpack/tapable>
 - `temp-dir@2.0.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com) — <https://github.com/sindresorhus/temp-dir>
 - `tempy@0.6.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com) — <https://github.com/sindresorhus/tempy>
-- `tinyglobby@0.2.15` — Copyright (c) 2024 Madeline Gurriarán — <https://github.com/SuperchupuDev/tinyglobby>
+- `tinyglobby@0.2.17` — Copyright (c) 2024 Madeline Gurriarán — <https://github.com/SuperchupuDev/tinyglobby>
 - `tr46@1.0.1` — Copyright (c) 2016 Sebastian Mayr — <https://github.com/Sebmaster/tr46.js>
 - `typed-array-buffer@1.0.3` — Copyright (c) 2023 Jordan Harband — <https://github.com/inspect-js/typed-array-buffer>
 - `typed-array-byte-length@1.0.3` — Copyright (c) 2020 Inspect JS — <https://github.com/inspect-js/typed-array-byte-length>
@@ -792,8 +793,9 @@ excluded from the scan and recorded in the inventory section above.
 - `zod@4.3.5` — Copyright (c) 2025 Colin McDonnell — <https://github.com/colinhacks/zod>
 - `zustand@5.0.9` — Copyright (c) 2019 Paul Henschel — <https://github.com/pmndrs/zustand>
 
-### MPL-2.0 (3)
+### MPL-2.0 (4)
 
 - `@capgo/capacitor-social-login@7.20.0` — Copyright Martin Donadieu — <https://github.com/Cap-go/capacitor-social-login>
-- `lightningcss-darwin-x64@1.30.2` — <https://github.com/parcel-bundler/lightningcss>
+- `lightningcss-linux-x64-gnu@1.30.2` — <https://github.com/parcel-bundler/lightningcss>
+- `lightningcss-linux-x64-musl@1.30.2` — <https://github.com/parcel-bundler/lightningcss>
 - `lightningcss@1.30.2` — <https://github.com/parcel-bundler/lightningcss>
