@@ -122,8 +122,20 @@ export class PlatformIntegration implements MediaPlatform {
      * @param {TTSStatus} status The current player status.
      */
     updatePlaybackState(status: TTSStatus) {
+        // 'loading' and 'completed' are transient inter-utterance states. Folding them
+        // into mediaState 'playing' is LOAD-BEARING on NATIVE: it keeps the native
+        // media-session proxy (the Media3 WebViewProxyPlayer) out of Player.STATE_IDLE
+        // across utterance boundaries, so Media3's shouldShowNotification /
+        // shouldRunInForeground stay true and the notification does not flicker or tear
+        // down (and the legacy session stops thrashing, which is what the Bluetooth/AVRCP
+        // "metadata to sync" timeout was reacting to). This intentionally mirrors the
+        // BackgroundAudio fold immediately below. Do NOT narrow this back toward 'none'.
+        // On web it is the cosmetic navigator.mediaSession.playbackState enum (no
+        // timeline/foreground gate); scrubber motion is driven by setPositionState, not
+        // this line. 'none' is reserved for a genuine stop.
         this.mediaSessionManager.setPlaybackState(
-            status === 'playing' ? 'playing' : (status === 'paused' ? 'paused' : 'none')
+            (status === 'playing' || status === 'loading' || status === 'completed') ? 'playing'
+                : (status === 'paused' ? 'paused' : 'none')
         );
 
         if (status === 'playing' || status === 'loading' || status === 'completed') {

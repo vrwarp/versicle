@@ -128,6 +128,20 @@
       "notes": "MIT fork; the published package.json keeps private:true but the git dependency is still consumed normally. Covered by the license record; the in-tree LICENSE is retained upstream in the fork repo."
     },
     {
+      "name": "@jofr/capacitor-media-session (vendored fork: Media3 migration + versicle device fixes)",
+      "version": "4.0.0, vendored from vrwarp/capacitor-media-session@2f8c6fa20eca5ea449c1a54514eb7001279d1b07 (branch antigravity)",
+      "source": "https://github.com/vrwarp/capacitor-media-session (upstream: https://github.com/jofr/capacitor-media-session)",
+      "license": "GPL-3.0-or-later",
+      "provenance": "Vendored in-repo as a file: dependency (packages/capacitor-media-session) instead of the prior git+https pin. Upstream jofr is the legacy androidx.media plugin; the vrwarp fork migrates Android to AndroidX Media3 (media3-session/common 1.2.0) via a WebViewProxyPlayer (SimpleBasePlayer). Retains the upstream GPL-3.0-or-later LICENSE verbatim. Full lineage and the exact local modifications are in packages/capacitor-media-session/PROVENANCE.md.",
+      "path": "packages/capacitor-media-session (git-tracked incl. committed dist/; consumed via the file: dependency in package.json)",
+      "modifications": "Android-only device fixes (upstreamable): MediaSessionService.onCreate now calls addSession() so the Media3 foreground notification posts; onStartCommand returns START_NOT_STICKY and onTaskRemoved stops the idle service; MediaSessionPlugin.bitmapToByteArray downscales artwork to a 512px long edge and encodes JPEG q85 (Binder/AVRCP safety). Vendoring-only deltas (not upstreamed): dist/ is committed and the prepare hook removed (file: deps do not build on install). See PROVENANCE.md.",
+      "distribution": [
+        "web",
+        "android"
+      ],
+      "notes": "GPL-3.0-or-later fork; this is the package cited in inventory.json#licenseFloor as a GPL-3 floor source. Covered by the license allowlist as a normal production dependency."
+    },
+    {
       "name": "@capgo/capacitor-social-login local patch (login_hint passthrough)",
       "version": "patch against 7.20.0",
       "source": "https://github.com/Cap-go/capacitor-social-login",

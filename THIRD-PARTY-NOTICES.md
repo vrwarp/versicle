@@ -77,33 +77,43 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 
 ### y-cinder (fork of PodRaven/y-fire)
 
-- **Version:** 3.0.2603210004, vendored from fork SHA 9c5c205e6bfef008c5dd8733c67619a5a73d5f62
+- **Version:** 3.0.2606100319, git dependency pinned to e1e946408928119837c3a68b474da2def6bf0a69
 - **License:** MIT
 - **Source:** https://github.com/vrwarp/y-cinder (upstream: https://github.com/podraven/y-fire)
-- **Path:** packages/y-cinder (workspace package; src/ bundled into dist/ at build)
-- **Provenance:** Personal fork VENDORED into the repo as an npm workspace (Phase 9, paying off the deferred P4-1 item — plan/overhaul/prep/phase4-sync-strangler.md §D6/§Follow-ups): TS source imported from the fork repo at the exact SHA the app was previously git-pinned to; the fork's committed dist/ at that SHA was verified byte-identical to the previously installed artifact and was built from src/ in the same commit. Retains the upstream MIT LICENSE ('Pod Raven 2024') verbatim plus the fork-of readme header; full lineage, pre-existing fork deltas, and a running Phase 9 modification log live in packages/y-cinder/PROVENANCE.md.
-- **Modifications:** Packaging only at vendor time (private: true, exports point at the TS source, lib0 added as a peer next to the existing firebase/yjs peers, build/release tooling dropped, one type-only `export type` fix for esbuild consumption, the fork's unit suite ported to test/unit) — zero behavior change, pinned by the contract suite in packages/y-cinder/test/contract/. Subsequent fork surgery is logged in PROVENANCE.md.
-- **Notes:** package.json stays private:true (never published), which keeps it OUT of license-checker output — this inventory entry plus the in-tree LICENSE file are its license record. Vendored the same way as packages/zustand-middleware-yjs (Phase 2) and packages/y-idb (Phase 3).
+- **Path:** node_modules/y-cinder (git dependency; ships built dist/ produced by its prepare hook)
+- **Provenance:** Personal fork consumed as a git dependency (git+https://github.com/vrwarp/y-cinder.git#e1e9464), upstreamed from the formerly-vendored copy: the fork surgery (saved/sync events, the compaction inline-content fix) plus the correctness/performance overhaul now live in the fork repo, which builds its dist on install via a `prepare` hook. Retains the upstream MIT LICENSE ('Pod Raven 2024') verbatim plus the fork-of readme header; full lineage and the fork modification log live in the fork repo's PROVENANCE.md.
+- **Modifications:** None in-repo — the fork now lives entirely upstream. The app consumes the published dist; behavior is pinned by the relocated contract suite in test/vendor-contracts/y-cinder/ and the fork's own CI.
+- **Notes:** MIT fork; covered by the license allowlist as a normal production dependency. The in-tree LICENSE record is retained upstream in the fork repo.
 
 ### y-idb (fork of yjs/y-indexeddb)
 
-- **Version:** 9.0.12, vendored from fork SHA e2a21f45b55190e22d165817e9bc2a2ca1aa40cf
+- **Version:** 9.1.0, git dependency pinned to 60379ae5e4af7efd8305969db4cb9db8dcc89efb
 - **License:** MIT
 - **Source:** https://github.com/vrwarp/y-idb (upstream: https://github.com/yjs/y-indexeddb)
-- **Path:** packages/y-idb (workspace package; src/ bundled into dist/ at build)
-- **Provenance:** Personal fork VENDORED into the repo as an npm workspace (Phase 3, plan/overhaul/prep/phase3-storage-gateway.md §D6): ES source imported from the fork at the exact SHA the app was previously git-pinned to; src/y-idb.js verified byte-identical to the previously installed artifact, and the consumer-facing src/y-idb.d.ts is the tsc-emitted declaration from the same install. Retains the upstream MIT LICENSE (Kevin Jahns / RWTH Aachen) verbatim; full lineage, pre-existing fork deltas, and a running Phase 3 modification log live in packages/y-idb/PROVENANCE.md.
-- **Modifications:** Packaging only at vendor time (private: true, exports point at the ES source, lib0 moved to peerDependencies next to the existing yjs peer, build/release tooling dropped) — zero behavior change, pinned by the contract suite in packages/y-idb/test/contract/. Subsequent fork surgery is logged in PROVENANCE.md.
-- **Notes:** package.json stays private:true (never published), which keeps it OUT of license-checker output — this inventory entry plus the in-tree LICENSE file are its license record. y-cinder remains git-pinned until its own phase (P4).
+- **Path:** node_modules/y-idb (git dependency; ES source via the import condition, declarations built on install)
+- **Provenance:** Personal fork consumed as a git dependency (git+https://github.com/vrwarp/y-idb.git#60379ae), upstreamed from the formerly-vendored copy: the snapshot/durability fork surgery lives in the fork repo, which builds its dist (incl. the tsc-emitted declarations) on install via a `prepare` hook. The app resolves the ES source via the package's `import` condition. Retains the upstream MIT LICENSE (Kevin Jahns / RWTH Aachen) verbatim; full lineage and the fork modification log live in the fork repo's PROVENANCE.md.
+- **Modifications:** None in-repo — the fork now lives entirely upstream. Behavior is pinned by the relocated contract suite in test/vendor-contracts/y-idb/ and the fork's own CI.
+- **Notes:** MIT fork; covered by the license allowlist as a normal production dependency. The in-tree LICENSE record is retained upstream in the fork repo.
 
 ### zustand-middleware-yjs (fork of joebobmiles/zustand-middleware-yjs)
 
-- **Version:** 1.3.1, vendored from fork SHA f2842963ecbd5b2bc80fc1898267c0e41b5a1834
+- **Version:** 1.3.1, git dependency pinned to 6a0cff9d9c5f890f6f0fa8f0aec389febe4e6779
 - **License:** MIT
 - **Source:** https://github.com/vrwarp/zustand-middleware-yjs (upstream: https://github.com/joebobmiles/zustand-middleware-yjs)
-- **Path:** packages/zustand-middleware-yjs (workspace package; src/ bundled into dist/ at build)
-- **Provenance:** Personal fork VENDORED into the repo as an npm workspace (Phase 2, plan/overhaul/prep/phase2-fork-surgery.md §6): TS source imported from the fork repo at the exact SHA the app was previously git-pinned to; the fork's committed dist/ at that SHA was verified byte-identical to the previously installed artifact. Retains the upstream MIT LICENSE (Joseph R Miles) verbatim; full lineage, pre-existing fork deltas, and a running Phase 2 modification log live in packages/zustand-middleware-yjs/PROVENANCE.md.
-- **Modifications:** Packaging only at vendor time (peerDependencies for yjs/zustand, exports point at TS source, build/release tooling deleted, jest specs ported to vitest) — zero behavior change, pinned by the contract suite in packages/zustand-middleware-yjs/test/contract/. Subsequent fork surgery is logged in PROVENANCE.md.
-- **Notes:** package.json stays private:true (never published), which keeps it OUT of license-checker output — this inventory entry plus the in-tree LICENSE file are its license record. y-idb was vendored the same way in Phase 3 (packages/y-idb); y-cinder remains git-pinned until its own phase (P4).
+- **Path:** node_modules/zustand-middleware-yjs (git dependency; ships built dist/ produced by its prepare hook)
+- **Provenance:** Personal fork consumed as a git dependency (git+https://github.com/vrwarp/zustand-middleware-yjs.git#6a0cff9), upstreamed from the formerly-vendored copy: the CRDT fork surgery lives in the fork repo, which builds its dist on install via a `prepare` hook. Retains the upstream MIT LICENSE (Joseph R Miles) verbatim; full lineage and the fork modification log live in the fork repo's PROVENANCE.md.
+- **Modifications:** None in-repo — the fork now lives entirely upstream. The app consumes the published dist; behavior is pinned by the relocated contract suite in test/vendor-contracts/zustand/ and the fork's own CI.
+- **Notes:** MIT fork; the published package.json keeps private:true but the git dependency is still consumed normally. Covered by the license record; the in-tree LICENSE is retained upstream in the fork repo.
+
+### @jofr/capacitor-media-session (vendored fork: Media3 migration + versicle device fixes)
+
+- **Version:** 4.0.0, vendored from vrwarp/capacitor-media-session@2f8c6fa20eca5ea449c1a54514eb7001279d1b07 (branch antigravity)
+- **License:** GPL-3.0-or-later
+- **Source:** https://github.com/vrwarp/capacitor-media-session (upstream: https://github.com/jofr/capacitor-media-session)
+- **Path:** packages/capacitor-media-session (git-tracked incl. committed dist/; consumed via the file: dependency in package.json)
+- **Provenance:** Vendored in-repo as a file: dependency (packages/capacitor-media-session) instead of the prior git+https pin. Upstream jofr is the legacy androidx.media plugin; the vrwarp fork migrates Android to AndroidX Media3 (media3-session/common 1.2.0) via a WebViewProxyPlayer (SimpleBasePlayer). Retains the upstream GPL-3.0-or-later LICENSE verbatim. Full lineage and the exact local modifications are in packages/capacitor-media-session/PROVENANCE.md.
+- **Modifications:** Android-only device fixes (upstreamable): MediaSessionService.onCreate now calls addSession() so the Media3 foreground notification posts; onStartCommand returns START_NOT_STICKY and onTaskRemoved stops the idle service; MediaSessionPlugin.bitmapToByteArray downscales artwork to a 512px long edge and encodes JPEG q85 (Binder/AVRCP safety). Vendoring-only deltas (not upstreamed): dist/ is committed and the prepare hook removed (file: deps do not build on install). See PROVENANCE.md.
+- **Notes:** GPL-3.0-or-later fork; this is the package cited in inventory.json#licenseFloor as a GPL-3 floor source. Covered by the license allowlist as a normal production dependency.
 
 ### @capgo/capacitor-social-login local patch (login_hint passthrough)
 
@@ -348,7 +358,7 @@ excluded from the scan and recorded in the inventory section above.
 - `yaml@2.9.0` — Copyright Eemeli Aro <eemeli@gmail.com> — <https://github.com/eemeli/yaml>
 - `yargs-parser@21.1.1` — Copyright (c) 2016, Contributors — <https://github.com/yargs/yargs-parser>
 
-### MIT (442)
+### MIT (443)
 
 - `@alloc/quick-lru@5.2.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com) — <https://github.com/sindresorhus/quick-lru>
 - `@apideck/better-ajv-errors@0.3.6` — Copyright (c) 2021 Apideck — <https://github.com/apideck-libraries/better-ajv-errors>
@@ -450,7 +460,7 @@ excluded from the scan and recorded in the inventory section above.
 - `@capacitor/filesystem@7.1.6` — Copyright (c) 2025 Ionic — <https://github.com/ionic-team/capacitor-filesystem>
 - `@capacitor/share@7.0.3` — Copyright 2020-present Ionic. https://ionic.io — <https://github.com/ionic-team/capacitor-plugins>
 - `@capawesome-team/capacitor-android-battery-optimization@7.0.0` — Copyright (c) 2022 Robin Genz — <https://github.com/capawesome-team/capacitor-plugins>
-- `@esbuild/linux-x64@0.27.2` — <https://github.com/evanw/esbuild>
+- `@esbuild/darwin-x64@0.27.2` — <https://github.com/evanw/esbuild>
 - `@floating-ui/core@1.7.3` — Copyright (c) 2021-present Floating UI contributors — <https://github.com/floating-ui/floating-ui>
 - `@floating-ui/dom@1.7.4` — Copyright (c) 2021-present Floating UI contributors — <https://github.com/floating-ui/floating-ui>
 - `@floating-ui/react-dom@2.1.6` — Copyright (c) 2021-present Floating UI contributors — <https://github.com/floating-ui/floating-ui>
@@ -506,11 +516,9 @@ excluded from the scan and recorded in the inventory section above.
 - `@rollup/plugin-replace@6.0.3` — Copyright (c) 2019 RollupJS Plugin Contributors (https://github.com/rollup/plugins/graphs/contributors) — <https://github.com/rollup/plugins>
 - `@rollup/plugin-terser@1.0.0` — Copyright (c) 2019 RollupJS Plugin Contributors (https://github.com/rollup/plugins/graphs/contributors) — <https://github.com/rollup/plugins>
 - `@rollup/pluginutils@5.4.0` — Copyright (c) 2019 RollupJS Plugin Contributors (https://github.com/rollup/plugins/graphs/contributors) — <https://github.com/rollup/plugins>
-- `@rollup/rollup-linux-x64-gnu@4.61.1` — Copyright Lukas Taegert-Atkinson — <https://github.com/rollup/rollup>
-- `@rollup/rollup-linux-x64-musl@4.61.1` — Copyright Lukas Taegert-Atkinson — <https://github.com/rollup/rollup>
+- `@rollup/rollup-darwin-x64@4.61.1` — Copyright Lukas Taegert-Atkinson — <https://github.com/rollup/rollup>
 - `@tailwindcss/node@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
-- `@tailwindcss/oxide-linux-x64-gnu@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
-- `@tailwindcss/oxide-linux-x64-musl@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
+- `@tailwindcss/oxide-darwin-x64@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
 - `@tailwindcss/oxide@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
 - `@tailwindcss/postcss@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
 - `@types/babel__core@7.20.5` — <https://github.com/DefinitelyTyped/DefinitelyTyped>
@@ -596,6 +604,7 @@ excluded from the scan and recorded in the inventory section above.
 - `file-saver@2.0.5` — Copyright © 2016 [Eli Grey][1]. — <https://github.com/eligrey/FileSaver.js>
 - `for-each@0.3.5` — Copyright (c) 2012 Raynos. — <https://github.com/Raynos/for-each>
 - `fs-extra@9.1.0` — Copyright (c) 2011-2017 JP Richardson — <https://github.com/jprichardson/node-fs-extra>
+- `fsevents@2.3.3` — Copyright (C) 2010-2020 by Philipp Dunkel, Ben Noordhuis, Elan Shankar, Paul Miller — <https://github.com/fsevents/fsevents>
 - `function-bind@1.1.2` — Copyright (c) 2013 Raynos. — <https://github.com/Raynos/function-bind>
 - `function.prototype.name@1.1.8` — Copyright (c) 2016 Jordan Harband — <https://github.com/es-shims/Function.prototype.name>
 - `functions-have-names@1.2.3` — Copyright (c) 2019 Jordan Harband — <https://github.com/inspect-js/functions-have-names>
@@ -787,15 +796,16 @@ excluded from the scan and recorded in the inventory section above.
 - `workbox-window@7.4.1` — Copyright 2018 Google LLC — <https://github.com/googlechrome/workbox>
 - `wrap-ansi@7.0.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com) — <https://github.com/chalk/wrap-ansi>
 - `wrap-ansi@8.1.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com) — <https://github.com/chalk/wrap-ansi>
+- `y-cinder@3.0.2606100319` — Copyright (c) 2024 Pod Raven — <https://github.com/vrwarp/y-cinder>
+- `y-idb@9.1.0` — Copyright (c) 2014.   - Kevin Jahns <kevin.jahns@rwth-aachen.de>..   - Chair of Computer Science 5 (Databases & Information Systems), RWTH Aachen University, Germany — <https://github.com/vrwarp/y-idb>
 - `y-protocols@1.0.7` — Copyright (c) 2019 Kevin Jahns <kevin.jahns@protonmail.com>. — <https://github.com/yjs/y-protocols>
 - `yargs@17.7.2` — Copyright 2010 James Halliday (mail@substack.net); Modified work Copyright 2014 Contributors (ben@npmjs.com) — <https://github.com/yargs/yargs>
 - `yjs@13.6.29` — Copyright (c) 2023.   - Kevin Jahns <kevin.jahns@protonmail.com>..   - Chair of Computer Science 5 (Databases & Information Systems), RWTH Aachen University, Germany — <https://github.com/yjs/yjs>
 - `zod@4.3.5` — Copyright (c) 2025 Colin McDonnell — <https://github.com/colinhacks/zod>
 - `zustand@5.0.9` — Copyright (c) 2019 Paul Henschel — <https://github.com/pmndrs/zustand>
 
-### MPL-2.0 (4)
+### MPL-2.0 (3)
 
 - `@capgo/capacitor-social-login@7.20.0` — Copyright Martin Donadieu — <https://github.com/Cap-go/capacitor-social-login>
-- `lightningcss-linux-x64-gnu@1.30.2` — <https://github.com/parcel-bundler/lightningcss>
-- `lightningcss-linux-x64-musl@1.30.2` — <https://github.com/parcel-bundler/lightningcss>
+- `lightningcss-darwin-x64@1.30.2` — <https://github.com/parcel-bundler/lightningcss>
 - `lightningcss@1.30.2` — <https://github.com/parcel-bundler/lightningcss>
