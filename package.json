@@ -27,7 +27,8 @@
     "tests": "vitest run",
     "coverage": "vitest run --coverage",
     "preview": "vite preview",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "test:emulator": "firebase emulators:exec --only auth,firestore,storage --project demo-versicle-sync-contract 'vitest run src/lib/sync/syncBackendContract.emulator.test.ts src/lib/sync/security-rules.test.ts'"
   },
   "dependencies": {
     "@capacitor-community/safe-area": "^7.0.0",
@@ -116,6 +117,7 @@
     "eslint-plugin-react-refresh": "^0.4.26",
     "fake-indexeddb": "^6.2.5",
     "fflate": "^0.8.3",
+    "firebase-tools": "^15.4.0",
     "globals": "^16.5.0",
     "jsdom": "^27.4.0",
     "knip": "^6.16.1",
