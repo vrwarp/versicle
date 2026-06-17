@@ -7,6 +7,7 @@ import { Cloud, CloudDownload, MoreVertical } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { BookActionMenu } from './BookActionMenu';
 import { coverUrl } from '@data/covers';
+import { useCoverUrl } from '@hooks/useCoverUrl';
 import type { CoverBook } from './BookActionMenu';
 
 function unpackColor(packed: number): string {
@@ -26,7 +27,8 @@ interface BookCoverProps {
 export const BookCover: React.FC<BookCoverProps & { showActions?: boolean }> = React.memo(({ book, isGhostBook = false, onDelete, onOffload, onRestore, showActions = true }) => {
     // If book.coverUrl is set (external URL), use it.
     // Otherwise, if we have a blob (local), use the SW route.
-    const displayUrl = book.coverUrl || (book.coverBlob ? coverUrl(book.id) : null);
+    const swCoverUrl = book.coverUrl || (book.coverBlob ? coverUrl(book.id) : undefined);
+    const displayUrl = useCoverUrl(book.id, book.coverBlob || undefined, swCoverUrl);
 
     const [imageError, setImageError] = React.useState(false);
 

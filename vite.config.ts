@@ -189,7 +189,7 @@ export default defineConfig(({ mode }) => {
         // as `favico.ico` (typo, now renamed), apple-touch-icon.png is
         // generated from pwa-512x512.png, and the phantom mask-icon.svg
         // entry was trimmed — no such asset has ever existed.
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
+        includeAssets: ['apple-touch-icon.png'],
         manifest: {
           // `id` pins app identity across start_url changes; lang/dir feed
           // the OS shell (Phase 8 §F: UI locale is en until a second locale

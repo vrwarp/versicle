@@ -8,6 +8,7 @@ import { Progress } from '../ui/Progress';
 import { BookActionMenu } from './BookActionMenu';
 import { unpackColorToRGB } from '@lib/cover-palette';
 import { coverUrl } from '@data/covers';
+import { useCoverUrl } from '@hooks/useCoverUrl';
 import { formatBytes } from '@kernel/locale/format';
 import { formatReadingTime } from './readingTime';
 
@@ -46,7 +47,8 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
     // This prevents ~1000 selectors running on every store update.
     const progressPercent = book.progress ? Math.round(book.progress * 100) : 0;
 
-    const displayUrl = book.coverUrl || (book.coverBlob ? coverUrl(book.id) : null);
+    const swCoverUrl = book.coverUrl || (book.coverBlob ? coverUrl(book.id) : undefined);
+    const displayUrl = useCoverUrl(book.id, book.coverBlob || undefined, swCoverUrl);
 
     const gradientStyle = React.useMemo(() => {
         if (!book.coverPalette || book.coverPalette.length !== 5) return undefined;

@@ -97,6 +97,7 @@ export class PlaybackController implements TtsEngine {
      */
     private currentProviderId: string = 'local';
     private currentBookId: string | null = null;
+    private currentCoverUrl: string | null = null;
     private playlist: SectionMetadata[] = [];
     private playlistPromise: Promise<void> | null = null;
     private sessionRestored: boolean = false;
@@ -343,6 +344,13 @@ export class PlaybackController implements TtsEngine {
 
         this.taskSequencer.bumpEpoch('setBookId');
 
+        if (this.currentCoverUrl) {
+            if (typeof URL !== 'undefined' && URL.revokeObjectURL) {
+                URL.revokeObjectURL(this.currentCoverUrl);
+            }
+            this.currentCoverUrl = null;
+        }
+
         if (bookId) {
             // Proactively sync language to ensure proper voices are loaded before playback starts
             const currentLang = normalizeLanguageCode(this.ctx.book.getBookLanguage(bookId));
@@ -376,10 +384,23 @@ export class PlaybackController implements TtsEngine {
         if (bookId) {
             this.ctx.book.getMetadata(bookId).then(metadata => {
                 if (this.currentBookId === bookId) {
+                    let coverUrlStr: string | undefined = metadata?.coverUrl;
+                    if (!coverUrlStr && metadata?.coverBlob) {
+                        const hasController = typeof navigator !== 'undefined' && !!navigator.serviceWorker?.controller;
+                        if (hasController) {
+                            coverUrlStr = coverUrl(bookId);
+                        } else if (typeof URL !== 'undefined' && URL.createObjectURL) {
+                            if (this.currentCoverUrl) {
+                                URL.revokeObjectURL(this.currentCoverUrl);
+                            }
+                            this.currentCoverUrl = URL.createObjectURL(metadata.coverBlob);
+                            coverUrlStr = this.currentCoverUrl;
+                        }
+                    }
                     this.book = {
                         title: metadata?.title || '',
                         author: metadata?.author || '',
-                        coverUrl: metadata?.coverUrl || (metadata?.coverBlob ? coverUrl(bookId) : undefined),
+                        coverUrl: coverUrlStr,
                         palette: metadata?.coverPalette,
                         perceptualPalette: metadata?.perceptualPalette,
                     };
