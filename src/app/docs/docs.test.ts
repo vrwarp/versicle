@@ -15,7 +15,6 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from '
 import { join } from 'node:path';
 import ts from 'typescript';
 import {
-  PACKAGE_MODULES,
   SRC_MODULES,
   DOMAIN_MODULES,
   KERNEL_MODULES,
@@ -80,10 +79,6 @@ const expectGenerated = (relPath: string, expected: string) => {
 };
 
 describe('module-map completeness (authored maps == filesystem)', () => {
-  it('packages/* matches PACKAGE_MODULES', () => {
-    expect(Object.keys(PACKAGE_MODULES).sort()).toEqual(dirsOf('packages'));
-  });
-
   it('src/* directories match SRC_MODULES (and the curated render order)', () => {
     expect(Object.keys(SRC_MODULES).sort()).toEqual(dirsOf('src'));
     expect([...srcModuleOrderForTest()].sort()).toEqual(Object.keys(SRC_MODULES).sort());

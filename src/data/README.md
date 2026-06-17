@@ -52,6 +52,6 @@ Captured-fixture upgrades (v18, v24 → current) are pinned in
 | `playbackCache.ts` | session/playback cache (WebKit-safe write pattern preserved verbatim) |
 | `searchText.ts` | persisted search corpus (cache_search_text) |
 
-The Yjs document itself is persisted by `packages/y-idb` (vendored fork)
+The Yjs document itself is persisted by the `y-idb` dependency (vrwarp fork)
 into the separate `versicle-yjs` database; `snapshot/YjsSnapshotService`
 is the one read/write/export surface over it.

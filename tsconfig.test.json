@@ -16,13 +16,5 @@
   "include": ["src"],
   // Override tsconfig.app.json's test excludes — this project exists to
   // check exactly those files.
-  "exclude": [],
-  // `references` are not inherited from tsconfig.app.json via `extends`;
-  // repeat the vendored-fork references so store tests importing
-  // zustand-middleware-yjs (and sync tests importing y-cinder) resolve to
-  // their declarations too.
-  "references": [
-    { "path": "./packages/zustand-middleware-yjs" },
-    { "path": "./packages/y-cinder" }
-  ]
+  "exclude": []
 }

@@ -10,7 +10,7 @@
     "data-no-upward": 0,
     "domains-no-store": 0,
     "ui-imports-kernel-only": 0,
-    "worker-no-state-typegraph": 16
+    "worker-no-state-typegraph": 15
   },
-  "total": 35
+  "total": 34
 }

@@ -51,13 +51,6 @@ function mdTable(headers: readonly string[], rows: readonly (readonly string[])[
 // The module map (completeness-gated against the filesystem by docs.test.ts)
 // ---------------------------------------------------------------------------
 
-/** packages/* — gated: set equality with the directories on disk. */
-export const PACKAGE_MODULES: Readonly<Record<string, string>> = {
-  'zustand-middleware-yjs': 'P2 fork surgeries: syncedKeys, merge-defaults hydration, scopedDiff, api.yjs',
-  'y-idb': 'P3 fork: flush(), writeSnapshot(), readSnapshot(), durable `synced`',
-  'y-cinder': 'P9 vendoring: Firestore Yjs provider, `saved` flush events',
-};
-
 /** src/* directories — gated: set equality with the directories on disk. */
 export const SRC_MODULES: Readonly<Record<string, string>> = {
   kernel: 'L0 — imports nothing internal (admission: zero deps + ≥2 consumers, C12)',
@@ -104,7 +97,6 @@ export const ENTRY_FILES: Readonly<Record<string, string>> = {
 
 /** Repo-root directories named in the docs — gated: existence on disk. */
 export const ROOT_DIRS: Readonly<Record<string, string>> = {
-  'packages/': 'vendored forks as npm workspaces (peer-dep singletons; see check:single-instance)',
   'verification/': 'Playwright journey suite (Docker lane; see TESTING.md)',
   'scripts/': 'operator tooling: gates, generators, codemods, fixture capture (scripts/README.md)',
   'third-party/': 'vendored runtime artifacts (piper) + the license inventory',
@@ -115,10 +107,6 @@ export const ROOT_DIRS: Readonly<Record<string, string>> = {
 function renderModuleTree(): string {
   const pad = (label: string, width: number) => label.padEnd(width);
   const lines: string[] = [];
-  lines.push(`packages/                  # ${ROOT_DIRS['packages/']}`);
-  for (const [name, desc] of Object.entries(PACKAGE_MODULES)) {
-    lines.push(`  ${pad(`${name}/`, 25)}# ${desc}`);
-  }
   lines.push('src/');
   const srcOrder = [
     'kernel', 'data', 'store', 'domains', 'lib', 'app', 'components',
@@ -858,7 +846,7 @@ ${mdTable(['Entry', 'What it is'], Object.entries(DATA_MODULES).map(([k, v]) => 
 
 ${mdTable(['Repo', 'Owns'], Object.entries(DATA_REPOS).map(([k, v]) => [`\`${k}\``, v]))}
 
-The Yjs document itself is persisted by \`packages/y-idb\` (vendored fork)
+The Yjs document itself is persisted by the \`y-idb\` dependency (vrwarp fork)
 into the separate \`versicle-yjs\` database; \`snapshot/YjsSnapshotService\`
 is the one read/write/export surface over it.
 `;

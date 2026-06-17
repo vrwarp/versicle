@@ -4,9 +4,6 @@
   "version": "0.0.0",
   "license": "GPL-3.0-or-later",
   "type": "module",
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -80,13 +77,13 @@
     "ua-parser-js": "^2.0.8",
     "uuid": "^13.0.0",
     "vite-plugin-pwa": "^1.2.0",
-    "y-cinder": "file:packages/y-cinder",
-    "y-idb": "file:packages/y-idb",
+    "y-cinder": "git+https://github.com/vrwarp/y-cinder.git#e1e946408928119837c3a68b474da2def6bf0a69",
+    "y-idb": "git+https://github.com/vrwarp/y-idb.git#60379ae5e4af7efd8305969db4cb9db8dcc89efb",
     "y-protocols": "^1.0.7",
     "yjs": "^13.6.20",
     "zod": "^4.3.5",
     "zustand": "^5.0.9",
-    "zustand-middleware-yjs": "file:packages/zustand-middleware-yjs"
+    "zustand-middleware-yjs": "git+https://github.com/vrwarp/zustand-middleware-yjs.git#6a0cff9d9c5f890f6f0fa8f0aec389febe4e6779"
   },
   "engines": {
     "node": ">=25 <26"
