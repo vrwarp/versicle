@@ -11,9 +11,14 @@
  *  - the `#` header (license declaration + release metadata) is parsed and
  *    RETAINED as a sidecar, public/dict/cedict.meta.json — the shipped
  *    release is finally knowable (inventory.json references it).
- *  - the download is PINNED: scripts/cedict.lock.json records the source
- *    zip's sha256 + release date; a mismatch fails the build (MDBG rotates
- *    the export ~daily — upgrades are deliberate: `--update-lock`).
+ *  - the source snapshot is VENDORED in-repo (scripts/cedict-source.zip) and
+ *    pinned (scripts/cedict.lock.json: sha256 + release date). Normal builds
+ *    compile the committed snapshot OFFLINE and reproducibly — MDBG rotates
+ *    its "latest" export ~daily, so pinning a checksum against that moving URL
+ *    was inherently fragile (any cache-miss recompile would fail through no
+ *    code change of ours). The only network access is the deliberate
+ *    `--update-lock` upgrade, automated monthly behind a reviewed PR
+ *    (.github/workflows/update-dict.yml).
  *  - system `unzip` replaced by fflate (no shell deps; works on any CI).
  *
  * Outputs (git-ignored; built in CI and on dev bootstrap):
@@ -21,8 +26,8 @@
  *  - public/dict/cedict.meta.json   provenance sidecar
  *
  * Usage:
- *  node scripts/compile-dict.cjs                 # verify lock, compile
- *  node scripts/compile-dict.cjs --update-lock   # deliberate release upgrade
+ *  node scripts/compile-dict.cjs                 # compile vendored snapshot (offline)
+ *  node scripts/compile-dict.cjs --update-lock   # fetch MDBG, re-vendor + re-pin
  *  node scripts/compile-dict.cjs --mock          # test fixture only
  */
 const fs = require('fs');
@@ -36,6 +41,7 @@ const ZIP_URL = 'https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_
 const SOURCE_PAGE = 'https://www.mdbg.net/chinese/dictionary?page=cc-cedict';
 const REPO_ROOT = path.join(__dirname, '..');
 const LOCK_PATH = path.join(__dirname, 'cedict.lock.json');
+const VENDOR_PATH = path.join(__dirname, 'cedict-source.zip');
 const OUTPUT_DIR = path.join(REPO_ROOT, 'public/dict');
 const OUTPUT_PATH = path.join(OUTPUT_DIR, 'cedict.json');
 const META_PATH = path.join(OUTPUT_DIR, 'cedict.meta.json');
@@ -146,26 +152,42 @@ async function main() {
   }
   const updateLock = args.includes('--update-lock');
 
-  if (!fs.existsSync(LOCK_PATH) && !updateLock) {
-    throw new Error(
-      `${LOCK_PATH} is missing. The download must be pinned: run ` +
-        `'node scripts/compile-dict.cjs --update-lock' to record the current release.`,
-    );
+  let zip;
+  if (updateLock) {
+    // Deliberate upgrade — the ONLY path that touches the network: fetch
+    // MDBG's current (daily-rotated) export, vendor it in-repo, re-pin below.
+    console.log(`Downloading CC-CEDICT from ${ZIP_URL}...`);
+    zip = await download(ZIP_URL);
+    fs.writeFileSync(VENDOR_PATH, zip);
+    console.log(`Vendored source written to ${VENDOR_PATH}.`);
+  } else {
+    // Normal build — compile the committed snapshot, fully offline. The
+    // sha256 check below guards against corruption / lock drift, not a moving
+    // upstream (we pin a vendored snapshot, never MDBG's rotating URL).
+    if (!fs.existsSync(VENDOR_PATH)) {
+      throw new Error(
+        `${VENDOR_PATH} is missing — the pinned CC-CEDICT snapshot is vendored in-repo. ` +
+          `Run 'node scripts/compile-dict.cjs --update-lock' to fetch and pin the current release.`,
+      );
+    }
+    if (!fs.existsSync(LOCK_PATH)) {
+      throw new Error(
+        `${LOCK_PATH} is missing. Run 'node scripts/compile-dict.cjs --update-lock' to record the pin.`,
+      );
+    }
+    zip = fs.readFileSync(VENDOR_PATH);
   }
 
-  console.log(`Downloading CC-CEDICT from ${ZIP_URL}...`);
-  const zip = await download(ZIP_URL);
   const zipSha = sha256(zip);
-
   if (updateLock) {
     console.log(`Pinning release sha256=${zipSha}.`);
   } else {
     const lock = JSON.parse(fs.readFileSync(LOCK_PATH, 'utf8'));
     if (lock.sha256 !== zipSha) {
       throw new Error(
-        `CC-CEDICT release mismatch: downloaded sha256=${zipSha}, lock pins ${lock.sha256} ` +
-          `(release ${lock.releaseDate}). MDBG rotated the export. Upgrading is a deliberate ` +
-          `step: review and run 'node scripts/compile-dict.cjs --update-lock'.`,
+        `Vendored CC-CEDICT integrity check failed: ${VENDOR_PATH} sha256=${zipSha}, ` +
+          `lock pins ${lock.sha256} (release ${lock.releaseDate}). The vendored snapshot and ` +
+          `lock are out of sync — re-run 'node scripts/compile-dict.cjs --update-lock'.`,
       );
     }
   }

@@ -1,0 +1,63 @@
+# Monthly CC-CEDICT refresh — the deliberate, reviewed upgrade lane.
+#
+# The build pins a VENDORED snapshot (scripts/cedict-source.zip +
+# scripts/cedict.lock.json) instead of MDBG's "latest" export URL, which
+# rotates ~daily. This job is the ONLY place that touches mdbg.net: it fetches
+# the current release, re-vendors + re-pins via `compile-dict.cjs --update-lock`,
+# and opens a PR so the upgrade is reviewed (entry-count delta, license header)
+# before it ships. It never pushes to a protected branch directly.
+#
+# Requires repo setting: Settings → Actions → General → "Allow GitHub Actions
+# to create and approve pull requests" (so the bot can open the PR).
+name: Update dictionary
+
+on:
+  schedule:
+    # 06:00 UTC on the 1st of each month.
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    name: Refresh CC-CEDICT snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Fetch + re-vendor + re-pin current MDBG release
+        run: node scripts/compile-dict.cjs --update-lock
+      - name: Open upgrade PR if the snapshot changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- scripts/cedict.lock.json scripts/cedict-source.zip; then
+            echo "CC-CEDICT snapshot unchanged — nothing to do."
+            exit 0
+          fi
+          BRANCH="bot/update-cedict"
+          BASE="${{ github.event.repository.default_branch }}"
+          RELEASE=$(node -p "require('./scripts/cedict.lock.json').releaseDate")
+          ENTRIES=$(node -p "require('./scripts/cedict.lock.json').entries")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add scripts/cedict.lock.json scripts/cedict-source.zip
+          git commit -m "chore(dict): refresh CC-CEDICT snapshot to ${RELEASE}"
+          git push -f -u origin "$BRANCH"
+          if [ "$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')" = "0" ]; then
+            gh pr create --head "$BRANCH" --base "$BASE" \
+              --title "chore(dict): refresh CC-CEDICT snapshot to ${RELEASE}" \
+              --body "Automated monthly CC-CEDICT refresh from the MDBG export (release ${RELEASE}, ${ENTRIES} entries). Re-vendors \`scripts/cedict-source.zip\` and re-pins \`scripts/cedict.lock.json\`. Review the entry-count delta before merging."
+          else
+            echo "PR for $BRANCH already open — force-pushed the latest snapshot to it."
+          fi
