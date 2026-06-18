@@ -1,0 +1,272 @@
+{
+  "api": {
+    "name": "MediaSessionPlugin",
+    "slug": "mediasessionplugin",
+    "docs": "",
+    "tags": [],
+    "methods": [
+      {
+        "name": "setMetadata",
+        "signature": "(options: MetadataOptions) => Promise<void>",
+        "parameters": [
+          {
+            "name": "options",
+            "docs": "",
+            "type": "MetadataOptions"
+          }
+        ],
+        "returns": "Promise<void>",
+        "tags": [],
+        "docs": "Sets metadata of the currently playing media. Analogue to setting the\n[metadata property of the MediaSession\ninterface](https://developer.mozilla.org/en-US/docs/Web/API/MediaSession/metadata)\nwhen using the Media Session API directly.",
+        "complexTypes": [
+          "MetadataOptions"
+        ],
+        "slug": "setmetadata"
+      },
+      {
+        "name": "setPlaybackState",
+        "signature": "(options: PlaybackStateOptions) => Promise<void>",
+        "parameters": [
+          {
+            "name": "options",
+            "docs": "",
+            "type": "PlaybackStateOptions"
+          }
+        ],
+        "returns": "Promise<void>",
+        "tags": [],
+        "docs": "Indicate whether media is playing or not. Analogue to setting the\n[playbackState property of the MediaSession\ninterface](https://developer.mozilla.org/en-US/docs/Web/API/MediaSession/playbackState)\nwhen using the Media Session API directly.",
+        "complexTypes": [
+          "PlaybackStateOptions"
+        ],
+        "slug": "setplaybackstate"
+      },
+      {
+        "name": "setActionHandler",
+        "signature": "(options: ActionHandlerOptions) => Promise<void>",
+        "parameters": [
+          {
+            "name": "options",
+            "docs": "",
+            "type": "ActionHandlerOptions"
+          }
+        ],
+        "returns": "Promise<void>",
+        "tags": [],
+        "docs": "Registers an intent to handle a specific action.",
+        "complexTypes": [
+          "ActionHandlerOptions"
+        ],
+        "slug": "setactionhandler"
+      },
+      {
+        "name": "setPositionState",
+        "signature": "(options: PositionStateOptions) => Promise<void>",
+        "parameters": [
+          {
+            "name": "options",
+            "docs": "",
+            "type": "PositionStateOptions"
+          }
+        ],
+        "returns": "Promise<void>",
+        "tags": [],
+        "docs": "Update current media playback position, duration and speed. Analogue to\ncalling [setPositionState() of the MediaSession\ninterface](https://developer.mozilla.org/en-US/docs/Web/API/MediaSession/setPositionState)\nwhen using the Media Session API directly.",
+        "complexTypes": [
+          "PositionStateOptions"
+        ],
+        "slug": "setpositionstate"
+      },
+      {
+        "name": "addListener",
+        "signature": "(eventName: 'onMediaAction', listenerFunc: ActionHandler) => Promise<PluginListenerHandle>",
+        "parameters": [
+          {
+            "name": "eventName",
+            "docs": "",
+            "type": "'onMediaAction'"
+          },
+          {
+            "name": "listenerFunc",
+            "docs": "",
+            "type": "ActionHandler"
+          }
+        ],
+        "returns": "Promise<PluginListenerHandle>",
+        "tags": [],
+        "docs": "Listen for media actions from the OS",
+        "complexTypes": [
+          "PluginListenerHandle",
+          "ActionHandler"
+        ],
+        "slug": "addlisteneronmediaaction"
+      }
+    ],
+    "properties": []
+  },
+  "interfaces": [
+    {
+      "name": "MetadataOptions",
+      "slug": "metadataoptions",
+      "docs": "",
+      "tags": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "album",
+          "tags": [],
+          "docs": "",
+          "complexTypes": [],
+          "type": "string | undefined"
+        },
+        {
+          "name": "artist",
+          "tags": [],
+          "docs": "",
+          "complexTypes": [],
+          "type": "string | undefined"
+        },
+        {
+          "name": "artwork",
+          "tags": [],
+          "docs": "",
+          "complexTypes": [
+            "MediaImage"
+          ],
+          "type": "any[] | undefined"
+        },
+        {
+          "name": "title",
+          "tags": [],
+          "docs": "",
+          "complexTypes": [],
+          "type": "string | undefined"
+        }
+      ]
+    },
+    {
+      "name": "PlaybackStateOptions",
+      "slug": "playbackstateoptions",
+      "docs": "",
+      "tags": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "playbackState",
+          "tags": [],
+          "docs": "",
+          "complexTypes": [
+            "MediaSessionPlaybackState"
+          ],
+          "type": "MediaSessionPlaybackState"
+        }
+      ]
+    },
+    {
+      "name": "ActionHandlerOptions",
+      "slug": "actionhandleroptions",
+      "docs": "",
+      "tags": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "action",
+          "tags": [],
+          "docs": "",
+          "complexTypes": [
+            "MediaSessionAction"
+          ],
+          "type": "MediaSessionAction"
+        }
+      ]
+    },
+    {
+      "name": "PositionStateOptions",
+      "slug": "positionstateoptions",
+      "docs": "",
+      "tags": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "duration",
+          "tags": [],
+          "docs": "",
+          "complexTypes": [],
+          "type": "number | undefined"
+        },
+        {
+          "name": "playbackRate",
+          "tags": [],
+          "docs": "",
+          "complexTypes": [],
+          "type": "number | undefined"
+        },
+        {
+          "name": "position",
+          "tags": [],
+          "docs": "",
+          "complexTypes": [],
+          "type": "number | undefined"
+        }
+      ]
+    },
+    {
+      "name": "PluginListenerHandle",
+      "slug": "pluginlistenerhandle",
+      "docs": "",
+      "tags": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "remove",
+          "tags": [],
+          "docs": "",
+          "complexTypes": [],
+          "type": "() => Promise<void>"
+        }
+      ]
+    },
+    {
+      "name": "ActionDetails",
+      "slug": "actiondetails",
+      "docs": "",
+      "tags": [],
+      "methods": [],
+      "properties": [
+        {
+          "name": "action",
+          "tags": [],
+          "docs": "",
+          "complexTypes": [
+            "MediaSessionAction"
+          ],
+          "type": "MediaSessionAction"
+        },
+        {
+          "name": "seekTime",
+          "tags": [],
+          "docs": "",
+          "complexTypes": [],
+          "type": "number | null | undefined"
+        }
+      ]
+    }
+  ],
+  "enums": [],
+  "typeAliases": [
+    {
+      "name": "ActionHandler",
+      "slug": "actionhandler",
+      "docs": "",
+      "types": [
+        {
+          "text": "(details: ActionDetails): void",
+          "complexTypes": [
+            "ActionDetails"
+          ]
+        }
+      ]
+    }
+  ],
+  "pluginConfigs": []
+}

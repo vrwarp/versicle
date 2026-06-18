@@ -5,9 +5,15 @@ on:
     branches: [ "main", "capacitor" ]
     paths:
       - 'android/**'
+      - 'packages/capacitor-media-session/**'
+      - 'Dockerfile.android'
+      - '.github/workflows/android.yml'
   pull_request:
     paths:
       - 'android/**'
+      - 'packages/capacitor-media-session/**'
+      - 'Dockerfile.android'
+      - '.github/workflows/android.yml'
 
 jobs:
   test:

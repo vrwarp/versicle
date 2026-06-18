@@ -36,15 +36,5 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
-
-        <service
-            android:name="io.capawesome.capacitorjs.plugins.foregroundservice.AndroidForegroundService"
-            android:foregroundServiceType="mediaPlayback"
-            android:exported="false"
-        />
-
-        <receiver
-            android:name="io.capawesome.capacitorjs.plugins.foregroundservice.NotificationActionBroadcastReceiver"
-        />
     </application>
 </manifest>
