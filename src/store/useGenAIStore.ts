@@ -159,7 +159,7 @@ export const useGenAIStore = create<GenAIState>()(
     (set) => ({
       apiKey: '',
       model: 'gemini-flash-lite-latest',
-      embeddingModel: 'gemini-embedding-001',
+      embeddingModel: 'gemini-embedding-2',
       embeddingDims: 768,
       useBatchEmbedding: false,
       isEnabled: false,
@@ -215,7 +215,7 @@ export const useGenAIStore = create<GenAIState>()(
     }),
     {
       name: 'genai-storage',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedGenAIState => ({
         apiKey: state.apiKey,
@@ -243,12 +243,26 @@ export const useGenAIStore = create<GenAIState>()(
        * table images) and dead `usageStats` from existing blobs. Settings
        * (apiKey/model/flags) survive untouched — pinned by the captured-
        * blob regression test (useGenAIStore.migration.test.ts).
+       *
+       * v1 → v2: switch the embedding model off the retired `gemini-embedding-001`
+       * onto `gemini-embedding-2` (the GA model — 8192-token inputs vs 2048,
+       * prompt-instruction profiles instead of `taskType`, auto-normalized
+       * truncated dims). Only the OLD default is flipped, so a hand-picked model
+       * is left alone. The two embedding spaces are incompatible, so the prior
+       * `-001` vectors are ABANDONED automatically: the stamp guards re-embed the
+       * book on the next index pass and skip the stale vectors (regex-only) until
+       * then — no purge needed (see EmbeddingIndexer / semanticRank stamp checks).
        */
       migrate: (persistedState, version) => {
-        if (version < 1 && persistedState && typeof persistedState === 'object') {
+        if (persistedState && typeof persistedState === 'object') {
           const state = persistedState as Record<string, unknown>;
-          delete state.logs;
-          delete state.usageStats;
+          if (version < 1) {
+            delete state.logs;
+            delete state.usageStats;
+          }
+          if (version < 2 && state.embeddingModel === 'gemini-embedding-001') {
+            state.embeddingModel = 'gemini-embedding-2';
+          }
         }
         return persistedState as PersistedGenAIState;
       },

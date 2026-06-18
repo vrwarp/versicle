@@ -99,7 +99,7 @@ describe('genai-storage v0→v1 migration (captured-blob regression)', () => {
     expect(raw).not.toContain('usageStats');
     expect(raw).not.toContain('Full book text sample');
     const parsed = JSON.parse(raw);
-    expect(parsed.version).toBe(1);
+    expect(parsed.version).toBe(2);
     expect(parsed.state.apiKey).toBe('user-api-key-123');
   });
 
@@ -131,6 +131,35 @@ describe('genai-storage v0→v1 migration (captured-blob regression)', () => {
       });
     }
     expect(useGenAIStore.getState().logs.map((l) => l.id)).toEqual(['l-2', 'l-3', 'l-4']);
+  });
+
+  it('v1→v2 switches a persisted gemini-embedding-001 setting onto gemini-embedding-2', async () => {
+    localStorage.setItem(
+      'genai-storage',
+      JSON.stringify({
+        state: { apiKey: 'k', model: 'gemini-flash-lite-latest', embeddingModel: 'gemini-embedding-001' },
+        version: 1,
+      }),
+    );
+    const useGenAIStore = await loadFreshStore();
+    expect(useGenAIStore.getState().embeddingModel).toBe('gemini-embedding-2');
+    // The rewritten blob is at v2 and carries the switched model.
+    useGenAIStore.getState().setEnabled(true);
+    const parsed = JSON.parse(localStorage.getItem('genai-storage')!);
+    expect(parsed.version).toBe(2);
+    expect(parsed.state.embeddingModel).toBe('gemini-embedding-2');
+  });
+
+  it('v1→v2 leaves a hand-picked embedding model untouched', async () => {
+    localStorage.setItem(
+      'genai-storage',
+      JSON.stringify({
+        state: { apiKey: 'k', model: 'gemini-flash-lite-latest', embeddingModel: 'gemini-embedding-2' },
+        version: 1,
+      }),
+    );
+    const useGenAIStore = await loadFreshStore();
+    expect(useGenAIStore.getState().embeddingModel).toBe('gemini-embedding-2');
   });
 
   it('the E2E seeding shape ({state, version: 0} with partial settings) rehydrates cleanly', async () => {

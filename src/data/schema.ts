@@ -81,10 +81,16 @@ export const DB_NAME = 'EpubLibraryDB';
  * `cache_embeddings` + `cache_embed_jobs` stores — cache-domain, device-local,
  * rebuildable; on an older build their absence just means the book gets
  * re-embedded. This bump is DECOUPLED from the reserved sync_log/SW cleanup,
- * which was never done and would take v28. The next IDB bump must add a
- * MIGRATIONS step, never edit an existing one.
+ * which was never done and would take v28. v28 (embedding-model switch) CLEARS
+ * the `cache_embeddings` + `cache_embed_jobs` stores once: the default embedding
+ * model moved from `gemini-embedding-001` to `gemini-embedding-2` (useGenAIStore
+ * persist v2), and the two embedding spaces are incompatible, so the legacy
+ * vectors are dead weight — clearing reclaims their bytes at upgrade time and
+ * every book re-embeds under the new model on its next index pass. Cache-domain,
+ * device-local, rebuildable — nothing user-authored is touched. The next IDB
+ * bump must add a MIGRATIONS step, never edit an existing one.
  */
-export const DB_VERSION = 27;
+export const DB_VERSION = 28;
 
 /**
  * Interface defining the schema for the IndexedDB database.
@@ -393,6 +399,31 @@ function migrateToV27(db: IDBPDatabase<EpubLibraryDB>): void {
 }
 
 /**
+ * The v28 step (embedding-model switch): CLEAR the `cache_embeddings` +
+ * `cache_embed_jobs` stores once. The default embedding model moved from
+ * `gemini-embedding-001` to `gemini-embedding-2` (useGenAIStore persist v2);
+ * the two embedding spaces are incompatible, so a stored `-001` vector can
+ * never be compared against a `-2` query (semanticRank skips a stamp mismatch)
+ * and the indexer re-embeds the whole book anyway. Rather than leave the stale
+ * vectors occupying disk until each book is next opened, clear both stores here
+ * so the bytes are reclaimed at upgrade time; every book re-embeds under the new
+ * model on its next index pass. Cache-domain, device-local and rebuildable, so
+ * the clear is non-destructive (nothing user-authored). Empty/fresh installs
+ * clear nothing. Each store is guarded by `contains()` (baseline creates both
+ * before this step runs, so the guard is belt-and-suspenders).
+ */
+async function migrateToV28(
+  db: IDBPDatabase<EpubLibraryDB>,
+  tx: UpgradeTransaction,
+): Promise<void> {
+  for (const store of ['cache_embeddings', 'cache_embed_jobs'] as const) {
+    if (db.objectStoreNames.contains(store)) {
+      await tx.objectStore(store).clear();
+    }
+  }
+}
+
+/**
  * The versioned migration registry (D7). APPEND-ONLY: released steps are
  * persisted-format surface (migrations.test.ts runs them against committed
  * v18/v24 fixtures); a later fix is a later step, never an edit. Ordered
@@ -403,6 +434,7 @@ export const MIGRATIONS: readonly IdbMigration[] = [
   { toVersion: 25, migrate: migrateToV25 },
   { toVersion: 26, migrate: migrateToV26 },
   { toVersion: 27, migrate: migrateToV27 },
+  { toVersion: 28, migrate: migrateToV28 },
 ];
 
 /**
