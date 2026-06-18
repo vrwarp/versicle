@@ -270,4 +270,30 @@ describe('SearchPanel', () => {
         renderPanel();
         expect(screen.queryByText('No results found')).not.toBeInTheDocument();
     });
+
+    it('shows semantic search status when enabled and configured', async () => {
+        const session = makeSession();
+        session.getEmbeddingStatus = vi.fn().mockResolvedValue({
+            totalSections: 10,
+            embeddedSections: 4,
+        });
+
+        renderPanel({ session });
+
+        await screen.findByText('Indexing for Semantic Search...');
+        expect(screen.getByText('40% (4/10 sections)')).toBeInTheDocument();
+    });
+
+    it('shows semantic search ready when fully indexed', async () => {
+        const session = makeSession();
+        session.getEmbeddingStatus = vi.fn().mockResolvedValue({
+            totalSections: 10,
+            embeddedSections: 10,
+        });
+
+        renderPanel({ session });
+
+        await screen.findByText('Semantic Search Ready');
+        expect(screen.getByText('100% of book text indexed by meaning.')).toBeInTheDocument();
+    });
 });
