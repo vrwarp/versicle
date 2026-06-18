@@ -42,7 +42,10 @@ public class WebViewProxyPlayer extends SimpleBasePlayer {
     public void updateState(String title, String artist, String album, byte[] artworkData,
                             String playbackState, double duration, double position,
                             double playbackRate, java.util.Set<String> supportedActions) {
-        Log.d(TAG, "updateState() called. playbackState: " + playbackState + ", title: " + title);
+        Log.d(TAG, "updateState: playbackState=" + playbackState + " title='" + title + "' artist='" + artist
+                + "' durationS=" + duration + " positionS=" + position + " rate=" + playbackRate
+                + " artwork=" + (artworkData != null ? artworkData.length + "B" : "none")
+                + " actions=" + supportedActions);
         this.title = title;
         this.artist = artist;
         this.album = album;
@@ -57,8 +60,7 @@ public class WebViewProxyPlayer extends SimpleBasePlayer {
 
     @Override
     protected State getState() {
-        Log.d(TAG, "Media3 framework invoking getState(). Constructing state with playbackState=" + playbackState);
-        // 1. Map Playback State
+        // 1. Map Playback State (the comprehensive getState: line at the end subsumes the old entry log)
         int media3State = Player.STATE_READY;
         boolean isPlaying = false;
 
@@ -106,8 +108,20 @@ public class WebViewProxyPlayer extends SimpleBasePlayer {
         }
 
         // 4. Return the built State
+        Player.Commands commands = commandsBuilder.build();
+        // The exact inputs to Media3's shouldShowNotification (timeline non-empty + state != IDLE)
+        // and shouldRunInForeground (playWhenReady + state READY/BUFFERING). When the notification
+        // is missing, this line says why: IDLE state, or !playWhenReady, or no PLAY_PAUSE command.
+        Log.d(TAG, "getState: media3State=" + media3State + " playWhenReady=" + isPlaying
+                + " timelineItems=1 PLAY_PAUSE=" + commands.contains(Player.COMMAND_PLAY_PAUSE)
+                + " SEEK_TO=" + commands.contains(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+                + " NEXT=" + commands.contains(Player.COMMAND_SEEK_TO_NEXT)
+                + " PREV=" + commands.contains(Player.COMMAND_SEEK_TO_PREVIOUS)
+                + " STOP=" + commands.contains(Player.COMMAND_STOP)
+                + " durationMs=" + Math.round(duration * 1000) + " positionMs=" + Math.round(position * 1000)
+                + " artwork=" + (artworkData != null ? artworkData.length + "B" : "none"));
         return new State.Builder()
-                .setAvailableCommands(commandsBuilder.build())
+                .setAvailableCommands(commands)
                 .setPlaybackState(media3State)
                 .setPlayWhenReady(isPlaying, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
                 .setPlaylist(java.util.List.of(

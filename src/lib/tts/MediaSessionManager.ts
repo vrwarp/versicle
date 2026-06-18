@@ -2,6 +2,11 @@ import { Capacitor } from '@capacitor/core';
 import { MediaSession, type ActionDetails } from '@jofr/capacitor-media-session';
 import { isPaletteBright, rgbToL, unpackColorToRGB } from '../cover-palette';
 import type { PerceptualPalette } from '~types/book';
+import { createLogger } from '../logger';
+
+// Diagnostics surface in the device WebView console -> logcat (Capacitor/Console). info/debug
+// only appear when the WebView is built with VITE_LOG_LEVEL=debug (prod default is 'warn').
+const logger = createLogger('MediaSessionManager');
 
 /**
  * Metadata for the Media Session API.
@@ -80,11 +85,14 @@ export class MediaSessionManager {
         ['seekto', this.callbacks.onSeekTo],
       ];
 
+      const registered: string[] = [];
       for (const [action, handler] of nativeHandlers) {
         if (handler) {
           await MediaSession.setActionHandler({ action });
+          registered.push(action);
         }
       }
+      logger.info('native: registered action handlers', registered);
 
       // One listener dispatches every OS-originated action to its callback.
       // The manager lives for the worker's lifetime, so (like the web branch)
@@ -92,6 +100,7 @@ export class MediaSessionManager {
       await MediaSession.addListener('onMediaAction', (details) => {
         this.dispatchNativeAction(details);
       });
+      logger.info('native: onMediaAction listener attached');
     } else if (this.hasWebMediaSession) {
       // WEB MODE
       const actionHandlers: [MediaSessionAction, MediaSessionActionHandler | undefined][] = [
@@ -113,9 +122,12 @@ export class MediaSessionManager {
             navigator.mediaSession.setActionHandler(action, null);
           }
         } catch {
-          console.warn(`MediaSession action '${action}' is not supported.`);
+          logger.warn(`web: MediaSession action '${action}' is not supported.`);
         }
       });
+      logger.info('web: registered navigator.mediaSession action handlers');
+    } else {
+      logger.warn('no media session available (neither native plugin nor navigator.mediaSession)');
     }
   }
 
@@ -127,6 +139,9 @@ export class MediaSessionManager {
    * `seekTime` field that the seek callbacks read.
    */
   private dispatchNativeAction(details: ActionDetails) {
+    // warn (not info) so this always-on breadcrumb survives a production WebView build: it proves
+    // the OS transport event crossed native -> JS. Fires once per button press, so not noisy.
+    logger.warn('OS->JS onMediaAction', details.action, details.seekTime != null ? `seekTime=${details.seekTime}` : '');
     const seekDetails = details as unknown as MediaSessionActionDetails;
     switch (details.action) {
       case 'play': this.callbacks.onPlay?.(); break;
@@ -146,6 +161,8 @@ export class MediaSessionManager {
    * @param metadata - The new metadata to display.
    */
   async setMetadata(metadata: MediaSessionMetadata) {
+    logger.info('setMetadata', this.isNative ? 'native' : (this.hasWebMediaSession ? 'web' : 'none'),
+      { title: metadata.title, artist: metadata.artist, hasArtwork: !!(metadata.artwork && metadata.artwork.length) });
     let artwork = metadata.artwork;
 
     // Process artwork (fetch, crop to square, convert to base64) for both Native and Web
@@ -164,7 +181,7 @@ export class MediaSessionManager {
           artwork = [processedArtwork];
         }
       } catch (e) {
-        console.warn("Failed to process artwork", e);
+        logger.warn("Failed to process artwork", e);
       }
     }
 
@@ -211,7 +228,7 @@ export class MediaSessionManager {
         type: 'image/jpeg'
       };
     } catch (e) {
-      console.warn("Error processing artwork", e);
+      logger.warn("Error processing artwork", e);
       return null;
     }
   }
@@ -359,6 +376,7 @@ export class MediaSessionManager {
    * @param state - The current playback state or just the string 'playing' | 'paused' | 'none' for compatibility.
    */
   async setPlaybackState(playbackState: 'playing' | 'paused' | 'none') {
+    logger.info('setPlaybackState', playbackState, this.isNative ? 'native' : (this.hasWebMediaSession ? 'web' : 'none'));
     if (this.isNative) {
       await MediaSession.setPlaybackState({
         playbackState,
@@ -375,17 +393,18 @@ export class MediaSessionManager {
    * @param state - The current position state.
    */
   setPositionState(state: MediaPositionState) {
+    logger.debug('setPositionState', state);
     if (this.isNative) {
       MediaSession.setPositionState({
         duration: state.duration,
         playbackRate: state.playbackRate,
         position: state.position
-      }).catch(e => console.warn("Failed to set native position state", e));
+      }).catch(e => logger.warn("Failed to set native position state", e));
     } else if (this.hasWebMediaSession && 'setPositionState' in navigator.mediaSession) {
       try {
         navigator.mediaSession.setPositionState(state);
       } catch (e) {
-        console.warn("Failed to set MediaSession position state", e);
+        logger.warn("Failed to set MediaSession position state", e);
       }
     }
   }

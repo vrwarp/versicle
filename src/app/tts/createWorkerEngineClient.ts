@@ -134,13 +134,17 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
     }, undefined, storeProviderBuildContext);
 
     // The real media platform (lock screen / background audio) on the main thread.
+    // These logs are the FINAL hop of an OS transport command (notification / lock screen /
+    // Bluetooth -> native -> MediaSessionManager -> here -> worker engine). If a control does
+    // nothing, check whether the matching line appears (and compare against the native
+    // "onMediaAction" emit + the MediaSessionManager "OS->JS onMediaAction" line).
     const platform = new PlatformIntegration({
-        onPlay: () => { void engine.play(); },
-        onPause: () => { engine.pause(); },
-        onStop: () => { engine.stop(); },
-        onPrev: () => { void engine.skipToPreviousSection(); },
-        onNext: () => { void engine.skipToNextSection(); },
-        onSeek: (offset) => { engine.seek(offset); },
+        onPlay: () => { logger.info('transport play -> engine.play()'); void engine.play(); },
+        onPause: () => { logger.info('transport pause -> engine.pause()'); engine.pause(); },
+        onStop: () => { logger.info('transport stop -> engine.stop()'); engine.stop(); },
+        onPrev: () => { logger.info('transport prev -> engine.skipToPreviousSection()'); void engine.skipToPreviousSection(); },
+        onNext: () => { logger.info('transport next -> engine.skipToNextSection()'); void engine.skipToNextSection(); },
+        onSeek: (offset) => { logger.info('transport seek -> engine.seek(' + offset + ')'); engine.seek(offset); },
         onSeekTo: () => { /* seekTo is internal; lock-screen seek uses onSeek */ },
     });
 

@@ -70,12 +70,14 @@ public class MediaSessionPlugin extends Plugin {
     @Override
     public void load() {
         super.load();
-        Log.i(TAG, "Plugin load() invoked. startServiceOnlyDuringPlayback: " + startServiceOnlyDuringPlayback);
 
         final String foregroundServiceConfig = getConfig().getString("foregroundService", "");
         if (foregroundServiceConfig.equals("always")) {
             startServiceOnlyDuringPlayback = false;
         }
+        Log.i(TAG, "load(): foregroundService config='" + foregroundServiceConfig
+                + "' startServiceOnlyDuringPlayback=" + startServiceOnlyDuringPlayback
+                + " -> " + (startServiceOnlyDuringPlayback ? "service starts on first playback" : "binding service now"));
 
         if (!startServiceOnlyDuringPlayback) {
             startMediaService();
@@ -83,6 +85,7 @@ public class MediaSessionPlugin extends Plugin {
     }
 
     public void startMediaService() {
+        Log.i(TAG, "startMediaService: bindService(MediaSessionService, BIND_AUTO_CREATE)");
         Intent intent = new Intent(getActivity(), MediaSessionService.class);
         getContext().bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
     }
@@ -112,7 +115,10 @@ public class MediaSessionPlugin extends Plugin {
     }
 
     private byte[] bitmapToByteArray(Bitmap bitmap) {
-        if (bitmap == null) return null;
+        if (bitmap == null) {
+            Log.w(TAG, "Artwork: decode produced a null bitmap (unsupported/corrupt source)");
+            return null;
+        }
         int[] dims = computeScaledDimensions(bitmap.getWidth(), bitmap.getHeight(), MAX_ARTWORK_EDGE_PX);
         Bitmap scaled = (dims[0] == bitmap.getWidth() && dims[1] == bitmap.getHeight())
                 ? bitmap
@@ -122,7 +128,10 @@ public class MediaSessionPlugin extends Plugin {
         // the encoded artwork comfortably under the Binder transaction limit.
         scaled.compress(Bitmap.CompressFormat.JPEG, ARTWORK_JPEG_QUALITY, stream);
         if (scaled != bitmap) scaled.recycle();
-        return stream.toByteArray();
+        byte[] out = stream.toByteArray();
+        Log.d(TAG, "Artwork: " + bitmap.getWidth() + "x" + bitmap.getHeight() + " -> "
+                + dims[0] + "x" + dims[1] + " JPEG q" + ARTWORK_JPEG_QUALITY + " = " + (out.length / 1024) + "KB");
+        return out;
     }
 
     private byte[] urlToArtworkData(String url) throws IOException {
@@ -157,7 +166,13 @@ public class MediaSessionPlugin extends Plugin {
     }
 
     private void updateProxyPlayerState() {
-        if (service == null || service.getPlayer() == null) return;
+        if (service == null || service.getPlayer() == null) {
+            // State arrived before the service bound — it is dropped (the next state push after
+            // onServiceConnected re-syncs). If metadata/playback never appear, look for this line.
+            Log.w(TAG, "updateProxyPlayerState: service not bound yet — dropping state update (playbackState="
+                    + playbackState + ", title=" + title + ")");
+            return;
+        }
 
         getActivity().runOnUiThread(() -> {
             service.getPlayer().updateState(
@@ -233,6 +248,7 @@ public class MediaSessionPlugin extends Plugin {
         String action = call.getString("action");
         if (action != null) {
             supportedActions.add(action);
+            Log.d(TAG, "JS Bridge -> setActionHandler('" + action + "'). supportedActions=" + supportedActions);
             updateProxyPlayerState();
         }
         call.resolve();
@@ -247,12 +263,17 @@ public class MediaSessionPlugin extends Plugin {
     }
 
     public void actionCallback(String action, JSObject data) {
-        Log.i(TAG, "Native -> JS Bridge: Emitting onMediaAction -> " + action);
         if (supportedActions.contains(action)) {
+            // hasListeners distinguishes "JS never attached the onMediaAction listener" (a startup
+            // race) from "JS got it but the engine call failed" — the two indistinguishable halves
+            // of a control that does nothing.
+            Log.i(TAG, "Native -> JS Bridge: Emitting onMediaAction -> " + action
+                    + " (jsListenerAttached=" + hasListeners("onMediaAction") + ")");
             data.put("action", action);
             notifyListeners("onMediaAction", data);
         } else {
-            Log.d(TAG, "No handler registered for action " + action);
+            Log.w(TAG, "onMediaAction DROPPED: action '" + action + "' not in supportedActions="
+                    + supportedActions + " (registration race or never registered) — control will do nothing");
         }
     }
 
