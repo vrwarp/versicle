@@ -217,6 +217,7 @@ export class WorkerTtsEngine {
     skipToPreviousSection(): Promise<boolean> { return this.e.skipToPreviousSection(); }
     jumpTo(index: number): void { void this.e.jumpTo(index); }
     seek(offset: number): void { void this.e.seek(offset); }
+    seekTo(time: number): void { void this.e.seekTo(time); }
     setSpeed(speed: number): void { void this.e.setSpeed(speed); }
     setVoice(voiceId: string): void { void this.e.setVoice(voiceId); }
     setProviderById(providerId: string): void { void this.e.setProviderById(providerId); }

@@ -145,7 +145,11 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         onPrev: () => { logger.info('transport prev -> engine.skipToPreviousSection()'); void engine.skipToPreviousSection(); },
         onNext: () => { logger.info('transport next -> engine.skipToNextSection()'); void engine.skipToNextSection(); },
         onSeek: (offset) => { logger.info('transport seek -> engine.seek(' + offset + ')'); engine.seek(offset); },
-        onSeekTo: () => { /* seekTo is internal; lock-screen seek uses onSeek */ },
+        // Absolute scrubber drag on the OS media notification / lock screen: the native
+        // layer emits `seekto` with an absolute time (seconds) in the section-queue domain
+        // we publish via setPositionState. Route it to the engine's absolute seek — NOT
+        // engine.seek(), whose offset only carries a sign (sentence-step navigation).
+        onSeekTo: (time) => { logger.info('transport seekTo -> engine.seekTo(' + time + ')'); engine.seekTo(time); },
     });
 
     const host: EngineHost = {
