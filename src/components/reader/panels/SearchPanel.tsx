@@ -12,13 +12,13 @@
  * result to `onNavigate`, which lands on the EXACT match with a temporary
  * highlight (app/reader/searchNavigation).
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Input } from '../../ui/Input';
 import { Button } from '../../ui/Button';
 import { Search, Loader2, X } from 'lucide-react';
 import { cn } from '@lib/utils';
 import type { SearchSession } from '@domains/search';
-import type { DetailedSearchResult } from '~types/search';
+import type { DetailedSearchResult, EmbeddingStatus } from '~types/search';
 import { useImportController } from '@app/library/useImportController';
 import { useToastStore } from '@store/useToastStore';
 import { createLogger } from '@lib/logger';
@@ -44,6 +44,10 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
     const [searchResults, setSearchResults] = useState<DetailedSearchResult[]>([]);
     const [truncated, setTruncated] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
+    const [embedStatus, setEmbedStatus] = useState<EmbeddingStatus | null>(null);
+
+    const embedStatusRef = useRef<EmbeddingStatus | null>(null);
+    embedStatusRef.current = embedStatus;
 
     // Indexing State
     const [isIndexing, setIsIndexing] = useState(false);
@@ -87,7 +91,48 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
         };
     }, [bookId, session, importController, showToast]);
 
-    const requestCounter = React.useRef(0);
+    useEffect(() => {
+        if (!bookId || !session) return;
+
+        let mounted = true;
+        let timer: NodeJS.Timeout | undefined;
+
+        const fetchStatus = async () => {
+            try {
+                const status = await session.getEmbeddingStatus(bookId);
+                if (mounted) {
+                    setEmbedStatus(status);
+                    if (status && status.embeddedSections === status.totalSections) {
+                        if (timer) {
+                            clearInterval(timer);
+                            timer = undefined;
+                        }
+                    }
+                }
+            } catch (e) {
+                logger.error('Failed to fetch embedding status', e);
+            }
+        };
+
+        void fetchStatus().then(() => {
+            const currentStatus = embedStatusRef.current;
+            if (
+                mounted &&
+                (!currentStatus || currentStatus.embeddedSections < currentStatus.totalSections)
+            ) {
+                timer = setInterval(() => {
+                    void fetchStatus();
+                }, 3000);
+            }
+        });
+
+        return () => {
+            mounted = false;
+            if (timer) clearInterval(timer);
+        };
+    }, [bookId, session]);
+
+    const requestCounter = useRef(0);
 
     const handleSearch = useCallback(async () => {
         const capturedQuery = searchQuery.trim();
@@ -187,7 +232,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
             <div className="flex-1 overflow-y-auto p-4" aria-live="polite">
                 {isSearching ? (
                     <div className="text-center text-muted-foreground" role="status" aria-live="polite">Searching...</div>
-                ) : (
+                ) : searchResults.length > 0 ? (
                     <ul className="space-y-4">
                         {searchResults.map((result, idx) => (
                             <li key={`${result.href}-${result.charOffset}-${idx}`} className="border-b border-border pb-2 last:border-0">
@@ -206,15 +251,52 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                                 </Button>
                             </li>
                         ))}
-                        {truncated && searchResults.length > 0 && (
+                        {truncated && (
                             <li className="text-center text-muted-foreground text-xs" role="status">
                                 Showing the first {searchResults.length} matches
                             </li>
                         )}
-                        {searchResults.length === 0 && activeSearchQuery && !isSearching && (
-                            <div className="text-center text-muted-foreground text-sm" role="status" aria-live="polite">No results found</div>
-                        )}
                     </ul>
+                ) : activeSearchQuery ? (
+                    <div className="text-center text-muted-foreground text-sm" role="status" aria-live="polite">No results found</div>
+                ) : (
+                    // Show embedding progress before any search starts (Scenario A or B)
+                    embedStatus && (
+                        <div className="p-3 rounded-lg border border-border bg-card/50 text-xs space-y-2">
+                            {embedStatus.embeddedSections === embedStatus.totalSections ? (
+                                <>
+                                    <div className="font-semibold text-foreground flex items-center gap-1.5">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                        Semantic Search Ready
+                                    </div>
+                                    <p className="text-muted-foreground">
+                                        100% of book text indexed by meaning.
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="font-semibold text-foreground flex items-center gap-1.5">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                        Indexing for Semantic Search...
+                                    </div>
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                                            <span>{Math.round((embedStatus.embeddedSections / embedStatus.totalSections) * 100)}% ({embedStatus.embeddedSections}/{embedStatus.totalSections} sections)</span>
+                                        </div>
+                                        <div className="h-1.5 bg-secondary rounded-full overflow-hidden w-full">
+                                            <div
+                                                className="h-full bg-primary transition-all duration-500"
+                                                style={{ width: `${(embedStatus.embeddedSections / embedStatus.totalSections) * 100}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground italic">
+                                        Indexing fanning out from your page.
+                                    </p>
+                                </>
+                            )}
+                        </div>
+                    )
                 )}
             </div>
         </div>
