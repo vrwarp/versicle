@@ -361,3 +361,49 @@ describe('M.8 v27 embedding stores (Increment B — additive, cache-domain)', ()
     await jobTx.done;
   });
 });
+
+describe('M.9 v28 abandons legacy embedding vectors (model switch 001 → 2)', () => {
+  it('clears cache_embeddings + cache_embed_jobs on upgrade, leaving other data intact', async () => {
+    // Seed a v27 DB carrying legacy -001 vectors + an unrelated static row,
+    // then let getConnection() upgrade it to v28.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const v27: IDBPDatabase<any> = await openDB(DB_NAME, 27, {
+      upgrade(db) {
+        for (const name of ['cache_embeddings', 'cache_embed_jobs', 'static_manifests']) {
+          if (!db.objectStoreNames.contains(name)) {
+            db.createObjectStore(name, { keyPath: 'bookId' });
+          }
+        }
+      },
+    });
+    await v27.put('cache_embeddings', {
+      bookId: 'bk-1',
+      model: 'gemini-embedding-001',
+      dims: 768,
+      quant: 'int8-pervec',
+      extractionVersion: 1,
+      sections: [],
+    });
+    await v27.put('cache_embed_jobs', {
+      bookId: 'bk-1',
+      extractionVersion: 1,
+      sections: [],
+      updatedAt: 0,
+    });
+    await v27.put('static_manifests', { bookId: 'bk-keep', title: 'Keep me' });
+    v27.close();
+
+    const db = await getConnection();
+    expect(db.version).toBe(DB_VERSION);
+
+    // The legacy -001 vectors are gone (bytes reclaimed at upgrade) …
+    expect(await db.count('cache_embeddings')).toBe(0);
+    expect(await db.count('cache_embed_jobs')).toBe(0);
+    // … but unrelated data survives the bump.
+    expect(await db.get('static_manifests', 'bk-keep')).toMatchObject({ bookId: 'bk-keep' });
+
+    // schemaHistory records the 27 → 28 step.
+    const history = await getSchemaHistory(db as never);
+    expect(history.at(-1)).toMatchObject({ from: 27, to: DB_VERSION });
+  });
+});
