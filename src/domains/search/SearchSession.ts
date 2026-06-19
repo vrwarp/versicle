@@ -17,7 +17,7 @@
  *    clears caches unconditionally.
  */
 import { AppError, NetRateLimitedError } from '~types/errors';
-import type { SearchBatchResult, SearchSection } from '~types/search';
+import type { SearchBatchResult, SearchSection, EmbeddingStatus } from '~types/search';
 import { QueryEmbeddingCache } from './queryEmbeddingCache';
 import { fuseRrf } from './rrf';
 import { semanticRank } from './semanticRank';
@@ -267,6 +267,50 @@ export class SearchSession {
    */
   async enqueueEmbedding(bookId: string, currentCfi?: string): Promise<void> {
     await this.opts.embeddingIndexer?.enqueue(bookId, currentCfi);
+  }
+
+  /**
+   * Returns the embedding progress status for the book. Returns null if
+   * semantic search is disabled, unconfigured, or the ports are absent.
+   */
+  async getEmbeddingStatus(bookId: string): Promise<EmbeddingStatus | null> {
+    const { embeddingClient, embeddingsSource, getSemanticConfig, textSource } = this.opts;
+    if (!embeddingClient || !embeddingsSource || !getSemanticConfig || !textSource) {
+      return null;
+    }
+
+    const semanticConfig = getSemanticConfig();
+    if (!semanticConfig.enabled || !embeddingClient.isConfigured()) {
+      return null;
+    }
+
+    try {
+      const corpus = await this.memoizingTextSource(textSource).get(bookId);
+      if (!corpus || corpus.sections.length === 0) {
+        return null;
+      }
+
+      const totalSections = corpus.sections.length;
+      const embedded = await embeddingsSource.get(bookId);
+      if (!embedded || embedded.sections.length === 0) {
+        return { totalSections, embeddedSections: 0 };
+      }
+
+      // Cross-reference text hashes to count only matching/up-to-date sections
+      const corpusHashes = new Map(corpus.sections.map((s) => [s.href, s.sectionTextHash]));
+      let embeddedSections = 0;
+
+      for (const section of embedded.sections) {
+        const liveHash = corpusHashes.get(section.href);
+        if (liveHash !== undefined && section.sectionTextHash === liveHash) {
+          embeddedSections++;
+        }
+      }
+
+      return { totalSections, embeddedSections };
+    } catch {
+      return null;
+    }
   }
 
   /**

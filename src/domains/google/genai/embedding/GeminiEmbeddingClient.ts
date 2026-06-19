@@ -210,6 +210,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
         // One combined token estimate for the whole batch, since the batch is a
         // single egress call (like the per-text path's per-text estimate).
         estTokens: contents.reduce((sum, c) => sum + estTokens(c), 0),
+        ratePool: config.model,
       },
     );
 
@@ -272,6 +273,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
         consent: { bookId: opts.bookId, interactive: opts.interactive },
         lane: opts.lane ?? 'fg',
         estTokens: estTokens(content),
+        ratePool: config.model,
       },
     );
 

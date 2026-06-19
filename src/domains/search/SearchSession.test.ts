@@ -410,4 +410,115 @@ describe('SearchSession — hybrid semantic query path (Increment D)', () => {
     // The regex hit for "whale" survives fusion alongside semantic chunk hits.
     expect(results.some((r) => SEMANTIC_TEXT.substring(r.charOffset, r.charOffset + r.matchLength).toLowerCase().includes('whale'))).toBe(true);
   });
+
+  describe('getEmbeddingStatus', () => {
+    it('returns null when semantic ports are absent', async () => {
+      const { factory } = makeFactory();
+      const session = new SearchSession({ engineFactory: factory });
+      await expect(session.getEmbeddingStatus('bk-1')).resolves.toBeNull();
+    });
+
+    it('returns null when semantic search is disabled', async () => {
+      const { factory } = makeFactory();
+      const queryClient = new MockEmbeddingClient({ dims: DIMS });
+      const session = new SearchSession({
+        engineFactory: factory,
+        textSource: semanticTextSource(),
+        embeddingClient: queryClient,
+        embeddingsSource: { get: vi.fn() },
+        getSemanticConfig: semanticConfig(false), // disabled
+      });
+      await expect(session.getEmbeddingStatus('bk-1')).resolves.toBeNull();
+    });
+
+    it('returns null when embeddingClient is not configured', async () => {
+      const { factory } = makeFactory();
+      const queryClient = new MockEmbeddingClient({ dims: DIMS, configured: false });
+      const session = new SearchSession({
+        engineFactory: factory,
+        textSource: semanticTextSource(),
+        embeddingClient: queryClient,
+        embeddingsSource: { get: vi.fn() },
+        getSemanticConfig: semanticConfig(true),
+      });
+      await expect(session.getEmbeddingStatus('bk-1')).resolves.toBeNull();
+    });
+
+    it('returns null when corpus is missing', async () => {
+      const { factory } = makeFactory();
+      const queryClient = new MockEmbeddingClient({ dims: DIMS });
+      const session = new SearchSession({
+        engineFactory: factory,
+        textSource: { get: vi.fn(async () => undefined) },
+        embeddingClient: queryClient,
+        embeddingsSource: { get: vi.fn() },
+        getSemanticConfig: semanticConfig(true),
+      });
+      await expect(session.getEmbeddingStatus('bk-1')).resolves.toBeNull();
+    });
+
+    it('returns 0 embedded sections if book is not embedded at all', async () => {
+      const { factory } = makeFactory();
+      const queryClient = new MockEmbeddingClient({ dims: DIMS });
+      const session = new SearchSession({
+        engineFactory: factory,
+        textSource: semanticTextSource(),
+        embeddingClient: queryClient,
+        embeddingsSource: { get: vi.fn(async () => undefined) },
+        getSemanticConfig: semanticConfig(true),
+      });
+      const status = await session.getEmbeddingStatus('bk-1');
+      expect(status).toEqual({ totalSections: 1, embeddedSections: 0 });
+    });
+
+    it('returns progress based on matching text hashes', async () => {
+      const { factory } = makeFactory();
+      const queryClient = new MockEmbeddingClient({ dims: DIMS });
+
+      // Case 1: hashes match
+      const embeddedMatch = {
+        extractionVersion: 3,
+        sections: [{ href: SEMANTIC_HREF, sectionTextHash: 'h1' }],
+      };
+      const textSourceMatch = {
+        get: vi.fn(async () => ({
+          extractionVersion: 3,
+          sections: [{ href: SEMANTIC_HREF, title: 'Ch 1', text: SEMANTIC_TEXT, sectionTextHash: 'h1' }],
+        })),
+      };
+
+      const session1 = new SearchSession({
+        engineFactory: factory,
+        textSource: textSourceMatch,
+        embeddingClient: queryClient,
+        embeddingsSource: { get: vi.fn(async () => embeddedMatch as unknown as EmbeddedRowView) },
+        getSemanticConfig: semanticConfig(true),
+      });
+      await expect(session1.getEmbeddingStatus('bk-1')).resolves.toEqual({
+        totalSections: 1,
+        embeddedSections: 1,
+      });
+
+      // Case 2: hashes mismatch
+      const textSourceMismatch = {
+        get: vi.fn(async () => ({
+          extractionVersion: 3,
+          sections: [{ href: SEMANTIC_HREF, title: 'Ch 1', text: SEMANTIC_TEXT, sectionTextHash: 'h2' }], // h2 !== h1
+        })),
+      };
+
+      const session2 = new SearchSession({
+        engineFactory: factory,
+        textSource: textSourceMismatch,
+        embeddingClient: queryClient,
+        embeddingsSource: { get: vi.fn(async () => embeddedMatch as unknown as EmbeddedRowView) },
+        getSemanticConfig: semanticConfig(true),
+      });
+      await expect(session2.getEmbeddingStatus('bk-1')).resolves.toEqual({
+        totalSections: 1,
+        embeddedSections: 0,
+      });
+    });
+  });
 });
+

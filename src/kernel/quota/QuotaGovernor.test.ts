@@ -48,8 +48,8 @@ function makeStoreDouble(initial: DailyUsage | null = null): {
   const saved: DailyUsage[] = [];
   return {
     store: {
-      loadDailyUsage: () => Promise.resolve(loadValue),
-      saveDailyUsage: (u) => {
+      loadDailyUsage: (_ratePool) => Promise.resolve(loadValue),
+      saveDailyUsage: (_ratePool, u) => {
         saved.push(u);
         loadValue = u;
       },

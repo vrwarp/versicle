@@ -34,26 +34,27 @@ export default defineConfig({
       '@test': srcAlias('test'),
       '@workers': srcAlias('workers'),
     },
-    // Single-yjs-instance guard (phase2-fork-surgery.md §6.6c): the vendored
-    // zustand-middleware-yjs workspace declares yjs/zustand as peers; dedupe
-    // is the bundler-level belt-and-braces so a second copy can never split
-    // `instanceof Y.Map` identity. Keep in sync with vite.config.ts.
-    dedupe: ['yjs', 'zustand'],
+    // Single-instance guard (phase2-fork-surgery.md §6.6c): the upstream
+    // y-cinder / y-idb / zustand-middleware-yjs deps declare yjs/zustand/lib0
+    // as peers; dedupe is the bundler-level belt-and-braces so a second copy
+    // can never split `instanceof Y.Map` identity (or y-idb's lib0/observable
+    // base). Keep in sync with vite.config.ts and assert-single-instance.cjs.
+    dedupe: ['yjs', 'zustand', 'lib0'],
   },
   test: {
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     testTimeout: 60000,
-    // All unit/integration tests live under src/, plus the vendored
-    // zustand-middleware-yjs workspace package (its ported upstream specs in
-    // src/ and the Phase 2 fork contract suite in test/). The explicit
-    // include keeps vitest from discovering stray *.test.* files at the repo
-    // root or inside agent worktrees (.claude/worktrees/<name>/ are full
-    // repo checkouts).
+    // All unit/integration tests live under src/, plus the relocated
+    // contract suites for the upstream y-idb / y-cinder / zustand-middleware-yjs
+    // deps (test/vendor-contracts/, black-box against the published packages).
+    // The explicit include keeps vitest from discovering stray *.test.* files at
+    // the repo root or inside agent worktrees (.claude/worktrees/<name>/ are
+    // full repo checkouts).
     include: [
       'src/**/*.{test,spec}.?(c|m)[jt]s?(x)',
-      'packages/*/{src,test}/**/*.{test,spec}.?(c|m)[jt]s?(x)',
+      'test/**/*.{test,spec}.?(c|m)[jt]s?(x)',
     ],
     // Defense in depth if the include ever widens: never descend into the
     // Playwright suite (verification/) or .claude/ worktrees.

@@ -99,7 +99,7 @@ describe('genai-storage v0→v1 migration (captured-blob regression)', () => {
     expect(raw).not.toContain('usageStats');
     expect(raw).not.toContain('Full book text sample');
     const parsed = JSON.parse(raw);
-    expect(parsed.version).toBe(2);
+    expect(parsed.version).toBe(3);
     expect(parsed.state.apiKey).toBe('user-api-key-123');
   });
 
@@ -143,10 +143,10 @@ describe('genai-storage v0→v1 migration (captured-blob regression)', () => {
     );
     const useGenAIStore = await loadFreshStore();
     expect(useGenAIStore.getState().embeddingModel).toBe('gemini-embedding-2');
-    // The rewritten blob is at v2 and carries the switched model.
+    // The rewritten blob is at v3 and carries the switched model.
     useGenAIStore.getState().setEnabled(true);
     const parsed = JSON.parse(localStorage.getItem('genai-storage')!);
-    expect(parsed.version).toBe(2);
+    expect(parsed.version).toBe(3);
     expect(parsed.state.embeddingModel).toBe('gemini-embedding-2');
   });
 
@@ -176,5 +176,25 @@ describe('genai-storage v0→v1 migration (captured-blob regression)', () => {
     expect(useGenAIStore.getState().apiKey).toBe('mock-key');
     // Defaults fill the unspecified keys.
     expect(useGenAIStore.getState().maxLogs).toBe(500);
+  });
+
+  it('migrates from v2 to v3, adding the new google tts pools', async () => {
+    localStorage.setItem(
+      'genai-storage',
+      JSON.stringify({
+        state: {
+          apiKey: 'key-v2',
+          quotaLimitsMap: {
+            default: { rpm: 50, tpm: 15_000, rpd: 500 },
+          },
+        },
+        version: 2,
+      }),
+    );
+    const useGenAIStore = await loadFreshStore();
+    const map = useGenAIStore.getState().quotaLimitsMap;
+    expect(map.default).toEqual({ rpm: 50, tpm: 15_000, rpd: 500 });
+    expect(map['google-tts-chirp3-hd']).toEqual({ rpm: 100, tpm: 30_000, rpd: 500 });
+    expect(map['google-tts-wavenet']).toEqual({ rpm: 100, tpm: 100_000, rpd: 2000 });
   });
 });

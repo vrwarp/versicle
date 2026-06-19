@@ -111,6 +111,15 @@ export interface TtsEngine {
     loadSectionBySectionId(sectionId: string, autoPlay?: boolean, title?: string): Promise<void>;
     jumpTo(index: number): Promise<void> | void;
     seek(offset: number): Promise<void> | void;
+    /**
+     * Seek to an ABSOLUTE position (seconds) within the current section's queue
+     * timeline — the time domain reported via `setPositionState`
+     * ({@link QueueModel.getTotalDuration} / `getCurrentPosition`). Distinct from
+     * {@link seek}, whose `offset` only carries a sign (discrete sentence/chapter
+     * navigation, magnitude ignored). The OS media-notification scrubber is the
+     * consumer: lock-screen drag -> native `seekto` -> here.
+     */
+    seekTo(time: number): Promise<void> | void;
     skipToNextSection(): Promise<boolean>;
     skipToPreviousSection(): Promise<boolean>;
 

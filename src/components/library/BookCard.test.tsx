@@ -84,6 +84,18 @@ describe('BookCard', () => {
       unobserve() { }
       disconnect() { }
     };
+
+    // Mock navigator.serviceWorker.controller so that coverUrl is returned
+    // instead of fallback URL.createObjectURL(blob)
+    Object.defineProperty(navigator, 'serviceWorker', {
+      writable: true,
+      configurable: true,
+      value: {
+        controller: {},
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      },
+    });
   });
 
   const renderWithRouter = (ui: React.ReactElement) => {

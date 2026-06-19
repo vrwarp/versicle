@@ -24,4 +24,4 @@ include ':capgo-capacitor-social-login'
 project(':capgo-capacitor-social-login').projectDir = new File('../node_modules/@capgo/capacitor-social-login/android')
 
 include ':jofr-capacitor-media-session'
-project(':jofr-capacitor-media-session').projectDir = new File('../node_modules/@jofr/capacitor-media-session/android')
+project(':jofr-capacitor-media-session').projectDir = new File('../packages/capacitor-media-session/android')

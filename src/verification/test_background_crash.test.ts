@@ -37,6 +37,7 @@ vi.mock('@jofr/capacitor-media-session', () => ({
         setMetadata: vi.fn(),
         setPlaybackState: vi.fn(),
         setPositionState: vi.fn().mockResolvedValue(undefined),
+        addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
     }
 }));
 

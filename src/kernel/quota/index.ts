@@ -11,10 +11,6 @@ export {
   type QuotaStore,
   type DailyUsage,
   type QuotaLimits,
-  // Exported for the app-side cross-device spend reconciler
-  // (app/quota/embedSpendReconciler.ts), which returns one as the background-lane
-  // limits provider.
-  type QuotaLimitsProvider,
   // Exported for the settings quota meters: it is `snapshot()`'s per-lane shape,
   // consumed by the GenAI panel's `useQuotaMeters` hook and the GenAI settings
   // tab props.

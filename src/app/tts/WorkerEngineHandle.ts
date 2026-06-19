@@ -145,6 +145,7 @@ export class WorkerEngineHandle implements TtsEngine {
     }
     jumpTo(index: number): Promise<void> { this.run((c) => c.engine.jumpTo(index)); return Promise.resolve(); }
     seek(offset: number): Promise<void> { this.run((c) => c.engine.seek(offset)); return Promise.resolve(); }
+    seekTo(time: number): Promise<void> { this.run((c) => c.engine.seekTo(time)); return Promise.resolve(); }
     async skipToNextSection(): Promise<boolean> { return this.call((c) => c.engine.skipToNextSection(), false); }
     async skipToPreviousSection(): Promise<boolean> { return this.call((c) => c.engine.skipToPreviousSection(), false); }
 

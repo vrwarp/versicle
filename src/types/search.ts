@@ -48,3 +48,10 @@ export interface SearchSection {
     /** Optional display title (carried through to DetailedSearchResult.sectionTitle). */
     title?: string;
 }
+
+/** Embedding indexation status details. */
+export interface EmbeddingStatus {
+    totalSections: number;
+    embeddedSections: number;
+}
+

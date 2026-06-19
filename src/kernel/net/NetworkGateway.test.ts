@@ -177,7 +177,7 @@ describe('NetworkGateway.egress', () => {
 
       await egress('gemini', GEMINI_URL, {}, { lane: 'fg', estTokens: 42 });
 
-      expect(acquire).toHaveBeenCalledWith('fg', 42);
+      expect(acquire).toHaveBeenCalledWith('fg', 42, undefined);
       expect(order).toEqual(['acquire', 'fetch']);
     });
 
@@ -185,7 +185,7 @@ describe('NetworkGateway.egress', () => {
       const acquire = vi.fn(async () => {});
       setQuotaScheduler({ acquire, release: vi.fn() });
       await egress('gemini', GEMINI_URL, {}, { lane: 'fg' });
-      expect(acquire).toHaveBeenCalledWith('fg', 0);
+      expect(acquire).toHaveBeenCalledWith('fg', 0, undefined);
     });
 
     it('opts.lane overrides the destination default lane (gemini default is fg)', async () => {
@@ -193,14 +193,14 @@ describe('NetworkGateway.egress', () => {
       setQuotaScheduler({ acquire, release: vi.fn() });
       // gemini's destination.rateLimit.lane is 'fg'; a bg-tagged egress acquires bg.
       await egress('gemini', GEMINI_URL, {}, { lane: 'bg', estTokens: 7 });
-      expect(acquire).toHaveBeenCalledWith('bg', 7);
+      expect(acquire).toHaveBeenCalledWith('bg', 7, undefined);
     });
 
     it('falls back to the destination default lane (fg) when opts.lane is omitted', async () => {
       const acquire = vi.fn(async () => {});
       setQuotaScheduler({ acquire, release: vi.fn() });
       await egress('gemini', GEMINI_URL, {}, { estTokens: 3 });
-      expect(acquire).toHaveBeenCalledWith('fg', 3);
+      expect(acquire).toHaveBeenCalledWith('fg', 3, undefined);
     });
 
     it('releases on the bg lane when a bg-tagged fetch rejects', async () => {
@@ -212,7 +212,7 @@ describe('NetworkGateway.egress', () => {
         egress('gemini', GEMINI_URL, {}, { lane: 'bg', estTokens: 5 }),
       ).rejects.toBeInstanceOf(TypeError);
       expect(release).toHaveBeenCalledTimes(1);
-      expect(release).toHaveBeenCalledWith('bg');
+      expect(release).toHaveBeenCalledWith('bg', undefined);
     });
 
     it('acquire throwing NetRateLimitedError rejects pre-network and is NOT counted', async () => {
@@ -242,7 +242,7 @@ describe('NetworkGateway.egress', () => {
       const res = await egress('gemini', GEMINI_URL, {}, { lane: 'fg', estTokens: 5 });
       expect(res.status).toBe(429); // the gateway never reads the body; it resolves the Response
       expect(release).toHaveBeenCalledTimes(1);
-      expect(release).toHaveBeenCalledWith('fg');
+      expect(release).toHaveBeenCalledWith('fg', undefined);
     });
 
     it('releases the lane exactly once when the fetch rejects (migrated fg-claim cleanup)', async () => {
@@ -254,7 +254,7 @@ describe('NetworkGateway.egress', () => {
         egress('gemini', GEMINI_URL, {}, { lane: 'fg', estTokens: 5 }),
       ).rejects.toBeInstanceOf(TypeError);
       expect(release).toHaveBeenCalledTimes(1);
-      expect(release).toHaveBeenCalledWith('fg');
+      expect(release).toHaveBeenCalledWith('fg', undefined);
     });
 
     it('releases exactly once on a successful fetch (release is finally-owned; commit no longer releases)', async () => {
@@ -262,7 +262,7 @@ describe('NetworkGateway.egress', () => {
       setQuotaScheduler({ acquire: vi.fn(async () => {}), release });
       await egress('gemini', GEMINI_URL, {}, { lane: 'fg', estTokens: 5 });
       expect(release).toHaveBeenCalledTimes(1);
-      expect(release).toHaveBeenCalledWith('fg');
+      expect(release).toHaveBeenCalledWith('fg', undefined);
     });
 
     it('does not consult the scheduler for ungoverned destinations (drive)', async () => {

@@ -35,6 +35,10 @@ WORKDIR /app
 # Copy package.json and scripts for npm install
 COPY package.json package-lock.json ./
 COPY scripts ./scripts
+# The media-session plugin is vendored and consumed via a `file:` dependency, so its
+# directory must exist BEFORE `npm ci` (which links it into node_modules). It ships a
+# committed dist/, so no build step is needed here.
+COPY packages ./packages
 RUN rm -f local.properties
 
 # Install npm dependencies

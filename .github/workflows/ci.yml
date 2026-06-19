@@ -101,3 +101,26 @@ jobs:
         # Reuses dist/ from the build step above; asserts the TTS worker
         # bundle contains no zustand/yjs/src-store code.
         run: npm run check:worker-chunk -- --skip-build
+
+  emulator:
+    name: Sync backend contract (firebase emulator)
+    # Drives the REAL FirestoreBackend + the y-cinder provider against the
+    # auth/firestore/storage emulator trio (firebase.json). This is the only
+    # gate that exercises y-cinder's overhauled wire format end-to-end; the
+    # suites skipIf(!emulatorUp) in the plain `test` job, so they only run here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@v4
+        # The firestore + storage emulators are JVM processes.
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install dependencies
+        run: npm ci
+      - name: Sync backend emulator contract (real FirestoreBackend + y-cinder)
+        run: npm run test:emulator

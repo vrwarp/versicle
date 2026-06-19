@@ -58,7 +58,7 @@ export interface QuotaLimits {
  * The config seam: limits are read fresh on every acquire. Whatever this
  * returns between calls is honored on the next acquire (no caching).
  */
-export type QuotaLimitsProvider = () => QuotaLimits;
+export type QuotaLimitsProvider = (ratePool: string) => QuotaLimits;
 
 /** Injectable clock (ms epoch). Defaults to `Date.now`; tests control it. */
 export type NowProvider = () => number;
@@ -85,9 +85,9 @@ export interface DailyUsage {
  */
 export interface QuotaStore {
   /** The persisted daily usage, or null when never written (treated as zero). */
-  loadDailyUsage(): Promise<DailyUsage | null>;
+  loadDailyUsage(ratePool: string): Promise<DailyUsage | null>;
   /** Persist the daily usage (last-write-wins; fire-and-forget). */
-  saveDailyUsage(usage: DailyUsage): void;
+  saveDailyUsage(ratePool: string, usage: DailyUsage): void;
 }
 
 /** The SINGLE shared usage shape — what `snapshot()` returns per lane. */
@@ -104,11 +104,11 @@ export interface LaneUsage {
 
 /** In-memory fallback used until the composition root installs a real store. */
 const inMemoryFallback: QuotaStore = (() => {
-  let held: DailyUsage | null = null;
+  const held = new Map<string, DailyUsage>();
   return {
-    loadDailyUsage: () => Promise.resolve(held),
-    saveDailyUsage: (usage) => {
-      held = usage;
+    loadDailyUsage: (ratePool) => Promise.resolve(held.get(ratePool) ?? null),
+    saveDailyUsage: (ratePool, usage) => {
+      held.set(ratePool, usage);
     },
   };
 })();
@@ -147,18 +147,29 @@ const WINDOW_MS = 60_000;
  */
 const BG_FRACTION = 0.5;
 
+interface PoolState {
+  events: Record<Lane, WindowEvent[]>;
+  fgClaims: number;
+  daily: DailyUsage | null;
+  cooldownUntil: number;
+}
+
 export class QuotaGovernor {
-  /** Sliding per-lane request/token events (pruned to the 60 s window). */
-  private readonly events: Record<Lane, WindowEvent[]> = { fg: [], bg: [] };
+  private readonly pools = new Map<string, PoolState>();
 
-  /** In-flight foreground acquisitions (bg is refused while > 0). */
-  private fgClaims = 0;
-
-  /** Cached daily counter; refreshed from the store on day rollover. */
-  private daily: DailyUsage | null = null;
-
-  /** Epoch (ms) until which acquire is refused after a 429 (0 = none). */
-  private cooldownUntil = 0;
+  private getPool(ratePool: string = 'default'): PoolState {
+    let p = this.pools.get(ratePool);
+    if (!p) {
+      p = {
+        events: { fg: [], bg: [] },
+        fgClaims: 0,
+        daily: null,
+        cooldownUntil: 0,
+      };
+      this.pools.set(ratePool, p);
+    }
+    return p;
+  }
 
   /**
    * @param getLimits Per-lane limits, read FRESH on every acquire (never cached).
@@ -169,52 +180,56 @@ export class QuotaGovernor {
     private readonly now: NowProvider = Date.now,
   ) {}
 
-  /** Drop window events older than 60 s for the given lane. */
-  private prune(lane: Lane, at: number): void {
+  /** Drop window events older than 60 s for the given lane in a pool. */
+  private prune(ratePool: string, lane: Lane, at: number): void {
     const cutoff = at - WINDOW_MS;
-    const events = this.events[lane];
+    const p = this.getPool(ratePool);
+    const events = p.events[lane];
     let i = 0;
     while (i < events.length && events[i].at < cutoff) i++;
     if (i > 0) events.splice(0, i);
   }
 
-  /** Sum of requests across both lanes inside the current minute window. */
-  private requestsInWindow(at: number): number {
-    this.prune('fg', at);
-    this.prune('bg', at);
-    return this.events.fg.length + this.events.bg.length;
+  /** Sum of requests across both lanes inside the current minute window for a pool. */
+  private requestsInWindow(ratePool: string, at: number): number {
+    this.prune(ratePool, 'fg', at);
+    this.prune(ratePool, 'bg', at);
+    const p = this.getPool(ratePool);
+    return p.events.fg.length + p.events.bg.length;
   }
 
-  /** Sum of tokens across both lanes inside the current minute window. */
-  private tokensInWindow(at: number): number {
-    this.prune('fg', at);
-    this.prune('bg', at);
+  /** Sum of tokens across both lanes inside the current minute window for a pool. */
+  private tokensInWindow(ratePool: string, at: number): number {
+    this.prune(ratePool, 'fg', at);
+    this.prune(ratePool, 'bg', at);
+    const p = this.getPool(ratePool);
     const sum = (events: WindowEvent[]) => events.reduce((acc, e) => acc + e.tokens, 0);
-    return sum(this.events.fg) + sum(this.events.bg);
+    return sum(p.events.fg) + sum(p.events.bg);
   }
 
   /**
-   * Load (or roll over) the persisted daily counter for the current PT day.
+   * Load (or roll over) the persisted daily counter for the current PT day for a pool.
    * A stored counter whose `day` differs from today resets to zero — the
    * midnight-PT reset is a day-string compare against the injected clock.
    */
-  private async loadDaily(at: number): Promise<DailyUsage> {
+  private async loadDaily(ratePool: string, at: number): Promise<DailyUsage> {
     const today = ptDayString(at);
-    if (this.daily && this.daily.day === today) {
-      return this.daily;
+    const p = this.getPool(ratePool);
+    if (p.daily && p.daily.day === today) {
+      return p.daily;
     }
-    const persisted = await store.loadDailyUsage();
+    const persisted = await store.loadDailyUsage(ratePool);
     if (persisted && persisted.day === today) {
-      this.daily = { ...persisted };
+      p.daily = { ...persisted };
     } else {
-      this.daily = { day: today, rpd: 0, tpm: 0 };
+      p.daily = { day: today, rpd: 0, tpm: 0 };
     }
-    return this.daily;
+    return p.daily;
   }
 
   /**
-   * Admit one request on `lane`, sized by `estTokens`. Throws
-   * {@link NetRateLimitedError} (retryable, pre-network backpressure) when:
+   * Admit one request on `lane` in the specified `ratePool`, sized by `estTokens`.
+   * Throws {@link NetRateLimitedError} (retryable, pre-network backpressure) when:
    *  - a cooldown from a prior 429 is still active,
    *  - the persisted RPD for today is exhausted, or
    *  - the rolling RPM/TPM minute budget cannot fit the request
@@ -229,24 +244,27 @@ export class QuotaGovernor {
    * and still persists via the store. {@link commit} only reconciles the
    * recorded estimate to the actual cost.
    */
-  async acquire(lane: Lane, estTokens: number): Promise<void> {
+  async acquire(lane: Lane, estTokens: number, ratePool: string = 'default'): Promise<void> {
     const at = this.now();
-    const limits = this.getLimits();
+    const limits = this.getLimits(ratePool);
+    const p = this.getPool(ratePool);
 
-    if (this.cooldownUntil > at) {
-      throw new NetRateLimitedError(this.cooldownUntil - at, {
+    if (p.cooldownUntil > at) {
+      throw new NetRateLimitedError(p.cooldownUntil - at, {
         lane,
         reason: 'cooldown',
+        ratePool,
       });
     }
 
-    const daily = await this.loadDaily(at);
+    const daily = await this.loadDaily(ratePool, at);
     if (daily.rpd >= limits.rpd) {
       throw new NetRateLimitedError(this.msUntilNextPtDay(at), {
         lane,
         reason: 'rpd-exhausted',
         rpd: daily.rpd,
         limit: limits.rpd,
+        ratePool,
       });
     }
 
@@ -255,30 +273,31 @@ export class QuotaGovernor {
     // floor to >=1 (Math.max(1, …)) so a free-tier rpm/tpm of 1 still admits at
     // least one bg request instead of flooring the bg fraction to zero.
     if (lane === 'bg') {
-      if (this.fgClaims > 0) {
-        throw new NetRateLimitedError(WINDOW_MS, { lane, reason: 'fg-preempt' });
+      if (p.fgClaims > 0) {
+        throw new NetRateLimitedError(WINDOW_MS, { lane, reason: 'fg-preempt', ratePool });
       }
       const bgRequestCap = Math.max(1, Math.floor(limits.rpm * BG_FRACTION));
       const bgTokenCap = Math.max(1, Math.floor(limits.tpm * BG_FRACTION));
-      this.prune('bg', at);
-      const bgTokens = this.events.bg.reduce((acc, e) => acc + e.tokens, 0);
-      if (this.events.bg.length >= bgRequestCap || bgTokens + estTokens > bgTokenCap) {
+      this.prune(ratePool, 'bg', at);
+      const bgTokens = p.events.bg.reduce((acc, e) => acc + e.tokens, 0);
+      if (p.events.bg.length >= bgRequestCap || bgTokens + estTokens > bgTokenCap) {
         throw new NetRateLimitedError(WINDOW_MS, {
           lane,
           reason: 'bg-fraction-exhausted',
+          ratePool,
         });
       }
     }
 
-    if (this.requestsInWindow(at) >= limits.rpm) {
-      throw new NetRateLimitedError(WINDOW_MS, { lane, reason: 'rpm-exhausted' });
+    if (this.requestsInWindow(ratePool, at) >= limits.rpm) {
+      throw new NetRateLimitedError(WINDOW_MS, { lane, reason: 'rpm-exhausted', ratePool });
     }
-    if (this.tokensInWindow(at) + estTokens > limits.tpm) {
-      throw new NetRateLimitedError(WINDOW_MS, { lane, reason: 'tpm-exhausted' });
+    if (this.tokensInWindow(ratePool, at) + estTokens > limits.tpm) {
+      throw new NetRateLimitedError(WINDOW_MS, { lane, reason: 'tpm-exhausted', ratePool });
     }
 
     if (lane === 'fg') {
-      this.fgClaims += 1;
+      p.fgClaims += 1;
     }
 
     // RECORD the spend at admission (the single recorder). Push the rolling
@@ -286,12 +305,12 @@ export class QuotaGovernor {
     // actual later, if it commits at all), then bump + persist the daily RPD/TPM.
     // A never-committing request (every embedding) is counted purely here.
     const est = Math.max(0, estTokens);
-    this.events[lane].push({ at, tokens: est, committed: false });
-    this.prune(lane, at);
+    p.events[lane].push({ at, tokens: est, committed: false });
+    this.prune(ratePool, lane, at);
 
     daily.rpd += 1;
     daily.tpm = (daily.tpm ?? 0) + est;
-    store.saveDailyUsage({ ...daily });
+    store.saveDailyUsage(ratePool, { ...daily });
   }
 
   /**
@@ -311,10 +330,11 @@ export class QuotaGovernor {
    * observability-only (admission correctness is fully preserved by recording at
    * acquire) and never causes over/under-admission.
    */
-  commit(lane: Lane, actualTokens: number): void {
+  commit(lane: Lane, actualTokens: number, ratePool: string = 'default'): void {
     const at = this.now();
-    this.prune(lane, at);
-    const event = this.events[lane].find((e) => !e.committed);
+    this.prune(ratePool, lane, at);
+    const p = this.getPool(ratePool);
+    const event = p.events[lane].find((e) => !e.committed);
     if (!event) return;
 
     const actual = Math.max(0, actualTokens);
@@ -323,9 +343,9 @@ export class QuotaGovernor {
     event.committed = true;
 
     const today = ptDayString(at);
-    if (this.daily && this.daily.day === today) {
-      this.daily.tpm = Math.max(0, (this.daily.tpm ?? 0) + delta);
-      store.saveDailyUsage({ ...this.daily });
+    if (p.daily && p.daily.day === today) {
+      p.daily.tpm = Math.max(0, (p.daily.tpm ?? 0) + delta);
+      store.saveDailyUsage(ratePool, { ...p.daily });
     }
   }
 
@@ -336,9 +356,10 @@ export class QuotaGovernor {
    * counts — matching free-tier reality). Idempotent (clamped at zero). bg
    * acquisitions hold no claim and are a no-op here.
    */
-  release(lane: Lane): void {
+  release(lane: Lane, ratePool: string = 'default'): void {
     if (lane === 'fg') {
-      this.fgClaims = Math.max(0, this.fgClaims - 1);
+      const p = this.getPool(ratePool);
+      p.fgClaims = Math.max(0, p.fgClaims - 1);
     }
   }
 
@@ -347,10 +368,11 @@ export class QuotaGovernor {
    * `retryAfterMs` from now. The next acquire throws {@link NetRateLimitedError}
    * with the remaining cooldown.
    */
-  recordCooldown(retryAfterMs: number): void {
+  recordCooldown(retryAfterMs: number, ratePool: string = 'default'): void {
     const until = this.now() + Math.max(0, retryAfterMs);
-    if (until > this.cooldownUntil) {
-      this.cooldownUntil = until;
+    const p = this.getPool(ratePool);
+    if (until > p.cooldownUntil) {
+      p.cooldownUntil = until;
     }
   }
 
@@ -369,17 +391,18 @@ export class QuotaGovernor {
     return 24 * 3_600_000;
   }
 
-  /** Current per-lane usage (the shared {@link LaneUsage} shape). */
-  snapshot(): Record<Lane, LaneUsage> {
+  /** Current per-lane usage (the shared {@link LaneUsage} shape) for a pool. */
+  snapshot(ratePool: string = 'default'): Record<Lane, LaneUsage> {
     const at = this.now();
-    const limits = this.getLimits();
+    const limits = this.getLimits(ratePool);
+    const p = this.getPool(ratePool);
     const today = ptDayString(at);
-    const rpd = this.daily && this.daily.day === today ? this.daily.rpd : 0;
+    const rpd = p.daily && p.daily.day === today ? p.daily.rpd : 0;
     const lane = (l: Lane): LaneUsage => {
-      this.prune(l, at);
+      this.prune(ratePool, l, at);
       return {
-        rpm: this.events[l].length,
-        tpm: this.events[l].reduce((acc, e) => acc + e.tokens, 0),
+        rpm: p.events[l].length,
+        tpm: p.events[l].reduce((acc, e) => acc + e.tokens, 0),
         rpd,
         limits,
       };

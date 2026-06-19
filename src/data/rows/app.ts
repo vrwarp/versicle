@@ -185,12 +185,17 @@ export type LegacyRecoveryRecord = {
  */
 export const quotaDailyUsageSchema = z.looseObject({
   day: z.string(),
-  rpd: z.number(),
+  pools: z.record(z.string(), z.looseObject({
+    rpd: z.number(),
+    tpm: z.number().optional(),
+  })).optional(),
+  rpd: z.number().optional(),
   tpm: z.number().optional(),
 });
 export type QuotaDailyUsageRow = {
   day: string;
-  rpd: number;
+  pools?: Record<string, { rpd: number; tpm?: number }>;
+  rpd?: number;
   tpm?: number;
 };
 

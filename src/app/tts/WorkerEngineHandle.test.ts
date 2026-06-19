@@ -50,6 +50,8 @@ function makeFakeClient() {
         setProviderById: vi.fn().mockResolvedValue(undefined),
         getVoices: vi.fn().mockResolvedValue([{ id: 'v1', name: 'V', lang: 'en', provider: 'local' }]),
         loadSection: vi.fn().mockResolvedValue(undefined),
+        seek: vi.fn().mockResolvedValue(undefined),
+        seekTo: vi.fn().mockResolvedValue(undefined),
     };
     const client = {
         engine,
@@ -221,6 +223,24 @@ describe('WorkerEngineHandle (Worker available)', () => {
 
         await vi.waitFor(() => expect(client.engine.setProviderById).toHaveBeenCalledWith('google'));
         await vi.waitFor(() => expect(client.setBook).toHaveBeenCalledWith('book-1'));
+    });
+
+    it('routes relative seek and absolute seekTo to DISTINCT engine methods', async () => {
+        // Regression: the OS media-notification scrubber drag emits an absolute `seekto`
+        // (seconds). It must reach engine.seekTo(), not the relative engine.seek() — whose
+        // offset only carries a sign (sentence-step navigation). Conflating the two was the
+        // "dragging the slider does nothing" bug.
+        const handle = new WorkerEngineHandle();
+        const client = makeFakeClient();
+        clientState.resolve!(client);
+        await handle.whenReady();
+
+        void handle.seek(15);
+        void handle.seekTo(42.5);
+
+        await vi.waitFor(() => expect(client.engine.seek).toHaveBeenCalledWith(15));
+        await vi.waitFor(() => expect(client.engine.seekTo).toHaveBeenCalledWith(42.5));
+        expect(client.engine.seekTo).not.toHaveBeenCalledWith(15);
     });
 
     it('request/response calls await the booted client (getVoices)', async () => {
