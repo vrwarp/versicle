@@ -17,12 +17,6 @@ dist-ssr
 packages/*/dist-types/
 packages/*/dist-types-test/
 
-# Vendored Capacitor plugin COMMITS its built dist/ — it is consumed via a `file:`
-# dependency, which (unlike a git/registry install) does not run the upstream
-# `prepare` build hook, so the prebuilt dist/ must be tracked. Overrides the `dist`
-# rule above. See packages/capacitor-media-session/PROVENANCE.md.
-!packages/capacitor-media-session/dist/
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

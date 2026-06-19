@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import { MediaSession, type ActionDetails } from '@jofr/capacitor-media-session';
+import { MediaSession } from '@jofr/capacitor-media-session';
 import { isPaletteBright, rgbToL, unpackColorToRGB } from '../cover-palette';
 import type { PerceptualPalette } from '~types/book';
 import { createLogger } from '../logger';
@@ -66,92 +66,54 @@ export class MediaSessionManager {
 
   /**
    * Sets up the action handlers for the Media Session API.
+   *
+   * One action table for both platforms. Each action is registered with a per-action handler:
+   * navigator.mediaSession.setActionHandler(action, handler) on web, and the native plugin's
+   * MediaSession.setActionHandler({ action }, handler) on native (the plugin keeps the call alive
+   * and invokes the handler when the OS fires that action). Registration and the handler are
+   * atomic, so there is no register-before-listen window where an early action could be dropped.
    */
   private async setupActionHandlers() {
+    const actionHandlers: [MediaSessionAction, MediaSessionActionHandler | undefined][] = [
+      ['play', this.callbacks.onPlay],
+      ['pause', this.callbacks.onPause],
+      ['stop', this.callbacks.onStop],
+      ['nexttrack', this.callbacks.onNext],
+      ['previoustrack', this.callbacks.onPrev],
+      ['seekbackward', this.callbacks.onSeekBackward],
+      ['seekforward', this.callbacks.onSeekForward],
+      ['seekto', this.callbacks.onSeekTo],
+    ];
+
     if (this.isNative) {
       // NATIVE MODE (Media3 fork of @jofr/capacitor-media-session).
-      // The native plugin no longer accepts a per-action callback: it follows
-      // the event model. We register each action we handle, then receive them
-      // all through a single `onMediaAction` event. The native layer only emits
-      // events for actions that were registered via setActionHandler.
-      const nativeHandlers: [MediaSessionAction, MediaSessionActionHandler | undefined][] = [
-        ['play', this.callbacks.onPlay],
-        ['pause', this.callbacks.onPause],
-        ['stop', this.callbacks.onStop],
-        ['nexttrack', this.callbacks.onNext],
-        ['previoustrack', this.callbacks.onPrev],
-        ['seekbackward', this.callbacks.onSeekBackward],
-        ['seekforward', this.callbacks.onSeekForward],
-        ['seekto', this.callbacks.onSeekTo],
-      ];
-
       const registered: string[] = [];
-      for (const [action, handler] of nativeHandlers) {
+      for (const [action, handler] of actionHandlers) {
         if (handler) {
-          await MediaSession.setActionHandler({ action });
+          await MediaSession.setActionHandler({ action }, (details) => {
+            // warn (not info) so this always-on breadcrumb survives a production WebView build: it
+            // proves the OS transport event crossed native -> JS. Fires once per button press.
+            logger.warn('OS->JS onMediaAction', details.action, details.seekTime != null ? `seekTime=${details.seekTime}` : '');
+            // The plugin's ActionDetails ({ action, seekTime }) is structurally compatible with the
+            // web MediaSessionActionDetails for the seekTime field that the seek callbacks read.
+            handler(details as unknown as MediaSessionActionDetails);
+          });
           registered.push(action);
         }
       }
       logger.info('native: registered action handlers', registered);
-
-      // One listener dispatches every OS-originated action to its callback.
-      // The manager lives for the worker's lifetime, so (like the web branch)
-      // the listener is registered once and never removed.
-      await MediaSession.addListener('onMediaAction', (details) => {
-        this.dispatchNativeAction(details);
-      });
-      logger.info('native: onMediaAction listener attached');
     } else if (this.hasWebMediaSession) {
       // WEB MODE
-      const actionHandlers: [MediaSessionAction, MediaSessionActionHandler | undefined][] = [
-        ['play', this.callbacks.onPlay],
-        ['pause', this.callbacks.onPause],
-        ['stop', this.callbacks.onStop],
-        ['previoustrack', this.callbacks.onPrev],
-        ['nexttrack', this.callbacks.onNext],
-        ['seekbackward', this.callbacks.onSeekBackward],
-        ['seekforward', this.callbacks.onSeekForward],
-        ['seekto', this.callbacks.onSeekTo],
-      ];
-
-      actionHandlers.forEach(([action, handler]) => {
+      for (const [action, handler] of actionHandlers) {
         try {
-          if (handler) {
-            navigator.mediaSession.setActionHandler(action, handler);
-          } else {
-            navigator.mediaSession.setActionHandler(action, null);
-          }
+          navigator.mediaSession.setActionHandler(action, handler ?? null);
         } catch {
           logger.warn(`web: MediaSession action '${action}' is not supported.`);
         }
-      });
+      }
       logger.info('web: registered navigator.mediaSession action handlers');
     } else {
       logger.warn('no media session available (neither native plugin nor navigator.mediaSession)');
-    }
-  }
-
-  /**
-   * Routes a native `onMediaAction` event to the matching callback.
-   *
-   * Typed bridge, not `any`: the plugin's ActionDetails ({ action, seekTime })
-   * is structurally compatible with the web MediaSessionActionDetails for the
-   * `seekTime` field that the seek callbacks read.
-   */
-  private dispatchNativeAction(details: ActionDetails) {
-    // warn (not info) so this always-on breadcrumb survives a production WebView build: it proves
-    // the OS transport event crossed native -> JS. Fires once per button press, so not noisy.
-    logger.warn('OS->JS onMediaAction', details.action, details.seekTime != null ? `seekTime=${details.seekTime}` : '');
-    const seekDetails = details as unknown as MediaSessionActionDetails;
-    switch (details.action) {
-      case 'play': this.callbacks.onPlay?.(); break;
-      case 'pause': this.callbacks.onPause?.(); break;
-      case 'stop': this.callbacks.onStop?.(); break;
-      case 'nexttrack': this.callbacks.onNext?.(); break;
-      case 'previoustrack': this.callbacks.onPrev?.(); break;
-      case 'seekbackward': this.callbacks.onSeekBackward?.(seekDetails); break;
-      case 'seekforward': this.callbacks.onSeekForward?.(seekDetails); break;
-      case 'seekto': this.callbacks.onSeekTo?.(seekDetails); break;
     }
   }
 
