@@ -1,15 +1,18 @@
 import React from 'react';
 import { Label } from '../ui/Label';
 import { Input } from '../ui/Input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { PasswordInput } from '../ui/PasswordInput';
 import { Switch } from '../ui/Switch';
 import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
-import { Download } from 'lucide-react';
+import { Dialog } from '../ui/Dialog';
+import { ScrollArea } from '../ui/ScrollArea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
+import { Download, Search, Edit2, RotateCcw } from 'lucide-react';
 import type { ContentType } from '~types/content-analysis';
 import type { QuotaLimits, LaneUsage } from '@kernel/quota';
-import { formatTime } from '@kernel/locale/format';
+import { formatTime, formatNumber } from '@kernel/locale/format';
+import { DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';
 
 /**
  * Per-lane time-to-exhaustion hints (ms; null when not filling) the panel
@@ -20,25 +23,32 @@ import { formatTime } from '@kernel/locale/format';
 interface QuotaMeterEtas {
     /** ms until RPM exhaustion at the current minute fill rate (null = idle). */
     rpmMs: number | null;
+    rpmPool: string | null;
     /** ms until TPM exhaustion at the current minute fill rate (null = idle). */
     tpmMs: number | null;
+    tpmPool: string | null;
     /** ms until RPD exhaustion at the current daily rate (null = idle). */
     rpdMs: number | null;
+    rpdPool: string | null;
 }
 
 /** Live meter inputs, all derived from `governor.snapshot()` by the panel. */
 export interface QuotaMeters {
-    /** Foreground-lane live usage (the shared snapshot shape). */
-    fg: LaneUsage;
-    /** Background-lane live usage (the shared snapshot shape). */
-    bg: LaneUsage;
-    /**
-     * Today's requests-per-day spent against the shared Gemini project budget
-     * across ALL the user's devices: this device's background spend plus the sum
-     * reported by the user's other active devices.
-     */
+    fg: {
+        rpm: number;
+        tpm: number;
+        rpd: number;
+        limits: {
+            rpd: number;
+        };
+    };
+    bg: {
+        rpm: number;
+        tpm: number;
+        rpd: number;
+    };
     projectRpd: number;
-    /** Foreground-lane time-to-exhaustion hints. */
+    activePools: string[];
     etas: QuotaMeterEtas;
 }
 
@@ -63,41 +73,17 @@ function formatEta(ms: number | null): string {
     return `~${hours} hr`;
 }
 
-/**
- * A used-vs-limit progress bar. `role="progressbar"` with aria-valuenow/min/max
- * carries the exact figures for assistive tech (jsx-a11y clean); the visible
- * label echoes `used / limit`. Every number is a prop — no fabrication.
- */
-const UsageBar: React.FC<{ label: string; used: number; limit: number }> = ({
-    label,
-    used,
-    limit,
-}) => {
-    const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-    return (
-        <div className="space-y-1">
-            <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">{label}</span>
-                <span className="font-mono">
-                    {used} / {limit}
-                </span>
-            </div>
-            <div
-                role="progressbar"
-                aria-label={`${label} usage`}
-                aria-valuenow={used}
-                aria-valuemin={0}
-                aria-valuemax={limit}
-                className="h-2 w-full overflow-hidden rounded-full bg-muted"
-            >
-                <div
-                    className="h-full rounded-full bg-primary transition-all"
-                    style={{ width: `${pct}%` }}
-                />
-            </div>
-        </div>
-    );
-};
+function formatEtaWithPool(ms: number | null, poolKey: string | null): string {
+    if (ms === null || !Number.isFinite(ms) || ms <= 0) return '—';
+    const timeStr = formatEta(ms);
+    if (poolKey) {
+        const label = RATE_POOL_LABELS[poolKey] || poolKey;
+        return `${timeStr} (${label})`;
+    }
+    return timeStr;
+}
+
+
 
 export interface GenAISettingsTabProps {
     // Core settings
@@ -128,8 +114,11 @@ export interface GenAISettingsTabProps {
     onDownloadLogs: () => void;
     onClearLogs: () => void;
     // Quota & Usage
-    quotaLimits: QuotaLimits;
-    onQuotaLimitsChange: (limits: QuotaLimits) => void;
+    quotaLimitsMap: Record<string, QuotaLimits>;
+    getQuotaSnapshot?: (ratePool?: string) => Record<'fg' | 'bg', LaneUsage>;
+    onQuotaLimitsForPoolChange: (ratePool: string, limits: QuotaLimits) => void;
+    onResetPoolLimits: (ratePool: string) => void;
+    onResetAllPoolLimits: () => void;
     bgThrottlePercent: number;
     onBgThrottlePercentChange: (percent: number) => void;
     fgRpdHeadroom: number;
@@ -147,6 +136,51 @@ export interface GenAISettingsTabProps {
     shareAiCaches: boolean;
     onShareAiCachesChange: (enabled: boolean) => void;
 }
+
+const RATE_POOL_LABELS: Record<string, string> = {
+    default: 'Default / General',
+    'gemini-2.5-flash-lite': 'Gemini 2.5 Flash-Lite',
+    'gemini-2.5-flash': 'Gemini 2.5 Flash',
+    'gemini-3-flash': 'Gemini 3 Flash',
+    'gemini-3.1-flash-lite': 'Gemini 3.1 Flash Lite',
+    'gemini-3.5-flash': 'Gemini 3.5 Flash',
+    'gemini-1.5-pro': 'Gemini 1.5 Pro',
+    'gemini-2.5-flash-tts': 'Gemini 2.5 Flash TTS',
+    'gemini-3.1-flash-tts': 'Gemini 3.1 Flash TTS',
+    'gemini-embedding-001': 'Gemini Embedding 1',
+    'gemini-embedding-2': 'Gemini Embedding 2',
+    'gemini-robotics-er-1.5-preview': 'Gemini Robotics ER 1.5 Preview',
+    'gemini-robotics-er-1.6-preview': 'Gemini Robotics ER 1.6 Preview',
+    'gemma-4-26b': 'Gemma 4 26B',
+    'gemma-4-31b': 'Gemma 4 31B',
+    'imagen-4-fast-generate': 'Imagen 4 Fast Generate',
+    'imagen-4-generate': 'Imagen 4 Generate',
+    'imagen-4-ultra-generate': 'Imagen 4 Ultra Generate',
+    'gemini-2.5-flash-native-audio-dialog': 'Gemini 2.5 Flash Native Audio Dialog',
+    'gemini-3-flash-live': 'Gemini 3 Flash Live',
+    'gemini-3.5-live-translate': 'Gemini 3.5 Live Translate',
+    'deep-research-pro-preview-map-grounding': 'Deep Research Pro Preview (Map Grounding)',
+    'gemini-2-flash-map-grounding': 'Gemini 2 Flash (Map Grounding)',
+    'gemini-2.0-flash-map-grounding': 'Gemini 2.0 Flash (Map Grounding)',
+    'computer-use-preview-map-grounding': 'Computer Use Preview (Map Grounding)',
+    'gemini-2.5-flash-map-grounding': 'Gemini 2.5 Flash (Map Grounding)',
+    'gemini-2.5-flash-lite-map-grounding': 'Gemini 2.5 Flash Lite (Map Grounding)',
+    'gemini-3.1-flash-lite-map-grounding': 'Gemini 3.1 Flash Lite (Map Grounding)',
+    'gemini-3.1-flash-tts-map-grounding': 'Gemini 3.1 Flash TTS (Map Grounding)',
+    'gemini-robotics-er-1.6-preview-map-grounding': 'Gemini Robotics ER 1.6 Preview (Map Grounding)',
+    'gemini-2-search-grounding': 'Gemini 2 (Search Grounding)',
+    'gemini-2.0-search-grounding': 'Gemini 2.0 (Search Grounding)',
+    'gemini-2.5-search-grounding': 'Gemini 2.5 (Search Grounding)',
+    'default-search-grounding': 'Default (Search Grounding)',
+    'google-tts': 'Google Text-to-Speech (Fallback)',
+    'google-tts-chirp3-hd': 'Google TTS Chirp 3: HD',
+    'google-tts-wavenet': 'Google TTS WaveNet',
+    'google-tts-studio': 'Google TTS Studio',
+    'google-tts-standard': 'Google TTS Standard',
+    'google-tts-neural2': 'Google TTS Neural2',
+    'google-tts-polyglot': 'Google TTS Polyglot (Preview)',
+    'openai-tts': 'OpenAI Text-to-Speech',
+};
 
 export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
     isEnabled,
@@ -171,8 +205,11 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
     onMaxLogsChange,
     onDownloadLogs,
     onClearLogs,
-    quotaLimits,
-    onQuotaLimitsChange,
+    quotaLimitsMap,
+    getQuotaSnapshot,
+    onQuotaLimitsForPoolChange,
+    onResetPoolLimits,
+    onResetAllPoolLimits,
     bgThrottlePercent,
     onBgThrottlePercentChange,
     fgRpdHeadroom,
@@ -186,6 +223,97 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
     onShareAiCachesChange
 }) => {
     const contentTypes: ContentType[] = ['reference'];
+
+    const [searchQuery, setSearchQuery] = React.useState('');
+    const [, setTick] = React.useState(0);
+
+    // Setup 1s interval to poll the live usage snapshots from the governor
+    React.useEffect(() => {
+        const timer = setInterval(() => {
+            setTick((t) => t + 1);
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    // Modal state for editing a specific rate limit pool
+    const [editingPoolKey, setEditingPoolKey] = React.useState<string | null>(null);
+    const [editRpm, setEditRpm] = React.useState<number>(0);
+    const [editTpm, setEditTpm] = React.useState<number>(0);
+    const [editRpd, setEditRpd] = React.useState<number>(0);
+
+    const handleStartEdit = (poolKey: string, currentLimits: QuotaLimits) => {
+        setEditingPoolKey(poolKey);
+        setEditRpm(currentLimits.rpm);
+        setEditTpm(currentLimits.tpm);
+        setEditRpd(currentLimits.rpd);
+    };
+
+    const handleCancelEdit = () => {
+        setEditingPoolKey(null);
+    };
+
+    const handleResetEditToDefault = () => {
+        if (!editingPoolKey) return;
+        onResetPoolLimits(editingPoolKey);
+        setEditingPoolKey(null);
+    };
+
+    const handleSaveEdit = () => {
+        if (!editingPoolKey) return;
+        onQuotaLimitsForPoolChange(editingPoolKey, {
+            rpm: editRpm,
+            tpm: editTpm,
+            rpd: editRpd,
+        });
+        setEditingPoolKey(null);
+    };
+
+    // Helper to extract usage and limits for a specific pool key
+    const getPoolUsageAndLimits = (poolKey: string) => {
+        const limits = quotaLimitsMap[poolKey] ??
+                       DEFAULT_QUOTA_LIMITS[poolKey] ??
+                       quotaLimitsMap['default'] ??
+                       { rpm: 100, tpm: 30000, rpd: 1000 };
+
+        let rpmUsage = 0;
+        let tpmUsage = 0;
+        let rpdUsage = 0;
+
+        if (getQuotaSnapshot) {
+            try {
+                const snap = getQuotaSnapshot(poolKey);
+                if (snap) {
+                    rpmUsage = snap.fg.rpm + snap.bg.rpm;
+                    tpmUsage = snap.fg.tpm + snap.bg.tpm;
+                    rpdUsage = snap.fg.rpd;
+                }
+            } catch (_e) {
+                // ignore
+            }
+        }
+
+        return {
+            limits,
+            usage: { rpm: rpmUsage, tpm: tpmUsage, rpd: rpdUsage }
+        };
+    };
+
+    // Filter and sort pools based on search query and usage
+    const filteredPools = Object.entries(RATE_POOL_LABELS)
+        .filter(([key, label]) => {
+            const query = searchQuery.toLowerCase();
+            return label.toLowerCase().includes(query) || key.toLowerCase().includes(query);
+        })
+        .map(([key, label]) => {
+            const { limits, usage } = getPoolUsageAndLimits(key);
+            const hasUsage = usage.rpm > 0 || usage.tpm > 0 || usage.rpd > 0;
+            return { key, label, limits, usage, hasUsage };
+        })
+        .sort((a, b) => {
+            if (a.hasUsage && !b.hasUsage) return -1;
+            if (!a.hasUsage && b.hasUsage) return 1;
+            return 0; // preserve original relative order
+        });
 
     return (
         <div className="space-y-6">
@@ -395,7 +523,7 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                     </p>
                                 </div>
 
-                                <div className="flex items-center justify-between">
+                                <div className="flex items-center justify-between border-b pb-2">
                                     <div className="space-y-0.5">
                                         <Label htmlFor="genai-pause-all" className="text-sm font-medium">Pause All AI Requests</Label>
                                         <p className="text-xs text-muted-foreground">
@@ -409,44 +537,163 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                     />
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                    <div className="space-y-1">
-                                        <Label htmlFor="genai-quota-rpm" className="text-xs">Requests / min</Label>
-                                        <Input
-                                            id="genai-quota-rpm"
-                                            type="number"
-                                            min={0}
-                                            value={quotaLimits.rpm}
-                                            onChange={(e) =>
-                                                onQuotaLimitsChange({ ...quotaLimits, rpm: parseInt(e.target.value) || 0 })
-                                            }
-                                        />
+                                <div className="space-y-4">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                        <div className="relative flex-1 max-w-sm">
+                                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                            <Input
+                                                id="genai-search-pools"
+                                                type="search"
+                                                placeholder="Search rate limit pools..."
+                                                className="pl-9 h-9 text-xs"
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                            />
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={onResetAllPoolLimits}
+                                            className="text-xs h-9 px-3"
+                                        >
+                                            Reset All Pools to Defaults
+                                        </Button>
                                     </div>
-                                    <div className="space-y-1">
-                                        <Label htmlFor="genai-quota-tpm" className="text-xs">Tokens / min</Label>
-                                        <Input
-                                            id="genai-quota-tpm"
-                                            type="number"
-                                            min={0}
-                                            value={quotaLimits.tpm}
-                                            onChange={(e) =>
-                                                onQuotaLimitsChange({ ...quotaLimits, tpm: parseInt(e.target.value) || 0 })
-                                            }
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <Label htmlFor="genai-quota-rpd" className="text-xs">Requests / day</Label>
-                                        <Input
-                                            id="genai-quota-rpd"
-                                            type="number"
-                                            min={0}
-                                            value={quotaLimits.rpd}
-                                            onChange={(e) =>
-                                                onQuotaLimitsChange({ ...quotaLimits, rpd: parseInt(e.target.value) || 0 })
-                                            }
-                                        />
+
+                                    <div className="border rounded-md overflow-hidden">
+                                        <ScrollArea className="h-[280px] w-full">
+                                            <table className="w-full text-xs text-left border-collapse">
+                                                <thead className="sticky top-0 bg-background border-b z-10">
+                                                    <tr className="text-muted-foreground">
+                                                        <th className="p-3 font-medium">Pool Name</th>
+                                                        <th className="p-3 font-medium text-right font-semibold">Reqs / min</th>
+                                                        <th className="p-3 font-medium text-right font-semibold">Tokens / min</th>
+                                                        <th className="p-3 font-medium text-right font-semibold">Reqs / day</th>
+                                                        <th className="p-3 font-medium text-center">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y">
+                                                    {filteredPools.map(({ key: poolKey, label, limits, usage }) => {
+                                                        return (
+                                                            <tr
+                                                                key={poolKey}
+                                                                className="hover:bg-muted/50 transition-colors"
+                                                            >
+                                                                <td className="p-3">
+                                                                    <div>{label}</div>
+                                                                    <div className="text-[10px] text-muted-foreground font-mono">{poolKey}</div>
+                                                                </td>
+                                                                <td className="p-3 text-right font-mono">
+                                                                    <span className={usage.rpm > 0 ? "text-primary font-semibold" : "text-muted-foreground"}>
+                                                                        {usage.rpm}
+                                                                    </span>
+                                                                    <span className="text-muted-foreground/60 mx-1">/</span>
+                                                                    <span>{formatNumber(limits.rpm)}</span>
+                                                                </td>
+                                                                <td className="p-3 text-right font-mono">
+                                                                    <span className={usage.tpm > 0 ? "text-primary font-semibold" : "text-muted-foreground"}>
+                                                                        {formatNumber(usage.tpm)}
+                                                                    </span>
+                                                                    <span className="text-muted-foreground/60 mx-1">/</span>
+                                                                    <span>{formatNumber(limits.tpm)}</span>
+                                                                </td>
+                                                                <td className="p-3 text-right font-mono">
+                                                                    <span className={usage.rpd > 0 ? "text-primary font-semibold" : "text-muted-foreground"}>
+                                                                        {formatNumber(usage.rpd)}
+                                                                    </span>
+                                                                    <span className="text-muted-foreground/60 mx-1">/</span>
+                                                                    <span>{formatNumber(limits.rpd)}</span>
+                                                                </td>
+                                                                <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        className="h-7 px-2 text-xs"
+                                                                        onClick={() => handleStartEdit(poolKey, limits)}
+                                                                    >
+                                                                        <Edit2 className="h-3 w-3 mr-1" />
+                                                                        Edit
+                                                                    </Button>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                    {filteredPools.length === 0 && (
+                                                        <tr>
+                                                            <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                                                                No rate limit pools found matching your search.
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </ScrollArea>
                                     </div>
                                 </div>
+
+
+                                {editingPoolKey && (
+                                    <Dialog
+                                        isOpen={true}
+                                        onClose={handleCancelEdit}
+                                        title={`Edit Limits: ${RATE_POOL_LABELS[editingPoolKey] || editingPoolKey}`}
+                                        description="Configure individual rate and token limit thresholds for this pool."
+                                        footer={
+                                            <div className="flex flex-col-reverse sm:flex-row justify-between w-full gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={handleResetEditToDefault}
+                                                    className="text-xs"
+                                                >
+                                                    <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                                                    Reset to Default
+                                                </Button>
+                                                <div className="flex gap-2 justify-end">
+                                                    <Button variant="outline" size="sm" onClick={handleCancelEdit}>
+                                                        Cancel
+                                                    </Button>
+                                                    <Button size="sm" onClick={handleSaveEdit}>
+                                                        Save Changes
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        }
+                                    >
+                                        <div className="space-y-4 py-2">
+                                            <div className="space-y-1">
+                                                <Label htmlFor="edit-quota-rpm" className="text-xs">Requests / min</Label>
+                                                <Input
+                                                    id="edit-quota-rpm"
+                                                    type="number"
+                                                    min={0}
+                                                    value={editRpm}
+                                                    onChange={(e) => setEditRpm(parseInt(e.target.value) || 0)}
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label htmlFor="edit-quota-tpm" className="text-xs">Tokens / min</Label>
+                                                <Input
+                                                    id="edit-quota-tpm"
+                                                    type="number"
+                                                    min={0}
+                                                    value={editTpm}
+                                                    onChange={(e) => setEditTpm(parseInt(e.target.value) || 0)}
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label htmlFor="edit-quota-rpd" className="text-xs">Requests / day</Label>
+                                                <Input
+                                                    id="edit-quota-rpd"
+                                                    type="number"
+                                                    min={0}
+                                                    value={editRpd}
+                                                    onChange={(e) => setEditRpd(parseInt(e.target.value) || 0)}
+                                                />
+                                            </div>
+                                        </div>
+                                    </Dialog>
+                                )}
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div className="space-y-1">
@@ -483,24 +730,43 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                 </div>
 
                                 <div className="space-y-3 pt-2">
-                                    <h5 className="text-sm font-medium">Live Usage</h5>
-                                    <div className="space-y-2">
-                                        <UsageBar label="Foreground RPM" used={meters.fg.rpm} limit={meters.fg.limits.rpm} />
-                                        <UsageBar label="Foreground TPM" used={meters.fg.tpm} limit={meters.fg.limits.tpm} />
-                                        <UsageBar label="Foreground RPD" used={meters.fg.rpd} limit={meters.fg.limits.rpd} />
-                                        <UsageBar label="Background RPM" used={meters.bg.rpm} limit={meters.bg.limits.rpm} />
-                                        <UsageBar label="Background TPM" used={meters.bg.tpm} limit={meters.bg.limits.tpm} />
-                                    </div>
-                                    <div className="flex items-center justify-between text-xs">
-                                        <span className="text-muted-foreground">Today's spend (this project, all devices)</span>
-                                        <span className="font-mono" data-testid="genai-project-rpd">
-                                            {meters.projectRpd} / {meters.fg.limits.rpd} requests
-                                        </span>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-muted-foreground">
-                                        <span>RPM exhausts: {formatEta(meters.etas.rpmMs)}</span>
-                                        <span>TPM exhausts: {formatEta(meters.etas.tpmMs)}</span>
-                                        <span>RPD exhausts: {formatEta(meters.etas.rpdMs)}</span>
+                                    <h5 className="text-sm font-medium">Overall AI & TTS Live Status</h5>
+                                    <div className="p-3 border rounded-md bg-muted/30 space-y-2.5 text-xs">
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-medium text-muted-foreground">Active Pools</span>
+                                            <span className="font-semibold text-primary text-right max-w-[70%] truncate">
+                                                {meters.activePools && meters.activePools.length > 0
+                                                    ? meters.activePools.map(key => RATE_POOL_LABELS[key] || key).join(', ')
+                                                    : 'None'}
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-muted">
+                                            <div className="space-y-1">
+                                                <div className="text-muted-foreground text-[10px] uppercase font-semibold tracking-wider">Project Daily Spend</div>
+                                                <div className="font-mono text-foreground font-semibold" data-testid="genai-project-rpd">
+                                                    {meters.projectRpd} requests <span className="text-[10px] font-normal text-muted-foreground">(all devices, all pools)</span>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <div className="text-muted-foreground text-[10px] uppercase font-semibold tracking-wider">Time to Exhaustion</div>
+                                                <div className="font-mono text-foreground space-x-2">
+                                                    <span>RPM: <span className="font-semibold">{formatEtaWithPool(meters.etas.rpmMs, meters.etas.rpmPool)}</span></span>
+                                                    <span className="text-muted-foreground">|</span>
+                                                    <span>TPM: <span className="font-semibold">{formatEtaWithPool(meters.etas.tpmMs, meters.etas.tpmPool)}</span></span>
+                                                    <span className="text-muted-foreground">|</span>
+                                                    <span>RPD: <span className="font-semibold">{formatEtaWithPool(meters.etas.rpdMs, meters.etas.rpdPool)}</span></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="pt-1 border-t border-muted flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-muted-foreground gap-1">
+                                            <div>
+                                                <span className="font-medium">Foreground:</span> {meters.fg.rpm} RPM, {formatNumber(meters.fg.tpm)} TPM, {meters.fg.rpd} RPD
+                                            </div>
+                                            <div className="hidden sm:block text-muted-foreground/45">|</div>
+                                            <div>
+                                                <span className="font-medium">Background:</span> {meters.bg.rpm} RPM, {formatNumber(meters.bg.tpm)} TPM, {meters.bg.rpd} RPD
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

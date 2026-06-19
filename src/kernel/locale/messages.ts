@@ -161,6 +161,9 @@ export const messages = {
   'genai.clearCache.title': 'Clear analysis cache?',
   'genai.clearCache.body':
     'Are you sure you want to clear the Content Analysis cache? This will force re-analysis of content.',
+  'genai.resetAll.title': 'Reset all rate pools?',
+  'genai.resetAll.body':
+    'Are you sure you want to reset all rate limit pools to their default values? This will overwrite your customized limits.',
   'syncSettings.clearConfig.title': 'Clear Firebase configuration?',
   'syncSettings.clearConfig.body': 'Are you sure you want to clear the Firebase configuration?',
   'syncSettings.deleteWorkspace.title': 'Delete workspace "{name}"?',

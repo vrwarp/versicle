@@ -43,7 +43,7 @@ import { useSyncStore } from '@store/useSyncStore';
 import { useDriveStore } from '@store/useDriveStore';
 import { useBookStore } from '@store/useBookStore';
 import { libraryController } from '@app/library/useImportController';
-import { useGenAIStore } from '@store/useGenAIStore';
+import { useGenAIStore, DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
 import { makeAiConsentResolver } from './aiConsent';
@@ -112,17 +112,25 @@ export function wireGoogleDomain(): void {
   // change). The daily request count is persisted through the injected store
   // onto the quotaCounter repo (the only IDB touch); per-minute counts live
   // in-memory in the governor.
-  const getQuotaLimits = (): QuotaLimits => {
+  const getQuotaLimits = (ratePool: string): QuotaLimits => {
     const s = useGenAIStore.getState();
-    return s.pauseAllGenAI ? { rpm: 0, tpm: 0, rpd: 0 } : s.quotaLimits;
+    if (s.pauseAllGenAI) return { rpm: 0, tpm: 0, rpd: 0 };
+    return (
+      s.quotaLimitsMap[ratePool] ??
+      DEFAULT_QUOTA_LIMITS[ratePool] ??
+      s.quotaLimitsMap['default'] ??
+      s.quotaLimits
+    );
   };
   // saveDailyUsage — the single chokepoint where the governor reports today's
   // usage — ALSO publishes THIS device's own spend onto its synced DeviceInfo
   // record, so every device can sum the whole project's daily quota usage.
   setQuotaStore(
-    makeQuotaStore(quotaCounterRepo, (usage) =>
-      useDeviceStore.getState().publishEmbedSpend(getDeviceId(), usage),
-    ),
+    makeQuotaStore(quotaCounterRepo, (ratePool, usage) => {
+      if (ratePool === 'gemini-embedding-001') {
+        useDeviceStore.getState().publishEmbedSpend(getDeviceId(), usage);
+      }
+    }),
   );
   // The background lane's effective daily ceiling: the base daily request limit
   // reduced by the sum of what OTHER devices active today have already spent, so
@@ -131,7 +139,7 @@ export function wireGoogleDomain(): void {
   // this reduced provider; the embedding-backfill task (below) reads it as a
   // cross-device admission check before each background embed.
   const getBackgroundQuotaLimits = makeBackgroundQuotaLimits(
-    getQuotaLimits,
+    () => getQuotaLimits('gemini-embedding-001'),
     () => useDeviceStore.getState().devices,
     getDeviceId(),
   );
@@ -147,7 +155,7 @@ export function wireGoogleDomain(): void {
   // Expose the governor's live per-lane usage to the settings quota meters. The
   // governor stays the single source of truth; the store only re-exposes its
   // snapshot to the UI layer (no kernel→store edge).
-  useGenAIStore.getState().setQuotaSnapshotProvider(() => governor.snapshot());
+  useGenAIStore.getState().setQuotaSnapshotProvider((ratePool?: string) => governor.snapshot(ratePool));
   // Install the in-memory seam the embedding-backfill task reads for its
   // cross-device admission check: this device's reduced background daily ceiling
   // plus the governor's live background daily count. Never persisted (same
@@ -155,7 +163,7 @@ export function wireGoogleDomain(): void {
   // kernel governor.
   useGenAIStore
     .getState()
-    .setBgBudgetProvider(getBackgroundQuotaLimits, () => governor.snapshot().bg.rpd);
+    .setBgBudgetProvider(getBackgroundQuotaLimits, () => governor.snapshot('gemini-embedding-001').bg.rpd);
 
   // GenAI (Phase 7 §H): config read PER CALL from the store — the mutable
   // singleton fields (and the TTS pipeline's configure() clobber, GG-8) are

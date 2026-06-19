@@ -63,6 +63,8 @@ interface GenAIState {
   maxLogs: number;
   /** Persisted per-lane quota limits, read fresh on every budget reservation. */
   quotaLimits: QuotaLimits;
+  /** Persisted per-pool quota limits map. */
+  quotaLimitsMap: Record<string, QuotaLimits>;
   /** Persisted fraction (%) of the budget background work may consume. */
   bgThrottlePercent: number;
   /** Persisted RPD headroom reserved for the foreground lane. */
@@ -93,7 +95,7 @@ interface GenAIState {
    * In-memory injected snapshot provider (the READ mirror of `addLog`):
    * wireGoogle installs `() => governor.snapshot()`. NEVER persisted.
    */
-  getQuotaSnapshot?: () => Record<'fg' | 'bg', LaneUsage>;
+  getQuotaSnapshot?: (ratePool?: string) => Record<'fg' | 'bg', LaneUsage>;
   /**
    * In-memory injected seam exposing the background lane's budget: wireGoogle
    * installs the background-lane ceiling and the governor's live
@@ -120,12 +122,14 @@ interface GenAIState {
   addLog: (log: GenAILogEntry) => void;
   clearLogs: () => void;
   setQuotaLimits: (limits: QuotaLimits) => void;
+  setQuotaLimitsForPool: (ratePool: string, limits: QuotaLimits) => void;
+  resetAllQuotaLimits: () => void;
   setBgThrottlePercent: (percent: number) => void;
   setFgRpdHeadroom: (headroom: number) => void;
   setPauseAllGenAI: (paused: boolean) => void;
   setPreEmbedLibrary: (enabled: boolean) => void;
   setShareAiCaches: (enabled: boolean) => void;
-  setQuotaSnapshotProvider: (provider: () => Record<'fg' | 'bg', LaneUsage>) => void;
+  setQuotaSnapshotProvider: (provider: (ratePool?: string) => Record<'fg' | 'bg', LaneUsage>) => void;
   /** Install the background-lane budget read-back seam (in-memory; never persisted). */
   setBgBudgetProvider: (getBgQuotaLimits: () => QuotaLimits, getBgUsedRpd: () => number) => void;
 }
@@ -147,12 +151,58 @@ type PersistedGenAIState = Pick<
   | 'referenceDetectionStrategy'
   | 'maxLogs'
   | 'quotaLimits'
+  | 'quotaLimitsMap'
   | 'bgThrottlePercent'
   | 'fgRpdHeadroom'
   | 'pauseAllGenAI'
   | 'preEmbedLibrary'
   | 'shareAiCaches'
 >;
+
+export const DEFAULT_QUOTA_LIMITS: Record<string, QuotaLimits> = {
+  default: { rpm: 100, tpm: 30_000, rpd: 1000 },
+  'gemini-1.5-pro': { rpm: 2, tpm: 32_000, rpd: 50 },
+  'google-tts': { rpm: 100, tpm: 30_000, rpd: 1000 },
+  'openai-tts': { rpm: 100, tpm: 30_000, rpd: 1000 },
+  'google-tts-chirp3-hd': { rpm: 100, tpm: 30_000, rpd: 500 },
+  'google-tts-wavenet': { rpm: 100, tpm: 100_000, rpd: 2000 },
+  'google-tts-studio': { rpm: 100, tpm: 30_000, rpd: 500 },
+  'google-tts-standard': { rpm: 100, tpm: 100_000, rpd: 2000 },
+  'google-tts-neural2': { rpm: 100, tpm: 30_000, rpd: 500 },
+  'google-tts-polyglot': { rpm: 100, tpm: 30_000, rpd: 500 },
+  'gemini-embedding-001': { rpm: 100, tpm: 30_000, rpd: 1000 },
+  'gemini-2.5-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+  'gemini-2.5-flash-lite': { rpm: 10, tpm: 250_000, rpd: 20 },
+  'gemini-2.5-flash-tts': { rpm: 3, tpm: 10_000, rpd: 10 },
+  'gemini-3-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+  'gemini-3.1-flash-lite': { rpm: 15, tpm: 250_000, rpd: 500 },
+  'gemini-3.1-flash-tts': { rpm: 3, tpm: 10_000, rpd: 10 },
+  'gemini-3.5-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+  'gemini-embedding-2': { rpm: 100, tpm: 30_000, rpd: 1000 },
+  'gemini-robotics-er-1.5-preview': { rpm: 10, tpm: 250_000, rpd: 20 },
+  'gemini-robotics-er-1.6-preview': { rpm: 5, tpm: 250_000, rpd: 20 },
+  'gemma-4-26b': { rpm: 15, tpm: 999_999_999, rpd: 1500 },
+  'gemma-4-31b': { rpm: 15, tpm: 999_999_999, rpd: 1500 },
+  'imagen-4-fast-generate': { rpm: 999_999, tpm: 999_999_999, rpd: 25 },
+  'imagen-4-generate': { rpm: 999_999, tpm: 999_999_999, rpd: 25 },
+  'imagen-4-ultra-generate': { rpm: 999_999, tpm: 999_999_999, rpd: 25 },
+  'gemini-2.5-flash-native-audio-dialog': { rpm: 999_999, tpm: 1_000_000, rpd: 999_999 },
+  'gemini-3-flash-live': { rpm: 999_999, tpm: 65_000, rpd: 999_999 },
+  'gemini-3.5-live-translate': { rpm: 999_999, tpm: 20_000, rpd: 999_999 },
+  'deep-research-pro-preview-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'gemini-2-flash-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'gemini-2.0-flash-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'computer-use-preview-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'gemini-2.5-flash-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'gemini-2.5-flash-lite-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'gemini-3.1-flash-lite-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'gemini-3.1-flash-tts-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'gemini-robotics-er-1.6-preview-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'gemini-2-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
+  'gemini-2.0-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
+  'gemini-2.5-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
+  'default-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
+};
 
 export const useGenAIStore = create<GenAIState>()(
   persist(
@@ -172,6 +222,7 @@ export const useGenAIStore = create<GenAIState>()(
       logs: [],
       maxLogs: 500,
       quotaLimits: { rpm: 100, tpm: 30_000, rpd: 1000 },
+      quotaLimitsMap: DEFAULT_QUOTA_LIMITS,
       bgThrottlePercent: 50,
       fgRpdHeadroom: 0,
       pauseAllGenAI: false,
@@ -203,7 +254,21 @@ export const useGenAIStore = create<GenAIState>()(
           return { logs: newLogs };
         }),
       clearLogs: () => set({ logs: [] }),
-      setQuotaLimits: (limits) => set({ quotaLimits: limits }),
+      setQuotaLimits: (limits) =>
+        set((state) => ({
+          quotaLimits: limits,
+          quotaLimitsMap: { ...state.quotaLimitsMap, default: limits },
+        })),
+      setQuotaLimitsForPool: (ratePool, limits) =>
+        set((state) => ({
+          quotaLimitsMap: { ...state.quotaLimitsMap, [ratePool]: limits },
+          ...(ratePool === 'default' ? { quotaLimits: limits } : {}),
+        })),
+      resetAllQuotaLimits: () =>
+        set({
+          quotaLimits: DEFAULT_QUOTA_LIMITS.default,
+          quotaLimitsMap: DEFAULT_QUOTA_LIMITS,
+        }),
       setBgThrottlePercent: (percent) => set({ bgThrottlePercent: percent }),
       setFgRpdHeadroom: (headroom) => set({ fgRpdHeadroom: headroom }),
       setPauseAllGenAI: (paused) => set({ pauseAllGenAI: paused }),
@@ -215,7 +280,7 @@ export const useGenAIStore = create<GenAIState>()(
     }),
     {
       name: 'genai-storage',
-      version: 1,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedGenAIState => ({
         apiKey: state.apiKey,
@@ -232,23 +297,74 @@ export const useGenAIStore = create<GenAIState>()(
         referenceDetectionStrategy: state.referenceDetectionStrategy,
         maxLogs: state.maxLogs,
         quotaLimits: state.quotaLimits,
+        quotaLimitsMap: state.quotaLimitsMap,
         bgThrottlePercent: state.bgThrottlePercent,
         fgRpdHeadroom: state.fgRpdHeadroom,
         pauseAllGenAI: state.pauseAllGenAI,
         preEmbedLibrary: state.preEmbedLibrary,
         shareAiCaches: state.shareAiCaches,
       }),
-      /**
-       * v0 → v1: strip the legacy persisted `logs` (full prompts, base64
-       * table images) and dead `usageStats` from existing blobs. Settings
-       * (apiKey/model/flags) survive untouched — pinned by the captured-
-       * blob regression test (useGenAIStore.migration.test.ts).
-       */
       migrate: (persistedState, version) => {
         if (version < 1 && persistedState && typeof persistedState === 'object') {
           const state = persistedState as Record<string, unknown>;
           delete state.logs;
           delete state.usageStats;
+        }
+        if (version < 2 && persistedState && typeof persistedState === 'object') {
+          const state = persistedState as Record<string, unknown>;
+          const defaultLimits = (state.quotaLimits as QuotaLimits | undefined) || { rpm: 100, tpm: 30_000, rpd: 1000 };
+          state.quotaLimitsMap = {
+            default: defaultLimits,
+            'gemini-1.5-pro': { rpm: 2, tpm: 32_000, rpd: 50 },
+            'google-tts': { rpm: 100, tpm: 30_000, rpd: 1000 },
+            'openai-tts': { rpm: 100, tpm: 30_000, rpd: 1000 },
+            'gemini-embedding-001': { rpm: 100, tpm: 30_000, rpd: 1000 },
+            'gemini-2.5-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+            'gemini-2.5-flash-lite': { rpm: 10, tpm: 250_000, rpd: 20 },
+            'gemini-2.5-flash-tts': { rpm: 3, tpm: 10_000, rpd: 10 },
+            'gemini-3-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+            'gemini-3.1-flash-lite': { rpm: 15, tpm: 250_000, rpd: 500 },
+            'gemini-3.1-flash-tts': { rpm: 3, tpm: 10_000, rpd: 10 },
+            'gemini-3.5-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+            'gemini-embedding-2': { rpm: 100, tpm: 30_000, rpd: 1000 },
+            'gemini-robotics-er-1.5-preview': { rpm: 10, tpm: 250_000, rpd: 20 },
+            'gemini-robotics-er-1.6-preview': { rpm: 5, tpm: 250_000, rpd: 20 },
+            'gemma-4-26b': { rpm: 15, tpm: 999_999_999, rpd: 1500 },
+            'gemma-4-31b': { rpm: 15, tpm: 999_999_999, rpd: 1500 },
+            'imagen-4-fast-generate': { rpm: 999_999, tpm: 999_999_999, rpd: 25 },
+            'imagen-4-generate': { rpm: 999_999, tpm: 999_999_999, rpd: 25 },
+            'imagen-4-ultra-generate': { rpm: 999_999, tpm: 999_999_999, rpd: 25 },
+            'gemini-2.5-flash-native-audio-dialog': { rpm: 999_999, tpm: 1_000_000, rpd: 999_999 },
+            'gemini-3-flash-live': { rpm: 999_999, tpm: 65_000, rpd: 999_999 },
+            'gemini-3.5-live-translate': { rpm: 999_999, tpm: 20_000, rpd: 999_999 },
+            'deep-research-pro-preview-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+            'gemini-2-flash-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+            'gemini-2.0-flash-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+            'computer-use-preview-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+            'gemini-2.5-flash-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+            'gemini-2.5-flash-lite-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+            'gemini-3.1-flash-lite-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+            'gemini-3.1-flash-tts-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+            'gemini-robotics-er-1.6-preview-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+            'gemini-2-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
+            'gemini-2.0-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
+            'gemini-2.5-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
+            'default-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
+          };
+          state.quotaLimits = defaultLimits;
+        }
+        if (version < 3 && persistedState && typeof persistedState === 'object') {
+          const state = persistedState as Record<string, unknown>;
+          const map = (state.quotaLimitsMap as Record<string, QuotaLimits> | undefined) || {};
+          state.quotaLimitsMap = {
+            ...map,
+            'google-tts-chirp3-hd': { rpm: 100, tpm: 30_000, rpd: 500 },
+            'google-tts-wavenet': { rpm: 100, tpm: 100_000, rpd: 2000 },
+            'google-tts-studio': { rpm: 100, tpm: 30_000, rpd: 500 },
+            'google-tts-standard': { rpm: 100, tpm: 100_000, rpd: 2000 },
+            'google-tts-neural2': { rpm: 100, tpm: 30_000, rpd: 500 },
+            'google-tts-polyglot': { rpm: 100, tpm: 30_000, rpd: 500 },
+          };
         }
         return persistedState as PersistedGenAIState;
       },

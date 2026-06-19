@@ -67,6 +67,8 @@ export interface EgressOptions {
    * response body the gateway never touches). Defaults to 0.
    */
   estTokens?: number;
+  /** The rate-limiting pool key to apply (e.g. model ID, provider name). */
+  ratePool?: string;
 }
 
 export type ConsentResolver = (
@@ -106,10 +108,10 @@ export interface QuotaScheduler {
    * per egress in its finally — on success, on a resolved non-2xx, or on a
    * throw).
    */
-  acquire(lane: 'fg' | 'bg', estTokens: number): Promise<void>;
+  acquire(lane: 'fg' | 'bg', estTokens: number, ratePool?: string): Promise<void>;
   /** Release a foreground claim. The gateway calls this exactly once per egress
    *  (its finally) — on a 200, a resolved 429/500, or a throw. Idempotent. */
-  release(lane: 'fg' | 'bg'): void;
+  release(lane: 'fg' | 'bg', ratePool?: string): void;
 }
 
 let quotaScheduler: QuotaScheduler | null = null;
@@ -230,7 +232,7 @@ export async function egress(
   // rateLimit stay ungoverned.
   const rateLane = destination.rateLimit ? (opts.lane ?? destination.rateLimit.lane) : undefined;
   if (rateLane && quotaScheduler) {
-    await quotaScheduler.acquire(rateLane, opts.estTokens ?? 0);
+    await quotaScheduler.acquire(rateLane, opts.estTokens ?? 0, opts.ratePool);
   }
 
   recordEgress(destinationId, estimateBodyBytes(init.body));
@@ -271,7 +273,7 @@ export async function egress(
     // release() is idempotent (clamped at zero) so the once-per-egress call
     // cannot drive the foreground-claim count negative.
     if (rateLane && quotaScheduler) {
-      quotaScheduler.release(rateLane);
+      quotaScheduler.release(rateLane, opts.ratePool);
     }
     clearTimeout(timer);
   }

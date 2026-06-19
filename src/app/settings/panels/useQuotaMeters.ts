@@ -13,25 +13,17 @@
  * app/settings dir).
  */
 import { useState, useEffect } from 'react';
-import { useGenAIStore } from '@store/useGenAIStore';
+import { useGenAIStore, DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';
 import { useDeviceStore } from '@store/useDeviceStore';
 import { getDeviceId } from '@lib/device-id';
 import { sumActiveDeviceSpend } from '@app/quota/embedSpendReconciler';
 import type { QuotaMeters } from '@components/settings';
-import type { LaneUsage } from '@kernel/quota';
 
 /** How often the live meters re-poll the injected snapshot. */
 const METER_POLL_MS = 1000;
 /** A rolling minute, for the RPM/TPM fill-rate ETA. */
 const WINDOW_MS = 60_000;
 
-/** Zero usage rendered until wireGoogle installs the snapshot provider. */
-const EMPTY_LANE: LaneUsage = {
-  rpm: 0,
-  tpm: 0,
-  rpd: 0,
-  limits: { rpm: 0, tpm: 0, rpd: 0 },
-};
 
 /**
  * ms until a metric exhausts at the current fill rate: remaining headroom
@@ -46,35 +38,126 @@ function fillEta(used: number, limit: number): number | null {
   return (limit - used) / ratePerMs;
 }
 
+const EMPTY_METERS: QuotaMeters = {
+  fg: { rpm: 0, tpm: 0, rpd: 0, limits: { rpd: 0 } },
+  bg: { rpm: 0, tpm: 0, rpd: 0 },
+  projectRpd: 0,
+  activePools: [],
+  etas: {
+    rpmMs: null,
+    rpmPool: null,
+    tpmMs: null,
+    tpmPool: null,
+    rpdMs: null,
+    rpdPool: null,
+  },
+};
+
 export function useQuotaMeters(): QuotaMeters {
   const getQuotaSnapshot = useGenAIStore((s) => s.getQuotaSnapshot);
-  const [meters, setMeters] = useState<QuotaMeters>(() => ({
-    fg: EMPTY_LANE,
-    bg: EMPTY_LANE,
-    projectRpd: 0,
-    etas: { rpmMs: null, tpmMs: null, rpdMs: null },
-  }));
+  const [meters, setMeters] = useState<QuotaMeters>(EMPTY_METERS);
 
   useEffect(() => {
     const tick = () => {
-      const snapshot = getQuotaSnapshot?.();
-      if (!snapshot) {
+      if (!getQuotaSnapshot) {
         return;
       }
-      const { fg, bg } = snapshot;
-      const projectRpd =
-        bg.rpd + sumActiveDeviceSpend(useDeviceStore.getState().devices, getDeviceId(), Date.now());
+
+      const keys = Array.from(new Set([
+        ...Object.keys(DEFAULT_QUOTA_LIMITS),
+        ...Object.keys(useGenAIStore.getState().quotaLimitsMap || {})
+      ]));
+
+      let totalFgRpm = 0;
+      let totalFgTpm = 0;
+      let totalFgRpd = 0;
+      let totalFgRpdLimit = 0;
+
+      let totalBgRpm = 0;
+      let totalBgTpm = 0;
+      let totalBgRpd = 0;
+
+      let totalProjectRpd = 0;
+      const activePools: string[] = [];
+
+      let minRpmMs: number | null = null;
+      let minRpmPool: string | null = null;
+      let minTpmMs: number | null = null;
+      let minTpmPool: string | null = null;
+      let minRpdMs: number | null = null;
+      let minRpdPool: string | null = null;
+
+      const activeDevices = useDeviceStore.getState().devices;
+      const deviceId = getDeviceId();
+      const nowMs = Date.now();
+
+      for (const poolKey of keys) {
+        const snapshot = getQuotaSnapshot(poolKey);
+        if (!snapshot) continue;
+
+        const { fg, bg } = snapshot;
+
+        totalFgRpm += fg.rpm;
+        totalFgTpm += fg.tpm;
+        totalFgRpd += fg.rpd;
+        totalFgRpdLimit += fg.limits.rpd;
+
+        totalBgRpm += bg.rpm;
+        totalBgTpm += bg.tpm;
+        totalBgRpd += bg.rpd;
+
+        // Sum this device's own background RPD spend
+        totalProjectRpd += bg.rpd;
+
+        if (fg.rpm > 0 || bg.rpm > 0 || fg.rpd > 0 || bg.rpd > 0) {
+          activePools.push(poolKey);
+        }
+
+        const rpmEta = fillEta(fg.rpm, fg.limits.rpm);
+        if (rpmEta !== null) {
+          if (minRpmMs === null || rpmEta < minRpmMs) {
+            minRpmMs = rpmEta;
+            minRpmPool = poolKey;
+          }
+        }
+
+        const tpmEta = fillEta(fg.tpm, fg.limits.tpm);
+        if (tpmEta !== null) {
+          if (minTpmMs === null || tpmEta < minTpmMs) {
+            minTpmMs = tpmEta;
+            minTpmPool = poolKey;
+          }
+        }
+
+        const poolProjectRpd = bg.rpd + sumActiveDeviceSpend(activeDevices, deviceId, nowMs);
+        const rpdEta = fillEta(poolProjectRpd, fg.limits.rpd);
+        if (rpdEta !== null) {
+          if (minRpdMs === null || rpdEta < minRpdMs) {
+            minRpdMs = rpdEta;
+            minRpdPool = poolKey;
+          }
+        }
+      }
+
+      // Add the other active devices' spend EXACTLY once
+      totalProjectRpd += sumActiveDeviceSpend(activeDevices, deviceId, nowMs);
+
       setMeters({
-        fg,
-        bg,
-        projectRpd,
+        fg: { rpm: totalFgRpm, tpm: totalFgTpm, rpd: totalFgRpd, limits: { rpd: totalFgRpdLimit } },
+        bg: { rpm: totalBgRpm, tpm: totalBgTpm, rpd: totalBgRpd },
+        projectRpd: totalProjectRpd,
+        activePools,
         etas: {
-          rpmMs: fillEta(fg.rpm, fg.limits.rpm),
-          tpmMs: fillEta(fg.tpm, fg.limits.tpm),
-          rpdMs: fillEta(projectRpd, fg.limits.rpd),
+          rpmMs: minRpmMs,
+          rpmPool: minRpmPool,
+          tpmMs: minTpmMs,
+          tpmPool: minTpmPool,
+          rpdMs: minRpdMs,
+          rpdPool: minRpdPool,
         },
       });
     };
+
     tick();
     const interval = setInterval(tick, METER_POLL_MS);
     return () => clearInterval(interval);

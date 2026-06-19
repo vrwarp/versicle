@@ -20,7 +20,7 @@
  * (design: plan/shared-ai-cache-design.md)
  */
 import type { DeviceInfo } from '~types/device';
-import { ptDayString, type QuotaLimits, type QuotaLimitsProvider } from '@kernel/quota';
+import { ptDayString, type QuotaLimits } from '@kernel/quota';
 
 /**
  * Recency window for counting a sibling device's spend: a device counts toward
@@ -72,7 +72,7 @@ export function makeBackgroundQuotaLimits(
   getDevices: () => Record<string, DeviceInfo>,
   selfId: string,
   now: () => number = Date.now,
-): QuotaLimitsProvider {
+): () => QuotaLimits {
   return () => {
     const base = getBaseLimits();
     const siblingSum = sumActiveDeviceSpend(getDevices(), selfId, now());

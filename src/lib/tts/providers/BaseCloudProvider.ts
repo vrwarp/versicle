@@ -29,7 +29,7 @@ type TtsQuotaGovernor = Pick<QuotaGovernor, 'commit' | 'recordCooldown'>;
  * `null` (the default) makes the governor a no-op, so provider tests that never
  * install one behave exactly as before.
  */
-let ttsGovernor: TtsQuotaGovernor | null = null;
+export let ttsGovernor: TtsQuotaGovernor | null = null;
 
 /** Install the cloud-TTS rate/spend governor (called once at the composition root). */
 export function setTtsQuotaGovernor(governor: TtsQuotaGovernor | null): void {
@@ -37,7 +37,7 @@ export function setTtsQuotaGovernor(governor: TtsQuotaGovernor | null): void {
 }
 
 /** ~4-chars-per-token estimate for the up-front budget reservation (commit corrects it). */
-function estTtsTokens(text: string): number {
+export function estTtsTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
@@ -287,7 +287,7 @@ export abstract class BaseCloudProvider implements ITTSProvider {
         body: payload,
         signal
       },
-      { lane: 'fg', estTokens: estimate },
+      { lane: 'fg', estTokens: estimate, ratePool: destinationId },
     );
 
     if (!response.ok) {
@@ -295,12 +295,12 @@ export abstract class BaseCloudProvider implements ITTSProvider {
         // The cloud-TTS 429 default falls back to the synthesis timeout (30s) —
         // passed explicitly so the shared kernel/net helper keeps no baked-in
         // default (each caller owns its own constant).
-        ttsGovernor?.recordCooldown(retryAfterMs(response, SYNTHESIS_TIMEOUT_MS));
+        ttsGovernor?.recordCooldown(retryAfterMs(response, SYNTHESIS_TIMEOUT_MS), destinationId);
       }
       throw new Error(`TTS API Error: ${response.status} ${response.statusText}`);
     }
 
-    ttsGovernor?.commit('fg', estimate);
+    ttsGovernor?.commit('fg', estimate, destinationId);
     return await response.blob();
   }
 }

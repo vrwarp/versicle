@@ -120,6 +120,11 @@ export function formatBytes(bytes: number, locale?: string): string {
   ).format(value);
 }
 
+/** Format a number with commas — `12,500` (en-US). */
+export function formatNumber(value: number, locale?: string): string {
+  return numberFormat({}, locale).format(value);
+}
+
 /** Percentage from a 0..1 ratio — `42%` (en). */
 export function formatPercent(ratio: number, locale?: string): string {
   return numberFormat({ style: 'percent', maximumFractionDigits: 0 }, locale).format(ratio);

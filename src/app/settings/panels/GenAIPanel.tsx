@@ -4,7 +4,7 @@
  * cache clear) moved verbatim from the deleted GlobalSettingsDialog.
  */
 import React from 'react';
-import { useGenAIStore } from '@store/useGenAIStore';
+import { useGenAIStore, DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';
 import { useToastStore } from '@store/useToastStore';
 import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
 import { exportFile } from '@lib/export';
@@ -18,6 +18,7 @@ const logger = createLogger('GenAIPanel');
 const GenAIPanel: React.FC = () => {
   const showToast = useToastStore((state) => state.showToast);
   const confirm = useConfirm();
+
   const {
     apiKey,
     setApiKey,
@@ -39,8 +40,9 @@ const GenAIPanel: React.FC = () => {
     clearLogs,
     isDebugModeEnabled,
     setDebugModeEnabled,
-    quotaLimits,
-    setQuotaLimits,
+    quotaLimitsMap,
+    setQuotaLimitsForPool,
+    resetAllQuotaLimits,
     bgThrottlePercent,
     setBgThrottlePercent,
     fgRpdHeadroom,
@@ -50,8 +52,26 @@ const GenAIPanel: React.FC = () => {
     preEmbedLibrary,
     setPreEmbedLibrary,
     shareAiCaches,
-    setShareAiCaches
+    setShareAiCaches,
+    getQuotaSnapshot
   } = useGenAIStore();
+
+  const handleResetPoolLimits = (ratePool: string) => {
+    const defaultLimits = DEFAULT_QUOTA_LIMITS[ratePool] || DEFAULT_QUOTA_LIMITS['default'] || { rpm: 100, tpm: 30000, rpd: 1000 };
+    setQuotaLimitsForPool(ratePool, defaultLimits);
+  };
+
+  const handleResetAllPoolLimits = async () => {
+    if (await confirm({ titleKey: 'genai.resetAll.title', bodyKey: 'genai.resetAll.body', danger: true })) {
+      try {
+        resetAllQuotaLimits();
+        showToast("All rate limit pools have been reset to defaults.", "success");
+      } catch (e) {
+        logger.error("Failed to reset all rate limit pools", e);
+        showToast("Failed to reset rate pools.", "error");
+      }
+    }
+  };
 
   const meters = useQuotaMeters();
 
@@ -107,8 +127,12 @@ const GenAIPanel: React.FC = () => {
       onMaxLogsChange={setMaxLogs}
       onClearLogs={clearLogs}
       onDownloadLogs={handleDownloadLogs}
-      quotaLimits={quotaLimits}
-      onQuotaLimitsChange={setQuotaLimits}
+      quotaLimitsMap={quotaLimitsMap}
+      getQuotaSnapshot={getQuotaSnapshot}
+      onQuotaLimitsForPoolChange={setQuotaLimitsForPool}
+
+      onResetPoolLimits={handleResetPoolLimits}
+      onResetAllPoolLimits={handleResetAllPoolLimits}
       bgThrottlePercent={bgThrottlePercent}
       onBgThrottlePercentChange={setBgThrottlePercent}
       fgRpdHeadroom={fgRpdHeadroom}

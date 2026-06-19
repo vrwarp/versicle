@@ -203,7 +203,7 @@ export class GeminiClient implements GenAIClient {
     const commit = (tokens: number): void => {
       if (committed) return;
       committed = true;
-      this.deps.governor?.commit('fg', tokens);
+      this.deps.governor?.commit('fg', tokens, modelId);
     };
 
     const response = await this.egress(
@@ -225,6 +225,7 @@ export class GeminiClient implements GenAIClient {
         consent: { bookId: context?.bookId, interactive: context?.interactive },
         lane: 'fg',
         estTokens: estimate,
+        ratePool: modelId,
       },
     );
 
@@ -236,7 +237,7 @@ export class GeminiClient implements GenAIClient {
       // executeWithRetry's rotation path still sees it (the governor never
       // swallows the error the rotation loop branches on).
       if (response.status === 429) {
-        this.deps.governor?.recordCooldown(retryAfterMs(response, DEFAULT_COOLDOWN_MS));
+        this.deps.governor?.recordCooldown(retryAfterMs(response, DEFAULT_COOLDOWN_MS), modelId);
       }
       throw new GenAIHttpError(
         body.error?.message || `Gemini request failed: ${response.status}`,

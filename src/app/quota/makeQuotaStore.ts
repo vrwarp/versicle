@@ -27,19 +27,57 @@ import type { QuotaCounterRepo } from '@data/repos/quotaCounter';
 
 export function makeQuotaStore(
   repo: QuotaCounterRepo,
-  publishOwnSpend?: (usage: DailyUsage) => void,
+  publishOwnSpend?: (ratePool: string, usage: DailyUsage) => void,
 ): QuotaStore {
   return {
-    loadDailyUsage: async (): Promise<DailyUsage | null> => {
+    loadDailyUsage: async (ratePool: string): Promise<DailyUsage | null> => {
       const row = await repo.load();
-      return row ?? null;
+      if (!row) return null;
+
+      if (row.pools && row.pools[ratePool]) {
+        return {
+          day: row.day,
+          rpd: row.pools[ratePool].rpd,
+          tpm: row.pools[ratePool].tpm,
+        };
+      }
+
+      // Backward compatibility fallback for the default pool
+      if (ratePool === 'default') {
+        return {
+          day: row.day,
+          rpd: row.rpd ?? 0,
+          tpm: row.tpm ?? 0,
+        };
+      }
+
+      return {
+        day: row.day,
+        rpd: 0,
+        tpm: 0,
+      };
     },
-    saveDailyUsage: (usage: DailyUsage): void => {
-      void repo.save(usage).catch(() => {});
+    saveDailyUsage: (ratePool: string, usage: DailyUsage): void => {
+      const persist = async () => {
+        const row = (await repo.load()) ?? { day: usage.day, pools: {} };
+        const activeRow = row.day === usage.day ? row : { day: usage.day, pools: {} };
+
+        activeRow.pools = activeRow.pools || {};
+        activeRow.pools[ratePool] = { rpd: usage.rpd, tpm: usage.tpm };
+
+        if (ratePool === 'default') {
+          activeRow.rpd = usage.rpd;
+          activeRow.tpm = usage.tpm;
+        }
+
+        await repo.save(activeRow);
+      };
+
+      void persist().catch(() => {});
       // Mirror this device's own daily spend onto its synced device record so
       // other devices can keep the shared per-project Gemini quota correct.
       // Fire-and-forget, never throws — same contract as the repo write.
-      publishOwnSpend?.(usage);
+      publishOwnSpend?.(ratePool, usage);
     },
   };
 }

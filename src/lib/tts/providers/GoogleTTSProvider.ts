@@ -1,8 +1,34 @@
-import { egress } from '@kernel/net';
-import { BaseCloudProvider } from './BaseCloudProvider';
+import { egress, retryAfterMs } from '@kernel/net';
+import { BaseCloudProvider, estTtsTokens, ttsGovernor } from './BaseCloudProvider';
 import type { TTSOptions, SpeechSegment, Timepoint } from './types';
 import type { AudioSink } from '../engine/AudioSink';
 import type { TTSCache } from '../TTSCache';
+
+function getGoogleTtsPool(voiceId: string): string {
+  const lower = voiceId.toLowerCase();
+  if (lower.includes('chirp3-hd') || lower.includes('chirp-hd') || lower.includes('chirp3')) {
+    return 'google-tts-chirp3-hd';
+  }
+  if (lower.includes('studio')) {
+    return 'google-tts-studio';
+  }
+  if (lower.includes('wavenet')) {
+    return 'google-tts-wavenet';
+  }
+  if (lower.includes('neural2') || lower.includes('neural-2')) {
+    return 'google-tts-neural2';
+  }
+  if (lower.includes('polyglot')) {
+    return 'google-tts-polyglot';
+  }
+  if (lower.includes('standard')) {
+    return 'google-tts-standard';
+  }
+  if (lower.includes('custom')) {
+    return 'google-tts-custom';
+  }
+  return 'google-tts';
+}
 
 /**
  * TTS Provider for Google Cloud Text-to-Speech API.
@@ -93,21 +119,34 @@ export class GoogleTTSProvider extends BaseCloudProvider {
       enableTimePointing: ["SSML_MARK"]
     };
 
-    const response = await egress('google-tts', url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': this.apiKey
+    const payload = JSON.stringify(requestBody);
+    const estimate = estTtsTokens(payload);
+    const ratePool = getGoogleTtsPool(options.voiceId);
+
+    const response = await egress(
+      'google-tts',
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': this.apiKey
+        },
+        body: payload,
+        signal
       },
-      body: JSON.stringify(requestBody),
-      signal
-    });
+      { lane: 'fg', estTokens: estimate, ratePool }
+    );
 
     if (!response.ok) {
+      if (response.status === 429) {
+        ttsGovernor?.recordCooldown(retryAfterMs(response, 30_000), ratePool);
+      }
       const err = await response.text();
       throw new Error(`Google TTS Synthesis Error: ${response.status} ${err}`);
     }
 
+    ttsGovernor?.commit('fg', estimate, ratePool);
     const data = await response.json();
 
     // Decode base64 audio

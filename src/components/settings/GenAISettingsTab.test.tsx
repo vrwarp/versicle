@@ -64,8 +64,14 @@ describe('GenAISettingsTab', () => {
         maxLogs: 100,
         onMaxLogsChange: vi.fn(),
         onClearLogs: vi.fn(),
-        quotaLimits: { rpm: 100, tpm: 30000, rpd: 1000 },
-        onQuotaLimitsChange: vi.fn(),
+        quotaLimitsMap: { default: { rpm: 100, tpm: 30000, rpd: 1000 } },
+        getQuotaSnapshot: vi.fn().mockReturnValue({
+            fg: { rpm: 40, tpm: 12000, rpd: 300, limits: { rpm: 100, tpm: 30000, rpd: 1000 } },
+            bg: { rpm: 5, tpm: 2000, rpd: 300, limits: { rpm: 100, tpm: 30000, rpd: 1000 } }
+        }),
+        onQuotaLimitsForPoolChange: vi.fn(),
+        onResetPoolLimits: vi.fn(),
+        onResetAllPoolLimits: vi.fn(),
         bgThrottlePercent: 50,
         onBgThrottlePercentChange: vi.fn(),
         fgRpdHeadroom: 0,
@@ -77,13 +83,20 @@ describe('GenAISettingsTab', () => {
         shareAiCaches: false,
         onShareAiCachesChange: vi.fn(),
         meters: {
-            // Seeded snapshot: the bars MUST read these exact figures, proving
-            // the meter derives from the snapshot rather than fabricating.
-            fg: { rpm: 40, tpm: 12000, rpd: 300, limits: { rpm: 100, tpm: 30000, rpd: 1000 } },
-            bg: { rpm: 5, tpm: 2000, rpd: 300, limits: { rpm: 100, tpm: 30000, rpd: 1000 } },
+            fg: { rpm: 40, tpm: 12000, rpd: 300, limits: { rpd: 1000 } },
+            bg: { rpm: 5, tpm: 2000, rpd: 300 },
             projectRpd: 500,
-            etas: { rpmMs: 90_000, tpmMs: 90_000, rpdMs: 7_200_000 }
+            activePools: ['gemini-2.5-flash'],
+            etas: {
+                rpmMs: 90_000,
+                rpmPool: 'gemini-2.5-flash',
+                tpmMs: 90_000,
+                tpmPool: 'gemini-2.5-flash',
+                rpdMs: 7_200_000,
+                rpdPool: 'gemini-2.5-flash'
+            }
         }
+
     };
 
     it('renders header and toggle', () => {
@@ -188,21 +201,32 @@ describe('GenAISettingsTab', () => {
         render(<GenAISettingsTab {...defaultProps} isEnabled={true} />);
 
         expect(screen.getByText('Quota & Usage')).toBeInTheDocument();
-        expect(screen.getByText('Live Usage')).toBeInTheDocument();
+        expect(screen.getByText('Overall AI & TTS Live Status')).toBeInTheDocument();
     });
 
-    it('calls onQuotaLimitsChange when a per-lane limit input changes', () => {
-        const onQuotaLimitsChange = vi.fn();
+    it('calls onQuotaLimitsForPoolChange when a pool limit is edited and saved', () => {
+        const onQuotaLimitsForPoolChange = vi.fn();
         render(
             <GenAISettingsTab
                 {...defaultProps}
                 isEnabled={true}
-                onQuotaLimitsChange={onQuotaLimitsChange}
+                onQuotaLimitsForPoolChange={onQuotaLimitsForPoolChange}
             />
         );
 
-        fireEvent.change(screen.getByLabelText('Requests / min'), { target: { value: '200' } });
-        expect(onQuotaLimitsChange).toHaveBeenCalledWith({ rpm: 200, tpm: 30000, rpd: 1000 });
+        // Click Edit for the first pool (default)
+        const editButtons = screen.getAllByRole('button', { name: /Edit/i });
+        fireEvent.click(editButtons[0]);
+
+        // Edit the RPM value in the dialog
+        const rpmInput = screen.getByLabelText('Requests / min') as HTMLInputElement;
+        fireEvent.change(rpmInput, { target: { value: '200' } });
+
+        // Save changes
+        const saveButton = screen.getByRole('button', { name: 'Save Changes' });
+        fireEvent.click(saveButton);
+
+        expect(onQuotaLimitsForPoolChange).toHaveBeenCalledWith('default', { rpm: 200, tpm: 30000, rpd: 1000 });
     });
 
     it('calls onPauseAllGenAIChange when the pause-all switch is toggled', () => {
@@ -219,26 +243,20 @@ describe('GenAISettingsTab', () => {
         expect(onPauseAllGenAIChange).toHaveBeenCalledWith(true);
     });
 
-    it('meter progressbars derive aria-valuenow/max from the SEEDED snapshot (no fabrication)', () => {
+    it('shows details of foreground and background usage from the snapshot', () => {
         render(<GenAISettingsTab {...defaultProps} isEnabled={true} />);
 
-        const rpmBar = screen.getByRole('progressbar', { name: 'Foreground RPM usage' });
-        expect(rpmBar).toHaveAttribute('aria-valuenow', '40'); // meters.fg.rpm
-        expect(rpmBar).toHaveAttribute('aria-valuemax', '100'); // meters.fg.limits.rpm
-
-        const tpmBar = screen.getByRole('progressbar', { name: 'Foreground TPM usage' });
-        expect(tpmBar).toHaveAttribute('aria-valuenow', '12000'); // meters.fg.tpm
-        expect(tpmBar).toHaveAttribute('aria-valuemax', '30000'); // meters.fg.limits.tpm
-
-        const rpdBar = screen.getByRole('progressbar', { name: 'Foreground RPD usage' });
-        expect(rpdBar).toHaveAttribute('aria-valuenow', '300'); // meters.fg.rpd
-        expect(rpdBar).toHaveAttribute('aria-valuemax', '1000'); // meters.fg.limits.rpd
+        expect(screen.getByText(/Foreground:/)).toBeInTheDocument();
+        expect(screen.getByText(/40 RPM, 12,000 TPM, 300 RPD/)).toBeInTheDocument();
+        expect(screen.getByText(/Background:/)).toBeInTheDocument();
+        expect(screen.getByText(/5 RPM, 2,000 TPM, 300 RPD/)).toBeInTheDocument();
     });
+
 
     it("today-spend shows the seeded project-wide RPD total", () => {
         render(<GenAISettingsTab {...defaultProps} isEnabled={true} />);
 
-        expect(screen.getByTestId('genai-project-rpd')).toHaveTextContent('500 / 1000 requests');
+        expect(screen.getByTestId('genai-project-rpd')).toHaveTextContent('500 requests (all devices, all pools)');
     });
 
     // ── Semantic Search opt-in + disclosure (E3, §7/§8.4) ──
@@ -303,4 +321,34 @@ describe('GenAISettingsTab', () => {
         // Distinct from the TTS excerpt consent (the copy says so explicitly).
         expect(disclosure).toHaveTextContent(/TTS/);
     });
+
+    it('prioritizes pools with active usage above pools with zero usage', () => {
+        const getQuotaSnapshotMock = vi.fn().mockImplementation((poolKey?: string) => {
+            if (poolKey === 'gemini-1.5-pro') {
+                return {
+                    fg: { rpm: 1, tpm: 0, rpd: 0, limits: { rpm: 100, tpm: 30000, rpd: 1000 } },
+                    bg: { rpm: 0, tpm: 0, rpd: 0, limits: { rpm: 100, tpm: 30000, rpd: 1000 } }
+                };
+            }
+            return {
+                fg: { rpm: 0, tpm: 0, rpd: 0, limits: { rpm: 100, tpm: 30000, rpd: 1000 } },
+                bg: { rpm: 0, tpm: 0, rpd: 0, limits: { rpm: 100, tpm: 30000, rpd: 1000 } }
+            };
+        });
+
+        render(
+            <GenAISettingsTab
+                {...defaultProps}
+                isEnabled={true}
+                getQuotaSnapshot={getQuotaSnapshotMock}
+            />
+        );
+
+        // The pools table should show gemini-1.5-pro at the top because it has active usage.
+        // Get all cells or row text to verify.
+        const rowElements = screen.getAllByRole('row');
+        // The first row is the header, so the first data row is at index 1.
+        expect(rowElements[1]).toHaveTextContent('Gemini 1.5 Pro');
+    });
 });
+
