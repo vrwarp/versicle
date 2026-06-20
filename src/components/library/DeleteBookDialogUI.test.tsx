@@ -1,12 +1,12 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DeleteBookDialog } from './DeleteBookDialog';
-import { useLibraryStore } from '@store/useLibraryStore';
+import { useImportController } from '@app/library/useImportController';
 import { useToastStore } from '@store/useToastStore';
 import { act } from '@testing-library/react';
 
-vi.mock('@store/useLibraryStore', () => ({
-  useLibraryStore: vi.fn(),
+vi.mock('@app/library/useImportController', () => ({
+  useImportController: vi.fn(),
 }));
 
 vi.mock('@store/useToastStore', () => ({
@@ -25,7 +25,9 @@ describe('DeleteBookDialog UI state', () => {
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useLibraryStore as any).mockReturnValue(() => removeBookPromise);
+    (useImportController as any).mockReturnValue({
+        removeBook: vi.fn(() => removeBookPromise)
+    });
 
     const showToastMock = vi.fn();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

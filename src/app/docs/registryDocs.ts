@@ -480,6 +480,43 @@ were rebuilt in place without the (pure-motion) relocation to
 ${renderModuleTree()}
 \`\`\`
 
+### System Architecture Diagram
+
+\`\`\`mermaid
+graph TD
+    L4[App / Composition Root] --> L3[Domains: library, reader, search, sync, etc.]
+    L4 --> L2
+    L4 --> L1
+    L4 --> L0
+    L3 --> L2[Store / Y.Doc]
+    L3 --> L1
+    L3 --> L0
+    L2 --> L1
+    L2 --> L0
+    L1[Data / IndexedDB] --> L0[Kernel]
+\`\`\`
+
+### Module Reference
+
+- **\`src/data/write-gate.ts\`**
+  - **Goal**: Prevent WebKit IndexedDB deadlocks caused by concurrent readwrite transactions.
+  - **Logic**: Uses a Mutex pattern (\`navigator.locks\`) for cross-context exclusive write locking, falling back to a promise chain where Web Locks are unavailable.
+  - **Trade-offs**: Writes are serialized, meaning a long-running transaction can stall the entire system.
+
+- **\`src/workers/search.worker.ts\`**
+  - **Goal**: Fast, offline full-text search without blocking the main thread UI.
+  - **Logic**: Runs \`SearchEngine\` with Comlink to process searches asynchronously in a Web Worker.
+  - **Trade-offs**: Memory overhead of loading the corpus into worker memory; message-passing latency.
+
+- **\`src/workers/tts.worker.ts\`**
+  - **Goal**: Offload heavy TTS processing (e.g. WASM inference) from the main thread.
+  - **Logic**: Implements a worker-side \`TtsEngine\` communicating via message channels.
+  - **Trade-offs**: Complex state synchronization with the main thread; serialization costs.
+
+### Hardening
+
+Added \`write-gate.ts\` implementing the Web Locks API (\`navigator.locks\`) to ensure cross-context exclusivity for IndexedDB writes. This safety rail mitigates intermittent WebKit deadlocks triggered when multiple \`readwrite\` transactions overlap across the main thread and workers.
+
 Other repo roots:
 
 ${mdTable(['Path', 'What it is'], Object.entries(ROOT_DIRS).map(([p, d]) => [`\`${p}\``, d]))}
