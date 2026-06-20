@@ -25,7 +25,7 @@
 *   **Linting**: ESLint 9.39.2
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (github:vrwarp/zustand-middleware-yjs#master)
 *   **Sync**: `y-cinder` (github:vrwarp/y-cinder#main / Firestore 11.10.0) + Android Backup Service + Google Drive API
-*   **Storage**: IndexedDB (via `idb`)
+*   **Storage**: IndexedDB (via `idb`) with Web Locks API (`navigator.locks`) for safe cross-context execution and deadlock prevention
 *   **Parsing**: epub.js + PapaParse (CSV) + `opencc-js` + `pinyin-pro`
 *   **Audio**: Piper (WASM) / Web Speech API / LemonFox.ai
 *   **AI**: Google Gemini 2.5 (Flash Lite / Flash) via `@google/generative-ai`
@@ -50,6 +50,7 @@
 *   **Zero-Latency Parsing**: Uses a specialized zero-allocation text scanner (`TextScanningTrie`) to process text instantly without garbage collection pauses.
 *   **Instant Resume**: Remembers the last open book and restores your place immediately on launch, bypassing heavy sync checks.
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker. Features smart offloading of XML parsing and direct EPUB archive extraction (with rendering fallback) to keep the UI buttery smooth during indexing.
+*   **Worker TTS**: Background TTS processing (e.g. WASM inference) decoupled from the main thread UI to maximize performance and avoid UI freezes.
 *   **Annotations**: Full support for text highlighting and adding notes. Includes **Markdown Annotation Export** to easily extract all notes for a book to a `.md` file or copy directly to the clipboard.
 
 ### Listening (The "Listening Room")
@@ -98,7 +99,7 @@
 *   **Checkpoint Forensics**: Inspect the exact data difference between your live state and any backup checkpoint.
 *   **Flight Data Recorders**: Captures "Black Box" snapshots of application state (Zustand) during unexpected errors or manually via the Diagnostics UI for post-mortem debugging.
 *   **Safe Mode**: A fallback UI that activates on critical database initialization failures, allowing users to export debug info or perform a factory reset to recover usability.
-*   **Schema Quarantine (`ObsoleteLockView`)**: A safety mechanism that locks the app and severs cloud connections if a remote database with a newer schema version (currently V5) is detected, preventing outdated clients from corrupting upgraded data structures.
+*   **Schema Quarantine (`ObsoleteLockView`)**: A safety mechanism that locks the app and severs cloud connections if a remote database with a newer schema version (currently V9 for CRDT schema, and V28 for local IndexedDB) is detected, preventing outdated clients from corrupting upgraded data structures.
 
 ## Setup & Development
 
