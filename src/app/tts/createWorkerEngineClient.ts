@@ -150,6 +150,10 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         // we publish via setPositionState. Route it to the engine's absolute seek — NOT
         // engine.seek(), whose offset only carries a sign (sentence-step navigation).
         onSeekTo: (time) => { logger.info('transport seekTo -> engine.seekTo(' + time + ')'); engine.seekTo(time); },
+        // "Bookmark" custom action on the Android media notification (plugin
+        // v4.1.0). Routes to the worker engine, which captures an audio-bookmark
+        // at the current location (the same capture the pause→play Dragnet uses).
+        onBookmark: () => { logger.info('transport bookmark -> engine.captureBookmark()'); void engine.captureBookmark(); },
     });
 
     const host: EngineHost = {

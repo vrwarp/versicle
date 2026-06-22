@@ -48,6 +48,7 @@ describe('PlatformIntegration', () => {
             onNext: vi.fn(),
             onSeek: vi.fn(),
             onSeekTo: vi.fn(),
+            onBookmark: vi.fn(),
         };
         platform = new PlatformIntegration(events);
     });

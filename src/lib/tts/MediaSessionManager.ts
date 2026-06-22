@@ -44,6 +44,12 @@ export interface MediaSessionCallbacks {
   onSeekBackward?: (details?: MediaSessionActionDetails) => void;
   onSeekForward?: (details?: MediaSessionActionDetails) => void;
   onSeekTo?: (details: MediaSessionActionDetails) => void;
+  /**
+   * Tap of the "Bookmark" custom action on the Android media notification.
+   * Custom actions are an Android-only feature of the native plugin (v4.1.0);
+   * Web/iOS do not surface them, so this never fires there.
+   */
+  onBookmark?: () => void;
 }
 
 /**
@@ -102,6 +108,30 @@ export class MediaSessionManager {
         }
       }
       logger.info('native: registered action handlers', registered);
+
+      // Custom action (plugin v4.1.0, Android only): an extra "Bookmark" button
+      // in the media notification / session custom layout. `label` is REQUIRED
+      // for the button to render; `icon` maps to a Media3 built-in. The plugin
+      // keeps this call alive to deliver every tap (same keep-alive contract as
+      // the standard handlers above).
+      if (this.callbacks.onBookmark) {
+        await MediaSession.setActionHandler(
+          { action: 'bookmark', label: 'Bookmark', icon: 'bookmark' },
+          (details) => {
+            logger.warn('OS->JS custom action', details.action);
+            this.callbacks.onBookmark!();
+          }
+        );
+        logger.info('native: registered custom action', 'bookmark');
+      }
+
+      // Artwork load outcome (plugin v4.1.0): a breadcrumb proving whether the
+      // lock-screen cover actually rendered. warn-level so it survives a prod
+      // WebView build — the artwork pipeline already defends against failures
+      // (canvas crop + 2s timeout fallback), this just makes the result visible.
+      MediaSession.addListener('artworkload', (event) => {
+        logger.warn('artworkload', event.loaded ? 'loaded' : 'FAILED', event.src ?? '');
+      }).catch((e) => logger.warn('artworkload listener registration failed', e));
     } else if (this.hasWebMediaSession) {
       // WEB MODE
       for (const [action, handler] of actionHandlers) {
