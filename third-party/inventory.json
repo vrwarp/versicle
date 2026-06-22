@@ -129,12 +129,12 @@
     },
     {
       "name": "@jofr/capacitor-media-session (fork: Media3 migration + device fixes)",
-      "version": "4.0.0, pinned to vrwarp/capacitor-media-session@a24799a1e4f30c0cda0376fa66a6dc8213904449 (branch main)",
+      "version": "4.1.0, pinned to vrwarp/capacitor-media-session@0fc0f9f7c304b57346f4b999ed06a18c20b75d40 (branch main)",
       "source": "https://github.com/vrwarp/capacitor-media-session (upstream: https://github.com/jofr/capacitor-media-session)",
       "license": "GPL-3.0-or-later",
-      "provenance": "Consumed as a git dependency pinned to vrwarp/capacitor-media-session@a24799a (main); npm builds dist/ on install via the upstream `prepare` hook. Upstream jofr is the legacy androidx.media plugin; the vrwarp fork migrates Android to AndroidX Media3 (media3-session/common 1.4.1) via a WebViewProxyPlayer (SimpleBasePlayer). Retains the upstream GPL-3.0-or-later LICENSE verbatim. Previously vendored in-repo (packages/capacitor-media-session); the device fixes were upstreamed (PRs #4, #5) and the vendored copy removed.",
+      "provenance": "Consumed as a git dependency pinned to vrwarp/capacitor-media-session@0fc0f9f (main); npm builds dist/ on install via the upstream `prepare` hook. Upstream jofr is the legacy androidx.media plugin; the vrwarp fork migrates Android to AndroidX Media3 (media3-session/common 1.4.1) via a WebViewProxyPlayer (SimpleBasePlayer). Retains the upstream GPL-3.0-or-later LICENSE verbatim. Previously vendored in-repo (packages/capacitor-media-session); the device fixes were upstreamed (PRs #4, #5) and the vendored copy removed. 4.1.0 (PR #6) adds Android custom actions, read-back getters, action/artworkload listeners, and async off-thread artwork on top of the same Media3 base.",
       "path": "node_modules/@jofr/capacitor-media-session (git dependency; not tracked in-repo)",
-      "modifications": "None in-repo — the Media3 migration and the device fixes (addSession-on-onCreate, START_NOT_STICKY + onTaskRemoved idle-stop, 512px/JPEG-q85 artwork) now live entirely upstream in vrwarp/capacitor-media-session and are consumed via the pinned git dependency.",
+      "modifications": "None in-repo — the Media3 migration and the device fixes (addSession-on-onCreate, START_NOT_STICKY + onTaskRemoved idle-stop, 512px/JPEG-q85 artwork) plus the 4.1.0 additions (custom actions, getters, listeners, async artwork) now live entirely upstream in vrwarp/capacitor-media-session and are consumed via the pinned git dependency.",
       "distribution": [
         "web",
         "android"

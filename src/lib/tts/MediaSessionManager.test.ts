@@ -16,6 +16,7 @@ vi.mock('@jofr/capacitor-media-session', () => ({
     setMetadata: vi.fn(),
     setPlaybackState: vi.fn(),
     setPositionState: vi.fn(),
+    addListener: vi.fn(),
   },
 }));
 
@@ -70,6 +71,7 @@ describe('MediaSessionManager', () => {
     (MediaSession.setMetadata as Mock).mockResolvedValue(undefined);
     (MediaSession.setPlaybackState as Mock).mockResolvedValue(undefined);
     (MediaSession.setPositionState as Mock).mockResolvedValue(undefined);
+    (MediaSession.addListener as Mock).mockResolvedValue({ remove: vi.fn() });
 
     // --- Mocks for Artwork Processing ---
     // Note: We don't need to mock fetch or URL.createObjectURL anymore since we load Image directly from URL string.
@@ -285,6 +287,38 @@ describe('MediaSessionManager', () => {
       // Seek details (e.g. seekTime) are forwarded through to the callback.
       handlerFor('seekforward')({ action: 'seekforward', seekTime: 5 });
       expect(callbacks.onSeekForward).toHaveBeenCalledWith({ action: 'seekforward', seekTime: 5 });
+    });
+
+    it('registers the "bookmark" custom action only when onBookmark is supplied', async () => {
+      // Default callbacks have no onBookmark -> no custom action button.
+      new MediaSessionManager(callbacks);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(MediaSession.setActionHandler).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'bookmark' }), expect.any(Function));
+
+      vi.clearAllMocks();
+      (MediaSession.setActionHandler as Mock).mockResolvedValue(undefined);
+      (MediaSession.addListener as Mock).mockResolvedValue({ remove: vi.fn() });
+
+      const onBookmark = vi.fn();
+      new MediaSessionManager({ ...callbacks, onBookmark });
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // The custom action is published with a label (required to render) + icon.
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith(
+        { action: 'bookmark', label: 'Bookmark', icon: 'bookmark' }, expect.any(Function));
+
+      // The registered handler routes a tap to onBookmark.
+      const bookmarkHandler = (MediaSession.setActionHandler as Mock).mock.calls
+        .find(([opts]) => opts.action === 'bookmark')?.[1] as (d: { action: string }) => void;
+      bookmarkHandler({ action: 'bookmark' });
+      expect(onBookmark).toHaveBeenCalledTimes(1);
+    });
+
+    it('subscribes to the artworkload outcome event', async () => {
+      new MediaSessionManager(callbacks);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(MediaSession.addListener).toHaveBeenCalledWith('artworkload', expect.any(Function));
     });
 
     it('updates native metadata correctly with artwork processing', async () => {

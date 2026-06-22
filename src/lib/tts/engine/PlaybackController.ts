@@ -123,6 +123,7 @@ export class PlaybackController implements TtsEngine {
             onNext: () => this.next(),
             onSeek: (offset) => this.seek(offset),
             onSeekTo: (time) => this.seekTo(time),
+            onBookmark: () => { void this.captureBookmark(); },
         });
 
         // Provider events that drive the FSM (start/end/error) run as sequenced
@@ -684,6 +685,22 @@ export class PlaybackController implements TtsEngine {
                 this.notifyError(e instanceof Error ? e.message : "Preview error");
             }
         });
+    }
+
+    /**
+     * Capture an audio-bookmark at the current location on demand, driven by
+     * the OS media-notification "Bookmark" custom action (capacitor-media-session
+     * 4.1.0). Runs INSIDE the sequencer — like the pause→play Dragnet capture —
+     * so it observes a consistent queue snapshot, and a capture that went stale
+     * (a stop/setBookId/loadSection bumped the epoch after it was enqueued)
+     * cancels at its checkpoint before touching the store.
+     */
+    captureBookmark(): Promise<void> {
+        flightRecorder.record('APS', 'captureBookmark', { status: this.status });
+        return this.enqueue('captureBookmark', async (ctx) => {
+            ctx.checkpoint();
+            await this.dragnet.captureNow();
+        }) as Promise<void>;
     }
 
     async play(): Promise<void> {

@@ -87,6 +87,18 @@ export class DragnetGesture {
         await this.capture();
     }
 
+    /**
+     * Capture an audio-bookmark at the current location ON DEMAND, independent
+     * of the pause→play gesture — driven by the OS media-notification
+     * "Bookmark" custom action (capacitor-media-session 4.1.0). Disarms any
+     * pending pause gesture first so the next resume does not double-capture.
+     */
+    async captureNow(): Promise<void> {
+        this.lastUserPauseTimestamp = null;
+        logger.debug('Explicit bookmark capture (custom action)');
+        await this.capture();
+    }
+
     private async capture(): Promise<void> {
         const queue = this.deps.queue.queue;
         const currentIndex = this.deps.queue.currentIndex;
