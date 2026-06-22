@@ -227,6 +227,14 @@ export function useReaderController(
         const iframe = viewerRef.current?.querySelector('iframe');
         if (iframe) {
           const iframeRect = iframe.getBoundingClientRect();
+          // A fresh user selection must start from a clean compass: clear any
+          // lingering compassState (a prior vocab-triage / audio-triage / an
+          // existing-highlight tap that set targetAnnotation). The
+          // ReaderControlBar dispatcher ranks compassState.variant ABOVE
+          // popover.visible, so a stale variant would otherwise mask the new
+          // selection's annotation toolbar — "highlighting no longer triggers
+          // the compass". (The onClick collapse path resets it the same way.)
+          useReaderUIStore.getState().resetCompassState();
           showPopover(
             rect.left + iframeRect.left,
             rect.top + iframeRect.top,
