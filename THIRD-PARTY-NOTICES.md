@@ -107,12 +107,12 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 
 ### @jofr/capacitor-media-session (fork: Media3 migration + device fixes)
 
-- **Version:** 4.0.0, pinned to vrwarp/capacitor-media-session@a24799a1e4f30c0cda0376fa66a6dc8213904449 (branch main)
+- **Version:** 4.1.0, pinned to vrwarp/capacitor-media-session@0fc0f9f7c304b57346f4b999ed06a18c20b75d40 (branch main)
 - **License:** GPL-3.0-or-later
 - **Source:** https://github.com/vrwarp/capacitor-media-session (upstream: https://github.com/jofr/capacitor-media-session)
 - **Path:** node_modules/@jofr/capacitor-media-session (git dependency; not tracked in-repo)
-- **Provenance:** Consumed as a git dependency pinned to vrwarp/capacitor-media-session@a24799a (main); npm builds dist/ on install via the upstream `prepare` hook. Upstream jofr is the legacy androidx.media plugin; the vrwarp fork migrates Android to AndroidX Media3 (media3-session/common 1.4.1) via a WebViewProxyPlayer (SimpleBasePlayer). Retains the upstream GPL-3.0-or-later LICENSE verbatim. Previously vendored in-repo (packages/capacitor-media-session); the device fixes were upstreamed (PRs #4, #5) and the vendored copy removed.
-- **Modifications:** None in-repo — the Media3 migration and the device fixes (addSession-on-onCreate, START_NOT_STICKY + onTaskRemoved idle-stop, 512px/JPEG-q85 artwork) now live entirely upstream in vrwarp/capacitor-media-session and are consumed via the pinned git dependency.
+- **Provenance:** Consumed as a git dependency pinned to vrwarp/capacitor-media-session@0fc0f9f (main); npm builds dist/ on install via the upstream `prepare` hook. Upstream jofr is the legacy androidx.media plugin; the vrwarp fork migrates Android to AndroidX Media3 (media3-session/common 1.4.1) via a WebViewProxyPlayer (SimpleBasePlayer). Retains the upstream GPL-3.0-or-later LICENSE verbatim. Previously vendored in-repo (packages/capacitor-media-session); the device fixes were upstreamed (PRs #4, #5) and the vendored copy removed. 4.1.0 (PR #6) adds Android custom actions, read-back getters, action/artworkload listeners, and async off-thread artwork on top of the same Media3 base.
+- **Modifications:** None in-repo — the Media3 migration and the device fixes (addSession-on-onCreate, START_NOT_STICKY + onTaskRemoved idle-stop, 512px/JPEG-q85 artwork) plus the 4.1.0 additions (custom actions, getters, listeners, async artwork) now live entirely upstream in vrwarp/capacitor-media-session and are consumed via the pinned git dependency.
 - **Notes:** GPL-3.0-or-later fork; this is the package cited in inventory.json#licenseFloor as a GPL-3 floor source. Covered by the license allowlist as a normal production dependency.
 
 ### @capgo/capacitor-social-login local patch (login_hint passthrough)
@@ -182,7 +182,7 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 
 ## Bundled npm packages (production dependency tree)
 
-576 packages, grouped by license. The private
+578 packages, grouped by license. The private
 vendored forks `zustand-middleware-yjs` and `y-idb` (both MIT) are
 excluded from the scan and recorded in the inventory section above.
 
@@ -321,7 +321,7 @@ excluded from the scan and recorded in the inventory section above.
 
 ### GPL-3.0-or-later (1)
 
-- `@jofr/capacitor-media-session@4.0.0` — Copyright Jonas — <https://github.com/jofr/capacitor-media-session>
+- `@jofr/capacitor-media-session@4.1.0` — Copyright Jonas — <https://github.com/jofr/capacitor-media-session>
 
 ### ISC (32)
 
@@ -358,7 +358,7 @@ excluded from the scan and recorded in the inventory section above.
 - `yaml@2.9.0` — Copyright Eemeli Aro <eemeli@gmail.com> — <https://github.com/eemeli/yaml>
 - `yargs-parser@21.1.1` — Copyright (c) 2016, Contributors — <https://github.com/yargs/yargs-parser>
 
-### MIT (443)
+### MIT (444)
 
 - `@alloc/quick-lru@5.2.0` — Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (sindresorhus.com) — <https://github.com/sindresorhus/quick-lru>
 - `@apideck/better-ajv-errors@0.3.6` — Copyright (c) 2021 Apideck — <https://github.com/apideck-libraries/better-ajv-errors>
@@ -460,7 +460,7 @@ excluded from the scan and recorded in the inventory section above.
 - `@capacitor/filesystem@7.1.6` — Copyright (c) 2025 Ionic — <https://github.com/ionic-team/capacitor-filesystem>
 - `@capacitor/share@7.0.3` — Copyright 2020-present Ionic. https://ionic.io — <https://github.com/ionic-team/capacitor-plugins>
 - `@capawesome-team/capacitor-android-battery-optimization@7.0.0` — Copyright (c) 2022 Robin Genz — <https://github.com/capawesome-team/capacitor-plugins>
-- `@esbuild/darwin-x64@0.27.2` — <https://github.com/evanw/esbuild>
+- `@esbuild/linux-x64@0.27.2` — <https://github.com/evanw/esbuild>
 - `@floating-ui/core@1.7.3` — Copyright (c) 2021-present Floating UI contributors — <https://github.com/floating-ui/floating-ui>
 - `@floating-ui/dom@1.7.4` — Copyright (c) 2021-present Floating UI contributors — <https://github.com/floating-ui/floating-ui>
 - `@floating-ui/react-dom@2.1.6` — Copyright (c) 2021-present Floating UI contributors — <https://github.com/floating-ui/floating-ui>
@@ -516,9 +516,11 @@ excluded from the scan and recorded in the inventory section above.
 - `@rollup/plugin-replace@6.0.3` — Copyright (c) 2019 RollupJS Plugin Contributors (https://github.com/rollup/plugins/graphs/contributors) — <https://github.com/rollup/plugins>
 - `@rollup/plugin-terser@1.0.0` — Copyright (c) 2019 RollupJS Plugin Contributors (https://github.com/rollup/plugins/graphs/contributors) — <https://github.com/rollup/plugins>
 - `@rollup/pluginutils@5.4.0` — Copyright (c) 2019 RollupJS Plugin Contributors (https://github.com/rollup/plugins/graphs/contributors) — <https://github.com/rollup/plugins>
-- `@rollup/rollup-darwin-x64@4.61.1` — Copyright Lukas Taegert-Atkinson — <https://github.com/rollup/rollup>
+- `@rollup/rollup-linux-x64-gnu@4.61.1` — Copyright Lukas Taegert-Atkinson — <https://github.com/rollup/rollup>
+- `@rollup/rollup-linux-x64-musl@4.61.1` — Copyright Lukas Taegert-Atkinson — <https://github.com/rollup/rollup>
 - `@tailwindcss/node@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
-- `@tailwindcss/oxide-darwin-x64@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
+- `@tailwindcss/oxide-linux-x64-gnu@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
+- `@tailwindcss/oxide-linux-x64-musl@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
 - `@tailwindcss/oxide@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
 - `@tailwindcss/postcss@4.1.18` — Copyright (c) Tailwind Labs, Inc. — <https://github.com/tailwindlabs/tailwindcss>
 - `@types/babel__core@7.20.5` — <https://github.com/DefinitelyTyped/DefinitelyTyped>
@@ -604,7 +606,6 @@ excluded from the scan and recorded in the inventory section above.
 - `file-saver@2.0.5` — Copyright © 2016 [Eli Grey][1]. — <https://github.com/eligrey/FileSaver.js>
 - `for-each@0.3.5` — Copyright (c) 2012 Raynos. — <https://github.com/Raynos/for-each>
 - `fs-extra@9.1.0` — Copyright (c) 2011-2017 JP Richardson — <https://github.com/jprichardson/node-fs-extra>
-- `fsevents@2.3.3` — Copyright (C) 2010-2020 by Philipp Dunkel, Ben Noordhuis, Elan Shankar, Paul Miller — <https://github.com/fsevents/fsevents>
 - `function-bind@1.1.2` — Copyright (c) 2013 Raynos. — <https://github.com/Raynos/function-bind>
 - `function.prototype.name@1.1.8` — Copyright (c) 2016 Jordan Harband — <https://github.com/es-shims/Function.prototype.name>
 - `functions-have-names@1.2.3` — Copyright (c) 2019 Jordan Harband — <https://github.com/inspect-js/functions-have-names>
@@ -804,8 +805,9 @@ excluded from the scan and recorded in the inventory section above.
 - `zod@4.3.5` — Copyright (c) 2025 Colin McDonnell — <https://github.com/colinhacks/zod>
 - `zustand@5.0.9` — Copyright (c) 2019 Paul Henschel — <https://github.com/pmndrs/zustand>
 
-### MPL-2.0 (3)
+### MPL-2.0 (4)
 
 - `@capgo/capacitor-social-login@7.20.0` — Copyright Martin Donadieu — <https://github.com/Cap-go/capacitor-social-login>
-- `lightningcss-darwin-x64@1.30.2` — <https://github.com/parcel-bundler/lightningcss>
+- `lightningcss-linux-x64-gnu@1.30.2` — <https://github.com/parcel-bundler/lightningcss>
+- `lightningcss-linux-x64-musl@1.30.2` — <https://github.com/parcel-bundler/lightningcss>
 - `lightningcss@1.30.2` — <https://github.com/parcel-bundler/lightningcss>

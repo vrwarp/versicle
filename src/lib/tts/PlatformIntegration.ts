@@ -30,6 +30,12 @@ export interface PlatformEvents {
      * @param time The target timestamp in seconds.
      */
     onSeekTo: (time: number) => void;
+    /**
+     * Triggered when the user taps the "Bookmark" custom action button on the
+     * Android media notification (capacitor-media-session 4.1.0 custom action;
+     * a no-op on Web/iOS where custom actions are not surfaced).
+     */
+    onBookmark: () => void;
 }
 
 /**
@@ -82,6 +88,7 @@ export class PlatformIntegration implements MediaPlatform {
                     events.onSeekTo(details.seekTime);
                 }
             },
+            onBookmark: events.onBookmark,
         });
     }
 
