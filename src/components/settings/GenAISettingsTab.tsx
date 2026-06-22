@@ -8,7 +8,7 @@ import { Checkbox } from '../ui/Checkbox';
 import { Dialog } from '../ui/Dialog';
 import { ScrollArea } from '../ui/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
-import { Download, Search, Edit2, RotateCcw } from 'lucide-react';
+import { Download, Search, Edit2, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
 import type { ContentType } from '~types/content-analysis';
 import type { QuotaLimits, LaneUsage } from '@kernel/quota';
 import { formatTime, formatNumber } from '@kernel/locale/format';
@@ -226,6 +226,8 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
 
     const [searchQuery, setSearchQuery] = React.useState('');
     const [, setTick] = React.useState(0);
+    const [showPreEmbedDetails, setShowPreEmbedDetails] = React.useState(false);
+    const [showShareCachesDetails, setShowShareCachesDetails] = React.useState(false);
 
     // Setup 1s interval to poll the live usage snapshots from the governor
     React.useEffect(() => {
@@ -779,12 +781,36 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                     </p>
                                 </div>
 
-                                <div className="flex items-center justify-between">
-                                    <div className="space-y-0.5 max-w-md">
-                                        <label htmlFor="genai-preembed" className="text-sm font-medium">
-                                            Pre-embed my library for semantic search
-                                        </label>
-                                        <p className="text-xs text-muted-foreground">
+                                <div className="space-y-2 border-b pb-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-0.5 max-w-md">
+                                            <label htmlFor="genai-preembed" className="text-sm font-medium">
+                                                Pre-embed my library for semantic search
+                                            </label>
+                                            <p className="text-xs text-muted-foreground">
+                                                Allows background embedding of books to enable searching passages by meaning.
+                                            </p>
+                                        </div>
+                                        <Switch
+                                            id="genai-preembed"
+                                            checked={preEmbedLibrary}
+                                            onCheckedChange={onPreEmbedLibraryChange}
+                                        />
+                                    </div>
+                                    <div className="pl-0.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPreEmbedDetails(!showPreEmbedDetails)}
+                                            className="inline-flex items-center text-xs text-primary/80 hover:text-primary transition-colors focus:outline-none cursor-pointer"
+                                        >
+                                            <span>{showPreEmbedDetails ? 'Show less' : 'Learn more...'}</span>
+                                            {showPreEmbedDetails ? (
+                                                <ChevronUp className="ml-1 h-3.5 w-3.5" />
+                                            ) : (
+                                                <ChevronDown className="ml-1 h-3.5 w-3.5" />
+                                            )}
+                                        </button>
+                                        <p className={`text-xs text-muted-foreground mt-2 bg-muted/30 border border-muted p-3 rounded-md max-w-md ${showPreEmbedDetails ? 'block' : 'hidden'}`}>
                                             When ON, the <strong>full text</strong> of books you have loaded but
                                             not yet read is sent to Google during idle time to build search
                                             embeddings, and your <strong>search query terms</strong> leave the
@@ -794,19 +820,38 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                             you turn this on.
                                         </p>
                                     </div>
-                                    <Switch
-                                        id="genai-preembed"
-                                        checked={preEmbedLibrary}
-                                        onCheckedChange={onPreEmbedLibraryChange}
-                                    />
                                 </div>
 
-                                <div className="flex items-center justify-between">
-                                    <div className="space-y-0.5 max-w-md">
-                                        <label htmlFor="genai-share-ai-caches" className="text-sm font-medium">
-                                            Share AI caches across my devices
-                                        </label>
-                                        <p className="text-xs text-muted-foreground">
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-0.5 max-w-md">
+                                            <label htmlFor="genai-share-ai-caches" className="text-sm font-medium">
+                                                Share AI caches across my devices
+                                            </label>
+                                            <p className="text-xs text-muted-foreground">
+                                                Syncs built embeddings to your private cloud to reuse across devices without spending quota.
+                                            </p>
+                                        </div>
+                                        <Switch
+                                            id="genai-share-ai-caches"
+                                            checked={shareAiCaches}
+                                            onCheckedChange={onShareAiCachesChange}
+                                        />
+                                    </div>
+                                    <div className="pl-0.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowShareCachesDetails(!showShareCachesDetails)}
+                                            className="inline-flex items-center text-xs text-primary/80 hover:text-primary transition-colors focus:outline-none cursor-pointer"
+                                        >
+                                            <span>{showShareCachesDetails ? 'Show less' : 'Learn more...'}</span>
+                                            {showShareCachesDetails ? (
+                                                <ChevronUp className="ml-1 h-3.5 w-3.5" />
+                                            ) : (
+                                                <ChevronDown className="ml-1 h-3.5 w-3.5" />
+                                            )}
+                                        </button>
+                                        <p className={`text-xs text-muted-foreground mt-2 bg-muted/30 border border-muted p-3 rounded-md max-w-md ${showShareCachesDetails ? 'block' : 'hidden'}`}>
                                             When ON, the <strong>whole-book embeddings</strong> a device builds
                                             (the full-corpus search vectors, roughly ~251&nbsp;KB per book — far
                                             heavier than the small annotation/progress data normal sync uploads)
@@ -817,11 +862,6 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                             Default OFF — no embeddings leave the device unless you turn this on.
                                         </p>
                                     </div>
-                                    <Switch
-                                        id="genai-share-ai-caches"
-                                        checked={shareAiCaches}
-                                        onCheckedChange={onShareAiCachesChange}
-                                    />
                                 </div>
                             </div>
                         </>

@@ -150,9 +150,6 @@ export default tseslint.config(
       'venv',
       'android',
       '.claude',
-      // Vendored fork (packages/*/PROVENANCE.md): upstream source kept diff-minimal,
-      // carries committed dist/, and is not subject to versicle's lint rules.
-      'packages/capacitor-media-session',
       'test/vendor-contracts/y-cinder/unit',
       'test/vendor-contracts/y-cinder/utils',
     ],

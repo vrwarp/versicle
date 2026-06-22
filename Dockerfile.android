@@ -35,13 +35,16 @@ WORKDIR /app
 # Copy package.json and scripts for npm install
 COPY package.json package-lock.json ./
 COPY scripts ./scripts
-# The media-session plugin is vendored and consumed via a `file:` dependency, so its
-# directory must exist BEFORE `npm ci` (which links it into node_modules). It ships a
-# committed dist/, so no build step is needed here.
-COPY packages ./packages
 RUN rm -f local.properties
 
-# Install npm dependencies
+# Production git deps (y-cinder, y-idb, zustand-middleware-yjs, @jofr/capacitor-media-session)
+# are pinned to github URLs that npm records as git+ssh in the lockfile. This build container
+# has no SSH key, so rewrite github ssh -> https (the repos are public and clone without auth).
+RUN git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" && \
+    git config --global url."https://github.com/".insteadOf "git@github.com:"
+
+# Install npm dependencies. This also clones and prepare-builds the @jofr/capacitor-media-session
+# git dependency (npm runs its `prepare` hook to produce dist/ on install).
 RUN npm ci
 
 # Copy the rest of the project

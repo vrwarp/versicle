@@ -16,7 +16,6 @@ vi.mock('@jofr/capacitor-media-session', () => ({
     setMetadata: vi.fn(),
     setPlaybackState: vi.fn(),
     setPositionState: vi.fn(),
-    addListener: vi.fn(),
   },
 }));
 
@@ -71,7 +70,6 @@ describe('MediaSessionManager', () => {
     (MediaSession.setMetadata as Mock).mockResolvedValue(undefined);
     (MediaSession.setPlaybackState as Mock).mockResolvedValue(undefined);
     (MediaSession.setPositionState as Mock).mockResolvedValue(undefined);
-    (MediaSession.addListener as Mock).mockResolvedValue({ remove: vi.fn() });
 
     // --- Mocks for Artwork Processing ---
     // Note: We don't need to mock fetch or URL.createObjectURL anymore since we load Image directly from URL string.
@@ -251,39 +249,41 @@ describe('MediaSessionManager', () => {
       (Capacitor.isNativePlatform as Mock).mockReturnValue(true);
     });
 
-    it('registers native action intents and a single onMediaAction listener', async () => {
+    it('registers native action handlers with per-action callbacks', async () => {
       new MediaSessionManager(callbacks);
-      // Constructor is async in effect due to async calls but we can't await it directly.
+      // Constructor kicks off async registration; let the microtasks settle.
       await new Promise(resolve => setTimeout(resolve, 0));
 
-      // The Media3 fork registers each action with a single `{ action }` arg
-      // (no per-action callback) and delivers events via one listener.
-      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'play' });
-      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'pause' });
-      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'stop' });
-      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'nexttrack' });
-      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'previoustrack' });
-      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'seekbackward' });
-      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'seekforward' });
+      // The Media3 fork registers each action with a per-action callback:
+      // setActionHandler({ action }, handler).
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'play' }, expect.any(Function));
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'pause' }, expect.any(Function));
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'stop' }, expect.any(Function));
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'nexttrack' }, expect.any(Function));
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'previoustrack' }, expect.any(Function));
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'seekbackward' }, expect.any(Function));
+      expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'seekforward' }, expect.any(Function));
       // No `onSeekTo` callback supplied here, so `seekto` must not be registered.
-      expect(MediaSession.setActionHandler).not.toHaveBeenCalledWith({ action: 'seekto' });
-      expect(MediaSession.addListener).toHaveBeenCalledWith('onMediaAction', expect.any(Function));
+      expect(MediaSession.setActionHandler).not.toHaveBeenCalledWith({ action: 'seekto' }, expect.any(Function));
     });
 
-    it('dispatches native onMediaAction events to the matching callbacks', async () => {
+    it('dispatches native actions to the matching callbacks', async () => {
       new MediaSessionManager(callbacks);
       await new Promise(resolve => setTimeout(resolve, 0));
 
-      const listener = (MediaSession.addListener as Mock).mock.calls[0][1] as (d: { action: string; seekTime?: number }) => void;
+      // Pull the per-action handler the manager registered for a given action.
+      const handlerFor = (action: string) =>
+        (MediaSession.setActionHandler as Mock).mock.calls
+          .find(([opts]) => opts.action === action)?.[1] as (d: { action: string; seekTime?: number }) => void;
 
-      listener({ action: 'play' });
+      handlerFor('play')({ action: 'play' });
       expect(callbacks.onPlay).toHaveBeenCalledTimes(1);
 
-      listener({ action: 'nexttrack' });
+      handlerFor('nexttrack')({ action: 'nexttrack' });
       expect(callbacks.onNext).toHaveBeenCalledTimes(1);
 
       // Seek details (e.g. seekTime) are forwarded through to the callback.
-      listener({ action: 'seekforward', seekTime: 5 });
+      handlerFor('seekforward')({ action: 'seekforward', seekTime: 5 });
       expect(callbacks.onSeekForward).toHaveBeenCalledWith({ action: 'seekforward', seekTime: 5 });
     });
 

@@ -105,14 +105,14 @@ From `third-party/inventory.json` (authoritative for provenance and modification
 - **Modifications:** None in-repo — the fork now lives entirely upstream. The app consumes the published dist; behavior is pinned by the relocated contract suite in test/vendor-contracts/zustand/ and the fork's own CI.
 - **Notes:** MIT fork; the published package.json keeps private:true but the git dependency is still consumed normally. Covered by the license record; the in-tree LICENSE is retained upstream in the fork repo.
 
-### @jofr/capacitor-media-session (vendored fork: Media3 migration + versicle device fixes)
+### @jofr/capacitor-media-session (fork: Media3 migration + device fixes)
 
-- **Version:** 4.0.0, vendored from vrwarp/capacitor-media-session@2f8c6fa20eca5ea449c1a54514eb7001279d1b07 (branch antigravity)
+- **Version:** 4.0.0, pinned to vrwarp/capacitor-media-session@a24799a1e4f30c0cda0376fa66a6dc8213904449 (branch main)
 - **License:** GPL-3.0-or-later
 - **Source:** https://github.com/vrwarp/capacitor-media-session (upstream: https://github.com/jofr/capacitor-media-session)
-- **Path:** packages/capacitor-media-session (git-tracked incl. committed dist/; consumed via the file: dependency in package.json)
-- **Provenance:** Vendored in-repo as a file: dependency (packages/capacitor-media-session) instead of the prior git+https pin. Upstream jofr is the legacy androidx.media plugin; the vrwarp fork migrates Android to AndroidX Media3 (media3-session/common 1.2.0) via a WebViewProxyPlayer (SimpleBasePlayer). Retains the upstream GPL-3.0-or-later LICENSE verbatim. Full lineage and the exact local modifications are in packages/capacitor-media-session/PROVENANCE.md.
-- **Modifications:** Android-only device fixes (upstreamable): MediaSessionService.onCreate now calls addSession() so the Media3 foreground notification posts; onStartCommand returns START_NOT_STICKY and onTaskRemoved stops the idle service; MediaSessionPlugin.bitmapToByteArray downscales artwork to a 512px long edge and encodes JPEG q85 (Binder/AVRCP safety). Vendoring-only deltas (not upstreamed): dist/ is committed and the prepare hook removed (file: deps do not build on install). See PROVENANCE.md.
+- **Path:** node_modules/@jofr/capacitor-media-session (git dependency; not tracked in-repo)
+- **Provenance:** Consumed as a git dependency pinned to vrwarp/capacitor-media-session@a24799a (main); npm builds dist/ on install via the upstream `prepare` hook. Upstream jofr is the legacy androidx.media plugin; the vrwarp fork migrates Android to AndroidX Media3 (media3-session/common 1.4.1) via a WebViewProxyPlayer (SimpleBasePlayer). Retains the upstream GPL-3.0-or-later LICENSE verbatim. Previously vendored in-repo (packages/capacitor-media-session); the device fixes were upstreamed (PRs #4, #5) and the vendored copy removed.
+- **Modifications:** None in-repo — the Media3 migration and the device fixes (addSession-on-onCreate, START_NOT_STICKY + onTaskRemoved idle-stop, 512px/JPEG-q85 artwork) now live entirely upstream in vrwarp/capacitor-media-session and are consumed via the pinned git dependency.
 - **Notes:** GPL-3.0-or-later fork; this is the package cited in inventory.json#licenseFloor as a GPL-3 floor source. Covered by the license allowlist as a normal production dependency.
 
 ### @capgo/capacitor-social-login local patch (login_hint passthrough)
