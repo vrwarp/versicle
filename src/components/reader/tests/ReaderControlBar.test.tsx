@@ -175,6 +175,22 @@ describe('ReaderControlBar', () => {
     expect(screen.getByTestId('compass-pill-annotation')).toBeInTheDocument();
   });
 
+  it('a stale compass variant masks a visible selection popover (regression: highlighting no longer triggers the compass)', () => {
+    // The dispatcher ranks compassState.variant ABOVE popover.visible — this
+    // is intentional (vocab-triage / audio-triage override the live popover).
+    // The cost: a compass variant left over from a prior interaction masks a
+    // brand-new selection's annotation toolbar. With an audio-triage variant
+    // but no targetAnnotation the triage pill renders nothing, so the compass
+    // disappears entirely. useReaderController.onSelection prevents this by
+    // resetting compassState before showPopover on every fresh gesture.
+    mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
+      compassState: { variant: 'audio-triage' },
+      popover: { visible: true, text: 'fresh selection', cfiRange: 'cfi' },
+    })));
+    render(<ReaderControlBar />);
+    expect(screen.queryByTestId('compass-pill-annotation')).not.toBeInTheDocument();
+  });
+
   it('renders the active audio pill when currentBookId is present (Reader Active)', () => {
     mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
       currentSectionTitle: 'Chapter 1',
