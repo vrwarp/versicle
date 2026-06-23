@@ -217,33 +217,42 @@ export function useReaderController(
     onTocLoaded: (newToc) => useReaderUIStore.getState().setToc(newToc),
     onSelection: (cfiRange, range, _contents) => {
       try {
-        // Pre-flight check: ensure range is valid and has dimensions
-        if (!range || typeof range.getBoundingClientRect !== 'function') return;
+        // Show the compass on the SELECTION itself, not on its geometry. The
+        // annotation pill is fixed-position (ReaderControlBar `bottom-8`), so
+        // the x/y below are not load-bearing — we must NOT gate the popover on
+        // a non-zero bounding rect. On Android a perfectly valid selection can
+        // report a degenerate rect (column-break / off-screen / not-yet-laid-
+        // out range), and the old `rect.width===0 && height===0` early-return
+        // silently dropped it. Gate only on there being real selected text.
+        const text = range?.toString() ?? '';
+        if (!cfiRange || !text.trim()) return;
 
-        const rect = range.getBoundingClientRect();
-        // If the selection has no width/height (e.g. collapsed or detached), skip
-        if (rect.width === 0 && rect.height === 0) return;
-
-        const iframe = viewerRef.current?.querySelector('iframe');
-        if (iframe) {
-          const iframeRect = iframe.getBoundingClientRect();
-          // A fresh user selection must start from a clean compass: clear any
-          // lingering compassState (a prior vocab-triage / audio-triage / an
-          // existing-highlight tap that set targetAnnotation). The
-          // ReaderControlBar dispatcher ranks compassState.variant ABOVE
-          // popover.visible, so a stale variant would otherwise mask the new
-          // selection's annotation toolbar — "highlighting no longer triggers
-          // the compass". (The onClick collapse path resets it the same way.)
-          useReaderUIStore.getState().resetCompassState();
-          showPopover(
-            rect.left + iframeRect.left,
-            rect.top + iframeRect.top,
-            cfiRange,
-            range.toString()
-          );
+        // Best-effort screen coordinates (kept for any future anchored UI).
+        let x = 0;
+        let y = 0;
+        try {
+          const rect = range?.getBoundingClientRect?.();
+          const iframe = viewerRef.current?.querySelector('iframe');
+          const iframeRect = iframe?.getBoundingClientRect();
+          if (rect && iframeRect) {
+            x = rect.left + iframeRect.left;
+            y = rect.top + iframeRect.top;
+          }
+        } catch {
+          // Coordinates are best-effort; never block the popover on them.
         }
+
+        // A fresh user selection must start from a clean compass: clear any
+        // lingering compassState (a prior vocab-triage / audio-triage / an
+        // existing-highlight tap that set targetAnnotation). The
+        // ReaderControlBar dispatcher ranks compassState.variant ABOVE
+        // popover.visible, so a stale variant would otherwise mask the new
+        // selection's annotation toolbar — "highlighting no longer triggers
+        // the compass". (The onClick collapse path resets it the same way.)
+        useReaderUIStore.getState().resetCompassState();
+        showPopover(x, y, cfiRange, text);
       } catch (e) {
-        logger.warn('Selection measurement failed (likely DOM mutation)', e);
+        logger.warn('Selection handling failed', e);
       }
     },
     onBookLoaded: (_book) => {

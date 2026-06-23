@@ -12,14 +12,17 @@
  * useEpubReader_Selection.test.tsx.
  *
  * The gesture ends on `mouseup` for desktop drag-selection, but on Android
- * (Capacitor WebView) a long-press selection is a TOUCH gesture finalized via
- * the native selection handles — `mouseup` is not reliably delivered there, so
- * the gesture also has to be picked up on `touchend`. (Dropping epub.js's
- * selectionchange-based `selected` pipeline in D3 left mouseup as the only
- * trigger, which is why long-press selection stopped opening the compass on
- * Android.) Both events funnel through one resolver with a per-gesture CFI
- * de-dupe so "one selection per gesture" still holds when a platform emits
- * both.
+ * (Capacitor WebView) a long-press selection is a TOUCH gesture and the native
+ * selection UI SWALLOWS the trailing `mouseup`/`touchend` — they are not
+ * delivered to JS while the selection handles are up. The only signal that
+ * reliably fires when the native selection is created/adjusted is the
+ * document's `selectionchange` (debounced so handle-dragging settles first).
+ * That is the same signal epub.js's `selected` pipeline used before D3 dropped
+ * it — which is exactly why long-press selection stopped opening the compass on
+ * Android. So we listen for all three: `mouseup` + `touchend` (fast desktop /
+ * delivered-touch path) and `selectionchange` (the Android path). They funnel
+ * through ONE resolver with a per-gesture CFI de-dupe, so "one selection per
+ * gesture" still holds when a platform emits several of them.
  *
  * Also owns the contextmenu suppression (Android long-press) that shared the
  * legacy listener-attachment guard.
@@ -48,9 +51,9 @@ export function attachSelectionBridge(contents: Contents, onSelection: Selection
     e.stopPropagation();
   });
 
-  // De-dupe across the end-of-gesture events: a single Android long-press can
-  // surface through both touchend AND a synthesized mouseup, and we must not
-  // report the same selection twice. Cleared when the selection collapses so
+  // De-dupe across the trigger events: one gesture can surface through
+  // mouseup, touchend AND selectionchange, and we must not report the same
+  // selection more than once. Cleared when the selection collapses so
   // re-selecting the same text fires again.
   let lastCfi: string | null = null;
 
@@ -78,16 +81,34 @@ export function attachSelectionBridge(contents: Contents, onSelection: Selection
     }
   };
 
-  // Re-check selection existence after a short delay to handle race
-  // conditions where a click event might have cleared it (the legacy 10ms
-  // mouseup guard, applied to both gesture-end events).
+  // Fast path (desktop drag / a delivered touchend). Re-check at two delays:
+  // the 10ms guard lets a click that clears the selection win the race
+  // (desktop), and a longer re-check catches Android, where the native
+  // selection commits slightly AFTER the touch-end event — at +10ms the range
+  // can still read collapsed. De-duped, so the second check is a no-op when the
+  // first already reported.
   const scheduleEmit = () => {
     setTimeout(emitSelection, 10);
+    setTimeout(emitSelection, 300);
+  };
+
+  // Android path: the native long-press UI often swallows mouseup/touchend, so
+  // we ALSO resolve off selectionchange — the one signal guaranteed to fire
+  // when the native selection is created/adjusted. Debounced so dragging the
+  // selection handles settles before we read the range (and so a single
+  // word-select that fires several selectionchanges collapses to one emit). The
+  // CFI de-dupe absorbs any overlap with the fast path.
+  let changeTimer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleEmitDebounced = () => {
+    clearTimeout(changeTimer);
+    changeTimer = setTimeout(emitSelection, 250);
   };
 
   // Desktop: drag-selection ends on mouseup.
   doc.addEventListener('mouseup', scheduleEmit);
-  // Android / touch: long-press selection ends on touchend (mouseup is not
-  // reliably delivered for handle-driven selection in the WebView).
+  // Touch platforms that DO deliver it: gesture ends on touchend.
   doc.addEventListener('touchend', scheduleEmit);
+  // Android / WebView: the reliable signal when mouseup/touchend are swallowed
+  // by the native selection UI, or fire before the selection commits.
+  doc.addEventListener('selectionchange', scheduleEmitDebounced);
 }
