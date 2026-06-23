@@ -3,16 +3,26 @@
  * semantics", prep/phase6-reader-engine.md PR-4 / D3).
  *
  * Extracted verbatim from useEpubReader's `attachListeners`: a per-document
- * mouseup listener that re-checks the selection after a 10ms delay (click
- * races), resolves the CFI via `contents.cfiFromRange`, and reports ONE
- * selection per gesture. This mouseup path exists for WebKit reliability
- * (epub.js's own debounced `selected` event is unreliable there) and is the
- * SINGLE source of selection events — the parallel epub.js `selected`
- * listener was dropped in the same change that landed this module (D3:
- * "selections can fire twice"), pinned by useEpubReader_Selection.test.tsx.
+ * listener that re-checks the selection after a 10ms delay (click races),
+ * resolves the CFI via `contents.cfiFromRange`, and reports ONE selection per
+ * gesture. This path exists because epub.js's own debounced `selected` event
+ * is unreliable on WebKit, and it is the SINGLE source of selection events —
+ * the parallel epub.js `selected` listener was dropped in the same change that
+ * landed this module (D3: "selections can fire twice"), pinned by
+ * useEpubReader_Selection.test.tsx.
  *
- * Also owns the contextmenu suppression (Android long-press) that shared
- * the legacy listener-attachment guard.
+ * The gesture ends on `mouseup` for desktop drag-selection, but on Android
+ * (Capacitor WebView) a long-press selection is a TOUCH gesture finalized via
+ * the native selection handles — `mouseup` is not reliably delivered there, so
+ * the gesture also has to be picked up on `touchend`. (Dropping epub.js's
+ * selectionchange-based `selected` pipeline in D3 left mouseup as the only
+ * trigger, which is why long-press selection stopped opening the compass on
+ * Android.) Both events funnel through one resolver with a per-gesture CFI
+ * de-dupe so "one selection per gesture" still holds when a platform emits
+ * both.
+ *
+ * Also owns the contextmenu suppression (Android long-press) that shared the
+ * legacy listener-attachment guard.
  */
 import type { Contents } from 'epubjs';
 
@@ -38,28 +48,46 @@ export function attachSelectionBridge(contents: Contents, onSelection: Selection
     e.stopPropagation();
   });
 
-  doc.addEventListener('mouseup', () => {
+  // De-dupe across the end-of-gesture events: a single Android long-press can
+  // surface through both touchend AND a synthesized mouseup, and we must not
+  // report the same selection twice. Cleared when the selection collapses so
+  // re-selecting the same text fires again.
+  let lastCfi: string | null = null;
+
+  const emitSelection = () => {
     const selection = contents.window.getSelection();
-    if (!selection || selection.isCollapsed) return;
+    if (!selection || selection.isCollapsed) {
+      lastCfi = null;
+      return;
+    }
+    if (selection.rangeCount === 0) return;
 
-    setTimeout(() => {
-      // Re-check selection existence after delay to handle race conditions
-      // where a click event might have cleared it.
-      if (selection.rangeCount === 0 || selection.isCollapsed) return;
+    let range;
+    try {
+      range = selection.getRangeAt(0);
+    } catch {
+      // Handle IndexSizeError if selection was cleared
+      return;
+    }
 
-      let range;
-      try {
-        range = selection.getRangeAt(0);
-      } catch {
-        // Handle IndexSizeError if selection was cleared
-        return;
-      }
+    if (!range) return;
+    const cfi = contents.cfiFromRange(range);
+    if (cfi && cfi !== lastCfi) {
+      lastCfi = cfi;
+      onSelection(cfi, range, contents);
+    }
+  };
 
-      if (!range) return;
-      const cfi = contents.cfiFromRange(range);
-      if (cfi) {
-        onSelection(cfi, range, contents);
-      }
-    }, 10);
-  });
+  // Re-check selection existence after a short delay to handle race
+  // conditions where a click event might have cleared it (the legacy 10ms
+  // mouseup guard, applied to both gesture-end events).
+  const scheduleEmit = () => {
+    setTimeout(emitSelection, 10);
+  };
+
+  // Desktop: drag-selection ends on mouseup.
+  doc.addEventListener('mouseup', scheduleEmit);
+  // Android / touch: long-press selection ends on touchend (mouseup is not
+  // reliably delivered for handle-driven selection in the WebView).
+  doc.addEventListener('touchend', scheduleEmit);
 }
