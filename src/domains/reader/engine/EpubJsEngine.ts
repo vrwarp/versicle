@@ -338,9 +338,13 @@ export class EpubJsEngine implements ReaderEngine {
     try {
       const iframe = this.deps.container.querySelector('iframe');
       if (iframe && iframe.contentWindow) {
-        // App-driven clear (e.g. popover dismiss) — suppress the resulting
-        // selectionchange so the bridge does not re-arm the popover (review H1).
-        markProgrammaticSelection(iframe.contentWindow);
+        // NOTE: deliberately NOT marked programmatic. clearSelection only
+        // collapses the selection, and the bridge already no-ops on a collapsed
+        // selectionchange. Arming the flag here (on every popover dismiss) would
+        // instead suppress a legitimate user re-selection landing within the
+        // flag window — the original "highlighting doesn't open the compass"
+        // symptom (review finding 1). Only selectRange, which creates a real
+        // selection via addRange, needs suppression.
         iframe.contentWindow.getSelection()?.removeAllRanges();
       }
     } catch {
