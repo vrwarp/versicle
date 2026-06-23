@@ -216,6 +216,14 @@ export function useReaderController(
     },
     onTocLoaded: (newToc) => useReaderUIStore.getState().setToc(newToc),
     onSelection: (cfiRange, range, _contents) => {
+      // Audio-bookmark triage OWNS the live selection: it programmatically
+      // selects the bookmarked block (engine.selectRange → selectionchange,
+      // which now drives the selection bridge) and the user may refine that
+      // selection by hand before confirming. Neither is a "new annotation"
+      // gesture, so it must NOT reset the audio-triage pill into the annotation
+      // toolbar. (compassState is set synchronously right after selectRange, so
+      // it is already 'audio-triage' by the time the debounced emit lands.)
+      if (useReaderUIStore.getState().compassState?.variant === 'audio-triage') return;
       try {
         // Show the compass on the SELECTION itself, not on its geometry. The
         // annotation pill is fixed-position (ReaderControlBar `bottom-8`), so
