@@ -179,6 +179,34 @@ describe('regression: selection single-fire per gesture (D3)', () => {
     expect(onSelection).toHaveBeenCalledTimes(1);
   });
 
+  it('a touchend gesture (Android long-press) reports one selection', async () => {
+    await bootAndAttach();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const contents = slot.contents as any;
+
+    // Android (Capacitor WebView) long-press selection is finalized on
+    // touchend, not mouseup — the bridge must pick the gesture up there too.
+    contents.document.dispatchEvent(new window.Event('touchend'));
+
+    await waitFor(() => expect(onSelection).toHaveBeenCalledTimes(1));
+    expect(onSelection).toHaveBeenCalledWith(GESTURE_CFI, expect.anything(), contents);
+  });
+
+  it('a single gesture surfacing on BOTH touchend and mouseup reports once', async () => {
+    await bootAndAttach();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const contents = slot.contents as any;
+
+    // Some Android WebViews emit a synthesized mouseup after touchend for the
+    // same long-press — the per-gesture CFI de-dupe must collapse it to one.
+    contents.document.dispatchEvent(new window.Event('touchend'));
+    contents.document.dispatchEvent(new window.Event('mouseup'));
+
+    await waitFor(() => expect(onSelection).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(onSelection).toHaveBeenCalledTimes(1);
+  });
+
   it('an engine-only selected event (no mouseup) reports nothing', async () => {
     await bootAndAttach();
 
