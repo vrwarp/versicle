@@ -50,6 +50,8 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        androidx.core.splashscreen.SplashScreen.installSplashScreen(this);
+
         // On debug builds, clear the WebView cache and the Service Worker directory
         // so that the service worker script (sw.js) is re-read from the updated APK
         // assets after each `cap sync`. Without this, the Android WebView's internal
