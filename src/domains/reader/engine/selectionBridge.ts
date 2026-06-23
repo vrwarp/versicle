@@ -41,12 +41,13 @@ interface FlaggedWindow extends Window {
 const PROGRAMMATIC_SELECTION_MS = 500;
 
 /**
- * Mark that the app is about to mutate the iframe selection programmatically
- * (engine.selectRange for audio-bookmark triage, engine.clearSelection on
- * dismiss). Those mutations fire `selectionchange` too; without this flag the
- * bridge would treat them as a user gesture and clobber the triage pill or
- * re-arm a popover the user just dismissed (review H1). Call it BEFORE the
- * removeAllRanges/addRange.
+ * Mark that the app is about to create a selection programmatically
+ * (engine.selectRange for audio-bookmark triage). That mutation fires
+ * `selectionchange` too; without this flag the bridge would treat the
+ * app-created selection as a user gesture and clobber the triage pill. Call it
+ * BEFORE the removeAllRanges/addRange. (engine.clearSelection deliberately does
+ * NOT use this — it only collapses, which the bridge already no-ops on, and
+ * flagging every dismiss would suppress a quick user re-selection.)
  */
 export function markProgrammaticSelection(win: Window | null | undefined): void {
   if (win) (win as FlaggedWindow).__versicleProgrammaticSelectionAt = Date.now();
@@ -90,10 +91,10 @@ export function attachSelectionBridge(contents: Contents, onSelection: Selection
     const win = contents.window as Window | undefined;
     if (!win || !contents.document) return;
 
-    // Ignore selection mutations the app made itself (engine.selectRange for
-    // audio-bookmark triage; clearSelection on dismiss). Treating those as a
-    // user gesture would clobber the triage pill or re-arm a just-dismissed
-    // popover (review H1).
+    // Ignore the app's own programmatic selection (engine.selectRange for
+    // audio-bookmark triage). Treating that as a user gesture would clobber the
+    // triage pill. Checked BEFORE lastCfi is touched, so it never pollutes the
+    // de-dupe key (a later real user selection of the same text still fires).
     if (isProgrammaticSelection(win)) return;
 
     const selection = win.getSelection();

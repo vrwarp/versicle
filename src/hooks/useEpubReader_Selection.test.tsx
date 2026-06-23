@@ -221,14 +221,14 @@ describe('regression: selection single-fire per gesture (D3)', () => {
     expect(onSelection).toHaveBeenCalledTimes(1);
   });
 
-  it('a programmatic selection (selectRange/clearSelection) reports nothing', async () => {
+  it('a programmatic selection (engine.selectRange) reports nothing', async () => {
     await bootAndAttach();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const contents = slot.contents as any;
 
-    // The engine marks app-driven selection mutations (audio-bookmark triage,
-    // dismiss) so the bridge ignores the selectionchange they emit — otherwise
-    // it would clobber the triage pill / re-arm a dismissed popover.
+    // The engine marks its own selectRange (audio-bookmark triage) so the
+    // bridge ignores the selectionchange it emits — otherwise it would clobber
+    // the triage pill.
     markProgrammaticSelection(contents.window);
     contents.document.dispatchEvent(new window.Event('selectionchange'));
 
