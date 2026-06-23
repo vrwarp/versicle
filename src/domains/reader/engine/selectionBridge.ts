@@ -81,18 +81,23 @@ export function attachSelectionBridge(contents: Contents, onSelection: Selection
     }
   };
 
-  // Fast path (desktop drag / a delivered touchend): re-check after a short
-  // delay so a click that clears the selection wins the race (legacy 10ms
-  // mouseup guard).
+  // Fast path (desktop drag / a delivered touchend). Re-check at two delays:
+  // the 10ms guard lets a click that clears the selection win the race
+  // (desktop), and a longer re-check catches Android, where the native
+  // selection commits slightly AFTER the touch-end event — at +10ms the range
+  // can still read collapsed. De-duped, so the second check is a no-op when the
+  // first already reported.
   const scheduleEmit = () => {
     setTimeout(emitSelection, 10);
+    setTimeout(emitSelection, 300);
   };
 
-  // Android path: the native long-press UI swallows mouseup/touchend, so we
-  // resolve off selectionchange instead. Debounced so dragging the selection
-  // handles settles before we read the range (and so a single word-select that
-  // fires several selectionchanges collapses to one emit). The CFI de-dupe
-  // then absorbs any overlap with the fast path on platforms that fire both.
+  // Android path: the native long-press UI often swallows mouseup/touchend, so
+  // we ALSO resolve off selectionchange — the one signal guaranteed to fire
+  // when the native selection is created/adjusted. Debounced so dragging the
+  // selection handles settles before we read the range (and so a single
+  // word-select that fires several selectionchanges collapses to one emit). The
+  // CFI de-dupe absorbs any overlap with the fast path.
   let changeTimer: ReturnType<typeof setTimeout> | undefined;
   const scheduleEmitDebounced = () => {
     clearTimeout(changeTimer);
@@ -103,7 +108,7 @@ export function attachSelectionBridge(contents: Contents, onSelection: Selection
   doc.addEventListener('mouseup', scheduleEmit);
   // Touch platforms that DO deliver it: gesture ends on touchend.
   doc.addEventListener('touchend', scheduleEmit);
-  // Android / WebView: the only reliable signal when mouseup/touchend are
-  // swallowed by the native selection UI.
+  // Android / WebView: the reliable signal when mouseup/touchend are swallowed
+  // by the native selection UI, or fire before the selection commits.
   doc.addEventListener('selectionchange', scheduleEmitDebounced);
 }
