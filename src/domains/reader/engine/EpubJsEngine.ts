@@ -21,6 +21,7 @@ import { createLogger } from '@lib/logger';
 import type { NavigationItem } from '~types/book';
 import { bookInternals, internals } from './epubjsInternals';
 import { HighlightLayerManager, type AnnotatingRendition } from './HighlightLayerManager';
+import { markProgrammaticSelection } from './selectionBridge';
 import type {
   ContentView,
   EngineLocation,
@@ -322,6 +323,9 @@ export class EpubJsEngine implements ReaderEngine {
       const range = this.getRenderedRange(cfiRange);
       const win = internals(this.deps.rendition).manager?.getContents()?.[0]?.window;
       if (win && range) {
+        // Tell the selection bridge this mutation is app-driven so it does not
+        // morph the audio-triage pill into the annotation toolbar.
+        markProgrammaticSelection(win);
         win.getSelection()?.removeAllRanges();
         win.getSelection()?.addRange(range);
       }
@@ -334,6 +338,9 @@ export class EpubJsEngine implements ReaderEngine {
     try {
       const iframe = this.deps.container.querySelector('iframe');
       if (iframe && iframe.contentWindow) {
+        // App-driven clear (e.g. popover dismiss) — suppress the resulting
+        // selectionchange so the bridge does not re-arm the popover (review H1).
+        markProgrammaticSelection(iframe.contentWindow);
         iframe.contentWindow.getSelection()?.removeAllRanges();
       }
     } catch {

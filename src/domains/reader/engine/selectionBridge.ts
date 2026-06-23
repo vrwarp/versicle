@@ -31,6 +31,32 @@ import type { Contents } from 'epubjs';
 
 export type SelectionHandler = (cfiRange: string, range: Range, contents: Contents) => void;
 
+interface FlaggedWindow extends Window {
+  __versicleProgrammaticSelectionAt?: number;
+}
+
+/** How long after a programmatic selection mutation we treat selectionchange
+ *  as app-driven rather than a user gesture. Comfortably covers the bridge's
+ *  250ms selectionchange debounce. */
+const PROGRAMMATIC_SELECTION_MS = 500;
+
+/**
+ * Mark that the app is about to mutate the iframe selection programmatically
+ * (engine.selectRange for audio-bookmark triage, engine.clearSelection on
+ * dismiss). Those mutations fire `selectionchange` too; without this flag the
+ * bridge would treat them as a user gesture and clobber the triage pill or
+ * re-arm a popover the user just dismissed (review H1). Call it BEFORE the
+ * removeAllRanges/addRange.
+ */
+export function markProgrammaticSelection(win: Window | null | undefined): void {
+  if (win) (win as FlaggedWindow).__versicleProgrammaticSelectionAt = Date.now();
+}
+
+function isProgrammaticSelection(win: Window): boolean {
+  const at = (win as FlaggedWindow).__versicleProgrammaticSelectionAt;
+  return typeof at === 'number' && Date.now() - at < PROGRAMMATIC_SELECTION_MS;
+}
+
 /**
  * Attaches the bridge to one section document. Idempotent per Contents
  * instance (the legacy `_listenersAttached` guard, verbatim — epub.js
@@ -58,7 +84,19 @@ export function attachSelectionBridge(contents: Contents, onSelection: Selection
   let lastCfi: string | null = null;
 
   const emitSelection = () => {
-    const selection = contents.window.getSelection();
+    // The Contents (and its window) can be torn down before a pending
+    // debounce / re-check fires (section change, book close) — bail rather
+    // than throw (review H2).
+    const win = contents.window as Window | undefined;
+    if (!win || !contents.document) return;
+
+    // Ignore selection mutations the app made itself (engine.selectRange for
+    // audio-bookmark triage; clearSelection on dismiss). Treating those as a
+    // user gesture would clobber the triage pill or re-arm a just-dismissed
+    // popover (review H1).
+    if (isProgrammaticSelection(win)) return;
+
+    const selection = win.getSelection();
     if (!selection || selection.isCollapsed) {
       lastCfi = null;
       return;
@@ -74,7 +112,14 @@ export function attachSelectionBridge(contents: Contents, onSelection: Selection
     }
 
     if (!range) return;
-    const cfi = contents.cfiFromRange(range);
+
+    let cfi: string | undefined;
+    try {
+      cfi = contents.cfiFromRange(range);
+    } catch {
+      // cfiFromRange can throw on a detached/torn-down range.
+      return;
+    }
     if (cfi && cfi !== lastCfi) {
       lastCfi = cfi;
       onSelection(cfi, range, contents);
