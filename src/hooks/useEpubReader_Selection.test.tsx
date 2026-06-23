@@ -14,6 +14,7 @@ import React, { useRef } from 'react';
 import { render, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { useEpubReader, type EpubReaderOptions } from './useEpubReader';
+import { markProgrammaticSelection } from '@domains/reader/engine/selectionBridge';
 import { useBookStore } from '@store/useBookStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 
@@ -218,6 +219,21 @@ describe('regression: selection single-fire per gesture (D3)', () => {
     await waitFor(() => expect(onSelection).toHaveBeenCalledTimes(1));
     await new Promise((r) => setTimeout(r, 30));
     expect(onSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it('a programmatic selection (engine.selectRange) reports nothing', async () => {
+    await bootAndAttach();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const contents = slot.contents as any;
+
+    // The engine marks its own selectRange (audio-bookmark triage) so the
+    // bridge ignores the selectionchange it emits — otherwise it would clobber
+    // the triage pill.
+    markProgrammaticSelection(contents.window);
+    contents.document.dispatchEvent(new window.Event('selectionchange'));
+
+    await new Promise((r) => setTimeout(r, 300));
+    expect(onSelection).not.toHaveBeenCalled();
   });
 
   it('an engine-only selected event (no mouseup) reports nothing', async () => {

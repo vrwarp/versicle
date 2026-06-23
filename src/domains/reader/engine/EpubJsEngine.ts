@@ -21,6 +21,7 @@ import { createLogger } from '@lib/logger';
 import type { NavigationItem } from '~types/book';
 import { bookInternals, internals } from './epubjsInternals';
 import { HighlightLayerManager, type AnnotatingRendition } from './HighlightLayerManager';
+import { markProgrammaticSelection } from './selectionBridge';
 import type {
   ContentView,
   EngineLocation,
@@ -322,6 +323,9 @@ export class EpubJsEngine implements ReaderEngine {
       const range = this.getRenderedRange(cfiRange);
       const win = internals(this.deps.rendition).manager?.getContents()?.[0]?.window;
       if (win && range) {
+        // Tell the selection bridge this mutation is app-driven so it does not
+        // morph the audio-triage pill into the annotation toolbar.
+        markProgrammaticSelection(win);
         win.getSelection()?.removeAllRanges();
         win.getSelection()?.addRange(range);
       }
@@ -334,6 +338,13 @@ export class EpubJsEngine implements ReaderEngine {
     try {
       const iframe = this.deps.container.querySelector('iframe');
       if (iframe && iframe.contentWindow) {
+        // NOTE: deliberately NOT marked programmatic. clearSelection only
+        // collapses the selection, and the bridge already no-ops on a collapsed
+        // selectionchange. Arming the flag here (on every popover dismiss) would
+        // instead suppress a legitimate user re-selection landing within the
+        // flag window — the original "highlighting doesn't open the compass"
+        // symptom (review finding 1). Only selectRange, which creates a real
+        // selection via addRange, needs suppression.
         iframe.contentWindow.getSelection()?.removeAllRanges();
       }
     } catch {
