@@ -192,6 +192,19 @@ describe('regression: selection single-fire per gesture (D3)', () => {
     expect(onSelection).toHaveBeenCalledWith(GESTURE_CFI, expect.anything(), contents);
   });
 
+  it('a selectionchange gesture (Android, mouseup/touchend swallowed) reports one selection', async () => {
+    await bootAndAttach();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const contents = slot.contents as any;
+
+    // On Android the native long-press UI swallows mouseup/touchend, so the
+    // bridge must resolve the selection off the debounced selectionchange.
+    contents.document.dispatchEvent(new window.Event('selectionchange'));
+
+    await waitFor(() => expect(onSelection).toHaveBeenCalledTimes(1));
+    expect(onSelection).toHaveBeenCalledWith(GESTURE_CFI, expect.anything(), contents);
+  });
+
   it('a single gesture surfacing on BOTH touchend and mouseup reports once', async () => {
     await bootAndAttach();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
