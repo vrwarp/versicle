@@ -164,25 +164,6 @@ describe('GeminiEmbeddingClient', () => {
     expect(opts.consent).toEqual({ bookId: 'bk-7', interactive: false });
   });
 
-  it('logs request/response with the embedContent method name', async () => {
-    const { client, logs } = makeClient([embedResponse([0])]);
-    await client.embed(['x'], { profile: 'document' });
-    expect(logs.map((l) => [l.type, l.method])).toEqual([
-      ['request', 'embedContent'],
-      ['response', 'embedContent'],
-    ]);
-  });
-
-  it('redacts inlineData-shaped payloads before the onLog sink (privacy D3)', async () => {
-    // The embedding payload carries text only, but redactPayload runs on every
-    // logged payload — assert the redaction pass is wired (a synthetic
-    // inlineData node would be stripped if one ever appeared).
-    const { client, logs } = makeClient([embedResponse([0])]);
-    await client.embed(['plain chunk'], { profile: 'document' });
-    const request = logs.find((l) => l.type === 'request');
-    expect(JSON.stringify(request?.payload)).toContain('plain chunk');
-  });
-
   it('throws GenAIHttpError carrying the status on a non-ok response', async () => {
     const { client } = makeClient([errorResponse(429, 'RESOURCE_EXHAUSTED')]);
     await expect(client.embed(['x'], { profile: 'document' })).rejects.toBeInstanceOf(

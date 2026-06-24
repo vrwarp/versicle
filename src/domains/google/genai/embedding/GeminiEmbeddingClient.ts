@@ -22,7 +22,7 @@
  */
 import { egress, type EgressFn } from '@kernel/net';
 import { GenAIHttpError } from '../errors';
-import { redactPayload, type GenAILogEntry, type GenAILogSink } from '../logging';
+import { type GenAILogSink } from '../logging';
 import type {
   EmbeddingClient,
   EmbeddingConfigProvider,
@@ -59,14 +59,6 @@ function estTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-function generateLogId(): string {
-  try {
-    return crypto.randomUUID();
-  } catch {
-    return `log_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  }
-}
-
 interface EmbedContentResponseBody {
   embedding?: { values?: number[] };
   error?: { code?: number; message?: string; status?: string };
@@ -95,16 +87,6 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
 
   isConfigured(): boolean {
     return this.deps.getConfig().apiKey !== '';
-  }
-
-  private log(type: GenAILogEntry['type'], payload: unknown): void {
-    this.deps.onLog?.({
-      id: generateLogId(),
-      timestamp: Date.now(),
-      type,
-      method: 'embedContent',
-      payload: redactPayload(payload),
-    });
   }
 
   async embed(
@@ -190,8 +172,6 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
     }));
     const payload = { requests };
 
-    this.log('request', { model: config.model, profile: opts.profile, batch: requests.length });
-
     const response = await this.egress(
       'gemini',
       `${GEMINI_API_BASE}/models/${config.model}:batchEmbedContents`,
@@ -221,13 +201,11 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
         response.status,
         { apiStatus: body.error?.status, model: config.model },
       );
-      this.log('error', { message: error.message, status: response.status });
       throw error;
     }
 
     const body = (await response.json()) as BatchEmbedContentsResponseBody;
     const embeddings = body.embeddings ?? [];
-    this.log('response', { model: config.model, batch: embeddings.length });
     return embeddings.map((e) => Float32Array.from(e.values ?? []));
   }
 
@@ -254,8 +232,6 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
       outputDimensionality: config.dims,
       ...(isEm2 ? {} : { taskType: TASK_TYPE[opts.profile] }),
     };
-
-    this.log('request', { model: config.model, profile: opts.profile, payload });
 
     const response = await this.egress(
       'gemini',
@@ -284,13 +260,11 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
         response.status,
         { apiStatus: body.error?.status, model: config.model },
       );
-      this.log('error', { message: error.message, status: response.status });
       throw error;
     }
 
     const body = (await response.json()) as EmbedContentResponseBody;
     const values = body.embedding?.values ?? [];
-    this.log('response', { model: config.model, dims: values.length });
     return Float32Array.from(values);
   }
 }
