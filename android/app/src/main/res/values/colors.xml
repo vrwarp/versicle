@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Solid background shown behind the centered splash icon (light theme).
+         Matches the background baked into the legacy splash.png assets. -->
+    <color name="splash_background">#EEEEEE</color>
+</resources>
