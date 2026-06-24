@@ -196,6 +196,14 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
 
     if (!response.ok) {
       const body = (await response.json().catch(() => ({}))) as BatchEmbedContentsResponseBody;
+      // Per PR comment, it's useful to log errors even if we omit successful calls.
+      this.deps.onLog?.({
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        type: 'error',
+        method: 'embedBatch',
+        payload: { message: body.error?.message || `Embedding request failed: ${response.status}`, status: response.status },
+      });
       const error = new GenAIHttpError(
         body.error?.message || `Embedding request failed: ${response.status}`,
         response.status,
@@ -255,6 +263,14 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
 
     if (!response.ok) {
       const body = (await response.json().catch(() => ({}))) as EmbedContentResponseBody;
+      // Per PR comment, it's useful to log errors even if we omit successful calls.
+      this.deps.onLog?.({
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        type: 'error',
+        method: 'embedOne',
+        payload: { message: body.error?.message || `Embedding request failed: ${response.status}`, status: response.status },
+      });
       const error = new GenAIHttpError(
         body.error?.message || `Embedding request failed: ${response.status}`,
         response.status,
