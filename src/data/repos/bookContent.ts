@@ -91,11 +91,23 @@ class BookContentRepo {
 
       // BOLT OPTIMIZATION: Avoid getAll() on large arrays across IDB bridge to prevent serialization OOMs
       // and use count() instead of getKey() to avoid fetching the key value itself.
-      const manifestsPromise = Promise.all(ids.map(id => manifestStore.get(id)));
-      const resourceCountPromise = Promise.all(ids.map(id => resourceStore.count(id)));
-      const structuresPromise = Promise.all(ids.map(id => structureStore.get(id)));
+      // FURTHER OPTIMIZATION: Chunk parallel requests to avoid flooding the transaction/microtask queue.
+      const manifests: (StaticManifestRow | undefined)[] = [];
+      const resourceCounts: number[] = [];
+      const structures: (StaticStructureRow | undefined)[] = [];
+      const CHUNK_SIZE = 100;
 
-      const [manifests, resourceCounts, structures] = await Promise.all([manifestsPromise, resourceCountPromise, structuresPromise]);
+      for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+        const chunk = ids.slice(i, i + CHUNK_SIZE);
+        const manifestsPromise = Promise.all(chunk.map(id => manifestStore.get(id)));
+        const resourceCountPromise = Promise.all(chunk.map(id => resourceStore.count(id)));
+        const structuresPromise = Promise.all(chunk.map(id => structureStore.get(id)));
+
+        const [m, r, s] = await Promise.all([manifestsPromise, resourceCountPromise, structuresPromise]);
+        manifests.push(...m);
+        resourceCounts.push(...r);
+        structures.push(...s);
+      }
 
       await tx.done;
 
@@ -214,13 +226,18 @@ class BookContentRepo {
         const store = tx.objectStore('static_resources');
 
         // BOLT OPTIMIZATION: Avoid getAllKeys() across IDB boundary. Map to count() promises instead.
-        const promises = bookIds.map(async (id) => {
-          const count = await store.count(id);
-          const exists = count > 0;
-          logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists}`);
-          result.set(id, !exists);
-        });
-        await Promise.all(promises);
+        // FURTHER OPTIMIZATION: Chunk parallel requests to avoid flooding the transaction/microtask queue.
+        const CHUNK_SIZE = 100;
+        for (let i = 0; i < bookIds.length; i += CHUNK_SIZE) {
+          const chunk = bookIds.slice(i, i + CHUNK_SIZE);
+          const promises = chunk.map(async (id) => {
+            const count = await store.count(id);
+            const exists = count > 0;
+            logger.debug(`getOffloadedStatus: ${id} exists in static_resources? ${exists}`);
+            result.set(id, !exists);
+          });
+          await Promise.all(promises);
+        }
         await tx.done;
       }
       return result;
