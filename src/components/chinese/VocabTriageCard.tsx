@@ -79,6 +79,7 @@ const VocabTile: React.FC<{
                 : "bg-card border-border text-foreground hover:bg-accent hover:border-accent-foreground/30"
             )}
             style={{ touchAction: 'manipulation' }}
+            aria-pressed={isKnown}
           >
             <span className="text-[10px] text-muted-foreground/80 leading-none h-3 select-none font-pinyin">
               {pinyin.split(' / ')[0]}
@@ -95,6 +96,8 @@ const VocabTile: React.FC<{
               }}
               className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-muted border border-border flex items-center justify-center text-[9px] text-muted-foreground hover:bg-accent hover:text-foreground shadow-sm transition-colors"
               title="Show meaning"
+              aria-label="Show character details"
+              aria-expanded={showTooltip}
             >
               i
             </button>
