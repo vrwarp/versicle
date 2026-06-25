@@ -19,7 +19,17 @@
 
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:background">@drawable/splash</item>
+        <!--
+          Use the AndroidX SplashScreen API attributes instead of stretching a
+          full-screen bitmap via android:background. Setting the window
+          background to @drawable/splash scaled the ~2:3 PNG to fill the whole
+          window, distorting the centered logo into an oval on tall screens
+          (and on warm-start / foreground when the launch window is redrawn).
+          A solid color plus a centered, correctly-scaled icon cannot be
+          stretched.
+        -->
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="postSplashScreenTheme">@style/AppTheme</item>
     </style>
 </resources>

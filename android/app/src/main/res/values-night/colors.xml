@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Solid background shown behind the centered splash icon (dark theme).
+         Matches the background baked into the legacy splash.png night assets. -->
+    <color name="splash_background">#111111</color>
+</resources>
