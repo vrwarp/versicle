@@ -70,7 +70,7 @@ describe('GeminiClient', () => {
     expect(used).toBe(true);
   });
 
-  it('regression: retries with a DIFFERENT model on 429 when rotation is enabled', async () => {
+  it('regression: retries with the next model on 429 when rotation is enabled (deterministic order)', async () => {
     const { client, calls } = makeClient(
       [errorResponse(429, 'RESOURCE_EXHAUSTED'), geminiResponse('success')],
       { rotationEnabled: true },
@@ -78,7 +78,9 @@ describe('GeminiClient', () => {
     await expect(client.generateText('prompt')).resolves.toBe('success');
     expect(calls).toHaveLength(2);
     const model = (url: string) => url.match(/models\/([^:]+):/)?.[1];
-    expect(model(calls[0].url)).not.toBe(model(calls[1].url));
+    // Tiered order: premium first, then next
+    expect(model(calls[0].url)).toBe('gemini-3.5-flash');
+    expect(model(calls[1].url)).toBe('gemini-3-flash-preview');
   });
 
   it('regression: does NOT retry on 429 when rotation is disabled', async () => {
@@ -97,7 +99,11 @@ describe('GeminiClient', () => {
 
   it('regression: exhausts all rotation models when every one returns 429', async () => {
     const { client, calls } = makeClient(
-      [errorResponse(429, 'RESOURCE_EXHAUSTED'), errorResponse(429, 'RESOURCE_EXHAUSTED')],
+      [
+        errorResponse(429, 'RESOURCE_EXHAUSTED'),
+        errorResponse(429, 'RESOURCE_EXHAUSTED'),
+        errorResponse(429, 'RESOURCE_EXHAUSTED'),
+      ],
       { rotationEnabled: true },
     );
     await expect(client.generateText('prompt')).rejects.toMatchObject({ status: 429 });

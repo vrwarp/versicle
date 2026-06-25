@@ -125,6 +125,17 @@ export function validateReferenceDetection(
       { referenceStartIndex: index, nodeCount },
     );
   }
+  // Positional guard: a reference section beginning before 40% of the chapter
+  // is almost certainly a false positive (e.g. epigraph attributions). The
+  // deterministic detector uses 60%; we are more lenient for the model but
+  // still catch extreme early-chapter misclassifications.
+  const MIN_POSITION_FRACTION = 0.4;
+  if (index >= 0 && nodeCount > 5 && index < nodeCount * MIN_POSITION_FRACTION) {
+    throw new GenAIInvalidResponseError(
+      `referenceStartIndex ${index} is before 40% of chapter (${nodeCount} groups) — likely false positive`,
+      { referenceStartIndex: index, nodeCount, positionFraction: index / nodeCount },
+    );
+  }
   return parsed.data;
 }
 

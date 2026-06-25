@@ -35,16 +35,18 @@ import type {
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
-/** The ONE rotation list (was duplicated between service + settings copy). */
-export const GENAI_ROTATION_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'] as const;
+/**
+ * Tiered rotation list: premium models first (20 RPD each), lite fallback
+ * last (500 RPD). The list is iterated IN ORDER (no shuffle) — smart models
+ * get first crack, and when their daily quota is exhausted (429), the
+ * high-quota lite model handles the rest.
+ */
+export const GENAI_ROTATION_MODELS = [
+  'gemini-3.5-flash',
+  'gemini-3-flash-preview',
+  'gemini-3.1-flash-lite',
+] as const;
 
-function fisherYatesShuffle<T>(items: T[]): T[] {
-  for (let i = items.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [items[i], items[j]] = [items[j], items[i]];
-  }
-  return items;
-}
 
 function generateLogId(): string {
   try {
@@ -134,7 +136,7 @@ export class GeminiClient implements GenAIClient {
   private modelsToTry(): string[] {
     const config = this.deps.getConfig();
     return config.rotationEnabled
-      ? fisherYatesShuffle([...GENAI_ROTATION_MODELS])
+      ? [...GENAI_ROTATION_MODELS]
       : [config.model];
   }
 

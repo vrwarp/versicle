@@ -52,6 +52,47 @@ describe('referenceDetection validation', () => {
     ).rejects.toBeInstanceOf(GenAIInvalidResponseError);
   });
 
+  it('positional guard: early-chapter indices throw for sections with > 5 groups', () => {
+    // Index 4 in a 29-group section (13.8%) — the exact bug case from the evaluation
+    expect(() => validateReferenceDetection({ ...base, referenceStartIndex: 4 }, 29)).toThrow(
+      GenAIInvalidResponseError,
+    );
+    // Index 1 in a 29-group section (3.4%)
+    expect(() => validateReferenceDetection({ ...base, referenceStartIndex: 1 }, 29)).toThrow(
+      GenAIInvalidResponseError,
+    );
+    // Index 2 in a 10-group section (20%)
+    expect(() => validateReferenceDetection({ ...base, referenceStartIndex: 2 }, 10)).toThrow(
+      GenAIInvalidResponseError,
+    );
+  });
+
+  it('positional guard: indices at or past 40% are accepted', () => {
+    // Index 12 in a 29-group section (41.4%) — just past the threshold
+    expect(
+      validateReferenceDetection({ ...base, referenceStartIndex: 12 }, 29).referenceStartIndex,
+    ).toBe(12);
+    // Index 4 in a 10-group section (40%) — exactly at threshold
+    expect(
+      validateReferenceDetection({ ...base, referenceStartIndex: 4 }, 10).referenceStartIndex,
+    ).toBe(4);
+    // -1 (no references) always accepted
+    expect(
+      validateReferenceDetection({ ...base, referenceStartIndex: -1 }, 29).referenceStartIndex,
+    ).toBe(-1);
+  });
+
+  it('positional guard: bypassed for short sections (nodeCount <= 5)', () => {
+    // Index 0 in a 3-group section — the whole section may be references
+    expect(
+      validateReferenceDetection({ ...base, referenceStartIndex: 0 }, 3).referenceStartIndex,
+    ).toBe(0);
+    // Index 1 in a 5-group section
+    expect(
+      validateReferenceDetection({ ...base, referenceStartIndex: 1 }, 5).referenceStartIndex,
+    ).toBe(1);
+  });
+
   it('maps a valid index to reference/main classifications (pinned semantics)', async () => {
     const client = new MockGenAIClient({
       response: { ...base, referenceStartIndex: 1 },

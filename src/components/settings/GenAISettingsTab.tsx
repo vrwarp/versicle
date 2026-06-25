@@ -141,7 +141,7 @@ const RATE_POOL_LABELS: Record<string, string> = {
     default: 'Default / General',
     'gemini-2.5-flash-lite': 'Gemini 2.5 Flash-Lite',
     'gemini-2.5-flash': 'Gemini 2.5 Flash',
-    'gemini-3-flash': 'Gemini 3 Flash',
+    'gemini-3-flash-preview': 'Gemini 3 Flash Preview',
     'gemini-3.1-flash-lite': 'Gemini 3.1 Flash Lite',
     'gemini-3.5-flash': 'Gemini 3.5 Flash',
     'gemini-1.5-pro': 'Gemini 1.5 Pro',
@@ -358,7 +358,7 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                 <div className="space-y-0.5">
                                     <label htmlFor="genai-rotation" className="text-sm font-medium">Free Tier Rotation</label>
                                     <p className="text-xs text-muted-foreground max-w-sm">
-                                        Maximizes free quota by randomly rotating between gemini-2.5-flash-lite and gemini-2.5-flash on each request.
+                                        Maximizes free quota by trying premium models (gemini-3.5-flash, gemini-3-flash-preview) first, then falling back to gemini-3.1-flash-lite when their daily quota is exhausted.
                                     </p>
                                 </div>
                                 <Switch
