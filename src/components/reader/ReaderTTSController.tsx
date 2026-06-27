@@ -6,6 +6,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { useReaderEngine } from '@domains/reader/ui/ReaderCommands';
 import { useTtsPlaybackShortcuts } from '@app/shortcuts/readerShortcuts';
+import { useAudioFollowDetach } from '@hooks/useAudioFollowDetach';
 
 interface ReaderTTSControllerProps {
   viewMode: string;
@@ -42,6 +43,10 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
 
   // Engine commands come from the TtsController facade (stable identities).
   const { play, pause, stop, jumpTo } = useAudioCommands();
+
+  // Drop follow mode when the user scrolls/swipes inside the book iframe
+  // (the parent-wrapper listener in useReaderNavigation can't see those).
+  useAudioFollowDetach(engine);
 
   // Re-engage following whenever a FRESH playback session starts (the
   // stopped → active transition). Pause/resume preserves the user's current
