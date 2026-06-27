@@ -30,13 +30,19 @@ vi.mock('@app/tts/useAudioCommands', () => ({
 }));
 
 // Mock useReaderUIStore with selector support
+const { mockSetFollowingAudio, readerUIState } = vi.hoisted(() => ({
+    mockSetFollowingAudio: vi.fn(),
+    readerUIState: { followingAudio: true },
+}));
 vi.mock('@store/useReaderUIStore', () => ({
     useReaderUIStore: (selector: any) => {
         const state = {
             currentBookId: null,
             currentSectionTitle: 'Test Chapter',
             toc: [],
-            popover: { visible: false, x: 0, y: 0, cfiRange: '', text: '' }
+            popover: { visible: false, x: 0, y: 0, cfiRange: '', text: '' },
+            followingAudio: readerUIState.followingAudio,
+            setFollowingAudio: mockSetFollowingAudio,
         };
         return selector ? selector(state) : state;
     }
@@ -84,6 +90,7 @@ const playbackState = (overrides: Record<string, unknown> = {}) => ({
 describe('AudioPill', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        readerUIState.followingAudio = true;
         vi.mocked(useTTSPlaybackStore).mockImplementation(((selector: any) =>
             selector ? selector(playbackState()) : playbackState()) as any);
     });
@@ -204,5 +211,53 @@ describe('AudioPill', () => {
         render(<AudioPill compact title="Compact Book" />);
         fireEvent.click(screen.getByLabelText('Pause Compact Book'));
         expect(mockPause).toHaveBeenCalled();
+    });
+
+    describe('audio-follow re-center button', () => {
+        it('is hidden while following the audio', () => {
+            readerUIState.followingAudio = true;
+            vi.mocked(useTTSPlaybackStore).mockImplementation(((selector: any) =>
+                selector(playbackState({ status: 'playing', isPlaying: true }))) as any);
+
+            render(<AudioPill />);
+            expect(screen.queryByTestId('audio-recenter-button')).not.toBeInTheDocument();
+        });
+
+        it('is hidden when audio is stopped, even if not following', () => {
+            readerUIState.followingAudio = false;
+            vi.mocked(useTTSPlaybackStore).mockImplementation(((selector: any) =>
+                selector(playbackState({ status: 'stopped' }))) as any);
+
+            render(<AudioPill />);
+            expect(screen.queryByTestId('audio-recenter-button')).not.toBeInTheDocument();
+        });
+
+        it('appears once the user has scrolled away during playback', () => {
+            readerUIState.followingAudio = false;
+            vi.mocked(useTTSPlaybackStore).mockImplementation(((selector: any) =>
+                selector(playbackState({ status: 'playing', isPlaying: true }))) as any);
+
+            render(<AudioPill />);
+            expect(screen.getByTestId('audio-recenter-button')).toBeInTheDocument();
+        });
+
+        it('re-engages following when clicked', () => {
+            readerUIState.followingAudio = false;
+            vi.mocked(useTTSPlaybackStore).mockImplementation(((selector: any) =>
+                selector(playbackState({ status: 'playing', isPlaying: true }))) as any);
+
+            render(<AudioPill />);
+            fireEvent.click(screen.getByTestId('audio-recenter-button'));
+            expect(mockSetFollowingAudio).toHaveBeenCalledWith(true);
+        });
+
+        it('also surfaces in compact (immersive) mode', () => {
+            readerUIState.followingAudio = false;
+            vi.mocked(useTTSPlaybackStore).mockImplementation(((selector: any) =>
+                selector(playbackState({ status: 'playing', isPlaying: true }))) as any);
+
+            render(<AudioPill compact />);
+            expect(screen.getByTestId('audio-recenter-button')).toBeInTheDocument();
+        });
     });
 });
