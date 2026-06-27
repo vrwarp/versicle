@@ -61,6 +61,13 @@ export const AudioPill: React.FC<AudioPillProps> = ({
 
   const isLoading = status === 'loading';
 
+  // Honest nav labels: the arrows route through nextChapter/prevChapter, which
+  // (useReaderController) turn a single PAGE while TTS is stopped and skip a
+  // whole SECTION (≈ chapter) while audio is active. Reflect the real action so
+  // the accessible name never lies — it formerly hardcoded "chapter" even for a
+  // page turn, a WCAG 2.5.3 name-vs-action mismatch for screen-reader users.
+  const navTargetLabel = status === 'stopped' ? 'page' : 'chapter';
+
   // Chapter navigation: the reader's command registry (the TTS-aware
   // routing lives in nextChapter/prevChapter — this pill stays agnostic).
   // Null when no reader is open; the nav arrows are then no-ops, matching
@@ -145,7 +152,7 @@ export const AudioPill: React.FC<AudioPillProps> = ({
           size="icon"
           className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
           onClick={() => handleChapterNav('prev')}
-          aria-label="Previous"
+          aria-label={`Previous ${navTargetLabel}`}
         >
           <ChevronsLeft size={18} />
         </Button>
@@ -182,7 +189,7 @@ export const AudioPill: React.FC<AudioPillProps> = ({
           size="icon"
           className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
           onClick={() => handleChapterNav('next')}
-          aria-label="Next"
+          aria-label={`Next ${navTargetLabel}`}
         >
           <ChevronsRight size={18} />
         </Button>
@@ -205,7 +212,7 @@ export const AudioPill: React.FC<AudioPillProps> = ({
         variant="ghost"
         className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
         onClick={() => handleChapterNav('prev')}
-        aria-label="Previous chapter"
+        aria-label={`Previous ${navTargetLabel}`}
       >
         <ChevronsLeft size={24} />
       </Button>
@@ -255,7 +262,7 @@ export const AudioPill: React.FC<AudioPillProps> = ({
         variant="ghost"
         className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
         onClick={() => handleChapterNav('next')}
-        aria-label="Next chapter"
+        aria-label={`Next ${navTargetLabel}`}
       >
         <ChevronsRight size={24} />
       </Button>
