@@ -39,6 +39,15 @@ interface ReaderUIState {
     currentSectionTitle: string | null;
     currentSectionId: string | null;
     currentBookId: string | null;
+    /**
+     * Whether the reader auto-follows the spoken sentence during TTS playback
+     * (the "navigation" behavior). Like a maps app: ON by default, it
+     * re-centers the page on each sentence; the moment the user manually
+     * scrolls away it flips OFF, and the AudioPill's re-center button turns it
+     * back ON (snapping to the current sentence). Reset to ON when a fresh
+     * playback session starts. Ephemeral, device-local — never synced.
+     */
+    followingAudio: boolean;
     // (The playFromSelection/jumpToLocation callback fields died with
     // Phase 6 §5a: commands live in the ReaderCommands context/registry —
     // this store keeps DATA state only.)
@@ -48,6 +57,7 @@ interface ReaderUIState {
     setImmersiveMode: (enabled: boolean) => void;
     setCurrentSection: (title: string | null, id: string | null) => void;
     setCurrentBookId: (id: string | null) => void;
+    setFollowingAudio: (following: boolean) => void;
 
     compassState: CompassState;
     setCompassState: (state: CompassState) => void;
@@ -70,6 +80,7 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
     currentSectionTitle: null,
     currentSectionId: null,
     currentBookId: null,
+    followingAudio: true,
 
     compassState: {},
 
@@ -78,6 +89,7 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
     setImmersiveMode: (enabled) => set({ immersiveMode: enabled }),
     setCurrentSection: (title, id) => set({ currentSectionTitle: title, currentSectionId: id }),
     setCurrentBookId: (id) => set({ currentBookId: id }),
+    setFollowingAudio: (following) => set({ followingAudio: following }),
 
     setCompassState: (state) => set({ compassState: state }),
     resetCompassState: () => set({ compassState: {} }),
@@ -97,6 +109,7 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
         currentSectionTitle: null,
         currentSectionId: null,
         currentBookId: null,
+        followingAudio: true,
         compassState: {},
         popover: INITIAL_POPOVER_STATE
     })

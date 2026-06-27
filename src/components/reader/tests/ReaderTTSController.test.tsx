@@ -3,6 +3,7 @@ import { render, fireEvent, act } from '@testing-library/react';
 import { ReaderTTSController } from '../ReaderTTSController';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
 import { autoResetStores, makeTTSQueue, seedStore } from '@test/harness';
 import { HighlightLayerManager, type AnnotatingRendition } from '@domains/reader/engine/HighlightLayerManager';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
@@ -75,6 +76,9 @@ describe('ReaderTTSController', () => {
     beforeEach(() => {
         vi.spyOn(console, 'error').mockImplementation(() => { });
         vi.clearAllMocks();
+        // autoResetStores only resets the TTS store; keep follow-mode pinned
+        // to its default (ON) so suites stay isolated.
+        useReaderUIStore.setState({ followingAudio: true });
     });
 
     afterEach(() => {
@@ -271,6 +275,71 @@ describe('ReaderTTSController', () => {
             const lastAdd = rendition.annotations.add.mock.calls.at(-1);
             expect(lastAdd?.[1]).toBe('cfi-FRESH');
             expect(lastAdd?.[4]).toBe('tts-highlight');
+        });
+    });
+
+    describe('audio-follow ("navigation") mode: re-center vs leave-alone', () => {
+        const makeRendition = () => ({
+            display: vi.fn().mockResolvedValue(undefined),
+            annotations: { add: vi.fn(), remove: vi.fn() },
+            views: vi.fn().mockReturnValue([]),
+        });
+
+        const renderPlaying = (rendition: ReturnType<typeof makeRendition>, activeCfi = 'cfi-A') => {
+            seedStore(useTTSPlaybackStore, {
+                activeCfi,
+                currentIndex: 0,
+                status: 'playing',
+                isPlaying: true,
+                queue: makeTTSQueue(3),
+            });
+            return render(
+                withEngine(makeEngineStub(rendition), <ReaderTTSController viewMode="scrolled" />)
+            );
+        };
+
+        it('does NOT re-center (no display) when the user has scrolled away, but still highlights', () => {
+            useReaderUIStore.setState({ followingAudio: false });
+            const rendition = makeRendition();
+
+            renderPlaying(rendition);
+
+            // Scroll position is left untouched...
+            expect(rendition.display).not.toHaveBeenCalled();
+            // ...but the spoken sentence is still highlighted (for when the
+            // user scrolls back, or taps re-center).
+            expect(rendition.annotations.add).toHaveBeenCalledTimes(1);
+        });
+
+        it('snaps back to the current sentence when following is re-engaged (the re-center button)', () => {
+            useReaderUIStore.setState({ followingAudio: false });
+            const rendition = makeRendition();
+
+            renderPlaying(rendition, 'cfi-A');
+            expect(rendition.display).not.toHaveBeenCalled();
+
+            act(() => { useReaderUIStore.setState({ followingAudio: true }); });
+
+            expect(rendition.display).toHaveBeenCalledWith('cfi-A');
+        });
+
+        it('re-engages following automatically on a fresh playback (stopped → playing)', () => {
+            useReaderUIStore.setState({ followingAudio: false });
+            const rendition = makeRendition();
+            seedStore(useTTSPlaybackStore, {
+                activeCfi: 'cfi-A',
+                currentIndex: 0,
+                status: 'stopped',
+                isPlaying: false,
+                queue: makeTTSQueue(3),
+            });
+            render(
+                withEngine(makeEngineStub(rendition), <ReaderTTSController viewMode="scrolled" />)
+            );
+
+            act(() => { useTTSPlaybackStore.setState({ status: 'playing', isPlaying: true }); });
+
+            expect(useReaderUIStore.getState().followingAudio).toBe(true);
         });
     });
 

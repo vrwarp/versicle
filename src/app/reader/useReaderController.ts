@@ -50,6 +50,19 @@ const logger = createLogger('ReaderController');
 
 const DEFAULT_CUSTOM_THEME = { bg: '#ffffff', fg: '#000000' };
 
+/**
+ * Drop out of audio-follow mode on a manual page turn during playback (the
+ * paginated counterpart to the scrolled-mode wheel/touch signal). No-op when
+ * audio is idle or already not following, so plain reading never churns the
+ * store. Chapter skips (next/prevChapter) deliberately KEEP following — the
+ * user asked the audio to move, so the page should move with it.
+ */
+function breakAudioFollowOnManualNav() {
+  if (useTTSPlaybackStore.getState().status === 'stopped') return;
+  const ui = useReaderUIStore.getState();
+  if (ui.followingAudio) ui.setFollowingAudio(false);
+}
+
 // The int8 quantizer (SearchEngine.quantizeInt8PerVector) for the foreground
 // embedding indexer — a pure compute helper, instantiated once and passed in as
 // a port so the search domain never deep-imports the worker. The instance holds
@@ -590,8 +603,8 @@ export function useReaderController(
         logger.error('Failed to jump to location', e);
       }
     },
-    nextPage: () => { engineRef.current?.next(); },
-    prevPage: () => { engineRef.current?.prev(); },
+    nextPage: () => { breakAudioFollowOnManualNav(); engineRef.current?.next(); },
+    prevPage: () => { breakAudioFollowOnManualNav(); engineRef.current?.prev(); },
     nextChapter: () => {
       // TTS-aware routing (the old reader:chapter-nav listener body).
       const { status } = useTTSPlaybackStore.getState();
