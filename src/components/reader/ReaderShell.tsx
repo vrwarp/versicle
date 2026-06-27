@@ -28,6 +28,7 @@ import { useTTS } from '@hooks/useTTS';
 import { useSidebarState } from '@hooks/useSidebarState';
 import { useReaderController } from '@app/reader/useReaderController';
 import { ReaderCommandsProvider } from '@domains/reader/ui/ReaderCommands';
+import { isRtlLanguage } from '@lib/utils';
 import { useImportJumpPrompt } from './shell/ImportJumpPrompt';
 import { AnnotationLayer } from './shell/AnnotationLayer';
 import { DebugHighlightLayer } from './shell/DebugHighlightLayer';
@@ -143,6 +144,7 @@ export const ReaderShell: React.FC = () => {
                         viewerRef={controller.viewerRef}
                         scrollWrapperRef={controller.scrollWrapperRef}
                         readerViewMode={controller.readerViewMode}
+                        direction={isRtlLanguage(controller.bookMetadata?.language) ? 'rtl' : 'ltr'}
                     />
                 </main>
 

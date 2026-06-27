@@ -159,21 +159,20 @@ const commands = useMemo<ReaderCommands>(() => ({
     nextPage: () => engineRef.current?.next(),
     prevPage: () => engineRef.current?.prev(),
     nextChapter: () => {
-        const { status } = useTTSPlaybackStore.getState();
-        if (status !== 'stopped') audio.skipToNextSection();
-        else engineRef.current?.next();
+        // Pure audio transport (compass-pill rework Phase 1): skip a TTS
+        // section while audio is live, no-op otherwise. The page-turn branch
+        // was removed — page turns now live on the reading surface.
+        if (useTTSPlaybackStore.getState().status !== 'stopped') audio.skipToNextSection();
     },
     prevChapter: () => {
-        const { status } = useTTSPlaybackStore.getState();
-        if (status !== 'stopped') audio.skipToPreviousSection();
-        else engineRef.current?.prev();
+        if (useTTSPlaybackStore.getState().status !== 'stopped') audio.skipToPreviousSection();
     },
     playFromSelection: (cfiRange) => handlePlayFromSelection(cfiRange),
     refineSelection: () => { /* reads iframe selection, returns {cfiRange, text} | null */ },
 }), [audio, handlePlayFromSelection]);
 ```
 
-The `nextChapter` / `prevChapter` TTS-aware routing is what replaced the old `reader:chapter-nav` CustomEvent. The `refineSelection()` implementation reads the live iframe selection through `engine.getContentViews()[0]` — this is the D11 fix that made the audio-triage selection refinement reachable again (it previously rode a `rendition` prop that was never supplied).
+`nextChapter` / `prevChapter` are the **compass-pill arrows** (the surface that replaced the old `reader:chapter-nav` CustomEvent). They used to flip meaning with TTS state — skip a section while audio played, but turn a single page while idle — which made one control do two different things depending on a hidden mode. The rework split the two metaphors: the pill arrows are now a **pure audio transport** (skip section / disabled when idle), and **page turns moved to the reading surface** — `nextPage`/`prevPage`, driven by the `ArrowLeft`/`ArrowRight` shortcuts and the new `PageTurnRails` (see ReaderViewport). The `refineSelection()` implementation reads the live iframe selection through `engine.getContentViews()[0]` — this is the D11 fix that made the audio-triage selection refinement reachable again (it previously rode a `rendition` prop that was never supplied).
 
 ### Return Surface
 
@@ -313,10 +312,11 @@ div.flex-1 (scrollWrapperRef)
 
 The `height` style switches: `paginated` → `calc(100% - 100px)` (leaves room for the bottom control bar), `scrolled` → `100%`.
 
-Navigation is wired by three hooks:
-- `useReaderNavigation` — wheel and touch gestures for scrolled mode.
+Navigation is wired by three hooks plus one affordance:
+- `useReaderNavigation` — wheel and touch gestures for **scrolled** mode.
 - `useReaderPageTurnShortcuts` — ArrowLeft / ArrowRight in `scope: 'reader'` (KeyboardShortcutService registrations; see Phase 8 §E).
 - `useReaderEngineKeyBridge(engine)` — forwards keydown events from inside the epub.js iframe to the parent's KeyboardShortcutService, so keyboard shortcuts work when focus is inside the book text.
+- `PageTurnRails` (`shell/PageTurnRails.tsx`) — **paginated**-only page-turn affordance: full-height tap rails at the left/right edges of the reading column, wired to `commands.prevPage`/`nextPage` and mirrored for RTL. Paginated mode has no swipe/tap-zone (those are scrolled-only), so before the compass-pill rework the pill's corner arrows were the *only* touch page-turn — which forced them to flip between "page" and "section". The rails give page-turning its own large, always-present home so the pill can be a pure audio transport. They render in the parent document (not the iframe), so only the outer edges turn pages; the central reading area keeps native selection and link taps.
 
 ---
 
@@ -681,7 +681,7 @@ When the variant morphs (e.g. from `annotation` to `active` after dismissing), i
 
 One component, two layouts: normal (`compact=false`) and immersive (`compact=true`). Both show prev/play-pause/next controls. The normal layout adds a centered section title and time-remaining display.
 
-Chapter navigation calls `readerCommandsRegistry.get()?.nextChapter()` / `prevChapter()` — TTS-aware routing (skip sections while TTS is active, turn pages when not). Progress fills the `PillShell` via the `progress` prop (a CSS custom property applied to the shell).
+The prev/next arrows call `readerCommandsRegistry.get()?.prevChapter()` / `nextChapter()` and are a **pure audio transport** (compass-pill rework Phase 1): they skip a TTS section, carry one stable accessible name (`"Previous/Next chapter"` — no longer the page-vs-chapter lie), and are **disabled while TTS is idle** (`status === 'stopped'`). They are kept present-but-disabled rather than conditionally rendered, to avoid the layout shift and focus loss of a control that mounts/unmounts with playback state — and the control-bar's focus-restoration selector skips disabled controls so a morph never drops focus on the disabled arrow. Page turning is no longer one of the pill's jobs (it moved to `PageTurnRails` + the Arrow-key shortcuts). Progress fills the `PillShell` via the `progress` prop (a CSS custom property applied to the shell).
 
 Time remaining is from `useSectionDuration()`, formatted as `-MM:SS`.
 

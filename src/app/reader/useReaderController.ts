@@ -606,20 +606,20 @@ export function useReaderController(
     nextPage: () => { breakAudioFollowOnManualNav(); engineRef.current?.next(); },
     prevPage: () => { breakAudioFollowOnManualNav(); engineRef.current?.prev(); },
     nextChapter: () => {
-      // TTS-aware routing (the old reader:chapter-nav listener body).
-      const { status } = useTTSPlaybackStore.getState();
-      if (status !== 'stopped') {
+      // Pure audio transport (compass-pill rework Phase 1): the pill arrows
+      // skip a TTS section while audio is live and are inert otherwise. The
+      // pill disables them when stopped; this guard also makes the command a
+      // no-op for any out-of-band caller so it can never auto-start playback.
+      // Page turns no longer route through here — they moved to the reading
+      // surface (PageTurnRails + the ArrowLeft/Right shortcuts), so the arrows
+      // have ONE meaning ("skip chapter") instead of flipping with TTS state.
+      if (useTTSPlaybackStore.getState().status !== 'stopped') {
         audio.skipToNextSection();
-      } else {
-        engineRef.current?.next();
       }
     },
     prevChapter: () => {
-      const { status } = useTTSPlaybackStore.getState();
-      if (status !== 'stopped') {
+      if (useTTSPlaybackStore.getState().status !== 'stopped') {
         audio.skipToPreviousSection();
-      } else {
-        engineRef.current?.prev();
       }
     },
     playFromSelection: (cfiRange) => handlePlayFromSelection(cfiRange),
