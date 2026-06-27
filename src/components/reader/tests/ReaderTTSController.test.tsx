@@ -18,6 +18,10 @@ const makeEngineStub = (rendition: any): ReaderEngine =>
     ({
         display: rendition.display,
         highlights: new HighlightLayerManager(rendition as AnnotatingRendition),
+        // useAudioFollowDetach binds gesture listeners to rendered iframe docs;
+        // the stub has none, so the engine just reports an empty, inert surface.
+        getContentViews: () => [],
+        subscribe: () => () => { },
     }) as unknown as ReaderEngine;
 
 // The controller rides the ReaderCommands context for the engine (Phase 6
