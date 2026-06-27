@@ -14,6 +14,7 @@
  * DOM nodes and offsets, so this module is trivially unit-testable.
  */
 import type { PinyinPosition } from '@domains/chinese/types';
+import { applyPolyphonicOverrides } from './polyphonic';
 
 /**
  * The Han test (CH-1): the full Unicode script property, NOT the BMP block
@@ -38,12 +39,19 @@ export async function ensurePinyin(): Promise<void> {
  * Per-code-point pinyin for `text` (tone symbols). Requires
  * {@link ensurePinyin} to have resolved — synchronous on purpose so the
  * geometry loop never awaits between DOM reads.
+ *
+ * pinyin-pro segments the text and disambiguates most polyphonic (多音字)
+ * characters by context, but its phrase dictionary leaves a curated tail
+ * wrong; {@link applyPolyphonicOverrides} corrects those against the
+ * context-word rules (Simplified + Traditional). Both layers operate on the
+ * SAME per-code-point alignment, so the geometry loop indexing is unchanged.
  */
 export function getPinyin(text: string): string[] {
   if (!pinyinFn) {
     throw new Error('Pinyin module not loaded. Call ensurePinyin() first.');
   }
-  return pinyinFn(text, { type: 'array', toneType: 'symbol' });
+  const base = pinyinFn(text, { type: 'array', toneType: 'symbol' });
+  return applyPolyphonicOverrides(text, base);
 }
 
 /**
