@@ -27,6 +27,7 @@ import type { EngineContext, CompiledLexicon } from './EngineContext';
 import { AnalysisApplier } from './AnalysisApplier';
 import { MediaMetadataPublisher, type BookPresentation } from './MediaMetadataPublisher';
 import { DragnetGesture } from './DragnetGesture';
+import { SeekCoalescer, SEEK_SETTLE_MS, type PendingSeek } from './SeekCoalescer';
 import { createLogger } from '../../logger';
 import { normalizeLanguageCode } from '../../language-utils';
 import { coverUrl } from '@data/covers';
@@ -103,6 +104,13 @@ export class PlaybackController implements TtsEngine {
     private sessionRestored: boolean = false;
     private prerollEnabled: boolean = false;
     private isPreviewing: boolean = false;
+    /**
+     * Coalesces a BURST of scrubber `seekto` actions into one settled apply, so
+     * the lock-screen scrubber stops lagging (see {@link SeekCoalescer}). The
+     * FSM mechanism of applying a settled seek stays here ({@link applySettledSeek});
+     * this unit owns only the debounce/timer policy.
+     */
+    private readonly seekCoalescer: SeekCoalescer;
     private book: BookPresentation = {
         title: '', author: '', coverUrl: undefined, palette: undefined, perceptualPalette: undefined,
     };
@@ -186,6 +194,22 @@ export class PlaybackController implements TtsEngine {
             annotations: this.ctx.annotations,
             backend: () => this.providerManager,
             getBookId: () => this.currentBookId,
+        });
+
+        this.seekCoalescer = new SeekCoalescer({
+            getQueueId: () => this.stateManager.queueId,
+            settleMs: SEEK_SETTLE_MS,
+            // Apply the settled scrub as a sequenced 'seekTo' task — like the old
+            // per-tick seekTo, but ONCE per drag. Bail if superseded by a context
+            // switch (epoch) or invalidated by a queue change (queueId) before the
+            // task runs, rather than mutating a queue the scrub never targeted.
+            onSettle: (pending) => {
+                void this.enqueue('seekTo', async (ctx) => {
+                    ctx.checkpoint();
+                    if (!this.isSeekStillValid(pending)) return;
+                    await this.applySettledSeek(pending.time);
+                });
+            },
         });
 
         // Mid-playback lexicon edits (S15): any lexicon change drops the handle;
@@ -366,6 +390,7 @@ export class PlaybackController implements TtsEngine {
         this.book = { title: '', author: '', coverUrl: undefined, palette: undefined, perceptualPalette: undefined };
         this.activeLexicon = null;
         this.dragnet.clear('setBookId');
+        this.seekCoalescer.cancel();
         this.lastPersistedQueueId = null;
 
         // Stop playback and reset queue state to prevent leakage of old book
@@ -580,6 +605,7 @@ export class PlaybackController implements TtsEngine {
         // Context-switch command (§5b.3): bump before enqueueing ourselves so
         // previously queued navigation/playback tasks go stale.
         this.taskSequencer.bumpEpoch('loadSection');
+        this.seekCoalescer.cancel();
         return this.enqueue('loadSection', async (ctx) => {
             if (this.playlistPromise) await this.playlistPromise;
             // Converted hand-rolled guard (S7): originalBookId comparison -> epoch
@@ -712,6 +738,16 @@ export class PlaybackController implements TtsEngine {
         // synthesizing.
         return this.enqueue('play', async (ctx) => {
             ctx.checkpoint();
+            // A scrubber drag ends with seekto → play (the OS media controls
+            // pause on grab and resume on release). Land on the dropped position
+            // here — index only; playInternal resumes — instead of racing the
+            // settle timer, which would briefly resume at the PRE-drag spot and
+            // then jump. The dragnet was already disarmed by seekTo, so the
+            // capture below correctly no-ops for a scrub.
+            const dropped = this.seekCoalescer.flush();
+            if (dropped && this.isSeekStillValid(dropped)) {
+                this.seekIndexTo(dropped.time);
+            }
             await this.dragnet.maybeCapture();
             return this.playInternal();
         }) as Promise<void>;
@@ -846,6 +882,7 @@ export class PlaybackController implements TtsEngine {
         // previously queued playback tasks (play/loadSection) cancel at their
         // checkpoints instead of racing the stop.
         this.taskSequencer.bumpEpoch('stop');
+        this.seekCoalescer.cancel();
         return this.enqueue('stop', async () => {
             await this.stopInternal();
         });
@@ -901,29 +938,67 @@ export class PlaybackController implements TtsEngine {
     }
 
     seekTo(time: number) {
-        return this.enqueue('seekTo', async () => {
-            const changed = this.stateManager.seekToTime(time);
-            const wasPlaying = (this.status === 'playing' || this.status === 'loading');
+        // A scrubber drag is NAVIGATION, not a pause→resume "Dragnet" gesture.
+        // The OS media controls surface a drag as pause → seekto(×N) → play, and
+        // a quick grab-drag-release lands inside the 5s Dragnet capture window —
+        // so without this it captures a spurious audio-bookmark. Disarm here,
+        // mirroring the loadSection / section-change invalidation. (Synchronous,
+        // like pause()'s armPause(), so it wins regardless of how the burst
+        // interleaves with the sequencer.)
+        this.dragnet.clear('seekTo');
+        // Coalesce the burst: SeekCoalescer keeps only the latest target and
+        // settles ONCE (the onSettle handler wired in the constructor). seekTo is
+        // fire-and-forget on every transport (WorkerTtsEngine / WorkerEngineHandle
+        // / createWorkerEngineClient never await it), so returning now is safe.
+        this.seekCoalescer.schedule(time);
+        return Promise.resolve();
+    }
 
-            if (!changed) {
-                if (this.stateManager.hasNext()) {
-                    this.stateManager.next();
-                } else {
-                    await this.advanceToNextChapter();
-                    return;
-                }
-            }
+    /**
+     * Whether a coalesced scrub is still applicable: it targets the SAME queue
+     * it was scheduled against (a section/chapter/book navigation — loadSection,
+     * skipTo*, advanceToNextChapter, setBookId — stamps a fresh queueId) and the
+     * queue is non-empty. (A plain stop keeps the queueId, hence the explicit
+     * `this.seekCoalescer.cancel()` on the stop path.)
+     */
+    private isSeekStillValid(pending: PendingSeek): boolean {
+        return pending.queueId === this.stateManager.queueId && this.stateManager.queue.length > 0;
+    }
 
-            if (wasPlaying) {
-                this.providerManager.stop();
-            }
+    /**
+     * Move the queue index to the seek `time`; if that maps to the SAME item,
+     * step forward one (the legacy "a seek that doesn't move snaps to the next
+     * sentence" semantics). Returns false only at the end of the queue — the
+     * caller decides whether to advance a chapter ({@link applySettledSeek}) or
+     * just resume the last item (the play() takeover).
+     */
+    private seekIndexTo(time: number): boolean {
+        if (this.stateManager.seekToTime(time)) return true;
+        if (this.stateManager.hasNext()) {
+            this.stateManager.next();
+            return true;
+        }
+        return false;
+    }
 
-            if (wasPlaying) {
-                await this.playInternal();
-            } else {
-                // Subscription handles metadata/listeners.
-            }
-        });
+    /**
+     * Apply a settled scrub (the FSM mechanism behind {@link SeekCoalescer}):
+     * move the index, then — only if playback was live — re-synthesize from the
+     * new position. This is the body the old seekTo ran on EVERY tick, now run
+     * ONCE per settled drag, inside the sequenced 'seekTo' task.
+     */
+    private async applySettledSeek(time: number): Promise<void> {
+        const wasPlaying = (this.status === 'playing' || this.status === 'loading');
+        if (!this.seekIndexTo(time)) {
+            await this.advanceToNextChapter();
+            return;
+        }
+        if (wasPlaying) {
+            this.providerManager.stop();
+            await this.playInternal();
+        }
+        // else: paused/stopped — the index moved and the state-manager
+        // subscription already pushed fresh metadata/position; nothing to synth.
     }
 
     seek(offset: number) {

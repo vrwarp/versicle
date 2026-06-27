@@ -13,6 +13,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { PlaybackController } from './PlaybackController';
+import { SEEK_SETTLE_MS } from './SeekCoalescer';
 import { FakeEngineContext } from './FakeEngineContext';
 import { FakePlaybackBackend } from './FakePlaybackBackend';
 import type { MediaPlatformFactory, PlatformEvents } from '../PlatformIntegration';
@@ -328,6 +329,118 @@ describe('PlaybackController', () => {
             expect(exported.stats.eventCount).toBeGreaterThan(0);
             expect(exported.events.length).toBe(exported.stats.eventCount);
             expect(exported.events.some((e) => e.src === 'TSQ')).toBe(true);
+        });
+    });
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Scrubber seek. A drag on the OS media controls (Chrome's Global Media
+    // Controls / lock screen) surfaces as pause → seekto(×N) → play. Two
+    // regressions are pinned here:
+    //   1) every seekto re-derived the index + rebuilt metadata + RE-SYNTHESIZED,
+    //      so the drag felt laggy. The burst must coalesce into ONE commit.
+    //   2) the pause→play bracketing the drag tripped the 5s "Dragnet"
+    //      audio-bookmark gesture. A scrub must DISARM it.
+    // ─────────────────────────────────────────────────────────────────────────
+    describe('scrubber seek (coalescing + dragnet)', () => {
+        // 30-char sentences: charsPerSecond=15 → prefixSums [0,30,60,90,120], so
+        // t=3→idx1, t=5→idx2, t=7→idx3 (each tick would change the index).
+        const FOUR = [
+            { text: 'A'.repeat(30), cfi: 'epubcfi(/6/4!/4/2/1:0)' },
+            { text: 'B'.repeat(30), cfi: 'epubcfi(/6/4!/4/2/1:50)' },
+            { text: 'C'.repeat(30), cfi: 'epubcfi(/6/4!/4/2/1:100)' },
+            { text: 'D'.repeat(30), cfi: 'epubcfi(/6/4!/4/2/1:150)' },
+        ];
+
+        async function startPlaying(ctx = new FakeEngineContext()) {
+            ctx.sections['bk'] = [];
+            const eng = makeEngine(ctx);
+            void eng.svc.setBookId('bk');
+            await eng.svc.setQueue(FOUR, 0);
+            await eng.svc.play();
+            await vi.waitFor(() => expect(eng.backend.played.length).toBe(1));
+            eng.backend.fireStart();
+            await vi.waitFor(() => expect(eng.svc.snapshot().status).toBe('playing'));
+            return eng;
+        }
+
+        it('coalesces a burst of seekto ticks into ONE re-synthesis when the drag settles', async () => {
+            const { svc, backend } = await startPlaying();
+
+            svc.seekTo(3);
+            svc.seekTo(5);
+            svc.seekTo(7); // only this last target survives the coalescing
+
+            // The drag settles onto the LAST target (index 3) with a single play.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await vi.waitFor(() => expect((svc as any).stateManager.currentIndex).toBe(3));
+            // Let any stray per-tick synthesis surface, then assert there was none.
+            await new Promise((r) => setTimeout(r, 60));
+            expect(backend.played.length).toBe(2); // 1 initial + 1 settled commit (NOT 4)
+            expect(backend.played.at(-1)!.text).toBe('D'.repeat(30));
+        });
+
+        it('a scrub (pause → seekto → play) does NOT capture an audio-bookmark', async () => {
+            const ctx = new FakeEngineContext();
+            const { svc, backend } = await startPlaying(ctx);
+
+            svc.pause(); // arms the Dragnet (pause→play within 5s)
+            await vi.waitFor(() => expect(svc.snapshot().status).toBe('paused'));
+            svc.seekTo(7); // the scrub: must DISARM the gesture
+            await svc.play();
+
+            // Give the (suppressed) capture path time to run.
+            await new Promise((r) => setTimeout(r, 60));
+            expect(ctx.addedAnnotations.some((a) => a.type === 'audio-bookmark')).toBe(false);
+            expect(backend.earcons).not.toContain('bookmark_captured');
+        });
+
+        it('a bare pause → play within 5s STILL captures an audio-bookmark (control)', async () => {
+            const ctx = new FakeEngineContext();
+            const { svc, backend } = await startPlaying(ctx);
+            await svc.jumpTo(1); // capture spans the previous + current sentence
+
+            svc.pause();
+            await vi.waitFor(() => expect(svc.snapshot().status).toBe('paused'));
+            await svc.play();
+
+            await vi.waitFor(() =>
+                expect(ctx.addedAnnotations.some((a) => a.type === 'audio-bookmark')).toBe(true));
+            expect(backend.earcons).toContain('bookmark_captured');
+        });
+
+        it('cancels a pending scrub on stop (no stale seek fires after)', async () => {
+            const { svc, backend } = await startPlaying();
+            const playedBeforeStop = backend.played.length;
+
+            svc.seekTo(7);
+            await svc.stop();
+            await vi.waitFor(() => expect(svc.snapshot().status).toBe('stopped'));
+
+            // Wait past the settle window: the cancelled scrub must not re-synthesize.
+            await new Promise((r) => setTimeout(r, 60));
+            expect(backend.played.length).toBe(playedBeforeStop);
+            expect(svc.snapshot().status).toBe('stopped');
+        });
+
+        it('discards a pending scrub when the queue changes before it settles', async () => {
+            const { svc, backend } = await startPlaying();
+            const playedBefore = backend.played.length;
+
+            svc.seekTo(7); // pending against the original queue (would land on idx 3)
+            // A new section/queue (same shape, so t=7 maps to idx 3 there TOO)
+            // arrives before the drag settles → fresh queueId. Without the guard
+            // the stale time would mis-apply and jump the new queue to index 3.
+            await svc.setQueue(
+                [0, 1, 2, 3].map((i) => ({ text: String.fromCharCode(87 + i).repeat(30), cfi: `epubcfi(/6/8!/4/2/1:${i})` })),
+                0,
+            );
+
+            // Wait PAST the settle window (the timer still fires, then bails on the
+            // queueId mismatch rather than mis-applying the stale time).
+            await new Promise((r) => setTimeout(r, SEEK_SETTLE_MS + 80));
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            expect((svc as any).stateManager.currentIndex).toBe(0); // guard bailed (would be 3)
+            expect(backend.played.length).toBe(playedBefore); // no stale re-synthesis
         });
     });
 });
