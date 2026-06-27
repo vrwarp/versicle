@@ -13,6 +13,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { PlaybackController } from './PlaybackController';
+import { SEEK_SETTLE_MS } from './SeekCoalescer';
 import { FakeEngineContext } from './FakeEngineContext';
 import { FakePlaybackBackend } from './FakePlaybackBackend';
 import type { MediaPlatformFactory, PlatformEvents } from '../PlatformIntegration';
@@ -341,8 +342,6 @@ describe('PlaybackController', () => {
     //      audio-bookmark gesture. A scrub must DISARM it.
     // ─────────────────────────────────────────────────────────────────────────
     describe('scrubber seek (coalescing + dragnet)', () => {
-        // Mirrors the private PlaybackController.SEEK_SETTLE_MS (the scrub coalesce window).
-        const PRIVATE_SETTLE_MS = 180;
         // 30-char sentences: charsPerSecond=15 → prefixSums [0,30,60,90,120], so
         // t=3→idx1, t=5→idx2, t=7→idx3 (each tick would change the index).
         const FOUR = [
@@ -438,7 +437,7 @@ describe('PlaybackController', () => {
 
             // Wait PAST the settle window (the timer still fires, then bails on the
             // queueId mismatch rather than mis-applying the stale time).
-            await new Promise((r) => setTimeout(r, PRIVATE_SETTLE_MS + 80));
+            await new Promise((r) => setTimeout(r, SEEK_SETTLE_MS + 80));
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             expect((svc as any).stateManager.currentIndex).toBe(0); // guard bailed (would be 3)
             expect(backend.played.length).toBe(playedBefore); // no stale re-synthesis
