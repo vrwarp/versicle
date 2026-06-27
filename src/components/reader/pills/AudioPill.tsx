@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { ChevronsLeft, ChevronsRight, Play, Pause, Loader2 } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Play, Pause, Loader2, LocateFixed } from 'lucide-react';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { useReaderUIStore } from '@store/useReaderUIStore';
@@ -39,6 +39,12 @@ export const AudioPill: React.FC<AudioPillProps> = ({
   const book = useBookStore(state => currentBookId ? state.books[currentBookId] : null);
   // Optimize: Select only currentSectionTitle to prevent re-renders on progress/cfi updates
   const readerSectionTitle = useReaderUIStore(state => state.currentSectionTitle);
+
+  // Audio-follow ("navigation") state: when the user has scrolled away mid
+  // playback, this pill surfaces a re-center button that snaps the page back
+  // to the spoken sentence (ReaderTTSController reacts to the flag flip).
+  const followingAudio = useReaderUIStore(state => state.followingAudio);
+  const setFollowingAudio = useReaderUIStore(state => state.setFollowingAudio);
 
   const { isPlaying, status, queue, currentIndex } = useTTSPlaybackStore(useShallow(state => ({
     isPlaying: state.isPlaying,
@@ -98,9 +104,38 @@ export const AudioPill: React.FC<AudioPillProps> = ({
   const sectionTitle = subtitle || currentItem?.title || readerSectionTitle || `Section ${currentIndex + 1}`;
   const displayTitle = title || book?.title || "Current Book";
 
+  const handleRecenter = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // The flag flip is the whole action: ReaderTTSController re-runs its sync
+    // effect and snaps the page to the current sentence (this pill stays
+    // reader-agnostic, like the rest of its controls).
+    setFollowingAudio(true);
+  };
+
+  // Surface the re-center affordance only when audio is live AND the user has
+  // scrolled off the spoken sentence — exactly the maps "re-center" chip.
+  const showRecenter = status !== 'stopped' && !followingAudio;
+
+  // Floating chip above the pill (a sibling, so the pill's own layout is
+  // untouched in both the active and compact morphs).
+  const recenterChip = showRecenter ? (
+    <button
+      type="button"
+      data-testid="audio-recenter-button"
+      onClick={handleRecenter}
+      aria-label="Re-center on the current sentence"
+      className="absolute left-1/2 -translate-x-1/2 -top-12 z-50 flex items-center gap-1.5 h-9 px-3 rounded-full border border-border bg-background/75 text-xs font-semibold text-primary shadow-lg backdrop-blur-md hover:bg-primary/10 touch-manipulation animate-in fade-in slide-in-from-bottom-1"
+    >
+      <LocateFixed size={16} aria-hidden="true" />
+      <span>Re-center</span>
+    </button>
+  ) : null;
+
   if (compact) {
     return (
-      <PillShell
+      <div className="relative w-full flex justify-center">
+        {recenterChip}
+        <PillShell
         data-testid="compass-pill-compact"
         className="z-40 flex items-center justify-center gap-1 w-fit h-14 px-2"
       >
@@ -151,12 +186,15 @@ export const AudioPill: React.FC<AudioPillProps> = ({
         >
           <ChevronsRight size={18} />
         </Button>
-      </PillShell>
+        </PillShell>
+      </div>
     );
   }
 
   return (
-    <PillShell
+    <div className="relative w-full flex justify-center">
+      {recenterChip}
+      <PillShell
       data-testid="compass-pill-active"
       className="z-40 flex items-center justify-between w-full max-w-md h-14 px-4"
       progress={progress}
@@ -221,6 +259,7 @@ export const AudioPill: React.FC<AudioPillProps> = ({
       >
         <ChevronsRight size={24} />
       </Button>
-    </PillShell>
+      </PillShell>
+    </div>
   );
 };

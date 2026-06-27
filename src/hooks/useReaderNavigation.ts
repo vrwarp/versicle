@@ -1,4 +1,18 @@
 import { useEffect, useRef } from 'react';
+import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+
+/**
+ * Drop out of audio-follow mode when the user manually scrolls during
+ * playback (the maps "you swiped away from the route" signal). No-op when
+ * audio is idle, or already not following — so normal reading never churns
+ * the store.
+ */
+function breakAudioFollowOnUserScroll() {
+    if (useTTSPlaybackStore.getState().status === 'stopped') return;
+    const ui = useReaderUIStore.getState();
+    if (ui.followingAudio) ui.setFollowingAudio(false);
+}
 
 interface UseReaderNavigationProps {
     readerViewMode: 'paginated' | 'scrolled';
@@ -34,6 +48,7 @@ export function useReaderNavigation({
             if (readerViewMode !== 'scrolled') return;
             const epubContainer = viewerRef.current?.firstElementChild as HTMLElement;
             if (epubContainer) {
+                breakAudioFollowOnUserScroll();
                 epubContainer.scrollBy({ top: e.deltaY, left: e.deltaX });
                 if (e.cancelable) e.preventDefault();
             }
@@ -51,6 +66,7 @@ export function useReaderNavigation({
 
             const epubContainer = viewerRef.current?.firstElementChild as HTMLElement;
             if (epubContainer) {
+                breakAudioFollowOnUserScroll();
                 epubContainer.scrollBy({ top: deltaY, left: deltaX });
                 if (e.cancelable) e.preventDefault();
             }

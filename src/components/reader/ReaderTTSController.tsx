@@ -1,10 +1,12 @@
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { useReaderEngine } from '@domains/reader/ui/ReaderCommands';
 import { useTtsPlaybackShortcuts } from '@app/shortcuts/readerShortcuts';
+import { useAudioFollowDetach } from '@hooks/useAudioFollowDetach';
 
 interface ReaderTTSControllerProps {
   viewMode: string;
@@ -33,8 +35,30 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
     status: state.status
   })));
 
+  // Follow mode (the maps-style "navigation" behavior): ON re-centers the
+  // page on each spoken sentence; OFF leaves the user's scroll position alone
+  // (they scrolled away — the AudioPill's re-center button turns it back ON).
+  const followingAudio = useReaderUIStore(state => state.followingAudio);
+  const setFollowingAudio = useReaderUIStore(state => state.setFollowingAudio);
+
   // Engine commands come from the TtsController facade (stable identities).
   const { play, pause, stop, jumpTo } = useAudioCommands();
+
+  // Drop follow mode when the user scrolls/swipes inside the book iframe
+  // (the parent-wrapper listener in useReaderNavigation can't see those).
+  useAudioFollowDetach(engine);
+
+  // Re-engage following whenever a FRESH playback session starts (the
+  // stopped → active transition). Pause/resume preserves the user's current
+  // follow state — only a brand-new read snaps the page back to the start.
+  const prevStatusRef = useRef(status);
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = status;
+    if (prev === 'stopped' && status !== 'stopped') {
+      setFollowingAudio(true);
+    }
+  }, [status, setFollowingAudio]);
 
   // --- TTS Highlighting & Sync ---
   useEffect(() => {
@@ -42,10 +66,17 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
     const highlights = engine.highlights;
 
     const syncVisuals = () => {
-      // Non-blocking display call
-      engine.display(activeCfi).catch((err: unknown) => {
-        console.warn("[TTS] Sync skipped", err);
-      });
+      // Only re-center on the spoken sentence while we're following. If the
+      // user has scrolled away (followingAudio === false), we still move the
+      // highlight to the current sentence but leave their scroll position
+      // untouched — re-running this effect when followingAudio flips back to
+      // true (the re-center button) snaps the page to the sentence again.
+      if (followingAudio) {
+        // Non-blocking display call
+        engine.display(activeCfi).catch((err: unknown) => {
+          console.warn("[TTS] Sync skipped", err);
+        });
+      }
 
       // Add via the manager: it runs the (formerly triplicated) orphaned-SVG
       // sweep first, then adds exactly one 'tts' highlight for the CFI.
@@ -64,7 +95,7 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
     return () => {
       highlights.remove('tts', activeCfi);
     };
-  }, [activeCfi, viewMode, engine, status]);
+  }, [activeCfi, viewMode, engine, status, followingAudio]);
 
   // --- Visibility Reconciliation ---
   useEffect(() => {
@@ -76,8 +107,12 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
 
         if (!freshCfi || freshStatus === 'stopped') return;
 
-        // Sync visual state regardless of view mode (paginated or scrolled)
-        engine.display(freshCfi).catch((err: unknown) => console.warn("Reconciliation failed", err));
+        // Sync visual state regardless of view mode (paginated or scrolled),
+        // but only re-center when following — a user who scrolled away keeps
+        // their position across a background → foreground round-trip.
+        if (useReaderUIStore.getState().followingAudio) {
+          engine.display(freshCfi).catch((err: unknown) => console.warn("Reconciliation failed", err));
+        }
 
         // Ensure the highlight is present: remove-then-add through the
         // manager (each side runs the orphan sweep) so a background queue
