@@ -5,7 +5,9 @@
   "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
+    "predev": "test -f public/dict/cedict.json || npm run compile-dict",
     "dev": "vite",
+    "prebuild": "test -f public/dict/cedict.json || npm run compile-dict",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "depcruise": "depcruise src --config .dependency-cruiser.cjs",
