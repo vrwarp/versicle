@@ -61,6 +61,15 @@ export const AudioPill: React.FC<AudioPillProps> = ({
 
   const isLoading = status === 'loading';
 
+  // The pill is a pure audio transport (compass-pill rework Phase 1): the
+  // prev/next arrows skip TTS sections and carry ONE meaning regardless of
+  // playback state. They are disabled when there is no audio session — page
+  // turning moved to the reading surface (PageTurnRails + the ArrowLeft/Right
+  // shortcuts), so the arrows no longer flip between "page" and "chapter" under
+  // the user. Kept present-but-disabled (not hidden) to avoid the layout shift
+  // and focus loss of a control that mounts/unmounts with playback state.
+  const navDisabled = status === 'stopped';
+
   // Chapter navigation: the reader's command registry (the TTS-aware
   // routing lives in nextChapter/prevChapter — this pill stays agnostic).
   // Null when no reader is open; the nav arrows are then no-ops, matching
@@ -145,7 +154,8 @@ export const AudioPill: React.FC<AudioPillProps> = ({
           size="icon"
           className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
           onClick={() => handleChapterNav('prev')}
-          aria-label="Previous"
+          disabled={navDisabled}
+          aria-label="Previous chapter"
         >
           <ChevronsLeft size={18} />
         </Button>
@@ -182,7 +192,8 @@ export const AudioPill: React.FC<AudioPillProps> = ({
           size="icon"
           className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
           onClick={() => handleChapterNav('next')}
-          aria-label="Next"
+          disabled={navDisabled}
+          aria-label="Next chapter"
         >
           <ChevronsRight size={18} />
         </Button>
@@ -205,6 +216,7 @@ export const AudioPill: React.FC<AudioPillProps> = ({
         variant="ghost"
         className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
         onClick={() => handleChapterNav('prev')}
+        disabled={navDisabled}
         aria-label="Previous chapter"
       >
         <ChevronsLeft size={24} />
@@ -255,6 +267,7 @@ export const AudioPill: React.FC<AudioPillProps> = ({
         variant="ghost"
         className="h-11 w-11 rounded-full text-primary hover:bg-primary/10 hover:text-primary touch-manipulation"
         onClick={() => handleChapterNav('next')}
+        disabled={navDisabled}
         aria-label="Next chapter"
       >
         <ChevronsRight size={24} />

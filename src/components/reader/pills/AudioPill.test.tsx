@@ -95,48 +95,43 @@ describe('AudioPill', () => {
             selector ? selector(playbackState()) : playbackState()) as any);
     });
 
-    describe('regression: chapter nav routes through the ReaderCommands registry', () => {
-        it('calls prevChapter when "prev" is clicked and not playing', () => {
+    describe('chapter nav: pure audio transport (rework Phase 1)', () => {
+        it('disables the arrows when there is no audio session', () => {
             const { commands, unregister } = registerFakeCommands();
             try {
-                render(<AudioPill />);
+                render(<AudioPill />); // default playbackState: status 'stopped'
 
-                fireEvent.click(screen.getByRole('button', { name: 'Previous chapter' }));
+                const prev = screen.getByRole('button', { name: 'Previous chapter' });
+                const next = screen.getByRole('button', { name: 'Next chapter' });
+                expect(prev).toBeDisabled();
+                expect(next).toBeDisabled();
 
-                expect(commands.prevChapter).toHaveBeenCalledTimes(1);
+                // Page turning is no longer one of the pill's jobs — it moved to
+                // the reading surface (PageTurnRails + the Arrow-key shortcuts).
+                fireEvent.click(prev);
+                fireEvent.click(next);
+                expect(commands.prevChapter).not.toHaveBeenCalled();
                 expect(commands.nextChapter).not.toHaveBeenCalled();
             } finally {
                 unregister();
             }
         });
 
-        it('calls nextChapter when "next" is clicked and not playing', () => {
-            const { commands, unregister } = registerFakeCommands();
-            try {
-                render(<AudioPill />);
-
-                fireEvent.click(screen.getByRole('button', { name: 'Next chapter' }));
-
-                expect(commands.nextChapter).toHaveBeenCalledTimes(1);
-            } finally {
-                unregister();
-            }
-        });
-
-        it('calls nextChapter while playing (pill stays TTS-agnostic)', () => {
-            // The TTS-aware routing lives INSIDE the reader's nextChapter
-            // command, not in the pill (it replaced the reader:chapter-nav
-            // CustomEvent the same way).
+        it('routes through the registry when audio is active', () => {
             vi.mocked(useTTSPlaybackStore).mockImplementation(((selector: any) =>
-                selector(playbackState({ isPlaying: true, currentIndex: 5 }))) as any);
+                selector(playbackState({ isPlaying: true, status: 'playing', currentIndex: 5 }))) as any);
 
             const { commands, unregister } = registerFakeCommands();
             try {
                 render(<AudioPill />);
 
+                fireEvent.click(screen.getByRole('button', { name: 'Previous chapter' }));
                 fireEvent.click(screen.getByRole('button', { name: 'Next chapter' }));
 
+                expect(commands.prevChapter).toHaveBeenCalledTimes(1);
                 expect(commands.nextChapter).toHaveBeenCalledTimes(1);
+                // The TTS-aware routing lives inside the reader command, not the
+                // pill — the pill never reaches for the engine directly.
                 expect(mockJumpTo).not.toHaveBeenCalled();
             } finally {
                 unregister();
@@ -144,6 +139,11 @@ describe('AudioPill', () => {
         });
 
         it('nav arrows are no-ops when no reader is open (empty registry)', () => {
+            // Audio active so the arrows are enabled, but no reader registered:
+            // the click must be a safe no-op (the legacy listener absence).
+            vi.mocked(useTTSPlaybackStore).mockImplementation(((selector: any) =>
+                selector(playbackState({ isPlaying: true, status: 'playing' }))) as any);
+
             render(<AudioPill />);
             expect(() =>
                 fireEvent.click(screen.getByRole('button', { name: 'Next chapter' })),
@@ -165,18 +165,22 @@ describe('AudioPill', () => {
         expect(screen.queryByTestId('active-play-icon')).not.toBeInTheDocument();
     });
 
-    it('has consistent nav aria-labels across playback states', () => {
+    it('nav arrows carry one stable meaning ("chapter"), enabled only with audio', () => {
+        // Idle: present but disabled — the arrows are audio transport and there
+        // is no audio session to skip through. The name never flips to "page"
+        // under the user (page turns live on the reading surface now).
         const { rerender } = render(<AudioPill />);
 
-        expect(screen.getByRole('button', { name: 'Previous chapter' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Next chapter' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Previous chapter' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Next chapter' })).toBeDisabled();
 
+        // Audio active: same names, now enabled.
         vi.mocked(useTTSPlaybackStore).mockImplementation(((selector: any) =>
-            selector(playbackState({ isPlaying: true }))) as any);
+            selector(playbackState({ isPlaying: true, status: 'playing' }))) as any);
         rerender(<AudioPill />);
 
-        expect(screen.getByRole('button', { name: 'Previous chapter' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Next chapter' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Previous chapter' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Next chapter' })).toBeEnabled();
     });
 
     it('active mode: aria-label is descriptive (section + time remaining)', () => {
