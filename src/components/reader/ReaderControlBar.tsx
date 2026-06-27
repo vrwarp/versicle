@@ -132,8 +132,12 @@ export const ReaderControlBar: React.FC = () => {
         prevVariantRef.current = variant;
         const region = pillRegionRef.current;
         if (pillHadFocusRef.current && region && !region.contains(document.activeElement)) {
+            // Skip disabled controls — a disabled element cannot take focus, so
+            // targeting one would drop focus back to <body>. The AudioPill's
+            // prev/next arrows are disabled while TTS is idle (the pill is a
+            // pure audio transport), so the first focusable is the center toggle.
             region
-                .querySelector<HTMLElement>('button, [role="button"], [tabindex="0"], textarea')
+                .querySelector<HTMLElement>('button:not([disabled]), [role="button"], [tabindex="0"], textarea')
                 ?.focus();
         }
     }, [variant]);

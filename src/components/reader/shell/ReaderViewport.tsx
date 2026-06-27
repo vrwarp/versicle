@@ -13,17 +13,21 @@ import {
   useReaderPageTurnShortcuts,
   useReaderEngineKeyBridge,
 } from '@app/shortcuts/readerShortcuts';
+import { PageTurnRails } from './PageTurnRails';
 
 export interface ReaderViewportProps {
   viewerRef: React.RefObject<HTMLDivElement | null>;
   scrollWrapperRef: React.RefObject<HTMLDivElement | null>;
   readerViewMode: 'paginated' | 'scrolled';
+  /** Reading direction — mirrors the paginated page-turn rails for RTL books. */
+  direction?: 'ltr' | 'rtl';
 }
 
 export const ReaderViewport: React.FC<ReaderViewportProps> = ({
   viewerRef,
   scrollWrapperRef,
   readerViewMode,
+  direction = 'ltr',
 }) => {
   const commands = useReaderCommands();
   const engine = useReaderEngine();
@@ -51,6 +55,15 @@ export const ReaderViewport: React.FC<ReaderViewportProps> = ({
         className="w-full max-w-2xl overflow-hidden px-6 md:px-8 transition-opacity duration-300 opacity-100"
         style={{ height: readerViewMode === 'paginated' ? 'calc(100% - 100px)' : '100%' }}
       />
+      {/* Paginated page-turn affordance: scrolled mode turns pages by
+          wheel/touch (useReaderNavigation), so the rails are paginated-only. */}
+      {readerViewMode === 'paginated' && (
+        <PageTurnRails
+          onPrev={commands.prevPage}
+          onNext={commands.nextPage}
+          direction={direction}
+        />
+      )}
     </div>
   );
 };
