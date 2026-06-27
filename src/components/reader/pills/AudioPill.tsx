@@ -124,7 +124,7 @@ export const AudioPill: React.FC<AudioPillProps> = ({
       data-testid="audio-recenter-button"
       onClick={handleRecenter}
       aria-label="Re-center on the current sentence"
-      className="absolute left-1/2 -translate-x-1/2 -top-12 z-50 flex items-center gap-1.5 h-9 px-3 rounded-full border border-border bg-background/90 text-xs font-semibold text-primary shadow-lg backdrop-blur-md hover:bg-primary/10 touch-manipulation animate-in fade-in slide-in-from-bottom-1"
+      className="absolute left-1/2 -translate-x-1/2 -top-12 z-50 flex items-center gap-1.5 h-9 px-3 rounded-full border border-border bg-background/75 text-xs font-semibold text-primary shadow-lg backdrop-blur-md hover:bg-primary/10 touch-manipulation animate-in fade-in slide-in-from-bottom-1"
     >
       <LocateFixed size={16} aria-hidden="true" />
       <span>Re-center</span>
