@@ -30,7 +30,7 @@
     "coverage": "vitest run --coverage",
     "preview": "vite preview",
     "postinstall": "patch-package",
-    "test:emulator": "firebase emulators:exec --only auth,firestore,storage --project demo-versicle-sync-contract 'vitest run src/lib/sync/syncBackendContract.emulator.test.ts src/lib/sync/security-rules.test.ts'"
+    "test:emulator": "firebase emulators:exec --only auth,firestore,storage --project demo-versicle-sync-contract 'vitest run --no-file-parallelism src/lib/sync/syncBackendContract.emulator.test.ts src/lib/sync/security-rules.test.ts'"
   },
   "dependencies": {
     "@capacitor-community/safe-area": "^7.0.0",
