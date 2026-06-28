@@ -61,6 +61,23 @@ interface CachedTextNode extends Text {
 }
 
 /**
+ * The book's NATIVE text for a node — the Simplified source for cn→tw books,
+ * cached by {@link applyDisplayScript} before any in-place mutation. This is
+ * the right input for pinyin: pinyin-pro's dictionary is Simplified-centric,
+ * so feeding it the original (rather than the displayed Traditional glyphs)
+ * fixes the readings it gets wrong on Traditional (樂→yuè not lè, 難→nàn,
+ * 應→yìng, 間→jiān…). cn→tw is 1:1 code-point aligned (guarded in
+ * applyDisplayScript), so the readings line up with the displayed characters.
+ *
+ * Falls back to the current `nodeValue` when nothing is cached (the pass has
+ * not run, or the node was never converted) — identical to the old behavior.
+ */
+export function getPinyinSourceText(textNode: Text): string {
+  const cached = textNode as CachedTextNode;
+  return cached._originalText ?? textNode.nodeValue ?? '';
+}
+
+/**
  * Apply the display script to one text node: Traditional when
  * `forceTraditional`, otherwise the cached original — byte-for-byte
  * round-trip via `_originalText`.

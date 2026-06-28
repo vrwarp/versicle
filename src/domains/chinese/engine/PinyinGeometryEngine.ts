@@ -82,11 +82,21 @@ export function collectNodePinyinPositions(
   doc: Document,
   textNode: Text,
   iframeOffset: { top: number; left: number },
+  pinyinSourceText?: string,
 ): PinyinPosition[] {
   const positions: PinyinPosition[] = [];
-  const currentText = textNode.nodeValue || '';
-  const pinyinArray = getPinyin(currentText);
-  const codePoints = Array.from(currentText);
+  const displayedText = textNode.nodeValue || '';
+  const codePoints = Array.from(displayedText);
+
+  // Readings come from the source text (the Simplified original in Traditional
+  // display mode — pinyin-pro is far stronger on Simplified); geometry comes
+  // from the displayed glyphs. cn→tw is 1:1 code-point aligned, so reading[cp]
+  // pairs with displayed code point cp. Defensive guard: if the source ever
+  // disagrees in code-point count, read from the displayed text so the array
+  // can never misalign with the rects.
+  const sourceText = pinyinSourceText ?? displayedText;
+  const aligned = Array.from(sourceText).length === codePoints.length;
+  const pinyinArray = getPinyin(aligned ? sourceText : displayedText);
 
   let unit = 0;
   for (let cp = 0; cp < codePoints.length; cp++) {

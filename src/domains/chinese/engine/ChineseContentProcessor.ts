@@ -32,7 +32,7 @@ import {
   ensurePinyin,
   findHanTextNodes,
 } from './PinyinGeometryEngine';
-import { applyDisplayScript, ensureOpenCC } from './TraditionalConverter';
+import { applyDisplayScript, ensureOpenCC, getPinyinSourceText } from './TraditionalConverter';
 
 export interface ChineseReadingPrefs {
   forceTraditionalChinese: boolean;
@@ -166,9 +166,13 @@ export class ChineseContentProcessor {
 
     const positions: PinyinPosition[] = [];
     for (const textNode of findHanTextNodes(doc)) {
+      // Cache the native (Simplified) source BEFORE applyDisplayScript mutates
+      // the node to Traditional, then read pinyin from it — the readings line
+      // up 1:1 with the displayed glyphs (cn→tw is code-point-preserving).
+      const pinyinSource = getPinyinSourceText(textNode);
       const displayed = applyDisplayScript(textNode, prefs.forceTraditionalChinese);
       if (prefs.showPinyin && displayed) {
-        positions.push(...collectNodePinyinPositions(doc, textNode, iframeOffset));
+        positions.push(...collectNodePinyinPositions(doc, textNode, iframeOffset, pinyinSource));
       }
     }
 
