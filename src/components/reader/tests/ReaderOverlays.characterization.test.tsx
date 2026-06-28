@@ -272,6 +272,35 @@ describe('characterization: reader overlay systems (P6 entry gate)', () => {
       );
       expect(getActiveReaderEngine()?.highlights.count('annotation')).toBe(1);
     });
+
+    it('re-draws the highlight with the new class when an annotation color changes', async () => {
+      useAnnotationStore.setState({
+        annotations: {
+          'a-1': makeAnnotation({ id: 'a-1', color: 'yellow' }),
+        },
+      });
+
+      renderReader();
+      await waitForReady();
+      await waitFor(() => expect(mockAnnotations.add).toHaveBeenCalledTimes(1));
+      expect(mockAnnotations.add.mock.calls[0][4]).toBe('highlight-yellow');
+
+      // Recolor the existing annotation (same id, same CFI) — epub.js has no
+      // in-place recolor, so the layer must remove the stale SVG and re-add
+      // with the new class. Without that, the highlight keeps its old color.
+      act(() => {
+        useAnnotationStore.getState().update('a-1', { color: 'green' });
+      });
+
+      await waitFor(() =>
+        expect(mockAnnotations.remove).toHaveBeenCalledWith('epubcfi(/6/4!/4/2,/1:0,/1:5)', 'highlight'),
+      );
+      await waitFor(() => expect(mockAnnotations.add).toHaveBeenCalledTimes(2));
+      expect(mockAnnotations.add.mock.calls[1][1]).toBe('epubcfi(/6/4!/4/2,/1:0,/1:5)');
+      expect(mockAnnotations.add.mock.calls[1][4]).toBe('highlight-green');
+      // Still exactly one tracked highlight (re-drawn, not duplicated).
+      expect(getActiveReaderEngine()?.highlights.count('annotation')).toBe(1);
+    });
   });
 
   describe('2. content-analysis debug highlights', () => {

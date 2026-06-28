@@ -69,9 +69,14 @@ export const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
     }
   }, [bookId, loadAnnotations]);
 
-  // Apply Annotations to the engine's highlight layer
-  // Map of ID -> CFI for highlights
-  const addedAnnotations = useRef<Map<string, string>>(new Map());
+  // Apply Annotations to the engine's highlight layer.
+  // Map of annotation ID -> the rendered highlight handle (the CFI it was
+  // drawn at and the epub.js class it used). The class is tracked so a color
+  // change on an existing annotation re-renders the highlight: epub.js has no
+  // "recolor" — the only way to change a highlight's color is remove + re-add,
+  // and without this the diff below would see the id already present and skip
+  // it, leaving the old color on screen.
+  const addedAnnotations = useRef<Map<string, { cfi: string; className: string }>>(new Map());
 
   // Clear tracked annotations if the engine changes (e.g. re-initialization)
   useEffect(() => {
@@ -83,15 +88,27 @@ export const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
       const currentIds = new Set(annotationList.map(a => a.id));
 
       // 1. Remove deleted annotations (Highlights only - markers are in the React overlay)
-      addedAnnotations.current.forEach((cfi, id) => {
+      addedAnnotations.current.forEach((handle, id) => {
         if (!currentIds.has(id)) {
-          highlights.remove('annotation', cfi);
+          highlights.remove('annotation', handle.cfi);
           addedAnnotations.current.delete(id);
         }
       });
 
-      // 2. Add new annotations
+      // 2. Add new annotations (and re-draw any whose color or range changed)
       annotationList.forEach(annotation => {
+        const className = annotation.type === 'audio-bookmark'
+          ? AUDIO_BOOKMARK_PENDING_CLASS
+          : annotationClassName(annotation.color);
+
+        // epub.js cannot recolor a highlight in place — if the class (color)
+        // or the CFI changed, drop the stale SVG so it is re-added below.
+        const existing = addedAnnotations.current.get(annotation.id);
+        if (existing && (existing.className !== className || existing.cfi !== annotation.cfiRange)) {
+          highlights.remove('annotation', existing.cfi);
+          addedAnnotations.current.delete(annotation.id);
+        }
+
         // Add Highlight/Underline if missing
         if (!addedAnnotations.current.has(annotation.id)) {
           if (annotation.type === 'audio-bookmark') {
@@ -117,7 +134,7 @@ export const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
           }
           else {
             highlights.add('annotation', annotation.cfiRange, {
-              className: annotationClassName(annotation.color),
+              className,
               onClick: (e: Event) => {
                 const me = e as MouseEvent;
                 // Handle click on highlight to show actions (delete/edit)
@@ -144,7 +161,7 @@ export const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
           // whose highlight actually attached (parity with the pre-manager
           // try/catch placement).
           if (highlights.has('annotation', annotation.cfiRange)) {
-            addedAnnotations.current.set(annotation.id, annotation.cfiRange);
+            addedAnnotations.current.set(annotation.id, { cfi: annotation.cfiRange, className });
           }
         }
       });
