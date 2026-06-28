@@ -31,6 +31,28 @@ type PillVariant =
   | 'annotation' | 'active' | 'summary' | 'compact'
   | 'sync-alert' | 'audio-triage' | 'vocab-triage';
 
+/**
+ * True when any reader iframe currently holds a live (non-collapsed) text
+ * selection. Used to keep the pill's variant-morph focus restore from
+ * stealing focus out of the iframe and killing an in-progress Android
+ * long-press selection. Same-origin iframes only; cross-origin access throws
+ * and is swallowed.
+ */
+function readerIframeHasActiveSelection(): boolean {
+    const iframes = document.querySelectorAll('iframe');
+    for (const iframe of Array.from(iframes)) {
+        try {
+            const sel = iframe.contentWindow?.getSelection();
+            if (sel && !sel.isCollapsed && sel.rangeCount > 0 && sel.toString().trim()) {
+                return true;
+            }
+        } catch {
+            // Cross-origin iframe — not ours; ignore.
+        }
+    }
+    return false;
+}
+
 export const ReaderControlBar: React.FC = () => {
     // Correctly using the store-based toast
     const showToast = useToastStore(state => state.showToast);
@@ -131,6 +153,19 @@ export const ReaderControlBar: React.FC = () => {
         if (variant === prevVariantRef.current) return;
         prevVariantRef.current = variant;
         const region = pillRegionRef.current;
+        // Never steal focus from a live text selection in the reader iframe.
+        // The selection→annotation morph is DRIVEN by the user creating a
+        // selection (Android long-press), so the iframe holds an active,
+        // non-collapsed selection at this point. Focusing a pill button here
+        // moves focus out of the iframe, which deactivates the native Android
+        // selection — the handles vanish and the highlight renders inert grey,
+        // so the user can no longer drag to adjust it. The `pillHadFocusRef`
+        // flag wrongly survives that focus-into-iframe transition (a blur with
+        // a null relatedTarget reads as "unmount", not "moved to iframe"), so
+        // this guard is what actually protects the selection. Keyboard users —
+        // the only ones the restore serves — never have a live iframe
+        // selection, so skipping here costs them nothing.
+        if (readerIframeHasActiveSelection()) return;
         if (pillHadFocusRef.current && region && !region.contains(document.activeElement)) {
             // Skip disabled controls — a disabled element cannot take focus, so
             // targeting one would drop focus back to <body>. The AudioPill's
