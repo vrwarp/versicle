@@ -269,6 +269,25 @@ describe('ChineseContentProcessor (CH-2 matrix)', () => {
     processor.dispose();
   });
 
+  it('Traditional-NATIVE book reads via tw→cn, even with no force-Traditional', async () => {
+    // The book is already Traditional and shown as-is. The pinyin source is
+    // normalized to Simplified (時間 → 时间) so pinyin-pro reads it correctly.
+    const engine = new StubEngine();
+    const view = makeView('ch1.xhtml', '時間'); // Traditional-native text
+    engine.views = [view];
+    prefs = { forceTraditionalChinese: false, showPinyin: true };
+    const processor = new ChineseContentProcessor(engine.asEngine(), hooks());
+    processor.start();
+    await settle();
+
+    expect(view.textNode.nodeValue).toBe('時間'); // displayed unchanged
+    const jian = positions.find((p) => p.char === '間');
+    expect(jian).toBeDefined();
+    expect(jian!.pinyin).toBe('jiān'); // via Simplified source 时间
+    expect(getPinyin('時間')[1]).toBe('jiàn'); // the Traditional-direct bug
+    processor.dispose();
+  });
+
   it('a superseded run abandons its writes (per-run cancellation token)', async () => {
     const engine = new StubEngine();
     engine.views = [makeView('ch1.xhtml', '你好')];

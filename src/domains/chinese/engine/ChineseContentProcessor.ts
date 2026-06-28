@@ -152,8 +152,11 @@ export class ChineseContentProcessor {
 
     const prefs = this.hooks.getPrefs();
 
-    // Pre-load processors so the DOM loop below is fully synchronous.
-    if (prefs.forceTraditionalChinese) await ensureOpenCC();
+    // Pre-load processors so the DOM loop below is fully synchronous. OpenCC
+    // is needed for the display pass (forceTraditional) AND for normalizing the
+    // pinyin source to Simplified (showPinyin) — pinyin-pro is Simplified-centric,
+    // so tw-native books are read via tw→cn (see getPinyinSourceText).
+    if (prefs.forceTraditionalChinese || prefs.showPinyin) await ensureOpenCC();
     if (prefs.showPinyin) await ensurePinyin();
     if (token !== this.tokens.get(view.sectionHref) || this.disposed) return;
 
