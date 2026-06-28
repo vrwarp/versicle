@@ -41,7 +41,7 @@
  * which is out of scope for this override.)
  */
 
-export interface PolyphonicAlternate {
+interface PolyphonicAlternate {
   /** The reading to force, in tone-symbol form (matches pinyin-pro `toneType: 'symbol'`). */
   reading: string;
   /** Context words that select this reading; each contains the entry's character. */

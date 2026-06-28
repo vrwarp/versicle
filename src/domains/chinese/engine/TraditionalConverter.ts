@@ -48,17 +48,6 @@ export function toTraditional(text: string): string {
   return converter(text);
 }
 
-/**
- * Convert to Simplified. Requires {@link ensureOpenCC}. tw→cn is identity on
- * already-Simplified text and 1:1 (code-point-preserving) on Traditional.
- */
-export function toSimplified(text: string): string {
-  if (!simplifier) {
-    throw new Error('OpenCC module not loaded. Call ensureOpenCC() first.');
-  }
-  return simplifier(text);
-}
-
 /** Test seam: reset the lazy module cache. */
 export function __resetOpenCCForTests(): void {
   converter = null;
