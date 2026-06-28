@@ -1,15 +1,19 @@
 /**
- * polyphonic override suite — the curated 多音字 corrections layered on top
- * of pinyin-pro in getPinyin (see ./polyphonic.ts).
+ * polyphonic override suite — the trimmed, safe 多音字 corrections layered on
+ * top of pinyin-pro in getPinyin (see ./polyphonic.ts).
  *
- * Two layers of assertion:
+ * Three layers of assertion:
  *  - applyPolyphonicOverrides() in isolation (pure, no pinyin-pro), pinning
- *    the context-word matching, first-occurrence position, longest-match
- *    precedence, and Simplified/Traditional symmetry;
- *  - getPinyin() end-to-end, proving the curated readings that pinyin-pro
- *    gets wrong on its own are corrected, and the ones it gets right survive.
+ *    the context-word matching, first-occurrence position, shared-word merge,
+ *    and code-point alignment;
+ *  - getPinyin() end-to-end, proving the curated readings pinyin-pro gets
+ *    wrong are corrected while the cases it already handles are untouched and
+ *    the deliberately-dropped collision-prone characters do NOT over-fire;
+ *  - an invariant that the curated set is non-redundant — every trigger word
+ *    is one bare pinyin-pro actually reads differently.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
+import { pinyin } from 'pinyin-pro';
 import { ensurePinyin, getPinyin } from './PinyinGeometryEngine';
 import {
   POLYPHONIC_ENTRIES,
@@ -38,20 +42,24 @@ describe('applyPolyphonicOverrides (pure, pinyin-pro independent)', () => {
     expect(input).toEqual(['shèng', 'lè']);
   });
 
-  it('overrides only the FIRST occurrence of the char (恶恶 = wù è)', () => {
-    // 恶 → wù via 恶恶; the trailing 恶 keeps pinyin-pro's default (è here).
-    expect(applyPolyphonicOverrides('恶恶', ['è', 'è'])).toEqual(['wù', 'è']);
+  it('overrides only the FIRST occurrence of the char (惡惡 = wù è)', () => {
+    // 惡 → wù via 惡惡; the trailing 惡 keeps pinyin-pro's default (è here).
+    expect(applyPolyphonicOverrides('惡惡', ['è', 'è'])).toEqual(['wù', 'è']);
   });
 
-  it('merges entries that share a context word (参差 → cēn cī)', () => {
-    expect(applyPolyphonicOverrides('参差', ['shēn', 'chà'])).toEqual(['cēn', 'cī']);
+  it('merges entries that share a context word (參差 → cēn cī)', () => {
+    // 參 contributes index 0 → cēn; 差 contributes index 1 → cī.
+    expect(applyPolyphonicOverrides('參差', ['shēn', 'chà'])).toEqual(['cēn', 'cī']);
   });
 
-  it('longest context word wins (目的地 keeps 地→dì at index 2)', () => {
-    // Both 目的地 and (hypothetically) shorter windows resolve 地→dì here;
-    // the precedence rule is what guarantees a longer, more specific word
-    // is not clobbered by a shorter one.
-    expect(applyPolyphonicOverrides('目的地', ['mù', 'dì', 'de'])).toEqual(['mù', 'dì', 'dì']);
+  it('resolves overlapping windows consistently (受創傷 keeps 創→chuāng)', () => {
+    // 受創 (start 0, 創 at index 1) and 創傷 (start 1, 創 at index 0) both
+    // target the same 創 — the override lands once, deterministically.
+    expect(applyPolyphonicOverrides('受創傷', ['shòu', 'chuàng', 'shāng'])).toEqual([
+      'shòu',
+      'chuāng',
+      'shāng',
+    ]);
   });
 
   it('aligns by code point — an astral char before the word does not shift it', () => {
@@ -79,27 +87,31 @@ describe('getPinyin polyphonic correction (end-to-end with pinyin-pro)', () => {
     await ensurePinyin();
   });
 
-  it('corrects readings pinyin-pro gets wrong on its own', () => {
+  it('corrects the rare/domain Simplified words pinyin-pro lacks', () => {
     expect(reading('圣乐', '乐')).toBe('yuè');
     expect(reading('诗乐', '乐')).toBe('yuè');
     expect(reading('行传', '传')).toBe('zhuàn');
     expect(reading('受难', '难')).toBe('nàn');
-    expect(reading('朝露', '朝')).toBe('zhāo');
     expect(reading('圣都', '都')).toBe('dū');
     expect(reading('受创', '创')).toBe('chuāng');
-    expect(reading('和面', '和')).toBe('huó');
-    expect(reading('教书', '教')).toBe('jiāo');
     expect(reading('夹杂', '夹')).toBe('jiá');
-    expect(reading('你得', '得')).toBe('děi');
+    expect(reading('朝露', '朝')).toBe('zhāo');
   });
 
-  it('corrects the Traditional forms identically', () => {
+  it('corrects the Traditional forms pinyin-pro mis-reads wholesale', () => {
     expect(reading('聖樂', '樂')).toBe('yuè');
     expect(reading('行傳', '傳')).toBe('zhuàn');
     expect(reading('受難', '難')).toBe('nàn');
+    expect(reading('回應', '應')).toBe('yìng');
+    expect(reading('睡覺', '覺')).toBe('jiào');
+    expect(reading('重擔', '擔')).toBe('dàn');
+    expect(reading('銀行', '行')).toBe('háng');
+    expect(reading('重來', '重')).toBe('chóng');
+    expect(reading('參差', '參')).toBe('cēn');
+    expect(reading('參差', '差')).toBe('cī');
   });
 
-  it('does not regress the cases pinyin-pro already handles', () => {
+  it('does not regress the cases pinyin-pro already handles (no override added)', () => {
     expect(reading('银行', '行')).toBe('háng');
     expect(reading('重生', '重')).toBe('chóng');
     expect(reading('音乐', '乐')).toBe('yuè');
@@ -108,8 +120,32 @@ describe('getPinyin polyphonic correction (end-to-end with pinyin-pro)', () => {
     expect(reading('睡着', '着')).toBe('zháo');
   });
 
-  it('does not over-fire on unrelated text', () => {
+  it('does not over-fire on unrelated text or dropped collision-prone chars', () => {
     expect(reading('快乐', '乐')).toBe('lè');
     expect(reading('你好世界', '好')).toBe('hǎo');
+    // 长/地 were intentionally dropped — pinyin-pro already reads them right,
+    // and a blunt override would mis-fire on running text like 成长期.
+    expect(reading('成长期', '长')).toBe('zhǎng');
+    expect(reading('地上', '地')).toBe('dì');
+  });
+});
+
+describe('curated set is non-redundant (trim invariant)', () => {
+  beforeAll(async () => {
+    await ensurePinyin();
+  });
+
+  it('every trigger word is one bare pinyin-pro reads differently', () => {
+    for (const entry of POLYPHONIC_ENTRIES) {
+      for (const alt of entry.alternates) {
+        for (const word of alt.words) {
+          const idx = Array.from(word).indexOf(entry.char);
+          const bare = pinyin(word, { type: 'array', toneType: 'symbol' })[idx];
+          // If bare pinyin-pro already produced the alternate, the entry would
+          // be dead weight — keep the set honest by failing here.
+          expect(bare, `${word} (${entry.char}) is redundant`).not.toBe(alt.reading);
+        }
+      }
+    }
   });
 });
