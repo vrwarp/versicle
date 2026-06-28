@@ -21,7 +21,23 @@ const jsonResponse = (body: unknown, ok = true, status = 200): Response =>
   ({
     ok,
     status,
+    headers: new Headers({ 'content-type': 'application/json' }),
     json: async () => body,
+  }) as unknown as Response;
+
+/**
+ * The SPA-shell trap: a missing /dict/cedict.json is served as the app's
+ * index.html with a 200 by the dev server and GitHub Pages' 404.html. ok is
+ * true, content-type is text/html, and JSON.parse would die on "<!doctype".
+ */
+const htmlShellResponse = (): Response =>
+  ({
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+    json: async () => {
+      throw new SyntaxError(`Unexpected token '<', "<!doctype "... is not valid JSON`);
+    },
   }) as unknown as Response;
 
 const fetchOk = async (url: string): Promise<Response> => {
@@ -94,6 +110,29 @@ describe('DictionaryService', () => {
     expect(service.getProgress().error).toContain('503');
 
     fail = false;
+    await service.ensureReady();
+    expect(service.getProgress().status).toBe('ready');
+    expect(await service.getEntry('我')).toEqual(['wǒ', 'I; me']);
+  });
+
+  it('a missing artifact (HTML app shell, 200 OK) fails loudly, not with a cryptic JSON error', async () => {
+    // Regression for "[DictionaryService] Dictionary import failed SyntaxError:
+    // Unexpected token '<', "<!doctype "... is not valid JSON": response.ok is
+    // true so the status check passes; we must catch the HTML shell ourselves.
+    let missing = true;
+    const flaky = async (url: string) => {
+      if (url === '/dict/cedict.json' && missing) return htmlShellResponse();
+      return fetchOk(url);
+    };
+    const service = new DictionaryService({ fetch: flaky });
+
+    await expect(service.ensureReady()).rejects.toThrow(/compile-dict/);
+    expect(service.getProgress().status).toBe('error');
+    expect(service.getProgress().error).not.toMatch(/Unexpected token/);
+    expect(service.getProgress().error).toMatch(/compile-dict/);
+
+    // Retryable: once the artifact is served, a later call recovers.
+    missing = false;
     await service.ensureReady();
     expect(service.getProgress().status).toBe('ready');
     expect(await service.getEntry('我')).toEqual(['wǒ', 'I; me']);
