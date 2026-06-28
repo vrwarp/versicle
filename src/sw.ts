@@ -4,6 +4,7 @@ import { clientsClaim } from 'workbox-core'
 import { registerRoute } from 'workbox-routing'
 import { CacheFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
+import type { WorkboxPlugin } from 'workbox-core/types'
 import { createCoverResponse } from '@data/sw-contract';
 import { parseCoverPath } from '@data/covers';
 
@@ -46,6 +47,26 @@ clientsClaim()
 
 precacheAndRoute(self.__WB_MANIFEST)
 
+/**
+ * Never let a CacheFirst route store the SPA app shell.
+ *
+ * A MISSING same-origin asset is answered with index.html at 200 OK by both
+ * the Vite dev server and GitHub Pages' 404.html. Without this guard,
+ * CacheFirst caches that HTML and then serves it FOREVER on every later
+ * request — the exact trap that kept /dict/cedict.json returning
+ * "<!doctype html>" to the DictionaryService even after `compile-dict` had
+ * produced the real artifact (the import only recovers once the poisoned
+ * cache entry is gone). Reject html/xml so only the genuine asset
+ * (json / ttf / wasm / binary) is ever written to these caches.
+ */
+const denySpaShellCaching: WorkboxPlugin = {
+  cacheWillUpdate: async ({ response }) => {
+    if (response.status !== 200) return null
+    const contentType = response.headers.get('content-type') ?? ''
+    return /\b(?:html|xml)\b/i.test(contentType) ? null : response
+  },
+}
+
 // ── Runtime caching (Phase 8 §G) ────────────────────────────────────────────
 // The precache covers `**/*.{js,css,html}` only (vite.config.ts
 // injectManifest); everything below is fetched on demand and far beyond the
@@ -63,7 +84,7 @@ registerRoute(
   ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/dict/'),
   new CacheFirst({
     cacheName: 'versicle-dict-assets',
-    plugins: [new ExpirationPlugin({ maxEntries: 4 })],
+    plugins: [new ExpirationPlugin({ maxEntries: 4 }), denySpaShellCaching],
   }),
 )
 
@@ -74,7 +95,7 @@ registerRoute(
   ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/fonts/'),
   new CacheFirst({
     cacheName: 'versicle-fonts-v1',
-    plugins: [new ExpirationPlugin({ maxEntries: 12 })],
+    plugins: [new ExpirationPlugin({ maxEntries: 12 }), denySpaShellCaching],
   }),
 )
 
@@ -87,7 +108,7 @@ registerRoute(
   ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/piper/'),
   new CacheFirst({
     cacheName: 'versicle-piper-runtime-v1',
-    plugins: [new ExpirationPlugin({ maxEntries: 16 })],
+    plugins: [new ExpirationPlugin({ maxEntries: 16 }), denySpaShellCaching],
   }),
 )
 

@@ -130,6 +130,26 @@ describe('PinyinGeometryEngine (characterization heritage: P6 entry gate)', () =
     expect(HAN_RE.test('a')).toBe(false);
   });
 
+  it('reads pinyin from the source text but geometry from the displayed glyphs', () => {
+    // Displayed Traditional 樂器, pinyin source Simplified 乐器 (1:1 aligned).
+    const { doc, textNode } = makeFixtureDoc('樂器');
+    const positions = collectNodePinyinPositions(doc, textNode, IFRAME_OFFSET, '乐器');
+
+    expect(positions.map((p) => p.char)).toEqual(['樂', '器']); // displayed glyphs
+    expect(positions.map((p) => p.pinyin)).toEqual(getPinyin('乐器')); // source readings
+    expect(positions[0].pinyin).toBe('yuè'); // not lè (the Traditional-direct bug)
+  });
+
+  it('falls back to the displayed text when the source code-point count differs', () => {
+    // A mismatched source must never misalign readings against the rects.
+    const { doc, textNode } = makeFixtureDoc('樂');
+    const positions = collectNodePinyinPositions(doc, textNode, IFRAME_OFFSET, '乐器');
+
+    expect(positions).toHaveLength(1);
+    expect(positions[0].char).toBe('樂');
+    expect(positions[0].pinyin).toBe(getPinyin('樂')[0]); // computed from displayed
+  });
+
   it('findHanTextNodes finds astral-only nodes and skips ruby annotations', () => {
     const doc = document.implementation.createHTMLDocument('fixture');
     doc.body.innerHTML =

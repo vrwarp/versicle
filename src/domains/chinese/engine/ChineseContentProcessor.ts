@@ -32,7 +32,7 @@ import {
   ensurePinyin,
   findHanTextNodes,
 } from './PinyinGeometryEngine';
-import { applyDisplayScript, ensureOpenCC } from './TraditionalConverter';
+import { applyDisplayScript, ensureOpenCC, getPinyinSourceText } from './TraditionalConverter';
 
 export interface ChineseReadingPrefs {
   forceTraditionalChinese: boolean;
@@ -152,8 +152,11 @@ export class ChineseContentProcessor {
 
     const prefs = this.hooks.getPrefs();
 
-    // Pre-load processors so the DOM loop below is fully synchronous.
-    if (prefs.forceTraditionalChinese) await ensureOpenCC();
+    // Pre-load processors so the DOM loop below is fully synchronous. OpenCC
+    // is needed for the display pass (forceTraditional) AND for normalizing the
+    // pinyin source to Simplified (showPinyin) — pinyin-pro is Simplified-centric,
+    // so tw-native books are read via tw→cn (see getPinyinSourceText).
+    if (prefs.forceTraditionalChinese || prefs.showPinyin) await ensureOpenCC();
     if (prefs.showPinyin) await ensurePinyin();
     if (token !== this.tokens.get(view.sectionHref) || this.disposed) return;
 
@@ -166,9 +169,13 @@ export class ChineseContentProcessor {
 
     const positions: PinyinPosition[] = [];
     for (const textNode of findHanTextNodes(doc)) {
+      // Cache the native (Simplified) source BEFORE applyDisplayScript mutates
+      // the node to Traditional, then read pinyin from it — the readings line
+      // up 1:1 with the displayed glyphs (cn→tw is code-point-preserving).
+      const pinyinSource = getPinyinSourceText(textNode);
       const displayed = applyDisplayScript(textNode, prefs.forceTraditionalChinese);
       if (prefs.showPinyin && displayed) {
-        positions.push(...collectNodePinyinPositions(doc, textNode, iframeOffset));
+        positions.push(...collectNodePinyinPositions(doc, textNode, iframeOffset, pinyinSource));
       }
     }
 

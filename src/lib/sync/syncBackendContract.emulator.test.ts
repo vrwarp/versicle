@@ -106,6 +106,28 @@ async function emulatorReachable(hostPort: string): Promise<boolean> {
   }
 }
 
+/**
+ * The emulator's gRPC transport occasionally surfaces a transient
+ * `unavailable` ("Failed to get document because the client is offline") or
+ * `aborted` ("Firestore shutting down") under CI load — infrastructure noise,
+ * not a contract violation. Retry the read a few times with a short backoff so
+ * a single hiccup does not red the lane. Non-transient errors rethrow at once.
+ */
+const TRANSIENT_FIRESTORE = /\b(unavailable|aborted)\b|client is offline|shutting down/i;
+async function withTransientRetry<T>(op: () => Promise<T>, attempts = 4): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await op();
+    } catch (error) {
+      const code = (error as { code?: string } | null)?.code ?? '';
+      const message = error instanceof Error ? error.message : String(error);
+      const transient = TRANSIENT_FIRESTORE.test(code) || TRANSIENT_FIRESTORE.test(message);
+      if (!transient || attempt >= attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    }
+  }
+}
+
 // The trio is all-or-nothing: connect cases need auth (real request.auth)
 // and the purge cases need storage.
 const emulatorUp =
@@ -251,7 +273,7 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
     updateWorkspaceMetadata: (workspaceId, patch) =>
       backend.updateWorkspaceMetadata(workspaceId, patch),
 
-    probeHasData: (workspaceId) => backend.probeHasData(workspaceId),
+    probeHasData: (workspaceId) => withTransientRetry(() => backend.probeHasData(workspaceId)),
 
     // The production delete semantics (P4-6 honest delete): tombstone
     // first, then purge — exactly what WorkspaceService.delete runs.

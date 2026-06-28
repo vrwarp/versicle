@@ -14,6 +14,7 @@
  * DOM nodes and offsets, so this module is trivially unit-testable.
  */
 import type { PinyinPosition } from '@domains/chinese/types';
+import { applyPolyphonicOverrides } from './polyphonic';
 
 /**
  * The Han test (CH-1): the full Unicode script property, NOT the BMP block
@@ -38,12 +39,19 @@ export async function ensurePinyin(): Promise<void> {
  * Per-code-point pinyin for `text` (tone symbols). Requires
  * {@link ensurePinyin} to have resolved — synchronous on purpose so the
  * geometry loop never awaits between DOM reads.
+ *
+ * pinyin-pro segments the text and disambiguates most polyphonic (多音字)
+ * characters by context, but its phrase dictionary leaves a curated tail
+ * wrong; {@link applyPolyphonicOverrides} corrects those against the
+ * context-word rules (Simplified + Traditional). Both layers operate on the
+ * SAME per-code-point alignment, so the geometry loop indexing is unchanged.
  */
 export function getPinyin(text: string): string[] {
   if (!pinyinFn) {
     throw new Error('Pinyin module not loaded. Call ensurePinyin() first.');
   }
-  return pinyinFn(text, { type: 'array', toneType: 'symbol' });
+  const base = pinyinFn(text, { type: 'array', toneType: 'symbol' });
+  return applyPolyphonicOverrides(text, base);
 }
 
 /**
@@ -74,11 +82,21 @@ export function collectNodePinyinPositions(
   doc: Document,
   textNode: Text,
   iframeOffset: { top: number; left: number },
+  pinyinSourceText?: string,
 ): PinyinPosition[] {
   const positions: PinyinPosition[] = [];
-  const currentText = textNode.nodeValue || '';
-  const pinyinArray = getPinyin(currentText);
-  const codePoints = Array.from(currentText);
+  const displayedText = textNode.nodeValue || '';
+  const codePoints = Array.from(displayedText);
+
+  // Readings come from the source text (the Simplified original in Traditional
+  // display mode — pinyin-pro is far stronger on Simplified); geometry comes
+  // from the displayed glyphs. cn→tw is 1:1 code-point aligned, so reading[cp]
+  // pairs with displayed code point cp. Defensive guard: if the source ever
+  // disagrees in code-point count, read from the displayed text so the array
+  // can never misalign with the rects.
+  const sourceText = pinyinSourceText ?? displayedText;
+  const aligned = Array.from(sourceText).length === codePoints.length;
+  const pinyinArray = getPinyin(aligned ? sourceText : displayedText);
 
   let unit = 0;
   for (let cp = 0; cp < codePoints.length; cp++) {

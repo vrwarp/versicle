@@ -118,6 +118,21 @@ export class DictionaryService {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
+      // The SPA-shell trap: when /dict/cedict.json is absent (the artifact is
+      // git-ignored — built by `npm run compile-dict`, in CI, and the Docker
+      // images), both the Vite dev server and GitHub Pages' 404.html serve the
+      // app's index.html with a 200, so `response.ok` passes and the JSON parse
+      // below dies on "<!doctype html>" with the opaque
+      //   SyntaxError: Unexpected token '<', "<!doctype "... is not valid JSON.
+      // Detect the HTML shell up front and fail with an actionable message.
+      const contentType = response.headers?.get('content-type') ?? '';
+      if (/\b(?:html|xml)\b/i.test(contentType)) {
+        throw new Error(
+          `Expected JSON from /dict/cedict.json but the server returned "${contentType}" ` +
+            `(the app shell). The compiled dictionary is missing — run \`npm run compile-dict\` ` +
+            `(it is git-ignored and built offline from the vendored CC-CEDICT snapshot).`,
+        );
+      }
       const data = (await response.json()) as Record<string, DictEntryTuple>;
       const entries = Object.entries(data);
       const total = entries.length;
