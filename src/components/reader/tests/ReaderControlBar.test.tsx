@@ -343,5 +343,52 @@ describe('ReaderControlBar', () => {
       expect(document.activeElement).not.toBe(document.body);
       expect(pill.contains(document.activeElement)).toBe(true);
     });
+
+    it('does NOT steal focus from a live reader-iframe selection on morph (Android drag)', () => {
+      // A reader iframe holding a live, non-collapsed selection (Android
+      // long-press). Focusing a pill button here would deactivate the native
+      // selection and drop its drag handles.
+      const iframe = document.createElement('iframe');
+      document.body.appendChild(iframe);
+      Object.defineProperty(iframe, 'contentWindow', {
+        configurable: true,
+        value: {
+          getSelection: () => ({
+            isCollapsed: false,
+            rangeCount: 1,
+            toString: () => 'Conclusion',
+          }),
+        },
+      });
+
+      // Start on the active audio pill with focus inside it (sets the
+      // "pill had focus" flag the restore keys off).
+      mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
+        currentBookId: '123',
+        currentSectionTitle: 'Chapter 1',
+      })));
+      mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
+
+      const { rerender } = render(<ReaderControlBar />);
+      // The active pill's focusable control is the center toggle (the prev/next
+      // arrows are disabled while TTS is idle). Focusing it sets the router's
+      // "pill had focus" flag.
+      screen.getByTestId('compass-active-toggle').focus();
+
+      // Morph: the user's selection opens the annotation toolbar.
+      mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
+        currentBookId: '123',
+        popover: { visible: true, text: 'Conclusion', cfiRange: 'cfi' },
+      })));
+      rerender(<ReaderControlBar />);
+
+      const annotationPill = screen.getByTestId('compass-pill-annotation');
+      expect(annotationPill).toBeInTheDocument();
+      // Focus must NOT have been pulled into the new pill — the iframe keeps
+      // it so the native selection stays active and draggable.
+      expect(annotationPill.contains(document.activeElement)).toBe(false);
+
+      document.body.removeChild(iframe);
+    });
   });
 });
