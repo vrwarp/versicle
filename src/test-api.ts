@@ -24,7 +24,7 @@ import { getYjsPersistence, disconnectYjs } from './store/yjs-provider';
 import { playbackCache } from './data/repos/playbackCache';
 import { closeConnection } from './data/connection';
 import { wipeAllData } from './data/wipe';
-import { MockGenAIClient, setGenAIClient, type MockGenAIFixture } from './domains/google';
+import { MockGenAIClient, setGenAIClient, type MockGenAIFixture } from './domains/genai';
 import { useContentAnalysisStore } from './store/useContentAnalysisStore';
 import { useGenAIStore } from './store/useGenAIStore';
 import { getActiveReaderEngine } from './domains/reader/engine/activeEngineRegistry';

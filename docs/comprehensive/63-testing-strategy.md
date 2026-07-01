@@ -461,7 +461,7 @@ The subjects:
 | [CsvUtils.fuzz.test.ts](../../src/lib/tts/CsvUtils.fuzz.test.ts) | CSV round-trip with random data |
 | [csv.fuzz.test.ts](../../src/lib/csv.fuzz.test.ts) | Kernel CSV utilities |
 | [search-engine.fuzz.test.ts](../../src/lib/search-engine.fuzz.test.ts) | Search indexer with random queries |
-| [features.fuzz.test.ts](../../src/domains/google/genai/features/features.fuzz.test.ts) | GenAI feature parsing |
+| [features.fuzz.test.ts](../../src/domains/genai/features/features.fuzz.test.ts) | GenAI feature parsing |
 
 The CFI equivalence suite is the model: it runs the fast-path implementation
 and a reference oracle on the same 10k+ random inputs and asserts they

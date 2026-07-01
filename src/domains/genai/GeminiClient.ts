@@ -119,6 +119,7 @@ export class GeminiClient implements GenAIClient {
     method: string,
     payload: unknown,
     context?: GenAIRequestContext,
+    model?: string,
   ): void {
     this.deps.onLog?.({
       id: generateLogId(),
@@ -126,6 +127,8 @@ export class GeminiClient implements GenAIClient {
       type,
       method,
       payload: redactPayload(payload),
+      provider: 'gemini',
+      model,
       bookTitle: context?.bookTitle,
       sectionTitle: context?.sectionTitle,
       correlationId: context?.correlationId,
@@ -171,6 +174,7 @@ export class GeminiClient implements GenAIClient {
               error: (error as Error).message,
             },
             context,
+            modelId,
           );
           continue;
         }
@@ -270,6 +274,7 @@ export class GeminiClient implements GenAIClient {
             generationConfigOverride: request.generationConfig,
           },
           context,
+          modelId,
         );
 
         const text = await this.callGemini(
@@ -293,6 +298,7 @@ export class GeminiClient implements GenAIClient {
             request.method,
             { message: 'Failed to parse JSON', text, error: (error as Error).message },
             context,
+            modelId,
           );
           throw new GenAIInvalidResponseError(
             'Failed to parse GenAI response as JSON',
@@ -313,10 +319,11 @@ export class GeminiClient implements GenAIClient {
               error: (error as Error).message,
             },
             context,
+            modelId,
           );
           throw error;
         }
-        this.log('response', request.method, { text, parsed }, context);
+        this.log('response', request.method, { text, parsed }, context, modelId);
         return validated;
       },
       request.method,
@@ -327,9 +334,9 @@ export class GeminiClient implements GenAIClient {
   async generateText(prompt: string, context?: GenAIRequestContext): Promise<string> {
     return this.executeWithRetry(
       async (modelId) => {
-        this.log('request', 'generateContent', { prompt, model: modelId }, context);
+        this.log('request', 'generateContent', { prompt, model: modelId }, context, modelId);
         const text = await this.callGemini(modelId, prompt, undefined, context, undefined);
-        this.log('response', 'generateContent', { text }, context);
+        this.log('response', 'generateContent', { text }, context, modelId);
         return text;
       },
       'generateContent',

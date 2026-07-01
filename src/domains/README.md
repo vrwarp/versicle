@@ -16,7 +16,8 @@ one named carve-out: `store/yjs-provider.ts` for live Y.Doc handles
 | Domain | What it owns |
 | --- | --- |
 | `chinese/` | pinyin geometry engine, dictionary (separate versicle-dict IDB), vocabulary |
-| `google/` | GoogleAuthClient (per-service tokens), DriveClient, GenAIClient + per-feature zod modules |
+| `genai/` | GenAIClient contract + GeminiClient/AnthropicClient providers + per-feature zod modules + Gemini text-embedding client |
+| `google/` | GoogleAuthClient (per-service tokens), DriveClient/DriveLibrarySync |
 | `library/` | ImportOrchestrator job queue, LibraryService (keyed mutex), SHA-256 identity, reingest driver |
 | `reader/` | ReaderEngine port (EpubJsEngine = sole epubjs importer), overlays, session recorder |
 | `search/` | SearchSession over the search worker + persisted searchText repo |

@@ -21,15 +21,17 @@ import {
   DriveLibrarySync,
   GoogleAuthClient,
   defaultPlatformOptions,
-  makeLazyEmbeddingClient,
-  makeLazyGenAIClient,
   setDriveClient,
   setDriveLibrarySync,
+  setGoogleAuthClient,
+} from '@domains/google';
+import {
+  makeLazyEmbeddingClient,
+  makeLazyGenAIClient,
   setEmbeddingClient,
   setGenAIClient,
-  setGoogleAuthClient,
   type EmbeddingConfig,
-} from '@domains/google';
+} from '@domains/genai';
 import { setConsentResolver, setQuotaScheduler } from '@kernel/net';
 import { QuotaGovernor, setQuotaStore, type QuotaLimits } from '@kernel/quota';
 import { makeQuotaStore } from '@app/quota/makeQuotaStore';
@@ -173,19 +175,26 @@ export function wireGoogleDomain(): void {
   // Phase 8 §A: installed as the LAZY facade — GeminiClient (and the
   // egress plumbing behind it) loads on the first generate call, keeping
   // the GenAI implementation out of the entry chunk (check 4).
+  // Provider read PER CALL (like config): flipping provider in settings takes
+  // effect on the next generate call with no reload. When 'anthropic', the config
+  // provider hands back the Anthropic key/model (rotation is a Gemini-only
+  // feature); otherwise the Gemini key/model. The embedding wiring below is
+  // UNCHANGED — it always reads s.apiKey (the Gemini key), which is why embeddings
+  // stay on gemini-embedding-2 no matter which text-gen provider is selected.
   setGenAIClient(
-    makeLazyGenAIClient({
-      getConfig: () => {
-        const s = useGenAIStore.getState();
-        return {
-          apiKey: s.apiKey,
-          model: s.model,
-          rotationEnabled: s.isModelRotationEnabled,
-        };
+    makeLazyGenAIClient(
+      () => useGenAIStore.getState().provider,
+      {
+        getConfig: () => {
+          const s = useGenAIStore.getState();
+          return s.provider === 'anthropic'
+            ? { apiKey: s.anthropicApiKey, model: s.anthropicModel, rotationEnabled: false }
+            : { apiKey: s.apiKey, model: s.model, rotationEnabled: s.isModelRotationEnabled };
+        },
+        onLog: (entry) => useGenAIStore.getState().addLog(entry),
+        governor,
       },
-      onLog: (entry) => useGenAIStore.getState().addLog(entry),
-      governor,
-    }),
+    ),
   );
 
   // The embedding client, installed as a LAZY facade so the real

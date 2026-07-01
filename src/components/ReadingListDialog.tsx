@@ -10,7 +10,7 @@ import { EditReadingListEntryDialog } from './EditReadingListEntryDialog';
 import { exportFile } from '@lib/export';
 import { formatDate } from '@kernel/locale/format';
 import { useGenAIStore } from '@store/useGenAIStore';
-import { getGenAIClient } from '@domains/google';
+import { getGenAIClient } from '@domains/genai';
 import { SmartLinkDialog } from './SmartLinkDialog';
 
 interface ReadingListDialogProps {

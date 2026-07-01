@@ -31,6 +31,7 @@ production fetch against it (raw fetch is lint-banned outside
 | Id | Hosts | Via | Data class | Consent |
 | --- | --- | --- | --- | --- |
 | `gemini` | generativelanguage.googleapis.com | gateway | book-content | per-book |
+| `anthropic` | api.anthropic.com | gateway | book-content | per-book |
 | `google-tts` | texttospeech.googleapis.com | gateway | book-content | provider-selection |
 | `openai-tts` | api.openai.com | gateway | book-content | provider-selection |
 | `lemonfox-tts` | api.lemonfox.ai | gateway | book-content | provider-selection |

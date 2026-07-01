@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import type { NavigationItem } from '~types/book';
-import { getGenAIClient } from '@domains/google';
+import { getGenAIClient } from '@domains/genai';
 import { bookContent } from '@data/repos/bookContent';
 import { bookRepository } from '@app/repositories/BookRepository';
 import { useGenAIStore } from '@store/useGenAIStore';
@@ -60,7 +60,7 @@ export function useSmartTOC(
 
       // Deep feature import (first-use loading, Phase 8 §A — the feature
       // module's zod schemas must stay out of the static graph).
-      const { generateTocTitles } = await import('@domains/google/genai/features/tocTitles');
+      const { generateTocTitles } = await import('@domains/genai/features/tocTitles');
       const generatedTitles = await generateTocTitles(getGenAIClient(), sectionsToProcess, { bookTitle, language });
 
       const titleMap = new Map<string, string>();

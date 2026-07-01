@@ -4,15 +4,15 @@ import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 import { useReadingListStore } from '@store/useReadingListStore';
 import { useBookStore } from '@store/useBookStore';
 import { useGenAIStore } from '@store/useGenAIStore';
-import { mapReadingListToLibrary } from '@domains/google/genai/features/libraryMapping';
+import { mapReadingListToLibrary } from '@domains/genai/features/libraryMapping';
 
 // Mock dependencies (P9: the GenAIService façade is deleted — the dialog
 // deep-imports the libraryMapping feature module and the domain client).
 vi.mock('@store/useReadingListStore');
 vi.mock('@store/useBookStore');
 vi.mock('@store/useGenAIStore');
-vi.mock('@domains/google', () => ({ getGenAIClient: vi.fn(() => ({})) }));
-vi.mock('@domains/google/genai/features/libraryMapping', () => ({
+vi.mock('@domains/genai', () => ({ getGenAIClient: vi.fn(() => ({})) }));
+vi.mock('@domains/genai/features/libraryMapping', () => ({
     mapReadingListToLibrary: vi.fn(),
 }));
 

@@ -734,7 +734,7 @@ probe flag) is read per call from `useGenAIStore`; log entries land pre-redacted
 in the same in-memory ring buffer as the GenAI client. No `governor` is wired
 into it: the foreground-lane `acquire()` at the gateway already records its spend,
 and an embedding never commits. The domain side is a four-part module
-(`src/domains/google/genai/embedding/`: `contract`, the `GeminiEmbeddingClient`
+(`src/domains/genai/embedding/`: `contract`, the `GeminiEmbeddingClient`
 impl, a `holder` whose fallback is an inline NOT-CONFIGURED client — `embed()`
 throws `GENAI_EMBEDDING_NOT_CONFIGURED` so stray imports degrade like a missing
 API key, and the lazy facade), barrel-exported from `@domains/google`. See
@@ -940,8 +940,8 @@ Feature modules load on first call via deep dynamic imports (not via the domain
 index barrel), keeping them out of the entry chunk:
 
 ```typescript
-const { detectReferenceSection } = await import('@domains/google/genai/features/referenceDetection');
-const { generateTableAdaptations } = await import('@domains/google/genai/features/tableAdaptation');
+const { detectReferenceSection } = await import('@domains/genai/features/referenceDetection');
+const { generateTableAdaptations } = await import('@domains/genai/features/tableAdaptation');
 ```
 
 This preserves the Phase 8 §A first-use splitting discipline for the GenAI

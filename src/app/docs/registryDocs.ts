@@ -72,7 +72,8 @@ export const SRC_MODULES: Readonly<Record<string, string>> = {
 /** src/domains/* — gated: set equality with the directories on disk. */
 export const DOMAIN_MODULES: Readonly<Record<string, string>> = {
   chinese: 'pinyin geometry engine, dictionary (separate versicle-dict IDB), vocabulary',
-  google: 'GoogleAuthClient (per-service tokens), DriveClient, GenAIClient + per-feature zod modules',
+  genai: 'GenAIClient contract + GeminiClient/AnthropicClient providers + per-feature zod modules + Gemini text-embedding client',
+  google: 'GoogleAuthClient (per-service tokens), DriveClient/DriveLibrarySync',
   library: 'ImportOrchestrator job queue, LibraryService (keyed mutex), SHA-256 identity, reingest driver',
   reader: 'ReaderEngine port (EpubJsEngine = sole epubjs importer), overlays, session recorder',
   search: 'SearchSession over the search worker + persisted searchText repo',

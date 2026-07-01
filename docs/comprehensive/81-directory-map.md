@@ -497,18 +497,18 @@ Google integrations: OAuth, Drive, and GenAI (Gemini).
 | `genai/` | `GenAIClient` — Gemini API calls with per-book consent gating + the quota governor (lane + token estimate declared via egress, `commit`/`recordCooldown` reconciled after; model rotation stays here). Now also hosts the embedding client family (`genai/embedding/`, below). |
 | [`index.ts`](../../src/domains/google/index.ts) | Public barrel (re-exports `getEmbeddingClient` for the indexer/backfill) |
 
-#### src/domains/google/genai/embedding/
+#### src/domains/genai/embedding/
 
 The text-embedding capability — a sibling of the `GenAIClient` (chat) family. Four production parts (contract, impl, holder, lazy facade) plus a typed error and a test mock. The client returns FLOAT32 vectors; int8 quantization is the indexer/worker's job, so the wire format stays a single concern of the storage layer.
 
 | File | Purpose |
 |---|---|
-| [`contract.ts`](../../src/domains/google/genai/embedding/contract.ts) | The `EmbeddingClient` interface (`embed(texts, {profile, bookId, interactive, lane, signal})`, `isConfigured()`), `EmbeddingProfile` (`document`/`query` asymmetric pair), and the per-call `EmbeddingConfig`/`EmbeddingConfigProvider` (read fresh, never cached). |
-| [`GeminiEmbeddingClient.ts`](../../src/domains/google/genai/embedding/GeminiEmbeddingClient.ts) | Production impl over Gemini REST `:embedContent`, routed through `NetworkGateway.egress('gemini', …)` so every request passes the same consent + quota-lane + token-estimate admission as the chat client. Redacts log payloads so book text never lands in the activity log. |
-| [`holder.ts`](../../src/domains/google/genai/embedding/holder.ts) | The singleton holder (`set`/`getEmbeddingClient`). Default is an inline NOT-CONFIGURED client whose `embed()` throws `EmbeddingNotConfiguredError` — a stray import degrades exactly like a missing key. |
-| [`lazyClient.ts`](../../src/domains/google/genai/embedding/lazyClient.ts) | First-use-splitting facade: dynamic-imports `GeminiEmbeddingClient` on the first embed call so it never enters the entry chunk (asserted by `check:worker-chunk` check 4). `isConfigured()` is answered locally. |
-| [`errors.ts`](../../src/domains/google/genai/embedding/errors.ts) | `EmbeddingNotConfiguredError` (append-only `GENAI_EMBEDDING_NOT_CONFIGURED`). |
-| [`MockEmbeddingClient.ts`](../../src/domains/google/genai/embedding/MockEmbeddingClient.ts) | Deterministic hash-seeded fixture (test-only; outside the production import graph). |
+| [`contract.ts`](../../src/domains/genai/embedding/contract.ts) | The `EmbeddingClient` interface (`embed(texts, {profile, bookId, interactive, lane, signal})`, `isConfigured()`), `EmbeddingProfile` (`document`/`query` asymmetric pair), and the per-call `EmbeddingConfig`/`EmbeddingConfigProvider` (read fresh, never cached). |
+| [`GeminiEmbeddingClient.ts`](../../src/domains/genai/embedding/GeminiEmbeddingClient.ts) | Production impl over Gemini REST `:embedContent`, routed through `NetworkGateway.egress('gemini', …)` so every request passes the same consent + quota-lane + token-estimate admission as the chat client. Redacts log payloads so book text never lands in the activity log. |
+| [`holder.ts`](../../src/domains/genai/embedding/holder.ts) | The singleton holder (`set`/`getEmbeddingClient`). Default is an inline NOT-CONFIGURED client whose `embed()` throws `EmbeddingNotConfiguredError` — a stray import degrades exactly like a missing key. |
+| [`lazyClient.ts`](../../src/domains/genai/embedding/lazyClient.ts) | First-use-splitting facade: dynamic-imports `GeminiEmbeddingClient` on the first embed call so it never enters the entry chunk (asserted by `check:worker-chunk` check 4). `isConfigured()` is answered locally. |
+| [`errors.ts`](../../src/domains/genai/embedding/errors.ts) | `EmbeddingNotConfiguredError` (append-only `GENAI_EMBEDDING_NOT_CONFIGURED`). |
+| [`MockEmbeddingClient.ts`](../../src/domains/genai/embedding/MockEmbeddingClient.ts) | Deterministic hash-seeded fixture (test-only; outside the production import graph). |
 
 ### src/domains/search/
 
@@ -750,7 +750,7 @@ The composition layer between the TTS engine (worker) and the Zustand stores. Th
 | [`TtsController.ts`](../../src/app/tts/TtsController.ts) | Top-level TTS controller connecting the engine to the app stores. |
 | [`createZustandEngineContext.ts`](../../src/app/tts/createZustandEngineContext.ts) | Production `EngineContext` wiring (store reads + Capacitor detection). |
 | [`mainThreadAudioPlayer.ts`](../../src/app/tts/mainThreadAudioPlayer.ts) | In-process engine builder (used in jsdom unit tests + when `Worker` is unavailable). |
-| [`genaiPort.ts`](../../src/app/tts/genaiPort.ts) | `GenAI` port implementation (routes to `domains/google/genai/`). |
+| [`genaiPort.ts`](../../src/app/tts/genaiPort.ts) | `GenAI` port implementation (routes to `domains/genai/`). |
 | [`providerBuildContext.ts`](../../src/app/tts/providerBuildContext.ts) | Builds `ProviderBuildContext` from stores (API keys, language). |
 | [`replication.test.ts`](../../src/app/tts/replication.test.ts) | State-replication spec (declarative): asserts all store fields reach `WorkerEngineContext`. |
 | [`replicationSpec.ts`](../../src/app/tts/replicationSpec.ts) | The declarative replication spec table. |

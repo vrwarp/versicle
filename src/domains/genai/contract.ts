@@ -1,9 +1,16 @@
 /**
  * GenAIClient contract (Phase 7 §H; C9). The interface the per-feature
  * modules (./features/*) and the legacy GenAIService façade consume;
- * implementations: GeminiClient (REST via the kernel NetworkGateway) and
- * MockGenAIClient (composition-root/test builds only — boundary rule 9).
+ * implementations: GeminiClient and AnthropicClient (both REST via the kernel
+ * NetworkGateway) and MockGenAIClient (composition-root/test builds only —
+ * boundary rule 9).
  */
+
+/**
+ * The text-generation provider a GenAIClient talks to. Selected in settings;
+ * embeddings stay on Gemini (gemini-embedding-2) regardless of this choice.
+ */
+export type GenAIProvider = 'gemini' | 'anthropic';
 
 /** Gemini JSON-mode response schema type names (SDK-compatible, lowercase). */
 export const SchemaType = {

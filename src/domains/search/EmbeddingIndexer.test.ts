@@ -7,7 +7,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EmbeddingIndexer, orderOutward } from './EmbeddingIndexer';
 import type { SearchTextSource } from './SearchSession';
-import { MockEmbeddingClient, type EmbeddingProfile } from '@domains/google';
+import { MockEmbeddingClient, type EmbeddingProfile } from '@domains/genai';
 import type { CacheEmbeddingsRow, CacheEmbedJobsRow } from '@data/rows/cache';
 
 interface CapturedEmbedCall {

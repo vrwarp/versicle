@@ -167,7 +167,7 @@ const MOCK_FORBIDDEN = [
   { pattern: 'src/domains/sync/backend/MockFireProvider', label: 'MockFireProvider' },
   // Phase 7 (§H, boundary rule 9): the GenAI mock is reachable only via the
   // DEV/VITE_E2E-gated installTestApi() — never from the prod graph.
-  { pattern: 'src/domains/google/genai/MockGenAIClient', label: 'MockGenAIClient' },
+  { pattern: 'src/domains/genai/MockGenAIClient', label: 'MockGenAIClient' },
 ];
 
 const allChunks = readdirSync(assetsDir).filter((f) => f.endsWith('.js'));
@@ -320,12 +320,13 @@ const ENTRY_FORBIDDEN = [
   { pattern: 'node_modules/epubjs/src/managers/', label: 'epubjs (view managers)' },
   { pattern: 'src/domains/sync/backend/FirestoreBackend', label: 'FirestoreBackend' },
   { pattern: 'src/app/sync/composeSync', label: 'sync composition (heavy half)' },
-  { pattern: 'src/domains/google/genai/GeminiClient', label: 'GeminiClient' },
+  { pattern: 'src/domains/genai/GeminiClient', label: 'GeminiClient' },
+  { pattern: 'src/domains/genai/AnthropicClient', label: 'AnthropicClient' },
   {
-    pattern: 'src/domains/google/genai/embedding/GeminiEmbeddingClient',
+    pattern: 'src/domains/genai/embedding/GeminiEmbeddingClient',
     label: 'GeminiEmbeddingClient',
   },
-  { pattern: 'src/domains/google/genai/features/', label: 'GenAI feature modules' },
+  { pattern: 'src/domains/genai/features/', label: 'GenAI feature modules' },
   { pattern: 'src/components/reader/ReaderShell', label: 'ReaderShell (reader surface)' },
 ];
 

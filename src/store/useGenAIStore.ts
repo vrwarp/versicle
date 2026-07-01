@@ -2,7 +2,7 @@ export type ReferenceDetectionStrategy = 'gemini' | 'deterministic';
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { GenAILogEntry } from '@domains/google';
+import type { GenAILogEntry, GenAIProvider } from '@domains/genai';
 import type { ContentType } from '~types/content-analysis';
 import type { QuotaLimits, LaneUsage } from '@kernel/quota';
 
@@ -15,7 +15,7 @@ import type { QuotaLimits, LaneUsage } from '@kernel/quota';
  * — book text and base64 table screenshots — to plaintext localStorage
  * unconditionally, with quadratic re-serialization on every set() and
  * latent QuotaExceededError corruption. Entries arrive PRE-REDACTED from
- * the GenAI client (inlineData → {byteCount, hash} — domains/google/genai/
+ * the GenAI client (inlineData → {byteCount, hash} — domains/genai/
  * logging.ts). persist version 1 strips `logs`/`usageStats` from existing
  * blobs on rehydrate (strip-only, tolerated by older code reading the
  * slimmer blob; localStorage-only — NOT synced user data, so the program's
@@ -36,8 +36,20 @@ import type { QuotaLimits, LaneUsage } from '@kernel/quota';
  * localStorage would serialize to garbage, the same exclusion as logs above.
  */
 interface GenAIState {
+  /**
+   * Text-generation provider. `'gemini'` (default) or `'anthropic'` (Claude).
+   * Embeddings stay on Gemini (gemini-embedding-2) regardless — the embedding
+   * client always reads `apiKey`, so a Claude user still needs a Gemini key for
+   * semantic search.
+   */
+  provider: GenAIProvider;
+  /** Gemini API key: embeddings ALWAYS, and Gemini text-gen when provider==='gemini'. */
   apiKey: string;
   model: string;
+  /** Anthropic (Claude) API key — used for text-gen only when provider==='anthropic'. */
+  anthropicApiKey: string;
+  /** Claude model id, used when provider==='anthropic'. */
+  anthropicModel: string;
   /** Embedding model id, read per embed call by the client. */
   embeddingModel: string;
   /** Requested embedding output dimensionality (vector length). */
@@ -106,8 +118,11 @@ interface GenAIState {
    */
   getBgQuotaLimits?: () => QuotaLimits;
   getBgUsedRpd?: () => number;
+  setProvider: (provider: GenAIProvider) => void;
   setApiKey: (key: string) => void;
   setModel: (model: string) => void;
+  setAnthropicApiKey: (key: string) => void;
+  setAnthropicModel: (model: string) => void;
   setEmbeddingModel: (model: string) => void;
   setEmbeddingDims: (dims: number) => void;
   setUseBatchEmbedding: (enabled: boolean) => void;
@@ -137,8 +152,11 @@ interface GenAIState {
 /** The persisted slice (explicit allowlist — see module header). */
 type PersistedGenAIState = Pick<
   GenAIState,
+  | 'provider'
   | 'apiKey'
   | 'model'
+  | 'anthropicApiKey'
+  | 'anthropicModel'
   | 'embeddingModel'
   | 'embeddingDims'
   | 'useBatchEmbedding'
@@ -171,6 +189,10 @@ export const DEFAULT_QUOTA_LIMITS: Record<string, QuotaLimits> = {
   'google-tts-neural2': { rpm: 100, tpm: 30_000, rpd: 500 },
   'google-tts-polyglot': { rpm: 100, tpm: 30_000, rpd: 500 },
   'gemini-embedding-001': { rpm: 100, tpm: 30_000, rpd: 1000 },
+  // Anthropic (Claude) text-gen pools — keyed by model id, same as Gemini's.
+  'claude-sonnet-5': { rpm: 50, tpm: 30_000, rpd: 1000 },
+  'claude-haiku-4-5': { rpm: 50, tpm: 50_000, rpd: 1000 },
+  'claude-opus-4-8': { rpm: 50, tpm: 30_000, rpd: 1000 },
   'gemini-2.5-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
   'gemini-2.5-flash-lite': { rpm: 10, tpm: 250_000, rpd: 20 },
   'gemini-2.5-flash-tts': { rpm: 3, tpm: 10_000, rpd: 10 },
@@ -207,8 +229,11 @@ export const DEFAULT_QUOTA_LIMITS: Record<string, QuotaLimits> = {
 export const useGenAIStore = create<GenAIState>()(
   persist(
     (set) => ({
+      provider: 'gemini' as GenAIProvider,
       apiKey: '',
       model: 'gemini-flash-lite-latest',
+      anthropicApiKey: '',
+      anthropicModel: 'claude-sonnet-5',
       embeddingModel: 'gemini-embedding-2',
       embeddingDims: 768,
       useBatchEmbedding: false,
@@ -231,8 +256,11 @@ export const useGenAIStore = create<GenAIState>()(
       getQuotaSnapshot: undefined,
       getBgQuotaLimits: undefined,
       getBgUsedRpd: undefined,
+      setProvider: (provider) => set({ provider }),
       setApiKey: (key) => set({ apiKey: key }),
       setModel: (model) => set({ model }),
+      setAnthropicApiKey: (key) => set({ anthropicApiKey: key }),
+      setAnthropicModel: (model) => set({ anthropicModel: model }),
       setEmbeddingModel: (model) => set({ embeddingModel: model }),
       setEmbeddingDims: (dims) => set({ embeddingDims: dims }),
       setUseBatchEmbedding: (enabled) => set({ useBatchEmbedding: enabled }),
@@ -283,8 +311,11 @@ export const useGenAIStore = create<GenAIState>()(
       version: 3,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedGenAIState => ({
+        provider: state.provider,
         apiKey: state.apiKey,
         model: state.model,
+        anthropicApiKey: state.anthropicApiKey,
+        anthropicModel: state.anthropicModel,
         embeddingModel: state.embeddingModel,
         embeddingDims: state.embeddingDims,
         useBatchEmbedding: state.useBatchEmbedding,
