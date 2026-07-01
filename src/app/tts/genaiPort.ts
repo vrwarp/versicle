@@ -19,7 +19,7 @@
  * threading.
  */
 import type { ContentType } from '~types/content-analysis';
-import { getGenAIClient } from '@domains/google';
+import { getGenAIClient } from '@domains/genai';
 
 export function genAIIsConfigured(): boolean {
   return getGenAIClient().isConfigured();
@@ -48,7 +48,7 @@ export async function genAIDetectContentTypes(
   agreedWithHeuristic: boolean;
 }> {
   const { detectReferenceSection } = await import(
-    '@domains/google/genai/features/referenceDetection'
+    '@domains/genai/features/referenceDetection'
   );
   const result = await detectReferenceSection(getGenAIClient(), nodes, hints, context);
   return {
@@ -70,7 +70,7 @@ export async function genAIGenerateTableAdaptations(
   context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
 ): Promise<{ cfi: string; adaptation: string }[]> {
   const { generateTableAdaptations } = await import(
-    '@domains/google/genai/features/tableAdaptation'
+    '@domains/genai/features/tableAdaptation'
   );
   return generateTableAdaptations(getGenAIClient(), nodes, thinkingBudget, context);
 }

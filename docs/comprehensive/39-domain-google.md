@@ -438,7 +438,7 @@ The GenAI subsystem provides Gemini-powered content analysis. The key design con
 
 ### Contract
 
-[src/domains/google/genai/contract.ts](../../src/domains/google/genai/contract.ts) defines the interface and all shared types:
+[src/domains/genai/contract.ts](../../src/domains/genai/contract.ts) defines the interface and all shared types:
 
 ```typescript
 export interface GenAIClient {
@@ -476,7 +476,7 @@ export type GenAIPromptPart =
 
 ### GeminiClient
 
-[src/domains/google/genai/GeminiClient.ts](../../src/domains/google/genai/GeminiClient.ts) is the production implementation. It uses the Gemini REST API directly (`https://generativelanguage.googleapis.com/v1beta`) rather than the `@google/generative-ai` SDK, because the SDK does not accept a fetch injection and could not route through the kernel `NetworkGateway.egress('gemini', …)`.
+[src/domains/genai/GeminiClient.ts](../../src/domains/genai/GeminiClient.ts) is the production implementation. It uses the Gemini REST API directly (`https://generativelanguage.googleapis.com/v1beta`) rather than the `@google/generative-ai` SDK, because the SDK does not accept a fetch injection and could not route through the kernel `NetworkGateway.egress('gemini', …)`.
 
 #### Config read per call
 
@@ -525,13 +525,13 @@ For each model in `modelsToTry()`:
 
 #### Log redaction
 
-[src/domains/google/genai/logging.ts](../../src/domains/google/genai/logging.ts) provides `redactPayload()`, which deep-copies a payload replacing every `inlineData: { data: <base64> }` node with `{ byteCount, hash, mimeType, redacted: true }`. The hash is FNV-1a hex, providing a stable correlation token without storing any bytes.
+[src/domains/genai/logging.ts](../../src/domains/genai/logging.ts) provides `redactPayload()`, which deep-copies a payload replacing every `inlineData: { data: <base64> }` node with `{ byteCount, hash, mimeType, redacted: true }`. The hash is FNV-1a hex, providing a stable correlation token without storing any bytes.
 
 This runs before the `onLog` sink receives the entry, ensuring base64 table screenshot images never enter the activity log (GG-3 fix). The store's `partialize` allowlist explicitly excludes `logs`, so activity log entries never reach `localStorage`.
 
 ### MockGenAIClient
 
-[src/domains/google/genai/MockGenAIClient.ts](../../src/domains/google/genai/MockGenAIClient.ts) is the test double. It lives in the domain tree but is reachable from production graphs only via `window.__versicleTest.genai.setMock(...)`, which is itself guarded by `import.meta.env.DEV || VITE_E2E`.
+[src/domains/genai/MockGenAIClient.ts](../../src/domains/genai/MockGenAIClient.ts) is the test double. It lives in the domain tree but is reachable from production graphs only via `window.__versicleTest.genai.setMock(...)`, which is itself guarded by `import.meta.env.DEV || VITE_E2E`.
 
 ```typescript
 export interface MockGenAIFixture {
@@ -545,7 +545,7 @@ The critical invariant: `generateStructured<T>()` calls `request.validate(this.f
 
 ### Lazy client and bundle discipline
 
-[src/domains/google/genai/lazyClient.ts](../../src/domains/google/genai/lazyClient.ts) implements a one-time dynamic-import facade:
+[src/domains/genai/lazyClient.ts](../../src/domains/genai/lazyClient.ts) implements a one-time dynamic-import facade:
 
 ```typescript
 export function makeLazyGenAIClient(deps: GeminiClientDeps): GenAIClient {
@@ -562,20 +562,20 @@ This is the Phase 8 §A first-use splitting discipline. The composition root ins
 
 ### Holder
 
-[src/domains/google/genai/holder.ts](../../src/domains/google/genai/holder.ts) provides a fallback `notConfiguredClient` that throws `GenAINotConfiguredError` on every call. The composition root replaces this with the lazy facade via `setGenAIClient()`. In the E2E test harness, `installTestApi()` calls `setGenAIClient(new MockGenAIClient(fixture))`.
+[src/domains/genai/holder.ts](../../src/domains/genai/holder.ts) provides a fallback `notConfiguredClient` that throws `GenAINotConfiguredError` on every call. The composition root replaces this with the lazy facade via `setGenAIClient()`. In the E2E test harness, `installTestApi()` calls `setGenAIClient(new MockGenAIClient(fixture))`.
 
 The holder deliberately does not statically import `GeminiClient` — doing so would defeat the Phase 8 §A chunk splitting.
 
 ### GenAI error taxonomy
 
-[src/domains/google/genai/errors.ts](../../src/domains/google/genai/errors.ts):
+[src/domains/genai/errors.ts](../../src/domains/genai/errors.ts):
 
 | Class | Code | `retryable` | When |
 |---|---|---|---|
 | `GenAINotConfiguredError` | `GENAI_NOT_CONFIGURED` | false | `apiKey` is empty |
 | `GenAIInvalidResponseError` | `GENAI_INVALID_RESPONSE` | false | JSON parse fails or `validate()` throws |
 | `GenAIHttpError` | `GENAI_UNKNOWN` | `status === 429 \|\| status >= 500` | HTTP-level failure from Gemini endpoint (chat **and** embedding) |
-| `EmbeddingNotConfiguredError` | `GENAI_EMBEDDING_NOT_CONFIGURED` | false | `embed()` called on the NOT-CONFIGURED holder default ([embedding/errors.ts](../../src/domains/google/genai/embedding/errors.ts)) |
+| `EmbeddingNotConfiguredError` | `GENAI_EMBEDDING_NOT_CONFIGURED` | false | `embed()` called on the NOT-CONFIGURED holder default ([embedding/errors.ts](../../src/domains/genai/embedding/errors.ts)) |
 
 `isResourceExhausted(error)` tests `error instanceof GenAIHttpError && error.status === 429` — typed detection replacing the legacy `error.message?.includes('429') || error.toString().includes('RESOURCE_EXHAUSTED')` substring check.
 
@@ -603,7 +603,7 @@ Limits are read **fresh on every acquire** from the user-editable GenAI settings
 
 ### Embedding client (semantic search)
 
-[src/domains/google/genai/embedding/](../../src/domains/google/genai/embedding/) is a **four-part** sibling of the `GenAIClient` chat family, added for semantic search. It produces text-embedding vectors over Gemini's `:embedContent` endpoint; it is barrel-exported from [src/domains/google/index.ts](../../src/domains/google/index.ts). The four parts mirror the chat client's seams exactly:
+[src/domains/genai/embedding/](../../src/domains/genai/embedding/) is a **four-part** sibling of the `GenAIClient` chat family, added for semantic search. It produces text-embedding vectors over Gemini's `:embedContent` endpoint; it is barrel-exported from [src/domains/google/index.ts](../../src/domains/google/index.ts). The four parts mirror the chat client's seams exactly:
 
 | Part | File | Role |
 |---|---|---|
@@ -681,7 +681,7 @@ flowchart TD
 
 ### Reference section detection
 
-[src/domains/google/genai/features/referenceDetection.ts](../../src/domains/google/genai/features/referenceDetection.ts) classifies text groups within a book section as `'main'` or `'reference'` content. The key output is a single `referenceStartIndex` — the first group that begins the end-of-chapter reference section.
+[src/domains/genai/features/referenceDetection.ts](../../src/domains/genai/features/referenceDetection.ts) classifies text groups within a book section as `'main'` or `'reference'` content. The key output is a single `referenceStartIndex` — the first group that begins the end-of-chapter reference section.
 
 #### Prompt engineering
 
@@ -727,11 +727,11 @@ function validateReferenceDetection(
 }
 ```
 
-The range clamp `[-1, nodeCount - 1]` is the regression fix for the GG-5 critical: the legacy code treated any non-(-1) value as a valid start, so a model returning `-2` classified every group as reference and poisoned the synced `contentAnalysis` map. The fuzz test suite in [src/domains/google/genai/features/features.fuzz.test.ts](../../src/domains/google/genai/features/features.fuzz.test.ts) pins this regression with a named test.
+The range clamp `[-1, nodeCount - 1]` is the regression fix for the GG-5 critical: the legacy code treated any non-(-1) value as a valid start, so a model returning `-2` classified every group as reference and poisoned the synced `contentAnalysis` map. The fuzz test suite in [src/domains/genai/features/features.fuzz.test.ts](../../src/domains/genai/features/features.fuzz.test.ts) pins this regression with a named test.
 
 ### TOC title generation
 
-[src/domains/google/genai/features/tocTitles.ts](../../src/domains/google/genai/features/tocTitles.ts) generates concise titles for sections that lack them in the EPUB's table of contents.
+[src/domains/genai/features/tocTitles.ts](../../src/domains/genai/features/tocTitles.ts) generates concise titles for sections that lack them in the EPUB's table of contents.
 
 For non-English books (language code not starting with `en`), the prompt includes a bilingual title constraint:
 
@@ -749,7 +749,7 @@ The membership clamp drops any echoed id not in the input set before returning r
 
 ### Table adaptation
 
-[src/domains/google/genai/features/tableAdaptation.ts](../../src/domains/google/genai/features/tableAdaptation.ts) converts table images into narration-ready text for TTS playback.
+[src/domains/genai/features/tableAdaptation.ts](../../src/domains/genai/features/tableAdaptation.ts) converts table images into narration-ready text for TTS playback.
 
 Each table is sent as a `GenAIPromptPart` with `inlineData: { data: base64, mimeType }`. The multi-part prompt anchors each image to its unique CFI key before appending the instruction.
 
@@ -759,7 +759,7 @@ The `thinkingBudget` parameter (default 512 tokens) is passed to Gemini's `think
 
 ### Library mapping
 
-[src/domains/google/genai/features/libraryMapping.ts](../../src/domains/google/genai/features/libraryMapping.ts) maps orphan reading-list entries to library books by fuzzy title/author matching. Used by `SmartLinkDialog`.
+[src/domains/genai/features/libraryMapping.ts](../../src/domains/genai/features/libraryMapping.ts) maps orphan reading-list entries to library books by fuzzy title/author matching. Used by `SmartLinkDialog`.
 
 The membership clamp here is an anti-hallucination gate: every returned pair must have both a `readingListFilename` in the input entry set AND a `libraryBookId` in the input book set. Hallucinated IDs are filtered before reaching the dialog.
 
@@ -972,14 +972,14 @@ export function genAIIsConfigured(): boolean {
 
 export async function genAIDetectContentTypes(nodes, hints, context?): Promise<...> {
   const { detectReferenceSection } = await import(
-    '@domains/google/genai/features/referenceDetection'
+    '@domains/genai/features/referenceDetection'
   );
   return detectReferenceSection(getGenAIClient(), nodes, hints, context);
 }
 
 export async function genAIGenerateTableAdaptations(nodes, thinkingBudget, context?): Promise<...> {
   const { generateTableAdaptations } = await import(
-    '@domains/google/genai/features/tableAdaptation'
+    '@domains/genai/features/tableAdaptation'
   );
   return generateTableAdaptations(getGenAIClient(), nodes, thinkingBudget, context);
 }
@@ -1100,7 +1100,7 @@ Key test groups:
 
 ### GenAI fuzz tests
 
-[src/domains/google/genai/features/features.fuzz.test.ts](../../src/domains/google/genai/features/features.fuzz.test.ts) is the Phase 7 entry-gate fuzz suite (PR-A3). Seeded random malformed payloads verify that every feature's validator rejects out-of-contract model output.
+[src/domains/genai/features/features.fuzz.test.ts](../../src/domains/genai/features/features.fuzz.test.ts) is the Phase 7 entry-gate fuzz suite (PR-A3). Seeded random malformed payloads verify that every feature's validator rejects out-of-contract model output.
 
 Named GG-5 regression:
 
@@ -1120,7 +1120,7 @@ The `MockGenAIClient` feeds the bad response through the same `validate` functio
 
 ### Embedding and quota tests
 
-- [src/domains/google/genai/embedding/GeminiEmbeddingClient.test.ts](../../src/domains/google/genai/embedding/GeminiEmbeddingClient.test.ts) — per-text vs batch path, profile mapping (taskType vs EM2 instruction), per-call config read, log redaction, `lane`/`estTokens` threaded into the egress.
+- [src/domains/genai/embedding/GeminiEmbeddingClient.test.ts](../../src/domains/genai/embedding/GeminiEmbeddingClient.test.ts) — per-text vs batch path, profile mapping (taskType vs EM2 instruction), per-call config read, log redaction, `lane`/`estTokens` threaded into the egress.
 - [src/kernel/quota/QuotaGovernor.test.ts](../../src/kernel/quota/QuotaGovernor.test.ts) — admission/record-at-acquire, commit reconcile, fg-preempts-bg, daily rollover, cooldown, `NetRateLimitedError`.
 - [src/kernel/net/NetworkGateway.test.ts](../../src/kernel/net/NetworkGateway.test.ts) — `acquire` runs before fetch, the single-owner `release`, and a pre-network `NetRateLimitedError` is not counted.
 

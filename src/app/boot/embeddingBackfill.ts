@@ -28,7 +28,7 @@ import type { BootTask } from '../bootstrap';
 import { ACTIVE_DEVICE_WINDOW_MS } from '@app/quota/embedSpendReconciler';
 import { NetRateLimitedError } from '~types/errors';
 import { EmbeddingIndexer } from '@domains/search';
-import { getEmbeddingClient } from '@domains/google';
+import { getEmbeddingClient } from '@domains/genai';
 import { getArtifactConsult } from '@app/google/artifactConsult';
 import { SearchEngine } from '@lib/search-engine';
 import { searchTextRepo } from '@data/repos/searchText';

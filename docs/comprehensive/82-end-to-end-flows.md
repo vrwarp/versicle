@@ -719,7 +719,7 @@ ReaderView search box
        ├─ SearchSession.enqueueEmbedding(bookId, currentCfi)   src/domains/search/SearchSession.ts
        │    └─ EmbeddingIndexer.enqueue()                       src/domains/search/EmbeddingIndexer.ts
        │         ├─ chunkSection() (~320-token windows)         src/domains/search/chunker.ts
-       │         ├─ EmbeddingClient.embed() (lazy facade)       src/domains/google/genai/embedding/
+       │         ├─ EmbeddingClient.embed() (lazy facade)       src/domains/genai/embedding/
        │         │    └─ egress('gemini')  ── QuotaGovernor.acquire ──  src/kernel/quota/
        │         ├─ quantize int8 @ 768 (search worker)         src/workers/search.worker.ts
        │         └─ embeddings repo (packed blob)               src/data/repos/embeddings.ts

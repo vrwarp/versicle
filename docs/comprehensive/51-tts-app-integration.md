@@ -1190,7 +1190,7 @@ TTS worker chunk:
 ```typescript
 export async function genAIDetectContentTypes(...): Promise<...> {
     const { detectReferenceSection } = await import(
-        '@domains/google/genai/features/referenceDetection'
+        '@domains/genai/features/referenceDetection'
     );
     // ...
 }

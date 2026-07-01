@@ -317,7 +317,7 @@ JavaScript into the Piper web worker.
 
 **No new destinations for embeddings or the Artifact Lane.** Semantic-search embedding reuses
 the existing `gemini` destination: the new `EmbeddingClient`
-([src/domains/google/genai/embedding/](../../src/domains/google/genai/embedding/)) routes its
+([src/domains/genai/embedding/](../../src/domains/genai/embedding/)) routes its
 `embedContent` calls through `egress('gemini', ...)` exactly as `GeminiClient` does, so the
 embedding egress is the same `book-content`, `per-book` row — and is now joined on that row by
 the cloud TTS providers and the embedding client as the three rate-limited GenAI consumers
@@ -765,7 +765,7 @@ When content analysis runs, `GenAIService` truncates book text deliberately befo
 
 ### 9.2 GeminiClient and the gateway
 
-Source: [src/domains/google/genai/GeminiClient.ts](../../src/domains/google/genai/GeminiClient.ts)
+Source: [src/domains/genai/GeminiClient.ts](../../src/domains/genai/GeminiClient.ts)
 
 The `GeminiClient` replaced the deprecated `@google/generative-ai` SDK (which could not be
 injected with a custom fetch and therefore could not route through the gateway). All Gemini
@@ -804,7 +804,7 @@ requests.
 
 ### 9.3 Log payload redaction
 
-Source: [src/domains/google/genai/logging.ts](../../src/domains/google/genai/logging.ts)
+Source: [src/domains/genai/logging.ts](../../src/domains/genai/logging.ts)
 
 Table adaptation prompts include `inlineData.data` (base64 image bytes). The `redactPayload()`
 function deep-copies the payload tree and replaces every `inlineData` node before the entry

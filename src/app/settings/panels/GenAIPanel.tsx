@@ -20,10 +20,16 @@ const GenAIPanel: React.FC = () => {
   const confirm = useConfirm();
 
   const {
+    provider,
+    setProvider,
     apiKey,
     setApiKey,
     model,
     setModel,
+    anthropicApiKey,
+    setAnthropicApiKey,
+    anthropicModel,
+    setAnthropicModel,
     isEnabled,
     setEnabled,
     isModelRotationEnabled,
@@ -88,11 +94,14 @@ const GenAIPanel: React.FC = () => {
   };
 
   const handleDownloadLogs = async () => {
-    const content = logs.map(log =>
-      `[${new Date(log.timestamp).toISOString()}] ${log.type.toUpperCase()} (${log.method}) \n` +
-      JSON.stringify(log.payload, null, 2) +
-      `\n${'-'.repeat(40)} \n`
-    ).join('\n');
+    const content = logs.map(log => {
+      const target = log.model ? ` ${log.provider ? `${log.provider}/` : ''}${log.model}` : '';
+      return (
+        `[${new Date(log.timestamp).toISOString()}] ${log.type.toUpperCase()} (${log.method})${target} \n` +
+        JSON.stringify(log.payload, null, 2) +
+        `\n${'-'.repeat(40)} \n`
+      );
+    }).join('\n');
 
     const filename = `genai_logs_${new Date().toISOString()}.txt`;
 
@@ -107,10 +116,16 @@ const GenAIPanel: React.FC = () => {
     <GenAISettingsTab
       isEnabled={isEnabled}
       onEnabledChange={setEnabled}
+      provider={provider}
+      onProviderChange={setProvider}
       apiKey={apiKey}
       onApiKeyChange={setApiKey}
       model={model}
       onModelChange={setModel}
+      anthropicApiKey={anthropicApiKey}
+      onAnthropicApiKeyChange={setAnthropicApiKey}
+      anthropicModel={anthropicModel}
+      onAnthropicModelChange={setAnthropicModel}
       isModelRotationEnabled={isModelRotationEnabled}
       onModelRotationChange={setModelRotationEnabled}
       isContentAnalysisEnabled={isContentAnalysisEnabled}

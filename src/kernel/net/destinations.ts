@@ -30,6 +30,7 @@
 /** Stable destination ids. Append-only; ids appear in logs and tests. */
 export type DestinationId =
   | 'gemini'
+  | 'anthropic'
   | 'google-tts'
   | 'openai-tts'
   | 'lemonfox-tts'
@@ -132,6 +133,18 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
     via: 'gateway',
     purpose:
       'Gemini structured output: TOC titles, reference detection, table adaptations, library mapping',
+    dataClass: 'book-content',
+    consent: 'per-book',
+    timeoutMs: 60_000,
+    offline: 'fail',
+    rateLimit: { lane: 'fg' },
+  },
+  {
+    id: 'anthropic',
+    hosts: ['api.anthropic.com'],
+    via: 'gateway',
+    purpose:
+      'Claude (Anthropic) Messages API structured output: TOC titles, reference detection, table adaptations, library mapping (same features as the Gemini provider)',
     dataClass: 'book-content',
     consent: 'per-book',
     timeoutMs: 60_000,

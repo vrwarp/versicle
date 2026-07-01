@@ -38,7 +38,8 @@ src/
   store/                   # L2 — three-tier store registry + Y.Doc provider (see src/store/README.md)
   domains/                 # L3 — vertical feature modules (rule 3; see src/domains/README.md)
     chinese/               # pinyin geometry engine, dictionary (separate versicle-dict IDB), vocabulary
-    google/                # GoogleAuthClient (per-service tokens), DriveClient, GenAIClient + per-feature zod modules
+    genai/                 # GenAIClient contract + GeminiClient/AnthropicClient providers + per-feature zod modules + Gemini text-embedding client
+    google/                # GoogleAuthClient (per-service tokens), DriveClient/DriveLibrarySync
     library/               # ImportOrchestrator job queue, LibraryService (keyed mutex), SHA-256 identity, reingest driver
     reader/                # ReaderEngine port (EpubJsEngine = sole epubjs importer), overlays, session recorder
     search/                # SearchSession over the search worker + persisted searchText repo
@@ -123,7 +124,7 @@ is an internal and may be rewritten at will.
 | C6 | Store/selector public API | `src/store/registry.ts`, `src/store/yjs-provider.ts` | three declared tiers; synced stores created only via defineSyncedStore; generated README | `src/store/__tests__/registry.test.ts` |
 | C7 | Reader engine port | `src/domains/reader/engine/ReaderEngine.ts` | renderer-agnostic port; EpubJsEngine is the sole runtime epubjs importer (lint error) | `src/domains/reader/engine/ReaderEngine.contract.test.ts` |
 | C8 | Ingestion artifact contract | `src/lib/ingestion/sentence-extraction.ts`, `src/domains/library/import/extract.ts` | raw-at-rest extraction v3; CFI-comparison fixtures gate any extractionVersion bump; one extractBook() | `src/lib/ingestion/sentence-extraction.test.ts`, `src/lib/ingestion/extractSentences.test.ts`, `src/domains/library/import/extract.test.ts`, `src/domains/library/reingest.test.ts` |
-| C9 | External egress contract | `src/kernel/net/destinations.ts`, `src/kernel/net/NetworkGateway.ts` | 9 destinations with data class/consent/timeout; CSP GENERATED from the registry (scripts/generate-csp.mjs) | `src/kernel/net/csp.test.ts`, `src/kernel/net/NetworkGateway.test.ts` |
+| C9 | External egress contract | `src/kernel/net/destinations.ts`, `src/kernel/net/NetworkGateway.ts` | 10 destinations with data class/consent/timeout; CSP GENERATED from the registry (scripts/generate-csp.mjs) | `src/kernel/net/csp.test.ts`, `src/kernel/net/NetworkGateway.test.ts` |
 | C10 | Error contract | `src/types/errors.ts`, `src/app/errors/presentError.ts` | AppError taxonomy; append-only code namespaces; presentError is the one user-facing mapper | `src/types/errors.test.ts` |
 | C11 | Boot contract | `src/app/bootstrap.ts`, `src/app/boot/registerBootTasks.ts` | 8 phases, sequential awaited tasks; halt() for migration confirmation; SafeMode on throw | `src/App_Boot.test.tsx`, `src/App_MigrationFailure.test.tsx`, `src/App_SW_Wait.test.tsx`, `src/App_Capacitor.test.tsx` |
 | C12 | Layering & worker-purity contract | `.dependency-cruiser.cjs`, `.dependency-cruiser.runtime.cjs`, `eslint.config.js` | compile-time direction via tsc -b project references; emitted-artifact ground truth via the five-check build gate | `scripts/check-worker-chunk.mjs`, `scripts/depcruise-baseline.mjs`, `scripts/assert-single-instance.cjs`, `src/store/__tests__/crdt-contract/single-yjs-instance.test.ts` |
@@ -228,6 +229,7 @@ Every destination the app may contact, from
 | Id | Hosts | Via | Data class | Consent | Timeout | Offline |
 | --- | --- | --- | --- | --- | --- | --- |
 | `gemini` | generativelanguage.googleapis.com | gateway | book-content | per-book | 60000 ms | fail |
+| `anthropic` | api.anthropic.com | gateway | book-content | per-book | 60000 ms | fail |
 | `google-tts` | texttospeech.googleapis.com | gateway | book-content | provider-selection | 30000 ms | fail |
 | `openai-tts` | api.openai.com | gateway | book-content | provider-selection | 30000 ms | fail |
 | `lemonfox-tts` | api.lemonfox.ai | gateway | book-content | provider-selection | 30000 ms | fail |

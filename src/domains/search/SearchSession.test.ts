@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { SearchEngine } from '@lib/search-engine';
 import { SearchSession, type SearchEngineHandle, type SearchTextSource } from './SearchSession';
 import { chunkSection } from './chunker';
-import { MockEmbeddingClient } from '@domains/google';
+import { MockEmbeddingClient } from '@domains/genai';
 import { NetRateLimitedError } from '~types/errors';
 import type { EmbeddedRowView, EmbeddingClientPort } from './embeddingPort';
 

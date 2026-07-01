@@ -25,7 +25,7 @@ import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLaye
 import { ReadingSessionRecorder } from '@domains/reader/session/ReadingSessionRecorder';
 import type { ReaderCommands } from '@domains/reader/ui/ReaderCommands';
 import { SearchSession, createWorkerSearchEngineFactory, EmbeddingIndexer } from '@domains/search';
-import { getEmbeddingClient, type EmbeddingClient } from '@domains/google';
+import { getEmbeddingClient, type EmbeddingClient } from '@domains/genai';
 import { getArtifactConsult } from '@app/google/artifactConsult';
 import { registerChineseReading, getBookBaseLanguage } from '@domains/chinese';
 import type { PinyinPosition } from '@domains/chinese/types';

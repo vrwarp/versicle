@@ -10,6 +10,7 @@
  * ever leaves the client: table-adaptation prompts embedded full-resolution
  * page screenshots, which previously landed verbatim in localStorage.
  */
+import type { GenAIProvider } from './contract';
 
 export interface GenAILogEntry {
   id: string;
@@ -17,6 +18,16 @@ export interface GenAILogEntry {
   type: 'request' | 'response' | 'error';
   method: string;
   payload: unknown;
+  /**
+   * The text-gen provider this call went to (`'gemini'` | `'anthropic'`) and the
+   * exact model id invoked. First-class fields (rather than buried in `payload`)
+   * so the activity log and its export make the target unambiguous per entry —
+   * essential now that a book's text can leave for either provider. Optional so
+   * older entries and the not-configured/error paths without a chosen model
+   * still type-check.
+   */
+  provider?: GenAIProvider;
+  model?: string;
   bookTitle?: string;
   sectionTitle?: string;
   correlationId?: string;

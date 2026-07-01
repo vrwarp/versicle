@@ -437,7 +437,7 @@ Every `.js` file in `dist/assets/` is scanned (not just the worker closure). For
 
 - `src/domains/sync/backend/MockBackend`
 - `src/domains/sync/backend/MockFireProvider`
-- `src/domains/google/genai/MockGenAIClient`
+- `src/domains/genai/MockGenAIClient`
 
 These are reachable only through a `DEV || VITE_E2E` branch that Rollup dead-codes out of production builds. This check is "the GATE that the dead branch actually got eliminated (Rollup inlining surprises — risk R7 — fail here, not in the field)."
 
@@ -464,8 +464,8 @@ Two sub-checks:
 | `node_modules/epubjs/src/managers/` | epubjs view managers |
 | `src/domains/sync/backend/FirestoreBackend` | FirestoreBackend |
 | `src/app/sync/composeSync` | sync composition heavy half |
-| `src/domains/google/genai/GeminiClient` | GeminiClient |
-| `src/domains/google/genai/features/` | GenAI feature modules |
+| `src/domains/genai/GeminiClient` | GeminiClient |
+| `src/domains/genai/features/` | GenAI feature modules |
 | `src/components/reader/ReaderShell` | ReaderShell (reader surface) |
 
 **4b. Size ratchet.** The total gzip size of all entry-closure chunks is computed and compared against [`bundle-baseline.json`](../../bundle-baseline.json):

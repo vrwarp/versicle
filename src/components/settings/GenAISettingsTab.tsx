@@ -58,6 +58,8 @@ interface GenAILog {
     type: string;
     method: string;
     payload: unknown;
+    provider?: string;
+    model?: string;
     bookTitle?: string;
     sectionTitle?: string;
     correlationId?: string;
@@ -89,10 +91,18 @@ export interface GenAISettingsTabProps {
     // Core settings
     isEnabled: boolean;
     onEnabledChange: (enabled: boolean) => void;
+    // Text-generation provider (embeddings stay on Gemini regardless).
+    provider: 'gemini' | 'anthropic';
+    onProviderChange: (provider: 'gemini' | 'anthropic') => void;
     apiKey: string;
     onApiKeyChange: (key: string) => void;
     model: string;
     onModelChange: (model: string) => void;
+    // Anthropic (Claude) provider settings — used when provider === 'anthropic'.
+    anthropicApiKey: string;
+    onAnthropicApiKeyChange: (key: string) => void;
+    anthropicModel: string;
+    onAnthropicModelChange: (model: string) => void;
     // Model rotation
     isModelRotationEnabled: boolean;
     onModelRotationChange: (enabled: boolean) => void;
@@ -185,10 +195,16 @@ const RATE_POOL_LABELS: Record<string, string> = {
 export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
     isEnabled,
     onEnabledChange,
+    provider,
+    onProviderChange,
     apiKey,
     onApiKeyChange,
     model,
     onModelChange,
+    anthropicApiKey,
+    onAnthropicApiKeyChange,
+    anthropicModel,
+    onAnthropicModelChange,
     isModelRotationEnabled,
     onModelRotationChange,
     isContentAnalysisEnabled,
@@ -342,6 +358,17 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                     {isEnabled && (
                         <>
                             <div className="space-y-2">
+                                <Label htmlFor="genai-provider-select" className="text-sm font-medium">Provider</Label>
+                                <Select value={provider} onValueChange={(v) => onProviderChange(v as 'gemini' | 'anthropic')}>
+                                    <SelectTrigger id="genai-provider-select" aria-label="Select generative AI provider"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="gemini">Google Gemini</SelectItem>
+                                        <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-2">
                                 <Label htmlFor="genai-api-key">Gemini API Key</Label>
                                 <PasswordInput
                                     id="genai-api-key"
@@ -350,42 +377,75 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                     placeholder="Enter your Google Gemini API Key"
                                 />
                                 <p className="text-xs text-muted-foreground">
-                                    Your key is stored locally on this device.
+                                    Stored locally on this device. Always used for semantic-search embeddings (gemini-embedding-2){provider === 'anthropic' ? ' — required even when Claude is the text provider' : ', and for the AI features above'}.
                                 </p>
                             </div>
 
-                            <div className="flex items-center justify-between border-b pb-4">
-                                <div className="space-y-0.5">
-                                    <label htmlFor="genai-rotation" className="text-sm font-medium">Free Tier Rotation</label>
-                                    <p className="text-xs text-muted-foreground max-w-sm">
-                                        Maximizes free quota by trying premium models (gemini-3.5-flash, gemini-3-flash-preview) first, then falling back to gemini-3.1-flash-lite when their daily quota is exhausted.
-                                    </p>
-                                </div>
-                                <Switch
-                                    id="genai-rotation"
-                                    checked={isModelRotationEnabled}
-                                    onCheckedChange={onModelRotationChange}
-                                />
-                            </div>
+                            {provider === 'gemini' && (
+                                <>
+                                    <div className="flex items-center justify-between border-b pb-4">
+                                        <div className="space-y-0.5">
+                                            <label htmlFor="genai-rotation" className="text-sm font-medium">Free Tier Rotation</label>
+                                            <p className="text-xs text-muted-foreground max-w-sm">
+                                                Maximizes free quota by trying premium models (gemini-3.5-flash, gemini-3-flash-preview) first, then falling back to gemini-3.1-flash-lite when their daily quota is exhausted.
+                                            </p>
+                                        </div>
+                                        <Switch
+                                            id="genai-rotation"
+                                            checked={isModelRotationEnabled}
+                                            onCheckedChange={onModelRotationChange}
+                                        />
+                                    </div>
 
-                            <div className="space-y-2">
-                                <Label htmlFor="genai-model-select" className="text-sm font-medium">Model</Label>
-                                <Select value={model} onValueChange={onModelChange} disabled={isModelRotationEnabled}>
-                                    <SelectTrigger id="genai-model-select" aria-label="Select generative AI model"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="gemini-flash-lite-latest">Gemini Flash-Lite Latest (Recommended)</SelectItem>
-                                        <SelectItem value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</SelectItem>
-                                        <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash</SelectItem>
-                                        <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash</SelectItem>
-                                        <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                {isModelRotationEnabled && (
-                                    <p className="text-xs text-muted-foreground">
-                                        Model selection is handled automatically when rotation is enabled.
-                                    </p>
-                                )}
-                            </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="genai-model-select" className="text-sm font-medium">Model</Label>
+                                        <Select value={model} onValueChange={onModelChange} disabled={isModelRotationEnabled}>
+                                            <SelectTrigger id="genai-model-select" aria-label="Select generative AI model"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="gemini-flash-lite-latest">Gemini Flash-Lite Latest (Recommended)</SelectItem>
+                                                <SelectItem value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</SelectItem>
+                                                <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash</SelectItem>
+                                                <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash</SelectItem>
+                                                <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        {isModelRotationEnabled && (
+                                            <p className="text-xs text-muted-foreground">
+                                                Model selection is handled automatically when rotation is enabled.
+                                            </p>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+
+                            {provider === 'anthropic' && (
+                                <>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="anthropic-api-key">Anthropic API Key</Label>
+                                        <PasswordInput
+                                            id="anthropic-api-key"
+                                            value={anthropicApiKey}
+                                            onChange={(e) => onAnthropicApiKeyChange(e.target.value)}
+                                            placeholder="Enter your Anthropic (Claude) API Key"
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                            Stored locally on this device. Used for the AI features above when the Claude provider is selected.
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="anthropic-model-select" className="text-sm font-medium">Claude Model</Label>
+                                        <Select value={anthropicModel} onValueChange={onAnthropicModelChange}>
+                                            <SelectTrigger id="anthropic-model-select" aria-label="Select Claude model"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="claude-sonnet-5">Claude Sonnet 5 (Recommended)</SelectItem>
+                                                <SelectItem value="claude-haiku-4-5">Claude Haiku 4.5 (Fastest / cheapest)</SelectItem>
+                                                <SelectItem value="claude-opus-4-8">Claude Opus 4.8 (Most capable)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </>
+                            )}
 
                             <div className="pt-4 border-t space-y-4">
                                 <h4 className="text-sm font-medium">Advanced Features</h4>
@@ -500,6 +560,11 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                             <div key={log.id} className="mb-2 border-b last:border-0 pb-2">
                                                 <div className="font-semibold text-primary">
                                                     [{formatTime(log.timestamp)}] {log.type.toUpperCase()} - {log.method}
+                                                    {log.model && (
+                                                        <span className="text-muted-foreground font-normal">
+                                                            {' '}· {log.provider ? `${log.provider}/` : ''}{log.model}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 {(log.bookTitle || log.sectionTitle || log.correlationId) && (
                                                     <div className="text-muted-foreground mb-1">
