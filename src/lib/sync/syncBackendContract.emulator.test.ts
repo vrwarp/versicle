@@ -135,6 +135,12 @@ const emulatorUp =
   (await emulatorReachable(AUTH_HOST)) &&
   (await emulatorReachable(STORAGE_HOST));
 
+// The connect cases must be able to sit out a full watch-stream max-backoff
+// cycle (see the budget note in makeHarness.connect) — twice, for the cases
+// that open two connections — without vitest's default 60s testTimeout
+// killing them first. Applies to this file only.
+vi.setConfig({ testTimeout: 240_000 });
+
 describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cinder)', () => {
   let testEnv: RulesTestEnvironment;
   let app: FirebaseApp;
@@ -236,16 +242,33 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
       });
       await new Promise<void>((resolveSynced, reject) => {
         // Generous budget: success resolves in well under a second on an
-        // idle machine, but a FULL `vitest run` oversubscribes every core
-        // (parallel jsdom workers) and the multi-round-trip initial sync
-        // can starve for tens of seconds.
+        // idle machine, but two slow paths are real on CI runners:
+        //  - a FULL `vitest run` oversubscribes every core (parallel jsdom
+        //    workers) and the multi-round-trip initial sync can starve for
+        //    tens of seconds;
+        //  - the Firestore emulator sporadically corrupts a gRPC Listen
+        //    frame (RESOURCE_EXHAUSTED "Received message larger than max"),
+        //    which throws the SDK's shared watch stream — the transport
+        //    under every getDoc/getDocs/onSnapshot — into its MAXIMUM
+        //    backoff: 60s base, up to ~90s with jitter, before it recovers
+        //    and the handshake completes (CI run 28605952359 failed exactly
+        //    this way with a 55s budget while a sibling case squeaked by at
+        //    52.9s).
+        // The budget must outlast that max-backoff cycle, or a recoverable
+        // emulator hiccup is misreported as a handshake failure.
         const timer = setTimeout(
           () => reject(new Error('FirestoreBackend connection never emitted synced')),
-          55000
+          120_000
         );
         connection.on('synced', () => {
           clearTimeout(timer);
           resolveSynced();
+        });
+        // A terminal sync failure (y-cinder gives up after 5 attempts)
+        // rejects immediately instead of burning the whole budget.
+        connection.on('sync-failure', (error) => {
+          clearTimeout(timer);
+          reject(error instanceof Error ? error : new Error(String(error)));
         });
       });
       return {
