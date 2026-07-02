@@ -53,7 +53,7 @@ const logger = createLogger('EmbeddingBackfill');
  * minute-window rate limit to clear, short enough that indexing resumes
  * without waiting for the next boot.
  */
-export const ERROR_RETRY_DELAY_MS = 90_000;
+const ERROR_RETRY_DELAY_MS = 90_000;
 
 /**
  * The outcome of one backfill pass: `'complete'` when there is nothing left
