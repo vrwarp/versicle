@@ -49,7 +49,7 @@ The product's privacy property rests on three structural facts:
 | One device exhausting the shared per-project Gemini free quota | Cross-provider QuotaGovernor enforces RPM/TPM/RPD at egress admission; `NET_RATE_LIMITED` refuses before bytes leave; the daily budget is reconciled across the synced device mesh |
 | Raw-fetch escape hatch bypassing gateway | ESLint bans `fetch`, `XMLHttpRequest`, and `navigator.sendBeacon` outside `src/kernel/net/` |
 | Test backdoors in production | `__VERSICLE_SANITIZATION_DISABLED__` kill-switch unreachable in production builds by construction |
-| GenAI log data persisted to localStorage | Explicit `partialize` allowlist excludes `logs`; in-memory ring buffer only; v0→v1 migration strips legacy persisted logs |
+| GenAI log data persisted to localStorage | Explicit `partialize` allowlist excludes `logs`; v0→v1 migration strips legacy persisted logs. Cross-restart persistence goes through the dedicated `versicle-genai-logs` IndexedDB database instead (per-row writes of the pre-redacted entries; covered by `wipeAllData`) |
 
 ### 1.3 What it does NOT cover
 
@@ -842,7 +842,9 @@ partialize: (state): PersistedGenAIState => ({
   isDebugModeEnabled: state.isDebugModeEnabled,
   referenceDetectionStrategy: state.referenceDetectionStrategy,
   maxLogs: state.maxLogs,
-  // `logs` is NOT in this list — it is an in-memory ring buffer only
+  // `logs` is NOT in this list — the ring buffer persists via the dedicated
+  // `versicle-genai-logs` IndexedDB mirror (app/google/genaiLogPersistence),
+  // never through this localStorage blob
 }),
 ```
 

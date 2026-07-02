@@ -567,11 +567,13 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                             <table className="w-full text-xs text-left border-collapse">
                                                 <thead className="sticky top-0 bg-background border-b z-10">
                                                     <tr className="text-muted-foreground">
-                                                        <th className="p-3 font-medium">Pool Name</th>
-                                                        <th className="p-3 font-medium text-right font-semibold">Reqs / min</th>
-                                                        <th className="p-3 font-medium text-right font-semibold">Tokens / min</th>
-                                                        <th className="p-3 font-medium text-right font-semibold">Reqs / day</th>
-                                                        <th className="p-3 font-medium text-center">Actions</th>
+                                                        <th className="p-2 sm:p-3 font-medium">Pool Name</th>
+                                                        <th className="p-2 sm:p-3 font-medium text-right font-semibold">Reqs / min</th>
+                                                        <th className="p-2 sm:p-3 font-medium text-right font-semibold">Tokens / min</th>
+                                                        <th className="p-2 sm:p-3 font-medium text-right font-semibold">Reqs / day</th>
+                                                        {/* Collapsed on narrow screens (the table would overflow with no
+                                                            horizontal scroll); rows are tappable there instead. */}
+                                                        <th className="hidden sm:table-cell p-3 font-medium text-center">Actions</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y">
@@ -579,34 +581,39 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                                         return (
                                                             <tr
                                                                 key={poolKey}
-                                                                className="hover:bg-muted/50 transition-colors"
+                                                                className="hover:bg-muted/50 transition-colors cursor-pointer"
+                                                                // The whole row opens the edit dialog — on mobile the
+                                                                // Actions column is hidden, so a tap on the row is THE
+                                                                // way to edit a pool's limits there.
+                                                                onClick={() => handleStartEdit(poolKey, limits)}
+                                                                aria-label={`Edit limits for ${label}`}
                                                             >
-                                                                <td className="p-3">
+                                                                <td className="p-2 sm:p-3">
                                                                     <div>{label}</div>
                                                                     <div className="text-[10px] text-muted-foreground font-mono">{poolKey}</div>
                                                                 </td>
-                                                                <td className="p-3 text-right font-mono">
+                                                                <td className="p-2 sm:p-3 text-right font-mono">
                                                                     <span className={usage.rpm > 0 ? "text-primary font-semibold" : "text-muted-foreground"}>
                                                                         {usage.rpm}
                                                                     </span>
                                                                     <span className="text-muted-foreground/60 mx-1">/</span>
                                                                     <span>{formatNumber(limits.rpm)}</span>
                                                                 </td>
-                                                                <td className="p-3 text-right font-mono">
+                                                                <td className="p-2 sm:p-3 text-right font-mono">
                                                                     <span className={usage.tpm > 0 ? "text-primary font-semibold" : "text-muted-foreground"}>
                                                                         {formatNumber(usage.tpm)}
                                                                     </span>
                                                                     <span className="text-muted-foreground/60 mx-1">/</span>
                                                                     <span>{formatNumber(limits.tpm)}</span>
                                                                 </td>
-                                                                <td className="p-3 text-right font-mono">
+                                                                <td className="p-2 sm:p-3 text-right font-mono">
                                                                     <span className={usage.rpd > 0 ? "text-primary font-semibold" : "text-muted-foreground"}>
                                                                         {formatNumber(usage.rpd)}
                                                                     </span>
                                                                     <span className="text-muted-foreground/60 mx-1">/</span>
                                                                     <span>{formatNumber(limits.rpd)}</span>
                                                                 </td>
-                                                                <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                                                <td className="hidden sm:table-cell p-3 text-center" onClick={(e) => e.stopPropagation()}>
                                                                     <Button
                                                                         variant="ghost"
                                                                         size="sm"
@@ -811,8 +818,8 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                             )}
                                         </button>
                                         <p className={`text-xs text-muted-foreground mt-2 bg-muted/30 border border-muted p-3 rounded-md max-w-md ${showPreEmbedDetails ? 'block' : 'hidden'}`}>
-                                            When ON, the <strong>full text</strong> of books you have loaded but
-                                            not yet read is sent to Google during idle time to build search
+                                            When ON, the <strong>full text</strong> of every book on this device
+                                            is sent to Google during idle time to build search
                                             embeddings, and your <strong>search query terms</strong> leave the
                                             device to Google whenever you run a semantic search. This is broader
                                             than the per-book TTS consent, which only sends short excerpts to

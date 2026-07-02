@@ -105,10 +105,21 @@ describe('QuotaGovernor', () => {
       await g.acquire('fg', 60);
       g.commit('fg', 60);
 
-      // 60 already spent; an estimate of 50 would exceed 100.
+      // 60 already spent; an estimate of 50 would exceed the budget.
       await expect(g.acquire('fg', 50)).rejects.toBeInstanceOf(NetRateLimitedError);
-      // A request that fits is admitted.
-      await expect(g.acquire('fg', 40)).resolves.toBeUndefined();
+      // A request that fits under the buffered ceiling (80) is admitted.
+      await expect(g.acquire('fg', 20)).resolves.toBeUndefined();
+    });
+
+    it('keeps a 20% TPM safety buffer: admits only up to 80% of the configured limit', async () => {
+      limits = { ...LOOSE, tpm: 100 };
+      const g = newGovernor();
+
+      // 80 tokens = exactly the buffered ceiling (floor(100 * 0.8)) — admitted.
+      await expect(g.acquire('fg', 80)).resolves.toBeUndefined();
+      // One more token would cross the 80% ceiling even though the configured
+      // limit (100) still has room — refused (the 20% buffer).
+      await expect(g.acquire('fg', 1)).rejects.toBeInstanceOf(NetRateLimitedError);
     });
   });
 

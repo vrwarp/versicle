@@ -5,11 +5,15 @@
  * Pins the privacy + admission guardrails:
  *  (1) opt-in OFF  → no-op (never enqueues);
  *  (2) opt-in ON but THIS device idle (stale lastActive) → no-op;
- *  (3) opt-in ON + active → enqueues ONLY loaded-but-unread books, each with
+ *  (3) opt-in ON + active → enqueues EVERY locally-present book (the
+ *      background lane covers the whole on-device library), each with
  *      { interactive:false, lane:'bg' }; NO call ever has interactive:true;
  *  (4) respects the cross-device bg quota: remaining<=0 enqueues nothing;
  *      headroom enqueues until exhausted;
- *  (5) a per-book NetRateLimitedError stops the trickle without throwing.
+ *  (5) a per-book NetRateLimitedError stops the trickle without throwing and
+ *      signals a 'retry' outcome (the boot task re-runs after 90 s);
+ *  (6) a per-book generic failure skips the book, continues, and signals
+ *      'retry' so the failed book gets another pass.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { runEmbeddingBackfill, type EmbeddingBackfillDeps } from './embeddingBackfill';
@@ -50,12 +54,11 @@ interface CapturedEnqueue {
 
 /**
  * Build deps + an enqueue capture. `overrides` tunes each case; sensible
- * defaults model an active device with two loaded-but-unread books and ample
+ * defaults model an active device with two locally-present books and ample
  * quota.
  */
 function makeDeps(overrides: Partial<EmbeddingBackfillDeps> = {}) {
   const enqueued: CapturedEnqueue[] = [];
-  const progress: Record<string, number | null> = { b1: 0, b2: 0 };
   const local: Record<string, boolean> = { b1: true, b2: true };
   const deps: EmbeddingBackfillDeps = {
     isOptInEnabled: () => true,
@@ -64,7 +67,6 @@ function makeDeps(overrides: Partial<EmbeddingBackfillDeps> = {}) {
     selfId: 'self',
     now: () => NOW,
     listBooks: () => ['b1', 'b2'],
-    getProgress: (bookId) => progress[bookId] ?? null,
     hasLocalBinary: async (bookId) => local[bookId] ?? false,
     getBgLimits: () => LIMITS,
     getBgUsedRpd: () => 0,
@@ -85,13 +87,13 @@ function makeDeps(overrides: Partial<EmbeddingBackfillDeps> = {}) {
 describe('runEmbeddingBackfill (E2)', () => {
   it('opt-in OFF: no-ops (never enqueues)', async () => {
     const { deps, enqueued } = makeDeps({ isOptInEnabled: () => false });
-    await runEmbeddingBackfill(deps);
+    await expect(runEmbeddingBackfill(deps)).resolves.toBe('complete');
     expect(enqueued).toHaveLength(0);
   });
 
   it('client unconfigured: no-ops', async () => {
     const { deps, enqueued } = makeDeps({ isClientConfigured: () => false });
-    await runEmbeddingBackfill(deps);
+    await expect(runEmbeddingBackfill(deps)).resolves.toBe('complete');
     expect(enqueued).toHaveLength(0);
   });
 
@@ -104,16 +106,16 @@ describe('runEmbeddingBackfill (E2)', () => {
     expect(enqueued).toHaveLength(0);
   });
 
-  it('opt-in ON + active: enqueues only loaded-but-unread, each { interactive:false, lane:"bg" }', async () => {
-    // b1 loaded+unread, b2 loaded but READ (skip), b3 unread but NOT loaded (skip).
+  it('opt-in ON + active: enqueues EVERY locally-present book (read or unread), each { interactive:false, lane:"bg" }', async () => {
+    // b1 and b2 present locally (b2 fully read — still indexed: the background
+    // lane covers ALL books on device); b3 NOT present locally (skip).
     const { deps, enqueued } = makeDeps({
       listBooks: () => ['b1', 'b2', 'b3'],
-      getProgress: (id) => ({ b1: 0, b2: 0.8, b3: 0 })[id] ?? null,
       hasLocalBinary: async (id) => ({ b1: true, b2: true, b3: false })[id] ?? false,
     });
-    await runEmbeddingBackfill(deps);
+    await expect(runEmbeddingBackfill(deps)).resolves.toBe('complete');
 
-    expect(enqueued.map((e) => e.bookId)).toEqual(['b1']);
+    expect(enqueued.map((e) => e.bookId)).toEqual(['b1', 'b2']);
     for (const call of enqueued) {
       expect(call.opts).toEqual({ interactive: false, lane: 'bg' });
       // The §8.4.1 invariant: a bg path is NEVER interactive:true.
@@ -127,7 +129,7 @@ describe('runEmbeddingBackfill (E2)', () => {
       getBgLimits: () => ({ ...LIMITS, rpd: 200 }),
       getBgUsedRpd: () => 200,
     });
-    await runEmbeddingBackfill(deps);
+    await expect(runEmbeddingBackfill(deps)).resolves.toBe('complete');
     expect(enqueued).toHaveLength(0);
   });
 
@@ -144,11 +146,11 @@ describe('runEmbeddingBackfill (E2)', () => {
         used += 1; // each enqueue spends one bg request
       },
     });
-    await runEmbeddingBackfill(deps);
+    await expect(runEmbeddingBackfill(deps)).resolves.toBe('complete');
     expect(captured).toEqual(['b1']);
   });
 
-  it('a per-book NetRateLimitedError stops the trickle without throwing', async () => {
+  it('a per-book NetRateLimitedError stops the trickle without throwing and signals retry', async () => {
     const captured: string[] = [];
     const { deps } = makeDeps({
       listBooks: () => ['b1', 'b2'],
@@ -157,9 +159,24 @@ describe('runEmbeddingBackfill (E2)', () => {
         captured.push(bookId);
       },
     });
-    await expect(runEmbeddingBackfill(deps)).resolves.toBeUndefined();
+    await expect(runEmbeddingBackfill(deps)).resolves.toBe('retry');
     // b1 backpressured → trickle stopped; b2 never attempted.
     expect(captured).toHaveLength(0);
+  });
+
+  it('a per-book generic failure skips that book, continues, and signals retry', async () => {
+    const captured: string[] = [];
+    const { deps } = makeDeps({
+      listBooks: () => ['b1', 'b2'],
+      enqueue: async (bookId) => {
+        if (bookId === 'b1') throw new Error('transient extract failure');
+        captured.push(bookId);
+      },
+    });
+    // The pass finishes the remaining books but reports 'retry' so the failed
+    // book gets another attempt after the delay.
+    await expect(runEmbeddingBackfill(deps)).resolves.toBe('retry');
+    expect(captured).toEqual(['b2']);
   });
 
   it('shouldContinue() going false (opt-in flipped off mid-pass) halts the trickle', async () => {
@@ -173,7 +190,7 @@ describe('runEmbeddingBackfill (E2)', () => {
         live = false; // user toggled the opt-in off after the first book
       },
     });
-    await runEmbeddingBackfill(deps);
+    await expect(runEmbeddingBackfill(deps)).resolves.toBe('complete');
     expect(captured).toEqual(['b1']);
   });
 });
@@ -237,18 +254,18 @@ describe('runEmbeddingBackfill shared-AI-cache consult (Artifact Lane H-1)', () 
     expect(enqueued.map((e) => e.bookId)).toEqual(['b1']);
   });
 
-  it('a probe-HIT is consulted ONLY after the loaded-but-unread filter (never probes a read book)', async () => {
+  it('a probe is consulted ONLY after the local-binary filter (never probes an offloaded book)', async () => {
     const probed: string[] = [];
     const { deps } = makeDeps({
       listBooks: () => ['b1', 'b2'],
-      getProgress: (id) => ({ b1: 0.8, b2: 0 })[id] ?? null, // b1 read, b2 unread
+      hasLocalBinary: async (id) => ({ b1: false, b2: true })[id] ?? false, // b1 offloaded
       probeArtifact: async (bookId) => {
         probed.push(bookId);
         return false;
       },
     });
     await runEmbeddingBackfill(deps);
-    // b1 was filtered out (read) BEFORE the consult; only b2 is probed.
+    // b1 was filtered out (no local binary) BEFORE the consult; only b2 is probed.
     expect(probed).toEqual(['b2']);
   });
 });
