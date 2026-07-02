@@ -229,6 +229,26 @@ describe('GenAISettingsTab', () => {
         expect(onQuotaLimitsForPoolChange).toHaveBeenCalledWith('default', { rpm: 200, tpm: 30000, rpd: 1000 });
     });
 
+    it('opens the edit dialog when a pool ROW is tapped (the mobile path — Actions column is hidden there)', () => {
+        const onQuotaLimitsForPoolChange = vi.fn();
+        render(
+            <GenAISettingsTab
+                {...defaultProps}
+                isEnabled={true}
+                onQuotaLimitsForPoolChange={onQuotaLimitsForPoolChange}
+            />
+        );
+
+        // Tap the row itself (not the Edit button): on narrow screens the
+        // Actions column is display-hidden, so the row tap is THE edit path.
+        fireEvent.click(screen.getByText('Default / General'));
+        expect(screen.getByText('Edit Limits: Default / General')).toBeInTheDocument();
+
+        const saveButton = screen.getByRole('button', { name: 'Save Changes' });
+        fireEvent.click(saveButton);
+        expect(onQuotaLimitsForPoolChange).toHaveBeenCalledWith('default', { rpm: 100, tpm: 30000, rpd: 1000 });
+    });
+
     it('calls onPauseAllGenAIChange when the pause-all switch is toggled', () => {
         const onPauseAllGenAIChange = vi.fn();
         render(

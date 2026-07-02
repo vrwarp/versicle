@@ -14,6 +14,9 @@
  *  - Limits are read FRESH on every `acquire()` from the injected provider —
  *    never snapshotted at construction, never cached — so changing the limits
  *    takes effect on the next acquire.
+ *  - TPM is admitted against 80% of the configured limit (a 20% safety
+ *    buffer): acquire-time token counts are estimates, so running right up to
+ *    the provider's hard ceiling risks a 429 when actuals exceed estimates.
  *  - The CLOCK is injectable (`now`): the daily reset is a midnight-Pacific
  *    day-string compare against that clock, so the rollover is unit-testable
  *    without waiting for real midnight.
@@ -139,6 +142,20 @@ interface WindowEvent {
 
 /** Length of the sliding RPM/TPM window. */
 const WINDOW_MS = 60_000;
+
+/**
+ * The fraction of the configured TPM limit the governor actually admits.
+ * Token counts are ESTIMATES at acquire time (commit reconciles later, and an
+ * embedding never commits at all), so admitting right up to the provider's
+ * hard limit risks a 429 when the actual costs run over the estimates. A 20%
+ * buffer keeps the admitted spend safely under the real ceiling.
+ */
+const TPM_SAFETY_FRACTION = 0.8;
+
+/** The admitted TPM ceiling: 80% of the configured limit, floored to >=1. */
+function effectiveTpm(limitTpm: number): number {
+  return Math.max(1, Math.floor(limitTpm * TPM_SAFETY_FRACTION));
+}
 
 /**
  * The fraction of the per-minute request/token budget background work may
@@ -277,7 +294,7 @@ export class QuotaGovernor {
         throw new NetRateLimitedError(WINDOW_MS, { lane, reason: 'fg-preempt', ratePool });
       }
       const bgRequestCap = Math.max(1, Math.floor(limits.rpm * BG_FRACTION));
-      const bgTokenCap = Math.max(1, Math.floor(limits.tpm * BG_FRACTION));
+      const bgTokenCap = Math.max(1, Math.floor(effectiveTpm(limits.tpm) * BG_FRACTION));
       this.prune(ratePool, 'bg', at);
       const bgTokens = p.events.bg.reduce((acc, e) => acc + e.tokens, 0);
       if (p.events.bg.length >= bgRequestCap || bgTokens + estTokens > bgTokenCap) {
@@ -292,7 +309,7 @@ export class QuotaGovernor {
     if (this.requestsInWindow(ratePool, at) >= limits.rpm) {
       throw new NetRateLimitedError(WINDOW_MS, { lane, reason: 'rpm-exhausted', ratePool });
     }
-    if (this.tokensInWindow(ratePool, at) + estTokens > limits.tpm) {
+    if (this.tokensInWindow(ratePool, at) + estTokens > effectiveTpm(limits.tpm)) {
       throw new NetRateLimitedError(WINDOW_MS, { lane, reason: 'tpm-exhausted', ratePool });
     }
 

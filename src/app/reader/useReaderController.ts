@@ -69,6 +69,11 @@ function breakAudioFollowOnManualNav() {
 // no per-book state for quantization.
 const embeddingQuantizer = new SearchEngine();
 
+// How long to wait before retrying a failed foreground embedding pass: 90 s —
+// long enough for a minute-window rate limit to clear, short enough that the
+// book finishes indexing during a normal reading session.
+const EMBEDDING_RETRY_DELAY_MS = 90_000;
+
 export interface ReaderController {
   engine: ReaderEngine | null;
   isReady: boolean;
@@ -402,13 +407,25 @@ export function useReaderController(
   // would only re-walk the resume-skip over already-embedded sections. The
   // indexer no-ops when the embedding client is unconfigured. bookId/CFI are
   // passed as arguments, so the trigger context stays here in app/, never in the
-  // search domain.
+  // search domain. A failed pass (e.g. rate-limit backpressure mid-book) is
+  // retried 90 s later while the reader stays open — the per-section
+  // resume-skip makes each retry pick up where the last pass stopped.
   useEffect(() => {
     if (!isReady || !bookId) return;
-    const currentCfi = useReadingStateStore.getState().getProgress(bookId)?.currentCfi;
-    void searchSession.enqueueEmbedding(bookId, currentCfi).catch((e) => {
-      logger.error('Embedding indexer failed', e);
-    });
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const attempt = () => {
+      const currentCfi = useReadingStateStore.getState().getProgress(bookId)?.currentCfi;
+      void searchSession.enqueueEmbedding(bookId, currentCfi).catch((e) => {
+        logger.error('Embedding indexer failed; retrying in 90s', e);
+        if (!cancelled) retryTimer = setTimeout(attempt, EMBEDDING_RETRY_DELAY_MS);
+      });
+    };
+    attempt();
+    return () => {
+      cancelled = true;
+      if (retryTimer !== null) clearTimeout(retryTimer);
+    };
   }, [isReady, bookId, searchSession]);
 
   // Chinese reading registration (Phase 6 §7, PR-10): the app layer wires
