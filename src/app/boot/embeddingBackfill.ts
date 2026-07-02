@@ -1,8 +1,11 @@
 /**
  * `embeddingBackfillTask` — pre-embeds the library for semantic search in the
  * background, so books are searchable WITHOUT first being opened in the reader.
- * During idle time it trickles the full text of loaded-but-unread books through
- * the EmbeddingIndexer on the low-priority background quota lane.
+ * During idle time it trickles the full text of ALL books present on this
+ * device through the EmbeddingIndexer on the low-priority background quota
+ * lane. (The foreground indexer handles the currently open book; the
+ * per-section resume-skip makes re-visiting an already-embedded book free, so
+ * the two lanes never duplicate spend.)
  *
  * Privacy posture (the load-bearing gates — see GUARDRAILS):
  *  - it runs ONLY when the user turned the library-wide opt-in ON
@@ -36,7 +39,6 @@ import { embeddingsRepo } from '@data/repos/embeddings';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { useDeviceStore } from '@store/useDeviceStore';
 import { useBookStore } from '@store/useBookStore';
-import { useReadingStateStore } from '@store/useReadingStateStore';
 import { bookContent } from '@data/repos/bookContent';
 import { getDeviceId } from '@lib/device-id';
 import type { DeviceInfo } from '~types/device';
@@ -46,12 +48,20 @@ import { createLogger } from '@lib/logger';
 const logger = createLogger('EmbeddingBackfill');
 
 /**
- * "Unread enough to backfill": a book whose synced reading progress is below
- * this fraction is treated as loaded-but-unread. The background trickle targets
- * books the reader has NOT opened — the open book is already embedded by the
- * foreground indexer in the reader session.
+ * How long to wait before re-running a pass that stopped on an error
+ * (backpressure or a per-book failure): 90 seconds — long enough for a
+ * minute-window rate limit to clear, short enough that indexing resumes
+ * without waiting for the next boot.
  */
-const UNREAD_PROGRESS_CEILING = 0.05;
+export const ERROR_RETRY_DELAY_MS = 90_000;
+
+/**
+ * The outcome of one backfill pass: `'complete'` when there is nothing left
+ * for this pass to do (all books processed, gates closed, or cancelled), and
+ * `'retry'` when the pass hit an error (rate-limit backpressure or a per-book
+ * failure) — the boot task re-runs it after {@link ERROR_RETRY_DELAY_MS}.
+ */
+export type BackfillOutcome = 'complete' | 'retry';
 
 /** The injected seams (the boot task binds the real stores/repos/governor). */
 export interface EmbeddingBackfillDeps {
@@ -66,8 +76,6 @@ export interface EmbeddingBackfillDeps {
   now(): number;
   /** Candidate book ids (useBookStore.books keys). */
   listBooks(): string[];
-  /** Synced reading progress fraction (0..1) for a book, or null. */
-  getProgress(bookId: string): number | null;
   /** True when the local binary is present (getOffloadedStatus === false). */
   hasLocalBinary(bookId: string): Promise<boolean>;
   /**
@@ -107,26 +115,32 @@ function isSelfActive(deps: EmbeddingBackfillDeps): boolean {
 /**
  * Run one backfill pass (PURE — no store/IDB/governor edge; everything is a
  * dep). Bails unless opt-in ON + client configured + THIS device active; then
- * trickles loaded-but-unread books through the background-lane indexer until
- * this device's share of the daily request budget is exhausted, a book hits
- * NetRateLimitedError (stop and resume next idle/boot), or shouldContinue()
- * goes false.
+ * trickles EVERY book present on this device through the background-lane
+ * indexer until this device's share of the daily request budget is exhausted
+ * or shouldContinue() goes false. Returns `'retry'` when the pass stopped on
+ * an error (NetRateLimitedError backpressure, or any book failing to embed)
+ * so the caller re-runs it after {@link ERROR_RETRY_DELAY_MS}; `'complete'`
+ * otherwise.
  */
-export async function runEmbeddingBackfill(deps: EmbeddingBackfillDeps): Promise<void> {
-  if (!deps.isOptInEnabled()) return;
-  if (!deps.isClientConfigured()) return;
-  if (!isSelfActive(deps)) return;
+export async function runEmbeddingBackfill(
+  deps: EmbeddingBackfillDeps,
+): Promise<BackfillOutcome> {
+  if (!deps.isOptInEnabled()) return 'complete';
+  if (!deps.isClientConfigured()) return 'complete';
+  if (!isSelfActive(deps)) return 'complete';
+
+  let hadError = false;
 
   for (const bookId of deps.listBooks()) {
-    if (!deps.shouldContinue()) return;
+    if (!deps.shouldContinue()) return 'complete';
 
-    // Loaded-but-unread: the book's binary is present locally AND its progress
-    // is below the ceiling (the open/read books are handled by the foreground
-    // indexer). The local-binary check is an async IDB read, done lazily per
-    // candidate to avoid a burst at boot. Filtered BEFORE the quota gate so the
-    // shared-cache check below only runs for books this lane would actually embed.
-    const progress = deps.getProgress(bookId) ?? 0;
-    if (progress >= UNREAD_PROGRESS_CEILING) continue;
+    // Every book whose binary is present locally is a candidate — the
+    // background lane covers the WHOLE on-device library (the foreground
+    // indexer covers the currently open book, and the per-section resume-skip
+    // makes an already-embedded book a cheap no-op here). The local-binary
+    // check is an async IDB read, done lazily per candidate to avoid a burst
+    // at boot, and BEFORE the quota gate so the shared-cache check below only
+    // runs for books this lane would actually embed.
     if (!(await deps.hasLocalBinary(bookId))) continue;
 
     // Reuse a peer's embeddings before spending any quota — and do this BEFORE
@@ -146,7 +160,8 @@ export async function runEmbeddingBackfill(deps: EmbeddingBackfillDeps): Promise
     const remaining = deps.getBgLimits().rpd - deps.getBgUsedRpd();
     if (remaining <= 0) {
       logger.info('Background embedding paused: cross-device bg RPD ceiling reached.');
-      return;
+      // Not an error: the daily budget resets at midnight PT; resume next boot.
+      return 'complete';
     }
 
     try {
@@ -154,14 +169,18 @@ export async function runEmbeddingBackfill(deps: EmbeddingBackfillDeps): Promise
       await deps.enqueue(bookId, { interactive: false, lane: 'bg' });
     } catch (err) {
       if (err instanceof NetRateLimitedError) {
-        // Backpressured: stop the trickle and resume on the next idle/boot.
-        logger.info('Background embedding backpressured; will resume next idle.');
-        return;
+        // Backpressured: stop the trickle; the caller retries after the delay.
+        logger.info('Background embedding backpressured; retrying shortly.');
+        return 'retry';
       }
-      // Per-book failure (e.g. a transient extract error) — log and move on.
-      logger.warn(`Background embedding failed for ${bookId}; skipping:`, err);
+      // Per-book failure (e.g. a transient extract error) — log, move on, and
+      // signal a retry pass so the failed book gets another attempt after the
+      // delay (the resume-skip keeps the retry from re-embedding the rest).
+      logger.warn(`Background embedding failed for ${bookId}; will retry:`, err);
+      hadError = true;
     }
   }
+  return hadError ? 'retry' : 'complete';
 }
 
 /**
@@ -184,8 +203,9 @@ function scheduleIdle(cb: () => void): () => void {
  * reingest-wave task. It constructs its OWN long-lived EmbeddingIndexer (the
  * foreground indexer is created per reader session) and schedules the background
  * trickle on idle. The indexer's per-section resume-skip (keyed by href +
- * section text hash) plus the loaded-but-unread filter keep the background pass
- * from re-embedding the open book.
+ * section text hash) keeps the background pass from re-embedding books the
+ * foreground indexer already covered. A pass that stops on an error is re-run
+ * after {@link ERROR_RETRY_DELAY_MS}.
  */
 export const embeddingBackfillTask: BootTask = {
   name: 'search/embedding-backfill',
@@ -207,17 +227,16 @@ export const embeddingBackfillTask: BootTask = {
     });
 
     let cancelled = false;
-    const cancelIdle = scheduleIdle(() => {
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const runPass = () => {
       if (cancelled) return;
-      void runEmbeddingBackfill({
+      runEmbeddingBackfill({
         isOptInEnabled: () => useGenAIStore.getState().preEmbedLibrary,
         isClientConfigured: () => getEmbeddingClient().isConfigured(),
         getDevices: () => useDeviceStore.getState().devices,
         selfId: getDeviceId(),
         now: () => Date.now(),
         listBooks: () => Object.keys(useBookStore.getState().books),
-        getProgress: (bookId) =>
-          useReadingStateStore.getState().getProgress(bookId)?.percentage ?? null,
         hasLocalBinary: async (bookId) => {
           const status = await bookContent.getOffloadedStatus([bookId]);
           return status.get(bookId) === false;
@@ -246,14 +265,27 @@ export const embeddingBackfillTask: BootTask = {
           return row != null;
         },
         shouldContinue: () => !cancelled && useGenAIStore.getState().preEmbedLibrary,
-      }).catch((err) => {
-        logger.warn('Embedding backfill failed (will retry next boot):', err);
-      });
-    });
+      })
+        .then((outcome) => {
+          // An errored pass re-runs after the delay; the resume-skip makes the
+          // retry cheap (only the failed/remaining books actually embed).
+          if (outcome === 'retry' && !cancelled) {
+            retryTimer = setTimeout(runPass, ERROR_RETRY_DELAY_MS);
+          }
+        })
+        .catch((err) => {
+          logger.warn('Embedding backfill failed; retrying after delay:', err);
+          if (!cancelled) {
+            retryTimer = setTimeout(runPass, ERROR_RETRY_DELAY_MS);
+          }
+        });
+    };
+    const cancelIdle = scheduleIdle(runPass);
 
     ctx.addCleanup(() => {
       cancelled = true;
       cancelIdle();
+      if (retryTimer !== null) clearTimeout(retryTimer);
     });
   },
 };

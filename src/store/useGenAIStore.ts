@@ -10,16 +10,22 @@ import type { QuotaLimits, LaneUsage } from '@kernel/quota';
  * GenAI configuration + activity-log store (Phase 7 §H, privacy D3/GG-3).
  *
  * PERSISTENCE CONTRACT (PR-A5): `partialize` is an explicit ALLOWLIST —
- * settings only. `logs` is an IN-MEMORY ring buffer (`maxLogs`-capped) and
- * is NEVER persisted: the pre-Phase-7 spread-partialize wrote full prompts
- * — book text and base64 table screenshots — to plaintext localStorage
- * unconditionally, with quadratic re-serialization on every set() and
- * latent QuotaExceededError corruption. Entries arrive PRE-REDACTED from
- * the GenAI client (inlineData → {byteCount, hash} — domains/google/genai/
- * logging.ts). persist version 1 strips `logs`/`usageStats` from existing
- * blobs on rehydrate (strip-only, tolerated by older code reading the
- * slimmer blob; localStorage-only — NOT synced user data, so the program's
- * one-in-flight format-change rule is not engaged).
+ * settings only. `logs` is an in-memory ring buffer (`maxLogs`-capped) that
+ * is NEVER persisted THROUGH THIS STORE: the pre-Phase-7 spread-partialize
+ * wrote full prompts — book text and base64 table screenshots — to plaintext
+ * localStorage unconditionally, with quadratic re-serialization on every
+ * set() and latent QuotaExceededError corruption. Entries arrive PRE-REDACTED
+ * from the GenAI client (inlineData → {byteCount, hash} — domains/google/
+ * genai/logging.ts). persist version 1 strips `logs`/`usageStats` from
+ * existing blobs on rehydrate (strip-only, tolerated by older code reading
+ * the slimmer blob; localStorage-only — NOT synced user data, so the
+ * program's one-in-flight format-change rule is not engaged).
+ *
+ * Cross-restart log persistence lives OUTSIDE this store: the app-layer
+ * mirror (app/google/genaiLogPersistence.ts) writes each appended entry to a
+ * small dedicated IndexedDB database and re-injects them at boot via
+ * `hydrateLogs` — per-row IDB writes, none of the localStorage failure modes
+ * above. The partialize allowlist here still excludes `logs`.
  *
  * `apiKey` stays in the allowlist deliberately (BYO-key product model);
  * secrets isolation is the privacy report's D11, out of Phase 7 scope.
@@ -73,9 +79,10 @@ interface GenAIState {
   pauseAllGenAI: boolean;
   /**
    * Persisted, default-OFF library-wide opt-in for proactively embedding books.
-   * When ON, the FULL TEXT of loaded-but-unread books may be sent to Google for
-   * embedding during idle time on the background (low-priority) request lane, so
-   * semantic search is ready before the user opens the book. The single source
+   * When ON, the FULL TEXT of every book present on this device may be sent to
+   * Google for embedding during idle time on the background (low-priority)
+   * request lane, so semantic search is ready across the whole library (the
+   * foreground indexer covers the currently open book). The single source
    * of truth read by both the consent check and the background backfill task.
    * Additive field — tolerated by older persisted blobs (no migration needed).
    */
@@ -120,6 +127,12 @@ interface GenAIState {
   setReferenceDetectionStrategy: (strategy: ReferenceDetectionStrategy) => void;
   setMaxLogs: (max: number) => void;
   addLog: (log: GenAILogEntry) => void;
+  /**
+   * Prepend entries restored from the cross-restart IDB mirror (app/google/
+   * genaiLogPersistence.ts) — deduped by id against anything already logged
+   * this session, capped at maxLogs.
+   */
+  hydrateLogs: (entries: GenAILogEntry[]) => void;
   clearLogs: () => void;
   setQuotaLimits: (limits: QuotaLimits) => void;
   setQuotaLimitsForPool: (ratePool: string, limits: QuotaLimits) => void;
@@ -252,6 +265,17 @@ export const useGenAIStore = create<GenAIState>()(
             newLogs.splice(0, newLogs.length - state.maxLogs);
           }
           return { logs: newLogs };
+        }),
+      hydrateLogs: (entries) =>
+        set((state) => {
+          const existing = new Set(state.logs.map((l) => l.id));
+          const restored = entries.filter((e) => !existing.has(e.id));
+          if (restored.length === 0) return {};
+          const merged = [...restored, ...state.logs];
+          if (merged.length > state.maxLogs) {
+            merged.splice(0, merged.length - state.maxLogs);
+          }
+          return { logs: merged };
         }),
       clearLogs: () => set({ logs: [] }),
       setQuotaLimits: (limits) =>

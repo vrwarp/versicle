@@ -31,6 +31,7 @@
 import { createLogger } from '@lib/logger';
 import { closeConnection } from './connection';
 import { closeDictionaryConnection } from './repos/dictionary';
+import { closeGenaiLogsConnection } from './repos/genaiLogs';
 import { playbackCache } from './repos/playbackCache';
 
 const logger = createLogger('Wipe');
@@ -40,13 +41,15 @@ const logger = createLogger('Wipe');
  * Phase 4 staged-workspace-switch buffer (YJS_STAGING_DB_NAME) — transient,
  * but a wipe must not leave a stale staged workspace behind. `versicle-dict`
  * is the Phase 6 dictionary index (rebuildable static content, but a wipe
- * must still leave nothing behind).
+ * must still leave nothing behind). `versicle-genai-logs` is the persisted
+ * GenAI activity-log buffer (device-local diagnostics).
  */
 const APP_DATABASES: readonly string[] = [
   'versicle-yjs',
   'versicle-yjs-staging',
   'EpubLibraryDB',
   'versicle-dict',
+  'versicle-genai-logs',
 ];
 
 /** Exact localStorage keys owned by the app (persisted zustand stores). */
@@ -243,6 +246,11 @@ export async function wipeAllData(options: WipeOptions = {}): Promise<void> {
     await closeDictionaryConnection();
   } catch (error) {
     logger.warn('Failed to close versicle-dict cleanly before wipe (continuing):', error);
+  }
+  try {
+    await closeGenaiLogsConnection();
+  } catch (error) {
+    logger.warn('Failed to close versicle-genai-logs cleanly before wipe (continuing):', error);
   }
 
   // 2. Delete both databases outright — no store enumeration to go stale.

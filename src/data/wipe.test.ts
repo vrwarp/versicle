@@ -178,6 +178,7 @@ describe('wipeAllData', () => {
       'delete:versicle-yjs-staging',
       'delete:EpubLibraryDB',
       'delete:versicle-dict',
+      'delete:versicle-genai-logs',
     ]);
   });
 

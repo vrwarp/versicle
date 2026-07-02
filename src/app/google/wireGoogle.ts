@@ -47,6 +47,7 @@ import { useGenAIStore, DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
 import { makeAiConsentResolver } from './aiConsent';
+import { initGenAILogPersistence } from './genaiLogPersistence';
 import { makeArtifactConsult, makeArtifactConsentGate, setArtifactConsult } from './artifactConsult';
 import { peekSyncOrchestrator } from '@app/sync/createSync';
 import { bookContent } from '@data/repos/bookContent';
@@ -165,11 +166,19 @@ export function wireGoogleDomain(): void {
     .getState()
     .setBgBudgetProvider(getBackgroundQuotaLimits, () => governor.snapshot('gemini-embedding-001').bg.rpd);
 
+  // Cross-restart log persistence: hydrate the store's log ring buffer from
+  // the dedicated side DB, then mirror every appended entry back into it (all
+  // log producers — GenAI/embedding clients and the TTS worker bridge —
+  // funnel through addLog, so one store subscription covers them all).
+  // Fail-soft and fire-and-forget: with IDB unavailable the buffer simply
+  // stays in-memory-only, as before.
+  void initGenAILogPersistence();
+
   // GenAI (Phase 7 §H): config read PER CALL from the store — the mutable
   // singleton fields (and the TTS pipeline's configure() clobber, GG-8) are
   // gone. Log entries arrive pre-redacted (no inlineData bytes) and land in
-  // the store's in-memory ring buffer (never persisted — its partialize
-  // allowlist excludes logs).
+  // the store's log ring buffer (persisted across restarts via the IDB
+  // mirror above; the store's own partialize allowlist still excludes logs).
   // Phase 8 §A: installed as the LAZY facade — GeminiClient (and the
   // egress plumbing behind it) loads on the first generate call, keeping
   // the GenAI implementation out of the entry chunk (check 4).
