@@ -7,8 +7,9 @@
 #   - npm ci only. `npm install` in CI re-resolves git deps and can test a
 #     different tree than the lockfile (this exact failure mode existed in
 #     the retired npm-test.yml).
-#   - The Docker/Playwright E2E lane is NOT a PR gate (runners unverified);
-#     it lives in e2e-verification.yml (nightly + manual, experimental).
+#   - The Docker/Playwright E2E lane lives in e2e-verification.yml:
+#     desktop+mobile run per-PR (informational, not branch-protected),
+#     webkit stays nightly + manual.
 name: CI
 
 on:

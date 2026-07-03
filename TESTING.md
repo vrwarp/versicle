@@ -292,10 +292,12 @@ above cover the rules); screenshots are captured for humans — there are no
 `toHaveScreenshot()` golden assertions (visual goldens from master plan §7
 were never built; an honest open item in the program close-out).
 
-**In CI** the Docker E2E lane is deliberately **not** a PR gate: it runs
-nightly + on `workflow_dispatch` via `.github/workflows/e2e-verification.yml`
-(experimental until proven stable on hosted runners), one job per project,
-screenshots uploaded as artifacts.
+**In CI** the Docker E2E lane runs via
+`.github/workflows/e2e-verification.yml`, one job per project, screenshots
+uploaded as artifacts. The **desktop and mobile** projects run on every PR
+(informational checks — no branch protection requires them); **webkit**
+stays nightly + `workflow_dispatch` only (serial, timing-sensitive TTS
+journeys — see `run_verification.sh`).
 
 ## Accessibility scans (three layers)
 
@@ -372,4 +374,4 @@ follow:
 | `run_verification.sh` / `jules_run_verification.sh` | Dockerized E2E runner (+ sudo wrapper) |
 | `firebase.json` + `firestore.rules` + `storage.rules` | Emulator config + the rules under test |
 | `.github/workflows/ci.yml` | PR/push gate (lint, tsc, vitest shards, build, ratchets) |
-| `.github/workflows/e2e-verification.yml` | Nightly/manual Docker E2E (experimental) |
+| `.github/workflows/e2e-verification.yml` | Docker E2E: desktop+mobile per-PR, webkit nightly/manual |
