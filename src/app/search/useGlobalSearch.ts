@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useBookStore } from '@store/useBookStore';
 import { useSearchHistoryStore } from '@store/useSearchHistoryStore';
 import { useGenAIStore } from '@store/useGenAIStore';
@@ -43,7 +43,8 @@ const queryCache = new QueryEmbeddingCache();
 const quantizer = new SearchEngine();
 
 export function useGlobalSearch() {
-  const books = useBookStore((state) => Object.values(state.books));
+  const booksMap = useBookStore((state) => state.books);
+  const books = useMemo(() => Object.values(booksMap), [booksMap]);
   const recentQueries = useSearchHistoryStore((state) => state.recentQueries);
   const savedQueries = useSearchHistoryStore((state) => state.savedQueries);
   const toggleSaved = useSearchHistoryStore((state) => state.toggleSaved);
