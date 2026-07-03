@@ -43,6 +43,7 @@ import { useVocabularyStore, VOCABULARY_STORE_DEF } from './useVocabularyStore';
 import { useLexiconStore, LEXICON_STORE_DEF } from './useLexiconStore';
 import { useContentAnalysisStore, CONTENT_ANALYSIS_STORE_DEF } from './useContentAnalysisStore';
 import { useDeviceStore, DEVICES_STORE_DEF } from './useDeviceStore';
+import { useSearchHistoryStore, SEARCH_HISTORY_STORE_DEF } from './useSearchHistoryStore';
 
 export type { SyncedStoreDef } from './yjs-provider';
 
@@ -65,6 +66,7 @@ export const SYNCED_STORE_DEFS = {
   lexicon: LEXICON_STORE_DEF,
   contentAnalysis: CONTENT_ANALYSIS_STORE_DEF,
   devices: DEVICES_STORE_DEF,
+  searchHistory: SEARCH_HISTORY_STORE_DEF,
 } as const;
 
 export interface SyncedStoreEntry {
@@ -98,6 +100,7 @@ export const SYNCED_STORES: readonly SyncedStoreEntry[] = [
   { def: SYNCED_STORE_DEFS.lexicon, store: useLexiconStore },
   { def: SYNCED_STORE_DEFS.contentAnalysis, store: useContentAnalysisStore },
   { def: SYNCED_STORE_DEFS.devices, store: useDeviceStore },
+  { def: SYNCED_STORE_DEFS.searchHistory, store: useSearchHistoryStore },
 ];
 
 /**
@@ -208,6 +211,14 @@ export const STORE_REGISTRY: readonly StoreRegistryEntry[] = [
     owner: 'sync',
     summary: 'Device registry of the sync mesh (UA, heartbeat, names).',
     def: SYNCED_STORE_DEFS.devices,
+  },
+  {
+    module: 'useSearchHistoryStore',
+    tier: 'synced',
+    persistence: 'searchHistory',
+    owner: 'search',
+    summary: 'Search query history (recent and saved queries).',
+    def: SYNCED_STORE_DEFS.searchHistory,
   },
   // ── local-persisted (device-local, zustand/persist → localStorage) ─────
   {

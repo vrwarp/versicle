@@ -1,20 +1,23 @@
-# EXPERIMENTAL — Docker/Playwright E2E lane. Deliberately NOT a PR gate:
-# the Dockerized suite has not been verified green on hosted runners
-# (plan/overhaul/analysis/testing-verification.md debt #11: the old
-# visual-verification.yml ran it per-PR with three cold Docker builds and
-# without CI=1, and nothing consumed its artifacts). It runs nightly and on
-# demand until it is proven stable enough to promote into ci.yml.
+# Docker/Playwright E2E lane. Desktop + mobile run on every PR (informational
+# checks — not required by branch protection); webkit remains nightly/manual
+# only — it runs serially (--workers=1) and its TTS journeys are too
+# timing-sensitive for a PR gate (see run_verification.sh).
 #
 # Uses the existing run_verification.sh flow: builds Dockerfile.verification,
 # serves the production build via `vite preview` inside the container, and
 # runs the Playwright suite (verification/*.spec.ts) against it.
-name: E2E verification (experimental)
+name: E2E verification
 
 on:
   workflow_dispatch:
+  pull_request:
   schedule:
     # Nightly at 09:23 UTC (off the top of the hour to dodge GH cron load).
     - cron: '23 9 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   e2e:
@@ -24,7 +27,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: [desktop, mobile, webkit]
+        # WebKit is nightly/manual only, so PR runs get just desktop+mobile.
+        # (jobs.<id>.if cannot see the matrix context, hence the dynamic
+        # matrix instead of a per-leg condition.)
+        project: ${{ fromJSON(github.event_name == 'pull_request' && '["desktop", "mobile"]' || '["desktop", "mobile", "webkit"]') }}
     steps:
       - uses: actions/checkout@v4
       - name: Run verification suite (Docker)

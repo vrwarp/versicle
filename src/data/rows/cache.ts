@@ -300,6 +300,27 @@ export type CacheEmbedJobsRow = {
   updatedAt: number;
 };
 
+/**
+ * @public B1 row contract: no parse call site yet — kept exported as the
+ * drift-guard anchor (`_QueryEmbeddingsSchemaMatches` below pins it).
+ */
+export const cacheQueryEmbeddingsRowSchema = z.looseObject({
+  key: z.string().min(1),
+  query: z.string(),
+  model: z.string(),
+  dims: z.number(),
+  vector: embeddingBinarySchema,
+  createdAt: z.number(),
+});
+export type CacheQueryEmbeddingsRow = {
+  key: string;
+  query: string;
+  model: string;
+  dims: number;
+  vector: ArrayBuffer;
+  createdAt: number;
+};
+
 // ── Compile-time drift guards (see rows/static.ts for the pattern) ────────
 type _MetricsSchemaMatches = z.infer<typeof cacheRenderMetricsRowSchema> extends CacheRenderMetricsRow ? true : never;
 type _AudioSchemaMatches = z.infer<typeof cacheAudioBlobRowSchema> extends CacheAudioBlobRow ? true : never;
@@ -310,6 +331,7 @@ type _TimepointSchemaMatches = z.infer<typeof timepointSchema> extends Timepoint
 type _SearchTextSchemaMatches = z.infer<typeof cacheSearchTextRowSchema> extends CacheSearchTextRow ? true : never;
 type _EmbeddingsSchemaMatches = z.infer<typeof cacheEmbeddingsRowSchema> extends CacheEmbeddingsRow ? true : never;
 type _EmbedJobsSchemaMatches = z.infer<typeof cacheEmbedJobsRowSchema> extends CacheEmbedJobsRow ? true : never;
+type _QueryEmbeddingsSchemaMatches = z.infer<typeof cacheQueryEmbeddingsRowSchema> extends CacheQueryEmbeddingsRow ? true : never;
 type _AudioRound = CacheAudioBlobRow extends CacheAudioBlob ? true : never;
 type _SessionRound = CacheSessionStateRow extends CacheSessionState ? true : never;
 type _PrepRound = CacheTtsPreparationRow extends CacheTtsPreparation ? true : never;
@@ -323,10 +345,11 @@ const _schemaChecks: [
   _SearchTextSchemaMatches,
   _EmbeddingsSchemaMatches,
   _EmbedJobsSchemaMatches,
+  _QueryEmbeddingsSchemaMatches,
   _AudioRound,
   _SessionRound,
   _PrepRound,
-] = [true, true, true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true, true, true];
 void _schemaChecks;
 
 function _rowTypeDriftGuard(

@@ -109,6 +109,10 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
       interactive: true,
     });
     return vectors[0];
+  }, {
+    query,
+    model: config.model,
+    dims: config.dims,
   });
   if (!queryFloat || queryFloat.length === 0) return [];
 
@@ -190,7 +194,7 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
   const results: DetailedSearchResult[] = [];
   for (let s = 0; s < resolved.length; s++) {
     const { section, source, offsetsFor } = resolved[s];
-    for (const { row } of tops[s]) {
+    for (const { row, cosine } of tops[s]) {
       const offsets = offsetsFor(row);
       if (!offsets) continue;
       const charOffset = offsets.charStart;
@@ -203,6 +207,7 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
         matchLength,
         // 1-based ordinal within the section (chunk row + 1); CFI stays unset.
         occurrence: row + 1,
+        similarity: cosine,
       });
     }
   }

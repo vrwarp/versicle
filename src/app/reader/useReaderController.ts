@@ -175,12 +175,16 @@ export function useReaderController(
 
   const [searchParams] = useSearchParams();
   const cfiOverride = searchParams.get('cfi');
+  const locationOverride = searchParams.get('location');
+  const deepOffset = searchParams.get('offset');
+  const deepLength = searchParams.get('length');
 
   // Optimization: Read initial location once on mount/id change, avoiding subscription to progress updates
   const initialLocation = useMemo(() => {
     if (cfiOverride) return decodeURIComponent(cfiOverride);
+    if (locationOverride) return decodeURIComponent(locationOverride);
     return bookId ? useReadingStateStore.getState().getProgress(bookId)?.currentCfi : undefined;
-  }, [bookId, cfiOverride]);
+  }, [bookId, cfiOverride, locationOverride]);
 
   // Engine commands go through the TtsController facade (stable identities).
   const audio = useAudioCommands();
@@ -661,6 +665,28 @@ export function useReaderController(
       return null;
     },
   }), [audio, handlePlayFromSelection]);
+
+  // Navigate to deep-linked semantic search hit once ready
+  useEffect(() => {
+    if (!isReady || !locationOverride || !deepOffset || !deepLength) return;
+
+    const result: DetailedSearchResult = {
+      href: decodeURIComponent(locationOverride),
+      charOffset: Number(deepOffset),
+      matchLength: Number(deepLength),
+      occurrence: 1,
+      excerpt: '',
+    };
+
+    navigateToSearchResult(result);
+
+    // Clear search parameters from query to avoid re-triggering highlight on reload
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('location');
+    newParams.delete('offset');
+    newParams.delete('length');
+    navigate({ search: newParams.toString() }, { replace: true });
+  }, [isReady, locationOverride, deepOffset, deepLength, navigateToSearchResult, searchParams, navigate]);
 
   return {
     engine,

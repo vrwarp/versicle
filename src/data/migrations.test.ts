@@ -58,6 +58,7 @@ const CURRENT_STORE_SET = [
   'cache_audio_blobs',
   'cache_embed_jobs',
   'cache_embeddings',
+  'cache_query_embeddings',
   'cache_render_metrics',
   'cache_search_text',
   'cache_session_state',
