@@ -300,7 +300,11 @@ export type CacheEmbedJobsRow = {
   updatedAt: number;
 };
 
-const cacheQueryEmbeddingsRowSchema = z.looseObject({
+/**
+ * @public B1 row contract: no parse call site yet — kept exported as the
+ * drift-guard anchor (`_QueryEmbeddingsSchemaMatches` below pins it).
+ */
+export const cacheQueryEmbeddingsRowSchema = z.looseObject({
   key: z.string().min(1),
   query: z.string(),
   model: z.string(),
