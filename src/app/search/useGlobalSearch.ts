@@ -302,29 +302,30 @@ export function useGlobalSearch() {
       }
       flatHits.sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0));
 
-      // 7. Group consecutive adjacent results from the same book
-      const grouped: GroupedBookMatches[] = [];
+      // 7. Group all results by book
+      const groupsMap = new Map<string, GroupedBookMatches>();
       for (const hit of flatHits) {
         const book = books.find((b) => b.id === hit.bookId);
         if (!book) continue;
 
-        const lastGroup = grouped[grouped.length - 1];
-        if (lastGroup && lastGroup.bookId === hit.bookId) {
-          lastGroup.matches.push(hit);
-        } else {
-          grouped.push({
+        let group = groupsMap.get(hit.bookId);
+        if (!group) {
+          group = {
             bookId: hit.bookId,
             bookTitle: book.title,
             author: book.author || '',
             coverPalette: book.coverPalette,
             coverUrl: book.coverUrl,
             coverBlob: book.coverBlob,
-            matches: [hit],
+            matches: [],
             lastRead: book.lastRead,
-          });
+          };
+          groupsMap.set(hit.bookId, group);
         }
+        group.matches.push(hit);
       }
 
+      const grouped = Array.from(groupsMap.values());
       grouped.sort((a, b) => (b.lastRead ?? 0) - (a.lastRead ?? 0));
 
       setResults(grouped);
