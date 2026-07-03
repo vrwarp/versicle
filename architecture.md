@@ -115,7 +115,7 @@ is an internal and may be rewritten at will.
 
 | Id | Contract | Home | Validation / versioning | Pinned by |
 | --- | --- | --- | --- | --- |
-| C1 | IndexedDB storage schema | `src/data/schema.ts` | zod rows in src/data/rows/; append-only versioned migration registry (DB v29) | `src/data/migrations.test.ts`, `src/data/connection.test.ts`, `src/data/__fixtures__/schema-fixtures.ts` |
+| C1 | IndexedDB storage schema | `src/data/schema.ts` | zod rows in src/data/rows/; append-only versioned migration registry (DB v30) | `src/data/migrations.test.ts`, `src/data/connection.test.ts`, `src/data/__fixtures__/schema-fixtures.ts` |
 | C2 | CRDT document schema | `src/store/registry.ts`, `src/app/migrations.ts` | syncedKeys whitelist + merge-defaults hydration; coordinator chain at v9; doc-level quarantine on the meta map | `src/store/__tests__/crdt-contract/fixtures-manifest.test.ts`, `src/store/__tests__/crdt-contract/fixtures-hydration.test.ts`, `src/store/__tests__/crdt-contract/migrations.test.ts`, `src/test/fixtures/ydoc/manifest.json` |
 | C3 | Sync transport (SyncBackend) | `src/domains/sync/backend/SyncBackend.ts` | one behavioral spec, two transports (mock on every run, Firestore emulator gated); observe-mode zod on inbound docs | `src/lib/sync/syncBackendContract.ts`, `src/lib/sync/syncBackendContract.mock.test.ts`, `src/lib/sync/syncBackendContract.emulator.test.ts` |
 | C4 | TTS engine RPC | `src/lib/tts/engine/TtsEngine.ts`, `src/lib/tts/engine/WorkerTtsEngine.ts` | single monotonic PlaybackSnapshot{seq} channel; 23 parity scenarios × 2 transports | `src/lib/tts/engine/engineParityScenarios.ts`, `src/lib/tts/engine/engineParity.inprocess.test.ts`, `src/lib/tts/engine/engineParity.worker.test.ts` |
@@ -170,7 +170,7 @@ checkpoint before, atomic transactional bump, loud-fail to SafeMode):
 | v7 → v8 | `linkReadingListEntries` |
 | v8 → v9 | `clearHusksAndRetireDualWrite` |
 
-The IndexedDB schema (`EpubLibraryDB`) is at **v29** (`DB_VERSION`,
+The IndexedDB schema (`EpubLibraryDB`) is at **v30** (`DB_VERSION`,
 src/data/schema.ts). Versioned registry steps past the v24 baseline
 (append-only; released steps are persisted format):
 
@@ -181,6 +181,7 @@ src/data/schema.ts). Versioned registry steps past the v24 baseline
 | v27 | `migrateToV27` |
 | v28 | `migrateToV28` |
 | v29 | `migrateToV29` |
+| v30 | `migrateToV30` |
 
 localStorage (zustand/persist) stores:
 
@@ -207,7 +208,7 @@ subsystem boot modules). Phases, in order:
 | # | Phase | What runs |
 | --- | --- | --- |
 | 1 | `interceptMigration` | workspace-migration interceptor — may halt boot for user confirmation or apply a staged swap |
-| 2 | `openDB` | open EpubLibraryDB through the versioned migration registry (v29) |
+| 2 | `openDB` | open EpubLibraryDB through the versioned migration registry (v30) |
 | 3 | `startYjsPersistence` | y-idb persistence for the workspace Y.Doc (no module-scope boot) |
 | 4 | `whenHydrated` | IDB load + per-store hydration handles; static-metadata projection hydrates |
 | 5 | `migrations` | CRDT migration coordinator — checkpoint, transform, atomic bump (target v9) |

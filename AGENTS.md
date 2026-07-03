@@ -146,7 +146,7 @@ Whenever you update the project `README.md` file, make sure to include as a prea
 ## IndexedDB schema changes
 
 The schema and its versioned migration registry live in
-`src/data/schema.ts` (currently `DB_VERSION = 29`). Bumping it is a
+`src/data/schema.ts` (currently `DB_VERSION = 30`). Bumping it is a
 user-data format change (master plan §4 rule 4): append a migration step —
 never edit a released one — and extend the captured-fixture upgrade tests in
 `src/data/migrations.test.ts`. E2E specs open `EpubLibraryDB` without an

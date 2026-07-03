@@ -53,6 +53,12 @@ export const GlobalSemanticSearchView: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col gap-6" data-testid="global-semantic-search-view">
+      <div className="w-full max-w-2xl mx-auto text-center">
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Search across all books in your library semantically. Enter concepts, questions, or themes, and we'll find matching passages regardless of the exact words used.
+        </p>
+      </div>
+
       {/* Search Input Bar */}
       <form onSubmit={handleSubmit} className="flex gap-2 items-center w-full max-w-2xl mx-auto relative">
         <div className="relative flex-1">
@@ -206,6 +212,8 @@ export const GlobalSemanticSearchView: React.FC = () => {
                           title: book.title,
                           author: book.author,
                           coverPalette: book.coverPalette,
+                          coverUrl: book.coverUrl,
+                          coverBlob: book.coverBlob,
                         }}
                         onDelete={() => {}}
                         onOffload={() => {}}
@@ -348,6 +356,8 @@ export const GlobalSemanticSearchView: React.FC = () => {
                           title: group.bookTitle,
                           author: group.author,
                           coverPalette: group.coverPalette,
+                          coverUrl: group.coverUrl,
+                          coverBlob: group.coverBlob,
                         }}
                         onDelete={() => {}}
                         onOffload={() => {}}

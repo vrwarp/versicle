@@ -75,7 +75,7 @@ describe('navigator.storage.persist()', () => {
 describe('connection schema parity', () => {
   it('opens EpubLibraryDB at the current version with the exact store set', async () => {
     const db = await getConnection();
-    expect(DB_VERSION).toBe(29); // v28 = clear embedding caches on the gemini-embedding-001 → -2 model switch; v29 = cache_query_embeddings
+    expect(DB_VERSION).toBe(30); // v28 = clear embedding caches on the gemini-embedding-001 → -2 model switch; v29 = cache_query_embeddings; v30 = recovery / force upgrade for cache_query_embeddings
     expect(db.version).toBe(DB_VERSION);
     expect(Array.from(db.objectStoreNames).sort()).toEqual([
       'app_metadata',

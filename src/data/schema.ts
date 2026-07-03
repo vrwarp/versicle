@@ -91,7 +91,7 @@ export const DB_NAME = 'EpubLibraryDB';
  * device-local, rebuildable — nothing user-authored is touched. The next IDB
  * bump must add a MIGRATIONS step, never edit an existing one.
  */
-export const DB_VERSION = 29;
+export const DB_VERSION = 30;
 
 /**
  * Interface defining the schema for the IndexedDB database.
@@ -440,6 +440,16 @@ function migrateToV29(db: IDBPDatabase<EpubLibraryDB>): void {
 }
 
 /**
+ * The v30 step: additive step to force upgrade and create the EMPTY `cache_query_embeddings`
+ * store if it was missed in any intermediate state.
+ */
+function migrateToV30(db: IDBPDatabase<EpubLibraryDB>): void {
+  if (!db.objectStoreNames.contains('cache_query_embeddings')) {
+    db.createObjectStore('cache_query_embeddings', { keyPath: 'key' });
+  }
+}
+
+/**
  * The versioned migration registry (D7). APPEND-ONLY: released steps are
  * persisted-format surface (migrations.test.ts runs them against committed
  * v18/v24 fixtures); a later fix is a later step, never an edit. Ordered
@@ -452,6 +462,7 @@ export const MIGRATIONS: readonly IdbMigration[] = [
   { toVersion: 27, migrate: migrateToV27 },
   { toVersion: 28, migrate: migrateToV28 },
   { toVersion: 29, migrate: migrateToV29 },
+  { toVersion: 30, migrate: migrateToV30 },
 ];
 
 /**

@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useBookStore } from '@store/useBookStore';
+import { useState, useEffect } from 'react';
+import { useAllBooks } from '@store/libraryViewStore';
 import { useSearchHistoryStore } from '@store/useSearchHistoryStore';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { getEmbeddingClient } from '@domains/google';
@@ -25,7 +25,10 @@ export interface GroupedBookMatches {
   bookTitle: string;
   author: string;
   coverPalette?: number[];
+  coverUrl?: string;
+  coverBlob?: Blob | null;
   matches: DetailedSearchResult[];
+  lastRead?: number;
 }
 
 export interface BookIndexingStatus {
@@ -33,6 +36,8 @@ export interface BookIndexingStatus {
   title: string;
   author: string;
   coverPalette?: number[];
+  coverUrl?: string;
+  coverBlob?: Blob | null;
   status: 'indexed' | 'partial' | 'unindexed';
   progressLabel?: string;
   progressPercent?: number;
@@ -43,8 +48,7 @@ const queryCache = new QueryEmbeddingCache();
 const quantizer = new SearchEngine();
 
 export function useGlobalSearch() {
-  const booksMap = useBookStore((state) => state.books);
-  const books = useMemo(() => Object.values(booksMap), [booksMap]);
+  const books = useAllBooks();
   const recentQueries = useSearchHistoryStore((state) => state.recentQueries);
   const savedQueries = useSearchHistoryStore((state) => state.savedQueries);
   const toggleSaved = useSearchHistoryStore((state) => state.toggleSaved);
@@ -62,24 +66,28 @@ export function useGlobalSearch() {
     let active = true;
     async function loadStatuses() {
       const list: BookIndexingStatus[] = [];
-      for (const book of books) {
-        const text = await searchTextRepo.get(book.bookId);
-        const embed = await embeddingsRepo.get(book.bookId);
+      const sortedBooks = [...books].sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0));
+      for (const book of sortedBooks) {
+        const text = await searchTextRepo.get(book.id);
+        const embed = await embeddingsRepo.get(book.id);
+
+        const itemBase = {
+          bookId: book.id,
+          title: book.title,
+          author: book.author || '',
+          coverPalette: book.coverPalette,
+          coverUrl: book.coverUrl,
+          coverBlob: book.coverBlob,
+        };
 
         if (!text) {
           list.push({
-            bookId: book.bookId,
-            title: book.customTitle || book.title,
-            author: book.customAuthor || book.author,
-            coverPalette: book.coverPalette,
+            ...itemBase,
             status: 'unindexed',
           });
         } else if (!embed || embed.sections.length === 0) {
           list.push({
-            bookId: book.bookId,
-            title: book.customTitle || book.title,
-            author: book.customAuthor || book.author,
-            coverPalette: book.coverPalette,
+            ...itemBase,
             status: 'unindexed',
           });
         } else {
@@ -87,18 +95,12 @@ export function useGlobalSearch() {
           const embedded = embed.sections.length;
           if (embedded >= total) {
             list.push({
-              bookId: book.bookId,
-              title: book.customTitle || book.title,
-              author: book.customAuthor || book.author,
-              coverPalette: book.coverPalette,
+              ...itemBase,
               status: 'indexed',
             });
           } else {
             list.push({
-              bookId: book.bookId,
-              title: book.customTitle || book.title,
-              author: book.customAuthor || book.author,
-              coverPalette: book.coverPalette,
+              ...itemBase,
               status: 'partial',
               progressLabel: `${embedded}/${total} chapters`,
               progressPercent: Math.round((embedded / total) * 100),
@@ -303,7 +305,7 @@ export function useGlobalSearch() {
       // 7. Group consecutive adjacent results from the same book
       const grouped: GroupedBookMatches[] = [];
       for (const hit of flatHits) {
-        const book = useBookStore.getState().books[hit.bookId];
+        const book = books.find((b) => b.id === hit.bookId);
         if (!book) continue;
 
         const lastGroup = grouped[grouped.length - 1];
@@ -312,13 +314,18 @@ export function useGlobalSearch() {
         } else {
           grouped.push({
             bookId: hit.bookId,
-            bookTitle: book.customTitle || book.title,
-            author: book.customAuthor || book.author,
+            bookTitle: book.title,
+            author: book.author || '',
             coverPalette: book.coverPalette,
+            coverUrl: book.coverUrl,
+            coverBlob: book.coverBlob,
             matches: [hit],
+            lastRead: book.lastRead,
           });
         }
       }
+
+      grouped.sort((a, b) => (b.lastRead ?? 0) - (a.lastRead ?? 0));
 
       setResults(grouped);
       setStatus('success');

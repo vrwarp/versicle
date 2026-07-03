@@ -484,7 +484,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
               <SelectContent>
                 <SelectItem value="library">My Library</SelectItem>
                 <SelectItem value="notes">Notes</SelectItem>
-                <SelectItem value="search">Semantic Search</SelectItem>
+                <SelectItem value="search">Search</SelectItem>
               </SelectContent>
             </Select>
             <SyncPulseIndicator />
