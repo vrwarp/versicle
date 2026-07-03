@@ -5,7 +5,13 @@ WORKDIR /app
 ENV PATH="/app/node_modules/.bin:${PATH}"
 ENV BASE_URL=http://localhost:5173
 
+# 1.5 Install Peer Dependencies in a Dummy Directory to avoid git prepare conflicts
+WORKDIR /tmp-deps
+RUN npm install yjs@13.6.20 zustand@5.0.9 firebase@11.10.0 --legacy-peer-deps
+RUN mv node_modules /node_modules
+
 # 2. Install Node Dependencies (Layer Caching)
+WORKDIR /app
 COPY package.json package-lock.json ./
 COPY scripts ./scripts
 RUN npm ci --legacy-peer-deps

@@ -48,10 +48,13 @@ const logger = createLogger('LibraryView');
 const GlobalNotesViewLazy = React.lazy(() =>
   import('../notes/GlobalNotesView').then((m) => ({ default: m.GlobalNotesView })),
 );
+const GlobalSemanticSearchViewLazy = React.lazy(() =>
+  import('../search/GlobalSemanticSearchView').then((m) => ({ default: m.GlobalSemanticSearchView })),
+);
 
 interface LibraryViewProps {
   /** Which context this route renders: the library grid or global notes. */
-  context?: 'library' | 'notes';
+  context?: 'library' | 'notes' | 'search';
 }
 
 export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' }) => {
@@ -474,13 +477,14 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
         {/* Top Row: Title and Actions */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <Select value={context} onValueChange={(val) => navigate(val === 'notes' ? '/notes' : '/')}>
+            <Select value={context} onValueChange={(val) => navigate(val === 'notes' ? '/notes' : val === 'search' ? '/search' : '/')}>
               <SelectTrigger className="w-auto text-2xl sm:text-3xl font-bold border-0 shadow-none p-0 h-auto focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none flex-shrink-0" aria-label="Select view context">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="library">My Library</SelectItem>
                 <SelectItem value="notes">Notes</SelectItem>
+                <SelectItem value="search">Semantic Search</SelectItem>
               </SelectContent>
             </Select>
             <SyncPulseIndicator />
@@ -625,6 +629,16 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
             const book = books.find(b => b.id === bookId);
             if (book) handleRestore(book);
           }} />
+        </Suspense>
+      ) : context === 'search' ? (
+        <Suspense
+          fallback={
+            <div className="flex justify-center items-center py-12 flex-1" role="status" aria-label="Loading search">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" aria-hidden="true" />
+            </div>
+          }
+        >
+          <GlobalSemanticSearchViewLazy />
         </Suspense>
       ) : (
         <section className="flex-1 w-full">

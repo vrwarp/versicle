@@ -51,6 +51,7 @@ import type {
   CacheSessionStateRow,
   CacheTtsPreparationRow,
   TableImageRow,
+  CacheQueryEmbeddingsRow,
 } from './rows/cache';
 import type {
   AppMetadataValue,
@@ -90,7 +91,7 @@ export const DB_NAME = 'EpubLibraryDB';
  * device-local, rebuildable — nothing user-authored is touched. The next IDB
  * bump must add a MIGRATIONS step, never edit an existing one.
  */
-export const DB_VERSION = 28;
+export const DB_VERSION = 29;
 
 /**
  * Interface defining the schema for the IndexedDB database.
@@ -161,6 +162,11 @@ export interface EpubLibraryDB extends DBSchema {
   cache_embed_jobs: {
     key: string;
     value: CacheEmbedJobsRow;
+  };
+  /** v29: persistent query embedding vectors cache (keyPath key). */
+  cache_query_embeddings: {
+    key: string;
+    value: CacheQueryEmbeddingsRow;
   };
 
   // --- DOMAIN 3: APP (Sync Infrastructure + Schema Evolution) ---
@@ -424,6 +430,16 @@ async function migrateToV28(
 }
 
 /**
+ * The v29 step: create the EMPTY `cache_query_embeddings` store.
+ * Cache-domain, device-local, rebuildable.
+ */
+function migrateToV29(db: IDBPDatabase<EpubLibraryDB>): void {
+  if (!db.objectStoreNames.contains('cache_query_embeddings')) {
+    db.createObjectStore('cache_query_embeddings', { keyPath: 'key' });
+  }
+}
+
+/**
  * The versioned migration registry (D7). APPEND-ONLY: released steps are
  * persisted-format surface (migrations.test.ts runs them against committed
  * v18/v24 fixtures); a later fix is a later step, never an edit. Ordered
@@ -435,6 +451,7 @@ export const MIGRATIONS: readonly IdbMigration[] = [
   { toVersion: 26, migrate: migrateToV26 },
   { toVersion: 27, migrate: migrateToV27 },
   { toVersion: 28, migrate: migrateToV28 },
+  { toVersion: 29, migrate: migrateToV29 },
 ];
 
 /**
@@ -485,6 +502,9 @@ function ensureBaselineStores(
   // secondary index (mirrors cache_search_text/cache_render_metrics).
   createStore('cache_embeddings', { keyPath: 'bookId' });
   createStore('cache_embed_jobs', { keyPath: 'bookId' });
+
+  // v29: the query embedding vector cache. KeyPath IS key.
+  createStore('cache_query_embeddings', { keyPath: 'key' });
 
   // App Domain
   if (!db.objectStoreNames.contains('checkpoints')) {

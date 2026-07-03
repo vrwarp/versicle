@@ -23,6 +23,7 @@ hydration modes, and the per-store flip ledger.
 | `useLexiconStore` | `lexicon` | audio | `rules`, `settings` | merge-defaults | yes | TTS pronunciation rules + per-book lexicon settings. |
 | `useContentAnalysisStore` | `contentAnalysis` | audio | `sections` | merge-defaults | yes | AI content-analysis cache (references, table adaptations, titles). |
 | `useDeviceStore` | `devices` | sync | `devices` | merge-defaults | yes | Device registry of the sync mesh (UA, heartbeat, names). |
+| `useSearchHistoryStore` | `searchHistory` | search | `recentQueries`, `savedQueries` | merge-defaults | no | Search query history (recent and saved queries). |
 
 ## Local-persisted (zustand/persist → localStorage)
 

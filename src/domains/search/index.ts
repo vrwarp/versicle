@@ -45,3 +45,4 @@ export type {
 // app/ can fold it into the stamp it builds from the live config
 // (useGenAIStore {model, dims} + this).
 export { CURRENT_QUANT } from './embeddingPort';
+export { QueryEmbeddingCache } from './queryEmbeddingCache';

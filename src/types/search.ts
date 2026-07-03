@@ -25,6 +25,8 @@ export interface DetailedSearchResult {
      * an injected `cfiFromRange`. Optional so results stay cheap.
      */
     cfi?: string;
+    /** Cosine similarity score, populated by the semantic ranker. */
+    similarity?: number;
 }
 
 /** A bounded result page: the engine caps scans and SAYS so (no silent 50-cap). */

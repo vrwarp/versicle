@@ -82,6 +82,14 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: "search",
+        element: (
+          <ErrorBoundary>
+            <LibraryView context="search" />
+          </ErrorBoundary>
+        ),
+      },
+      {
         path: "read/:id",
         element: (
           <ErrorBoundary>
