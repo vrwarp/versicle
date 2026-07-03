@@ -1,14 +1,16 @@
 # Phase 0 PR gate (plan/overhaul/README.md §5 P0): lint, typecheck (app +
 # test + e2e code via tsc -b project references), sharded vitest, production
-# build, worker-chunk purity, dependency-cruiser ratchet, license gate.
+# build, worker-chunk purity, dependency-cruiser ratchet, license gate,
+# Docker/Playwright e2e verification.
 #
 # Conventions (do not regress):
 #   - Node comes from .nvmrc — never hardcode a version here.
 #   - npm ci only. `npm install` in CI re-resolves git deps and can test a
 #     different tree than the lockfile (this exact failure mode existed in
 #     the retired npm-test.yml).
-#   - The Docker/Playwright E2E lane is NOT a PR gate (runners unverified);
-#     it lives in e2e-verification.yml (nightly + manual, experimental).
+#   - The Docker/Playwright e2e lane (desktop/mobile/webkit) is a required
+#     PR gate here; e2e-verification.yml still runs the same suite nightly
+#     + on manual dispatch as an independent safety net.
 name: CI
 
 on:
@@ -124,3 +126,25 @@ jobs:
         run: npm ci
       - name: Sync backend emulator contract (real FirestoreBackend + y-cinder)
         run: npm run test:emulator
+
+  e2e:
+    name: Playwright (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop, mobile, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run verification suite (Docker)
+        # run_verification.sh builds the versicle-verify image, mounts
+        # verification/screenshots, and serializes WebKit automatically.
+        run: ./run_verification.sh --project=${{ matrix.project }}
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-screenshots-${{ matrix.project }}
+          path: verification/screenshots/
+          retention-days: 14

@@ -1,14 +1,12 @@
-# EXPERIMENTAL — Docker/Playwright E2E lane. Deliberately NOT a PR gate:
-# the Dockerized suite has not been verified green on hosted runners
-# (plan/overhaul/analysis/testing-verification.md debt #11: the old
-# visual-verification.yml ran it per-PR with three cold Docker builds and
-# without CI=1, and nothing consumed its artifacts). It runs nightly and on
-# demand until it is proven stable enough to promote into ci.yml.
+# Docker/Playwright e2e lane — same suite as the required `e2e` job in
+# ci.yml, run again independently of new commits (nightly) or on demand.
+# Acts as a safety net for drift on antigravity/main that a PR gate alone
+# wouldn't catch (e.g. flaky external dependencies degrading overnight).
 #
 # Uses the existing run_verification.sh flow: builds Dockerfile.verification,
 # serves the production build via `vite preview` inside the container, and
 # runs the Playwright suite (verification/*.spec.ts) against it.
-name: E2E verification (experimental)
+name: E2E verification (nightly)
 
 on:
   workflow_dispatch:
