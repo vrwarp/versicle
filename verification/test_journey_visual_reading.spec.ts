@@ -75,8 +75,9 @@ test("journey visual reading", async ({ page }) => {
 
   // --- Test Issue B: Tap Navigation Disabled in Standard Mode ---
   console.log("Testing Standard Mode Tap Restriction...");
-  // Right 10% of READER width
-  const tapXRight = readerX + readerW * 0.9;
+  // Tap inside the reading column but clear of the PageTurnRails (40/56px
+  // edge strips) — the central content area must never turn pages on tap.
+  const tapXRight = readerX + readerW * 0.75;
   const tapY = readerY + readerH / 2;
 
   await page.mouse.click(tapXRight, tapY);
@@ -117,14 +118,17 @@ test("journey visual reading", async ({ page }) => {
     "window.__versicleTest?.reader?.currentCfi() ?? 'null'"
   );
 
-  // --- Test Next Page (Compass Pill) in Immersive Mode ---
-  console.log("Clicking Next on Compass Pill (Immersive)...");
+  // --- Test Next Page (PageTurnRails) in Immersive Mode ---
+  // The compass pill is a pure audio transport since the Phase 1 rework
+  // (its arrows skip TTS chapters and are disabled while idle); page
+  // turning lives on the PageTurnRails at the reading column edges.
+  console.log("Clicking the right page-turn rail (Immersive)...");
   await page.waitForTimeout(1000); // Wait for UI to settle
 
   // Verify Compass Pill in compact mode is visible
   await expect(page.getByTestId("compass-pill-compact")).toBeVisible();
 
-  await page.getByTestId("compass-pill-compact").getByLabel("Next").click();
+  await page.getByTestId("page-turn-rail-right").click();
   await page.waitForTimeout(3000); // Wait for page turn animation/render
 
   let cfiAfter = await page.evaluate(
@@ -157,11 +161,11 @@ test("journey visual reading", async ({ page }) => {
     }
   }
 
-  // --- Test Prev Page (Compass Pill) in Immersive Mode ---
-  console.log("Clicking Previous on Compass Pill (Immersive)...");
+  // --- Test Prev Page (PageTurnRails) in Immersive Mode ---
+  console.log("Clicking the left page-turn rail (Immersive)...");
   await page.waitForTimeout(1000);
 
-  await page.getByTestId("compass-pill-compact").getByLabel("Previous").click();
+  await page.getByTestId("page-turn-rail-left").click();
   await page.waitForTimeout(3000);
 
   let cfiPrev = await page.evaluate(
