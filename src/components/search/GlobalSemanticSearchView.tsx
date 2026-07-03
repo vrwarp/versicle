@@ -191,6 +191,12 @@ interface SearchResultsListProps {
   onResultClick: (bookId: string, href: string, charOffset: number, matchLength: number) => void;
 }
 
+const calculateSigmoidMatch = (similarity: number): number => {
+  const k = 15;
+  const x0 = 0.50;
+  return Math.round(100 / (1 + Math.exp(-k * (similarity - x0))));
+};
+
 const SearchResultsList = React.memo<SearchResultsListProps>(({ query, results, onResultClick }) => {
   return (
     <div className="flex flex-col gap-6 animate-in fade-in duration-300">
@@ -261,7 +267,7 @@ const SearchResultsList = React.memo<SearchResultsListProps>(({ query, results, 
                     <div className="flex justify-between items-center gap-4 text-xs font-semibold">
                       <span className="text-primary truncate max-w-xs">{match.sectionTitle || 'Chapter'}</span>
                       <span className="bg-primary/10 text-primary px-2.5 py-0.5 rounded-full shrink-0 flex items-center gap-1 font-bold">
-                        {match.similarity ? `${Math.round(match.similarity * 100)}%` : '—'} Match
+                        {match.similarity ? `${calculateSigmoidMatch(match.similarity)}%` : '—'} Match
                       </span>
                     </div>
                     <p className="text-foreground/90 text-sm leading-relaxed italic border-l-2 border-primary/20 pl-3">
