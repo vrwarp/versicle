@@ -142,8 +142,14 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         onPlay: () => { logger.info('transport play -> engine.play()'); void engine.play(); },
         onPause: () => { logger.info('transport pause -> engine.pause()'); engine.pause(); },
         onStop: () => { logger.info('transport stop -> engine.stop()'); engine.stop(); },
-        onPrev: () => { logger.info('transport prev -> engine.skipToPreviousSection()'); void engine.skipToPreviousSection(); },
-        onNext: () => { logger.info('transport next -> engine.skipToNextSection()'); void engine.skipToNextSection(); },
+        // Hardware/OS prev-next (car steering wheel, headset, lock-screen skip buttons) step by
+        // ONE SENTENCE, not a chapter: on these surfaces the listener can't see the screen, and
+        // the dominant need is "rewind the sentence I just missed" — a whole-chapter jump loses
+        // their place entirely. engine.seek(±1) is the sentence step (sign-only offset) and still
+        // crosses a chapter boundary when pressed at the queue edge. Chapter skips remain on the
+        // in-app pill, which calls skipTo*Section directly (not through this transport path).
+        onPrev: () => { logger.info('transport prev -> engine.seek(-1) (sentence step)'); engine.seek(-1); },
+        onNext: () => { logger.info('transport next -> engine.seek(1) (sentence step)'); engine.seek(1); },
         onSeek: (offset) => { logger.info('transport seek -> engine.seek(' + offset + ')'); engine.seek(offset); },
         // Absolute scrubber drag on the OS media notification / lock screen: the native
         // layer emits `seekto` with an absolute time (seconds) in the section-queue domain

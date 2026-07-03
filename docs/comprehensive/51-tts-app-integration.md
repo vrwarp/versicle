@@ -411,8 +411,8 @@ const platform = new PlatformIntegration({
     onPlay: () => { void engine.play(); },
     onPause: () => { engine.pause(); },
     onStop: () => { engine.stop(); },
-    onPrev: () => { void engine.skipToPreviousSection(); },
-    onNext: () => { void engine.skipToNextSection(); },
+    onPrev: () => { engine.seek(-1); },  // sentence step, NOT a chapter skip
+    onNext: () => { engine.seek(1); },
     onSeek: (offset) => { engine.seek(offset); },
     onSeekTo: () => { /* seekTo is internal */ },
 });
@@ -421,6 +421,12 @@ const platform = new PlatformIntegration({
 `PlatformIntegration` handles lock-screen controls (MediaSession on web, `NowPlayingPlugin` on
 native). When the user presses Play on their lock screen, the event enters via `onPlay` and routes
 to `engine.play()` — which goes back into the worker.
+
+The prev/next transport actions (`previoustrack`/`nexttrack`: car steering-wheel buttons, headset
+buttons, the lock-screen skip buttons) intentionally map to `engine.seek(±1)` — a one-sentence
+step — rather than `skipTo*Section`. On eyes-free surfaces the dominant use is "rewind the
+sentence I just missed"; whole-chapter jumps live only on the in-app audio pill, which calls
+`skipToNextSection`/`skipToPreviousSection` directly.
 
 ### Step 4: Build the `EngineHost` and Connect
 
