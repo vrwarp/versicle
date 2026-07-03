@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useGlobalSearch } from '@app/search/useGlobalSearch';
 import { BookCover } from '../library/BookCover';
 import {
@@ -18,9 +18,10 @@ import { Input } from '../ui/Input';
 
 export const GlobalSemanticSearchView: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlQuery = searchParams.get('q') || '';
   const {
     query,
-    setQuery,
     results,
     status,
     errorType,
@@ -33,16 +34,27 @@ export const GlobalSemanticSearchView: React.FC = () => {
     executeSearch,
   } = useGlobalSearch();
 
-  const [inputVal, setInputVal] = useState(query);
+  const [prevUrlQuery, setPrevUrlQuery] = useState(urlQuery);
+  const [inputVal, setInputVal] = useState(urlQuery || query);
+
+  if (urlQuery !== prevUrlQuery) {
+    setPrevUrlQuery(urlQuery);
+    setInputVal(urlQuery);
+  }
+
+  // Sync urlQuery parameter to execute search
+  useEffect(() => {
+    executeSearch(urlQuery);
+  }, [urlQuery, executeSearch]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    executeSearch(inputVal);
+    const trimmed = inputVal.trim();
+    setSearchParams(trimmed ? { q: trimmed } : {});
   };
 
   const handlePillClick = (q: string) => {
-    setInputVal(q);
-    executeSearch(q);
+    setSearchParams({ q: q.trim() });
   };
 
   const handleResultClick = (bookId: string, href: string, charOffset: number, matchLength: number) => {
@@ -77,8 +89,7 @@ export const GlobalSemanticSearchView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  setInputVal('');
-                  setQuery('');
+                  setSearchParams({});
                 }}
                 className="p-1 hover:bg-muted rounded-full transition-colors"
                 aria-label="Clear search input"
@@ -342,9 +353,9 @@ export const GlobalSemanticSearchView: React.FC = () => {
             </div>
           ) : (
             <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full">
-              {results.map((group) => (
+              {results.map((group, groupIdx) => (
                 <div
-                  key={group.bookId}
+                  key={`${group.bookId}-${groupIdx}`}
                   className="bg-card rounded-2xl border border-border/80 overflow-hidden shadow-sm flex flex-col md:flex-row"
                 >
                   {/* Left Side: Book Cover Sidebar */}

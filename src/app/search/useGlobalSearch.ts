@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAllBooks } from '@store/libraryViewStore';
 import { useSearchHistoryStore } from '@store/useSearchHistoryStore';
 import { useGenAIStore } from '@store/useGenAIStore';
@@ -118,9 +118,15 @@ export function useGlobalSearch() {
     };
   }, [books]);
 
-  const executeSearch = async (queryText: string) => {
+  const executeSearch = useCallback(async (queryText: string) => {
     const trimmed = queryText.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setQuery('');
+      setResults([]);
+      setStatus('idle');
+      setErrorType(undefined);
+      return;
+    }
 
     setQuery(trimmed);
     setStatus('searching');
@@ -302,31 +308,28 @@ export function useGlobalSearch() {
       }
       flatHits.sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0));
 
-      // 7. Group all results by book
-      const groupsMap = new Map<string, GroupedBookMatches>();
+      // 7. Group consecutive adjacent results from the same book
+      const grouped: GroupedBookMatches[] = [];
       for (const hit of flatHits) {
         const book = books.find((b) => b.id === hit.bookId);
         if (!book) continue;
 
-        let group = groupsMap.get(hit.bookId);
-        if (!group) {
-          group = {
+        const lastGroup = grouped[grouped.length - 1];
+        if (lastGroup && lastGroup.bookId === hit.bookId) {
+          lastGroup.matches.push(hit);
+        } else {
+          grouped.push({
             bookId: hit.bookId,
             bookTitle: book.title,
             author: book.author || '',
             coverPalette: book.coverPalette,
             coverUrl: book.coverUrl,
             coverBlob: book.coverBlob,
-            matches: [],
+            matches: [hit],
             lastRead: book.lastRead,
-          };
-          groupsMap.set(hit.bookId, group);
+          });
         }
-        group.matches.push(hit);
       }
-
-      const grouped = Array.from(groupsMap.values());
-      grouped.sort((a, b) => (b.lastRead ?? 0) - (a.lastRead ?? 0));
 
       setResults(grouped);
       setStatus('success');
@@ -344,7 +347,7 @@ export function useGlobalSearch() {
     } finally {
       handle.dispose();
     }
-  };
+  }, [books]);
 
   return {
     query,
