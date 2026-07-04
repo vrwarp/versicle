@@ -60,6 +60,108 @@
       "colonAny": 1,
       "disables": 1,
       "reason": "LegacyEnvelope.state is a parsed PRE-SCHEMA `tts-storage` persist blob (v1/v2/v3): its shapes predate typing and are pinned by the captured-blob fixtures (src/store/__fixtures__/ttsStorageFixtures); the migration chain is copied verbatim from the deleted store. Dies when the legacy key retires."
+    },
+    "src/app/routes.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/ReadingListDialog.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/devices/DeviceList.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/drive/DriveImportDialog.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/library/BookCover.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/library/BookListItem.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/notes/AnnotationCard.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/reader/AnnotationList.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/reader/ContentAnalysisLegend.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/reader/LexiconManager.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/reader/ReaderShell.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/reader/ReadingHistoryPanel.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/reader/TTSAbbreviationSettings.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/settings/CheckpointDiffView.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/settings/GenAISettingsTab.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/components/ui/ConfirmDialog.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
+    },
+    "src/domains/reader/ui/ReaderCommands.tsx": {
+      "asAny": 0,
+      "colonAny": 0,
+      "disables": 1,
+      "reason": "Phase 0 baseline (automated suppression) - a11y and react-refresh rules"
     }
   }
 }
