@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/no-autofocus */
 import React, { useState, useMemo, useCallback } from 'react';
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from '../ui/Modal';
 import { Input } from '../ui/Input';

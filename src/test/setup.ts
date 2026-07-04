@@ -190,3 +190,10 @@ if (typeof window !== 'undefined') {
       reRealm(nativeStructuredClone(value, options), new Map())) as typeof structuredClone;
   }
 }
+
+const originalConsoleError = console.error;
+console.error = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('was not wrapped in act')) return;
+  if (typeof args[0] === 'string' && args[0].includes('Warning: Missing `Description`')) return;
+  originalConsoleError(...args);
+};

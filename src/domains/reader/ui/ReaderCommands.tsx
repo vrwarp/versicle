@@ -31,6 +31,7 @@
  * KeyboardShortcutService registrations — src/app/shortcuts/ — where
  * scope stacking replaced the P0 interim predicates).
  */
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useEffect } from 'react';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 

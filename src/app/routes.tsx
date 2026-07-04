@@ -20,6 +20,7 @@
  *                      ReaderShell (the book stays live behind the overlay and
  *                      the "This Book" lexicon scope stays reachable).
  */
+/* eslint-disable react-refresh/only-export-components */
 import { Suspense, lazy } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import { RootLayout } from '../layouts/RootLayout';

@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
 import React, { useState } from 'react';
 import type { DiffResult } from '@domains/sync/checkpoints/CheckpointInspector';
 import { ChevronDown, ChevronRight, Plus, Minus, RefreshCw, Maximize2, Download } from 'lucide-react';

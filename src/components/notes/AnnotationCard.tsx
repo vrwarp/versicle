@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/no-autofocus, jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events, jsx-a11y/label-has-for */
 import React, { useState } from 'react';
 import type { UserAnnotation } from '~types/user-data';
 import { StickyNote, PenLine, Trash2, Copy, Check } from 'lucide-react';

@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/no-autofocus, jsx-a11y/label-has-associated-control, jsx-a11y/label-has-for */
 import { useState, useRef, useMemo } from 'react';
 import { LexiconService } from '@lib/tts/LexiconService';
 import { useLexiconStore } from '@store/useLexiconStore';

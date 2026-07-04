@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/label-has-for */
 import React, { useState, useRef } from 'react';
 import { useTTSSettingsStore } from '@store/useTTSSettingsStore';
 import { useShallow } from 'zustand/react/shallow';

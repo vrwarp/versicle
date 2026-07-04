@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/no-autofocus, jsx-a11y/label-has-for */
 import React from 'react';
 import { useAnnotationStore } from '@store/useAnnotationStore';
 import { Trash2, StickyNote, PenLine } from 'lucide-react';

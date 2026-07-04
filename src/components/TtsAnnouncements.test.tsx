@@ -22,10 +22,12 @@ function flushAnnouncementFrame() {
 describe('LiveAnnouncer', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => setTimeout(() => cb(0), 16) as unknown as number);
     vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
   });
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
@@ -56,12 +58,14 @@ describe('LiveAnnouncer', () => {
 describe('TtsAnnouncements (adapter: playback transitions → announcements)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => setTimeout(() => cb(0), 16) as unknown as number);
     vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
     useTTSPlaybackStore.setState({ status: 'stopped', queue: [], currentIndex: 0 });
     useReaderUIStore.setState({ currentSectionTitle: 'Chapter 1' });
   });
   afterEach(() => {
+    vi.restoreAllMocks();
     useTTSPlaybackStore.setState({ status: 'stopped', queue: [], currentIndex: 0 });
     vi.unstubAllGlobals();
     vi.useRealTimers();

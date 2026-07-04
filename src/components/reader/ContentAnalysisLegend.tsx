@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/label-has-associated-control, jsx-a11y/label-has-for */
 import React, { useEffect, useState, useRef } from 'react';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';

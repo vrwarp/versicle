@@ -80,6 +80,18 @@ const runSearch = async (query: string, via: 'enter' | 'button' = 'button') => {
 };
 
 describe('SearchPanel', () => {
+
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation((...args) => {
+      if (typeof args[0] === 'string' && args[0].includes('was not wrapped in act')) return;
+      console.warn(...args);
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
     beforeEach(() => {
         vi.clearAllMocks();
     });

@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';

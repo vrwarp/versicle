@@ -16,6 +16,7 @@
  * The shell (src/components/reader/ReaderShell.tsx) is pure composition
  * over this controller's return surface.
  */
+
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
@@ -184,6 +185,7 @@ export function useReaderController(
     if (cfiOverride) return decodeURIComponent(cfiOverride);
     if (locationOverride) return decodeURIComponent(locationOverride);
     return bookId ? useReadingStateStore.getState().getProgress(bookId)?.currentCfi : undefined;
+
   }, [bookId, cfiOverride, locationOverride]);
 
   // Engine commands go through the TtsController facade (stable identities).
@@ -307,7 +309,6 @@ export function useReaderController(
     lineHeight,
     fontProfiles,
     shouldForceFont,
-    bookId,
     showPopover,
     hidePopover,
     bookMetadata,
@@ -430,6 +431,7 @@ export function useReaderController(
       cancelled = true;
       if (retryTimer !== null) clearTimeout(retryTimer);
     };
+
   }, [isReady, bookId, searchSession]);
 
   // Chinese reading registration (Phase 6 §7, PR-10): the app layer wires
@@ -479,6 +481,7 @@ export function useReaderController(
         navigate('/', { state: { reprocessBookId: bookId } });
       }
     }
+
   }, [bookMetadata, bookId, navigate]);
 
   // Reading-session recorder lifecycle (Phase 6 §6): one per book.
@@ -508,6 +511,7 @@ export function useReaderController(
       recorder.dispose();
       recorderRef.current = null;
     };
+
   }, [bookId]);
 
   // Sync loading state
@@ -531,6 +535,7 @@ export function useReaderController(
       audio.setBookId(bookId);
       setCurrentBookId(bookId);
     }
+
   }, [bookId, setCurrentBookId, audio]);
 
   // Hide selection popover when Chinese reading settings change.
