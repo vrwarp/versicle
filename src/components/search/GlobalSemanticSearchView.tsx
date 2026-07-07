@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useGlobalSearch, type BookIndexingStatus, type GroupedBookMatches } from '@app/search/useGlobalSearch';
+import type { DetailedSearchResult } from '~types/search';
 import { useSearchHistoryStore } from '@store/useSearchHistoryStore';
 import { BookCover } from '../library/BookCover';
 import {
@@ -189,6 +190,7 @@ interface SearchResultsListProps {
   query: string;
   results: GroupedBookMatches[];
   onResultClick: (bookId: string, href: string, charOffset: number, matchLength: number) => void;
+  triggerHighlightFor: (bookId: string, href: string, charOffset: number, excerpt: string) => void;
 }
 
 const calculateSigmoidMatch = (similarity: number): number => {
@@ -197,7 +199,104 @@ const calculateSigmoidMatch = (similarity: number): number => {
   return Math.round(100 / (1 + Math.exp(-k * (similarity - x0))));
 };
 
-const SearchResultsList = React.memo<SearchResultsListProps>(({ query, results, onResultClick }) => {
+interface SearchMatchCardProps {
+  bookId: string;
+  match: DetailedSearchResult;
+  onResultClick: (bookId: string, href: string, charOffset: number, matchLength: number) => void;
+  triggerHighlightFor: (bookId: string, href: string, charOffset: number, excerpt: string) => void;
+}
+
+const SearchMatchCard = React.memo<SearchMatchCardProps>(({
+  bookId,
+  match,
+  onResultClick,
+  triggerHighlightFor,
+}) => {
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Intersection observer to load highlights when card is near viewport (100px threshold)
+    const hasCalculated = match.sentenceHighlights && match.sentenceHighlights.some((hl: { score: number }) => hl.score > 0);
+    if (hasCalculated) return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        triggerHighlightFor(bookId, match.href, match.charOffset, match.excerpt);
+        observer.disconnect();
+      }
+    }, { rootMargin: '100px' });
+
+    if (cardRef.current) {
+      observer.observe(cardRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [bookId, match.href, match.charOffset, match.excerpt, triggerHighlightFor, match.sentenceHighlights]);
+
+  const renderExcerptWithHighlights = (excerptStr: string, highlights: { start: number; end: number; score: number }[]) => {
+    const elements: React.ReactNode[] = [];
+    let lastIndex = 0;
+    const sorted = [...highlights].sort((a, b) => a.start - b.start);
+    sorted.forEach((hl, sIdx) => {
+      if (hl.start > lastIndex) {
+        elements.push(excerptStr.substring(lastIndex, hl.start));
+      }
+      const sentenceText = excerptStr.substring(hl.start, hl.end);
+      elements.push(
+        <span
+          key={`hl-${sIdx}`}
+          className="px-0.5 rounded not-italic transition-all duration-300"
+          style={{
+            backgroundColor: `color-mix(in srgb, var(--primary) ${Math.round(hl.score * 25)}%, transparent)`,
+          }}
+        >
+          {sentenceText}
+        </span>
+      );
+      lastIndex = hl.end;
+    });
+    if (lastIndex < excerptStr.length) {
+      elements.push(excerptStr.substring(lastIndex));
+    }
+    return elements;
+  };
+
+  return (
+    <div
+      ref={cardRef}
+      onClick={() => onResultClick(bookId, match.href, match.charOffset, match.matchLength)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onResultClick(bookId, match.href, match.charOffset, match.matchLength);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      className="p-5 hover:bg-muted/30 cursor-pointer transition-colors duration-150 group/item flex flex-col gap-2 relative focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl animate-in fade-in duration-300"
+    >
+      <div className="flex justify-between items-center gap-4 text-xs font-semibold">
+        <span className="text-primary truncate max-w-xs">{match.sectionTitle || 'Chapter'}</span>
+        <span className="bg-primary/10 text-primary px-2.5 py-0.5 rounded-full shrink-0 flex items-center gap-1 font-bold">
+          {match.similarity ? `${calculateSigmoidMatch(match.similarity)}%` : '—'} Match
+        </span>
+      </div>
+      <p className="text-foreground/90 text-sm leading-relaxed italic border-l-2 border-primary/20 pl-3">
+        {match.sentenceHighlights && match.sentenceHighlights.length > 0 ? (
+          renderExcerptWithHighlights(match.excerpt, match.sentenceHighlights)
+        ) : (
+          match.excerpt
+        )}
+      </p>
+      <div className="absolute right-4 bottom-4 opacity-0 group-hover/item:opacity-100 text-primary transition-opacity flex items-center gap-1 text-xs font-bold">
+        Read Passage <Play className="w-3.5 h-3.5 fill-current" />
+      </div>
+    </div>
+  );
+});
+SearchMatchCard.displayName = 'SearchMatchCard';
+
+const SearchResultsList = React.memo<SearchResultsListProps>(({ query, results, onResultClick, triggerHighlightFor }) => {
   return (
     <div className="flex flex-col gap-6 animate-in fade-in duration-300">
       <div className="flex justify-between items-center border-b pb-2">
@@ -251,32 +350,13 @@ const SearchResultsList = React.memo<SearchResultsListProps>(({ query, results, 
               {/* Right Side: Matches list */}
               <div className="flex-1 flex flex-col divide-y divide-border">
                 {group.matches.map((match, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => onResultClick(group.bookId, match.href, match.charOffset, match.matchLength)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onResultClick(group.bookId, match.href, match.charOffset, match.matchLength);
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    className="p-5 hover:bg-muted/30 cursor-pointer transition-colors duration-150 group/item flex flex-col gap-2 relative focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
-                  >
-                    <div className="flex justify-between items-center gap-4 text-xs font-semibold">
-                      <span className="text-primary truncate max-w-xs">{match.sectionTitle || 'Chapter'}</span>
-                      <span className="bg-primary/10 text-primary px-2.5 py-0.5 rounded-full shrink-0 flex items-center gap-1 font-bold">
-                        {match.similarity ? `${calculateSigmoidMatch(match.similarity)}%` : '—'} Match
-                      </span>
-                    </div>
-                    <p className="text-foreground/90 text-sm leading-relaxed italic border-l-2 border-primary/20 pl-3">
-                      {match.excerpt}
-                    </p>
-                    <div className="absolute right-4 bottom-4 opacity-0 group-hover/item:opacity-100 text-primary transition-opacity flex items-center gap-1 text-xs font-bold">
-                      Read Passage <Play className="w-3.5 h-3.5 fill-current" />
-                    </div>
-                  </div>
+                  <SearchMatchCard
+                    key={`${match.href}-${match.charOffset}-${idx}`}
+                    bookId={group.bookId}
+                    match={match}
+                    onResultClick={onResultClick}
+                    triggerHighlightFor={triggerHighlightFor}
+                  />
                 ))}
               </div>
             </div>
@@ -303,6 +383,7 @@ export const GlobalSemanticSearchView: React.FC = () => {
     savedQueries,
     toggleSaved,
     executeSearch,
+    triggerHighlightFor,
   } = useGlobalSearch();
 
   const [prevUrlQuery, setPrevUrlQuery] = useState(urlQuery);
@@ -468,6 +549,7 @@ export const GlobalSemanticSearchView: React.FC = () => {
           query={query}
           results={results}
           onResultClick={handleResultClick}
+          triggerHighlightFor={triggerHighlightFor}
         />
       )}
     </div>

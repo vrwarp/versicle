@@ -27,6 +27,12 @@ export interface DetailedSearchResult {
     cfi?: string;
     /** Cosine similarity score, populated by the semantic ranker. */
     similarity?: number;
+    /** Code-unit offset of the match start within the excerpt string. */
+    matchStartInExcerpt?: number;
+    /** Code-unit length of the match within the excerpt string. */
+    matchLengthInExcerpt?: number;
+    /** Highlighting details for each sentence in the excerpt (for gradient/relevance highlights) */
+    sentenceHighlights?: { start: number; end: number; score: number }[];
 }
 
 /** A bounded result page: the engine caps scans and SAYS so (no silent 50-cap). */

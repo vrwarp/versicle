@@ -35,7 +35,7 @@ export interface ChunkSectionOptions {
 }
 
 /** A sentence span `[start, end)` in the section's text. */
-interface Sentence {
+export interface Sentence {
   start: number;
   end: number;
 }
@@ -46,11 +46,22 @@ interface Sentence {
  * boundary lands right after the sentence terminator, never on a space). Falls
  * back to one whole-text span when Intl.Segmenter is unavailable.
  */
-function segmentSentences(text: string, locale: string): Sentence[] {
+export function segmentSentences(text: string, locale: string): Sentence[] {
   const segmenter = getCachedSegmenter(locale);
   if (!segmenter) {
-    const trimmedEnd = text.trimEnd().length;
-    return trimmedEnd > 0 ? [{ start: 0, end: trimmedEnd }] : [];
+    const sentences: Sentence[] = [];
+    const re = /([^.!?。！？\n]+[.!?。！？\n]*)/g;
+    let match;
+    while ((match = re.exec(text)) !== null) {
+      const matchText = match[0];
+      const trimmed = matchText.trim();
+      if (trimmed.length > 0) {
+        const start = match.index + matchText.indexOf(trimmed);
+        const end = start + trimmed.length;
+        sentences.push({ start, end });
+      }
+    }
+    return sentences.length > 0 ? sentences : (text.trimEnd().length > 0 ? [{ start: 0, end: text.trimEnd().length }] : []);
   }
   const sentences: Sentence[] = [];
   for (const seg of segmenter.segment(text)) {

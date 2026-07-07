@@ -125,12 +125,16 @@ export class SearchEngine {
                     break outer;
                 }
 
+                const start = Math.max(0, match.index - 40);
+                const matchStartInExcerpt = (start > 0 ? 3 : 0) + (match.index - start);
                 results.push({
                     href,
                     sectionTitle: section.title,
                     excerpt: getExcerpt(section.text, match.index, match[0].length),
                     charOffset: match.index,
                     matchLength: match[0].length,
+                    matchStartInExcerpt,
+                    matchLengthInExcerpt: match[0].length,
                     occurrence,
                 });
             }
@@ -259,5 +263,54 @@ export class SearchEngine {
 
         scored.sort((a, b) => b.cosine - a.cosine);
         return scored.slice(0, limit);
+    }
+
+    /**
+     * Ranks sentences within a chunk by semantic similarity to a query using Ternlight.
+     * Dynamic import of @ternlight/mini ensures it is only loaded on demand in the worker.
+     */
+    async findBestSentences(
+        query: string,
+        chunksSentences: string[][],
+    ): Promise<{ index: number; cosine: number; scores: number[] }[]> {
+        if (chunksSentences.length === 0) return [];
+        try {
+            const tern = await import('@ternlight/mini');
+            const queryEmb = tern.embed(query);
+
+            const results = chunksSentences.map((sentences) => {
+                let bestIndex = 0;
+                let bestCosine = -1;
+                const scores: number[] = [];
+
+                for (let i = 0; i < sentences.length; i++) {
+                    const sText = sentences[i].trim();
+                    if (sText.length === 0) {
+                        scores.push(-1);
+                        continue;
+                    }
+
+                    try {
+                        const sEmb = tern.embed(sText);
+                        const sim = tern.cosineSim(queryEmb, sEmb);
+                        scores.push(sim);
+                        if (sim > bestCosine) {
+                            bestCosine = sim;
+                            bestIndex = i;
+                        }
+                    } catch (err) {
+                        console.error('worker error embedding sentence:', sText, err);
+                        scores.push(-1);
+                    }
+                }
+
+                return { index: bestIndex, cosine: bestCosine >= 0 ? bestCosine : 0, scores };
+            });
+
+            return results;
+        } catch (error) {
+            console.error('worker failed to run Ternlight sentence selection:', error);
+            return chunksSentences.map(sentences => ({ index: 0, cosine: 0, scores: sentences.map(() => 0) }));
+        }
     }
 }
