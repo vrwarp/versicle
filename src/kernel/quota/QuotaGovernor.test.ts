@@ -232,6 +232,18 @@ describe('QuotaGovernor', () => {
 
       await expect(g.acquire('bg', 1)).resolves.toBeUndefined();
     });
+
+    it('respects the bgThrottlePercent setting from limits', async () => {
+      limits = { ...LOOSE, rpm: 10, bgThrottlePercent: 20 };
+      const g = newGovernor();
+
+      // 20% of 10 RPM = 2 requests allowed for background.
+      await expect(g.acquire('bg', 1)).resolves.toBeUndefined();
+      await expect(g.acquire('bg', 1)).resolves.toBeUndefined();
+
+      const err = await g.acquire('bg', 1).catch((e: unknown) => e);
+      expect((err as NetRateLimitedError).context).toMatchObject({ reason: 'bg-fraction-exhausted' });
+    });
   });
 
   describe('persisted RPD + midnight-PT reset', () => {
@@ -247,6 +259,21 @@ describe('QuotaGovernor', () => {
       expect((err as NetRateLimitedError).code).toBe('NET_RATE_LIMITED');
       expect((err as NetRateLimitedError).retryable).toBe(true);
       expect((err as NetRateLimitedError).context).toMatchObject({ reason: 'rpd-exhausted' });
+    });
+
+    it('enforces fgRpdHeadroom by reducing the background RPD ceiling', async () => {
+      limits = { ...LOOSE, rpd: 10, fgRpdHeadroom: 2 };
+      const double = makeStoreDouble({ day: '2026-06-13', rpd: 8 });
+      setQuotaStore(double.store);
+      const g = newGovernor();
+
+      // Background lane tries to acquire but daily rpd (8) >= effective limit (10 - 2 = 8).
+      const err = await g.acquire('bg', 1).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(NetRateLimitedError);
+      expect((err as NetRateLimitedError).context).toMatchObject({ reason: 'rpd-exhausted' });
+
+      // Foreground lane can still acquire because it uses the full limit (10).
+      await expect(g.acquire('fg', 1)).resolves.toBeUndefined();
     });
 
     it('treats a persisted RPD stamped with a PRIOR PT day as zero (rollover)', async () => {
