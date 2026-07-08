@@ -55,6 +55,10 @@ export interface QuotaLimits {
   tpm: number;
   /** Requests per calendar day (midnight-PT reset). */
   rpd: number;
+  /** Fraction (%) of the budget background work may consume. Default 50. */
+  bgThrottlePercent?: number;
+  /** RPD headroom reserved for the foreground lane. Default 0. */
+  fgRpdHeadroom?: number;
 }
 
 /**
@@ -156,13 +160,6 @@ const TPM_SAFETY_FRACTION = 0.8;
 function effectiveTpm(limitTpm: number): number {
   return Math.max(1, Math.floor(limitTpm * TPM_SAFETY_FRACTION));
 }
-
-/**
- * The fraction of the per-minute request/token budget background work may
- * consume before it is refused — leaves headroom so foreground work is not
- * starved by automatic background spend.
- */
-const BG_FRACTION = 0.5;
 
 interface PoolState {
   events: Record<Lane, WindowEvent[]>;
@@ -275,12 +272,18 @@ export class QuotaGovernor {
     }
 
     const daily = await this.loadDaily(ratePool, at);
-    if (daily.rpd >= limits.rpd) {
+
+    let effectiveRpdLimit = limits.rpd;
+    if (lane === 'bg') {
+      effectiveRpdLimit = Math.max(0, limits.rpd - (limits.fgRpdHeadroom ?? 0));
+    }
+
+    if (daily.rpd >= effectiveRpdLimit) {
       throw new NetRateLimitedError(this.msUntilNextPtDay(at), {
         lane,
         reason: 'rpd-exhausted',
         rpd: daily.rpd,
-        limit: limits.rpd,
+        limit: effectiveRpdLimit,
         ratePool,
       });
     }
@@ -293,8 +296,11 @@ export class QuotaGovernor {
       if (p.fgClaims > 0) {
         throw new NetRateLimitedError(WINDOW_MS, { lane, reason: 'fg-preempt', ratePool });
       }
-      const bgRequestCap = Math.max(1, Math.floor(limits.rpm * BG_FRACTION));
-      const bgTokenCap = Math.max(1, Math.floor(effectiveTpm(limits.tpm) * BG_FRACTION));
+
+      const bgFraction = (limits.bgThrottlePercent ?? 50) / 100;
+      const bgRequestCap = Math.max(1, Math.floor(limits.rpm * bgFraction));
+      const bgTokenCap = Math.max(1, Math.floor(effectiveTpm(limits.tpm) * bgFraction));
+
       this.prune(ratePool, 'bg', at);
       const bgTokens = p.events.bg.reduce((acc, e) => acc + e.tokens, 0);
       if (p.events.bg.length >= bgRequestCap || bgTokens + estTokens > bgTokenCap) {
