@@ -9,6 +9,7 @@ import {
   QueryEmbeddingCache,
   segmentSentences,
   type Sentence,
+  type SearchEngineHandle,
 } from '@domains/search';
 import { queryEmbeddingsRepo } from '@data/repos/queryEmbeddings';
 import { embeddingsRepo } from '@data/repos/embeddings';
@@ -63,7 +64,7 @@ export function useGlobalSearch() {
   const [errorType, setErrorType] = useState<SearchErrorType | undefined>(undefined);
   const [indexingStatuses, setIndexingStatuses] = useState<BookIndexingStatus[]>([]);
 
-  const activeHandleRef = useRef<any>(null);
+  const activeHandleRef = useRef<SearchEngineHandle | null>(null);
   const requestedCardsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {

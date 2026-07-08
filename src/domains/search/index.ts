@@ -8,11 +8,8 @@
  */
 export {
   SearchSession,
-
-
   type SearchEngineProtocol,
-
-
+  type SearchEngineHandle,
 } from './SearchSession';
 export { createWorkerSearchEngineFactory } from './workerFactory';
 export {  resolveResultCfi } from './offsetRange';
