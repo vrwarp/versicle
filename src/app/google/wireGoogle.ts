@@ -115,20 +115,25 @@ export function wireGoogleDomain(): void {
   // in-memory in the governor.
   const getQuotaLimits = (ratePool: string): QuotaLimits => {
     const s = useGenAIStore.getState();
-    if (s.pauseAllGenAI) return { rpm: 0, tpm: 0, rpd: 0 };
-    return (
+    if (s.pauseAllGenAI) return { rpm: 0, tpm: 0, rpd: 0, bgThrottlePercent: 0, fgRpdHeadroom: 0 };
+    const base = (
       s.quotaLimitsMap[ratePool] ??
       DEFAULT_QUOTA_LIMITS[ratePool] ??
       s.quotaLimitsMap['default'] ??
       s.quotaLimits
     );
+    return {
+      ...base,
+      bgThrottlePercent: s.bgThrottlePercent,
+      fgRpdHeadroom: s.fgRpdHeadroom,
+    };
   };
   // saveDailyUsage — the single chokepoint where the governor reports today's
   // usage — ALSO publishes THIS device's own spend onto its synced DeviceInfo
   // record, so every device can sum the whole project's daily quota usage.
   setQuotaStore(
     makeQuotaStore(quotaCounterRepo, (ratePool, usage) => {
-      if (ratePool === 'gemini-embedding-001') {
+      if (ratePool === 'gemini-embedding-2') {
         useDeviceStore.getState().publishEmbedSpend(getDeviceId(), usage);
       }
     }),
@@ -140,7 +145,7 @@ export function wireGoogleDomain(): void {
   // this reduced provider; the embedding-backfill task (below) reads it as a
   // cross-device admission check before each background embed.
   const getBackgroundQuotaLimits = makeBackgroundQuotaLimits(
-    () => getQuotaLimits('gemini-embedding-001'),
+    () => getQuotaLimits('gemini-embedding-2'),
     () => useDeviceStore.getState().devices,
     getDeviceId(),
   );
@@ -164,7 +169,7 @@ export function wireGoogleDomain(): void {
   // kernel governor.
   useGenAIStore
     .getState()
-    .setBgBudgetProvider(getBackgroundQuotaLimits, () => governor.snapshot('gemini-embedding-001').bg.rpd);
+    .setBgBudgetProvider(getBackgroundQuotaLimits, () => governor.snapshot('gemini-embedding-2').bg.rpd);
 
   // Cross-restart log persistence: hydrate the store's log ring buffer from
   // the dedicated side DB, then mirror every appended entry back into it (all
