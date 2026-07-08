@@ -46,7 +46,7 @@ test("journey workspace switch", async ({ page }) => {
   // The switch durably stages, reloads to apply, then reloads again into the
   // AWAITING_CONFIRMATION boot arm which surfaces the app-level confirmation
   // modal. (Wait generously to ride out the two reboots under full-suite load.)
-  await expect(page.getByRole("heading", { name: "Finalize Workspace Switch?" })).toBeVisible({ timeout: 20000 });
+  await expect(page.getByRole("heading", { name: "Finalize Workspace Switch?" })).toBeVisible({ timeout: 45000 });
 
   // The reload lands back on /settings/sync, so the Radix SettingsShell dialog
   // re-opens UNDER the confirmation modal. While that modal Radix dialog is open
