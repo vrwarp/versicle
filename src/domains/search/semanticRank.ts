@@ -34,7 +34,7 @@
  */
 import type { DetailedSearchResult } from '~types/search';
 import { getExcerpt } from '@lib/search-engine';
-import { chunkSection } from './chunker';
+import { chunkSection, segmentSentences, type Sentence } from './chunker';
 import type { SearchEngineProtocol, SearchTextSource } from './protocol';
 import type { QueryEmbeddingCache } from './queryEmbeddingCache';
 import {
@@ -192,6 +192,7 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
   );
 
   const results: DetailedSearchResult[] = [];
+  const candidates: { result: DetailedSearchResult; sectionText: string }[] = [];
   for (let s = 0; s < resolved.length; s++) {
     const { section, source, offsetsFor } = resolved[s];
     for (const { row, cosine } of tops[s]) {
@@ -199,16 +200,63 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
       if (!offsets) continue;
       const charOffset = offsets.charStart;
       const matchLength = offsets.charEnd - offsets.charStart;
-      results.push({
+      const start = Math.max(0, charOffset - 40);
+      const matchStartInExcerpt = (start > 0 ? 3 : 0) + (charOffset - start);
+      const result: DetailedSearchResult = {
         href: section.href,
         sectionTitle: source.title,
         excerpt: getExcerpt(source.text, charOffset, matchLength),
         charOffset,
         matchLength,
+        matchStartInExcerpt,
+        matchLengthInExcerpt: matchLength,
         // 1-based ordinal within the section (chunk row + 1); CFI stays unset.
         occurrence: row + 1,
         similarity: cosine,
-      });
+      };
+      results.push(result);
+      candidates.push({ result, sectionText: source.text });
+    }
+  }
+
+  // Sentence re-ranking: Ternlight on-device sentence selection specifically for the top 20 candidate matches
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => (b.result.similarity ?? 0) - (a.result.similarity ?? 0));
+    const topCandidates = candidates.slice(0, 20);
+
+    const chunksSentences: string[][] = [];
+    const chunksSentenceSpans: Sentence[][] = [];
+
+    for (const c of topCandidates) {
+      const chunkText = c.sectionText.slice(c.result.charOffset, c.result.charOffset + c.result.matchLength);
+      const sentences = segmentSentences(chunkText, 'en');
+      chunksSentenceSpans.push(sentences);
+      chunksSentences.push(sentences.map(s => chunkText.slice(s.start, s.end)));
+    }
+
+    try {
+      const bestSentences = await engine.findBestSentences(query, chunksSentences);
+
+      for (let i = 0; i < topCandidates.length; i++) {
+        const c = topCandidates[i];
+        const best = bestSentences[i];
+        if (best && best.index >= 0) {
+          const spans = chunksSentenceSpans[i];
+          const span = spans?.[best.index];
+          if (span) {
+            const sentenceCharOffset = c.result.charOffset + span.start;
+            const sentenceMatchLength = span.end - span.start;
+            c.result.charOffset = sentenceCharOffset;
+            c.result.matchLength = sentenceMatchLength;
+            c.result.excerpt = getExcerpt(c.sectionText, sentenceCharOffset, sentenceMatchLength);
+            const sentenceStart = Math.max(0, sentenceCharOffset - 40);
+            c.result.matchStartInExcerpt = (sentenceStart > 0 ? 3 : 0) + (sentenceCharOffset - sentenceStart);
+            c.result.matchLengthInExcerpt = sentenceMatchLength;
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to run Ternlight sentence selection:', err);
     }
   }
 

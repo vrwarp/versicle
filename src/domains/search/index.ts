@@ -8,11 +8,8 @@
  */
 export {
   SearchSession,
-
-
   type SearchEngineProtocol,
-
-
+  type SearchEngineHandle,
 } from './SearchSession';
 export { createWorkerSearchEngineFactory } from './workerFactory';
 export {  resolveResultCfi } from './offsetRange';
@@ -20,7 +17,7 @@ export {  resolveResultCfi } from './offsetRange';
 // construct the indexer and any in-domain consumer reaches the chunker via the
 // published surface.
 export { EmbeddingIndexer } from './EmbeddingIndexer';
-export { chunkSection } from './chunker';
+export { chunkSection, segmentSentences, type Sentence } from './chunker';
 // The pure codec for the shared embedding cache: contentKey hashes a book's
 // embedding inputs into a content-addressed key, and the blob (de)serializers
 // pack/unpack the stored vector rows with a versioned header. Exported so app/

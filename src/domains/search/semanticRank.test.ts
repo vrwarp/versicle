@@ -51,7 +51,11 @@ function makeArgs(
 ) {
   const embedSpy = vi.fn(async () => ({ vectors: [new Float32Array(DIMS).fill(0.5)] }));
   const rankSpy = vi.fn(() => [{ row: 0, cosine: 0.9 }]);
-  const engine = { rankInt8: rankSpy } as unknown as SearchEngineProtocol;
+  const findBestSentencesSpy = vi.fn(async (_q, chunks) => chunks.map(() => ({ index: 0, cosine: 0.8 })));
+  const engine = {
+    rankInt8: rankSpy,
+    findBestSentences: findBestSentencesSpy,
+  } as unknown as SearchEngineProtocol;
   const args: SemanticRankArgs = {
     engine,
     embeddingClient: { embed: embedSpy, isConfigured: () => true },

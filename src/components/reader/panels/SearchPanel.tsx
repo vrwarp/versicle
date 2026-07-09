@@ -234,23 +234,35 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                     <div className="text-center text-muted-foreground" role="status" aria-live="polite">Searching...</div>
                 ) : searchResults.length > 0 ? (
                     <ul className="space-y-4">
-                        {searchResults.map((result, idx) => (
-                            <li key={`${result.href}-${result.charOffset}-${idx}`} className="border-b border-border pb-2 last:border-0">
-                                <Button
-                                    variant="ghost"
-                                    data-testid={`search-result-${idx}`}
-                                    className="text-left w-full h-auto p-2 block items-start justify-start font-normal"
-                                    onClick={() => onNavigate(result)}
-                                >
-                                    <p className="text-xs text-muted-foreground mb-1">
-                                        {result.sectionTitle ? `${result.sectionTitle} · ` : ''}Result {idx + 1}
-                                    </p>
-                                    <p className="text-sm text-foreground line-clamp-3 whitespace-normal break-words">
-                                        {result.excerpt}
-                                    </p>
-                                </Button>
-                            </li>
-                        ))}
+                        {searchResults.map((result, idx) => {
+                            return (
+                                <li key={`${result.href}-${result.charOffset}-${idx}`} className="border-b border-border pb-2 last:border-0">
+                                    <Button
+                                        variant="ghost"
+                                        data-testid={`search-result-${idx}`}
+                                        className="text-left w-full h-auto p-2 block items-start justify-start font-normal"
+                                        onClick={() => onNavigate(result)}
+                                    >
+                                        <p className="text-xs text-muted-foreground mb-1">
+                                            {result.sectionTitle ? `${result.sectionTitle} · ` : ''}Result {idx + 1}
+                                        </p>
+                                        <p className="text-sm text-foreground line-clamp-3 whitespace-normal break-words">
+                                            {result.matchStartInExcerpt !== undefined && result.matchLengthInExcerpt !== undefined ? (
+                                                <>
+                                                    {result.excerpt.substring(0, result.matchStartInExcerpt)}
+                                                    <strong className="font-semibold text-foreground bg-primary/5 px-0.5 rounded">
+                                                        {result.excerpt.substring(result.matchStartInExcerpt, result.matchStartInExcerpt + result.matchLengthInExcerpt)}
+                                                    </strong>
+                                                    {result.excerpt.substring(result.matchStartInExcerpt + result.matchLengthInExcerpt)}
+                                                </>
+                                            ) : (
+                                                result.excerpt
+                                            )}
+                                        </p>
+                                    </Button>
+                                </li>
+                            );
+                        })}
                         {truncated && (
                             <li className="text-center text-muted-foreground text-xs" role="status">
                                 Showing the first {searchResults.length} matches

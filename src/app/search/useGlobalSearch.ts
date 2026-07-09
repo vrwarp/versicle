@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAllBooks } from '@store/libraryViewStore';
 import { useSearchHistoryStore } from '@store/useSearchHistoryStore';
 import { useGenAIStore } from '@store/useGenAIStore';
@@ -7,6 +7,9 @@ import {
   createWorkerSearchEngineFactory,
   chunkSection,
   QueryEmbeddingCache,
+  segmentSentences,
+  type Sentence,
+  type SearchEngineHandle,
 } from '@domains/search';
 import { queryEmbeddingsRepo } from '@data/repos/queryEmbeddings';
 import { embeddingsRepo } from '@data/repos/embeddings';
@@ -60,6 +63,17 @@ export function useGlobalSearch() {
   const [status, setStatus] = useState<SearchStatus>('idle');
   const [errorType, setErrorType] = useState<SearchErrorType | undefined>(undefined);
   const [indexingStatuses, setIndexingStatuses] = useState<BookIndexingStatus[]>([]);
+
+  const activeHandleRef = useRef<SearchEngineHandle | null>(null);
+  const requestedCardsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    return () => {
+      if (activeHandleRef.current) {
+        activeHandleRef.current.dispose();
+      }
+    };
+  }, []);
 
   // Load books indexing status
   useEffect(() => {
@@ -156,8 +170,16 @@ export function useGlobalSearch() {
       return;
     }
 
+    requestedCardsRef.current.clear();
+
+    if (activeHandleRef.current) {
+      activeHandleRef.current.dispose();
+    }
+
     const factory = createWorkerSearchEngineFactory();
     const handle = factory();
+    activeHandleRef.current = handle;
+    let isAsyncStarted = false;
 
     try {
       // 2. Fetch or load candidate books
@@ -222,7 +244,12 @@ export function useGlobalSearch() {
       // 4. Quantize query vector
       const { vectors: queryVec, scale: queryScale } = quantizer.quantizeInt8PerVector(queryFloat);
 
+      const textMap = new Map<string, string>();
+
       const rankPromises = candidates.map(async ({ book, embedded, corpus }) => {
+        for (const s of corpus.sections) {
+          textMap.set(`${book.bookId}|${s.href}`, s.text);
+        }
         const textByHref = new Map<string, { title: string; text: string }>(
           corpus.sections.map((s) => [s.href, { title: s.title, text: s.text }])
         );
@@ -280,14 +307,25 @@ export function useGlobalSearch() {
             if (!offsets) continue;
             const charOffset = offsets.charStart;
             const matchLength = offsets.charEnd - offsets.charStart;
+            const start = Math.max(0, charOffset - 40);
+            const matchStartInExcerpt = (start > 0 ? 3 : 0) + (charOffset - start);
+            const excerpt = getExcerpt(source.text, charOffset, matchLength);
+            const sentences: Sentence[] = segmentSentences(excerpt, 'en');
             bookResults.push({
               href: section.href,
               sectionTitle: source.title,
-              excerpt: getExcerpt(source.text, charOffset, matchLength),
+              excerpt,
               charOffset,
               matchLength,
+              matchStartInExcerpt,
+              matchLengthInExcerpt: matchLength,
               occurrence: row + 1,
               similarity: cosine,
+              sentenceHighlights: sentences.map((span) => ({
+                start: span.start,
+                end: span.end,
+                score: 0,
+              })),
             });
           }
         }
@@ -336,6 +374,67 @@ export function useGlobalSearch() {
 
       // 8. Add query to synced search history
       useSearchHistoryStore.getState().addQuery(trimmed);
+
+      // Sentence re-ranking: Ternlight on-device sentence selection on the top 5 overall candidates
+      // Runs asynchronously to allow Gemini search results to render immediately.
+      isAsyncStarted = true;
+      (async () => {
+        try {
+          const topCandidates = flatHits.slice(0, 5);
+          for (let i = 0; i < topCandidates.length; i++) {
+            const hit = topCandidates[i];
+            const key = `${hit.bookId}|${hit.href}|${hit.charOffset}`;
+            requestedCardsRef.current.add(key);
+
+            // Check if handle is still active before sending the next worker message
+            if (activeHandleRef.current !== handle) break;
+
+            const sentences: Sentence[] = segmentSentences(hit.excerpt, 'en');
+            const chunkSentences = [sentences.map((s) => hit.excerpt.slice(s.start, s.end))];
+
+            const bestSentences = await handle.engine.findBestSentences(trimmed, chunkSentences);
+            const best = bestSentences[0];
+
+            if (best && best.scores && best.scores.length > 0) {
+              const validScores = best.scores.filter((s) => s >= 0);
+              const minScore = validScores.length > 0 ? Math.min(...validScores) : 0;
+              const maxScore = validScores.length > 0 ? Math.max(...validScores) : 0;
+              const range = maxScore - minScore;
+
+              const sentenceHighlights = sentences.map((span, sIdx) => {
+                const rawScore = best.scores[sIdx] ?? 0;
+                const score = range <= 0 ? 0.5 : (rawScore - minScore) / range;
+                return {
+                  start: span.start,
+                  end: span.end,
+                  score,
+                };
+              });
+
+              if (activeHandleRef.current === handle) {
+                setResults((prevGrouped) => {
+                  return prevGrouped.map((group) => {
+                    if (group.bookId !== hit.bookId) return group;
+
+                    const updatedMatches = group.matches.map((match) => {
+                      if (match.href === hit.href && match.charOffset === hit.charOffset) {
+                        return {
+                          ...match,
+                          sentenceHighlights,
+                        };
+                      }
+                      return match;
+                    });
+                    return { ...group, matches: updatedMatches };
+                  });
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Global search failed Ternlight re-ranking async:', err);
+        }
+      })();
     } catch (err: unknown) {
       setStatus('error');
       const errStr = err instanceof Error ? err.message : String(err);
@@ -345,9 +444,67 @@ export function useGlobalSearch() {
         setErrorType('general');
       }
     } finally {
-      handle.dispose();
+      if (!isAsyncStarted) {
+        if (activeHandleRef.current === handle) {
+          activeHandleRef.current = null;
+        }
+        handle.dispose();
+      }
     }
   }, [books]);
+
+  const triggerHighlightFor = useCallback(async (bookId: string, href: string, charOffset: number, excerpt: string) => {
+    const key = `${bookId}|${href}|${charOffset}`;
+    if (requestedCardsRef.current.has(key)) return;
+    requestedCardsRef.current.add(key);
+
+    const handle = activeHandleRef.current;
+    if (!handle) return;
+
+    try {
+      const sentences: Sentence[] = segmentSentences(excerpt, 'en');
+      const chunkSentences = [sentences.map((s) => excerpt.slice(s.start, s.end))];
+
+      const bestSentences = await handle.engine.findBestSentences(query, chunkSentences);
+      const best = bestSentences[0];
+
+      if (best && best.scores && best.scores.length > 0) {
+        const validScores = best.scores.filter((s: number) => s >= 0);
+        const minScore = validScores.length > 0 ? Math.min(...validScores) : 0;
+        const maxScore = validScores.length > 0 ? Math.max(...validScores) : 0;
+        const range = maxScore - minScore;
+
+        const sentenceHighlights = sentences.map((span, sIdx) => {
+          const rawScore = best.scores[sIdx] ?? 0;
+          const score = range <= 0 ? 0.5 : (rawScore - minScore) / range;
+          return {
+            start: span.start,
+            end: span.end,
+            score,
+          };
+        });
+
+        setResults((prevGrouped) => {
+          return prevGrouped.map((group) => {
+            if (group.bookId !== bookId) return group;
+
+            const updatedMatches = group.matches.map((match) => {
+              if (match.href === href && match.charOffset === charOffset) {
+                return {
+                  ...match,
+                  sentenceHighlights,
+                };
+              }
+              return match;
+            });
+            return { ...group, matches: updatedMatches };
+          });
+        });
+      }
+    } catch (err) {
+      console.error('Failed to trigger highlights dynamically:', err);
+    }
+  }, [query]);
 
   return {
     query,
@@ -363,5 +520,6 @@ export function useGlobalSearch() {
     deleteQuery,
     clearHistory,
     executeSearch,
+    triggerHighlightFor,
   };
 }

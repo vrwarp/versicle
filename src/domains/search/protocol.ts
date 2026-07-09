@@ -32,6 +32,10 @@ export interface SearchEngineProtocol {
     dims: number,
     limit: number,
   ): { row: number; cosine: number }[] | Promise<{ row: number; cosine: number }[]>;
+  findBestSentences(
+    query: string,
+    chunksSentences: string[][],
+  ): { index: number; cosine: number; scores: number[] }[] | Promise<{ index: number; cosine: number; scores: number[] }[]>;
 }
 
 export interface SearchEngineHandle {

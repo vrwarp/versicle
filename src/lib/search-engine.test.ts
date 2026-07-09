@@ -430,4 +430,30 @@ describe('SearchEngine', () => {
             expect(duration).toBeLessThan(3000);
         });
     });
+
+    describe('findBestSentences (Ternlight on-device re-ranking)', () => {
+
+        it('correctly ranks sentences and returns the best matching index', async () => {
+            const query = 'Hello universe';
+            const chunksSentences = [
+                ['Completely unrelated text.', 'Hello world!', 'Testing code.']
+            ];
+            const best = await engine.findBestSentences(query, chunksSentences);
+            expect(best).toHaveLength(1);
+            // 'Hello world!' is semantically closest to 'Hello universe' than the other options.
+            expect(best[0].index).toBe(1);
+            expect(best[0].cosine).toBeGreaterThan(0.5);
+        });
+
+        it('handles empty input gracefully', async () => {
+            const best = await engine.findBestSentences('test', []);
+            expect(best).toEqual([]);
+        });
+
+        it('handles chunks with empty sentences or only whitespace', async () => {
+            const best = await engine.findBestSentences('test', [['   ', '', 'actual content']]);
+            expect(best).toHaveLength(1);
+            expect(best[0].index).toBe(2);
+        });
+    });
 });

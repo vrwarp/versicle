@@ -7,6 +7,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 import mkcert from 'vite-plugin-mkcert'
 import { visualizer } from 'rollup-plugin-visualizer'
 import { renderCsp } from './src/kernel/net/csp'
+import wasm from 'vite-plugin-wasm'
 
 /**
  * CSP injection (Phase 7 §I): the policy is GENERATED from the egress
@@ -144,9 +145,10 @@ export default defineConfig(({ mode }) => {
     // { type: 'module' }, so this matches.
     worker: {
       format: 'es',
-      plugins: () => (analyze
-        ? [visualizer({ filename: 'stats-worker.html', gzipSize: true, brotliSize: true })]
-        : []),
+      plugins: () => [
+        wasm(),
+        ...(analyze ? [visualizer({ filename: 'stats-worker.html', gzipSize: true, brotliSize: true })] : []),
+      ],
     },
     preview: {
       headers: {
@@ -158,6 +160,7 @@ export default defineConfig(({ mode }) => {
       }
     },
     plugins: [
+      wasm(),
       piperVendorPlugin(),
       cspMetaPlugin(),
       ...(useHttps ? [mkcert()] : []),
@@ -183,7 +186,7 @@ export default defineConfig(({ mode }) => {
           // each — see piperVendorPlugin) are far beyond any sane precache budget;
           // they load on demand when Piper synthesizes (and are runtime-cached
           // by the /piper/* CacheFirst route in src/sw.ts since Phase 8 §G).
-          globIgnores: ['**/piper/onnxruntime/*.wasm'],
+          globIgnores: ['**/piper/onnxruntime/*.wasm', '**/*tern_engine*.wasm'],
         },
         // Reality-checked (Phase 8 §G, prep RC-11): favicon.ico was committed
         // as `favico.ico` (typo, now renamed), apple-touch-icon.png is

@@ -16,6 +16,7 @@ export function createWorkerSearchEngineFactory(): () => SearchEngineHandle {
     const listeners = new Set<(error: unknown) => void>();
 
     worker.onerror = (event) => {
+      console.error('Worker script load/execution error:', event.error ?? event);
       for (const listener of listeners) listener(event.error ?? event);
     };
 

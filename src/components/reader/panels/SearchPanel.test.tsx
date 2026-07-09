@@ -125,7 +125,7 @@ describe('SearchPanel', () => {
         await waitFor(() => {
             expect(screen.getByTestId('search-result-0')).toBeInTheDocument();
         });
-        expect(screen.getByText(/the second result/)).toBeInTheDocument();
+        expect(screen.getByTestId('search-result-0')).toHaveTextContent(/the second result/);
     });
 
     it('disables search button when query is empty', () => {
@@ -139,6 +139,7 @@ describe('SearchPanel', () => {
             initIndex: () => {},
             addDocuments: () => {},
             rankInt8: () => [],
+            findBestSentences: () => [],
             searchDetailed: () =>
                 new Promise((resolve) => {
                     resolveSearch = resolve;
