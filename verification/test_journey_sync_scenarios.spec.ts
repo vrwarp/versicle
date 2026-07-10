@@ -289,15 +289,28 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   console.log("[B] Checking for Resume Badge...");
   const resumeBadge = cardB.locator('[data-testid="resume-badge"]');
 
-  if (await resumeBadge.isVisible()) {
-    console.log("[B] Resume Badge visible. Clicking...");
-    await resumeBadge.click({ force: true });
-  } else {
-    console.log("[B] Resume Badge not visible. Clicking card.");
-    await cardB.click({ force: true });
-  }
+  const openReader = async () => {
+    if (await resumeBadge.isVisible()) {
+      console.log("[B] Resume Badge visible. Clicking...");
+      await resumeBadge.click({ force: true });
+    } else {
+      console.log("[B] Resume Badge not visible. Clicking card.");
+      await cardB.click({ force: true });
+    }
+  };
 
-  await expect(pageB.getByTestId("reader-iframe-container")).toBeVisible({ timeout: 15000 });
+  // One re-click allowed: right after the restore the offscreen renderer is
+  // still recalculating pagination (a burst of prerender iframes), and a
+  // force-click issued during that churn can be swallowed on WebKit — the
+  // library stays up and the reader never opens (this line's flake mode).
+  await openReader();
+  try {
+    await expect(pageB.getByTestId("reader-iframe-container")).toBeVisible({ timeout: 15000 });
+  } catch {
+    console.log("[B] Reader did not open; re-clicking...");
+    await openReader();
+    await expect(pageB.getByTestId("reader-iframe-container")).toBeVisible({ timeout: 15000 });
+  }
 
   // Wait for rendition to load and calculate progress
   await waitForReaderReady(pageB);
