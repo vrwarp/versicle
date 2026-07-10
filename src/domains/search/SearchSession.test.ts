@@ -519,6 +519,43 @@ describe('SearchSession — hybrid semantic query path (Increment D)', () => {
         embeddedSections: 0,
       });
     });
+
+    it('excludes text-less sections from the total so a fully-embedded book reads as done', async () => {
+      // Regression: a text-less spine item (an image-only cover page) lives in
+      // the corpus but yields zero chunks, so it is never in the embeddings
+      // row. Counting it in the total stranded the book at N-1/N forever.
+      const { factory } = makeFactory();
+      const queryClient = new MockEmbeddingClient({ dims: DIMS });
+
+      const embedded = {
+        extractionVersion: 3,
+        sections: [{ href: 'ch1.xhtml', sectionTextHash: 'h1' }],
+      };
+      const textSource: SearchTextSource = {
+        get: vi.fn(async () => ({
+          extractionVersion: 3,
+          sections: [
+            { href: 'cover.xhtml', title: 'Cover', text: '   ', sectionTextHash: 'h0' },
+            { href: 'ch1.xhtml', title: 'Ch 1', text: SEMANTIC_TEXT, sectionTextHash: 'h1' },
+          ],
+        })),
+      };
+
+      const session = new SearchSession({
+        engineFactory: factory,
+        textSource,
+        embeddingClient: queryClient,
+        embeddingsSource: { get: vi.fn(async () => embedded as unknown as EmbeddedRowView) },
+        getSemanticConfig: semanticConfig(true),
+      });
+
+      // Two corpus sections, but only the one text-bearing section counts —
+      // so the single embedded section reads as fully indexed, not 1/2.
+      await expect(session.getEmbeddingStatus('bk-1')).resolves.toEqual({
+        totalSections: 1,
+        embeddedSections: 1,
+      });
+    });
   });
 });
 

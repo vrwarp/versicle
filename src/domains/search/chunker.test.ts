@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 // Reach the chunker via the published domain surface (the barrel), the same
 // way an in-domain consumer would (Increment C §2 barrel export).
-import { chunkSection } from './index';
+import { chunkSection, sectionHasEmbeddableText } from './index';
 
 /**
  * Build N sentences of `wordsPer` words each (deterministic plain text). The
@@ -27,6 +27,17 @@ describe('chunkSection', () => {
   it('returns no chunks for empty / whitespace-only text', () => {
     expect(chunkSection({ href: 'h', title: 't', text: '' }).chunks).toEqual([]);
     expect(chunkSection({ href: 'h', title: 't', text: '   \n  ' }).chunks).toEqual([]);
+  });
+
+  it('sectionHasEmbeddableText agrees with whether chunkSection yields chunks', () => {
+    // The predicate indexing-progress denominators filter on MUST match the
+    // chunker's own empty-text guard, or a text-less section (an image-only
+    // cover page) leaves a book stuck one section shy of fully indexed.
+    for (const text of ['', '   ', '\n\t ', 'Call me Ishmael.', buildText(3)]) {
+      expect(sectionHasEmbeddableText(text)).toBe(
+        chunkSection({ href: 'h', title: 't', text }).chunks.length > 0,
+      );
+    }
   });
 
   it('keeps a single short section as one chunk spanning the whole text', () => {
