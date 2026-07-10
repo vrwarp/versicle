@@ -471,8 +471,8 @@ The controls, all rendered only while AI features are enabled:
 |---|---|---|
 | Pause All AI Requests | `pauseAllGenAI` | A switch. "Stops every outgoing AI request before it leaves this device." Default off. |
 | Requests / min, Tokens / min, Requests / day | `quotaLimits.{rpm,tpm,rpd}` | Editable per-lane limits, read *fresh* by the governor on every acquire (defaults `{ rpm: 100, tpm: 30000, rpd: 1000 }`). |
-| Background Throttle (%) | `bgThrottlePercent` | "Share of the budget background work may use before it yields to foreground." Default 50. |
-| Foreground RPD Headroom | `fgRpdHeadroom` | "Daily requests reserved for interactive use." Default 0. |
+| Background Throttle (%) | `bgThrottlePercent` | "Share of the per-minute budget used to pre-embed *other* books in the background." Caps the `bg` lane only; the book being read (`fgd` lane) is not throttled. Default 50. |
+| Foreground RPD Headroom | `fgRpdHeadroom` | "Daily requests held back for interactive search." Subtracted from the daily ceiling of *every* non-interactive lane (`fgd` current-book embedding **and** `bg` other-book embedding), so embedding can never spend the reserve the interactive `fg` lane needs. Default 0. |
 
 Below the inputs, a **Live Usage** block renders one `UsageBar` per metered figure — foreground RPM/TPM/RPD and background RPM/TPM — each a `role="progressbar"` carrying `aria-valuenow/min/max` (jsx-a11y clean) with a `used / limit` label. A separate "Today's spend (this project, all devices)" row (`data-testid="genai-project-rpd"`) shows the reconciled project-wide RPD against the daily limit, because the free-tier quota is per-Google-Cloud-*project* and is reconciled across the synced device mesh via an additive `embedSpend` field on the `DeviceInfo` record (no CRDT format change). Three time-to-exhaustion hints ("RPM/TPM/RPD exhausts: ~N min") are computed from the window fill rate, rendered as a dash when a lane is idle.
 

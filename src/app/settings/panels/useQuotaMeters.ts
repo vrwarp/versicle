@@ -95,10 +95,16 @@ export function useQuotaMeters(): QuotaMeters {
         const snapshot = getQuotaSnapshot(poolKey);
         if (!snapshot) continue;
 
-        const { fg, bg } = snapshot;
+        const { fg, fgd, bg } = snapshot;
 
-        totalFgRpm += fg.rpm;
-        totalFgTpm += fg.tpm;
+        // The foreground meter covers ALL foreground work: interactive queries
+        // (`fg`) AND embedding of the book being read (`fgd`). RPD is a single
+        // shared daily counter (identical across lanes), so it is NOT summed.
+        const fgRpm = fg.rpm + fgd.rpm;
+        const fgTpm = fg.tpm + fgd.tpm;
+
+        totalFgRpm += fgRpm;
+        totalFgTpm += fgTpm;
         totalFgRpd += fg.rpd;
         totalFgRpdLimit += fg.limits.rpd;
 
@@ -109,11 +115,11 @@ export function useQuotaMeters(): QuotaMeters {
         // Sum this device's own background RPD spend
         totalProjectRpd += bg.rpd;
 
-        if (fg.rpm > 0 || bg.rpm > 0 || fg.rpd > 0 || bg.rpd > 0) {
+        if (fgRpm > 0 || bg.rpm > 0 || fg.rpd > 0 || bg.rpd > 0) {
           activePools.push(poolKey);
         }
 
-        const rpmEta = fillEta(fg.rpm, fg.limits.rpm);
+        const rpmEta = fillEta(fgRpm, fg.limits.rpm);
         if (rpmEta !== null) {
           if (minRpmMs === null || rpmEta < minRpmMs) {
             minRpmMs = rpmEta;
@@ -121,7 +127,7 @@ export function useQuotaMeters(): QuotaMeters {
           }
         }
 
-        const tpmEta = fillEta(fg.tpm, fg.limits.tpm);
+        const tpmEta = fillEta(fgTpm, fg.limits.tpm);
         if (tpmEta !== null) {
           if (minTpmMs === null || tpmEta < minTpmMs) {
             minTpmMs = tpmEta;
