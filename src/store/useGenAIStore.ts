@@ -102,7 +102,7 @@ interface GenAIState {
    * In-memory injected snapshot provider (the READ mirror of `addLog`):
    * wireGoogle installs `() => governor.snapshot()`. NEVER persisted.
    */
-  getQuotaSnapshot?: (ratePool?: string) => Record<'fg' | 'bg', LaneUsage>;
+  getQuotaSnapshot?: (ratePool?: string) => Record<'fg' | 'fgd' | 'bg', LaneUsage>;
   /**
    * In-memory injected seam exposing the background lane's budget: wireGoogle
    * installs the background-lane ceiling and the governor's live
@@ -142,7 +142,7 @@ interface GenAIState {
   setPauseAllGenAI: (paused: boolean) => void;
   setPreEmbedLibrary: (enabled: boolean) => void;
   setShareAiCaches: (enabled: boolean) => void;
-  setQuotaSnapshotProvider: (provider: (ratePool?: string) => Record<'fg' | 'bg', LaneUsage>) => void;
+  setQuotaSnapshotProvider: (provider: (ratePool?: string) => Record<'fg' | 'fgd' | 'bg', LaneUsage>) => void;
   /** Install the background-lane budget read-back seam (in-memory; never persisted). */
   setBgBudgetProvider: (getBgQuotaLimits: () => QuotaLimits, getBgUsedRpd: () => number) => void;
 }

@@ -20,10 +20,15 @@
  *  - The CLOCK is injectable (`now`): the daily reset is a midnight-Pacific
  *    day-string compare against that clock, so the rollover is unit-testable
  *    without waiting for real midnight.
- *  - Foreground preempts background: a background acquire is refused while any
- *    foreground request is in flight, or once background work has spent its
- *    capped fraction of the minute budget, so interactive work is never starved
- *    by automatic prefetch/embedding spend.
+ *  - Foreground preempts background: a background (`bg`) acquire is refused while
+ *    ANY foreground request (`fg` OR `fgd`) is in flight, or once background work
+ *    has spent its capped fraction of the minute budget, so interactive work and
+ *    current-book embedding are never starved by automatic other-book prefetch.
+ *  - Foreground headroom reserves interactive capacity: `fgRpdHeadroom` daily
+ *    requests are held back from EVERY non-interactive lane (`fgd` and `bg`),
+ *    leaving them for the interactive `fg` lane (search). Embedding — whether of
+ *    the book being read (`fgd`) or the wider library (`bg`) — therefore can never
+ *    spend the last slice of the daily budget that an interactive search needs.
  *  - acquire RECORDS the spend, commit RECONCILES the estimate to the actual
  *    cost, release frees the foreground claim. `acquire(estTokens)` checks the
  *    estimate against the budget and, once admitted, records the minute-window
@@ -44,8 +49,20 @@
 import { NetRateLimitedError } from '~types/errors';
 import { ptDayString } from './ptDay';
 
-/** Foreground (interactive) or background (prefetch/auto) egress lane. */
-export type Lane = 'fg' | 'bg';
+/**
+ * Egress priority lane. Three tiers, highest → lowest priority:
+ *  - `'fg'`  — interactive foreground: a user gesture (a search query). Spends the
+ *    FULL daily RPD; the `fgRpdHeadroom` reserve exists FOR this lane.
+ *  - `'fgd'` — foreground DOCUMENT embedding of the book being read right now.
+ *    Runs at foreground speed (NOT throttled by `bgThrottlePercent`) and preempts
+ *    background work, but RESPECTS `fgRpdHeadroom`: it stops short of the reserve
+ *    so automatically embedding the current book can never starve interactive
+ *    search.
+ *  - `'bg'`  — background DOCUMENT embedding of OTHER books (the library backfill):
+ *    respects the headroom AND is throttled to `bgThrottlePercent` of the minute
+ *    budget, and yields to any in-flight foreground (`fg`/`fgd`) work.
+ */
+export type Lane = 'fg' | 'fgd' | 'bg';
 
 /** Per-lane limits, re-read on every acquire (never cached). */
 export interface QuotaLimits {
@@ -55,9 +72,17 @@ export interface QuotaLimits {
   tpm: number;
   /** Requests per calendar day (midnight-PT reset). */
   rpd: number;
-  /** Fraction (%) of the budget background work may consume. Default 50. */
+  /**
+   * Fraction (%) of the per-minute budget the background (`bg`, other-book)
+   * lane may consume before it yields to foreground. Does NOT apply to `fgd`:
+   * the book being read embeds at full foreground speed. Default 50.
+   */
   bgThrottlePercent?: number;
-  /** RPD headroom reserved for the foreground lane. Default 0. */
+  /**
+   * Daily requests reserved for the interactive `fg` lane. Every NON-interactive
+   * lane — `fgd` (current-book embedding) AND `bg` (other-book embedding) — stops
+   * this many requests short of `rpd`, leaving the reserve for search. Default 0.
+   */
   fgRpdHeadroom?: number;
 }
 
@@ -175,7 +200,7 @@ export class QuotaGovernor {
     let p = this.pools.get(ratePool);
     if (!p) {
       p = {
-        events: { fg: [], bg: [] },
+        events: { fg: [], fgd: [], bg: [] },
         fgClaims: 0,
         daily: null,
         cooldownUntil: 0,
@@ -204,21 +229,23 @@ export class QuotaGovernor {
     if (i > 0) events.splice(0, i);
   }
 
-  /** Sum of requests across both lanes inside the current minute window for a pool. */
+  /** Sum of requests across ALL lanes inside the current minute window for a pool. */
   private requestsInWindow(ratePool: string, at: number): number {
     this.prune(ratePool, 'fg', at);
+    this.prune(ratePool, 'fgd', at);
     this.prune(ratePool, 'bg', at);
     const p = this.getPool(ratePool);
-    return p.events.fg.length + p.events.bg.length;
+    return p.events.fg.length + p.events.fgd.length + p.events.bg.length;
   }
 
-  /** Sum of tokens across both lanes inside the current minute window for a pool. */
+  /** Sum of tokens across ALL lanes inside the current minute window for a pool. */
   private tokensInWindow(ratePool: string, at: number): number {
     this.prune(ratePool, 'fg', at);
+    this.prune(ratePool, 'fgd', at);
     this.prune(ratePool, 'bg', at);
     const p = this.getPool(ratePool);
     const sum = (events: WindowEvent[]) => events.reduce((acc, e) => acc + e.tokens, 0);
-    return sum(p.events.fg) + sum(p.events.bg);
+    return sum(p.events.fg) + sum(p.events.fgd) + sum(p.events.bg);
   }
 
   /**
@@ -273,10 +300,12 @@ export class QuotaGovernor {
 
     const daily = await this.loadDaily(ratePool, at);
 
-    let effectiveRpdLimit = limits.rpd;
-    if (lane === 'bg') {
-      effectiveRpdLimit = Math.max(0, limits.rpd - (limits.fgRpdHeadroom ?? 0));
-    }
+    // Headroom: the interactive `fg` lane may spend the FULL daily budget (the
+    // reserve exists for it). EVERY non-interactive lane — `fgd` (current-book
+    // embedding) and `bg` (other-book embedding) — stops `fgRpdHeadroom` requests
+    // short, so automatic embedding can never consume the slice a search needs.
+    const effectiveRpdLimit =
+      lane === 'fg' ? limits.rpd : Math.max(0, limits.rpd - (limits.fgRpdHeadroom ?? 0));
 
     if (daily.rpd >= effectiveRpdLimit) {
       throw new NetRateLimitedError(this.msUntilNextPtDay(at), {
@@ -288,10 +317,13 @@ export class QuotaGovernor {
       });
     }
 
-    // fg preempts bg: never admit background work while foreground is claiming,
-    // and cap background spend at the bg fraction of the minute budget. The caps
-    // floor to >=1 (Math.max(1, …)) so a free-tier rpm/tpm of 1 still admits at
-    // least one bg request instead of flooring the bg fraction to zero.
+    // fg preempts bg: never admit background (other-book) work while ANY
+    // foreground claim (interactive `fg` OR current-book `fgd`) is in flight, and
+    // cap background spend at the bg fraction of the minute budget. The caps floor
+    // to >=1 (Math.max(1, …)) so a free-tier rpm/tpm of 1 still admits at least
+    // one bg request instead of flooring the bg fraction to zero. `fgd` is
+    // foreground for preemption (it holds a claim below) but is deliberately NOT
+    // throttled here — the book being read embeds at full foreground speed.
     if (lane === 'bg') {
       if (p.fgClaims > 0) {
         throw new NetRateLimitedError(WINDOW_MS, { lane, reason: 'fg-preempt', ratePool });
@@ -319,7 +351,9 @@ export class QuotaGovernor {
       throw new NetRateLimitedError(WINDOW_MS, { lane, reason: 'tpm-exhausted', ratePool });
     }
 
-    if (lane === 'fg') {
+    // `fg` AND `fgd` hold a foreground claim (so a pending search or a current-book
+    // embed preempts other-book background work); `bg` holds none.
+    if (lane === 'fg' || lane === 'fgd') {
       p.fgClaims += 1;
     }
 
@@ -376,11 +410,12 @@ export class QuotaGovernor {
    * Release a foreground claim WITHOUT touching the windows or daily — for the
    * failure path where an {@link acquire} succeeded but the request never ran.
    * It NEVER undoes the acquire-recorded window/daily event (the attempt still
-   * counts — matching free-tier reality). Idempotent (clamped at zero). bg
-   * acquisitions hold no claim and are a no-op here.
+   * counts — matching free-tier reality). Idempotent (clamped at zero). Both the
+   * `fg` and `fgd` lanes hold a foreground claim; `bg` holds none and is a no-op
+   * here.
    */
   release(lane: Lane, ratePool: string = 'default'): void {
-    if (lane === 'fg') {
+    if (lane === 'fg' || lane === 'fgd') {
       const p = this.getPool(ratePool);
       p.fgClaims = Math.max(0, p.fgClaims - 1);
     }
@@ -430,6 +465,6 @@ export class QuotaGovernor {
         limits,
       };
     };
-    return { fg: lane('fg'), bg: lane('bg') };
+    return { fg: lane('fg'), fgd: lane('fgd'), bg: lane('bg') };
   }
 }

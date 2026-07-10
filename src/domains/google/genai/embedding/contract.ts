@@ -35,8 +35,11 @@ export interface EmbeddingClient {
       bookId?: string;
       /** True when an explicit user gesture drove this exact call. */
       interactive?: boolean;
-      /** Gateway quota lane (default `'fg'`); background backfill uses `'bg'`. */
-      lane?: 'fg' | 'bg';
+      /**
+       * Gateway quota lane (default `'fg'`, the interactive query posture); the
+       * foreground document indexer uses `'fgd'`, the background backfill `'bg'`.
+       */
+      lane?: 'fg' | 'fgd' | 'bg';
       signal?: AbortSignal;
     },
   ): Promise<{ vectors: Float32Array[] }>;

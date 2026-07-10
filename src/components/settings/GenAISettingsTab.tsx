@@ -115,7 +115,7 @@ export interface GenAISettingsTabProps {
     onClearLogs: () => void;
     // Quota & Usage
     quotaLimitsMap: Record<string, QuotaLimits>;
-    getQuotaSnapshot?: (ratePool?: string) => Record<'fg' | 'bg', LaneUsage>;
+    getQuotaSnapshot?: (ratePool?: string) => Record<'fg' | 'fgd' | 'bg', LaneUsage>;
     onQuotaLimitsForPoolChange: (ratePool: string, limits: QuotaLimits) => void;
     onResetPoolLimits: (ratePool: string) => void;
     onResetAllPoolLimits: () => void;
@@ -718,7 +718,7 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                             }
                                         />
                                         <p className="text-xs text-muted-foreground">
-                                            Share of the budget background work may use before it yields to foreground.
+                                            Share of the per-minute budget used to pre-embed <em>other</em> books in the background. The book you're reading now embeds at full speed and isn't throttled by this.
                                         </p>
                                     </div>
                                     <div className="space-y-1">
@@ -733,7 +733,7 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                             }
                                         />
                                         <p className="text-xs text-muted-foreground">
-                                            Daily requests reserved for interactive use.
+                                            Daily requests held back for interactive search. Embedding (any book) stops short of this reserve, so search keeps working.
                                         </p>
                                     </div>
                                 </div>

@@ -12,7 +12,7 @@ import type { CacheEmbeddingsRow, CacheEmbedJobsRow } from '@data/rows/cache';
 
 interface CapturedEmbedCall {
   texts: string[];
-  opts: { profile: EmbeddingProfile; bookId?: string; interactive?: boolean; lane?: 'fg' | 'bg' };
+  opts: { profile: EmbeddingProfile; bookId?: string; interactive?: boolean; lane?: 'fg' | 'fgd' | 'bg' };
 }
 
 function makeEmbeddingClient(configured = true) {
@@ -414,12 +414,15 @@ describe('EmbeddingIndexer', () => {
     });
 
     await indexer.enqueue('bk-99');
-    // The default (FOREGROUND reader) posture: interactive:true, lane:'fg'.
+    // The default (FOREGROUND reader) posture: interactive:true, and the
+    // foreground DOCUMENT lane 'fgd' — foreground speed, but it respects the
+    // interactive-search RPD headroom (so embedding the current book never
+    // starves search).
     expect(calls[0].opts).toMatchObject({
       profile: 'document',
       bookId: 'bk-99',
       interactive: true,
-      lane: 'fg',
+      lane: 'fgd',
     });
   });
 

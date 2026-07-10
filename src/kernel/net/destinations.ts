@@ -111,7 +111,7 @@ export interface EgressDestination {
    * CSP-generator's Node type-stripping path, which cannot resolve path aliases.
    * It must stay in sync with the quota module's `Lane` type.
    */
-  rateLimit?: { lane: 'fg' | 'bg' };
+  rateLimit?: { lane: 'fg' | 'fgd' | 'bg' };
 }
 
 /**

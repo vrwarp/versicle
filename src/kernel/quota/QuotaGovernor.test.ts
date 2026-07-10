@@ -246,6 +246,50 @@ describe('QuotaGovernor', () => {
     });
   });
 
+  describe('fgd — foreground document (current-book) lane', () => {
+    it('respects fgRpdHeadroom like bg, so the interactive fg lane keeps its reserve', async () => {
+      // rpd 10, headroom 2 → every NON-interactive lane caps at 8. Seed today at 8.
+      limits = { ...LOOSE, rpd: 10, fgRpdHeadroom: 2 };
+      const double = makeStoreDouble({ day: '2026-06-13', rpd: 8 });
+      setQuotaStore(double.store);
+      const g = newGovernor();
+
+      // The current-book document lane is refused AT the reserve boundary (unlike
+      // the plain 'fg' lane, which is what defeated the headroom before this fix)…
+      const err = await g.acquire('fgd', 1).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(NetRateLimitedError);
+      expect((err as NetRateLimitedError).context).toMatchObject({ reason: 'rpd-exhausted', limit: 8 });
+
+      // …while the interactive fg lane still has its reserved headroom (search works).
+      await expect(g.acquire('fg', 1)).resolves.toBeUndefined();
+    });
+
+    it('is NOT throttled by bgThrottlePercent — the book being read embeds at foreground speed', async () => {
+      // 20% of rpm 10 = 2 would cap a bg lane; fgd is exempt and fills the whole
+      // per-minute budget, stopping only at the shared rpm ceiling.
+      limits = { ...LOOSE, rpm: 10, bgThrottlePercent: 20 };
+      const g = newGovernor();
+
+      for (let i = 0; i < 10; i++) {
+        await expect(g.acquire('fgd', 1)).resolves.toBeUndefined();
+        g.release('fgd');
+      }
+      const err = await g.acquire('fgd', 1).catch((e: unknown) => e);
+      expect((err as NetRateLimitedError).context).toMatchObject({ reason: 'rpm-exhausted' });
+    });
+
+    it('holds a foreground claim that preempts bg (current book outranks other-book backfill)', async () => {
+      const g = newGovernor();
+
+      await g.acquire('fgd', 1); // claim held until the gateway's release
+
+      await expect(g.acquire('bg', 1)).rejects.toBeInstanceOf(NetRateLimitedError);
+
+      g.release('fgd');
+      await expect(g.acquire('bg', 1)).resolves.toBeUndefined();
+    });
+  });
+
   describe('persisted RPD + midnight-PT reset', () => {
     it('counts a persisted RPD from today and refuses once it is exhausted', async () => {
       limits = { ...LOOSE, rpd: 3 };
