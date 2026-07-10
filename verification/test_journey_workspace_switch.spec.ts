@@ -48,17 +48,15 @@ test("journey workspace switch", async ({ page }) => {
   // modal. (Wait generously to ride out the two reboots under full-suite load.)
   await expect(page.getByRole("heading", { name: "Finalize Workspace Switch?" })).toBeVisible({ timeout: 45000 });
 
-  // The reload lands back on /settings/sync, so the Radix SettingsShell dialog
-  // re-opens UNDER the confirmation modal. While that modal Radix dialog is open
-  // it makes the sibling (app-level) confirmation modal inert — its overlay
-  // intercepts the "Yes, Finalize" click. Escape closes the settings dialog
-  // (its Escape handler still fires beneath the plain confirmation overlay),
-  // navigating back to the library so the confirmation button is interactable.
-  await page.keyboard.press("Escape");
+  // The reload lands back on /settings/sync, but SettingsShell steps aside
+  // while a migration awaits confirmation (mounting its Radix dialog here
+  // would aria-hide the confirmation modal and trap focus beneath it), so the
+  // settings overlay must NOT be open and the modal is directly interactable.
   await expect(page.getByRole("tablist", { name: "Settings sections" })).not.toBeVisible({ timeout: 10000 });
 
-  // The modal warns that local data will be synced
-  await page.getByRole("button", { name: "Yes, Finalize" }).dispatchEvent("click");
+  // The modal warns that local data will be synced. A real click (not a
+  // dispatched event) pins that no overlay covers the confirmation buttons.
+  await page.getByRole("button", { name: "Yes, Finalize" }).click();
 
   // Now it should close the modal and resume sync
   await expect(page.getByRole("heading", { name: "Finalize Workspace Switch?" })).not.toBeVisible();

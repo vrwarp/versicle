@@ -569,6 +569,12 @@ test("data liberation", async ({ browser, baseURL }) => {
   await page.fill("data-testid=lexicon-input-replacement", "ImportMe");
   await page.click("data-testid=lexicon-save-rule-btn");
 
+  // Close the rules dialog and the Settings overlay before reloading —
+  // reloading while the URL is still /settings/dictionary re-opens the
+  // route-driven dialog, whose backdrop then blocks the openSettings click.
+  await page.getByTestId("lexicon-close-btn").click();
+  await closeSettings(page);
+
   // Reload to ensure clean state
   await page.reload();
   await expect(page.getByTestId("library-view")).toBeVisible();

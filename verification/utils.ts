@@ -442,11 +442,29 @@ export async function switchAudioPanelView(page: Page, view: 'queue' | 'settings
  * click on library content. Safe to call when settings is already closed.
  */
 export async function closeSettings(page: Page) {
+  // Detect the shell via data-testid, NOT a role query: while a nested dialog
+  // (e.g. the Lexicon Manager) is open — or still animating closed — Radix
+  // marks the shell aria-hidden, which hides it from role-based locators even
+  // though it is fully on screen. A role probe here reports "already closed"
+  // and skips the close entirely.
   const closeBtn = page.getByTestId('settings-close-button');
   if (await closeBtn.count()) {
-    await closeBtn.click({ force: true }).catch(() => {});
+    // Retry loop: a force click dispatches at fixed coordinates, so one issued
+    // while a closing nested dialog's backdrop is still up lands on that
+    // backdrop instead of the close button and silently does nothing. The
+    // shell unmounts on close, so a detached close button is the exit signal.
+    await expect(async () => {
+      if (await closeBtn.count()) {
+        await closeBtn.click({ force: true, timeout: 2000 }).catch(() => {});
+      }
+      await expect(closeBtn).toHaveCount(0, { timeout: 2000 });
+    }).toPass({ timeout: 20000 });
   }
-  await expect(page.getByRole('tablist', { name: 'Settings sections' })).not.toBeVisible({ timeout: 10000 });
+  // Settings is the route-driven /settings/:tab overlay and close is a history
+  // navigation — wait for the URL to actually leave /settings. A reload issued
+  // while the URL still points at /settings/* re-opens the dialog on boot, and
+  // its backdrop then swallows the next click (the WebKit-lane timeout mode).
+  await page.waitForURL((url) => !url.pathname.includes('/settings'), { timeout: 10000 });
 }
 
 /**
