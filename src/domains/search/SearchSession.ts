@@ -18,6 +18,7 @@
  */
 import { AppError, NetRateLimitedError } from '~types/errors';
 import type { SearchBatchResult, SearchSection, EmbeddingStatus } from '~types/search';
+import { sectionHasEmbeddableText } from './chunker';
 import { QueryEmbeddingCache } from './queryEmbeddingCache';
 import { fuseRrf } from './rrf';
 import { semanticRank } from './semanticRank';
@@ -290,7 +291,11 @@ export class SearchSession {
         return null;
       }
 
-      const totalSections = corpus.sections.length;
+      // Count only sections that can actually be embedded: a text-less spine
+      // item (image-only cover page, blank section-break page) yields zero
+      // chunks and is never written into the embeddings row, so including it in
+      // the total would leave the book perpetually one section shy of done.
+      const totalSections = corpus.sections.filter((s) => sectionHasEmbeddableText(s.text)).length;
       const embedded = await embeddingsSource.get(bookId);
       if (!embedded || embedded.sections.length === 0) {
         return { totalSections, embeddedSections: 0 };

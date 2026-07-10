@@ -6,6 +6,7 @@ import { getEmbeddingClient } from '@domains/google';
 import {
   createWorkerSearchEngineFactory,
   chunkSection,
+  sectionHasEmbeddableText,
   QueryEmbeddingCache,
   segmentSentences,
   type Sentence,
@@ -105,7 +106,11 @@ export function useGlobalSearch() {
             status: 'unindexed',
           });
         } else {
-          const total = text.sections.length;
+          // Only text-bearing sections can be embedded: a text-less spine item
+          // (image-only cover page, blank section-break page) yields zero
+          // chunks and never lands in the embeddings row, so counting it in the
+          // total would strand the book at N-1/N — perpetually one section shy.
+          const total = text.sections.filter((s) => sectionHasEmbeddableText(s.text)).length;
           const embedded = embed.sections.length;
           if (embedded >= total) {
             list.push({
