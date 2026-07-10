@@ -53,14 +53,15 @@ export interface EgressOptions {
   signal?: AbortSignal;
   consent?: EgressConsentContext;
   /**
-   * Which throttle lane this call belongs to. Foreground (`'fg'`, interactive)
-   * preempts background (`'bg'`, prefetch/auto) so user-driven work is never
-   * starved by automatic spend. Only consulted for rate-limited destinations;
-   * ignored otherwise. When set it OVERRIDES the destination's default lane
-   * (`destination.rateLimit.lane`) — e.g. a background embedding can be routed
-   * onto the bg lane even though the gemini destination defaults to `'fg'`.
+   * Which throttle lane this call belongs to. Priority `'fg'` (interactive) >
+   * `'fgd'` (foreground document embedding of the book being read) > `'bg'`
+   * (background other-book prefetch), so user-driven work is never starved by
+   * automatic spend. Only consulted for rate-limited destinations; ignored
+   * otherwise. When set it OVERRIDES the destination's default lane
+   * (`destination.rateLimit.lane`) — e.g. an embedding can be routed onto the
+   * `fgd`/`bg` lane even though the gemini destination defaults to `'fg'`.
    */
-  lane?: 'fg' | 'bg';
+  lane?: 'fg' | 'fgd' | 'bg';
   /**
    * A coarse pre-flight token estimate for the governor's admission window
    * (reconciled to the real cost by the CLIENT's commit, which reads the parsed
@@ -108,10 +109,10 @@ export interface QuotaScheduler {
    * per egress in its finally — on success, on a resolved non-2xx, or on a
    * throw).
    */
-  acquire(lane: 'fg' | 'bg', estTokens: number, ratePool?: string): Promise<void>;
+  acquire(lane: 'fg' | 'fgd' | 'bg', estTokens: number, ratePool?: string): Promise<void>;
   /** Release a foreground claim. The gateway calls this exactly once per egress
    *  (its finally) — on a 200, a resolved 429/500, or a throw. Idempotent. */
-  release(lane: 'fg' | 'bg', ratePool?: string): void;
+  release(lane: 'fg' | 'fgd' | 'bg', ratePool?: string): void;
 }
 
 let quotaScheduler: QuotaScheduler | null = null;

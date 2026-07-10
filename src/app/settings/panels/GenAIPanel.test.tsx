@@ -56,8 +56,9 @@ const PROFILE: DeviceProfile = {
 };
 
 // Seeded snapshot: fg.rpm 40/100, fg.rpd 300/1000, bg.rpd 300/1000.
-const SEEDED_SNAPSHOT: Record<'fg' | 'bg', LaneUsage> = {
+const SEEDED_SNAPSHOT: Record<'fg' | 'fgd' | 'bg', LaneUsage> = {
   fg: { rpm: 40, tpm: 12000, rpd: 300, limits: { rpm: 100, tpm: 30000, rpd: 1000 } },
+  fgd: { rpm: 0, tpm: 0, rpd: 300, limits: { rpm: 100, tpm: 30000, rpd: 1000 } },
   bg: { rpm: 8, tpm: 4000, rpd: 300, limits: { rpm: 100, tpm: 30000, rpd: 1000 } },
 };
 
@@ -98,6 +99,7 @@ describe('GenAIPanel quota meters (wired §10.7)', () => {
             }
             return {
               fg: { rpm: 0, tpm: 0, rpd: 0, limits: { rpm: 100, tpm: 30000, rpd: 1000 } },
+              fgd: { rpm: 0, tpm: 0, rpd: 0, limits: { rpm: 100, tpm: 30000, rpd: 1000 } },
               bg: { rpm: 0, tpm: 0, rpd: 0, limits: { rpm: 100, tpm: 30000, rpd: 1000 } },
             };
           },

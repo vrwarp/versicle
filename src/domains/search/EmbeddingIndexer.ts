@@ -37,8 +37,11 @@ interface EmbeddingClientPort {
       profile: 'document' | 'query';
       bookId?: string;
       interactive?: boolean;
-      /** Gateway quota lane (default `'fg'`); the bg backfill passes `'bg'`. */
-      lane?: 'fg' | 'bg';
+      /**
+       * Gateway quota lane. The foreground indexer (book being read) uses
+       * `'fgd'`; the bg backfill (other books) passes `'bg'`.
+       */
+      lane?: 'fg' | 'fgd' | 'bg';
       signal?: AbortSignal;
     },
   ): Promise<{ vectors: Float32Array[] }>;
@@ -136,15 +139,17 @@ export class EmbeddingIndexer {
    * client is unconfigured or the book has no persisted corpus.
    *
    * `opts` selects the consent/quota-lane posture (default `{ interactive:
-   * true, lane: 'fg' }`, the foreground reader behavior). The background
-   * backfill passes `{ interactive: false, lane: 'bg' }` so the embed uses the
-   * slow background quota lane and never claims a user gesture from a background
-   * path.
+   * true, lane: 'fgd' }`, the foreground reader behavior — the book being read
+   * embeds on the foreground DOCUMENT lane, which runs at foreground speed but
+   * respects the `fgRpdHeadroom` reserved for interactive search, so it never
+   * starves search the way the plain `'fg'` lane would). The background backfill
+   * passes `{ interactive: false, lane: 'bg' }` so the embed uses the slow
+   * background quota lane and never claims a user gesture from a background path.
    */
   async enqueue(
     bookId: string,
     currentCfi?: string,
-    opts?: { interactive?: boolean; lane?: 'fg' | 'bg' },
+    opts?: { interactive?: boolean; lane?: 'fg' | 'fgd' | 'bg' },
   ): Promise<void> {
     if (!this.deps.embeddingClient.isConfigured()) return;
 
@@ -242,7 +247,7 @@ export class EmbeddingIndexer {
           profile: 'document',
           bookId,
           interactive: opts?.interactive ?? true,
-          lane: opts?.lane ?? 'fg',
+          lane: opts?.lane ?? 'fgd',
         },
       );
 

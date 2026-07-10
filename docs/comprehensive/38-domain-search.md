@@ -672,7 +672,7 @@ The `EmbeddingIndexer` is the foreground pass that turns a book's text into the 
 
 ### `enqueue(bookId, currentCfi?, opts?)`
 
-The default posture is `{ interactive: true, lane: 'fg' }` (the foreground reader); the background backfill passes `{ interactive: false, lane: 'bg' }`. The pass:
+The default posture is `{ interactive: true, lane: 'fgd' }` (the foreground reader). `'fgd'` is the **foreground-document** quota tier: the book being read embeds at foreground speed (unlike `'bg'`, it is *not* throttled by `bgThrottlePercent`) but it still **respects the `fgRpdHeadroom`** reserved for interactive search — so automatically embedding the open book can never exhaust the daily budget a search would need (which the plain `'fg'` lane, shared with search, previously did). The background backfill passes `{ interactive: false, lane: 'bg' }` for *other* books. The pass:
 
 1. **No-ops** when the embedding client is unconfigured or the book has no persisted corpus.
 2. **Consults the shared cache first.** When a `consult` port is injected and `probe(bookId)` reports a hit, `hydrate(bookId)` downloads another device's vectors and, on a full hit, **returns without ever calling `embed()`** — spending zero Gemini quota. The consult adapter owns the consent gate and short-circuits cheaply when no cloud backend is connected, so the common no-sync case adds no latency. (This is the FG-reader leg of the Artifact Lane; the background leg lives in the backfill loop — see [the Artifact Lane](#the-artifact-lane-search-side).)

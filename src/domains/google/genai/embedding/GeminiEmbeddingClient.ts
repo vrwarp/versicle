@@ -95,7 +95,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
       profile: EmbeddingProfile;
       bookId?: string;
       interactive?: boolean;
-      lane?: 'fg' | 'bg';
+      lane?: 'fg' | 'fgd' | 'bg';
       signal?: AbortSignal;
     },
   ): Promise<{ vectors: Float32Array[] }> {
@@ -133,7 +133,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
       profile: EmbeddingProfile;
       bookId?: string;
       interactive?: boolean;
-      lane?: 'fg' | 'bg';
+      lane?: 'fg' | 'fgd' | 'bg';
       signal?: AbortSignal;
     },
   ): Promise<{ vectors: Float32Array[] }> {
@@ -153,7 +153,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
       profile: EmbeddingProfile;
       bookId?: string;
       interactive?: boolean;
-      lane?: 'fg' | 'bg';
+      lane?: 'fg' | 'fgd' | 'bg';
       signal?: AbortSignal;
     },
   ): Promise<Float32Array[]> {
@@ -223,7 +223,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
       profile: EmbeddingProfile;
       bookId?: string;
       interactive?: boolean;
-      lane?: 'fg' | 'bg';
+      lane?: 'fg' | 'fgd' | 'bg';
       signal?: AbortSignal;
     },
   ): Promise<Float32Array> {
