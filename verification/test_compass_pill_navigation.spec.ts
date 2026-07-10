@@ -50,24 +50,32 @@ test("page-turn rails turn pages in paginated mode", async ({ page }) => {
 
   await captureScreenshot(page, "page_turn_rails");
 
+  // Click a rail and wait for the reader location to move off `prev`. epub.js
+  // silently drops a next()/prev() issued while the section is still settling
+  // (WebKit under full-suite load), so one re-click is allowed before failing.
+  const turnPage = async (rail: typeof rightRail, prev: string | null) => {
+    const moved = () =>
+      page.waitForFunction(
+        (p) => (window.__versicleTest?.reader?.currentCfi?.() ?? null) !== p,
+        prev,
+        { timeout: 10000 },
+      );
+    await rail.click();
+    await moved().catch(async () => {
+      await rail.click();
+      await moved();
+    });
+  };
+
   // Forward via the right rail — the reader location must change.
   const cfiBefore = await getCurrentCfi(page);
-  await rightRail.click();
-  await page.waitForFunction(
-    (prev) => (window.__versicleTest?.reader?.currentCfi?.() ?? null) !== prev,
-    cfiBefore,
-    { timeout: 10000 },
-  );
+  expect(cfiBefore).not.toBeNull(); // guaranteed by waitForReaderReady's location gate
+  await turnPage(rightRail, cfiBefore);
   const cfiAfterNext = await getCurrentCfi(page);
   expect(cfiAfterNext).not.toBe(cfiBefore);
 
   // Back via the left rail — the location changes again.
-  await leftRail.click();
-  await page.waitForFunction(
-    (prev) => (window.__versicleTest?.reader?.currentCfi?.() ?? null) !== prev,
-    cfiAfterNext,
-    { timeout: 10000 },
-  );
+  await turnPage(leftRail, cfiAfterNext);
   expect(await getCurrentCfi(page)).not.toBe(cfiAfterNext);
 });
 

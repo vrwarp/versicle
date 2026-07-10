@@ -448,6 +448,14 @@ export async function closeSettings(page: Page) {
   // though it is fully on screen. A role probe here reports "already closed"
   // and skips the close entirely.
   const closeBtn = page.getByTestId('settings-close-button');
+  // SettingsShell is a lazy route chunk: after a reload that lands on
+  // /settings/* (the post-workspace-switch arm) the URL says "settings open"
+  // well before the close button exists. An instant count() probe then reports
+  // "already closed", skips the close, and the URL wait below has nothing to
+  // wait for. When the URL says settings, give the shell a moment to mount.
+  if (new URL(page.url()).pathname.includes('/settings')) {
+    await closeBtn.first().waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+  }
   if (await closeBtn.count()) {
     // Retry loop: a force click dispatches at fixed coordinates, so one issued
     // while a closing nested dialog's backdrop is still up lands on that
@@ -464,7 +472,20 @@ export async function closeSettings(page: Page) {
   // navigation — wait for the URL to actually leave /settings. A reload issued
   // while the URL still points at /settings/* re-opens the dialog on boot, and
   // its backdrop then swallows the next click (the WebKit-lane timeout mode).
-  await page.waitForURL((url) => !url.pathname.includes('/settings'), { timeout: 10000 });
+  try {
+    await page.waitForURL((url) => !url.pathname.includes('/settings'), { timeout: 10000 });
+  } catch {
+    // The shell never mounted (its chunk failed or is still loading — the
+    // WebKit full-suite-load mode), so no close nav will ever happen. Navigate
+    // to the underlay ourselves, mirroring SettingsShell's own close() target:
+    // everything before the '/settings' marker (reader-nested mounts keep the
+    // book route), or the library root.
+    const { pathname } = new URL(page.url());
+    const marker = pathname.indexOf('/settings');
+    const underlay = marker > 0 ? pathname.slice(0, marker) : '/';
+    await page.goto(underlay);
+    await page.waitForURL((url) => !url.pathname.includes('/settings'), { timeout: 10000 });
+  }
 }
 
 /**
@@ -476,6 +497,17 @@ export async function closeSettings(page: Page) {
 export async function waitForReaderReady(page: Page, opts: { locations?: boolean } = {}) {
   await page.waitForFunction(
     () => window.__versicleTest?.reader?.isReady?.() === true,
+    null,
+    { timeout: 30000 },
+  );
+  // isReady() only proves the engine OBJECT exists: EpubJsEngine constructs
+  // with status 'ready', before the first display() has rendered anything.
+  // Wait for a real location (set by the first relocation) so callers can
+  // actually interact with rendered content — without this, a page-turn issued
+  // against a still-blank rendition is silently dropped and the reader CFI
+  // stays null forever (the WebKit-lane compass-rail timeout mode).
+  await page.waitForFunction(
+    () => (window.__versicleTest?.reader?.currentCfi?.() ?? null) !== null,
     null,
     { timeout: 30000 },
   );
