@@ -44,3 +44,15 @@ jobs:
           name: verification-screenshots-${{ matrix.project }}
           path: verification/screenshots/
           retention-days: 14
+      - name: Upload Playwright traces
+        # test-results/ (mounted out of the container by run_verification.sh)
+        # carries the retry traces and error context that make failures
+        # diagnosable offline via `npx playwright show-trace`. Failure-only:
+        # the trace zips are large.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-test-results-${{ matrix.project }}
+          path: test-results/
+          retention-days: 14
+          if-no-files-found: warn

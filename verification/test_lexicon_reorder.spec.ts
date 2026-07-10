@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { resetApp } from "./utils";
+import { closeSettings, resetApp } from "./utils";
 
 test("lexicon reorder", async ({ page }) => {
   await resetApp(page);
@@ -52,11 +52,10 @@ test("lexicon reorder", async ({ page }) => {
   // Close Dialog
   await page.getByTestId("lexicon-close-btn").click();
 
-  // Close Settings Modal (press Escape to ensure everything closes)
-  await page.keyboard.press("Escape");
-
-  // Wait for settings to close
-  await page.waitForTimeout(500);
+  // Close the Settings overlay and wait for the URL to leave /settings —
+  // reloading while still on /settings/dictionary re-opens the route-driven
+  // dialog, whose backdrop then blocks the header-settings-button click below.
+  await closeSettings(page);
 
   // Reload page to verify persistence
   await page.reload();

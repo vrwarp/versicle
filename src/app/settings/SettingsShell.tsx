@@ -16,8 +16,9 @@
  *   handler pops the URL and the overlay closes; overlays INSIDE panels
  *   (e.g. the reading-list dialog) keep their own guards and win first.
  */
-import React, { Suspense, useCallback, useMemo } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { MigrationStateService } from '@domains/sync/workspaces/MigrationStateService';
 import { X } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import {
@@ -92,6 +93,21 @@ export const SettingsShell: React.FC = () => {
     },
     [navigate, settingsBase],
   );
+
+  // Pending-migration guard: a staged workspace switch reloads back onto
+  // /settings/sync in the AWAITING_CONFIRMATION boot arm, where the app-level
+  // WorkspaceMigrationConfirmModal (App.tsx) is the only legal interaction.
+  // Mounting this Radix modal Dialog then would aria-hide that plain modal
+  // (Radix hideOthers marks every sibling aria-hidden) and trap focus under
+  // it — the confirmation stays visible on screen but unreachable for AT and
+  // role-based queries. Step aside instead: render nothing and hand the URL
+  // back to the underlay until the user finalizes or rolls back.
+  const migrationPending = MigrationStateService.getState()?.status === 'AWAITING_CONFIRMATION';
+  useEffect(() => {
+    if (migrationPending) navigate(underlayPath, { replace: true });
+  }, [migrationPending, navigate, underlayPath]);
+
+  if (migrationPending) return null;
 
   return (
     <Modal open onOpenChange={(open) => { if (!open) close(); }}>

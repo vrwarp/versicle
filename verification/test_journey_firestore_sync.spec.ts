@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect, openSettings, gotoSettingsTab } from './utils';
+import { test, expect, openSettings, gotoSettingsTab, closeSettings } from './utils';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -398,9 +398,11 @@ test('Offline Resilience Test', async ({ browser }) => {
   await expect(page.getByText('OfflineTest')).toBeVisible();
 
   await page.getByTestId('lexicon-close-btn').click();
-  await page.keyboard.press('Escape');
+  // Close the Settings overlay and wait for the URL to leave /settings —
+  // reloading while still on /settings/dictionary re-opens the route-driven
+  // dialog, whose backdrop then blocks the openSettings click below.
+  await closeSettings(page);
 
-  await page.waitForTimeout(1000);
   await page.reload();
 
   await expect(page.getByTestId('library-view')).toBeVisible({ timeout: 10000 });

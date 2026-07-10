@@ -104,8 +104,9 @@ fi
 # Build the test image
 docker build -t versicle-verify -f Dockerfile.verification .
 
-# Create screenshots directory if it doesn't exist
+# Create host directories for persisted artifacts if they don't exist
 mkdir -p verification/screenshots
+mkdir -p test-results
 
 # Run the verification container and capture exit code
 echo "🏃 Running verification tests..."
@@ -113,9 +114,12 @@ echo "🏃 Running verification tests..."
 # --ipc=host: Playwright's recommended setting for browsers in Docker. The default
 #   64MB /dev/shm starves the browser's shared memory and causes renderer "Page
 #   crashed" failures (notably in WebKit on long, memory-heavy journeys).
+# test-results/ is mounted too so Playwright traces (trace: 'on-first-retry')
+# and failure context survive the container — CI uploads them on failure.
 docker run --rm \
   --ipc=host \
   -v "$(pwd)/verification/screenshots:/app/verification/screenshots" \
+  -v "$(pwd)/test-results:/app/test-results" \
   -e BASE_URL=http://localhost:5173 \
   -e CI=1 \
   $DEBUG_ENV \
