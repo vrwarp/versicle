@@ -25,12 +25,23 @@ import { createBrowserRouter } from 'react-router-dom';
 import { RootLayout } from '../layouts/RootLayout';
 import { LibraryView } from '@components/library/LibraryView';
 import { ErrorBoundary } from '@components/ErrorBoundary';
+import { importWithChunkReload } from '@lib/chunkReload';
 
-const ReaderShellLazy = lazy(() =>
-  import('@components/reader/ReaderShell').then((m) => ({ default: m.ReaderShell })),
+// Route chunks go through importWithChunkReload: a dynamic import aborted
+// mid-flight (e.g. by the workspace switch's back-to-back reloads) is cached
+// as rejected for the document's lifetime — without the reload-once recovery
+// the route stays permanently broken until the user refreshes by hand.
+const ReaderShellLazy = lazy(
+  importWithChunkReload(
+    () => import('@components/reader/ReaderShell').then((m) => ({ default: m.ReaderShell })),
+    'reader-shell',
+  ),
 );
-const SettingsShellLazy = lazy(() =>
-  import('./settings/SettingsShell').then((m) => ({ default: m.SettingsShell })),
+const SettingsShellLazy = lazy(
+  importWithChunkReload(
+    () => import('./settings/SettingsShell').then((m) => ({ default: m.SettingsShell })),
+    'settings-shell',
+  ),
 );
 
 /** Shared route-chunk fallback — the boot spinner, reused. */

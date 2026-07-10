@@ -3,6 +3,7 @@ import { useLibraryStore } from '@store/useLibraryStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useAllBooks } from '@store/libraryViewStore';
 import { createLogger } from '@lib/logger';
+import { importWithChunkReload } from '@lib/chunkReload';
 import { useToastStore } from '@store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
@@ -45,11 +46,20 @@ import { compareTitles } from '@kernel/locale/format';
  */
 const logger = createLogger('LibraryView');
 
-const GlobalNotesViewLazy = React.lazy(() =>
-  import('../notes/GlobalNotesView').then((m) => ({ default: m.GlobalNotesView })),
+// Wrapped in importWithChunkReload: a chunk fetch aborted mid-flight is
+// cached as rejected for the document's lifetime, permanently breaking the
+// view until a reload refreshes the module map (see chunkReload.ts).
+const GlobalNotesViewLazy = React.lazy(
+  importWithChunkReload(
+    () => import('../notes/GlobalNotesView').then((m) => ({ default: m.GlobalNotesView })),
+    'global-notes',
+  ),
 );
-const GlobalSemanticSearchViewLazy = React.lazy(() =>
-  import('../search/GlobalSemanticSearchView').then((m) => ({ default: m.GlobalSemanticSearchView })),
+const GlobalSemanticSearchViewLazy = React.lazy(
+  importWithChunkReload(
+    () => import('../search/GlobalSemanticSearchView').then((m) => ({ default: m.GlobalSemanticSearchView })),
+    'global-search',
+  ),
 );
 
 interface LibraryViewProps {

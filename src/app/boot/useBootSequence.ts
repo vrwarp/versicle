@@ -12,6 +12,7 @@ import {
 import { registerAppBootTasks } from './registerBootTasks';
 import { installGlobalErrorHandlers } from './globalErrorHandlers';
 import { createLogger } from '@lib/logger';
+import { isChunkLoadError, reloadOnceForChunkError } from '@lib/chunkReload';
 
 const logger = createLogger('Boot');
 
@@ -52,6 +53,11 @@ export function useBootSequence(): AppBootState {
       })
       .catch((error: unknown) => {
         logger.error('Failed to initialize App:', error);
+        // Boot itself lazy-imports chunks (createSync etc.); an import
+        // aborted by a mid-boot reload is cached as rejected for this
+        // document, so retrying in place cannot succeed — reload once for a
+        // fresh module map instead of stranding the user on the error screen.
+        if (isChunkLoadError(error) && reloadOnceForChunkError('boot')) return;
         if (active) setState({ status: 'error', error });
       });
 
