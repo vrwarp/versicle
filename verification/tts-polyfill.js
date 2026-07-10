@@ -23,6 +23,16 @@
 
     // Create debug element
     function ensureDebugElement() {
+        // TOP FRAME ONLY. Playwright init scripts run in every frame, so this
+        // used to inject the fixed-position readout into epub.js's paginated
+        // content iframe as well. There, WebKit resolves the `right: 10px`
+        // fixed element against a document whose width epub.js re-derives from
+        // scrollWidth on every layout pass — a feedback loop that balloons the
+        // rendition by ~97k px per re-layout (thousands of blank columns), so
+        // next() pages through emptiness and the reader CFI never changes (the
+        // nightly WebKit compass-rail failure). Every consumer reads
+        // #tts-debug from the main document, so subframes never need it.
+        if (window !== window.top) return null;
         let debugEl = document.getElementById('tts-debug');
         if (!debugEl && document.body) {
             debugEl = document.createElement('div');
