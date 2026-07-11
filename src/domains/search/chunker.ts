@@ -75,6 +75,24 @@ export function segmentSentences(text: string, locale: string): Sentence[] {
 }
 
 /**
+ * Whether a section's text can yield at least one embedding chunk. This is the
+ * SAME empty/whitespace guard {@link chunkSection} applies before it produces
+ * any window (and {@link chunkSection} calls it), so "would be embedded" can
+ * never drift from "actually gets embedded". A text-less spine item — an
+ * image-only cover page, a blank section-break page — yields zero chunks and is
+ * therefore never written into the embeddings row.
+ *
+ * Indexing-progress denominators MUST filter on this. The corpus
+ * (`cache_search_text`) keeps EVERY spine item, including text-less ones, but
+ * the indexer only ever embeds sections that produce chunks — so counting the
+ * text-less sections in the total makes a book read as perpetually one section
+ * shy of fully indexed.
+ */
+export function sectionHasEmbeddableText(text: string): boolean {
+  return text.trim().length > 0;
+}
+
+/**
  * Chunk a section into sentence-snapped, ~targetTokens windows with ~overlapPct
  * overlap. Each chunk's `text` is exactly `text.slice(charStart, charEnd)`, so
  * the offsets round-trip the source. Empty/whitespace-only text yields no
@@ -86,7 +104,7 @@ export function chunkSection(
 ): { chunks: SectionChunk[] } {
   const { targetTokens = 320, overlapPct = 0.15, locale = 'en' } = options;
   const text = section.text;
-  if (text.trim().length === 0) return { chunks: [] };
+  if (!sectionHasEmbeddableText(text)) return { chunks: [] };
 
   const targetChars = Math.max(1, targetTokens * CHARS_PER_TOKEN);
   const overlapChars = Math.max(0, Math.floor(targetChars * overlapPct));

@@ -289,15 +289,41 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   console.log("[B] Checking for Resume Badge...");
   const resumeBadge = cardB.locator('[data-testid="resume-badge"]');
 
-  if (await resumeBadge.isVisible()) {
-    console.log("[B] Resume Badge visible. Clicking...");
-    await resumeBadge.click({ force: true });
-  } else {
-    console.log("[B] Resume Badge not visible. Clicking card.");
-    await cardB.click({ force: true });
-  }
+  const openReader = async () => {
+    if (await resumeBadge.isVisible()) {
+      console.log("[B] Resume Badge visible. Clicking...");
+      await resumeBadge.click({ force: true });
+    } else {
+      console.log("[B] Resume Badge not visible. Clicking card.");
+      await cardB.click({ force: true });
+    }
+  };
 
-  await expect(pageB.getByTestId("reader-iframe-container")).toBeVisible({ timeout: 15000 });
+  // Recovery ladder for WebKit's two distinct "reader never opens" modes:
+  //  1. Swallowed click — the post-restore offscreen-renderer churn (a burst
+  //     of prerender iframes) eats a force-click; a plain re-click fixes it.
+  //  2. Poisoned module map — the workspace switch's back-to-back
+  //     window.location.reload()s abort an in-flight lazy-chunk fetch
+  //     ("[Boot] Importing a module script failed"), and WebKit caches the
+  //     rejection for the document's lifetime, so the ReaderShell chunk can
+  //     NEVER load in this document and re-clicking is useless. Only a
+  //     reload (fresh module map) heals it.
+  await openReader();
+  try {
+    await expect(pageB.getByTestId("reader-iframe-container")).toBeVisible({ timeout: 15000 });
+  } catch {
+    console.log("[B] Reader did not open; re-clicking...");
+    await openReader();
+    try {
+      await expect(pageB.getByTestId("reader-iframe-container")).toBeVisible({ timeout: 15000 });
+    } catch {
+      console.log("[B] Reader still closed; reloading to heal the module map...");
+      await pageB.reload();
+      await expect(cardB).toBeVisible({ timeout: 15000 });
+      await openReader();
+      await expect(pageB.getByTestId("reader-iframe-container")).toBeVisible({ timeout: 15000 });
+    }
+  }
 
   // Wait for rendition to load and calculate progress
   await waitForReaderReady(pageB);
