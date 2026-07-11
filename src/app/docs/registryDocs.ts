@@ -484,7 +484,7 @@ ${renderModuleTree()}
 
 \`\`\`mermaid
 graph TD
-    L4[App / Composition Root] --> L3[Domains: library, reader, search, sync, etc.]
+    L4[App / Composition Root] --> L3[Domains / Lib: library, reader, search, sync, tts, etc.]
     L4 --> L2
     L4 --> L1
     L4 --> L0
@@ -497,6 +497,11 @@ graph TD
 \`\`\`
 
 ### Module Reference
+
+- **\`src/lib/tts/engine/PlaybackController.ts\`**
+  - **Goal**: Replaces the monolithic \`AudioPlayerService\` to provide an isolated TTS orchestration core.
+  - **Logic**: Uses dependency injection (\`EngineContext\`) for Web Worker portability, removing jsdom/Zustand dependencies.
+  - **Trade-offs**: Requires explicit state synchronization across the worker boundary.
 
 - **\`src/data/write-gate.ts\`**
   - **Goal**: Prevent WebKit IndexedDB deadlocks caused by concurrent readwrite transactions.

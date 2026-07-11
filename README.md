@@ -50,7 +50,7 @@
 *   **Zero-Latency Parsing**: Uses a specialized zero-allocation text scanner (`TextScanningTrie`) to process text instantly without garbage collection pauses.
 *   **Instant Resume**: Remembers the last open book and restores your place immediately on launch, bypassing heavy sync checks.
 *   **Worker Search**: Fast, offline full-text search (RegExp based) running in a background Web Worker. Features smart offloading of XML parsing and direct EPUB archive extraction (with rendering fallback) to keep the UI buttery smooth during indexing.
-*   **Worker TTS**: Background TTS processing (e.g. WASM inference) decoupled from the main thread UI to maximize performance and avoid UI freezes.
+*   **Worker TTS**: Background TTS processing (e.g. WASM inference) decoupled from the main thread UI to maximize performance and avoid UI freezes. The monolithic `AudioPlayerService` has been replaced by an isolated `PlaybackController` using dependency injection for worker portability.
 *   **Annotations**: Full support for text highlighting and adding notes. Includes **Markdown Annotation Export** to easily extract all notes for a book to a `.md` file or copy directly to the clipboard.
 
 ### Listening (The "Listening Room")
