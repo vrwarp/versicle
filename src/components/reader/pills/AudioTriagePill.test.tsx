@@ -16,7 +16,7 @@ vi.mock('@store/useAnnotationStore', () => ({
 describe('AudioTriagePill', () => {
     const mockAdd = vi.fn();
     const mockRemove = vi.fn();
-    const mockResetCompassState = vi.fn();
+    const mockDispatchCompass = vi.fn();
 
     const annotation = {
         id: 'ab-1',
@@ -31,14 +31,14 @@ describe('AudioTriagePill', () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
-        // Mock useReaderUIStore behavior
+        // Mock useReaderUIStore behavior (compass machine — see store/compassMachine.ts)
         vi.mocked(useReaderUIStore).mockImplementation((selector: any) => {
             const state = {
-                compassState: {
-                    variant: 'audio-triage' as const,
-                    targetAnnotation: annotation
+                compass: {
+                    mode: 'audio-triage' as const,
+                    annotation
                 },
-                resetCompassState: mockResetCompassState
+                dispatchCompass: mockDispatchCompass
             };
             return selector(state);
         });
@@ -75,15 +75,15 @@ describe('AudioTriagePill', () => {
             color: 'orange',
             created: 987654321
         }));
-        expect(mockResetCompassState).toHaveBeenCalled();
+        expect(mockDispatchCompass).toHaveBeenCalledWith({ type: 'ACTION_COMMITTED' });
     });
 
-    it('discards the audio bookmark and resets compass state on discard', () => {
+    it('discards the audio bookmark and returns the compass to idle on discard', () => {
         render(<AudioTriagePill />);
 
         fireEvent.click(screen.getByText('Discard'));
 
         expect(mockRemove).toHaveBeenCalledWith('ab-1');
-        expect(mockResetCompassState).toHaveBeenCalled();
+        expect(mockDispatchCompass).toHaveBeenCalledWith({ type: 'ACTION_COMMITTED' });
     });
 });
