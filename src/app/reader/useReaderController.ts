@@ -37,6 +37,7 @@ import { SearchEngine } from '@lib/search-engine';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { useReadingStateStore } from '@store/useReadingStateStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
+import { compassOwnsSelection } from '@store/compassMachine';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useToastStore } from '@store/useToastStore';
@@ -145,16 +146,14 @@ export function useReaderController(
     setCurrentSection,
     setCurrentBookId,
     resetUI,
-    showPopover,
-    hidePopover,
+    dispatchCompass,
   } = useReaderUIStore(useShallow(state => ({
     currentSectionTitle: state.currentSectionTitle,
     setIsLoading: state.setIsLoading,
     setCurrentSection: state.setCurrentSection,
     setCurrentBookId: state.setCurrentBookId,
     resetUI: state.reset,
-    showPopover: state.showPopover,
-    hidePopover: state.hidePopover,
+    dispatchCompass: state.dispatchCompass,
   })));
 
   // Panic-save context ref (recorder getContext — legacy panicSaveState).
@@ -238,14 +237,6 @@ export function useReaderController(
     },
     onTocLoaded: (newToc) => useReaderUIStore.getState().setToc(newToc),
     onSelection: (cfiRange, range, _contents) => {
-      // Audio-bookmark triage OWNS the live selection: it programmatically
-      // selects the bookmarked block (engine.selectRange → selectionchange,
-      // which now drives the selection bridge) and the user may refine that
-      // selection by hand before confirming. Neither is a "new annotation"
-      // gesture, so it must NOT reset the audio-triage pill into the annotation
-      // toolbar. (compassState is set synchronously right after selectRange, so
-      // it is already 'audio-triage' by the time the debounced emit lands.)
-      if (useReaderUIStore.getState().compassState?.variant === 'audio-triage') return;
       try {
         // Show the compass on the SELECTION itself, not on its geometry. The
         // annotation pill is fixed-position (ReaderControlBar `bottom-8`), so
@@ -272,15 +263,14 @@ export function useReaderController(
           // Coordinates are best-effort; never block the popover on them.
         }
 
-        // A fresh user selection must start from a clean compass: clear any
-        // lingering compassState (a prior vocab-triage / audio-triage / an
-        // existing-highlight tap that set targetAnnotation). The
-        // ReaderControlBar dispatcher ranks compassState.variant ABOVE
-        // popover.visible, so a stale variant would otherwise mask the new
-        // selection's annotation toolbar — "highlighting no longer triggers
-        // the compass". (The onClick collapse path resets it the same way.)
-        useReaderUIStore.getState().resetCompassState();
-        showPopover(x, y, cfiRange, text);
+        // One atomic transition: the machine replaces whatever interaction
+        // was in flight with a fresh annotation toolbar — EXCEPT during
+        // audio-bookmark triage, which owns the live selection (the user may
+        // refine the programmatically-selected block before confirming; the
+        // table ignores TEXT_SELECTED in that mode). Triage dispatches
+        // synchronously right after selectRange, so it is already in effect
+        // by the time the debounced selection emit lands here.
+        dispatchCompass({ type: 'TEXT_SELECTED', selection: { cfiRange, text, x, y } });
       } catch (e) {
         logger.warn('Selection handling failed', e);
       }
@@ -291,8 +281,7 @@ export function useReaderController(
     onClick: (e: MouseEvent) => {
       const selection = e.view?.getSelection();
       if (!selection || selection.isCollapsed) {
-        hidePopover();
-        useReaderUIStore.getState().resetCompassState();
+        useReaderUIStore.getState().dispatchCompass({ type: 'OUTSIDE_TAP' });
       }
     },
     onError: (msg) => {
@@ -308,8 +297,7 @@ export function useReaderController(
     fontProfiles,
     shouldForceFont,
     bookId,
-    showPopover,
-    hidePopover,
+    dispatchCompass,
     bookMetadata,
     initialLocation,
     setCurrentSection,
@@ -533,11 +521,11 @@ export function useReaderController(
     }
   }, [bookId, setCurrentBookId, audio]);
 
-  // Hide selection popover when Chinese reading settings change.
-  // This prevents "orphaned" popovers that point to nodes we are about to replace in DOM.
+  // Collapse any compass interaction when Chinese reading settings change.
+  // This prevents "orphaned" toolbars that point to nodes we are about to replace in DOM.
   useEffect(() => {
-    hidePopover();
-  }, [forceTraditionalChinese, showPinyin, hidePopover]);
+    dispatchCompass({ type: 'CONTEXT_INVALIDATED' });
+  }, [forceTraditionalChinese, showPinyin, dispatchCompass]);
 
   // Handle Unmount Cleanup
   const reset = useCallback(() => {
@@ -549,19 +537,20 @@ export function useReaderController(
       searchNavigatorRef.current?.dispose();
       searchSessionRef.current?.dispose();
       setCurrentBookId(null);
-      reset();
-      hidePopover();
+      reset(); // Also returns the compass interaction to idle.
       setPinyinPositions(prev => prev.length === 0 ? prev : []);
     };
-  }, [reset, hidePopover, setCurrentBookId]);
+  }, [reset, setCurrentBookId]);
 
-  // Clear selection when popover is hidden
-  const popoverVisible = useReaderUIStore(state => state.popover.visible);
+  // Clear the engine selection when the compass leaves a selection-owning
+  // mode (annotation toolbar / vocab card). Audio-triage manages its own
+  // programmatic selection and is excluded by compassOwnsSelection.
+  const ownsSelection = useReaderUIStore(state => compassOwnsSelection(state.compass));
   useEffect(() => {
-    if (!popoverVisible) {
+    if (!ownsSelection) {
       engineRef.current?.clearSelection();
     }
-  }, [popoverVisible]);
+  }, [ownsSelection]);
 
   // Handle TTS Errors
   const lastError = useTTSPlaybackStore(state => state.lastError);

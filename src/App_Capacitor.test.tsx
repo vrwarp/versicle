@@ -46,9 +46,9 @@ vi.mock('./store/useReaderUIStore', () => ({
   useReaderUIStore: (selector: any) => selector({
     immersiveMode: false,
     currentSectionTitle: null,
-    // Popover state moved here from useAnnotationStore (popover-desync hotfix)
-    popover: { visible: false },
-    hidePopover: vi.fn(),
+    // Compass interaction machine (store/compassMachine.ts)
+    compass: { mode: 'idle' },
+    dispatchCompass: vi.fn(),
   }),
 }));
 

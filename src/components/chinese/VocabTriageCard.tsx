@@ -179,8 +179,7 @@ export const VocabTriageCard: React.FC<{ text: string }> = ({ text }) => {
   }, [text]);
 
   const close = () => {
-    useReaderUIStore.getState().resetCompassState();
-    useReaderUIStore.getState().hidePopover();
+    useReaderUIStore.getState().dispatchCompass({ type: 'DISMISSED' });
   };
 
   return (

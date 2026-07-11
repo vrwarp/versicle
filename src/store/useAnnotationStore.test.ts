@@ -112,14 +112,16 @@ describe('useAnnotationStore', () => {
     // so any (erroneous) pending Y.Doc write would have fired before we assert.
     const flushYjsWrites = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-    it('does not carry popover state or actions on the annotation store', () => {
+    it('does not carry compass/popover state or actions on the annotation store', () => {
       const state = useAnnotationStore.getState();
       expect(state).not.toHaveProperty('popover');
       expect(state).not.toHaveProperty('showPopover');
       expect(state).not.toHaveProperty('hidePopover');
+      expect(state).not.toHaveProperty('compass');
+      expect(state).not.toHaveProperty('dispatchCompass');
     });
 
-    it('popover open/close writes nothing to the Y.Doc and fires no annotations observer', async () => {
+    it('compass open/close writes nothing to the Y.Doc and fires no annotations observer', async () => {
       // Let any writes scheduled by beforeEach setState settle first.
       await flushYjsWrites();
 
@@ -131,25 +133,24 @@ describe('useAnnotationStore', () => {
 
       try {
         act(() => {
-          useReaderUIStore.getState().showPopover(100, 200, 'cfi', 'selected text');
+          useReaderUIStore.getState().dispatchCompass({
+            type: 'TEXT_SELECTED',
+            selection: { x: 100, y: 200, cfiRange: 'cfi', text: 'selected text' },
+          });
         });
         await flushYjsWrites();
 
-        expect(useReaderUIStore.getState().popover).toEqual({
-          visible: true,
-          x: 100,
-          y: 200,
-          cfiRange: 'cfi',
-          text: 'selected text',
-          id: undefined,
+        expect(useReaderUIStore.getState().compass).toEqual({
+          mode: 'annotation',
+          selection: { x: 100, y: 200, cfiRange: 'cfi', text: 'selected text' },
         });
 
         act(() => {
-          useReaderUIStore.getState().hidePopover();
+          useReaderUIStore.getState().dispatchCompass({ type: 'DISMISSED' });
         });
         await flushYjsWrites();
 
-        expect(useReaderUIStore.getState().popover.visible).toBe(false);
+        expect(useReaderUIStore.getState().compass.mode).toBe('idle');
         expect(updateSpy).not.toHaveBeenCalled();
         expect(observerSpy).not.toHaveBeenCalled();
 

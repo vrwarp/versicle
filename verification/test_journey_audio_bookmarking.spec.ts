@@ -73,9 +73,9 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
     const store = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useAnnotationStore.getState();
     const bookmark = Object.values(store.annotations).find((a: any /* eslint-disable-line @typescript-eslint/no-explicit-any */) => a.type === 'audio-bookmark');
     if (bookmark) {
-      (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useReaderUIStore.getState().setCompassState({
-        variant: 'audio-triage',
-        targetAnnotation: bookmark
+      (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useReaderUIStore.getState().dispatchCompass({
+        type: 'AUDIO_BOOKMARK_TAPPED',
+        annotation: bookmark
       });
     }
   });
