@@ -77,6 +77,37 @@ describe('useAnnotationStore', () => {
     });
   });
 
+  it('should preserve created timestamp when adding annotation if provided', async () => {
+    const { result } = renderHook(() => useAnnotationStore());
+    const existingTimestamp = 9876543210;
+    const annotationWithCreated = {
+      bookId: 'book1',
+      cfiRange: 'cfi',
+      text: 'text',
+      type: 'highlight',
+      color: 'yellow',
+      created: existingTimestamp,
+    };
+
+    await act(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await result.current.add(annotationWithCreated as any);
+    });
+
+    const annotations = result.current.annotations;
+    const ids = Object.keys(annotations);
+    expect(ids).toHaveLength(1);
+    expect(annotations[ids[0]]).toMatchObject({
+      bookId: 'book1',
+      cfiRange: 'cfi',
+      text: 'text',
+      type: 'highlight',
+      color: 'yellow',
+      id: expect.any(String),
+      created: existingTimestamp,
+    });
+  });
+
   it('should delete annotation', async () => {
     const { result } = renderHook(() => useAnnotationStore());
     const annotation = { id: 'test-uuid', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 };

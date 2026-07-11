@@ -113,6 +113,15 @@ describe('regression: theme change does not reflow (D5)', () => {
     expect(slot.flow).not.toHaveBeenCalled();
   });
 
+  it('initial theme application re-displays to correct potential layout shifts', async () => {
+    await boot();
+    // 1st call: initial book display (startLocation)
+    // 2nd call: post-theming re-scroll
+    expect(slot.display).toHaveBeenCalledTimes(2);
+    // Verified it re-displays the current location (which defaults to book location in mock)
+    expect(slot.display).toHaveBeenLastCalledWith('epubcfi(/6/4!/4/2)');
+  });
+
   it('a theme-only change re-themes without flow()/display()', async () => {
     const view = await boot();
     slot.display!.mockClear();

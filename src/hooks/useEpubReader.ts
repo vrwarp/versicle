@@ -439,8 +439,10 @@ export function useEpubReader(
   // always-reflow fired a spurious relocation event per settings change,
   // which fed the session recorder).
   const prevViewModeRef = useRef<'paginated' | 'scrolled' | null>(null);
+  const isInitialApplyRef = useRef(true);
   useEffect(() => {
     prevViewModeRef.current = null; // new book: rendition rendered with the current mode
+    isInitialApplyRef.current = true;
   }, [bookId]);
   useEffect(() => {
     if (!renditionRef.current || !isReady) return;
@@ -467,6 +469,14 @@ export function useEpubReader(
     prevViewModeRef.current = options.viewMode;
 
     applyStylesRef.current = applyReaderTheme(r, spec, { flowModeChanged });
+
+    if (isInitialApplyRef.current) {
+      isInitialApplyRef.current = false;
+      const currentLoc = (r.location as typeof r.location | undefined)?.start?.cfi || options.initialLocation;
+      if (currentLoc) {
+        r.display(currentLoc);
+      }
+    }
   }, [
     isReady,
     options.currentTheme,
@@ -476,6 +486,7 @@ export function useEpubReader(
     options.lineHeight,
     options.viewMode,
     options.shouldForceFont,
+    options.initialLocation,
     metadata?.baseFontSize,
     metadata?.baseLineHeight,
     forceTraditionalChinese,
