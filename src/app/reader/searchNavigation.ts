@@ -19,7 +19,7 @@ import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { resolveResultCfi } from '@domains/search';
 
 /** How long the navigate-to-match highlight stays before auto-removal. */
-export const SEARCH_HIGHLIGHT_MS = 2500;
+export const SEARCH_HIGHLIGHT_MS = 10000;
 
 export interface SearchNavigator {
   /** Display the result's section, then the exact occurrence (when resolvable). */

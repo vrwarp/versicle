@@ -167,7 +167,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
     }, [searchQuery, bookId, session, showToast]);
 
     return (
-        <div data-testid="reader-search-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto z-50 absolute inset-y-0 left-0 flex flex-col">
+        <div data-testid="reader-search-sidebar" className="w-64 shrink-0 bg-surface border-r border-border overflow-y-auto overflow-x-hidden z-50 absolute inset-y-0 left-0 flex flex-col">
             <div className="p-4 border-b border-border">
                 <div className="flex items-center justify-between mb-2">
                     <h2 className="text-lg font-bold text-foreground">Search</h2>
@@ -240,10 +240,10 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                                     <Button
                                         variant="ghost"
                                         data-testid={`search-result-${idx}`}
-                                        className="text-left w-full h-auto p-2 block items-start justify-start font-normal"
+                                        className="text-left w-full h-auto p-2 block items-start justify-start font-normal overflow-hidden"
                                         onClick={() => onNavigate(result)}
                                     >
-                                        <p className="text-xs text-muted-foreground mb-1">
+                                        <p className="text-xs text-muted-foreground mb-1 truncate" title={result.sectionTitle ? `${result.sectionTitle} · Result ${idx + 1}` : `Result ${idx + 1}`}>
                                             {result.sectionTitle ? `${result.sectionTitle} · ` : ''}Result {idx + 1}
                                         </p>
                                         <p className="text-sm text-foreground line-clamp-3 whitespace-normal break-words">
