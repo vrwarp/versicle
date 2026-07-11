@@ -472,7 +472,7 @@ export function useEpubReader(
 
     if (isInitialApplyRef.current) {
       isInitialApplyRef.current = false;
-      const currentLoc = (r.location as any)?.start?.cfi || options.initialLocation;
+      const currentLoc = (r.location as typeof r.location | undefined)?.start?.cfi || options.initialLocation;
       if (currentLoc) {
         r.display(currentLoc);
       }
@@ -486,6 +486,7 @@ export function useEpubReader(
     options.lineHeight,
     options.viewMode,
     options.shouldForceFont,
+    options.initialLocation,
     metadata?.baseFontSize,
     metadata?.baseLineHeight,
     forceTraditionalChinese,
