@@ -1,36 +1,15 @@
 import { create } from 'zustand';
 import type { NavigationItem } from '~types/book';
 
-import type { Annotation } from '~types/user-data';
+import {
+    COMPASS_IDLE,
+    transitionCompass,
+    type CompassEvent,
+    type CompassInteraction,
+} from './compassMachine';
+import { createLogger } from '@lib/logger';
 
-interface CompassState {
-    variant?: 'active' | 'summary' | 'compact' | 'annotation' | 'sync-alert' | 'audio-triage' | 'vocab-triage';
-    targetAnnotation?: Annotation;
-}
-
-/**
- * UI state for the annotation selection popover.
- * Ephemeral, device-local state: it lives in this non-synced, non-persisted store
- * so that opening/closing the popover never writes to the Yjs CRDT
- * (it previously lived in the synced useAnnotationStore and leaked screen
- * coordinates to other devices).
- */
-interface AnnotationPopoverState {
-    visible: boolean;
-    x: number;
-    y: number;
-    cfiRange: string;
-    text: string;
-    id?: string;
-}
-
-const INITIAL_POPOVER_STATE: AnnotationPopoverState = {
-    visible: false,
-    x: 0,
-    y: 0,
-    cfiRange: '',
-    text: '',
-};
+const log = createLogger('compass');
 
 interface ReaderUIState {
     isLoading: boolean;
@@ -59,21 +38,24 @@ interface ReaderUIState {
     setCurrentBookId: (id: string | null) => void;
     setFollowingAudio: (following: boolean) => void;
 
-    compassState: CompassState;
-    setCompassState: (state: CompassState) => void;
-    resetCompassState: () => void;
-
-    /** Annotation popover state (ephemeral, never synced). */
-    popover: AnnotationPopoverState;
-    /** Shows the annotation popover at the given screen coordinates. */
-    showPopover: (x: number, y: number, cfiRange: string, text: string, id?: string) => void;
-    /** Hides the annotation popover. */
-    hidePopover: () => void;
+    /**
+     * The compass pill's interaction state (see compassMachine.ts). Ephemeral,
+     * device-local — never synced via Yjs (its selection payload carries
+     * screen coordinates; the popover-desync hotfix moved that data here).
+     * Mutated exclusively through `dispatchCompass`.
+     */
+    compass: CompassInteraction;
+    /**
+     * Routes an event through the compass transition table. The ONLY way to
+     * change `compass` — events not meaningful in the current mode are
+     * ignored by the table, so callers never need to check state first.
+     */
+    dispatchCompass: (event: CompassEvent) => void;
 
     reset: () => void;
 }
 
-export const useReaderUIStore = create<ReaderUIState>((set) => ({
+export const useReaderUIStore = create<ReaderUIState>((set, get) => ({
     isLoading: false,
     toc: [],
     immersiveMode: false,
@@ -82,7 +64,7 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
     currentBookId: null,
     followingAudio: true,
 
-    compassState: {},
+    compass: COMPASS_IDLE,
 
     setIsLoading: (isLoading) => set({ isLoading }),
     setToc: (toc) => set({ toc }),
@@ -91,16 +73,13 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
     setCurrentBookId: (id) => set({ currentBookId: id }),
     setFollowingAudio: (following) => set({ followingAudio: following }),
 
-    setCompassState: (state) => set({ compassState: state }),
-    resetCompassState: () => set({ compassState: {} }),
-
-    popover: INITIAL_POPOVER_STATE,
-    showPopover: (x, y, cfiRange, text, id) => set({
-        popover: { visible: true, x, y, cfiRange, text, id }
-    }),
-    hidePopover: () => set((state) => ({
-        popover: { ...state.popover, visible: false, id: undefined }
-    })),
+    dispatchCompass: (event) => {
+        const prev = get().compass;
+        const next = transitionCompass(prev, event);
+        if (next === prev) return; // Event not meaningful in this mode.
+        log.debug(`${prev.mode} --${event.type}--> ${next.mode}`);
+        set({ compass: next });
+    },
 
     reset: () => set({
         isLoading: false,
@@ -110,7 +89,6 @@ export const useReaderUIStore = create<ReaderUIState>((set) => ({
         currentSectionId: null,
         currentBookId: null,
         followingAudio: true,
-        compassState: {},
-        popover: INITIAL_POPOVER_STATE
+        compass: COMPASS_IDLE
     })
 }));

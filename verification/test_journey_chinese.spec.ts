@@ -209,7 +209,7 @@ test('Journey Smart Pinyin', async ({ page }) => {
   // vocab-triage shows the exact glyphs the test asserts on, incl. '中'). The
   // selection bridge is now attached to the initial section (the useEpubReader
   // fix), so the in-iframe dispatched mouseup reaches it: cfiFromRange →
-  // showPopover → annotation pill with the vocab button.
+  // TEXT_SELECTED → annotation pill with the vocab button.
   await page
     .locator('[data-testid="reader-iframe-container"] iframe')
     .contentFrame()

@@ -13,9 +13,9 @@ test('Audio Bookmark Dismissal Test', async ({ page }) => {
   // 2. Programmatically trigger triage mode (to save time)
   console.log('Triggering audio-triage mode...');
   await page.evaluate(() => {
-    (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useReaderUIStore.getState().setCompassState({
-      variant: 'audio-triage',
-      targetAnnotation: {
+    (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useReaderUIStore.getState().dispatchCompass({
+      type: 'AUDIO_BOOKMARK_TAPPED',
+      annotation: {
         id: 'test-id',
         type: 'audio-bookmark',
         cfiRange: 'epubcfi(/6/4[chap1]!/4/2/2)',
@@ -43,9 +43,9 @@ test('Audio Bookmark Dismissal Test', async ({ page }) => {
   // 5. Try clicking inside the iframe (if possible)
   // We'll trigger triage mode again
   await page.evaluate(() => {
-    (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useReaderUIStore.getState().setCompassState({
-      variant: 'audio-triage',
-      targetAnnotation: {
+    (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useReaderUIStore.getState().dispatchCompass({
+      type: 'AUDIO_BOOKMARK_TAPPED',
+      annotation: {
         id: 'test-id',
         type: 'audio-bookmark',
         cfiRange: 'epubcfi(/6/4[chap1]!/4/2/2)',
@@ -66,9 +66,9 @@ test('Audio Bookmark Dismissal Test', async ({ page }) => {
   // 6. Test X button dismissal
   console.log('Testing X button dismissal...');
   await page.evaluate(() => {
-    (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useReaderUIStore.getState().setCompassState({
-      variant: 'audio-triage',
-      targetAnnotation: {
+    (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useReaderUIStore.getState().dispatchCompass({
+      type: 'AUDIO_BOOKMARK_TAPPED',
+      annotation: {
         id: 'test-id',
         type: 'audio-bookmark',
         cfiRange: 'epubcfi(/6/4[chap1]!/4/2/2)',

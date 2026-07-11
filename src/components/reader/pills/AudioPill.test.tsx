@@ -40,7 +40,7 @@ vi.mock('@store/useReaderUIStore', () => ({
             currentBookId: null,
             currentSectionTitle: 'Test Chapter',
             toc: [],
-            popover: { visible: false, x: 0, y: 0, cfiRange: '', text: '' },
+            compass: { mode: 'idle' },
             followingAudio: readerUIState.followingAudio,
             setFollowingAudio: mockSetFollowingAudio,
         };
@@ -68,6 +68,7 @@ vi.mock('@hooks/useSectionDuration', () => ({
 function registerFakeCommands() {
     const commands = {
         jumpTo: vi.fn(),
+        jumpToEnd: vi.fn(),
         nextPage: vi.fn(),
         prevPage: vi.fn(),
         nextChapter: vi.fn(),

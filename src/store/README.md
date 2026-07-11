@@ -43,7 +43,7 @@ hydration modes, and the per-store flip ledger.
 | `useLibraryStore` | — | library | Static-metadata projection of IndexedDB + offloaded-book set. |
 | `useUIStore` | — | shell | Global UI flags (obsolete-client lock; settings became route state in P8). |
 | `useToastStore` | — | shell | Toast notification state. |
-| `useReaderUIStore` | — | reader | Reader session UI (menus, popover, compass, reader callbacks). |
+| `useReaderUIStore` | — | reader | Reader session UI (menus, compass interaction machine, section state). |
 | `useBackNavigationStore` | — | shell | Priority-ordered back-button handler registry. |
 | `useSidebarStore` | — | reader | Which reader side panel (TOC/search/annotations/audio) is open. |
 | `useTTSPlaybackStore` | — | audio | Engine playback mirror + voice list/downloads (never persisted or replicated; 5b split). |

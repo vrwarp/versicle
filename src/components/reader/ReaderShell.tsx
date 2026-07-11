@@ -46,12 +46,11 @@ export const ReaderShell: React.FC = () => {
     const { id: bookId } = useParams<{ id: string }>();
     const { activeSidebar } = useSidebarState();
 
-    const { currentSectionTitle, immersiveMode, resetCompassState, hidePopover } =
+    const { currentSectionTitle, immersiveMode, dispatchCompass } =
         useReaderUIStore(useShallow(state => ({
             currentSectionTitle: state.currentSectionTitle,
             immersiveMode: state.immersiveMode,
-            resetCompassState: state.resetCompassState,
-            hidePopover: state.hidePopover,
+            dispatchCompass: state.dispatchCompass,
         })));
     const { fontSize, pinyinSize, currentTheme } = usePreferencesStore(useShallow(state => ({
         fontSize: state.fontSize,
@@ -79,12 +78,12 @@ export const ReaderShell: React.FC = () => {
 
     const [syncPanelOpen, setSyncPanelOpen] = useState(false);
 
-    // The CompassPill collapses whenever a sidebar/immersive mode opens.
+    // Any compass interaction collapses whenever a sidebar/immersive mode opens.
     useEffect(() => {
         if (activeSidebar !== 'none' || immersiveMode) {
-            resetCompassState();
+            dispatchCompass({ type: 'CONTEXT_INVALIDATED' });
         }
-    }, [activeSidebar, immersiveMode, resetCompassState]);
+    }, [activeSidebar, immersiveMode, dispatchCompass]);
 
     // TTS session wiring (queue building, progress following).
     useTTS();
@@ -95,8 +94,7 @@ export const ReaderShell: React.FC = () => {
                 data-testid="reader-view"
                 className="flex flex-col h-screen bg-background text-foreground relative"
                 onClick={() => {
-                    hidePopover();
-                    useReaderUIStore.getState().resetCompassState();
+                    useReaderUIStore.getState().dispatchCompass({ type: 'OUTSIDE_TAP' });
                 }}
             >
                 {importJump.dialog}
