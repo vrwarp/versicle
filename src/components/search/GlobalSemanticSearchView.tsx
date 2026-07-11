@@ -4,6 +4,7 @@ import { useGlobalSearch, type BookIndexingStatus, type GroupedBookMatches } fro
 import type { DetailedSearchResult } from '~types/search';
 import { useSearchHistoryStore } from '@store/useSearchHistoryStore';
 import { BookCover } from '../library/BookCover';
+import { isPaletteBright } from '@lib/cover-palette';
 import {
   Search,
   X,
@@ -124,61 +125,57 @@ const IndexingStatusGrid = React.memo<IndexingStatusGridProps>(({ indexingStatus
   }
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-6">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-0 rounded-2xl overflow-hidden border border-border shadow-sm">
       {indexingStatuses.map((book) => (
         <div
           key={book.bookId}
-          className={`group flex flex-col bg-card rounded-xl overflow-hidden border transition-all duration-200 hover:shadow-md ${
+          className={`relative aspect-[2/3] w-full bg-muted overflow-hidden transition-all duration-200 ${
             book.status === 'unindexed' ? 'opacity-70 dark:opacity-60 grayscale' : ''
           }`}
         >
-          <div className="aspect-[2/3] w-full bg-muted relative overflow-hidden flex flex-col">
-            <BookCover
-              book={{
-                id: book.bookId,
-                title: book.title,
-                author: book.author,
-                coverPalette: book.coverPalette,
-                coverUrl: book.coverUrl,
-                coverBlob: book.coverBlob,
-              }}
-              onDelete={() => {}}
-              onOffload={() => {}}
-              onRestore={() => {}}
-              showActions={false}
-            />
+          <BookCover
+            book={{
+              id: book.bookId,
+              title: book.title,
+              author: book.author,
+              coverPalette: book.coverPalette,
+              coverUrl: book.coverUrl,
+              coverBlob: book.coverBlob,
+            }}
+            onDelete={() => {}}
+            onOffload={() => {}}
+            onRestore={() => {}}
+            showActions={false}
+          />
 
-            {/* Status Badges Overlay */}
-            {book.status === 'unindexed' && (
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center p-2">
-                <span className="text-xs font-semibold bg-secondary/90 text-secondary-foreground px-2 py-1 rounded-full shadow-sm">
-                  Unindexed
-                </span>
-              </div>
-            )}
-            {book.status === 'partial' && (
-              <div className="absolute inset-0 bg-black/30 flex flex-col justify-end p-2 gap-1.5">
-                <div className="w-full bg-muted/80 rounded-full h-1.5 overflow-hidden shadow-inner">
-                  <div
-                    className="bg-primary h-full transition-all duration-300"
-                    style={{ width: `${book.progressPercent ?? 0}%` }}
-                  />
-                </div>
-                <span className="text-[10px] font-bold text-white text-center drop-shadow-md">
-                  Indexing {book.progressLabel}
-                </span>
-              </div>
-            )}
-          </div>
-
-          <div className="p-3 flex flex-col flex-1">
-            <h4 className="font-semibold text-sm line-clamp-1 text-foreground" title={book.title}>
-              {book.title}
-            </h4>
-            <p className="text-xs text-muted-foreground line-clamp-1" title={book.author}>
-              {book.author}
-            </p>
-          </div>
+          {/* Status Badges Overlay */}
+          {book.status === 'unindexed' && (
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center p-2">
+              <span className="text-xs font-semibold bg-secondary/90 text-secondary-foreground px-2 py-1 rounded-full shadow-sm">
+                Unindexed
+              </span>
+            </div>
+          )}
+          {book.status === 'partial' && (() => {
+            const isBright = isPaletteBright(book.coverPalette);
+            const overlayColor = isBright ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.4)';
+            const percent = book.progressPercent ?? 0;
+            return (
+              <div
+                className="absolute inset-0 transition-all duration-300 pointer-events-none"
+                style={{
+                  background: `conic-gradient(from 0deg, transparent 0% ${percent}%, ${overlayColor} ${percent}% 100%)`
+                }}
+                role="progressbar"
+                aria-valuenow={percent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={`Indexing progress: ${percent}%`}
+                title={`Indexing: ${percent}%`}
+                data-testid="indexing-progress-overlay"
+              />
+            );
+          })()}
         </div>
       ))}
     </div>
