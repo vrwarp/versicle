@@ -15,17 +15,19 @@ import { PillShell } from '../../ui/PillShell';
 import { Button } from '../../ui/Button';
 
 export const AudioTriagePill: React.FC = () => {
-  const compassState = useReaderUIStore(state => state.compassState || {});
-  const resetCompassState = useReaderUIStore(state => state.resetCompassState);
+  const compass = useReaderUIStore(state => state.compass);
+  const dispatchCompass = useReaderUIStore(state => state.dispatchCompass);
   const { addAnnotation, removeAnnotation } = useAnnotationStore(useShallow(state => ({
     addAnnotation: state.add,
     removeAnnotation: state.remove
   })));
 
-  if (!compassState.targetAnnotation) return null;
+  // The machine guarantees audio-triage mode carries its annotation; this
+  // guard only covers morph frames where the mode has already moved on.
+  if (compass.mode !== 'audio-triage') return null;
+  const target = compass.annotation;
 
   const onConfirmTriage = async () => {
-    const target = compassState.targetAnnotation!;
     let newCfiRange = target.cfiRange;
     let newText = target.text;
 
@@ -46,12 +48,12 @@ export const AudioTriagePill: React.FC = () => {
       type: 'highlight' // Elevate status
     });
 
-    resetCompassState();
+    dispatchCompass({ type: 'ACTION_COMMITTED' });
   };
 
   const onDiscardTriage = () => {
-    removeAnnotation(compassState.targetAnnotation!.id);
-    resetCompassState();
+    removeAnnotation(target.id);
+    dispatchCompass({ type: 'ACTION_COMMITTED' });
   };
 
   return (
@@ -71,7 +73,7 @@ export const AudioTriagePill: React.FC = () => {
           variant="ghost"
           size="icon"
           className="rounded-full w-8 h-8 text-muted-foreground mr-[-4px]"
-          onClick={() => resetCompassState()}
+          onClick={() => dispatchCompass({ type: 'DISMISSED' })}
           aria-label="Dismiss review"
         >
           <X size={16} />

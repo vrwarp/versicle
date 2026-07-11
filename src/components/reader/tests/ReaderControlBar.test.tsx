@@ -114,16 +114,20 @@ vi.mock('../LexiconManager', () => ({
   )
 }));
 
+const annotationMode = (overrides: Record<string, unknown> = {}) => ({
+  mode: 'annotation',
+  selection: { x: 0, y: 0, cfiRange: 'cfi', text: 'selected text' },
+  ...overrides,
+});
+
 const readerUIState = (overrides: Record<string, unknown> = {}) => ({
   immersiveMode: false,
   toc: [],
   currentSectionTitle: null,
   currentSectionId: null,
   currentBookId: null,
-  compassState: {},
-  resetCompassState: vi.fn(),
-  popover: { visible: false, text: 'selected text', cfiRange: 'cfi' },
-  hidePopover: vi.fn(),
+  compass: { mode: 'idle' },
+  dispatchCompass: vi.fn(),
   ...overrides,
 });
 
@@ -167,28 +171,51 @@ describe('ReaderControlBar', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('renders the annotation pill when the popover is visible', () => {
+  it('renders the annotation pill in annotation mode', () => {
     mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
-      popover: { visible: true, text: 'selected text', cfiRange: 'cfi' },
+      compass: annotationMode(),
     })));
     render(<ReaderControlBar />);
     expect(screen.getByTestId('compass-pill-annotation')).toBeInTheDocument();
   });
 
-  it('a stale compass variant masks a visible selection popover (regression: highlighting no longer triggers the compass)', () => {
-    // The dispatcher ranks compassState.variant ABOVE popover.visible — this
-    // is intentional (vocab-triage / audio-triage override the live popover).
-    // The cost: a compass variant left over from a prior interaction masks a
-    // brand-new selection's annotation toolbar. With an audio-triage variant
-    // but no targetAnnotation the triage pill renders nothing, so the compass
-    // disappears entirely. useReaderController.onSelection prevents this by
-    // resetting compassState before showPopover on every fresh gesture.
+  it('renders the triage pill with its payload in audio-triage mode', () => {
+    // Under the pre-machine model an 'audio-triage' variant could exist
+    // without its target annotation and rendered NOTHING (the old
+    // stale-variant regression). The machine makes that unrepresentable:
+    // audio-triage always carries the bookmark it reviews.
     mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
-      compassState: { variant: 'audio-triage' },
-      popover: { visible: true, text: 'fresh selection', cfiRange: 'cfi' },
+      compass: {
+        mode: 'audio-triage',
+        annotation: {
+          id: 'bookmark-1',
+          bookId: 'book-1',
+          cfiRange: 'cfi',
+          text: 'bookmarked',
+          type: 'audio-bookmark',
+          color: 'yellow',
+          created: 0,
+        },
+      },
     })));
     render(<ReaderControlBar />);
-    expect(screen.queryByTestId('compass-pill-annotation')).not.toBeInTheDocument();
+    expect(screen.getByTestId('compass-pill-triage')).toBeInTheDocument();
+  });
+
+  it('a live interaction outranks the sync alert (interaction > ambient)', () => {
+    mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
+      currentBookId: '123',
+      compass: annotationMode(),
+    })));
+    mockUseRemoteProgress.mockReturnValue({
+      deviceId: 'phone-1',
+      deviceName: 'Phone',
+      percentage: 0.45,
+      cfi: 'epubcfi(/6/4!/4/2)',
+    });
+    render(<ReaderControlBar />);
+    expect(screen.getByTestId('compass-pill-annotation')).toBeInTheDocument();
+    expect(screen.queryByTestId('compass-pill-sync-alert')).not.toBeInTheDocument();
   });
 
   it('renders the active audio pill when currentBookId is present (Reader Active)', () => {
@@ -273,7 +300,7 @@ describe('ReaderControlBar', () => {
 
   it('handles annotation actions through the real pill buttons', () => {
     const add = vi.fn();
-    const hidePopover = vi.fn();
+    const dispatchCompass = vi.fn();
     const showToast = vi.fn();
 
     mockUseAnnotationStore.mockImplementation((selector: any) => selector({
@@ -281,8 +308,8 @@ describe('ReaderControlBar', () => {
     }));
     mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
       currentBookId: '123',
-      popover: { visible: true, text: 'selected text', cfiRange: 'cfi' },
-      hidePopover,
+      compass: annotationMode(),
+      dispatchCompass,
     })));
     mockUseToastStore.mockImplementation((selector: any) => selector({
       showToast
@@ -298,14 +325,14 @@ describe('ReaderControlBar', () => {
       text: 'selected text',
       cfiRange: 'cfi'
     });
-    expect(hidePopover).toHaveBeenCalled();
+    expect(dispatchCompass).toHaveBeenCalledWith({ type: 'ACTION_COMMITTED' });
   });
 
   it('opens LexiconManager when the pronounce action is triggered', () => {
-    const hidePopover = vi.fn();
+    const dispatchCompass = vi.fn();
     mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
-      popover: { visible: true, text: 'Desolate', cfiRange: 'cfi' },
-      hidePopover,
+      compass: annotationMode({ selection: { x: 0, y: 0, cfiRange: 'cfi', text: 'Desolate' } }),
+      dispatchCompass,
     })));
 
     render(<ReaderControlBar />);
@@ -313,7 +340,7 @@ describe('ReaderControlBar', () => {
     expect(screen.queryByTestId('lexicon-manager-mock')).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId('popover-fix-pronunciation-button'));
     expect(screen.getByTestId('lexicon-manager-mock')).toBeInTheDocument();
-    expect(hidePopover).toHaveBeenCalled();
+    expect(dispatchCompass).toHaveBeenCalledWith({ type: 'ACTION_COMMITTED' });
   });
 
   describe('regression: focus survives the variant morph (a11y item 8)', () => {
@@ -321,7 +348,7 @@ describe('ReaderControlBar', () => {
       // Start in annotation mode with focus on a toolbar button.
       mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
         currentBookId: '123',
-        popover: { visible: true, text: 'selected text', cfiRange: 'cfi' },
+        compass: annotationMode(),
       })));
       mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
 
@@ -330,7 +357,7 @@ describe('ReaderControlBar', () => {
       copyButton.focus();
       expect(document.activeElement).toBe(copyButton);
 
-      // Morph: popover closes → active audio pill replaces the toolbar.
+      // Morph: interaction returns to idle → active audio pill replaces the toolbar.
       mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
         currentBookId: '123',
         currentSectionTitle: 'Chapter 1',
@@ -378,7 +405,7 @@ describe('ReaderControlBar', () => {
       // Morph: the user's selection opens the annotation toolbar.
       mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
         currentBookId: '123',
-        popover: { visible: true, text: 'Conclusion', cfiRange: 'cfi' },
+        compass: annotationMode({ selection: { x: 0, y: 0, cfiRange: 'cfi', text: 'Conclusion' } }),
       })));
       rerender(<ReaderControlBar />);
 

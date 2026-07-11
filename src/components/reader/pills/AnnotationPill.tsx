@@ -33,30 +33,34 @@ export interface AnnotationPillProps {
 }
 
 export const AnnotationPill: React.FC<AnnotationPillProps> = ({ onAction, availableActions }) => {
-  const compassState = useReaderUIStore(state => state.compassState || {});
-  // Popover state is ephemeral UI state (never synced via Yjs) — it lives in useReaderUIStore.
-  const popover = useReaderUIStore(state => state.popover);
+  // Compass interaction state is ephemeral UI state (never synced via Yjs) —
+  // it lives in useReaderUIStore behind the compassMachine transition table.
+  // The router only mounts this pill in annotation mode; the payload guards
+  // below cover morph frames where the mode has already moved on.
+  const compass = useReaderUIStore(state => state.compass);
+  const selectionText = compass.mode === 'annotation' ? compass.selection.text : '';
+  const targetAnnotation = compass.mode === 'annotation' ? compass.annotation : undefined;
 
   // Full-script Han test (CH-1 family: astral Han selections count too).
   // The dictionary itself loads only when the triage card opens (PR-11) —
   // the legacy any-CJK-selection fetch trigger is gone.
-  const isChineseSelection = HAN_RE.test(popover.text || '');
+  const isChineseSelection = HAN_RE.test(selectionText);
 
   // Internal state for note editing - initialize based on target annotation if present
-  const [isEditingNote, setIsEditingNote] = useState(!!compassState.targetAnnotation?.note);
-  const [noteText, setNoteText] = useState(compassState.targetAnnotation?.note || '');
+  const [isEditingNote, setIsEditingNote] = useState(!!targetAnnotation?.note);
+  const [noteText, setNoteText] = useState(targetAnnotation?.note || '');
   const [isCopied, setIsCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Keep track of the previous annotation to sync state during render
   // instead of using an effect, which prevents cascading renders.
-  const [prevAnnotationId, setPrevAnnotationId] = useState(compassState.targetAnnotation?.id);
+  const [prevAnnotationId, setPrevAnnotationId] = useState(targetAnnotation?.id);
 
-  if (compassState.targetAnnotation?.id !== prevAnnotationId) {
-    setPrevAnnotationId(compassState.targetAnnotation?.id);
-    if (compassState.targetAnnotation?.note) {
+  if (targetAnnotation?.id !== prevAnnotationId) {
+    setPrevAnnotationId(targetAnnotation?.id);
+    if (targetAnnotation?.note) {
       setIsEditingNote(true);
-      setNoteText(compassState.targetAnnotation.note);
+      setNoteText(targetAnnotation.note);
     } else {
       setIsEditingNote(false);
       setNoteText('');
@@ -147,8 +151,8 @@ export const AnnotationPill: React.FC<AnnotationPillProps> = ({ onAction, availa
           size="icon"
           className="rounded-full w-9 h-9"
           onClick={() => {
-            if (compassState.targetAnnotation?.note) {
-              setNoteText(compassState.targetAnnotation.note);
+            if (targetAnnotation?.note) {
+              setNoteText(targetAnnotation.note);
             }
             setIsEditingNote(true);
           }}
@@ -165,7 +169,7 @@ export const AnnotationPill: React.FC<AnnotationPillProps> = ({ onAction, availa
             size="icon"
             className="rounded-full w-9 h-9 text-primary hover:bg-primary/10"
             onClick={() => {
-              useReaderUIStore.getState().setCompassState({ variant: 'vocab-triage' });
+              useReaderUIStore.getState().dispatchCompass({ type: 'VOCAB_TRIAGE_REQUESTED' });
             }}
             data-testid="popover-vocab-button"
             aria-label="Manage Pinyin Vocabulary"

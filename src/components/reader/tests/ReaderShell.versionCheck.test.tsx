@@ -37,11 +37,9 @@ const MOCK_READER_UI_STATE = {
     currentSectionId: null,
     setCurrentSection: vi.fn(),
     setCurrentBookId: vi.fn(),
-    resetCompassState: vi.fn(), // Added to prevent undefined() calls
-    // Popover state moved here from useAnnotationStore (popover-desync hotfix)
-    showPopover: vi.fn(),
-    hidePopover: vi.fn(),
-    popover: { visible: false }
+    // Compass interaction machine (store/compassMachine.ts)
+    compass: { mode: 'idle' },
+    dispatchCompass: vi.fn(),
 };
 
 vi.mock('@store/useReaderUIStore', () => ({

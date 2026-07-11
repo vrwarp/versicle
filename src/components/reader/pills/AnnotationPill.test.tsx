@@ -13,12 +13,19 @@ vi.mock('@store/useReaderUIStore', () => ({
     useReaderUIStore: vi.fn()
 }));
 
+// Compass interaction state (see store/compassMachine.ts) — the pill only
+// mounts in annotation mode, so that is the default here.
+const annotationMode = (overrides: Record<string, unknown> = {}) => ({
+    mode: 'annotation',
+    selection: { x: 0, y: 0, cfiRange: '', text: '' },
+    ...overrides,
+});
+
 const uiState = (overrides: Record<string, unknown> = {}) => ({
-    compassState: {},
+    compass: annotationMode(),
+    dispatchCompass: vi.fn(),
     currentBookId: 'book-1',
     currentSectionTitle: 'Chapter 1',
-    // Popover state moved here from useAnnotationStore (popover-desync hotfix)
-    popover: { visible: true, x: 0, y: 0, cfiRange: '', text: '' },
     ...overrides,
 });
 
@@ -57,11 +64,11 @@ describe('AnnotationPill', () => {
     });
 
     it('renders the vocab entry only for Han selections', () => {
-        mockStore({ popover: { visible: true, x: 0, y: 0, cfiRange: '', text: 'plain latin' } });
+        mockStore({ compass: annotationMode({ selection: { x: 0, y: 0, cfiRange: '', text: 'plain latin' } }) });
         const { rerender } = render(<AnnotationPill />);
         expect(screen.queryByTestId('popover-vocab-button')).not.toBeInTheDocument();
 
-        mockStore({ popover: { visible: true, x: 0, y: 0, cfiRange: '', text: '漢字' } });
+        mockStore({ compass: annotationMode({ selection: { x: 0, y: 0, cfiRange: '', text: '漢字' } }) });
         rerender(<AnnotationPill />);
         expect(screen.getByTestId('popover-vocab-button')).toBeInTheDocument();
     });
@@ -77,7 +84,7 @@ describe('AnnotationPill', () => {
         };
 
         it('enters editing mode immediately when mounted with a target annotation that has a note', () => {
-            mockStore({ compassState: { variant: 'annotation', targetAnnotation: annotationWithNote } });
+            mockStore({ compass: annotationMode({ annotation: annotationWithNote }) });
 
             render(<AnnotationPill />);
 
@@ -88,10 +95,9 @@ describe('AnnotationPill', () => {
 
         it('does NOT enter editing mode when the target annotation has no note', () => {
             mockStore({
-                compassState: {
-                    variant: 'annotation',
-                    targetAnnotation: { ...annotationWithNote, id: 'highlight-1', note: undefined, type: 'highlight' }
-                }
+                compass: annotationMode({
+                    annotation: { ...annotationWithNote, id: 'highlight-1', note: undefined, type: 'highlight' }
+                })
             });
 
             render(<AnnotationPill />);
@@ -102,10 +108,9 @@ describe('AnnotationPill', () => {
 
         it('repopulates the existing note text when the note button is clicked after cancel', () => {
             mockStore({
-                compassState: {
-                    variant: 'annotation',
-                    targetAnnotation: { ...annotationWithNote, note: 'Original Note Content' }
-                }
+                compass: annotationMode({
+                    annotation: { ...annotationWithNote, note: 'Original Note Content' }
+                })
             });
 
             render(<AnnotationPill />);
@@ -122,20 +127,18 @@ describe('AnnotationPill', () => {
 
         it('updates note text when the target annotation changes while mounted', () => {
             mockStore({
-                compassState: {
-                    variant: 'annotation',
-                    targetAnnotation: { ...annotationWithNote, id: 'note-A', note: 'Note A' }
-                }
+                compass: annotationMode({
+                    annotation: { ...annotationWithNote, id: 'note-A', note: 'Note A' }
+                })
             });
 
             const { rerender } = render(<AnnotationPill />);
             expect(screen.getByPlaceholderText('Add a note...')).toHaveValue('Note A');
 
             mockStore({
-                compassState: {
-                    variant: 'annotation',
-                    targetAnnotation: { ...annotationWithNote, id: 'note-B', note: 'Note B', color: 'green' }
-                }
+                compass: annotationMode({
+                    annotation: { ...annotationWithNote, id: 'note-B', note: 'Note B', color: 'green' }
+                })
             });
             rerender(<AnnotationPill />);
 
