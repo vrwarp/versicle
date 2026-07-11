@@ -68,6 +68,7 @@ vi.mock('@hooks/useSectionDuration', () => ({
 function registerFakeCommands() {
     const commands = {
         jumpTo: vi.fn(),
+        jumpToEnd: vi.fn(),
         nextPage: vi.fn(),
         prevPage: vi.fn(),
         nextChapter: vi.fn(),

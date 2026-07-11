@@ -9,7 +9,7 @@ import { formatDate, formatTime } from '@kernel/locale/format';
 interface Props {
     bookId: string;
     engine: ReaderEngine | null;
-    onNavigate: (cfi: string) => void;
+    onNavigate: (cfi: string, endCfi?: string) => void;
     onClose?: () => void;
     trigger?: number;
 }
@@ -21,6 +21,7 @@ interface HistoryItem {
     subLabel: string;
     timestamp: number;
     targetCfi: string;
+    endCfi: string;
     type: ReadingEventType;
     sessionCount: number;
 }
@@ -49,6 +50,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, engine, onNavigat
             const targetCfi = cfi;
 
             const parsed = parseCfiRange(cfi);
+            const endCfi = parsed?.fullEnd ?? cfi;
 
             if (engine) {
                 if (parsed && engine.locations.length() > 0) {
@@ -82,6 +84,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, engine, onNavigat
                 subLabel,
                 timestamp: session.startTime,
                 targetCfi,
+                endCfi,
                 type: session.type,
                 sessionCount: 1
             };
@@ -94,6 +97,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, engine, onNavigat
             const targetCfi = range;
 
             const parsed = parseCfiRange(range);
+            const endCfi = parsed?.fullEnd ?? range;
 
             if (engine) {
                 if (parsed && engine.locations.length() > 0) {
@@ -117,6 +121,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, engine, onNavigat
                 subLabel,
                 timestamp: 0,
                 targetCfi,
+                endCfi,
                 type: 'page',
                 sessionCount: 1
             };
@@ -172,7 +177,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, engine, onNavigat
                     <li
                         key={idx}
                         className="p-3 hover:bg-muted cursor-pointer transition-colors"
-                        onClick={() => onNavigate(item.targetCfi)}
+                        onClick={() => onNavigate(item.targetCfi, item.endCfi)}
                         role="button"
                         aria-label={`Jump to ${item.label}`}
                         data-testid={`history-item-${idx}`}
