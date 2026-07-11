@@ -50,7 +50,7 @@ export type CompassInteraction =
   | { mode: 'vocab-triage'; selection: CompassSelection }
   | { mode: 'audio-triage'; annotation: Annotation };
 
-export type CompassInteractionMode = CompassInteraction['mode'];
+type CompassInteractionMode = CompassInteraction['mode'];
 
 export type CompassEvent =
   /** The user selected text in the reader (selection bridge emit). */
