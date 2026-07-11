@@ -142,6 +142,23 @@ export function parentHighlightCss(currentTheme: string): string {
                     fill-opacity: ${opacity};
                     mix-blend-mode: ${blendMode};
                 }
+                .search-highlight {
+                    fill: #fde047;
+                    fill-opacity: ${opacity};
+                    mix-blend-mode: ${blendMode};
+                    animation: search-highlight-fade 10s forwards;
+                }
+                @keyframes search-highlight-fade {
+                    0% {
+                        fill-opacity: ${opacity};
+                    }
+                    80% {
+                        fill-opacity: ${opacity};
+                    }
+                    100% {
+                        fill-opacity: 0;
+                    }
+                }
             `;
 }
 
