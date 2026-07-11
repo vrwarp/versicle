@@ -186,7 +186,27 @@ describe('ReadingHistoryPanel', () => {
     render(<ReadingHistoryPanel bookId="book1" engine={mockEngine} onNavigate={onNavigate} />);
 
     fireEvent.click(screen.getByText('Chapter One'));
-    expect(onNavigate).toHaveBeenCalledWith('epubcfi(/6/14!/4/2/1:0)');
+    expect(onNavigate).toHaveBeenCalledWith('epubcfi(/6/14!/4/2/1:0)', 'epubcfi(/6/14!/4/2/1:0)');
+  });
+
+  it('calls onNavigate with correct targetCfi and parsed endCfi when range contains comma', () => {
+    const sessions: ReadingSession[] = [{
+      cfiRange: 'epubcfi(/6/14!/4/2,/1:0,/3:50)',
+      startTime: Date.now(),
+      endTime: Date.now(),
+      type: 'page',
+      label: 'Chapter One'
+    }];
+    (useBookProgress as any).mockReturnValue({
+      completedRanges: [],
+      readingSessions: sessions
+    });
+
+    const onNavigate = vi.fn();
+    render(<ReadingHistoryPanel bookId="book1" engine={mockEngine} onNavigate={onNavigate} />);
+
+    fireEvent.click(screen.getByText('Chapter One'));
+    expect(onNavigate).toHaveBeenCalledWith('epubcfi(/6/14!/4/2,/1:0,/3:50)', 'epubcfi(/6/14!/4/2/3:50)');
   });
 
   it('falls back to completedRanges when no readingSessions', () => {

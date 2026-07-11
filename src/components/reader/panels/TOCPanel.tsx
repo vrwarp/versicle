@@ -32,7 +32,7 @@ export interface TOCPanelProps {
     bookId: string;
     engine?: ReaderEngine;
     historyTick: number;
-    onHistoryNavigate: (cfi: string) => void;
+    onHistoryNavigate: (cfi: string, endCfi?: string) => void;
     /**
      * Content language of the book (`book.language`) — applied as `lang=`
      * on TOC labels (i18n ADR §3: book-sourced text in the top document

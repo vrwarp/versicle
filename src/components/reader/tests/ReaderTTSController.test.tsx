@@ -27,7 +27,9 @@ const makeEngineStub = (rendition: any): ReaderEngine =>
 // The controller rides the ReaderCommands context for the engine (Phase 6
 // §5a) — the provider stands in for the shell.
 const noopCommands: ReaderCommands = {
-    jumpTo: () => { }, nextPage: () => { }, prevPage: () => { },
+    jumpTo: () => { },
+    jumpToEnd: () => { },
+    nextPage: () => { }, prevPage: () => { },
     nextChapter: () => { }, prevChapter: () => { },
     playFromSelection: () => { },
     refineSelection: () => null,

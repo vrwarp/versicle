@@ -37,6 +37,8 @@ import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 export interface ReaderCommands {
   /** Jump the reader to a CFI (sync-alert pill, history, panels). */
   jumpTo(cfi: string): void;
+  /** Jump the reader so that the target CFI is aligned to the bottom of the viewport in scrolled mode. */
+  jumpToEnd(cfi: string): void;
   /** Raw page turn (keyboard / nav surfaces; never TTS-routed). */
   nextPage(): void;
   prevPage(): void;

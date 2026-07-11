@@ -623,6 +623,54 @@ export function useReaderController(
         logger.error('Failed to jump to location', e);
       }
     },
+    jumpToEnd: (cfi) => {
+      try {
+        const engine = engineRef.current;
+        if (!engine) return;
+
+        if (readerViewMode !== 'scrolled') {
+          commands.jumpTo(cfi);
+          return;
+        }
+
+        void engine.display(cfi)
+          .then(() => {
+            requestAnimationFrame(() => {
+              const currentEngine = engineRef.current;
+              if (!currentEngine) return;
+              void currentEngine.display(cfi)
+                .then(() => {
+                  requestAnimationFrame(() => {
+                    const stableEngine = engineRef.current;
+                    if (!stableEngine) return;
+                    const range = stableEngine.getRenderedRange(cfi);
+                    if (!range) return;
+
+                    const rect = range.getBoundingClientRect();
+                    const views = stableEngine.getContentViews();
+                    if (views.length === 0) return;
+
+                    const iframeWindow = views[0].window;
+                    const currentScroll = iframeWindow.pageYOffset || 0;
+                    const viewportHeight = iframeWindow.innerHeight;
+                    const absoluteBottom = currentScroll + rect.bottom;
+
+                    iframeWindow.scrollTo({
+                      top: absoluteBottom - viewportHeight,
+                      behavior: 'instant',
+                    });
+                  });
+                })
+                .catch(() => {});
+            });
+          })
+          .catch((e) => {
+            logger.error('Failed to jumpToEnd', e);
+          });
+      } catch (e) {
+        logger.error('Failed to jumpToEnd', e);
+      }
+    },
     nextPage: () => { breakAudioFollowOnManualNav(); engineRef.current?.next(); },
     prevPage: () => { breakAudioFollowOnManualNav(); engineRef.current?.prev(); },
     nextChapter: () => {
@@ -663,7 +711,7 @@ export function useReaderController(
       }
       return null;
     },
-  }), [audio, handlePlayFromSelection]);
+  }), [audio, handlePlayFromSelection, readerViewMode]);
 
   // Navigate to deep-linked semantic search hit once ready
   useEffect(() => {

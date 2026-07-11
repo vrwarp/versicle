@@ -67,8 +67,12 @@ export const ReaderSidebars: React.FC<ReaderSidebarsProps> = ({
           bookId={bookId || ''}
           engine={engine ?? undefined}
           historyTick={historyTick}
-          onHistoryNavigate={(cfi) => {
-            commands.jumpTo(cfi);
+          onHistoryNavigate={(cfi, endCfi) => {
+            if (endCfi) {
+              commands.jumpToEnd(endCfi);
+            } else {
+              commands.jumpTo(cfi);
+            }
           }}
           contentLang={bookMetadata?.language}
         />
