@@ -32,7 +32,7 @@ export interface AnnotationState {
    * @param annotation - Annotation data without id and created timestamp.
    * @returns The generated UUID for the annotation.
    */
-  add: (annotation: Omit<UserAnnotation, 'id' | 'created'>) => string;
+  add: (annotation: Omit<UserAnnotation, 'id' | 'created'> & { created?: number }) => string;
   /**
    * Updates an existing annotation.
    * @param id - The annotation ID.
@@ -87,10 +87,11 @@ export const createAnnotationStore = () => create<AnnotationState>()(
       // Actions
       add: (partialAnnotation) => {
         const id = generateSecureId();
+        const { created, ...rest } = partialAnnotation;
         const newAnnotation: UserAnnotation = {
-          ...partialAnnotation,
+          ...rest,
           id,
-          created: Date.now(),
+          created: created ?? Date.now(),
         };
 
         // Update state (middleware syncs to Yjs)

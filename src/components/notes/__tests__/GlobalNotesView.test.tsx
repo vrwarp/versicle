@@ -154,7 +154,7 @@ describe('GlobalNotesView', () => {
 
     it('renders pending audio bookmarks and allows interaction', () => {
         const mockBookmarks = {
-            'bookmark-1': { id: 'bookmark-1', bookId: 'book-1', type: 'audio_bookmark', pending: true, text: 'Test bookmark' }
+            'bookmark-1': { id: 'bookmark-1', bookId: 'book-1', type: 'audio_bookmark', pending: true, text: 'Test bookmark', created: 123456789 }
         };
 
         (useAnnotationStore as unknown as Mock).mockImplementation((selector) => {
@@ -190,6 +190,7 @@ describe('GlobalNotesView', () => {
         expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({
             id: 'bookmark-1',
             type: 'highlight',
+            created: 123456789,
         }));
     });
 
