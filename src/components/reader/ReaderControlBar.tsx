@@ -1,10 +1,13 @@
 /**
  * ReaderControlBar — the THIN variant router over the dissolved CompassPill
- * (Phase 8 §C): the priority switch below is the single dispatcher; each
- * variant is its own feature component (reader/pills/*, sync/SyncAlertPill,
- * chinese/VocabTriageCard). The `key={variant}` remount is GONE (a11y item
- * 8): variants morph by re-render, and the router restores focus into the
- * new pill when a morph would otherwise drop it on <body>.
+ * (Phase 8 §C): each variant is its own feature component (reader/pills/*,
+ * sync/SyncAlertPill, chinese/VocabTriageCard). Which variant renders is
+ * decided by `resolvePillVariant` (store/compassMachine.ts): the compass
+ * interaction state wins when one is in flight, otherwise the ambient
+ * conditions gathered here pick the resting pill. The `key={variant}`
+ * remount is GONE (a11y item 8): variants morph by re-render, and the
+ * router restores focus into the new pill when a morph would otherwise
+ * drop it on <body>.
  */
 import React, { useEffect, useRef } from 'react';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
@@ -26,10 +29,7 @@ import { LexiconManager } from './LexiconManager';
 import { useRemoteProgress } from '@hooks/useRemoteProgress';
 import { findTocItem, resolveSyntheticPreference } from '@lib/reader/titleResolver';
 import { readerCommandsRegistry } from '@domains/reader/ui/ReaderCommands';
-
-type PillVariant =
-  | 'annotation' | 'active' | 'summary' | 'compact'
-  | 'sync-alert' | 'audio-triage' | 'vocab-triage';
+import { compassOwnsSelection, resolvePillVariant, type PillVariant } from '@store/compassMachine';
 
 /**
  * True when any reader iframe currently holds a live (non-collapsed) text
@@ -74,16 +74,16 @@ export const ReaderControlBar: React.FC = () => {
     const hasQueueItems = useTTSPlaybackStore(state => state.queue.length > 0);
     const isPlaying = useTTSPlaybackStore(state => state.isPlaying);
 
-    // Popover state is ephemeral UI state (never synced via Yjs) — it lives in useReaderUIStore.
-    const { immersiveMode, toc, currentSectionTitle, currentSectionId, currentBookId, resetCompassState, popover, hidePopover } = useReaderUIStore(useShallow(state => ({
+    // Compass interaction state is ephemeral UI state (never synced via Yjs) —
+    // it lives in useReaderUIStore behind the compassMachine transition table.
+    const { immersiveMode, toc, currentSectionTitle, currentSectionId, currentBookId, compass, dispatchCompass } = useReaderUIStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
         toc: state.toc,
         currentSectionTitle: state.currentSectionTitle,
         currentSectionId: state.currentSectionId,
         currentBookId: state.currentBookId,
-        resetCompassState: state.resetCompassState,
-        popover: state.popover,
-        hidePopover: state.hidePopover
+        compass: state.compass,
+        dispatchCompass: state.dispatchCompass
     })));
 
     // Check for remote progress
@@ -105,40 +105,23 @@ export const ReaderControlBar: React.FC = () => {
     // the best available progress rather than just the current-device entry.
     const currentBookProgress = useBookProgress(currentBookId);
 
-    // Determine State Priority
-    // 0. Sync Alert (High Priority)
-    const isSyncAlert = showSyncAlert;
-
-    // 1. Annotation Mode
-    const isAnnotationMode = popover.visible;
-
-    // 2. Audio Mode OR Active Reader
     const isReaderActive = !!currentBookId;
 
-    const compassState = useReaderUIStore(state => state.compassState || {});
+    // The selection the current interaction operates on (annotation toolbar /
+    // vocab card). Null in every other mode — the machine guarantees a
+    // selection-owning mode always carries its payload.
+    const selection = compassOwnsSelection(compass) ? compass.selection : null;
 
-    // THE single dispatcher (§C): priority switch, unchanged semantics.
-    let variant: PillVariant | null = null;
-
-    if (compassState.variant) {
-        variant = compassState.variant;
-    } else if (isSyncAlert) {
-        variant = 'sync-alert';
-    } else if (isAnnotationMode) {
-        variant = 'annotation';
-    } else if (isReaderActive) {
-        variant = immersiveMode ? 'compact' : 'active';
-    } else if (isPlaying) {
-        variant = 'active';
-    } else if (lastReadBook) { // Check lastReadBook existence directly
-        // If not playing and not in reader, prefer Summary over a paused queue
-        variant = 'summary';
-    } else if (hasQueueItems) {
-        // Fallback: If no last read book (unlikely in Library if we have a queue), but queue exists
-        variant = 'active';
-    } else {
-        variant = null;
-    }
+    // THE routing decision (§C): interaction mode wins; otherwise the ambient
+    // conditions pick the resting pill (see compassMachine.ts for the table).
+    const variant: PillVariant | null = resolvePillVariant(compass, {
+        showSyncAlert: !!showSyncAlert,
+        isReaderActive,
+        immersiveMode,
+        isAudioPlaying: isPlaying,
+        hasLastReadBook: !!lastReadBook,
+        hasQueueItems,
+    });
 
     // Focus management on variant morph (a11y item 8): if keyboard focus
     // lived inside the pill and the morph unmounted that control, move
@@ -177,50 +160,51 @@ export const ReaderControlBar: React.FC = () => {
         }
     }, [variant]);
 
-    // Handle Annotation Actions
+    // Handle Annotation Actions. Every completed action dispatches
+    // ACTION_COMMITTED — the machine returns the pill to idle regardless of
+    // how annotation mode was entered (fresh selection or highlight tap).
     const handleAnnotationAction = (action: ActionType, payload?: string) => {
         switch (action) {
             case 'color':
                 if (payload && currentBookId) {
-                    if (popover.id) {
-                        update(popover.id, { color: payload });
+                    if (selection?.annotationId) {
+                        update(selection.annotationId, { color: payload });
                     } else {
                         add({
                             type: 'highlight',
                             color: payload,
                             bookId: currentBookId,
-                            text: popover.text || '',
-                            cfiRange: popover.cfiRange || ''
+                            text: selection?.text || '',
+                            cfiRange: selection?.cfiRange || ''
                         });
                     }
-                    hidePopover();
-                    resetCompassState();
+                    dispatchCompass({ type: 'ACTION_COMMITTED' });
                 }
                 break;
             case 'note':
                 if (payload && currentBookId) {
-                    if (popover.id) {
-                        update(popover.id, { note: payload, type: 'note' });
+                    if (selection?.annotationId) {
+                        update(selection.annotationId, { note: payload, type: 'note' });
                     } else {
                         add({
                             type: 'note',
                             note: payload,
                             bookId: currentBookId,
-                            text: popover.text || '',
-                            cfiRange: popover.cfiRange || '',
+                            text: selection?.text || '',
+                            cfiRange: selection?.cfiRange || '',
                             color: 'yellow' // Default color for notes if not specified
                         });
                     }
                     showToast("Note saved", "success");
-                    hidePopover();
-                    resetCompassState();
+                    dispatchCompass({ type: 'ACTION_COMMITTED' });
                 }
                 break;
             case 'copy':
-                if (popover.text) {
-                    navigator.clipboard.writeText(popover.text).then(() => {
+                if (selection?.text) {
+                    navigator.clipboard.writeText(selection.text).then(() => {
                         showToast("Copied to clipboard", "success");
-                        setTimeout(() => hidePopover(), 1000);
+                        // Keep the toolbar up briefly so the "copied" check is seen.
+                        setTimeout(() => dispatchCompass({ type: 'ACTION_COMMITTED' }), 1000);
                     }).catch(() => {
                         showToast("Failed to copy", "error");
                     });
@@ -229,36 +213,35 @@ export const ReaderControlBar: React.FC = () => {
             case 'play':
                 // Play from selection (reader command registry — the
                 // callbacks-in-store path died with Phase 6 §5a)
-                if (popover.cfiRange) {
+                if (selection?.cfiRange) {
                     const commands = readerCommandsRegistry.get();
                     if (commands) {
-                        commands.playFromSelection(popover.cfiRange);
+                        commands.playFromSelection(selection.cfiRange);
                     } else {
                         showToast("Audio not ready yet", "error");
                     }
-                    hidePopover();
+                    dispatchCompass({ type: 'ACTION_COMMITTED' });
                 }
                 break;
             case 'pronounce':
-                if (popover.text) {
-                    setLexiconText(popover.text);
+                if (selection?.text) {
+                    setLexiconText(selection.text);
                     setLexiconOpen(true);
-                    hidePopover();
+                    dispatchCompass({ type: 'ACTION_COMMITTED' });
                 }
                 break;
             case 'delete':
-                if (popover.id) {
-                    remove(popover.id);
+                if (selection?.annotationId) {
+                    remove(selection.annotationId);
                     showToast("Annotation deleted", "success");
-                    hidePopover();
+                    dispatchCompass({ type: 'ACTION_COMMITTED' });
                 }
                 break;
             case 'dismiss':
                 if (variant === 'sync-alert' && remoteProgress) {
                     setDismissedSyncAlerts(prev => new Set(prev).add(remoteProgress.deviceId));
                 } else {
-                    hidePopover();
-                    resetCompassState();
+                    dispatchCompass({ type: 'DISMISSED' });
                 }
                 break;
         }
@@ -301,7 +284,7 @@ export const ReaderControlBar: React.FC = () => {
             case 'vocab-triage':
                 // Phase 6 PR-11 home: the chinese feature card (the IDB
                 // dictionary import is gated on THIS card opening).
-                return <VocabTriageCard text={popover.text || ''} />;
+                return <VocabTriageCard text={selection?.text || ''} />;
             case 'sync-alert':
                 return (
                     <SyncAlertPill
@@ -324,7 +307,7 @@ export const ReaderControlBar: React.FC = () => {
                         availableActions={{
                             play: true,
                             pronounce: true,
-                            delete: !!popover.id
+                            delete: !!selection?.annotationId
                         }}
                     />
                 );

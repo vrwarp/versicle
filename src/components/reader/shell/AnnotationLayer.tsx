@@ -46,7 +46,7 @@ export const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
   measureDeps,
 }) => {
   const loadAnnotations = useAnnotationStore(state => state.loadAnnotations);
-  const showPopover = useReaderUIStore(state => state.showPopover);
+  const dispatchCompass = useReaderUIStore(state => state.dispatchCompass);
 
   // BOLT OPTIMIZATION: Fine-grained selector for annotations
   // Only re-render when annotations for THIS specific book change, not when any annotation in the library changes.
@@ -123,10 +123,13 @@ export const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
                 setTimeout(() => {
                   engine.selectRange(annotation.cfiRange);
 
-                  // 2. Dispatch state to Reader UI Store to morph the CompassPill
-                  useReaderUIStore.getState().setCompassState({
-                    variant: 'audio-triage',
-                    targetAnnotation: annotation
+                  // 2. Morph the compass into triage mode. Dispatched
+                  // synchronously after selectRange so the machine is already
+                  // in audio-triage (which ignores TEXT_SELECTED) when the
+                  // debounced selection emit lands.
+                  useReaderUIStore.getState().dispatchCompass({
+                    type: 'AUDIO_BOOKMARK_TAPPED',
+                    annotation,
                   });
                 }, 50);
               },
@@ -147,12 +150,13 @@ export const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
                   x += iframeRect.left;
                   y += iframeRect.top;
                 }
-                showPopover(x, y, annotation.cfiRange, annotation.text, annotation.id);
-
-                // Update Compass UI state to sync with the existing annotation
-                useReaderUIStore.getState().setCompassState({
-                  variant: 'annotation',
-                  targetAnnotation: annotation
+                // One atomic transition into annotation mode, carrying the
+                // tapped annotation as the payload.
+                useReaderUIStore.getState().dispatchCompass({
+                  type: 'ANNOTATION_TAPPED',
+                  annotation,
+                  x,
+                  y,
                 });
               },
             });
@@ -170,7 +174,7 @@ export const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
       // gone: E2E polls `__versicleTest.reader.highlightCount('annotation')`,
       // backed by the engine's HighlightLayerManager.)
     }
-  }, [annotationList, isReady, engine, highlights, showPopover, bookId, viewerRef]);
+  }, [annotationList, isReady, engine, highlights, bookId, viewerRef]);
 
   // --- Note markers (geometry overlay) ---
 
@@ -206,17 +210,12 @@ export const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
   return (
     <AnnotationMarkerOverlay
       markers={markers}
-      onMarkerClick={(x, y, cfi, text, id) => {
-        // 1. Update Annotation store popover state (for color/delete etc)
-        showPopover(x, y, cfi, text, id);
-
-        // 2. Update Compass UI state to morph the pill
+      onMarkerClick={(x, y, _cfi, _text, id) => {
+        // Same transition as tapping the highlight itself: annotation mode
+        // with the tapped annotation as the payload.
         const annotation = annotationList.find(a => a.id === id);
         if (annotation) {
-          useReaderUIStore.getState().setCompassState({
-            variant: 'annotation',
-            targetAnnotation: annotation
-          });
+          dispatchCompass({ type: 'ANNOTATION_TAPPED', annotation, x, y });
         }
       }}
       containerNode={containerNode}

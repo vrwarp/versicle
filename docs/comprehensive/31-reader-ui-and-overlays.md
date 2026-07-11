@@ -105,16 +105,16 @@ useEffect(() => {
 
 The controller receives a stable function that delegates to the ref. The ref is wired to the real implementation in a layout effect. This breaks the cycle without requiring an extra render pass.
 
-### CompassState Reset on Sidebar Open
+### Compass Collapse on Sidebar Open
 
-The shell has a global click handler that calls `hidePopover()` and `resetCompassState()`, ensuring that annotation popovers and the compass state are cleared when the user taps anywhere outside a pill. It also resets the compass state when any sidebar opens or immersive mode activates:
+The shell has a global click handler that dispatches `{ type: 'OUTSIDE_TAP' }` to the compass machine, collapsing any in-flight interaction (annotation toolbar, vocab card, audio triage) when the user taps anywhere outside a pill. It also dispatches `CONTEXT_INVALIDATED` when any sidebar opens or immersive mode activates:
 
 ```typescript
 useEffect(() => {
     if (activeSidebar !== 'none' || immersiveMode) {
-        resetCompassState();
+        dispatchCompass({ type: 'CONTEXT_INVALIDATED' });
     }
-}, [activeSidebar, immersiveMode, resetCompassState]);
+}, [activeSidebar, immersiveMode, dispatchCompass]);
 ```
 
 ### TTS Session Wiring
@@ -139,7 +139,7 @@ This is the heart of the reader's stateful logic. It assembles and returns the `
 | Version check | Redirect to `/` if `book.version < CURRENT_BOOK_VERSION` |
 | Error/loading mirror | Sync `hookLoading` / `hookError` into UI store and toasts |
 | Panic save | `recorder.flushSync()` on unmount |
-| Popover hygiene | Clear on unmount, on popover-hide, on Chinese pref changes |
+| Compass hygiene | Reset on unmount; `CONTEXT_INVALIDATED` on Chinese pref changes; engine selection cleared when the compass leaves a selection-owning mode |
 | TTS error handling | Surface `useTTSPlaybackStore.lastError` as toast + clear |
 
 ### EpubReaderOptions Assembly
@@ -148,8 +148,8 @@ The controller builds the `EpubReaderOptions` memo with every preference from `u
 
 - **`onLocationChange(location, percentage, title, sectionId)`** — runs the import-jump gate, primes the session recorder, calls the recorder's `onRelocated`, then `setCurrentSection`.
 - **`onTocLoaded(toc)`** — calls `useReaderUIStore.getState().setToc(toc)`.
-- **`onSelection(cfiRange, range, contents)`** — measures the selection rect relative to the iframe, calls `showPopover`.
-- **`onClick(e)`** — hides popover and resets compass state when the selection is collapsed.
+- **`onSelection(cfiRange, range, contents)`** — measures the selection rect relative to the iframe, dispatches `{ type: 'TEXT_SELECTED', selection }` to the compass machine (which ignores it during audio-bookmark triage — the triage flow owns the live selection).
+- **`onClick(e)`** — dispatches `{ type: 'OUTSIDE_TAP' }` when the selection is collapsed.
 
 ### ReaderCommands Object
 
@@ -342,7 +342,7 @@ Audio-bookmark annotations (`type === 'audio-bookmark'`) use the `AUDIO_BOOKMARK
 
 1. Calls `engine.display(annotation.cfiRange)` to navigate to the location.
 2. After 50 ms, calls `engine.selectRange(annotation.cfiRange)` to programmatically select the text.
-3. Calls `useReaderUIStore.getState().setCompassState({ variant: 'audio-triage', targetAnnotation: annotation })` to morph the control bar pill into the `AudioTriagePill`.
+3. Dispatches `{ type: 'AUDIO_BOOKMARK_TAPPED', annotation }` to the compass machine to morph the control bar pill into the `AudioTriagePill`. The dispatch happens synchronously after `selectRange`, so the machine is already in `audio-triage` (which ignores `TEXT_SELECTED`) when the debounced selection emit lands.
 
 ### Note Marker Geometry
 
@@ -424,7 +424,7 @@ Renders note-marker buttons (small yellow sticky-note icons) at the coordinates 
 - Is absolutely positioned at `(marker.left - 4, marker.top)` with `transform: translateY(-75%)`.
 - Has `pointer-events: auto` (the parent overlay container is pointer-events-none).
 - Has an extended click target via `before:content-[''] before:absolute before:-inset-3`.
-- On click, calls `onMarkerClick(marker.left, marker.top + 20, marker.cfi, marker.text, marker.id)` which invokes both `showPopover` (for the annotation actions) and `setCompassState({ variant: 'annotation', targetAnnotation })` (to morph the control bar pill).
+- On click, calls `onMarkerClick(marker.left, marker.top + 20, marker.cfi, marker.text, marker.id)` which dispatches `{ type: 'ANNOTATION_TAPPED', annotation, x, y }` to the compass machine (morphing the control bar pill into the annotation toolbar with the tapped annotation as payload).
 
 ---
 
@@ -615,14 +615,16 @@ If CFI resolution fails (stale corpus vs re-rendered content), the section-level
 
 **Source:** [src/components/reader/ReaderControlBar.tsx](../../src/components/reader/ReaderControlBar.tsx)
 
-Mounted in `RootLayout` (outside the reader route), fixed at `bottom-8` with `z-40`. It is the single dispatcher for all pill variants, implementing a priority switch:
+Mounted in `RootLayout` (outside the reader route), fixed at `bottom-8` with `z-40`. Which variant renders is decided by `resolvePillVariant` ([src/store/compassMachine.ts](../../src/store/compassMachine.ts)) from two layers:
+
+1. **Interaction** — the compass machine's current mode (`annotation`, `vocab-triage`, `audio-triage`). A live interaction always wins; each mode carries its payload (selection or annotation), so a mode without the data it needs is unrepresentable.
+2. **Ambient** — when the machine is `idle`, `deriveAmbientVariant` picks the resting pill from the surrounding conditions.
 
 ```mermaid
 graph TD
     Start["ReaderControlBar renders"]
-    CS{"compassState.variant set?"}
+    CM{"compass.mode ≠ idle?"}
     SA{"showSyncAlert?"}
-    AM{"popover.visible?"}
     RA{"currentBookId set?"}
     IMM{"immersiveMode?"}
     PL{"isPlaying?"}
@@ -630,13 +632,11 @@ graph TD
     HQ{"hasQueueItems?"}
     NULL["render null"]
 
-    Start --> CS
-    CS -- "yes" --> CompassVar["render compass variant\n(audio-triage / vocab-triage)"]
-    CS -- "no" --> SA
+    Start --> CM
+    CM -- "yes" --> Interaction["variant = compass.mode\n(annotation / vocab-triage / audio-triage)"]
+    CM -- "no" --> SA
     SA -- "yes" --> SyncAlert["variant = sync-alert"]
-    SA -- "no" --> AM
-    AM -- "yes" --> Annotation["variant = annotation"]
-    AM -- "no" --> RA
+    SA -- "no" --> RA
     RA -- "yes" --> IMM
     IMM -- "yes" --> Compact["variant = compact"]
     IMM -- "no" --> Active["variant = active"]
@@ -650,13 +650,14 @@ graph TD
 ```
 
 **Priority explanation:**
-- `compassState.variant` takes absolute priority (audio-triage for bookmark review, vocab-triage for Chinese vocab entry).
-- Sync alert comes next (it is a time-sensitive nudge from another device).
-- Annotation/selection mode: the popover is visible, user has selected text.
+- Any compass interaction takes absolute priority — the user's in-flight gesture (selection toolbar, vocab card, bookmark review) is never preempted by ambient state.
+- Sync alert leads the ambient tier (a time-sensitive nudge from another device).
 - Reader active: a book is open, show the audio/navigation pill.
 - Last-read book fallback: show the "continue reading" summary card.
 - Queue with no last-read book (edge case).
 - Null: nothing to show.
+
+Interaction state changes flow exclusively through `dispatchCompass(event)` on `useReaderUIStore` — the transition table in `compassMachine.ts` decides what each event means in the current mode (e.g. `TEXT_SELECTED` opens the annotation toolbar from anywhere except `audio-triage`, which owns the live selection and ignores it). Completed actions dispatch `ACTION_COMMITTED`; explicit closes dispatch `DISMISSED`; taps outside the pill dispatch `OUTSIDE_TAP`; sidebar/immersive/book-close/settings churn dispatches `CONTEXT_INVALIDATED`. All four return the machine to `idle`.
 
 ### Focus Restoration on Variant Morph
 
@@ -693,12 +694,12 @@ Handles two sub-states: the color/action toolbar (default) and the note editor (
 
 - Color swatch click → `onAction('color', color)`.
 - Note button click → `setIsEditingNote(true)`.
-- Vocab button (Chinese-only, shown when `HAN_RE.test(popover.text)`) → `setCompassState({ variant: 'vocab-triage' })`.
+- Vocab button (Chinese-only, shown when `HAN_RE.test(selection.text)`) → `dispatchCompass({ type: 'VOCAB_TRIAGE_REQUESTED' })` (the machine carries the selection into the vocab card).
 - Play button → `onAction('play')` → `readerCommandsRegistry.get()?.playFromSelection(cfiRange)`.
 - Delete button → `onAction('delete')`.
 - Dismiss (X) → `onAction('dismiss')`.
 
-The note-recall sync (pre-populating `noteText` from `compassState.targetAnnotation.note`) is done with render-time comparison of `prevAnnotationId` to avoid cascading renders from a `useEffect`.
+The note-recall sync (pre-populating `noteText` from the annotation-mode payload's `annotation.note`) is done with render-time comparison of `prevAnnotationId` to avoid cascading renders from a `useEffect`.
 
 ### AudioTriagePill
 
@@ -709,9 +710,9 @@ The dragnet audio bookmark review pill. Shows "Review Bookmark" label with Confi
 1. Calls `readerCommandsRegistry.get()?.refineSelection()` — if the user adjusted the selection, uses the refined CFI/text.
 2. Calls `removeAnnotation(target.id)` to delete the pending dragnet annotation.
 3. Calls `addAnnotation({ ...target, cfiRange: newCfiRange, text: newText, type: 'highlight' })` to persist the confirmed highlight.
-4. Calls `resetCompassState()` to return to the default pill.
+4. Dispatches `{ type: 'ACTION_COMMITTED' }` to return to the ambient pill.
 
-On Discard: simply `removeAnnotation(target.id)` and `resetCompassState()`.
+On Discard: simply `removeAnnotation(target.id)` and `dispatchCompass({ type: 'ACTION_COMMITTED' })`.
 
 ### SummaryPill
 
@@ -829,7 +830,7 @@ The `FakeReaderEngine` ([src/domains/reader/engine/FakeReaderEngine.ts](../../sr
 
 ## Common Extension Points
 
-**Adding a new pill variant:** Add the variant string to the `PillVariant` union in `ReaderControlBar.tsx`, add a priority branch in the dispatcher switch, create the pill component under `src/components/reader/pills/`, and add a `case` in the render switch.
+**Adding a new pill variant:** For an interaction variant, add a mode (with its payload) to `CompassInteraction` and the entering/exiting events to the transition table in `src/store/compassMachine.ts` (with machine tests); for an ambient variant, add a field to `CompassAmbient` and a branch in `deriveAmbientVariant`. Then create the pill component under `src/components/reader/pills/` and add a `case` in `ReaderControlBar`'s render switch.
 
 **Adding a new highlight layer:** Add the layer ID to `HighlightLayerId` in [highlightStyles.ts](../../src/domains/reader/engine/highlightStyles.ts), add a `HighlightLayerConfig` entry in `HIGHLIGHT_LAYERS`, and use `engine.highlights.add('your-layer', cfi, opts)` from any component that has access to the controller's `highlights`.
 

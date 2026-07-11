@@ -290,7 +290,7 @@ export const STORE_REGISTRY: readonly StoreRegistryEntry[] = [
     tier: 'ephemeral',
     persistence: null,
     owner: 'reader',
-    summary: 'Reader session UI (menus, popover, compass, reader callbacks).',
+    summary: 'Reader session UI (menus, compass interaction machine, section state).',
   },
   {
     module: 'useBackNavigationStore',
