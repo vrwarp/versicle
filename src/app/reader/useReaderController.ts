@@ -619,7 +619,17 @@ export function useReaderController(
   const commands = useMemo<ReaderCommands>(() => ({
     jumpTo: (cfi) => {
       try {
-        engineRef.current?.display(cfi);
+        const engine = engineRef.current;
+        if (!engine) return;
+        void engine.display(cfi)
+          .then(() => {
+            requestAnimationFrame(() => {
+              void engineRef.current?.display(cfi).catch(() => {});
+            });
+          })
+          .catch((e) => {
+            logger.error('Failed to jump to location', e);
+          });
       } catch (e) {
         logger.error('Failed to jump to location', e);
       }

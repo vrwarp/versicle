@@ -259,4 +259,39 @@ describe('ReaderView', () => {
       expect(mockDisplay).toHaveBeenCalledWith('epubcfi(/6/4!/4/2/2)');
     });
   });
+
+  it('calls display twice when jumping to a location to correct layout shift', async () => {
+    const originalRaf = window.requestAnimationFrame;
+    window.requestAnimationFrame = vi.fn().mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+
+    mockDisplay.mockResolvedValue(undefined);
+    renderComponent();
+    await waitFor(() => expect(mockRenderTo).toHaveBeenCalled());
+
+    act(() => {
+      useReaderUIStore.setState({ immersiveMode: false });
+    });
+
+    const tocBtn = screen.getByLabelText('Table of Contents');
+    fireEvent.click(tocBtn);
+
+    const chapterBtn = await screen.findByText('Chapter 1');
+    mockDisplay.mockClear();
+    fireEvent.click(chapterBtn);
+
+    // 1st call happens immediately/synchronously
+    expect(mockDisplay).toHaveBeenCalledTimes(1);
+    expect(mockDisplay).toHaveBeenCalledWith('chap1.html');
+
+    // 2nd call should happen after requestAnimationFrame to correct layout shifts
+    await waitFor(() => {
+      expect(mockDisplay).toHaveBeenCalledTimes(2);
+      expect(mockDisplay).toHaveBeenLastCalledWith('chap1.html');
+    });
+
+    window.requestAnimationFrame = originalRaf;
+  });
 });
