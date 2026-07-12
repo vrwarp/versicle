@@ -10,7 +10,7 @@
  * orchestrator has already projected the user-facing message.
  */
 import { DuplicateBookError } from '~types/errors';
-import type { BatchImportSummary, ImportJobResult } from '@domains/library';
+import type { BatchImportSummary, ImportJobResult, RestoreOptions } from '@domains/library';
 import type { UserInventoryItem } from '~types/user-data';
 import { getLibrary } from './createLibrary';
 
@@ -39,7 +39,8 @@ export const libraryController = {
     return getLibrary().orchestrator.importFiles(files);
   },
 
-  restoreBook: (bookId: string, file: File) => getLibrary().service.restore(bookId, file),
+  restoreBook: (bookId: string, file: File, opts?: RestoreOptions) =>
+    getLibrary().service.restore(bookId, file, opts),
   removeBook: (bookId: string) => getLibrary().service.remove(bookId),
   offloadBook: (bookId: string) => getLibrary().service.offload(bookId),
   reprocessBook: (bookId: string) => getLibrary().orchestrator.reprocess(bookId),

@@ -13,6 +13,7 @@ import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Loader2 } fro
 import { Button } from '../ui/Button';
 import { ImportSourceDialog } from './ImportSourceDialog';
 import { ContentMissingDialog } from './ContentMissingDialog';
+import { RestoreMismatchDialog } from './RestoreMismatchDialog';
 import { DriveImportDialog } from '../drive/DriveImportDialog';
 import { getGoogleAuthClient } from '@domains/google';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
@@ -23,7 +24,7 @@ import type { BookMetadata } from '~types/book';
 import { ReprocessingInterstitial } from './ReprocessingInterstitial';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { DuplicateBookError } from '~types/errors';
+import { AppError, DuplicateBookError } from '~types/errors';
 import { ReplaceBookDialog } from './ReplaceBookDialog';
 import { useNavigationGuard } from '@hooks/useNavigationGuard';
 import { BackButtonPriority } from '@store/useBackNavigationStore';
@@ -148,6 +149,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
   const [isImportSourceOpen, setIsImportSourceOpen] = useState(false);
   const [isContentMissingOpen, setIsContentMissingOpen] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  // The file that failed the content-hash gate on restore, held so the user
+  // can proceed anyway from the mismatch warning.
+  const [restoreMismatchFile, setRestoreMismatchFile] = useState<File | null>(null);
 
   const handleBrowseDrive = async () => {
     try {
@@ -165,16 +169,23 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
     setIsContentMissingOpen(true);
   }, []);
 
-  const handlePerformRestore = async (file: File) => {
+  const handlePerformRestore = async (file: File, allowContentMismatch = false) => {
     if (!bookToRestore) return;
 
     setIsRestoring(true);
     try {
-      await controller.restoreBook(bookToRestore.id, file);
+      await controller.restoreBook(bookToRestore.id, file, { allowContentMismatch });
       showToast(`Restored "${bookToRestore.title}"`, 'success');
+      setRestoreMismatchFile(null);
       setIsContentMissingOpen(false);
       setBookToRestore(null);
     } catch (err) {
+      // A content-hash mismatch is recoverable: the user may have deliberately
+      // updated the EPUB. Offer a "proceed anyway" warning instead of failing.
+      if (!allowContentMismatch && err instanceof AppError && err.code === 'INGEST_FILE_MISMATCH') {
+        setRestoreMismatchFile(file);
+        return;
+      }
       logger.error("Restore failed", err);
       showToast("Failed to restore book", "error");
     } finally {
@@ -475,6 +486,15 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
           book={bookToRestore}
           onRestore={handlePerformRestore}
           isRestoring={isRestoring}
+        />
+      )}
+
+      {bookToRestore && restoreMismatchFile && (
+        <RestoreMismatchDialog
+          isOpen={!!restoreMismatchFile}
+          bookTitle={bookToRestore.title}
+          onCancel={() => setRestoreMismatchFile(null)}
+          onProceed={() => handlePerformRestore(restoreMismatchFile, true)}
         />
       )}
 

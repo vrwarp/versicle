@@ -21,7 +21,7 @@ import { createLogger } from '@lib/logger';
 import type { UserInventoryItem } from '~types/user-data';
 import type { KeyedMutex } from './mutex';
 import type { InventoryPort, LibraryProjectionPort, LibraryPersistence } from './ports';
-import type { ImportOrchestrator } from './import/ImportOrchestrator';
+import type { ImportOrchestrator, RestoreOptions } from './import/ImportOrchestrator';
 
 const logger = createLogger('LibraryService');
 
@@ -217,7 +217,7 @@ export class LibraryService {
    * orchestrator queue, so it serializes with delete on the same id (I-3);
    * failures reject AND surface via the projection's error field.
    */
-  restore(bookId: string, file: File): Promise<void> {
-    return this.deps.orchestrator.restore(bookId, file);
+  restore(bookId: string, file: File, opts?: RestoreOptions): Promise<void> {
+    return this.deps.orchestrator.restore(bookId, file, opts);
   }
 }
