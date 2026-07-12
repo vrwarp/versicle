@@ -421,6 +421,43 @@ describe('import flows characterization', () => {
       expect(useLibraryStore.getState().isImporting).toBe(false);
     });
 
+    it('allowContentMismatch skips the hash gate and re-derives under the existing id (updated-EPUB override)', async () => {
+      const restoreResource = vi.fn(async () => undefined);
+      const ingest = vi.fn(async () => undefined);
+      const { orchestrator } = makeOrchestrator({
+        getManifest: vi.fn(async () => ({
+          bookId: 'b1',
+          title: 'T',
+          author: 'A',
+          fileHash: 'legacy',
+          contentHash: 'stored-hash-of-the-original',
+          fileSize: 1,
+          totalChars: 1,
+          schemaVersion: 3,
+        })),
+        restoreResource,
+        ingest,
+      });
+      useBookStore.setState({ books: { b1: makeInventoryItem({ bookId: 'b1', addedAt: 7 }) } });
+      useLibraryStore.setState({ offloadedBookIds: new Set(['b1']) });
+
+      const updated = new File(['completely different bytes'], 'book.epub');
+      await orchestrator.restore('b1', updated, { allowContentMismatch: true });
+
+      // No hash-gated binary swap: the content is re-derived under the id
+      // (the same overwrite path a synced download uses) so the derived rows
+      // match the new binary.
+      expect(restoreResource).not.toHaveBeenCalled();
+      expect(ingest).toHaveBeenCalledWith(
+        expect.objectContaining({ bookId: 'b1' }),
+        { mode: 'overwrite' },
+      );
+      // Restored: offloaded cleared, static metadata projected, addedAt kept.
+      expect(useLibraryStore.getState().offloadedBookIds.has('b1')).toBe(false);
+      expect(useLibraryStore.getState().staticMetadata['b1']?.addedAt).toBe(7);
+      expect(useLibraryStore.getState().isImporting).toBe(false);
+    });
+
     it('falls back to a full import-with-id when no local manifest exists (synced-book download)', async () => {
       const ingest = vi.fn(async () => undefined);
       const { orchestrator } = makeOrchestrator({

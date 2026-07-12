@@ -51,6 +51,18 @@ export interface ImportPolicy {
   adoptGhosts: boolean;
 }
 
+export interface RestoreOptions {
+  /**
+   * Accept a file whose content hash does NOT match the offloaded book's
+   * stored manifest — the "updated the EPUB on purpose" override behind the
+   * mismatch warning. Skips the {@link verifyRestoreAcceptance} gate and
+   * re-derives the book under its existing id (the same path a synced
+   * download with no local manifest takes), so the derived content matches
+   * the new binary while reading progress and notes are preserved.
+   */
+  allowContentMismatch?: boolean;
+}
+
 export type ImportJobResult =
   | { status: 'imported'; bookId: string; adoptedGhost?: boolean }
   | { status: 'replaced'; bookId: string }
@@ -212,14 +224,19 @@ export class ImportOrchestrator {
    * (renamed files restore — D7), with the lazy contentHash manifest
    * upgrade on legacy acceptance. Without a local manifest this is a
    * synced-book download: a full import under the EXISTING id.
+   *
+   * `opts.allowContentMismatch` (the mismatch-warning "Proceed Anyway"
+   * override for a deliberately-updated EPUB) skips the acceptance gate and
+   * routes through the same full re-derivation, rebuilding the book's
+   * content from the new binary while its progress and notes are preserved.
    */
-  restore(bookId: string, file: File): Promise<void> {
+  restore(bookId: string, file: File, opts: RestoreOptions = {}): Promise<void> {
     return this.enqueue('restore', async () => {
       const { projection, persistence } = this.deps;
       projection.importStarted();
       try {
         const manifest = await persistence.getManifest(bookId);
-        if (manifest) {
+        if (manifest && !opts.allowContentMismatch) {
           await this.verifyRestoreAcceptance(bookId, manifest, file);
           await persistence.restoreResource(bookId, file);
           await this.deps.mutex.run(bookId, async () => {
@@ -230,7 +247,11 @@ export class ImportOrchestrator {
             if (fresh && this.deps.inventory.get(bookId)) projection.setStatic(bookId, fresh);
           });
         } else {
-          logger.info(`Book ${bookId} has no local manifest. Importing with existing ID for synced book.`);
+          logger.info(
+            manifest
+              ? `Book ${bookId} restored from a content-mismatched file (user override). Re-deriving under the existing ID.`
+              : `Book ${bookId} has no local manifest. Importing with existing ID for synced book.`,
+          );
           const extraction = await this.extract(file, {
             depth: 'full',
             extraction: this.deps.extractionOptions(),

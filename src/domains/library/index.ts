@@ -10,6 +10,7 @@ export {
   ImportOrchestrator,
   type ImportJobResult,
   type ImportOrchestratorDeps,
+  type RestoreOptions,
 } from './import/ImportOrchestrator';
 export {
   extractBook,
