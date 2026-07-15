@@ -25,6 +25,7 @@
  */
 import { parseCfiTokens, tryParseCfiPoint } from '@kernel/cfi';
 import { chunkSection } from './chunker';
+import { effectiveSectionHash } from './sectionHash';
 import { CURRENT_QUANT } from './embeddingPort';
 import type { SearchTextSource } from './SearchSession';
 import type { CacheEmbeddingsRow, CacheEmbedJobsRow } from '@data/rows/cache';
@@ -217,7 +218,13 @@ export class EmbeddingIndexer {
 
     for (const idx of order) {
       const section = sections[idx];
-      const sectionTextHash = section.sectionTextHash ?? '';
+      // Prefer the extractor's stamped hash; derive it from the section text
+      // when the corpus predates the field (version-3 corpora written before it
+      // existed, which are never re-extracted). Without this, a hash-less corpus
+      // falls to '' and NO section ever resume-skips — the whole book re-embeds
+      // on every reader pass. The derived value matches what re-extraction would
+      // stamp, so it is a stable, comparable key.
+      const sectionTextHash = effectiveSectionHash(section.text, section.sectionTextHash);
 
       // Resume-skip: the journal already records this {href, sectionTextHash}
       // as fully embedded AND its vectors are present in the persisted row (the

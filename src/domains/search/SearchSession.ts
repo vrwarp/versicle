@@ -19,6 +19,7 @@
 import { AppError, NetRateLimitedError } from '~types/errors';
 import type { SearchBatchResult, SearchSection, EmbeddingStatus } from '~types/search';
 import { sectionHasEmbeddableText } from './chunker';
+import { effectiveSectionHash } from './sectionHash';
 import { QueryEmbeddingCache } from './queryEmbeddingCache';
 import { fuseRrf } from './rrf';
 import { semanticRank } from './semanticRank';
@@ -301,8 +302,14 @@ export class SearchSession {
         return { totalSections, embeddedSections: 0 };
       }
 
-      // Cross-reference text hashes to count only matching/up-to-date sections
-      const corpusHashes = new Map(corpus.sections.map((s) => [s.href, s.sectionTextHash]));
+      // Cross-reference text hashes to count only matching/up-to-date sections.
+      // Use the EFFECTIVE hash (stamped, or derived from the section text for
+      // hash-less version-3 corpora) — the same key the indexer writes onto the
+      // embedded row — so a book on a hash-less corpus reports real progress
+      // instead of sitting at zero forever.
+      const corpusHashes = new Map(
+        corpus.sections.map((s) => [s.href, effectiveSectionHash(s.text, s.sectionTextHash)]),
+      );
       let embeddedSections = 0;
 
       for (const section of embedded.sections) {

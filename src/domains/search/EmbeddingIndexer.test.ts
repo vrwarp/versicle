@@ -247,6 +247,50 @@ describe('EmbeddingIndexer', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('resume-skips a HASH-LESS corpus on the second pass (derived text hash heals pre-field v3 corpora)', async () => {
+    // Regression: corpora extracted at version 3 BEFORE `sectionTextHash` was
+    // added (the version was never bumped for the field) carry no hash. The old
+    // `?? ''` fallback made the skip guard (`hash !== ''`) always fail, so EVERY
+    // reader pass re-embedded EVERY section — thousands of embeddings, no
+    // progress. The indexer now derives the hash from the section text, so a
+    // second pass over the same hash-less corpus resume-skips.
+    const sections = [
+      { href: 's0.xhtml', title: 's0', text: 'Call me Ishmael. Some years ago, never mind how long.' },
+      { href: 's1.xhtml', title: 's1', text: 'It was the best of times, it was the worst of times.' },
+    ];
+    // A stateful repo: get()/getJob() return what the prior pass last wrote, so
+    // the second enqueue sees the first pass's journal + vectors.
+    let embeddingRow: CacheEmbeddingsRow | undefined;
+    let jobRow: CacheEmbedJobsRow | undefined;
+    const repo = {
+      get: vi.fn(async () => embeddingRow),
+      getJob: vi.fn(async () => jobRow),
+      put: vi.fn(async (row: CacheEmbeddingsRow) => {
+        embeddingRow = row;
+      }),
+      putJob: vi.fn(async (row: CacheEmbedJobsRow) => {
+        jobRow = row;
+      }),
+    };
+    const { client, calls } = makeEmbeddingClient();
+    const indexer = new EmbeddingIndexer({
+      embeddingClient: client,
+      textSource: makeTextSource(sections),
+      embeddingsRepo: repo,
+      quantize,
+      getConfig: config,
+    });
+
+    await indexer.enqueue('bk-1');
+    expect(calls).toHaveLength(2); // first pass embeds both sections
+    // The written row carries a NON-empty derived hash (not the old '').
+    expect(embeddingRow?.sections.every((s) => s.sectionTextHash !== '')).toBe(true);
+
+    await indexer.enqueue('bk-1');
+    // Second pass adds NO embed calls — both sections resume-skip.
+    expect(calls).toHaveLength(2);
+  });
+
   it('a resumed run preserves prior persisted sections (read-modify-write, not overwrite)', async () => {
     const sections = [section('s0.xhtml', 'h0'), section('s1.xhtml', 'h1')];
     // The prior run already embedded s0: its job marks it done AND its vectors

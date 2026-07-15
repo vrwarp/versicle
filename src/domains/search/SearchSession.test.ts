@@ -7,6 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { SearchEngine } from '@lib/search-engine';
 import { SearchSession, type SearchEngineHandle, type SearchTextSource } from './SearchSession';
 import { chunkSection } from './chunker';
+import { effectiveSectionHash } from './sectionHash';
 import { MockEmbeddingClient } from '@domains/google';
 import { NetRateLimitedError } from '~types/errors';
 import type { EmbeddedRowView, EmbeddingClientPort } from './embeddingPort';
@@ -551,6 +552,42 @@ describe('SearchSession — hybrid semantic query path (Increment D)', () => {
 
       // Two corpus sections, but only the one text-bearing section counts —
       // so the single embedded section reads as fully indexed, not 1/2.
+      await expect(session.getEmbeddingStatus('bk-1')).resolves.toEqual({
+        totalSections: 1,
+        embeddedSections: 1,
+      });
+    });
+
+    it('counts progress on a HASH-LESS corpus by deriving the hash from text', async () => {
+      // Regression: a version-3 corpus extracted before `sectionTextHash`
+      // existed has no per-section hash. The counter used to require the corpus
+      // hash to be defined, so such a book sat at 0 sections embedded forever
+      // even after thousands of vectors were written. The counter now derives
+      // the hash from the section text — the SAME key the indexer stores — so it
+      // matches and progress is reported.
+      const { factory } = makeFactory();
+      const queryClient = new MockEmbeddingClient({ dims: DIMS });
+
+      // The embedded row carries the derived hash the indexer would have written.
+      const embedded = {
+        extractionVersion: 3,
+        sections: [{ href: SEMANTIC_HREF, sectionTextHash: effectiveSectionHash(SEMANTIC_TEXT) }],
+      };
+      // The corpus section has NO sectionTextHash (pre-field v3 corpus).
+      const textSource: SearchTextSource = {
+        get: vi.fn(async () => ({
+          extractionVersion: 3,
+          sections: [{ href: SEMANTIC_HREF, title: 'Ch 1', text: SEMANTIC_TEXT }],
+        })),
+      };
+
+      const session = new SearchSession({
+        engineFactory: factory,
+        textSource,
+        embeddingClient: queryClient,
+        embeddingsSource: { get: vi.fn(async () => embedded as unknown as EmbeddedRowView) },
+        getSemanticConfig: semanticConfig(true),
+      });
       await expect(session.getEmbeddingStatus('bk-1')).resolves.toEqual({
         totalSections: 1,
         embeddedSections: 1,
