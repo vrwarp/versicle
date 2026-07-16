@@ -529,6 +529,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
                   onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
                   className="shadow-sm"
                   aria-label={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
+                  title={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
                   data-testid="view-toggle-button"
                 >
                   {viewMode === 'grid' ? <ListIcon className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
@@ -560,6 +561,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
               onClick={() => navigate('/settings')}
               className="shadow-sm"
               aria-label="Settings"
+              title="Settings"
               data-testid="header-settings-button"
             >
               <Settings className="w-4 h-4" />
