@@ -61,3 +61,4 @@ public/dict/cedict.meta.json
 
 # scratch dir used by ad-hoc tooling
 .tmp/
+verification/perf-results/

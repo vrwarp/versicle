@@ -31,6 +31,18 @@
 import type { Book, Contents, Rendition } from 'epubjs';
 import type Section from 'epubjs/types/section';
 import type View from 'epubjs/types/managers/view';
+import type Queue from 'epubjs/types/utils/queue';
+
+/**
+ * epub.js `utils/queue` plus its undeclared `tick` — the scheduler every
+ * queued task waits on before running (requestAnimationFrame by default).
+ * The offscreen extraction pipeline re-ticks its rendition's queue onto a
+ * zero-delay macrotask: nothing it renders is ever painted, so frame
+ * alignment there is pure idle (~one frame-length per queue hop).
+ */
+type QueueInternals = Queue & {
+  tick: (this: Window, callback: (time: number) => void) => unknown;
+};
 
 /**
  * The live view manager (epub.js `DefaultViewManager`) — an undeclared
@@ -53,8 +65,9 @@ type ViewWithPane = View & {
  * the override below documents the real shape once instead of casting at
  * every call site.
  */
-export type RenditionInternals = Omit<Rendition, 'getContents' | 'views'> & {
+export type RenditionInternals = Omit<Rendition, 'getContents' | 'views' | 'q'> & {
   manager?: RenditionManager;
+  q: QueueInternals;
   getContents(): Contents[];
   views(): ViewWithPane[];
 };

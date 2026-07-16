@@ -31,12 +31,32 @@ import { importWithChunkReload } from '@lib/chunkReload';
 // mid-flight (e.g. by the workspace switch's back-to-back reloads) is cached
 // as rejected for the document's lifetime — without the reload-once recovery
 // the route stays permanently broken until the user refreshes by hand.
-const ReaderShellLazy = lazy(
-  importWithChunkReload(
-    () => import('@components/reader/ReaderShell').then((m) => ({ default: m.ReaderShell })),
-    'reader-shell',
-  ),
+const loadReaderShell = importWithChunkReload(
+  () => import('@components/reader/ReaderShell').then((m) => ({ default: m.ReaderShell })),
+  'reader-shell',
 );
+const ReaderShellLazy = lazy(loadReaderShell);
+
+// Warm the reader chunk shortly after the window load event: opening a book
+// is the primary action from the boot surface, and the chunk fetch + parse
+// (epubjs rides in it) is otherwise a serial slice of every first-open. The
+// delay keeps the warmup out of boot's network/CPU window; the import cache
+// makes the later route navigation a hit. Deliberately setTimeout, not
+// requestIdleCallback — WebKit has no requestIdleCallback.
+if (typeof window !== 'undefined') {
+  const warmReaderChunk = () => {
+    setTimeout(() => {
+      loadReaderShell().catch(() => {
+        // Prefetch is best-effort; the route's own load path handles errors.
+      });
+    }, 1500);
+  };
+  if (document.readyState === 'complete') {
+    warmReaderChunk();
+  } else {
+    window.addEventListener('load', warmReaderChunk, { once: true });
+  }
+}
 const SettingsShellLazy = lazy(
   importWithChunkReload(
     () => import('./settings/SettingsShell').then((m) => ({ default: m.SettingsShell })),

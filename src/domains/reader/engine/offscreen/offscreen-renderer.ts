@@ -10,6 +10,9 @@ import {
 import type { TableImage } from '~types/cache';
 import { CancellationError } from '@lib/cancellable-task-runner';
 import { createLogger } from '@lib/logger';
+import { measureTotal } from '@lib/perf';
+import { internals } from '../epubjsInternals';
+import type { Rendition } from 'epubjs';
 
 const logger = createLogger('OffscreenRenderer');
 
@@ -29,6 +32,38 @@ export interface OffscreenExtractionResult {
 }
 
 type StyleAccumulator = Map<number, { count: number; charCount: number; totalLineHeight: number }>;
+
+/**
+ * Zero-delay macrotask scheduler for epub.js queues (see QueueInternals).
+ *
+ * epub.js runs every queued task on a requestAnimationFrame tick, and one
+ * `rendition.display()` crosses its queue several times — so each chapter of
+ * the extraction loop pays multiple frame-lengths of pure idle (measured
+ * ~40% of extraction wall time on Chromium, more on WebKit, on the Alice
+ * fixture). Nothing this pipeline renders is ever painted, so frame
+ * alignment buys nothing here. A MessageChannel macrotask (setTimeout(0) is
+ * clamped to 4ms when chained) keeps queue tasks running back-to-back while
+ * still yielding to the event loop for iframe load events. The LIVE reader
+ * keeps the default rAF tick: it paints, and frame batching is correct there.
+ */
+function createZeroDelayTick(): {
+  tick: (this: unknown, callback: (time: number) => void) => void;
+  dispose: () => void;
+} {
+  const channel = new MessageChannel();
+  const pending: Array<() => void> = [];
+  channel.port1.onmessage = () => pending.shift()?.();
+  return {
+    tick: (callback) => {
+      pending.push(() => callback(performance.now()));
+      channel.port2.postMessage(null);
+    },
+    dispose: () => {
+      channel.port1.close();
+      channel.port2.close();
+    },
+  };
+}
 
 function getCanvasLineHeight(element: HTMLElement, win: Window = window) {
     const computedStyle = win.getComputedStyle(element);
@@ -176,6 +211,7 @@ export async function extractContentOffscreen(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const book = (ePub as any)(file);
   let disconnectSandboxObserver: (() => void) | null = null;
+  const fastTick = createZeroDelayTick();
 
   // SECURITY: sanitize-at-serialize via the shared epubSecurity module —
   // the SAME implementation the live reader renders through, so ingested
@@ -194,6 +230,13 @@ export async function extractContentOffscreen(
       flow: 'scrolled-doc',
       manager: 'default' // Display one chapter at a time
     });
+
+    // Re-tick the display queue onto the zero-delay scheduler (see
+    // createZeroDelayTick) BEFORE the first task runs, so even the initial
+    // start/attach tasks skip the rAF wait. `q` is an epub.js internal —
+    // absent on the unit-test rendition double, so patch conditionally.
+    const renditionQueue = internals(rendition as Rendition).q;
+    if (renditionQueue) renditionQueue.tick = fastTick.tick;
 
     // PATCH: Ensure all iframes (current and future) have allow-scripts to
     // prevent blocking in strict environments — shared epubSecurity observer
@@ -216,6 +259,11 @@ export async function extractContentOffscreen(
     const totalItems = items.length;
     // OPTIMIZATION: Track time to yield only when necessary to avoid artificial delays
     let lastYieldTime = performance.now();
+    // Per-phase accumulators, emitted as User Timing totals after the loop.
+    let displayMs = 0;
+    let stylesMs = 0;
+    let sentencesMs = 0;
+    let tablesMs = 0;
 
     for (let i = 0; i < totalItems; i++) {
       // Cancellation point between chapters (Phase 7: extractBook's
@@ -228,7 +276,9 @@ export async function extractContentOffscreen(
       onProgress?.(progress, `Processing chapter ${i + 1} of ${totalItems}`);
 
       // Render the chapter
+      const displayStart = performance.now();
       await rendition.display(item.href);
+      displayMs += performance.now() - displayStart;
 
       // Get the content document
       // We might need to wait a tick for the iframe to be fully ready if display() resolves too early
@@ -245,7 +295,9 @@ export async function extractContentOffscreen(
 
         // New logic: Accumulate styles for global evaluation
         if (win) {
+          const stylesStart = performance.now();
           accumulateChapterStyles(doc, win, globalStyleAccumulator);
+          stylesMs += performance.now() - stylesStart;
         }
 
         // Determine title
@@ -266,13 +318,16 @@ export async function extractContentOffscreen(
         if (!title) title = `Chapter ${i + 1}`;
 
         // Extract sentences with CFIs
+        const sentencesStart = performance.now();
         const { sentences, citationMarkers } = extractSentencesFromNode(body, (range) => {
           // contents.cfiFromRange returns the CFI for the range.
           // It should include the base CFI (spine index) if correctly initialized.
           return contents.cfiFromRange(range);
         }, options);
+        sentencesMs += performance.now() - sentencesStart;
 
         // Table Capture
+        const tablesStart = performance.now();
         const tables = doc.querySelectorAll('table');
         for (const table of tables) {
           try {
@@ -295,6 +350,7 @@ export async function extractContentOffscreen(
             logger.warn('Failed to snap table', e);
           }
         }
+        tablesMs += performance.now() - tablesStart;
 
         results.push({
           href: item.href,
@@ -316,6 +372,11 @@ export async function extractContentOffscreen(
       }
     }
 
+    measureTotal('import:offscreen:display', displayMs);
+    measureTotal('import:offscreen:styles', stylesMs);
+    measureTotal('import:offscreen:sentences', sentencesMs);
+    measureTotal('import:offscreen:tables', tablesMs);
+
     // After the for loop before finally block:
     const baseStyles = calculateDominantStyle(globalStyleAccumulator);
     if (baseStyles) {
@@ -331,6 +392,7 @@ export async function extractContentOffscreen(
 
     } finally {
     // Cleanup
+    fastTick.dispose();
     if (disconnectSandboxObserver) {
       disconnectSandboxObserver();
     }

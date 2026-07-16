@@ -43,6 +43,7 @@ import { initializeLocations } from '@domains/reader/engine/locations';
 import { internals } from '@domains/reader/engine/epubjsInternals';
 import { runCancellable, CancellationError } from '@lib/cancellable-task-runner';
 import { createLogger } from '@lib/logger';
+import { measureSince } from '@lib/perf';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { findTocItem } from '@lib/reader/titleResolver';
 
@@ -167,8 +168,10 @@ export function useEpubReader(
       setAreLocationsReady(false);
 
       try {
+        const openStart = performance.now();
         // Phase 2: Get file blob from static resources only. Metadata comes from props (Store).
         const fileData = yield bookContent.getBookFile(currentBookId);
+        measureSince('reader:load-file', openStart);
 
         if (!fileData) {
           throw new Error('Book file not found');
@@ -259,7 +262,10 @@ export function useEpubReader(
 
         // Legacy reading history fallback removed as Phase 2 relies on Stores (passed via options)
 
+        const displayStart = performance.now();
         yield newRendition.display(startLocation);
+        measureSince('reader:first-display', displayStart);
+        measureSince('reader:open-total', openStart);
 
         setIsReady(true);
 
@@ -474,7 +480,10 @@ export function useEpubReader(
       isInitialApplyRef.current = false;
       const currentLoc = (r.location as typeof r.location | undefined)?.start?.cfi || options.initialLocation;
       if (currentLoc) {
-        r.display(currentLoc);
+        const redisplayStart = performance.now();
+        void Promise.resolve(r.display(currentLoc)).then(() => {
+          measureSince('reader:initial-theme-redisplay', redisplayStart);
+        });
       }
     }
   }, [
