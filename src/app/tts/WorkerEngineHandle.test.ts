@@ -10,6 +10,13 @@ import type { PlaybackSnapshot, SnapshotListener } from '@lib/tts/engine/TtsEngi
 const { clientState } = vi.hoisted(() => ({
     clientState: {
         // Deferred so tests control when the "worker" finishes booting.
+        // The promise + resolve/reject are (re)created in beforeEach so they
+        // exist BEFORE the factory runs: WorkerEngineHandle now DYNAMICALLY
+        // imports createWorkerEngineClient (perf — keeps the TTS backend graph
+        // out of the entry chunk), so the factory is invoked a microtask after
+        // construction. Capturing resolve inside the factory would leave
+        // `clientState.resolve` undefined at the point tests drive boot.
+        promise: undefined as undefined | Promise<unknown>,
         resolve: undefined as undefined | ((c: unknown) => void),
         reject: undefined as undefined | ((e: unknown) => void),
         client: undefined as undefined | Record<string, unknown>,
@@ -18,10 +25,7 @@ const { clientState } = vi.hoisted(() => ({
 }));
 
 vi.mock('./createWorkerEngineClient', () => ({
-    createWorkerEngineClient: vi.fn(() => new Promise((resolve, reject) => {
-        clientState.resolve = resolve;
-        clientState.reject = reject;
-    })),
+    createWorkerEngineClient: vi.fn(() => clientState.promise),
 }));
 
 import { WorkerEngineHandle } from './WorkerEngineHandle';
@@ -68,7 +72,13 @@ function makeFakeClient() {
 
 describe('WorkerEngineHandle (Worker available)', () => {
     beforeEach(() => {
-        clientState.resolve = undefined;
+        // Fresh deferred per test — created HERE (not inside the mock factory)
+        // so clientState.resolve is defined before the handle's dynamic import
+        // invokes the factory. See the vi.hoisted comment above.
+        clientState.promise = new Promise((resolve, reject) => {
+            clientState.resolve = resolve as (c: unknown) => void;
+            clientState.reject = reject;
+        });
         clientState.subscribeListener = undefined;
         // jsdom has no Worker; define one so the handle takes the live path.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
