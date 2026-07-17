@@ -170,3 +170,6 @@
 ## 2025-06-25 - Improve screen reader accessibility for Vocab Triage tiles
 **Learning:** The application has heavily customized, non-standard interactive toggle elements (like the `VocabTile`) and nested custom tooltip buttons (`[i]`) that visually represent state but inherently lack screen reader semantics. Relying solely on `title` attributes for tooltips without `aria-label` and `aria-expanded` is insufficient. Furthermore, custom visual toggles must use `aria-pressed` to correctly communicate state to assistive technologies.
 **Action:** When creating or modifying custom interactive components—especially those that act as stateful toggles or have nested utility buttons (like tooltips)—always explicitly apply `aria-pressed`, `aria-expanded`, and `aria-label` to ensure feature parity for screen reader users.
+## 2026-07-16 - Add title tooltips to icon-only buttons
+**Learning:** Icon-only buttons lacking `title` attributes lack visual cues for mouse users, even if they have `aria-label` for screen readers.
+**Action:** Always provide `title` attributes for icon-only action buttons in addition to `aria-label`.
