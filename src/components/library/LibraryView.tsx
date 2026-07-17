@@ -3,6 +3,7 @@ import { useLibraryStore } from '@store/useLibraryStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useAllBooks } from '@store/libraryViewStore';
 import { createLogger } from '@lib/logger';
+import { measureSince } from '@lib/perf';
 import { importWithChunkReload } from '@lib/chunkReload';
 import { useToastStore } from '@store/useToastStore';
 import { BookCard } from './BookCard';
@@ -46,6 +47,13 @@ import { compareTitles } from '@kernel/locale/format';
  * @returns A React component rendering the library interface.
  */
 const logger = createLogger('LibraryView');
+
+let libraryMountedMeasured = false;
+function measureLibraryMountedOnce(): void {
+  if (libraryMountedMeasured) return;
+  libraryMountedMeasured = true;
+  measureSince('app:library-mounted', 0);
+}
 
 // Wrapped in importWithChunkReload: a chunk fetch aborted mid-flight is
 // cached as rejected for the document's lifetime, permanently breaking the
@@ -121,6 +129,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
   useNavigationGuard(() => {
     setDuplicateQueue(prev => prev.slice(1));
   }, BackButtonPriority.MODAL, duplicateQueue.length > 0);
+
+  // Boot milestone: first LibraryView commit (duration = time from the
+  // navigation timeOrigin; emitted once per page load).
+  useEffect(() => {
+    measureLibraryMountedOnce();
+  }, []);
 
   // Check for reprocessing request from navigation state
   useEffect(() => {

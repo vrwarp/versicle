@@ -2,6 +2,7 @@ import { useEffect, type FC } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { useToastStore } from '@store/useToastStore';
 import { createLogger } from '@lib/logger';
+import { signalServiceWorkerRegistrationFailed } from '@lib/serviceWorkerUtils';
 
 const logger = createLogger('SWUpdatePrompt');
 
@@ -46,7 +47,11 @@ export const SWUpdatePrompt: FC = () => {
     onRegisterError(error: unknown) {
       // Registration failure degrades to a no-SW session; the boot gate's
       // degraded notice (useServiceWorkerGate) owns the user-facing signal.
+      // Release the boot gate NOW: `serviceWorker.ready` never settles after
+      // a failed registration, so without this the gate always burns its
+      // full 3s timeout (a 3s blank screen on every boot for affected users).
       logger.warn('Service worker registration failed:', error);
+      signalServiceWorkerRegistrationFailed();
     },
   });
 

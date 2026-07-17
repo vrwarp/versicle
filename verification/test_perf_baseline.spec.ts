@@ -16,7 +16,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { test } from './utils';
+import { test, expect } from './utils';
 import { resetApp, waitForReaderReady } from './utils';
 import type { Page } from '@playwright/test';
 
@@ -66,7 +66,7 @@ async function collectPageMetrics(page: Page): Promise<PageMetrics> {
       .map((p) => ({ name: p.name, t: Math.round(p.startTime) }));
     const bootMeasures = performance
       .getEntriesByType('measure')
-      .filter((m) => /^(boot|import|reader):/.test(m.name))
+      .filter((m) => /^(app|boot|import|reader):/.test(m.name))
       .map((m) => ({
         name: m.name,
         start: Math.round(m.startTime),
@@ -221,4 +221,43 @@ test('performance baseline: boot, import, open, page turns, warm reload', async 
   fs.writeFileSync(outPath, JSON.stringify(results, null, 2));
   console.warn(`[perf] results written to ${outPath}`);
   console.warn(JSON.stringify({ steps, sessionMeasures: session.bootMeasures }, null, 2));
+});
+
+/**
+ * Regression guard for the 3s boot cliff: `navigator.serviceWorker.ready`
+ * never settles after a FAILED registration, so the boot gate used to burn
+ * its full 3s timeout on every load for affected users (observed
+ * intermittently on WebKit: sw.js load fails with SecurityError).
+ * SWUpdatePrompt's onRegisterError now signals the gate to release
+ * immediately (signalServiceWorkerRegistrationFailed). This simulates the
+ * failure by making register() reject before the app boots.
+ */
+test('boot stays fast when service worker registration fails', async ({ page }) => {
+  await page.addInitScript(() => {
+    if ('serviceWorker' in navigator) {
+      const proto = Object.getPrototypeOf(navigator.serviceWorker) as {
+        register?: unknown;
+      };
+      proto.register = () =>
+        Promise.reject(new Error('SW registration blocked by perf regression test'));
+    }
+  });
+
+  const t0 = Date.now();
+  await page.goto('/', { timeout: 60000 });
+  await page.waitForSelector(LIBRARY_READY_SELECTOR, { timeout: 60000 });
+  const bootMs = Date.now() - t0;
+
+  const swGate = await page.evaluate(
+    () =>
+      performance.getEntriesByType('measure').find((m) => m.name === 'app:sw-gate')?.duration ??
+      null,
+  );
+  console.warn(`[perf] broken-SW boot: ${bootMs}ms, sw-gate: ${Math.round(swGate ?? -1)}ms`);
+
+  // Generous CI bound — the point is to catch the 3s gate cliff, not to be
+  // a tight benchmark. A healthy boot is ~250-500ms on this hardware.
+  expect(bootMs).toBeLessThan(2500);
+  expect(swGate).not.toBeNull();
+  expect(swGate!).toBeLessThan(1500);
 });

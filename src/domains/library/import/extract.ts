@@ -27,7 +27,6 @@
 // would put epubjs back into the entry chunk (check 4 of
 // scripts/check-worker-chunk.mjs asserts the emitted artifact).
 import { v4 as uuidv4 } from 'uuid';
-import imageCompression from 'browser-image-compression';
 import type { NavigationItem, SectionMetadata, StaticBookManifest, StaticResource, PerceptualPalette } from '~types/book';
 import type { UserInventoryItem, UserProgress, UserOverrides, ReadingListEntry } from '~types/user-data';
 import type { CacheTtsPreparation, TableImage } from '~types/cache';
@@ -178,6 +177,10 @@ export async function extractPreamble(file: Blob, options: PreambleOptions): Pro
         coverBlob = await response.blob();
         if (coverBlob && options.cover === 'thumbnail') {
           try {
+            // Lazy: browser-image-compression (~55KB min) is only needed at
+            // import time; a static import would ride the eager LibraryView
+            // graph into the entry chunk (parsed on every boot).
+            const { default: imageCompression } = await import('browser-image-compression');
             thumbnailBlob = await imageCompression(coverBlob as File, {
               maxSizeMB: 0.1,
               maxWidthOrHeight: 600,

@@ -30,6 +30,12 @@
         // import graph (the main .dependency-cruiser.cjs is auto-detected
         // by knip's plugin).
         ".dependency-cruiser.runtime.cjs",
+        // Build-time replacement for @xmldom/xmldom, wired via resolve.alias
+        // in vite.config.ts (app builds only). No import edge exists — the
+        // alias rewrites epub.js's `@xmldom/xmldom` specifier to this stub —
+        // so knip cannot see it. See the file header for why xmldom is
+        // stubbed (unreachable Node/IE fallback, ~158KB otherwise).
+        "src/lib/xmldom-browser-stub.ts",
         // domains/sync published surface (master plan §2 rule 3: other
         // domains import a domain ONLY via its index.ts). Zero cross-domain
         // consumers exist today — app/ composes sync via subpath imports
