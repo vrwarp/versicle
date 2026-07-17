@@ -4,7 +4,10 @@
  * `AbortSignal`: entries are decompressed in small chunks with an abort
  * check and a main-thread yield between chunks).
  */
-import JSZip from 'jszip';
+// Type-only: the runtime module loads lazily inside extractEpubsFromZip —
+// jszip (~96KB min) otherwise rides the eager LibraryView graph (via the
+// ImportOrchestrator) into the entry chunk and is parsed on every boot.
+import type JSZip from 'jszip';
 import { CancellationError } from '@lib/cancellable-task-runner';
 import { createLogger } from '@lib/logger';
 
@@ -28,7 +31,8 @@ export async function extractEpubsFromZip(
   onProgress?: (percent: number) => void,
   signal?: AbortSignal,
 ): Promise<File[]> {
-  const zip = new JSZip();
+  const { default: JSZipCtor } = await import('jszip');
+  const zip = new JSZipCtor();
   const epubFiles: File[] = [];
 
   try {

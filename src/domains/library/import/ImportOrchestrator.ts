@@ -24,6 +24,7 @@ import type { UserInventoryItem } from '~types/user-data';
 import type { StaticManifestRow } from '@data/rows/static';
 import { AppError, StorageFullError } from '~types/errors';
 import { createLogger } from '@lib/logger';
+import { measureSince } from '@lib/perf';
 import type { KeyedMutex } from '../mutex';
 import type {
   InventoryPort,
@@ -351,7 +352,9 @@ export class ImportOrchestrator {
         preamble: probe,
         onProgress: (p, m) => this.deps.projection.importProgress(p, m),
       });
+      const persistStart = performance.now();
       await this.deps.persistence.ingest(extraction, { mode: 'add' });
+      measureSince('import:persist', persistStart);
       await this.registerNew(extraction, file.name);
       return { status: 'imported', bookId: extraction.bookId };
     } catch (error) {

@@ -117,6 +117,11 @@ const aliases = {
   '~types': srcAlias('types'),
   '@test': srcAlias('test'),
   '@workers': srcAlias('workers'),
+  // epub.js's Node/IE fallback DOM implementation — unreachable in browser
+  // builds but not tree-shakeable (~158KB in the entry AND TTS-worker
+  // chunks). Stubbed for app builds only; vitest.config.ts deliberately does
+  // NOT carry this alias so tests exercise the real package.
+  '@xmldom/xmldom': srcAlias('lib/xmldom-browser-stub.ts'),
 }
 
 // https://vite.dev/config/

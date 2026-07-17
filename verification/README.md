@@ -40,6 +40,15 @@ bigger timeouts.
 - `test_maintenance.spec.ts`, `test_journey_reprocessing.spec.ts` — open
   `EpubLibraryDB` directly with a **hardcoded version**; they must be
   updated when `src/db/db.ts` bumps the DB version (see AGENTS.md).
+- `test_perf_baseline.spec.ts` — performance instrumentation, not a
+  journey: drives cold boot → demo-book import → book open → page turns →
+  warm reload and records wall-clock step timings plus in-page User Timing
+  measures (`boot:*` from `src/app/bootstrap.ts`, `import:*` from the
+  import pipeline, `reader:*` from the reader open path) and a
+  frame-gap main-thread-stall sampler. Writes JSON to
+  `verification/perf-results/<project>.json` (gitignored). Run it one
+  project at a time with `--workers=1` — it is a measurement, and
+  parallel load skews it.
 
 ### Infrastructure
 

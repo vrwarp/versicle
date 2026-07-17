@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 
+import { measureSince } from '@lib/perf';
 import { useGoogleServicesStore } from './store/useGoogleServicesStore';
 import { useTTSSettingsStore } from './store/useTTSSettingsStore';
 import { useTTSPlaybackStore } from './store/useTTSPlaybackStore';
@@ -138,6 +139,12 @@ if (typeof window !== 'undefined') {
 // SocialLogin initialization (and its re-init store subscription) used to run
 // here at module scope; it is now the `google/social-login` boot task
 // (src/app/boot/socialLogin.ts) sequenced by src/app/bootstrap.ts.
+
+// Boot milestone: everything above (the entire static import graph of the
+// entry chunk) has now fetched, parsed and evaluated. Duration is measured
+// from the navigation timeOrigin, so this entry ≈ network + parse + eval of
+// the entry bundle.
+measureSince('app:entry-eval', 0);
 
 /**
  * Application entry point.

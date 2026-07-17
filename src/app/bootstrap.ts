@@ -17,6 +17,8 @@
  *    the migration interceptor while a backup restore reloads the page).
  */
 
+import { measureSince } from '@lib/perf';
+
 export const BOOT_PHASES = [
   'interceptMigration',
   'openDB',
@@ -123,14 +125,18 @@ export function runBootSequence(options: RunBootOptions = {}): BootHandle {
   };
 
   const promise = (async (): Promise<BootResult> => {
+    const bootStart = performance.now();
     for (const phase of BOOT_PHASES) {
       for (const task of registry.get(phase) ?? []) {
+        const taskStart = performance.now();
         await task.run(ctx);
+        measureSince(`boot:${task.name}`, taskStart);
       }
       if (haltReason !== null) {
         return { status: 'halted', reason: haltReason };
       }
     }
+    measureSince('boot:total', bootStart);
     return { status: 'ready', pendingMigration: ctx.pendingMigration };
   })();
 

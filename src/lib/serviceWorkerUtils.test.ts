@@ -1,14 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { waitForServiceWorkerController } from './serviceWorkerUtils';
+import {
+    waitForServiceWorkerController,
+    signalServiceWorkerRegistrationFailed,
+    resetServiceWorkerRegistrationSignalForTests,
+} from './serviceWorkerUtils';
 
 describe('waitForServiceWorkerController', () => {
     beforeEach(() => {
         vi.useFakeTimers();
+        resetServiceWorkerRegistrationSignalForTests();
     });
 
     afterEach(() => {
         vi.useRealTimers();
         vi.unstubAllGlobals();
+        resetServiceWorkerRegistrationSignalForTests();
     });
 
     it('resolves immediately if controller is already present', async () => {
@@ -81,5 +87,44 @@ describe('waitForServiceWorkerController', () => {
         const mockNavigator = {} as Navigator;
 
         await expect(waitForServiceWorkerController(mockNavigator)).resolves.toBeUndefined();
+    });
+
+    it('resolves immediately when registration failure is signaled mid-wait (ready never settles)', async () => {
+        Object.defineProperty(window.navigator, 'serviceWorker', {
+            value: {
+                ready: new Promise(() => {}), // failed registration: never settles
+                controller: null,
+            },
+            configurable: true,
+            writable: true,
+        });
+
+        const resolved = vi.fn();
+        const promise = waitForServiceWorkerController(window.navigator).then(resolved);
+
+        // Still waiting (would previously wait the full 3s timeout).
+        await vi.advanceTimersByTimeAsync(50);
+        expect(resolved).not.toHaveBeenCalled();
+
+        signalServiceWorkerRegistrationFailed();
+        await vi.advanceTimersByTimeAsync(0);
+
+        await expect(promise).resolves.toBeUndefined();
+        expect(resolved).toHaveBeenCalled();
+    });
+
+    it('resolves immediately when registration already failed before the wait started', async () => {
+        Object.defineProperty(window.navigator, 'serviceWorker', {
+            value: {
+                ready: new Promise(() => {}),
+                controller: null,
+            },
+            configurable: true,
+            writable: true,
+        });
+
+        signalServiceWorkerRegistrationFailed();
+
+        await expect(waitForServiceWorkerController(window.navigator)).resolves.toBeUndefined();
     });
 });

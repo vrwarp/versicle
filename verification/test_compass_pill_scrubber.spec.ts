@@ -140,15 +140,30 @@ test("scrubber shows book reading progress when TTS queue is empty", async ({ pa
   // committed — leaving the current-device progress stuck at 0%.
   await page.waitForTimeout(3000);
 
-  // Ensure TTS queue is empty (no TTS initiated)
-  const { total: queueLength } = await getTTSProgress(page);
-  console.log(`TTS queue length (should be 0): ${queueLength}`);
-
-  // When queue is empty, scrubber uses the global reading percentage from the store.
-  // Wait for both the store to have non-zero progress AND the DOM to reflect it
-  // (React re-render may lag a tick behind the Zustand state update).
+  // Opening/navigating a section auto-populates the TTS queue with that
+  // section's sentences (prepared for instant play), so the queue is NOT empty
+  // here — `getTTSProgress` reports the section's sentence count. To exercise
+  // the queue-EMPTY scrubber branch (scrubber = global book reading %, not the
+  // TTS chapter position), clear the ephemeral playback queue. `queue: []` is
+  // the store's own initial state, and the scrubber reads `hasQueueItems`
+  // straight from it (ReaderControlBar: `if (!hasQueueItems) progress = book%`),
+  // so this drives the real production code path. The clear happens inside the
+  // poll below so a late engine snapshot re-push is re-cleared until the DOM
+  // settles on the book %.
+  //
+  // (Historically this test asserted against the queue WITHOUT clearing it and
+  // passed only vacuously: reading progress was recorded as 0% because the
+  // locations registry generated too slowly to resolve a percentage within the
+  // dwell, so `toBeCloseTo(0, 0)` held trivially. Faster locations generation
+  // now records a real non-zero percentage, exposing that the queue-empty
+  // branch was never actually reached.)
   await page.waitForFunction(
     () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const playback = (window as any).useTTSPlaybackStore;
+      if (playback?.getState?.().queue?.length) {
+        playback.setState({ queue: [], currentIndex: 0 });
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const store = (window as any).useReadingStateStore?.getState?.();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -160,6 +175,9 @@ test("scrubber shows book reading progress when TTS queue is empty", async ({ pa
     undefined,
     { timeout: 12000 }
   ).catch(() => { /* fall through to assertion so the failure message is readable */ });
+
+  const { total: queueLength } = await getTTSProgress(page);
+  console.log(`TTS queue length after clear (should be 0): ${queueLength}`);
   const scrubberWidth = await getScrubberWidth(page);
   const globalBookPct = await page.evaluate(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

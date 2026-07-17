@@ -17,6 +17,7 @@
  */
 import { useEffect, useState } from 'react';
 import { waitForServiceWorkerController } from '@lib/serviceWorkerUtils';
+import { measureSince } from '@lib/perf';
 import { useToastStore } from '@store/useToastStore';
 import { createLogger } from '@lib/logger';
 
@@ -65,9 +66,11 @@ export function useServiceWorkerGate(): { swInitialized: boolean } {
   useEffect(() => {
     let cancelled = false;
     const initSW = async () => {
+      const gateStart = performance.now();
       // Never rejects: resolves on controller, `ready` timeout (3 s), or
       // poll exhaustion — the gate is soft by construction.
       await waitForServiceWorkerController();
+      measureSince('app:sw-gate', gateStart);
       if (cancelled) return;
       notifyServiceWorkerDegradedOnce();
       setSwInitialized(true);

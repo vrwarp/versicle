@@ -30,7 +30,7 @@ import type {
 import type { TTSQueueItem } from '~types/tts';
 import type { TTSVoice } from '@lib/tts/providers/types';
 import { createLogger } from '@lib/logger';
-import { createWorkerEngineClient, type WorkerEngineClient } from './createWorkerEngineClient';
+import type { WorkerEngineClient } from './createWorkerEngineClient';
 
 const logger = createLogger('WorkerEngineHandle');
 
@@ -69,7 +69,16 @@ export class WorkerEngineHandle implements TtsEngine {
             this.booted = new Promise<WorkerEngineClient>(() => {});
             return;
         }
-        this.booted = createWorkerEngineClient().then(async (client) => {
+        // Dynamic import: the entire main-thread TTS backend graph
+        // (TTSProviderManager + every provider, PlatformIntegration,
+        // LexiconService, comlink — ~122KB) loads in a lazy chunk here rather
+        // than riding the boot task's static graph into the entry chunk, where
+        // it was parsed on every cold boot before any audio was ever used. The
+        // handle already boots the worker as a fire-and-forget promise, so this
+        // only moves WHERE the code is parsed, not when the worker spawns.
+        this.booted = import('./createWorkerEngineClient')
+            .then(({ createWorkerEngineClient }) => createWorkerEngineClient())
+            .then(async (client) => {
             await client.subscribe((snap) => {
                 // Comlink deliveries can reorder; seq is monotonic worker-side, so a
                 // stale snapshot is simply dropped.

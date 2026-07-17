@@ -27,7 +27,6 @@
 // would put epubjs back into the entry chunk (check 4 of
 // scripts/check-worker-chunk.mjs asserts the emitted artifact).
 import { v4 as uuidv4 } from 'uuid';
-import imageCompression from 'browser-image-compression';
 import type { NavigationItem, SectionMetadata, StaticBookManifest, StaticResource, PerceptualPalette } from '~types/book';
 import type { UserInventoryItem, UserProgress, UserOverrides, ReadingListEntry } from '~types/user-data';
 import type { CacheTtsPreparation, TableImage } from '~types/cache';
@@ -39,6 +38,7 @@ import { extractCoverPalette } from '@lib/cover-palette';
 import { createLogger } from '@lib/logger';
 import { normalizeLanguageCode } from '@lib/language-utils';
 import { localFetch } from '@kernel/net';
+import { measureSince } from '@lib/perf';
 import { cheapHash, computeContentHash, computeLegacyFingerprint } from './identity';
 import { getSanitizedBookMetadata } from './metadata';
 import { validateZipSignature } from './validate';
@@ -177,6 +177,10 @@ export async function extractPreamble(file: Blob, options: PreambleOptions): Pro
         coverBlob = await response.blob();
         if (coverBlob && options.cover === 'thumbnail') {
           try {
+            // Lazy: browser-image-compression (~55KB min) is only needed at
+            // import time; a static import would ride the eager LibraryView
+            // graph into the entry chunk (parsed on every boot).
+            const { default: imageCompression } = await import('browser-image-compression');
             thumbnailBlob = await imageCompression(coverBlob as File, {
               maxSizeMB: 0.1,
               maxWidthOrHeight: 600,
@@ -330,17 +334,21 @@ export async function extractBook(file: File, opts: ExtractBookOptions): Promise
       throw new Error('Invalid file format. File must be a valid EPUB (ZIP archive).');
     }
 
+    const preambleStart = performance.now();
     const preamble = await extractPreamble(file, { cover: 'thumbnail', signal });
+    measureSince('import:preamble', preambleStart);
 
     // Identity. The legacy fingerprint hashes the UNSANITIZED metadata —
     // pre-P7 manifests were written that way and restore acceptance must
     // keep matching them.
+    const identityStart = performance.now();
     const legacyFingerprint = await computeLegacyFingerprint(file, {
       title: preamble.rawTitle,
       author: preamble.rawAuthor,
       filename: file.name,
     });
     const contentHash = await computeContentHash(file);
+    measureSince('import:identity-hashes', identityStart);
 
     // Sanitize the metadata candidate (sanitize-at-ingest boundary).
     const candidateMetadata = {
@@ -385,15 +393,19 @@ export async function extractBook(file: File, opts: ExtractBookOptions): Promise
   const { extractContentOffscreen } = await import(
     '@domains/reader/engine/offscreen/offscreen-renderer'
   );
+  const offscreenStart = performance.now();
   const { chapters, baseFontSize, baseLineHeight } = await extractContentOffscreen(
     file,
     optionsWithLocale,
     onProgress,
     signal,
   );
+  measureSince('import:offscreen-extract', offscreenStart);
 
   const bookId = uuidv4();
+  const mapStart = performance.now();
   const mapping = mapChapters(bookId, chapters);
+  measureSince('import:map-chapters', mapStart);
 
   const manifest: StaticBookManifest = {
     bookId,
