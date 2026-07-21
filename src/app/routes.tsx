@@ -65,6 +65,7 @@ const SettingsShellLazy = lazy(
 );
 
 /** Shared route-chunk fallback — the boot spinner, reused. */
+// eslint-disable-next-line react-refresh/only-export-components
 function RouteFallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
