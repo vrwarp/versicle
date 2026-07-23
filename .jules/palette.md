@@ -173,3 +173,6 @@
 ## 2026-07-16 - Add title tooltips to icon-only buttons
 **Learning:** Icon-only buttons lacking `title` attributes lack visual cues for mouse users, even if they have `aria-label` for screen readers.
 **Action:** Always provide `title` attributes for icon-only action buttons in addition to `aria-label`.
+## 2024-07-22 - Search Clear Button Title Tooltips
+**Learning:** Found multiple instances where search "clear" buttons had `aria-label="Clear search"` for screen readers but lacked a native `title="Clear search"` tooltip for mouse users. This creates an inconsistent UX where mouse users have no explicit text feedback on what an icon does before clicking it.
+**Action:** When creating icon-only buttons for clearing inputs (or any icon-only button), always ensure they have both `aria-label` (for screen readers) AND `title` (for mouse hover tooltips).
