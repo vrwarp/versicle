@@ -468,9 +468,14 @@ function migrateToV30(db: IDBPDatabase<EpubLibraryDB>): void {
  * rebuildable — on an older build its absence just means Drive previews are
  * re-fetched, and nothing user-authored is touched.
  */
-function migrateToV31(db: IDBPDatabase<EpubLibraryDB>): void {
-  if (!db.objectStoreNames.contains('cache_drive_previews')) {
-    const store = db.createObjectStore('cache_drive_previews', { keyPath: 'fileId' });
+function migrateToV31(
+  db: IDBPDatabase<EpubLibraryDB>,
+  tx: UpgradeTransaction,
+): void {
+  const store = db.objectStoreNames.contains('cache_drive_previews')
+    ? tx.objectStore('cache_drive_previews')
+    : db.createObjectStore('cache_drive_previews', { keyPath: 'fileId' });
+  if (!store.indexNames.contains('by_lastAccessed')) {
     store.createIndex('by_lastAccessed', 'lastAccessedAt');
   }
 }
@@ -544,12 +549,10 @@ function ensureBaselineStores(
   // v29: the query embedding vector cache. KeyPath IS key.
   createStore('cache_query_embeddings', { keyPath: 'key' });
 
-  // v31: partial-fetch Drive previews. KeyPath IS fileId; LRU index.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const drivePreviews = createStore('cache_drive_previews', { keyPath: 'fileId' }) as any;
-  if (!drivePreviews.indexNames.contains('by_lastAccessed')) {
-    drivePreviews.createIndex('by_lastAccessed', 'lastAccessedAt');
-  }
+  // v31: partial-fetch Drive previews. KeyPath IS fileId; the by_lastAccessed
+  // LRU index is created by migrateToV31 (which runs on fresh installs too,
+  // since oldVersion 0 < 31), mirroring how cache_audio_blobs' index landed.
+  createStore('cache_drive_previews', { keyPath: 'fileId' });
 
   // App Domain
   if (!db.objectStoreNames.contains('checkpoints')) {
