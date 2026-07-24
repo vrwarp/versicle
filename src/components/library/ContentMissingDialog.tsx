@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
-import { CloudOff, Loader2, Download, Cloud } from 'lucide-react';
+import { CloudOff, Loader2, Download, Cloud, Book } from 'lucide-react';
 import type { BookMetadata } from '~types/book';
 import { useDriveStore } from '@store/useDriveStore';
 import { getDriveLibrarySync } from '@domains/google';
@@ -9,6 +9,7 @@ import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 import { getGoogleAuthClient } from '@domains/google';
 import { AlertCircle } from 'lucide-react';
 import { formatBytes } from '@kernel/locale/format';
+import { useDrivePreview } from '../drive/useDrivePreview';
 
 interface ContentMissingDialogProps {
     open: boolean;
@@ -28,6 +29,13 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
     const { findFile } = useDriveStore();
     const isDriveConnected = useGoogleServicesStore((state) => state.connectedServices.includes('drive'));
     const [cloudMatch, setCloudMatch] = React.useState<ReturnType<typeof findFile>>(undefined);
+    // R1: verify the candidate before download — pull its real title + cover
+    // via a partial fetch so the user confirms identity, not a filename guess.
+    const cloudPreview = useDrivePreview(cloudMatch?.id, {
+        enabled: !!cloudMatch && isDriveConnected,
+        interactive: true,
+        priority: 'interactive',
+    });
     const [isCloudRestoring, setIsCloudRestoring] = React.useState(false);
     const [isReconnecting, setIsReconnecting] = React.useState(false);
     const [reconnectError, setReconnectError] = React.useState<string | null>(null);
@@ -178,16 +186,40 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                             : "bg-amber-500/10 border-amber-500/20"
                     }`}>
                         {isDriveConnected ? (
-                            <Cloud className="h-5 w-5 text-primary shrink-0" />
+                            cloudPreview.coverUrl ? (
+                                <img
+                                    src={cloudPreview.coverUrl}
+                                    alt=""
+                                    className="h-14 w-10 rounded object-cover shrink-0 border"
+                                />
+                            ) : cloudPreview.loading ? (
+                                <div className="h-14 w-10 rounded bg-muted flex items-center justify-center shrink-0 border">
+                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+                                </div>
+                            ) : cloudPreview.title ? (
+                                <div className="h-14 w-10 rounded bg-muted flex items-center justify-center shrink-0 border">
+                                    <Book className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                                </div>
+                            ) : (
+                                <Cloud className="h-5 w-5 text-primary shrink-0" />
+                            )
                         ) : (
                             <CloudOff className="h-5 w-5 text-amber-500 shrink-0" />
                         )}
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                             <p className={`text-sm font-medium ${isDriveConnected ? "text-primary" : "text-amber-600"}`}>
-                                {isDriveConnected ? "Found in Google Drive" : "Drive Disconnected"}
+                                {isDriveConnected
+                                    ? (cloudPreview.title ? "Restore from this file?" : "Found in Google Drive")
+                                    : "Drive Disconnected"}
                             </p>
+                            {isDriveConnected && cloudPreview.title && (
+                                <p className="text-sm font-medium text-foreground break-words">
+                                    {cloudPreview.title}
+                                    {cloudPreview.author ? ` — ${cloudPreview.author}` : ''}
+                                </p>
+                            )}
                             <p className="text-xs text-muted-foreground break-all whitespace-normal">
-                                {isDriveConnected 
+                                {isDriveConnected
                                     ? `"${cloudMatch.name}" (${formatBytes(cloudMatch.size)})`
                                     : "Reconnect to download this book from the cloud."}
                             </p>
