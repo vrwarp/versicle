@@ -92,6 +92,49 @@ empty, so calling it at boot would silently scan Drive at launch, exactly the
 ethos violation this reshape exists to avoid. Covers for those rows hydrate
 only inside the opened dialog (R4). Zero new egress.
 
+### R7. Passive trickle hydration (M)
+Passively build the rich index: an idle background consumer of the same
+hydration queue works through unhydrated `{fileId, md5}` entries while the
+app is open, eventually making the entire Drive index rich — enabling
+library-wide search over not-yet-imported Drive books, full dedup coverage,
+zero-network dialog opens, and full cover coverage. Quota impact is
+negligible (~1.5% of the per-user ceiling at 6 books/min; a 500-book library
+completes in ~83 cumulative foreground minutes).
+
+Adopted with changes from the skeptic pass (the naive "one fetch every 10 s,
+default-on" form was rejected):
+
+- **One queue, lowest priority.** Not a separate mechanism: interactive tap >
+  viewport row > trickle, all writing the P3 cache, all on the bg lane.
+  Trickle consumes the *persisted* index only — it must never trigger a scan
+  (same trap as R6).
+- **Batched, not ticked.** A request every 10 s pins the cellular radio at
+  the dormancy-tail boundary indefinitely. Batch ~30 books every ~5 min —
+  same average rate, ~90% radio-idle. Foreground-only (Capacitor webviews
+  have no reliable background execution; don't pretend otherwise).
+- **Metering guard.** Unmetered-connections-only by default (Capacitor
+  Network plugin); on web, where metering is undetectable, unknown ≠
+  unmetered — apply a hard per-session byte cap (~20 MB) instead.
+- **Consent bar for default-on:** disclosure with a size estimate at
+  folder-link time + a settings toggle + a visible activity indicator while
+  trickling + the metering guard. Anything less → ship it opt-in. The
+  auto-scan precedent does NOT cover this: auto-scan is one metadata
+  listing; trickle is continuous ranged downloads of book bytes.
+- **Negative caching (biggest miss in the naive spec).** Persist "no
+  metadata extractable @ {fileId, md5}" for corrupt/non-standard EPUBs or
+  trickle retries the same broken files forever. A 404 mid-trickle (file
+  deleted/moved since last scan) evicts the entry from the index — no
+  backoff-retry.
+- **Cache lifecycle:** LRU eviction; drop entries whose fileId left the
+  index; sweep orphans left by md5 churn (500 covers ≈ 50 MB IndexedDB).
+- **N devices each trickle independently** (P3 cache is deliberately
+  device-local). Accept the still-tiny quota cost; do not reverse P3 and
+  sync covers to fix it.
+- **Does not replace R5.** Fresh-device users want covers in minutes, not
+  after 83 foreground-minutes; R5's visible, cancellable job stays. Trickle
+  is the slow complement that eventually covers everything else. Requires
+  only P1–P3, not R2.
+
 ## Deferred
 
 ### D1. Drive-as-shelf browse mode (v2, opt-in)
