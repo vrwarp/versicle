@@ -25,7 +25,7 @@ import { whenHydratedTask, hydrateStaticMetadataTask } from './whenHydrated';
 import { crdtMigrationsTask } from './crdtMigrations';
 import { syncInitTask } from './syncInit';
 import { ttsInitializeTask, deviceRegistrationTask } from './deviceRegistration';
-import { deviceHeartbeatTask, driveAutoScanTask, audioCacheEvictionTask, embeddingCacheEvictionTask, reingestWaveTask } from './backgroundTasks';
+import { deviceHeartbeatTask, driveAutoScanTask, driveTrickleTask, audioCacheEvictionTask, embeddingCacheEvictionTask, reingestWaveTask } from './backgroundTasks';
 import { embeddingBackfillTask } from './embeddingBackfill';
 import { artifactPublisherTask } from './artifactPublisher';
 import { artifactSweeperTask } from './artifactSweeper';
@@ -81,6 +81,7 @@ export function registerAppBootTasks(): void {
   registerBootTask('deviceRegistration', deviceRegistrationTask);
   registerBootTask('backgroundTasks', deviceHeartbeatTask);
   registerBootTask('backgroundTasks', driveAutoScanTask);
+  registerBootTask('backgroundTasks', driveTrickleTask);
   registerBootTask('backgroundTasks', audioCacheEvictionTask);
   registerBootTask('backgroundTasks', embeddingCacheEvictionTask);
   registerBootTask('backgroundTasks', reingestWaveTask);

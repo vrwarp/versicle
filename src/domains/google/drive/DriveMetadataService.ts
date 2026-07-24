@@ -256,6 +256,51 @@ export class DriveMetadataService {
     });
   }
 
+  /**
+   * R7 trickle: hydrate one batch of not-yet-cached index entries at 'trickle'
+   * priority (preempted by any interactive/viewport work). Ordered
+   * most-recently-modified first (a proxy for "new on Drive"). This is the pure
+   * engine — the boot task owns the guards (online/token/unmetered/consent/byte
+   * budget) and the cadence; the service just does the work when asked and
+   * never triggers a scan (it reads the persisted index only). Stops the batch
+   * early on an auth/offline outcome so it doesn't hammer a closed door.
+   *
+   * Staleness (md5 changed on a re-upload) is deliberately NOT chased here —
+   * that refresh happens on demand when the file is next viewed — so a batch is
+   * an O(index) set-diff, not a per-file cache read.
+   */
+  async hydrateBatch(
+    opts: { batchSize?: number; signal?: AbortSignal } = {},
+  ): Promise<{ attempted: number; hydrated: number; remaining: number }> {
+    const batchSize = opts.batchSize ?? 30;
+    const index = this.ports.index.getIndex().filter((e) => e.size > 0);
+    const cachedIds = new Set(await this.ports.cache.listFileIds().catch(() => []));
+    const ordered = [...index].sort((a, b) =>
+      (b.modifiedTime ?? '').localeCompare(a.modifiedTime ?? ''),
+    );
+    const needing = ordered.filter((e) => !cachedIds.has(e.id));
+    const targets = needing.slice(0, batchSize);
+
+    let hydrated = 0;
+    let attempted = 0;
+    for (const entry of targets) {
+      if (opts.signal?.aborted) break;
+      attempted += 1;
+      const outcome = await this.getPreview(entry.id, {
+        priority: 'trickle',
+        interactive: false,
+        signal: opts.signal,
+      });
+      if (outcome.status === 'ok' || outcome.status === 'unextractable') hydrated += 1;
+      if (outcome.status === 'auth' || outcome.status === 'offline') break;
+    }
+
+    // Opportunistic eviction keyed to the live index (drops orphans + LRU).
+    await this.ports.cache.runEviction(new Set(index.map((e) => e.id))).catch(() => {});
+
+    return { attempted, hydrated, remaining: Math.max(0, needing.length - attempted) };
+  }
+
   private async classifyError(
     fileId: string,
     entry: DriveIndexEntry,

@@ -39,6 +39,7 @@ export interface SyncSettingsTabProps {
 
 import { Modal, ModalContent, ModalHeader, ModalTitle } from '../ui/Modal';
 import { DriveFolderPicker } from '../drive/DriveFolderPicker';
+import { Switch } from '../ui/Switch';
 import { useDriveStore } from '@store/useDriveStore';
 import { getDriveLibrarySync } from '@domains/google';
 import { useToastStore } from '@store/useToastStore';
@@ -109,7 +110,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
 
     // Drive Folder Picker State
     const [isPickerOpen, setIsPickerOpen] = React.useState(false);
-    const { linkedFolderName, setLinkedFolder } = useDriveStore();
+    const { linkedFolderName, setLinkedFolder, trickleEnabled, setTrickleEnabled } = useDriveStore();
     const [isScanning, setIsScanning] = React.useState(false);
     const { showToast } = useToastStore();
     const confirm = useConfirm();
@@ -613,6 +614,28 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                             "Scan for New Books"
                                         )}
                                     </Button>
+                                </div>
+                            )}
+
+                            {/* R7: opt-in background preview hydration. */}
+                            {linkedFolderName && (
+                                <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+                                    <div className="space-y-0.5 pr-4">
+                                        <Label className="text-sm font-medium" htmlFor="drive-trickle">
+                                            Build book previews in the background
+                                        </Label>
+                                        <p className="text-xs text-muted-foreground">
+                                            Fetches covers and details for your Drive books a little at a time
+                                            while the app is open (Wi-Fi only). Uses small partial downloads,
+                                            not full books.
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        id="drive-trickle"
+                                        checked={trickleEnabled}
+                                        onCheckedChange={setTrickleEnabled}
+                                        aria-label="Build Drive book previews in the background"
+                                    />
                                 </div>
                             )}
                         </div>

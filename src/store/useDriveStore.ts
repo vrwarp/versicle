@@ -26,12 +26,21 @@ interface DriveConfigState {
     lastScanTime: number | null;
     isScanning: boolean;
 
+    /**
+     * R7 opt-in: build rich Drive previews (covers + metadata) in the
+     * background while the app is open. Default OFF — trickle hydration is
+     * continuous ranged egress of book bytes, so it is a deliberate choice,
+     * not the auto-scan default. Persisted.
+     */
+    trickleEnabled: boolean;
+
     // Actions
     setLinkedFolder: (id: string, name: string) => void;
     clearLinkedFolder: () => void;
 
     setScannedFiles: (files: DriveFileIndex[]) => void;
     setScanning: (isScanning: boolean) => void;
+    setTrickleEnabled: (enabled: boolean) => void;
 
     // Heuristic finder (client-side)
     findFile: (bookTitle: string, filename?: string) => DriveFileIndex | undefined;
@@ -46,6 +55,7 @@ export const useDriveStore = create<DriveConfigState>()(
             index: [],
             lastScanTime: null,
             isScanning: false,
+            trickleEnabled: false,
 
             setLinkedFolder: (id, name) => set({ linkedFolderId: id, linkedFolderName: name }),
             clearLinkedFolder: () => set({
@@ -62,6 +72,7 @@ export const useDriveStore = create<DriveConfigState>()(
             }),
 
             setScanning: (isScanning) => set({ isScanning }),
+            setTrickleEnabled: (enabled) => set({ trickleEnabled: enabled }),
 
             findFile: (bookTitle: string, filename?: string) => {
                 const { index } = get();
@@ -83,7 +94,8 @@ export const useDriveStore = create<DriveConfigState>()(
                 linkedFolderId: state.linkedFolderId,
                 linkedFolderName: state.linkedFolderName,
                 index: state.index,
-                lastScanTime: state.lastScanTime
+                lastScanTime: state.lastScanTime,
+                trickleEnabled: state.trickleEnabled
             })
         }
     )

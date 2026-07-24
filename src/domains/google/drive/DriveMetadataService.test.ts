@@ -208,6 +208,60 @@ describe('DriveMetadataService', () => {
     void calls;
   });
 
+  describe('hydrateBatch (R7 trickle)', () => {
+    it('hydrates only not-yet-cached entries, newest first, up to the batch size', async () => {
+      const buf = await buildEpubBuffer('Trickled');
+      const downloadFileRange = vi.fn(async (_id: string, start: number, end: number) =>
+        buf.slice(start, end + 1),
+      );
+      const cache = makeCache();
+      // 'old' is already cached; 'a' and 'b' are not.
+      cache.store.set('old', { fileId: 'old', md5Checksum: 'm', status: 'ok' });
+      const index = makeIndex([
+        { id: 'old', size: buf.byteLength, md5Checksum: 'm', modifiedTime: '2020-01-01' },
+        { id: 'a', size: buf.byteLength, md5Checksum: 'm', modifiedTime: '2024-01-01' },
+        { id: 'b', size: buf.byteLength, md5Checksum: 'm', modifiedTime: '2023-01-01' },
+      ]);
+      const svc = new DriveMetadataService({ client: { downloadFileRange }, cache, index });
+
+      const result = await svc.hydrateBatch({ batchSize: 1 });
+      expect(result.attempted).toBe(1);
+      expect(result.hydrated).toBe(1);
+      expect(result.remaining).toBe(1);
+      // Newest uncached ('a') is hydrated first; 'old' is left untouched.
+      expect(cache.store.has('a')).toBe(true);
+      expect(cache.store.has('b')).toBe(false);
+    });
+
+    it('stops the batch early on an auth outcome', async () => {
+      const downloadFileRange = vi.fn(async () => {
+        throw new GoogleAuthRequiredError('drive', 'no-credential');
+      });
+      const cache = makeCache();
+      const index = makeIndex([
+        { id: 'a', size: 5000, modifiedTime: '2024' },
+        { id: 'b', size: 5000, modifiedTime: '2023' },
+      ]);
+      const svc = new DriveMetadataService({ client: { downloadFileRange }, cache, index });
+      const result = await svc.hydrateBatch({ batchSize: 10 });
+      // First attempt hits auth → stop; second file never attempted.
+      expect(result.attempted).toBe(1);
+      expect(result.hydrated).toBe(0);
+    });
+
+    it('runs an eviction sweep keyed to the live index', async () => {
+      const cache = makeCache();
+      const index = makeIndex([]);
+      const svc = new DriveMetadataService({
+        client: { downloadFileRange: vi.fn() },
+        cache,
+        index,
+      });
+      await svc.hydrateBatch();
+      expect(cache.runEviction).toHaveBeenCalled();
+    });
+  });
+
   it('getCached hides a row whose md5 no longer matches the index', async () => {
     const cache = makeCache();
     cache.store.set('f1', { fileId: 'f1', md5Checksum: 'old', status: 'ok', title: 'Old' });
