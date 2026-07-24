@@ -1,5 +1,27 @@
 # Implementation Plan: Partial-Fetch Drive Metadata & Covers
 
+> **Implementation status (shipped on this branch).** Phase 0 (P1 md5, P2
+> backoff, P3 cache store + repo), Phase 1 (range client, `lib/epub/remoteEpub`
+> reader, `DriveMetadataService`), and features **R1, R3, R4, R6, R7** are
+> implemented with unit tests; the full suite (3232 tests), tsc, eslint,
+> lint-debt, dep-cruiser, knip, CSP, the production build, and the worker-chunk/
+> entry-budget checks are all green.
+>
+> **Deferred: R2 (synced ghost↔Drive binding) and R5 (fresh-device cover
+> hydration).** R2 requires a new *synced* CRDT store (registry + CRDT-contract
+> + docs surfaces) whose cross-device behavior can't be verified without a
+> multi-device runtime, and R5 depends on it and is ambient UI needing the same.
+> R1 already delivers the verified-restore trust benefit (cover + real title
+> shown before download) without the binding, so the deferral costs little
+> today. The Phase-0 md5 groundwork (P1) is the prerequisite R2 needs when it
+> lands. Everything else in R2/R5's design below stands as the follow-up spec.
+> One deviation from P2a: the `drive` destination was **not** given a gateway
+> `rateLimit` lane (avoiding any interaction with the shared GenAI quota
+> governor); quota safety is instead the DriveClient 429/403 backoff plus the
+> service's concurrency cap + trickle batching — the alternative the quota study
+> already sanctioned as sufficient.
+
+
 Companion documents:
 - `gdrive-partial-metadata.md` — feasibility (ranged ZIP reading over Drive
   `alt=media`) and quota analysis. **Read first.**
