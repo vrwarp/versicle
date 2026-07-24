@@ -95,6 +95,7 @@ describe('Sync Schema Exhaustion', () => {
         'cache_embeddings',  // v27: local, rebuildable embedding vectors (device-local, never synced)
         'cache_embed_jobs',  // v27: local, resumable embedding-job progress (device-local, never synced)
         'cache_query_embeddings', // v29: local, cached query embedding vectors (device-local, never synced)
+        'cache_drive_previews', // v31: local, rebuildable Drive metadata/cover previews (device-local, never synced)
 
         // App Level
         'checkpoints',      // Local recovery
