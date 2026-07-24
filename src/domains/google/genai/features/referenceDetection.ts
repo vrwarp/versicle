@@ -51,6 +51,41 @@ const responseZod = z.object({
   agreedWithHeuristic: z.boolean(),
 });
 
+/**
+ * Matches text that IS a references heading — the entire string is the heading
+ * (plus trailing punctuation), never merely prefixed by it, so a chapter titled
+ * "Notes from Underground" can't match while "End Notes." does.
+ */
+const REFERENCES_HEADING_RE =
+  /^(?:end\s?notes?|footnotes?|notes|references|reference\s+list|bibliography|works\s+cited|citations?|sources)\s*[.:]?$/i;
+
+/** Minimum leadsWithMarker density (and absolute count) for the endnote-block exemption. */
+const MARKER_RUN_MIN_FRACTION = 0.6;
+const MARKER_RUN_MIN_COUNT = 3;
+
+/**
+ * Whether an early-chapter referenceStartIndex is corroborated by structural
+ * evidence that the claimed span really is a reference block — the
+ * dedicated-endnotes-section case the positional guard used to reject
+ * (observed: a 7-group section titled "End Notes" whose entire body is
+ * numbered citations; the model's correct index 0 failed the 40% guard on
+ * every revisit, burning quota without ever converging).
+ */
+function isCorroboratedReferenceBlock(
+  index: number,
+  nodes: ReferenceDetectionNode[],
+  sectionTitle?: string,
+): boolean {
+  if (sectionTitle && REFERENCES_HEADING_RE.test(sectionTitle.trim())) return true;
+  // The group at the claimed start is itself a references heading.
+  const startText = nodes[index]?.sampleText.trim();
+  if (startText && REFERENCES_HEADING_RE.test(startText)) return true;
+  // The claimed span is dominated by groups that open with citation anchors.
+  const span = nodes.slice(index);
+  const leading = span.filter((n) => n.leadsWithMarker).length;
+  return leading >= MARKER_RUN_MIN_COUNT && leading / span.length >= MARKER_RUN_MIN_FRACTION;
+}
+
 const responseSchema = {
   type: SchemaType.OBJECT,
   properties: {
@@ -109,8 +144,10 @@ ${JSON.stringify(renderedNodes)}`;
 
 export function validateReferenceDetection(
   raw: unknown,
-  nodeCount: number,
+  nodes: ReferenceDetectionNode[],
+  context?: { sectionTitle?: string },
 ): z.infer<typeof responseZod> {
+  const nodeCount = nodes.length;
   const parsed = responseZod.safeParse(raw);
   if (!parsed.success) {
     throw new GenAIInvalidResponseError(
@@ -128,9 +165,17 @@ export function validateReferenceDetection(
   // Positional guard: a reference section beginning before 40% of the chapter
   // is almost certainly a false positive (e.g. epigraph attributions). The
   // deterministic detector uses 60%; we are more lenient for the model but
-  // still catch extreme early-chapter misclassifications.
+  // still catch extreme early-chapter misclassifications. Exception: a
+  // dedicated notes/bibliography section legitimately starts near index 0 —
+  // accept an early index when the section title, the start group's own text,
+  // or a dense leadsWithMarker run corroborates it.
   const MIN_POSITION_FRACTION = 0.4;
-  if (index >= 0 && nodeCount > 5 && index < nodeCount * MIN_POSITION_FRACTION) {
+  if (
+    index >= 0 &&
+    nodeCount > 5 &&
+    index < nodeCount * MIN_POSITION_FRACTION &&
+    !isCorroboratedReferenceBlock(index, nodes, context?.sectionTitle)
+  ) {
     throw new GenAIInvalidResponseError(
       `referenceStartIndex ${index} is before 40% of chapter (${nodeCount} groups) — likely false positive`,
       { referenceStartIndex: index, nodeCount, positionFraction: index / nodeCount },
@@ -153,7 +198,8 @@ export async function detectReferenceSection(
     method: 'detectContentTypes',
     prompt: buildPrompt(nodes, hints),
     responseSchema,
-    validate: (raw) => validateReferenceDetection(raw, nodes.length),
+    validate: (raw) =>
+      validateReferenceDetection(raw, nodes, { sectionTitle: context?.sectionTitle }),
     context,
   });
 

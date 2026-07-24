@@ -13,26 +13,34 @@ import { SeededRandom } from '@test/fuzz-utils';
 import { GenAIInvalidResponseError } from '../errors';
 import { MockGenAIClient } from '../MockGenAIClient';
 import { validateTocTitles, generateTocTitles } from './tocTitles';
-import { validateReferenceDetection, detectReferenceSection } from './referenceDetection';
+import {
+  validateReferenceDetection,
+  detectReferenceSection,
+  type ReferenceDetectionNode,
+} from './referenceDetection';
 import { validateTableAdaptations } from './tableAdaptation';
 import { validateLibraryMappings, mapReadingListToLibrary } from './libraryMapping';
 
 describe('referenceDetection validation', () => {
   const base = { justification: 'because', agreedWithHeuristic: true };
+  /** Plain narrative nodes — no heading text, no markers. */
+  const mkNodes = (n: number): ReferenceDetectionNode[] =>
+    Array.from({ length: n }, (_, i) => ({ id: String(i), sampleText: `Narrative group ${i}.` }));
 
   it('accepts the full legal range [-1, n-1]', () => {
     for (let i = -1; i < 5; i++) {
       expect(
-        validateReferenceDetection({ ...base, referenceStartIndex: i }, 5).referenceStartIndex,
+        validateReferenceDetection({ ...base, referenceStartIndex: i }, mkNodes(5))
+          .referenceStartIndex,
       ).toBe(i);
     }
   });
 
   it('regression (GG-5): -2 and other out-of-range indices throw instead of flagging every group', async () => {
     for (const bad of [-2, -100, 5, 99]) {
-      expect(() => validateReferenceDetection({ ...base, referenceStartIndex: bad }, 5)).toThrow(
-        GenAIInvalidResponseError,
-      );
+      expect(() =>
+        validateReferenceDetection({ ...base, referenceStartIndex: bad }, mkNodes(5)),
+      ).toThrow(GenAIInvalidResponseError);
     }
     // End-to-end through the feature + mock client: the poisoned response
     // REJECTS — callers mark status:'error', nothing persists.
@@ -54,43 +62,85 @@ describe('referenceDetection validation', () => {
 
   it('positional guard: early-chapter indices throw for sections with > 5 groups', () => {
     // Index 4 in a 29-group section (13.8%) — the exact bug case from the evaluation
-    expect(() => validateReferenceDetection({ ...base, referenceStartIndex: 4 }, 29)).toThrow(
-      GenAIInvalidResponseError,
-    );
+    expect(() =>
+      validateReferenceDetection({ ...base, referenceStartIndex: 4 }, mkNodes(29)),
+    ).toThrow(GenAIInvalidResponseError);
     // Index 1 in a 29-group section (3.4%)
-    expect(() => validateReferenceDetection({ ...base, referenceStartIndex: 1 }, 29)).toThrow(
-      GenAIInvalidResponseError,
-    );
+    expect(() =>
+      validateReferenceDetection({ ...base, referenceStartIndex: 1 }, mkNodes(29)),
+    ).toThrow(GenAIInvalidResponseError);
     // Index 2 in a 10-group section (20%)
-    expect(() => validateReferenceDetection({ ...base, referenceStartIndex: 2 }, 10)).toThrow(
-      GenAIInvalidResponseError,
-    );
+    expect(() =>
+      validateReferenceDetection({ ...base, referenceStartIndex: 2 }, mkNodes(10)),
+    ).toThrow(GenAIInvalidResponseError);
   });
 
   it('positional guard: indices at or past 40% are accepted', () => {
     // Index 12 in a 29-group section (41.4%) — just past the threshold
     expect(
-      validateReferenceDetection({ ...base, referenceStartIndex: 12 }, 29).referenceStartIndex,
+      validateReferenceDetection({ ...base, referenceStartIndex: 12 }, mkNodes(29))
+        .referenceStartIndex,
     ).toBe(12);
     // Index 4 in a 10-group section (40%) — exactly at threshold
     expect(
-      validateReferenceDetection({ ...base, referenceStartIndex: 4 }, 10).referenceStartIndex,
+      validateReferenceDetection({ ...base, referenceStartIndex: 4 }, mkNodes(10))
+        .referenceStartIndex,
     ).toBe(4);
     // -1 (no references) always accepted
     expect(
-      validateReferenceDetection({ ...base, referenceStartIndex: -1 }, 29).referenceStartIndex,
+      validateReferenceDetection({ ...base, referenceStartIndex: -1 }, mkNodes(29))
+        .referenceStartIndex,
     ).toBe(-1);
   });
 
   it('positional guard: bypassed for short sections (nodeCount <= 5)', () => {
     // Index 0 in a 3-group section — the whole section may be references
     expect(
-      validateReferenceDetection({ ...base, referenceStartIndex: 0 }, 3).referenceStartIndex,
+      validateReferenceDetection({ ...base, referenceStartIndex: 0 }, mkNodes(3))
+        .referenceStartIndex,
     ).toBe(0);
     // Index 1 in a 5-group section
     expect(
-      validateReferenceDetection({ ...base, referenceStartIndex: 1 }, 5).referenceStartIndex,
+      validateReferenceDetection({ ...base, referenceStartIndex: 1 }, mkNodes(5))
+        .referenceStartIndex,
     ).toBe(1);
+  });
+
+  it('regression: dedicated endnotes section — heading group corroborates index 0 (the "End Notes" loop)', () => {
+    // The observed production failure: a 7-group section whose group 0 is the
+    // heading "End Notes." and whose body is numbered citations. The model's
+    // correct index 0 used to fail the 40% guard on every revisit.
+    const nodes: ReferenceDetectionNode[] = [
+      { id: '0', sampleText: 'End Notes.' },
+      ...Array.from({ length: 6 }, (_, i) => ({
+        id: String(i + 1),
+        sampleText: `${i + 1} Author, Title, Publisher, 2001.`,
+      })),
+    ];
+    expect(
+      validateReferenceDetection({ ...base, referenceStartIndex: 0 }, nodes).referenceStartIndex,
+    ).toBe(0);
+  });
+
+  it('early index corroborated by a references-like section title is accepted', () => {
+    expect(
+      validateReferenceDetection({ ...base, referenceStartIndex: 0 }, mkNodes(10), {
+        sectionTitle: 'Notes',
+      }).referenceStartIndex,
+    ).toBe(0);
+    // A title merely CONTAINING a keyword must not corroborate
+    expect(() =>
+      validateReferenceDetection({ ...base, referenceStartIndex: 0 }, mkNodes(10), {
+        sectionTitle: 'Notes from Underground',
+      }),
+    ).toThrow(GenAIInvalidResponseError);
+  });
+
+  it('early index corroborated by a dense leadsWithMarker run is accepted', () => {
+    const nodes = mkNodes(10).map((n, i) => (i >= 2 ? { ...n, leadsWithMarker: true } : n));
+    expect(
+      validateReferenceDetection({ ...base, referenceStartIndex: 2 }, nodes).referenceStartIndex,
+    ).toBe(2);
   });
 
   it('maps a valid index to reference/main classifications (pinned semantics)', async () => {
@@ -123,7 +173,7 @@ describe('referenceDetection validation', () => {
         { ...base, referenceStartIndex: rng.nextBool() ? 'NaN' : undefined },
       ];
       const raw = candidates[rng.nextInt(0, candidates.length - 1)];
-      expect(() => validateReferenceDetection(raw, 4)).toThrow(GenAIInvalidResponseError);
+      expect(() => validateReferenceDetection(raw, mkNodes(4))).toThrow(GenAIInvalidResponseError);
     }
   });
 });

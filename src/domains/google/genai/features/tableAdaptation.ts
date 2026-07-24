@@ -92,7 +92,9 @@ export async function generateTableAdaptations(
   for (const node of nodes) {
     const base64 = await blobToBase64(node.imageBlob);
     // Anchor the image to its unique key in the prompt stream
-    parts.push({ inlineData: { data: base64, mimeType: node.imageBlob.type } });
+    // Blobs rehydrated from IDB ArrayBuffers can arrive with type "" — the API
+    // rejects an empty inlineData mimeType, so default to the capture format.
+    parts.push({ inlineData: { data: base64, mimeType: node.imageBlob.type || 'image/webp' } });
     parts.push({ text: `Table Image CFI: ${node.rootCfi}` });
   }
   parts.push({ text: INSTRUCTION_PROMPT });
