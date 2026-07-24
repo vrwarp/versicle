@@ -97,6 +97,75 @@ small cap (3–4) to stay under Drive's per-user QPS limits.
   to a failed scan — metadata preview is progressive enhancement over the
   existing name/size listing.
 
+## Drive API quota analysis
+
+Numbers from the Drive API limits guide (developers.google.com/workspace/
+drive/api/guides/limits), which now meters **quota units** per method rather
+than raw request counts:
+
+| Limit | Value |
+|---|---|
+| Per project | 1,000,000 units/min |
+| Per user per project | 325,000 units/min |
+| Egress per project | 1 TB/day |
+| Free daily threshold | 400,000,000 units/day/project |
+| `files.list` | 100 units |
+| `files.get` (metadata) | 5 units |
+| Download (`alt=media`) | 200 units |
+
+**Cost model of the partial fetch.** Nothing in the docs discounts a ranged
+download — assume each `alt=media` request costs the full 200 units regardless
+of bytes served. A metadata+cover extraction is 3–4 ranged requests, so
+**~600–800 units/book — 3–4× the units of one full download (200)**, while
+saving ~90%+ of the *bytes*. Partial fetch trades quota units for egress; that
+is the right trade here (egress is the project-wide 1 TB/day pool; units are
+plentiful at our scale), but it's worth being conscious that this approach is
+*more* expensive in request-count terms, not less.
+
+**Per-user headroom.** 325,000 units/min ÷ 800 = **~400 books/min** at the
+cap. Realistic throughput with the recommended concurrency of 3–4 (each book =
+4 sequential RTTs of ~150 ms) is coincidentally also in the 300–450 books/min
+range — meaning an *eager sweep of a large folder runs right at the per-user
+ceiling* and can plausibly draw `403 userRateLimitExceeded` / `429` bursts.
+The lazy, viewport-driven hydration already recommended above keeps actual
+usage 1–2 orders of magnitude below the cap and is therefore not just a UX
+nicety but the quota-safety mechanism.
+
+**Per-project headroom.** The 1M units/min pool is shared by every user of the
+app's OAuth client. At ~800 units/book, ~1,250 book-previews/min across the
+whole install base fits; a thundering herd (many users' boot auto-scans firing
+eager preview sweeps simultaneously) is the only realistic way to brush it.
+Same mitigation: lazy hydration + md5-keyed caching means each book pays the
+cost once ever, not once per session.
+
+**Errors and current client gap.** Exceeding limits surfaces as
+`403 rateLimitExceeded`/`userRateLimitExceeded` or `429`, and Google's
+prescribed handling is truncated exponential backoff
+(`min(2^n + jitter, ~32–64 s)`). `DriveClient.fetchWithAuth` currently retries
+only 401/403-insufficient-scope (token refresh) — it has **no backoff for
+rate-limit 403/429**, and `DriveApiError` already carries `status` + `reason`,
+so adding a small backoff-retry for
+`status === 429 || reason === 'rateLimitExceeded' || reason === 'userRateLimitExceeded'`
+is cheap and should ship with (or before) this feature. The
+`NetworkGateway`/`QuotaScheduler` seam is the principled place for client-side
+pacing, but the `drive` destination has no `rateLimit` lane configured today;
+a simple concurrency cap in the preview orchestrator is sufficient initially.
+
+**Non-issues.**
+- `downloadQuotaExceeded` (the per-file download cap) is a phenomenon of
+  publicly-shared files fetched by many parties; a user reading their own
+  EPUBs won't trigger it.
+- The 750 GB/day upload limit and 5 TB file cap are upload-side, irrelevant.
+- The 400M units/day free threshold is ~5 orders of magnitude above this
+  feature's plausible daily usage.
+- Egress: partial fetch *reduces* pressure on the 1 TB/day project pool vs.
+  the status quo of full downloads.
+
+**Verdict:** no hard blocker. The feature is quota-safe *provided* it hydrates
+lazily, caches per `{fileId, md5Checksum}`, caps concurrency (3–4), and the
+client gains exponential backoff on 403/429. An eager whole-library sweep
+without those guards is the one configuration that would visibly hit limits.
+
 ## Library choice
 
 - **Hand-rolled reader (recommended).** EOCD + central directory + local
