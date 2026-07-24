@@ -20,12 +20,7 @@ export { GoogleAuthRequiredError } from './auth/errors';
 export { DriveClient } from './drive/DriveClient';
 export { DriveLibrarySync } from './drive/DriveLibrarySync';
 export { DriveMetadataService } from './drive/DriveMetadataService';
-export type {
-  DriveMetadataServicePorts,
-  DriveIndexEntry,
-  CachedDrivePreview,
-  DrivePreviewCacheInput,
-} from './drive/DriveMetadataService';
+export type { DriveIndexEntry } from './drive/DriveMetadataService';
 export {
   getDriveClient,
   setDriveClient,
@@ -35,10 +30,8 @@ export {
   setDriveMetadataService,
   resetDriveHoldersForTesting,
 } from './drive/holder';
-export { DriveRangeUnsupportedError } from './drive/errors';
 export type {
   DriveFile,
-  DriveEpubPreview,
   DrivePreviewOutcome,
   DrivePreviewPriority,
 } from './drive/types';

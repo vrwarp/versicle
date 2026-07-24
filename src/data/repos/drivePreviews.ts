@@ -22,7 +22,7 @@ import { createLogger } from '@lib/logger';
 const logger = createLogger('DrivePreviewsRepo');
 
 /** Default byte budget the eviction sweep enforces (cover bytes dominate). */
-export const DRIVE_PREVIEW_BUDGET_BYTES = 60 * 1024 * 1024;
+const DRIVE_PREVIEW_BUDGET_BYTES = 60 * 1024 * 1024;
 
 /** Skip the read-path lastAccessed bump while the stored stamp is this fresh. */
 const LAST_ACCESSED_BUMP_INTERVAL_MS = 60 * 60 * 1000;
@@ -31,7 +31,7 @@ const LAST_ACCESSED_BUMP_INTERVAL_MS = 60 * 60 * 1000;
 const EVICTION_DELETE_BATCH = 50;
 
 /** A preview as handed to callers: cover re-wrapped as a Blob (or undefined). */
-export interface DrivePreview {
+interface DrivePreview {
   fileId: string;
   md5Checksum?: string;
   fetchedAt: number;
@@ -247,4 +247,3 @@ class DrivePreviewsRepo {
 }
 
 export const drivePreviews = new DrivePreviewsRepo();
-export type { CacheDrivePreviewRow };
