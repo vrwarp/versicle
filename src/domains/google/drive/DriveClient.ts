@@ -21,10 +21,31 @@
  */
 import { egress, type EgressFn } from '@kernel/net';
 import type { GoogleAuthClient } from '../auth/GoogleAuthClient';
-import { DriveApiError, handleDriveError } from './errors';
+import { DriveApiError, DriveRangeUnsupportedError, handleDriveError } from './errors';
 import type { DriveFile } from './types';
 
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
+
+/** Default truncated-exponential-backoff ceiling for server 429/403 rate limits. */
+const RATE_LIMIT_MAX_BACKOFF_MS = 32_000;
+/** Default number of backoff retries before a rate-limit response is returned as-is. */
+const RATE_LIMIT_MAX_RETRIES = 4;
+
+/** Abortable sleep used between rate-limit retries (injectable for tests). */
+function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
 
 export interface DriveRequestOptions {
   /**
@@ -50,11 +71,19 @@ export class DriveClient {
       auth: GoogleAuthClient;
       /** Injected for tests; production passes the kernel gateway. */
       egress?: EgressFn;
+      /** Injected for tests so backoff waits are instant; production sleeps for real. */
+      sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+      /** Backoff retry budget for server 429/403 rate-limit responses. */
+      maxRateLimitRetries?: number;
     },
   ) {}
 
   private get egress(): EgressFn {
     return this.deps.egress ?? egress;
+  }
+
+  private get sleep(): (ms: number, signal?: AbortSignal) => Promise<void> {
+    return this.deps.sleep ?? defaultSleep;
   }
 
   private acquireToken(opts: DriveRequestOptions): Promise<string> {
@@ -64,16 +93,20 @@ export class DriveClient {
   }
 
   /**
-   * Authenticated fetch with the retry policy: 401 (and 403 insufficient
-   * scope) invalidates the cached token, re-acquires, and retries once.
+   * Authenticated fetch with two layered retry policies:
+   *  - 401 (and 403 insufficient scope) invalidates the cached token,
+   *    re-acquires, and retries ONCE (unchanged legacy policy).
+   *  - server 429 / 403 rate-limit (rateLimitExceeded / userRateLimitExceeded)
+   *    backs off with truncated exponential backoff and retries, up to the
+   *    configured budget. This is the client half of the quota-safety design:
+   *    ranged-preview traffic can burst against Drive's per-user ceiling, and
+   *    Google's prescribed handling for a 429 is exactly this backoff.
    */
   async fetchWithAuth(
     url: string,
     options: RequestInit = {},
     opts: DriveRequestOptions = {},
   ): Promise<Response> {
-    let token = await this.acquireToken(opts);
-
     const makeRequest = (authToken: string) =>
       this.egress(
         'drive',
@@ -85,18 +118,57 @@ export class DriveClient {
         { signal: opts.signal },
       );
 
-    let response = await makeRequest(token);
+    const maxRetries = this.deps.maxRateLimitRetries ?? RATE_LIMIT_MAX_RETRIES;
+    let rateLimitAttempt = 0;
 
-    if (response.status === 401 || (response.status === 403 && (await this.isInsufficientScope(response)))) {
-      // Token rejected server-side: drop the cache and re-acquire. Silent
-      // callers get GoogleAuthRequiredError from getToken() here — the
-      // typed reconnect signal (NEVER a popup, NEVER a forced disconnect).
-      this.deps.auth.invalidateToken('drive');
-      token = await this.acquireToken(opts);
-      response = await makeRequest(token);
+    for (;;) {
+      let token = await this.acquireToken(opts);
+      let response = await makeRequest(token);
+
+      if (
+        response.status === 401 ||
+        (response.status === 403 && (await this.isInsufficientScope(response)))
+      ) {
+        // Token rejected server-side: drop the cache and re-acquire. Silent
+        // callers get GoogleAuthRequiredError from getToken() here — the
+        // typed reconnect signal (NEVER a popup, NEVER a forced disconnect).
+        this.deps.auth.invalidateToken('drive');
+        token = await this.acquireToken(opts);
+        response = await makeRequest(token);
+      }
+
+      if (
+        rateLimitAttempt < maxRetries &&
+        !opts.signal?.aborted &&
+        (await this.isRateLimited(response))
+      ) {
+        rateLimitAttempt += 1;
+        // min(2^n * 1s + jitter, 32s) — Google's truncated exponential backoff.
+        const base = Math.min(2 ** rateLimitAttempt * 1000, RATE_LIMIT_MAX_BACKOFF_MS);
+        const delay = Math.min(base + Math.floor(Math.random() * 1000), RATE_LIMIT_MAX_BACKOFF_MS);
+        await this.sleep(delay, opts.signal);
+        continue;
+      }
+
+      return response;
     }
+  }
 
-    return response;
+  /**
+   * True for a server-sent rate-limit response the client should back off on:
+   * any 429, or a 403 whose reason is rateLimitExceeded / userRateLimitExceeded
+   * (distinct from a 403 insufficient-scope, which the token-refresh path owns).
+   */
+  private async isRateLimited(response: Response): Promise<boolean> {
+    if (response.status === 429) return true;
+    if (response.status !== 403) return false;
+    try {
+      const body = (await response.clone().json()) as DriveErrorBody;
+      const reasons = body.error?.errors?.map((e) => e.reason) ?? [];
+      return reasons.includes('rateLimitExceeded') || reasons.includes('userRateLimitExceeded');
+    } catch {
+      return false;
+    }
   }
 
   private async isInsufficientScope(response: Response): Promise<boolean> {
@@ -261,6 +333,39 @@ export class DriveClient {
       return await response.blob();
     } catch (error) {
       handleDriveError(error, 'downloadFile');
+    }
+  }
+
+  /**
+   * Download a byte range of a file (`Range: bytes=start-end`, inclusive) as
+   * an ArrayBuffer — the primitive behind partial-fetch EPUB previews. Asserts
+   * a `206 Partial Content`: a `200 OK` means the server ignored the Range
+   * header and would stream the whole file, so the body is cancelled and
+   * {@link DriveRangeUnsupportedError} is thrown for the caller to fall back on
+   * (never a silent multi-MB buffer). `end` is inclusive per the HTTP Range
+   * spec; callers pass the last wanted byte index.
+   */
+  async downloadFileRange(
+    fileId: string,
+    start: number,
+    end: number,
+    opts: DriveRequestOptions = {},
+  ): Promise<ArrayBuffer> {
+    try {
+      const response = await this.fetchWithAuth(
+        `${DRIVE_API_BASE}/files/${fileId}?alt=media`,
+        { headers: { Range: `bytes=${start}-${end}` } },
+        opts,
+      );
+      if (response.status === 200) {
+        // Range ignored: don't buffer the whole file. Cancel and signal.
+        await response.body?.cancel().catch(() => {});
+        throw new DriveRangeUnsupportedError(fileId);
+      }
+      if (!response.ok) await this.throwResponseError(response, 'download file range');
+      return await response.arrayBuffer();
+    } catch (error) {
+      handleDriveError(error, 'downloadFileRange');
     }
   }
 }

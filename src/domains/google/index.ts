@@ -19,14 +19,29 @@ export { GOOGLE_SERVICES, type GoogleServiceId } from './auth/services';
 export { GoogleAuthRequiredError } from './auth/errors';
 export { DriveClient } from './drive/DriveClient';
 export { DriveLibrarySync } from './drive/DriveLibrarySync';
+export { DriveMetadataService } from './drive/DriveMetadataService';
+export type {
+  DriveMetadataServicePorts,
+  DriveIndexEntry,
+  CachedDrivePreview,
+  DrivePreviewCacheInput,
+} from './drive/DriveMetadataService';
 export {
   getDriveClient,
   setDriveClient,
   getDriveLibrarySync,
   setDriveLibrarySync,
+  getDriveMetadataService,
+  setDriveMetadataService,
   resetDriveHoldersForTesting,
 } from './drive/holder';
-export type { DriveFile } from './drive/types';
+export { DriveRangeUnsupportedError } from './drive/errors';
+export type {
+  DriveFile,
+  DriveEpubPreview,
+  DrivePreviewOutcome,
+  DrivePreviewPriority,
+} from './drive/types';
 
 // --- GenAI (Phase 7 §H) ---
 // Phase 8 §A (first-use splitting): the GenAI IMPLEMENTATION left this

@@ -44,6 +44,7 @@ import type {
 } from './rows/static';
 import type {
   CacheAudioBlobRow,
+  CacheDrivePreviewRow,
   CacheEmbedJobsRow,
   CacheEmbeddingsRow,
   CacheRenderMetricsRow,
@@ -91,7 +92,7 @@ export const DB_NAME = 'EpubLibraryDB';
  * device-local, rebuildable — nothing user-authored is touched. The next IDB
  * bump must add a MIGRATIONS step, never edit an existing one.
  */
-export const DB_VERSION = 30;
+export const DB_VERSION = 31;
 
 /**
  * Interface defining the schema for the IndexedDB database.
@@ -167,6 +168,17 @@ export interface EpubLibraryDB extends DBSchema {
   cache_query_embeddings: {
     key: string;
     value: CacheQueryEmbeddingsRow;
+  };
+  /** v31: partial-fetch Drive EPUB previews (keyPath fileId) — metadata + cover
+   *  extracted by ranged reads without a full download. Device-local, never
+   *  synced; LRU-evicted via by_lastAccessed. Includes negative-cache rows
+   *  (status:'unextractable'). */
+  cache_drive_previews: {
+    key: string;
+    value: CacheDrivePreviewRow;
+    indexes: {
+      by_lastAccessed: number;
+    };
   };
 
   // --- DOMAIN 3: APP (Sync Infrastructure + Schema Evolution) ---
@@ -450,6 +462,20 @@ function migrateToV30(db: IDBPDatabase<EpubLibraryDB>): void {
 }
 
 /**
+ * The v31 step: create the EMPTY `cache_drive_previews` store (keyPath fileId)
+ * plus its `by_lastAccessed` LRU index. Purely additive: no existing data is
+ * read or moved, guarded by `contains()`. Cache-domain, device-local and
+ * rebuildable — on an older build its absence just means Drive previews are
+ * re-fetched, and nothing user-authored is touched.
+ */
+function migrateToV31(db: IDBPDatabase<EpubLibraryDB>): void {
+  if (!db.objectStoreNames.contains('cache_drive_previews')) {
+    const store = db.createObjectStore('cache_drive_previews', { keyPath: 'fileId' });
+    store.createIndex('by_lastAccessed', 'lastAccessedAt');
+  }
+}
+
+/**
  * The versioned migration registry (D7). APPEND-ONLY: released steps are
  * persisted-format surface (migrations.test.ts runs them against committed
  * v18/v24 fixtures); a later fix is a later step, never an edit. Ordered
@@ -463,6 +489,7 @@ export const MIGRATIONS: readonly IdbMigration[] = [
   { toVersion: 28, migrate: migrateToV28 },
   { toVersion: 29, migrate: migrateToV29 },
   { toVersion: 30, migrate: migrateToV30 },
+  { toVersion: 31, migrate: migrateToV31 },
 ];
 
 /**
@@ -516,6 +543,13 @@ function ensureBaselineStores(
 
   // v29: the query embedding vector cache. KeyPath IS key.
   createStore('cache_query_embeddings', { keyPath: 'key' });
+
+  // v31: partial-fetch Drive previews. KeyPath IS fileId; LRU index.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const drivePreviews = createStore('cache_drive_previews', { keyPath: 'fileId' }) as any;
+  if (!drivePreviews.indexNames.contains('by_lastAccessed')) {
+    drivePreviews.createIndex('by_lastAccessed', 'lastAccessedAt');
+  }
 
   // App Domain
   if (!db.objectStoreNames.contains('checkpoints')) {

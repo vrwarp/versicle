@@ -321,6 +321,52 @@ export type CacheQueryEmbeddingsRow = {
   createdAt: number;
 };
 
+/**
+ * `cache_drive_previews` row (key: fileId) — a partial-fetch EPUB preview for
+ * a Google Drive file: the metadata and cover extracted by ranged reads
+ * WITHOUT a full download. Device-local, never synced (syncing it would grow a
+ * shadow-library data model in the CRDT). The `md5Checksum` pairs with `fileId`
+ * as the freshness key: a re-uploaded file keeps its id but changes md5, so a
+ * row whose md5 no longer matches the index is stale and re-fetched.
+ *
+ * `status: 'unextractable'` IS the negative cache: a corrupt / non-standard /
+ * ZIP64 EPUB that failed ranged extraction is recorded so the trickle crawler
+ * does not retry the same broken file forever. `lastAccessedAt` drives LRU
+ * eviction (the by_lastAccessed index). `cover` is canonically an ArrayBuffer
+ * on disk (WebKit structured-clone normalization); reads re-wrap it as a Blob
+ * using `coverType`.
+ *
+ * @public C1 row contract: parsed at the repo read boundary.
+ */
+export const cacheDrivePreviewRowSchema = z.looseObject({
+  fileId: z.string().min(1),
+  md5Checksum: z.string().optional(),
+  fetchedAt: z.number(),
+  lastAccessedAt: z.number(),
+  status: z.union([z.literal('ok'), z.literal('unextractable')]),
+  title: z.string().optional(),
+  author: z.string().optional(),
+  description: z.string().optional(),
+  language: z.string().optional(),
+  identifiers: z.array(z.string()).optional(),
+  cover: binaryValueSchema.optional(),
+  coverType: z.string().optional(),
+});
+export type CacheDrivePreviewRow = {
+  fileId: string;
+  md5Checksum?: string;
+  fetchedAt: number;
+  lastAccessedAt: number;
+  status: 'ok' | 'unextractable';
+  title?: string;
+  author?: string;
+  description?: string;
+  language?: string;
+  identifiers?: string[];
+  cover?: ArrayBuffer | Blob;
+  coverType?: string;
+};
+
 // ── Compile-time drift guards (see rows/static.ts for the pattern) ────────
 type _MetricsSchemaMatches = z.infer<typeof cacheRenderMetricsRowSchema> extends CacheRenderMetricsRow ? true : never;
 type _AudioSchemaMatches = z.infer<typeof cacheAudioBlobRowSchema> extends CacheAudioBlobRow ? true : never;
@@ -332,6 +378,7 @@ type _SearchTextSchemaMatches = z.infer<typeof cacheSearchTextRowSchema> extends
 type _EmbeddingsSchemaMatches = z.infer<typeof cacheEmbeddingsRowSchema> extends CacheEmbeddingsRow ? true : never;
 type _EmbedJobsSchemaMatches = z.infer<typeof cacheEmbedJobsRowSchema> extends CacheEmbedJobsRow ? true : never;
 type _QueryEmbeddingsSchemaMatches = z.infer<typeof cacheQueryEmbeddingsRowSchema> extends CacheQueryEmbeddingsRow ? true : never;
+type _DrivePreviewSchemaMatches = z.infer<typeof cacheDrivePreviewRowSchema> extends CacheDrivePreviewRow ? true : never;
 type _AudioRound = CacheAudioBlobRow extends CacheAudioBlob ? true : never;
 type _SessionRound = CacheSessionStateRow extends CacheSessionState ? true : never;
 type _PrepRound = CacheTtsPreparationRow extends CacheTtsPreparation ? true : never;
@@ -346,10 +393,11 @@ const _schemaChecks: [
   _EmbeddingsSchemaMatches,
   _EmbedJobsSchemaMatches,
   _QueryEmbeddingsSchemaMatches,
+  _DrivePreviewSchemaMatches,
   _AudioRound,
   _SessionRound,
   _PrepRound,
-] = [true, true, true, true, true, true, true, true, true, true, true, true, true];
+] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true];
 void _schemaChecks;
 
 function _rowTypeDriftGuard(

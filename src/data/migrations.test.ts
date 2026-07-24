@@ -56,6 +56,7 @@ import {
 const CURRENT_STORE_SET = [
   'app_metadata',
   'cache_audio_blobs',
+  'cache_drive_previews',
   'cache_embed_jobs',
   'cache_embeddings',
   'cache_query_embeddings',

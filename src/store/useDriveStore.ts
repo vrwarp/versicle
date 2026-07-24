@@ -7,6 +7,13 @@ export interface DriveFileIndex {
     size: number;
     modifiedTime: string;
     mimeType: string;
+    /**
+     * Drive content MD5 (blob files only). The cache key half for
+     * partial-fetch metadata/cover previews: a re-uploaded file keeps its id
+     * but changes md5, invalidating a stale preview. Optional — indexes
+     * scanned before this field existed lack it until the next scan.
+     */
+    md5Checksum?: string;
 }
 
 interface DriveConfigState {
