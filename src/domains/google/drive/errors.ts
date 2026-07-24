@@ -23,6 +23,23 @@ export class DriveApiError extends AppError {
 }
 
 /**
+ * A ranged download (`Range: bytes=…`) came back `200 OK` instead of
+ * `206 Partial Content`: the server (or an intermediary) ignored the Range
+ * header and would stream the whole file. The range client cancels the body
+ * and throws this so callers can fall back to a full download (or skip the
+ * preview) rather than silently buffering megabytes.
+ */
+export class DriveRangeUnsupportedError extends AppError {
+  constructor(public readonly fileId: string) {
+    super('Drive ignored the Range header (got 200, expected 206).', {
+      code: 'DRIVE_RANGE_UNSUPPORTED',
+      context: { fileId },
+    });
+    this.name = 'DriveRangeUnsupportedError';
+  }
+}
+
+/**
  * Boundary mapping helper: rethrows already-typed AppErrors (incl. the
  * GOOGLE_AUTH_* family and the gateway's NET_*), wraps everything else as
  * DRIVE_UNKNOWN with the raw error attached as cause.

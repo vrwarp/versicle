@@ -12,7 +12,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { DriveClient, escapeDriveQueryValue } from './DriveClient';
-import { DriveApiError } from './errors';
+import { DriveApiError, DriveRangeUnsupportedError } from './errors';
 import { GoogleAuthRequiredError } from '../auth/errors';
 import type { GoogleAuthClient } from '../auth/GoogleAuthClient';
 import type { EgressFn } from '@kernel/net';
@@ -37,7 +37,10 @@ function makeAuth(overrides: Partial<Record<keyof GoogleAuthClient, unknown>> = 
   };
 }
 
-function makeClient(responses: Response[] | ((url: string) => Response)) {
+function makeClient(
+  responses: Response[] | ((url: string) => Response),
+  opts: { maxRateLimitRetries?: number } = {},
+) {
   const queue = Array.isArray(responses) ? [...responses] : null;
   const egress = vi.fn(async (_id: string, url: string) => {
     if (queue) {
@@ -48,8 +51,15 @@ function makeClient(responses: Response[] | ((url: string) => Response)) {
     return (responses as (url: string) => Response)(url);
   }) as unknown as EgressFn & ReturnType<typeof vi.fn>;
   const auth = makeAuth();
-  const client = new DriveClient({ auth, egress });
-  return { client, auth, egress: egress as unknown as ReturnType<typeof vi.fn> };
+  // Inject an instant no-op sleep so backoff retries don't slow the suite.
+  const sleep = vi.fn(async () => {});
+  const client = new DriveClient({
+    auth,
+    egress,
+    sleep,
+    maxRateLimitRetries: opts.maxRateLimitRetries,
+  });
+  return { client, auth, egress: egress as unknown as ReturnType<typeof vi.fn>, sleep };
 }
 
 describe('escapeDriveQueryValue (GG-11)', () => {
@@ -172,5 +182,69 @@ describe('DriveClient', () => {
     const { client } = makeClient([new Response('epub-bytes')]);
     const blob = await client.downloadFile('file-1');
     expect(await blob.text()).toBe('epub-bytes');
+  });
+
+  describe('rate-limit backoff (429 / 403 rate-limit)', () => {
+    it('backs off and retries a 429, then returns the eventual success', async () => {
+      const { client, egress, sleep } = makeClient([
+        new Response('', { status: 429 }),
+        new Response('', { status: 429 }),
+        jsonResponse({ files: [] }),
+      ]);
+      const files = await client.listFiles('root');
+      expect(files).toEqual([]);
+      expect(egress).toHaveBeenCalledTimes(3);
+      expect(sleep).toHaveBeenCalledTimes(2);
+    });
+
+    it('backs off on a 403 rateLimitExceeded (distinct from insufficient-scope)', async () => {
+      const { client, egress, auth } = makeClient([
+        jsonResponse(
+          { error: { message: 'Rate Limit Exceeded', errors: [{ reason: 'userRateLimitExceeded' }] } },
+          403,
+        ),
+        jsonResponse({ files: [] }),
+      ]);
+      await client.listFiles('root');
+      // Rate-limit 403 must NOT be treated as an auth problem.
+      expect(auth.invalidateToken).not.toHaveBeenCalled();
+      expect(egress).toHaveBeenCalledTimes(2);
+    });
+
+    it('gives up after the retry budget and returns the last rate-limited response', async () => {
+      const { client, egress } = makeClient(
+        [
+          new Response('', { status: 429 }),
+          new Response('', { status: 429 }),
+          new Response('', { status: 429 }),
+        ],
+        { maxRateLimitRetries: 2 },
+      );
+      // listFolders throws a DriveApiError built from the final 429 response.
+      const error = await client.listFolders().catch((e) => e);
+      expect(error).toBeInstanceOf(DriveApiError);
+      expect(error.status).toBe(429);
+      // 1 initial + 2 retries = 3 egress calls.
+      expect(egress).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('downloadFileRange', () => {
+    it('sends an inclusive Range header and returns the bytes on 206', async () => {
+      const { client, egress } = makeClient([
+        new Response('PK-partial', { status: 206 }),
+      ]);
+      const buf = await client.downloadFileRange('file-1', 0, 9);
+      expect(new TextDecoder().decode(buf)).toBe('PK-partial');
+      const init = egress.mock.calls[0][2] as RequestInit;
+      expect((init.headers as Record<string, string>).Range).toBe('bytes=0-9');
+    });
+
+    it('throws DriveRangeUnsupportedError when the server ignores Range (200)', async () => {
+      const { client } = makeClient([new Response('whole-file', { status: 200 })]);
+      const error = await client.downloadFileRange('file-1', 0, 9).catch((e) => e);
+      expect(error).toBeInstanceOf(DriveRangeUnsupportedError);
+      expect(error.code).toBe('DRIVE_RANGE_UNSUPPORTED');
+    });
   });
 });

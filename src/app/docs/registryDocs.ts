@@ -856,6 +856,7 @@ export const DATA_REPOS: Readonly<Record<string, string>> = {
   'checkpoints.ts': 'pre-danger Y.Doc checkpoints (used by backup/restore/migrations)',
   'diagnostics.ts': 'flight-recorder persistence',
   'dictionary.ts': 'the separate versicle-dict database (Chinese dictionary)',
+  'drivePreviews.ts': 'partial-fetch Drive EPUB previews — metadata + covers (cache_drive_previews)',
   'embeddings.ts': 'per-book int8 embedding vectors + resumable embed jobs (cache_embeddings / cache_embed_jobs)',
   'genaiLogs.ts': 'the separate versicle-genai-logs database (persisted GenAI activity-log ring buffer)',
   'playbackCache.ts': 'session/playback cache (WebKit-safe write pattern preserved verbatim)',

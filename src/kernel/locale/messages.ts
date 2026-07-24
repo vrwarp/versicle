@@ -48,6 +48,7 @@ const errorMessages: ErrorMessages = {
     'Add a Gemini API key in Settings to use semantic search.',
   'errors.DRIVE_UNKNOWN': 'Google Drive request failed.',
   'errors.DRIVE_API_ERROR': 'Google Drive returned an error.',
+  'errors.DRIVE_RANGE_UNSUPPORTED': 'Google Drive could not serve a partial download.',
   'errors.INGEST_UNKNOWN': 'Import failed.',
   'errors.INGEST_DUPLICATE_BOOK': 'This book is already in your library.',
   'errors.INGEST_INVALID_FILE': 'This file is not a valid EPUB.',

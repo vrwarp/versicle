@@ -19,17 +19,21 @@
 import {
   DriveClient,
   DriveLibrarySync,
+  DriveMetadataService,
   GoogleAuthClient,
   defaultPlatformOptions,
   makeLazyEmbeddingClient,
   makeLazyGenAIClient,
   setDriveClient,
   setDriveLibrarySync,
+  setDriveMetadataService,
   setEmbeddingClient,
   setGenAIClient,
   setGoogleAuthClient,
+  type DriveIndexEntry,
   type EmbeddingConfig,
 } from '@domains/google';
+import { drivePreviews } from '@data/repos/drivePreviews';
 import { setConsentResolver, setQuotaScheduler } from '@kernel/net';
 import { QuotaGovernor, setQuotaStore, type QuotaLimits } from '@kernel/quota';
 import { makeQuotaStore } from '@app/quota/makeQuotaStore';
@@ -101,6 +105,36 @@ export function wireGoogleDomain(): void {
       },
       hasConnectedBefore: () => useGoogleServicesStore.getState().isServiceConnected('drive'),
       log: createLogger('DriveLibrarySync'),
+    }),
+  );
+
+  // Partial-fetch preview service (metadata + covers via ranged reads). The
+  // device-local drivePreviews repo is the cache; useDriveStore's persisted
+  // index supplies {size, md5} and is READ-ONLY here (never a scan trigger).
+  const toIndexEntry = (f: { id: string; size: number; md5Checksum?: string; modifiedTime: string }): DriveIndexEntry => ({
+    id: f.id,
+    size: f.size,
+    md5Checksum: f.md5Checksum,
+    modifiedTime: f.modifiedTime,
+  });
+  setDriveMetadataService(
+    new DriveMetadataService({
+      client,
+      cache: {
+        get: (fileId) => drivePreviews.get(fileId),
+        put: (input) => drivePreviews.put(input),
+        delete: (fileId) => drivePreviews.delete(fileId),
+        listFileIds: () => drivePreviews.listFileIds(),
+        runEviction: (valid) => drivePreviews.runEviction(valid),
+      },
+      index: {
+        getEntry: (fileId) => {
+          const f = useDriveStore.getState().index.find((e) => e.id === fileId);
+          return f ? toIndexEntry(f) : undefined;
+        },
+        getIndex: () => useDriveStore.getState().index.map(toIndexEntry),
+      },
+      log: createLogger('DriveMetadataService'),
     }),
   );
 

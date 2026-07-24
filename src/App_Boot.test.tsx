@@ -114,6 +114,8 @@ vi.mock('./domains/google/drive/holder', () => ({
     scanAndIndex: h.scanAndIndex,
   })),
   setDriveLibrarySync: vi.fn(),
+  getDriveMetadataService: vi.fn(() => ({ hydrateBatch: vi.fn(), getPreview: vi.fn() })),
+  setDriveMetadataService: vi.fn(),
   resetDriveHoldersForTesting: vi.fn(),
 }));
 

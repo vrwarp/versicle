@@ -122,6 +122,9 @@ export class DriveLibrarySync {
       size: parseInt(file.size || '0', 10),
       modifiedTime: file.modifiedTime || new Date().toISOString(),
       mimeType: file.mimeType,
+      // Carry Drive's content MD5 through to the persisted index (previously
+      // dropped) so the partial-fetch preview cache can key on {fileId, md5}.
+      md5Checksum: file.md5Checksum,
     };
   }
 

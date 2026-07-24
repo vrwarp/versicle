@@ -8,9 +8,11 @@ import { AppError } from '~types/errors';
 import { getGoogleAuthClient } from '../auth/holder';
 import { DriveClient } from './DriveClient';
 import type { DriveLibrarySync } from './DriveLibrarySync';
+import type { DriveMetadataService } from './DriveMetadataService';
 
 let client: DriveClient | null = null;
 let librarySync: DriveLibrarySync | null = null;
+let metadataService: DriveMetadataService | null = null;
 
 export function setDriveClient(instance: DriveClient): void {
   client = instance;
@@ -37,8 +39,23 @@ export function getDriveLibrarySync(): DriveLibrarySync {
   return librarySync;
 }
 
-/** Test-only: drop both singletons. */
+export function setDriveMetadataService(instance: DriveMetadataService): void {
+  metadataService = instance;
+}
+
+export function getDriveMetadataService(): DriveMetadataService {
+  if (!metadataService) {
+    throw new AppError(
+      'DriveMetadataService is not wired — app/google/wireGoogle.ts must run first (registerAppBootTasks).',
+      { code: 'APP_UNKNOWN' },
+    );
+  }
+  return metadataService;
+}
+
+/** Test-only: drop all singletons. */
 export function resetDriveHoldersForTesting(): void {
   client = null;
   librarySync = null;
+  metadataService = null;
 }

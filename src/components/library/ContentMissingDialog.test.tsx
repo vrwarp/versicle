@@ -19,6 +19,9 @@ vi.mock('@store/useGoogleServicesStore', () => ({
 vi.mock('@domains/google', () => ({
   getDriveLibrarySync: vi.fn(),
   getGoogleAuthClient: vi.fn(),
+  // The R1 preview hook resolves through this; a never-settling stub keeps the
+  // dialog in its filename-fallback state for these footer/behavior assertions.
+  getDriveMetadataService: vi.fn(() => ({ getPreview: vi.fn(() => new Promise(() => {})) })),
 }));
 
 // Mock the Dialog component since it uses Radix which might need setup

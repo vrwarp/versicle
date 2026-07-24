@@ -1,14 +1,97 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
-import { Search, Download, Loader2, Cloud, X } from 'lucide-react';
+import { Search, Download, Loader2, Cloud, X, Book } from 'lucide-react';
 import { cn } from '@lib/utils';
 import { useDriveStore, type DriveFileIndex } from '@store/useDriveStore';
 import { getDriveLibrarySync } from '@domains/google';
 import { useToastStore } from '@store/useToastStore';
 import { useDebounce } from '@hooks/useDebounce';
 import { formatBytes, formatDate, formatRelativeTime } from '@kernel/locale/format';
+import { useDrivePreview } from './useDrivePreview';
+import { DrivePreviewSheet } from './DrivePreviewSheet';
+
+/** Fires once the element scrolls into view — the R4 lazy-hydration trigger. */
+function useInView<T extends Element>(): [React.RefObject<T | null>, boolean] {
+    const ref = useRef<T | null>(null);
+    const [inView, setInView] = useState(false);
+    useEffect(() => {
+        const el = ref.current;
+        if (!el || inView) return;
+        const observer = new IntersectionObserver((entries) => {
+            if (entries.some((e) => e.isIntersecting)) setInView(true);
+        }, { rootMargin: '200px' });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [inView]);
+    return [ref, inView];
+}
+
+interface DriveFileRowProps {
+    file: DriveFileIndex;
+    importing: boolean;
+    disabled: boolean;
+    onImport: (file: DriveFileIndex) => void;
+    onOpenPreview: (file: DriveFileIndex) => void;
+}
+
+/**
+ * One Drive file row (R4). Hydrates its cover + verified title/author lazily
+ * once scrolled into view (cache-first; the fetch is cancelled on scroll-out
+ * via the hook's AbortSignal). Falls back to exactly the old filename+size row
+ * when no preview is available — never a broken card.
+ */
+const DriveFileRow: React.FC<DriveFileRowProps> = React.memo(({ file, importing, disabled, onImport, onOpenPreview }) => {
+    const [ref, inView] = useInView<HTMLDivElement>();
+    const preview = useDrivePreview(file.id, { enabled: inView, priority: 'viewport' });
+    const title = preview.title || file.name;
+
+    return (
+        <div
+            ref={ref}
+            className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 group transition-colors border border-transparent hover:border-border cursor-pointer"
+            onClick={() => onOpenPreview(file)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter') onOpenPreview(file); }}
+        >
+            <div className="w-10 h-14 shrink-0 rounded overflow-hidden bg-muted flex items-center justify-center border">
+                {preview.coverUrl ? (
+                    <img src={preview.coverUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                    <Book className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                )}
+            </div>
+            <div className="flex-1 min-w-0 pr-2">
+                <p className="font-medium truncate text-sm text-foreground">{title}</p>
+                {preview.author && (
+                    <p className="text-xs text-muted-foreground truncate">{preview.author}</p>
+                )}
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    {formatBytes(file.size)} • {formatDate(file.modifiedTime)}
+                </p>
+            </div>
+            <Button
+                size="sm"
+                variant={importing ? 'ghost' : 'secondary'}
+                onClick={(e) => { e.stopPropagation(); onImport(file); }}
+                disabled={disabled}
+                className="shrink-0"
+            >
+                {importing ? (
+                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                ) : (
+                    <>
+                        <Download className="w-4 h-4 mr-2" />
+                        Import
+                    </>
+                )}
+            </Button>
+        </div>
+    );
+});
+DriveFileRow.displayName = 'DriveFileRow';
 
 interface DriveImportDialogProps {
     isOpen: boolean;
@@ -19,6 +102,7 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
     const [searchQuery, setSearchQuery] = useState('');
     const debouncedSearchQuery = useDebounce(searchQuery, 300);
     const [importingId, setImportingId] = useState<string | null>(null);
+    const [previewFile, setPreviewFile] = useState<DriveFileIndex | null>(null);
 
     const { index, lastScanTime, isScanning } = useDriveStore();
     const showToast = useToastStore(state => state.showToast);
@@ -55,36 +139,18 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
     };
 
     const renderedFiles = useMemo(() => filteredFiles.map((file) => (
-        <div
+        <DriveFileRow
             key={file.id}
-            className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 group transition-colors border border-transparent hover:border-border"
-        >
-            <div className="flex-1 min-w-0 pr-4">
-                <p className="font-medium truncate text-sm text-foreground">{file.name}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                    {formatBytes(file.size)} • {formatDate(file.modifiedTime)}
-                </p>
-            </div>
-            <Button
-                size="sm"
-                variant={importingId === file.id ? "ghost" : "secondary"}
-                onClick={() => handleImport(file)}
-                disabled={!!importingId}
-                className="shrink-0"
-            >
-                {importingId === file.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                ) : (
-                    <>
-                        <Download className="w-4 h-4 mr-2" />
-                        Import
-                    </>
-                )}
-            </Button>
-        </div>
+            file={file}
+            importing={importingId === file.id}
+            disabled={!!importingId}
+            onImport={handleImport}
+            onOpenPreview={setPreviewFile}
+        />
     )), [filteredFiles, importingId, handleImport]);
 
     return (
+        <>
         <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <ModalContent className="max-w-2xl h-[80vh] flex flex-col p-0 gap-0 overflow-hidden">
                 <ModalHeader className="p-6 pb-2 border-b">
@@ -180,5 +246,12 @@ export const DriveImportDialog: React.FC<DriveImportDialogProps> = ({ isOpen, on
                 </div>
             </ModalContent>
         </Modal>
+        <DrivePreviewSheet
+            file={previewFile}
+            importing={!!previewFile && importingId === previewFile.id}
+            onClose={() => setPreviewFile(null)}
+            onImport={(file) => { setPreviewFile(null); handleImport(file); }}
+        />
+        </>
     );
 };

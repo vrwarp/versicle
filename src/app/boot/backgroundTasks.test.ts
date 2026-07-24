@@ -13,7 +13,7 @@
  *  - a probe throw FAIL-SAFE protects the book (offline blip ≠ confirmed).
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { computeProtectedBookIds } from './backgroundTasks';
+import { computeProtectedBookIds, shouldTrickleNow } from './backgroundTasks';
 import { MockBackend, clearMockArtifacts } from '@domains/sync/backend/MockBackend';
 import { contentKey, CURRENT_QUANT } from '@domains/search';
 import { TTS_EXTRACTION_VERSION } from '@lib/ingestion/sentence-extraction';
@@ -145,5 +145,33 @@ describe('computeProtectedBookIds (Phase D never-evict-unconfirmed-upload)', () 
       getStamp: () => STAMP,
     });
     expect([...result]).toEqual(['b1']);
+  });
+});
+
+describe('shouldTrickleNow (R7 gate)', () => {
+  const ok = { onLine: true, visible: true, saveData: false, enabled: true, linked: true };
+
+  it('allows only when opted-in, linked, online, foreground, and unmetered', () => {
+    expect(shouldTrickleNow(ok)).toBe(true);
+  });
+
+  it('blocks when not opted in', () => {
+    expect(shouldTrickleNow({ ...ok, enabled: false })).toBe(false);
+  });
+
+  it('blocks when no folder is linked', () => {
+    expect(shouldTrickleNow({ ...ok, linked: false })).toBe(false);
+  });
+
+  it('blocks when offline', () => {
+    expect(shouldTrickleNow({ ...ok, onLine: false })).toBe(false);
+  });
+
+  it('blocks when backgrounded', () => {
+    expect(shouldTrickleNow({ ...ok, visible: false })).toBe(false);
+  });
+
+  it('blocks on a metered (save-data) connection', () => {
+    expect(shouldTrickleNow({ ...ok, saveData: true })).toBe(false);
   });
 });

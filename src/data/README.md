@@ -13,7 +13,7 @@ transaction literals and `idb` imports are lint-banned everywhere else
 `await` inside a transaction unrepresentable — the WebKit-hang discipline
 is structural.
 
-The database is `EpubLibraryDB` at **v30** (`schema.ts`). Migration
+The database is `EpubLibraryDB` at **v31** (`schema.ts`). Migration
 steps are append-only registry entries; the steps past the v24 baseline:
 
 | Step | Transform |
@@ -24,6 +24,7 @@ steps are append-only registry entries; the steps past the v24 baseline:
 | v28 | `migrateToV28` |
 | v29 | `migrateToV29` |
 | v30 | `migrateToV30` |
+| v31 | `migrateToV31` |
 
 Captured-fixture upgrades (v18, v24 → current) are pinned in
 `migrations.test.ts`; multi-tab upgrade behavior in `connection.test.ts`.
@@ -53,6 +54,7 @@ Captured-fixture upgrades (v18, v24 → current) are pinned in
 | `checkpoints.ts` | pre-danger Y.Doc checkpoints (used by backup/restore/migrations) |
 | `diagnostics.ts` | flight-recorder persistence |
 | `dictionary.ts` | the separate versicle-dict database (Chinese dictionary) |
+| `drivePreviews.ts` | partial-fetch Drive EPUB previews — metadata + covers (cache_drive_previews) |
 | `embeddings.ts` | per-book int8 embedding vectors + resumable embed jobs (cache_embeddings / cache_embed_jobs) |
 | `genaiLogs.ts` | the separate versicle-genai-logs database (persisted GenAI activity-log ring buffer) |
 | `playbackCache.ts` | session/playback cache (WebKit-safe write pattern preserved verbatim) |

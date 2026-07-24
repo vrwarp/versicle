@@ -86,6 +86,9 @@ export const APP_ERROR_CODES = [
   // DRIVE_* — Google Drive HTTP boundary.
   'DRIVE_UNKNOWN',
   'DRIVE_API_ERROR',
+  // A ranged (partial) download returned 200 instead of 206: the server
+  // ignored the Range header, so the caller must fall back to a full download.
+  'DRIVE_RANGE_UNSUPPORTED',
   // INGEST_* — book import / EPUB ingestion.
   'INGEST_UNKNOWN',
   'INGEST_DUPLICATE_BOOK',
