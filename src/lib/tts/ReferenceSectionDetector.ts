@@ -133,6 +133,9 @@ export class ReferenceSectionDetector {
             return detCfi ?? undefined;
         }
 
+        // Hoisted for the catch block: the deterministic shadow result doubles
+        // as the terminal fallback when the model's answer fails validation.
+        let enumeratorCandidateIndex = -1;
         try {
             if (!(await ensureGenAIReady(genAI))) {
                 return null;
@@ -146,7 +149,7 @@ export class ReferenceSectionDetector {
             const markerGroupIndex = attributeMarkersToGroups(groups, markers);
 
             // Compute hint signals for the prompt (the deterministic shadow run)
-            const enumeratorCandidateIndex = runDeterministicDetector(groups);
+            enumeratorCandidateIndex = runDeterministicDetector(groups);
             const markerDropoffIndex = computeMarkerDropoffIndex(groups, markers, markerGroupIndex);
 
             const nodesToDetect = groups.map((g, index) => {
@@ -188,6 +191,21 @@ export class ReferenceSectionDetector {
             return referenceStartCfi;
         } catch (e: unknown) {
             console.warn("Content detection failed", e);
+            // A validation-rejected model response is not transient: re-sending
+            // the identical prompt tends to fail identically, and the 'error'
+            // status retry machinery re-attempted it on every revisit past
+            // RETRY_DELAY — across sessions and days — without ever converging.
+            // Persist the deterministic shadow result as the terminal answer
+            // instead. Transient failures (429s, network) keep the retry path.
+            // Branch by stable code, not instanceof — the error may have
+            // crossed a worker boundary (types/errors.ts contract).
+            if ((e as { code?: string } | null)?.code === 'GENAI_INVALID_RESPONSE') {
+                const detCfi = enumeratorCandidateIndex >= 0
+                    ? groups[enumeratorCandidateIndex]?.rootCfi
+                    : undefined;
+                await contentAnalysis.saveReferenceStartCfi(bookId, sectionId, detCfi);
+                return detCfi;
+            }
             // Mark as error with timestamp
             const message = e instanceof Error ? e.message : String(e);
             contentAnalysis.markAnalysisError(bookId, sectionId, message || 'Unknown error');

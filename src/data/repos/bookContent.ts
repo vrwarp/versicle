@@ -286,11 +286,17 @@ class BookContentRepo {
       const db = await getConnection();
       const rows = await db.getAllFromIndex('cache_table_images', 'by_bookId', bookId);
       return rows.map(row => {
-        // imageBlob may be ArrayBuffer at runtime (stored as ArrayBuffer for WebKit IDB compatibility)
+        // imageBlob may be ArrayBuffer at runtime (stored as ArrayBuffer for WebKit IDB
+        // compatibility). Re-wrapping MUST restore the MIME type: the capture site
+        // (offscreen-renderer) always snaps tables as webp, and a bare new Blob([buf])
+        // has type "" — which table adaptation forwards to Gemini as an inlineData
+        // mimeType the API rejects.
         const rawImageBlob = row.imageBlob as unknown as Blob | ArrayBuffer;
         return {
           ...row,
-          imageBlob: rawImageBlob instanceof ArrayBuffer ? new Blob([rawImageBlob]) : rawImageBlob,
+          imageBlob: rawImageBlob instanceof ArrayBuffer
+            ? new Blob([rawImageBlob], { type: 'image/webp' })
+            : rawImageBlob,
         };
       });
     } catch (error) {

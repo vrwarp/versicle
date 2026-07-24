@@ -106,6 +106,44 @@ describe('ReferenceSectionDetector', () => {
             expect(result).toBeNull();
             expect(markError).toHaveBeenCalledWith('b', 's', 'boom');
         });
+
+        it('persists the deterministic shadow as TERMINAL on a validation-rejected response (no retry loop)', async () => {
+            // GENAI_INVALID_RESPONSE is not transient: the identical prompt fails
+            // identically on every revisit, so the error-status retry machinery
+            // must not re-send it across sessions. The deterministic shadow
+            // result becomes the stored answer instead.
+            const { ctx, detector } = makeDetector({});
+            ctx.genAIConfigured = true;
+            const markError = vi.spyOn(ctx.contentAnalysis, 'markAnalysisError');
+            vi.spyOn(ctx.genAI, 'detectContentTypes').mockRejectedValue(
+                Object.assign(new Error('referenceStartIndex 0 is before 40% of chapter'), {
+                    code: 'GENAI_INVALID_RESPONSE',
+                }),
+            );
+
+            const result = await detector.detect('b', 's', { groups: REFERENCE_TAIL_GROUPS, citationMarkers: [] });
+
+            // Shadow = enumerator run starting at group 7
+            expect(result).toBe('epubcfi(/6/4!/4/16,,)');
+            expect(ctx.savedReferenceCfis).toEqual([{ bookId: 'b', sectionId: 's', cfi: 'epubcfi(/6/4!/4/16,,)' }]);
+            expect(markError).not.toHaveBeenCalled();
+        });
+
+        it('persists a terminal negative when validation rejects and the shadow found nothing', async () => {
+            const { ctx, detector } = makeDetector({});
+            ctx.genAIConfigured = true;
+            const markError = vi.spyOn(ctx.contentAnalysis, 'markAnalysisError');
+            vi.spyOn(ctx.genAI, 'detectContentTypes').mockRejectedValue(
+                Object.assign(new Error('bad response'), { code: 'GENAI_INVALID_RESPONSE' }),
+            );
+            const bodyOnly = REFERENCE_TAIL_GROUPS.slice(0, 7);
+
+            const result = await detector.detect('b', 's', { groups: bodyOnly, citationMarkers: [] });
+
+            expect(result).toBeUndefined();
+            expect(ctx.savedReferenceCfis).toEqual([{ bookId: 'b', sectionId: 's', cfi: undefined }]);
+            expect(markError).not.toHaveBeenCalled();
+        });
     });
 
     describe('concurrent promise dedup', () => {
