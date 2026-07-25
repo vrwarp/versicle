@@ -7,6 +7,10 @@
  *   /notes           → LibraryView in notes context (GlobalNotesView itself
  *                      is lazy inside LibraryView; replaces the synced
  *                      `activeContext` preference switch, §J)
+ *   /drive           → LibraryView in Drive context (the Drive shelf, lazy
+ *                      inside LibraryView — the promoted DriveImportDialog;
+ *                      the import dialog's "Google Drive" choice navigates
+ *                      here instead of opening a modal)
  *   /read/:id        → ReaderShell, React.lazy (pulls epubjs out of the
  *                      entry chunk — asserted by check 4 of
  *                      scripts/check-worker-chunk.mjs)
@@ -117,6 +121,14 @@ export const router = createBrowserRouter([
         element: (
           <ErrorBoundary>
             <LibraryView context="search" />
+          </ErrorBoundary>
+        ),
+      },
+      {
+        path: "drive",
+        element: (
+          <ErrorBoundary>
+            <LibraryView context="drive" />
           </ErrorBoundary>
         ),
       },
