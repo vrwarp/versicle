@@ -44,6 +44,9 @@ import { useToastStore } from '@store/useToastStore';
 import { useBook } from '@store/libraryViewStore';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { createSearchNavigator, type SearchNavigator } from '@app/reader/searchNavigation';
+import { ColdOpenResumeGuard } from '@app/reader/coldOpenResumeGuard';
+import { isYjsSyncSettled } from '@store/yjs-provider';
+import { getActiveReaderEngine } from '@domains/reader/engine/activeEngineRegistry';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import { createLogger } from '@lib/logger';
 
@@ -179,11 +182,51 @@ export function useReaderController(
   const deepLength = searchParams.get('length');
 
   // Optimization: Read initial location once on mount/id change, avoiding subscription to progress updates
+  // (Kept only as the theming re-display fallback inside useEpubReader —
+  // the DISPLAY target resolves live via getInitialLocation below.)
   const initialLocation = useMemo(() => {
     if (cfiOverride) return decodeURIComponent(cfiOverride);
     if (locationOverride) return decodeURIComponent(locationOverride);
     return bookId ? useReadingStateStore.getState().getProgress(bookId)?.currentCfi : undefined;
   }, [bookId, cfiOverride, locationOverride]);
+
+  // Cold-open resume guard (the wrong-resume race fix): protects the saved
+  // position when the reader opens before the Yjs IDB load has delivered
+  // the progress store — see ColdOpenResumeGuard. Recreated per book so
+  // its latch never leaks across opens.
+  const coldOpenGuard = useMemo(() => {
+    return new ColdOpenResumeGuard({
+      isSyncSettled: isYjsSyncSettled,
+      getSavedProgress: () =>
+        bookId ? useReadingStateStore.getState().getProgress(bookId) : null,
+      display: (cfi) => {
+        const activeEngine = getActiveReaderEngine();
+        if (!activeEngine) return Promise.reject(new Error('No active reader engine'));
+        return activeEngine.display(cfi);
+      },
+      onRestored: () =>
+        useToastStore.getState().showToast('Restored your last reading position', 'info'),
+    });
+  }, [bookId]);
+
+  // Display-time location resolver (useEpubReader calls it immediately
+  // before the first display): the mount-time memo above cannot see a
+  // position that hydrates between mount and display — this re-read can.
+  // It also latches the cold-open guard with what it found.
+  const getInitialLocation = useCallback(() => {
+    let location: string | undefined;
+    if (cfiOverride) {
+      location = decodeURIComponent(cfiOverride);
+    } else if (locationOverride) {
+      location = decodeURIComponent(locationOverride);
+    } else {
+      location = bookId
+        ? useReadingStateStore.getState().getProgress(bookId)?.currentCfi || undefined
+        : undefined;
+    }
+    coldOpenGuard.noteResolvedInitialLocation(location);
+    return location;
+  }, [bookId, cfiOverride, locationOverride, coldOpenGuard]);
 
   // Engine commands go through the TtsController facade (stable identities).
   const audio = useAudioCommands();
@@ -209,11 +252,25 @@ export function useReaderController(
     lineHeight: (fontProfiles[(bookMetadata?.language || 'en').split('-')[0]] || {}).lineHeight || lineHeight,
     shouldForceFont,
     initialLocation,
+    getInitialLocation,
     metadata: bookMetadata,
     onLocationChange: (location, percentage, title, sectionId) => {
       // Initialize the recorder's previous-location tracker (legacy step 1
       // — it ran even when the import-jump check skipped the save).
       recorderRef.current?.prime(location, Date.now());
+
+      // Cold-open resume guard (ColdOpenResumeGuard): a mislanded open must
+      // not record — and must jump back to the saved position the moment
+      // the store can prove there is one.
+      const verdict = coldOpenGuard.onRelocated(percentage);
+      if (verdict === 'restored') return;
+      if (verdict === 'blocked') {
+        // Store not yet loaded: keep the cosmetic section title current;
+        // recording is skipped (writes are also choked at the recorder
+        // deps, which covers the unmount flushSync).
+        setCurrentSection(title, sectionId);
+        return;
+      }
 
       // Import Jump Check (ImportJumpPrompt): true = prompt took over,
       // SKIP SAVING PROGRESS to avoid overwriting the imported progress.
@@ -300,6 +357,8 @@ export function useReaderController(
     dispatchCompass,
     bookMetadata,
     initialLocation,
+    getInitialLocation,
+    coldOpenGuard,
     setCurrentSection,
   ]);
 
@@ -479,10 +538,17 @@ export function useReaderController(
       store: {
         getCurrentCfi: () =>
           useReadingStateStore.getState().getProgress(bookId)?.currentCfi,
-        updateReadingSession: (id, cfi, pct, updates) =>
-          useReadingStateStore.getState().updateReadingSession(id, cfi, pct, updates),
-        addCompletedRange: (id, range, type, label) =>
-          useReadingStateStore.getState().addCompletedRange(id, range, type, label),
+        // Both writers are choked while the cold-open guard has the store
+        // quarantined: nothing may commit over a position that may still be
+        // loading — including flushSync's unmount drain and final segment.
+        updateReadingSession: (id, cfi, pct, updates) => {
+          if (coldOpenGuard.writesBlocked) return;
+          useReadingStateStore.getState().updateReadingSession(id, cfi, pct, updates);
+        },
+        addCompletedRange: (id, range, type, label) => {
+          if (coldOpenGuard.writesBlocked) return;
+          useReadingStateStore.getState().addCompletedRange(id, range, type, label);
+        },
       },
       getContext: () => ({
         title: panicSaveState.current.currentSectionTitle,
@@ -496,7 +562,7 @@ export function useReaderController(
       recorder.dispose();
       recorderRef.current = null;
     };
-  }, [bookId]);
+  }, [bookId, coldOpenGuard]);
 
   // Sync loading state
   useEffect(() => {

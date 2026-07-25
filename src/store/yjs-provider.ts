@@ -229,6 +229,19 @@ export const waitForYjsSync = (timeoutMs = 5000): Promise<void> => {
     });
 };
 
+/**
+ * True when the IndexedDB load has ACTUALLY completed (or persistence is
+ * disabled — in-memory mode has nothing to load). Unlike `waitForYjsSync`,
+ * this never lies on the timeout path: boot's `whenHydrated` phase is
+ * warn-and-proceed, so the app can be running while the load is still in
+ * transit — and this stays false until the 'synced' event really fires.
+ * Consumers that must not act on potentially-unloaded state (the reader's
+ * cold-open resume guard) check this instead of trusting that boot completed.
+ */
+export const isYjsSyncSettled = (): boolean => {
+    return !persistence || persistence.synced;
+};
+
 export const disconnectYjs = async () => {
     if (persistence) {
         logger.info('Disconnecting persistence...');

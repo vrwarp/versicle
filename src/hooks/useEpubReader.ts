@@ -81,6 +81,16 @@ export interface EpubReaderOptions {
   onError?: (error: string) => void;
   /** Optional: Initial CFI location to start reading at. Overrides metadata.currentCfi. */
   initialLocation?: string;
+  /**
+   * Optional: resolve the start location AT DISPLAY TIME. When provided it
+   * wins over `initialLocation` and `metadata.currentCfi`, and is called
+   * exactly once per open, immediately before the first `display()`. Those
+   * two are snapshots (mount / open-start respectively) — a saved position
+   * that hydrates into the store between mount and display is invisible to
+   * both, which is how a cold boot could open a book at its start instead
+   * of the saved position (the cold-open race).
+   */
+  getInitialLocation?: () => string | undefined;
   /** Optional: Book metadata. If not provided, some features like initial location inference may be limited. */
   metadata?: BookMetadata | null;
 }
@@ -257,8 +267,13 @@ export function useEpubReader(
         // Register built-in themes (epubTheming module)
         registerBaseThemes(newRendition);
 
-        // Display at saved location or start
-        const startLocation = optionsRef.current.initialLocation || meta?.currentCfi || undefined;
+        // Display at saved location or start. `getInitialLocation` (when
+        // provided) resolves LIVE — `initialLocation` and the `meta` capture
+        // above are stale snapshots by now, and a position hydrated since
+        // then must still win (cold-open race fix).
+        const startLocation = optionsRef.current.getInitialLocation
+          ? optionsRef.current.getInitialLocation() || undefined
+          : optionsRef.current.initialLocation || meta?.currentCfi || undefined;
 
         // Legacy reading history fallback removed as Phase 2 relies on Stores (passed via options)
 
