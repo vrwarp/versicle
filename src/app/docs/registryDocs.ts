@@ -390,8 +390,16 @@ function renderFormatChain(): string {
     '',
     'Backups are manifest **v3** (validate-before-destroy, pre-restore',
     'checkpoint — src/lib/BackupService.ts; round-trip suite',
-    'src/lib/BackupService.roundtrip.test.ts). The Chinese dictionary lives in',
+    'src/lib/BackupService.roundtrip.test.ts). Full backups use a **V2 Binary Snapshot**',
+    '(`Y.encodeStateAsUpdate`) that perfectly preserves the CRDT state without merge',
+    'conflicts, destructively restoring by wiping IDB data before cleanly applying',
+    'the snapshot. The Chinese dictionary lives in',
     'its own `versicle-dict` IndexedDB (src/domains/chinese/dictionary/).',
+    '',
+    '### Hardening',
+    'The `ObsoleteLockView` safety mechanism quarantines stale clients by severing',
+    'cloud connections when a remote database with a newer schema version is detected,',
+    'protecting upgraded data structures from corruption.',
   ].join('\n');
 }
 
@@ -564,7 +572,10 @@ ${mdTable(['#', 'Phase', 'What runs'], bootRows)}
 A task throw routes to SafeModeView; \`ctx.halt()\` stops the sequence (used
 while a backup restore or staged workspace swap needs the page). Wipe hooks
 (\`src/data/wipe.ts\`) are registered at manifest time so \`wipeAllData()\`
-can stop the sync and Yjs writers it cannot import.
+can stop the sync and Yjs writers it cannot import. \`MaintenanceService\`
+runs post-boot to apply one-time repairs for cover images and handles orphan
+pruning exclusively for \`static_*\` and \`cache_*\` stores (since user data now
+resides in Yjs).
 
 ## 6. Network egress (C9)
 
@@ -587,7 +598,9 @@ ${mdTable(['Tab', 'Order', 'Label key', 'Danger'], settingsRows)}
 ## 8. TTS providers (C5)
 
 \`src/lib/tts/providers/registry.ts\` — the settings UI, id unions, and
-construction all derive from this registry:
+construction all derive from this registry. The monolithic \`AudioPlayerService\`
+has been replaced by \`PlaybackController\` (\`src/lib/tts/engine/\`), which isolates
+playback via \`EngineContext\` for Web Worker portability without \`jsdom\`.
 
 ${mdTable(['Id', 'Name', 'Kind', 'API key', 'Platforms', 'Capabilities'], providerRows)}
 
