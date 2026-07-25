@@ -498,15 +498,25 @@ At the composition root, `getConfig` is `() => useGenAIStore.getState()` — a l
 export const GENAI_ROTATION_MODELS = [
   'gemini-3.6-flash',
   'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
   'gemini-3-flash-preview',
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
-  'gemini-3.5-flash-lite',
-  'gemini-3.1-flash-lite',
 ] as const;
 ```
 
-When `rotationEnabled` is true in the config, `modelsToTry()` walks this array **in order** (no shuffle) and tries each model in turn, continuing on `GenAIHttpError` with `status === 429` or on a pre-network `NetRateLimitedError`. The order is ascending free-tier daily bucket — the five 20-RPD models, then the two 500-RPD lite models, 1,100 requests/day in total. Every model has an independent bucket that resets at midnight PT and never carries over, so leading with a lite model would drain the 500-RPD bucket while the scarce 20-RPD buckets expired unused; this ordering realizes the full sum, and is capability-descending as a side effect. The 429 cooldown is recorded against the failing model's OWN rate pool (`recordCooldown(…, modelId)`), so exhausting one model never backpressures its siblings.
+When `rotationEnabled` is true in the config, `modelsToTry()` walks this array **in order** (no shuffle) and tries each model in turn, continuing whenever `isRetryableForRotation(error)` holds.
+
+**Order does not change the daily total.** Each model has an independent free-tier bucket that resets at midnight PT, and the loop falls through to the next entry whenever one is spent, so the ceiling is the SUM of the buckets — 1,100 requests/day — whatever the order. Nothing is stranded: a request that cannot be admitted at position N simply continues to N+1. What the order decides is which model serves the bulk of the day, and how much of the chain a hard failure takes down with it:
+
+- **1–2**, the stable 20-RPD frontier models (`gemini-3.6-flash`, `gemini-3.5-flash`). There is no per-call-type routing, so scarce premium quota cannot be *reserved* for high-value calls — it is spent on whatever arrives first or it expires. Leading with them guarantees it is spent.
+- **3–4**, the stable 500-RPD lite models — the workhorses that serve ~91% of the day.
+- **5–7**, the preview and deprecating models. Google retires models on its own schedule and a retired model answers **404, not 429**; `isModelUnavailable` makes that continuable, but keeping anything with a shutdown date below the workhorses bounds even an uncovered failure mode to the last 60 requests of the day rather than the first 1,040.
+
+`isRetryableForRotation` continues on three conditions: a server 429 (`isResourceExhausted`), an unusable model (`isModelUnavailable` — a 404, or a 400 whose `apiStatus` is `FAILED_PRECONDITION`), and a pre-network `NetRateLimitedError`. A bare 400 `INVALID_ARGUMENT` deliberately does **not** rotate: a malformed prompt fails identically on every model, so rotating would turn one bad request into a round trip per model.
+
+The 429 cooldown is recorded against the failing model's OWN rate pool (`recordCooldown(…, modelId)`), so exhausting one model never backpressures its siblings. Rotation fall-throughs caused by exhausted quota log at `'debug'` — once the head of the list is spent they fire on every request and would evict the capped ring buffer — while a fall-through caused by an unusable model logs at `'error'`, because it means the rotation list itself needs editing.
 
 #### Request flow
 

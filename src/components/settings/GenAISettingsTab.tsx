@@ -384,7 +384,7 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                 <div className="space-y-0.5">
                                     <label htmlFor="genai-rotation" className="text-sm font-medium">Free Tier Rotation</label>
                                     <p className="text-xs text-muted-foreground max-w-sm">
-                                        Maximizes free quota by working through the models in ascending order of daily allowance — the scarce 20/day premium models (gemini-3.6-flash first) before the 500/day lite models — so nothing expires unused at midnight. About 1,100 free requests/day in total.
+                                        Pools the free daily allowance of seven models — about 1,100 requests/day — by falling through to the next model as each one runs out. Starts with the newest premium models, then the high-volume lite ones.
                                     </p>
                                 </div>
                                 <Switch
