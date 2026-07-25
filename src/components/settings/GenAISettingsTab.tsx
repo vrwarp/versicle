@@ -139,26 +139,52 @@ export interface GenAISettingsTabProps {
 
 const RATE_POOL_LABELS: Record<string, string> = {
     default: 'Default / General',
-    'gemini-2.5-flash-lite': 'Gemini 2.5 Flash-Lite',
-    'gemini-2.5-flash': 'Gemini 2.5 Flash',
-    'gemini-3-flash-preview': 'Gemini 3 Flash Preview',
-    'gemini-3.1-flash-lite': 'Gemini 3.1 Flash Lite',
-    'gemini-3.5-flash': 'Gemini 3.5 Flash',
     'gemini-1.5-pro': 'Gemini 1.5 Pro',
-    'gemini-2.5-flash-tts': 'Gemini 2.5 Flash TTS',
-    'gemini-3.1-flash-tts': 'Gemini 3.1 Flash TTS',
+    // Text-out models
+    'gemini-flash-lite-latest': 'Gemini Flash-Lite Latest (alias)',
+    'gemini-2.0-flash': 'Gemini 2 Flash',
+    'gemini-2.0-flash-lite': 'Gemini 2 Flash Lite',
+    'gemini-2.5-flash': 'Gemini 2.5 Flash',
+    'gemini-2.5-flash-lite': 'Gemini 2.5 Flash-Lite',
+    'gemini-2.5-pro': 'Gemini 2.5 Pro',
+    'gemini-3-flash-preview': 'Gemini 3 Flash',
+    'gemini-3.1-flash-lite': 'Gemini 3.1 Flash Lite',
+    'gemini-3.1-pro-preview': 'Gemini 3.1 Pro',
+    'gemini-3.5-flash': 'Gemini 3.5 Flash',
+    'gemini-3.5-flash-lite': 'Gemini 3.5 Flash Lite',
+    'gemini-3.6-flash': 'Gemini 3.6 Flash',
+    // Agents
+    'antigravity-preview-05-2026': 'Antigravity',
+    'deep-research-pro-preview-12-2025': 'Deep Research Pro Preview',
+    // Multi-modal generative models
+    'gemini-2.5-flash-image': 'Nano Banana (Gemini 2.5 Flash Image)',
+    'gemini-2.5-flash-preview-tts': 'Gemini 2.5 Flash TTS',
+    'gemini-2.5-pro-preview-tts': 'Gemini 2.5 Pro TTS',
+    'gemini-3-pro-image': 'Nano Banana Pro (Gemini 3 Pro Image)',
+    'gemini-3.1-flash-image': 'Nano Banana 2 (Gemini 3.1 Flash Image)',
+    'gemini-3.1-flash-lite-image': 'Nano Banana 2 Lite (Gemini 3.1 Flash Lite Image)',
+    'gemini-3.1-flash-tts-preview': 'Gemini 3.1 Flash TTS',
+    'gemini-omni-flash-preview': 'Gemini Omni Flash',
+    'imagen-4.0-fast-generate-001': 'Imagen 4 Fast Generate',
+    'imagen-4.0-generate-001': 'Imagen 4 Generate',
+    'imagen-4.0-ultra-generate-001': 'Imagen 4 Ultra Generate',
+    'lyria-3-clip-preview': 'Lyria 3 Clip',
+    'lyria-3-pro-preview': 'Lyria 3 Pro',
+    'veo-3.1-fast-generate-preview': 'Veo 3 Fast Generate',
+    'veo-3.1-generate-preview': 'Veo 3 Generate',
+    'veo-3.1-lite-generate-preview': 'Veo 3 Lite Generate',
+    // Live API
+    'gemini-2.5-flash-native-audio-preview-12-2025': 'Gemini 2.5 Flash Native Audio Dialog',
+    'gemini-3.1-flash-live-preview': 'Gemini 3 Flash Live',
+    'gemini-3.5-live-translate-preview': 'Gemini 3.5 Live Translate',
+    // Other models
+    'gemini-2.5-computer-use-preview-10-2025': 'Computer Use Preview',
     'gemini-embedding-001': 'Gemini Embedding 1',
     'gemini-embedding-2': 'Gemini Embedding 2',
     'gemini-robotics-er-1.5-preview': 'Gemini Robotics ER 1.5 Preview',
     'gemini-robotics-er-1.6-preview': 'Gemini Robotics ER 1.6 Preview',
-    'gemma-4-26b': 'Gemma 4 26B',
-    'gemma-4-31b': 'Gemma 4 31B',
-    'imagen-4-fast-generate': 'Imagen 4 Fast Generate',
-    'imagen-4-generate': 'Imagen 4 Generate',
-    'imagen-4-ultra-generate': 'Imagen 4 Ultra Generate',
-    'gemini-2.5-flash-native-audio-dialog': 'Gemini 2.5 Flash Native Audio Dialog',
-    'gemini-3-flash-live': 'Gemini 3 Flash Live',
-    'gemini-3.5-live-translate': 'Gemini 3.5 Live Translate',
+    'gemma-4-26b-a4b-it': 'Gemma 4 26B',
+    'gemma-4-31b-it': 'Gemma 4 31B',
     'deep-research-pro-preview-map-grounding': 'Deep Research Pro Preview (Map Grounding)',
     'gemini-2-flash-map-grounding': 'Gemini 2 Flash (Map Grounding)',
     'gemini-2.0-flash-map-grounding': 'Gemini 2.0 Flash (Map Grounding)',
@@ -358,7 +384,7 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                 <div className="space-y-0.5">
                                     <label htmlFor="genai-rotation" className="text-sm font-medium">Free Tier Rotation</label>
                                     <p className="text-xs text-muted-foreground max-w-sm">
-                                        Maximizes free quota by trying premium models (gemini-3.5-flash, gemini-3-flash-preview) first, then falling back to gemini-3.1-flash-lite when their daily quota is exhausted.
+                                        Maximizes free quota by working through the models in ascending order of daily allowance — the scarce 20/day premium models (gemini-3.6-flash first) before the 500/day lite models — so nothing expires unused at midnight. About 1,100 free requests/day in total.
                                     </p>
                                 </div>
                                 <Switch

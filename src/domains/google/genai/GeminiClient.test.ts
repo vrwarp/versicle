@@ -15,6 +15,7 @@ import type { GenAIConfig } from './contract';
 import type { EgressFn } from '@kernel/net';
 import { NetRateLimitedError } from '~types/errors';
 import type { GenAILogEntry } from './logging';
+import { DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';
 
 function geminiResponse(text: string, status = 200): Response {
   return new Response(
@@ -78,9 +79,20 @@ describe('GeminiClient', () => {
     await expect(client.generateText('prompt')).resolves.toBe('success');
     expect(calls).toHaveLength(2);
     const model = (url: string) => url.match(/models\/([^:]+):/)?.[1];
-    // Tiered order: premium first, then next
-    expect(model(calls[0].url)).toBe('gemini-3.5-flash');
-    expect(model(calls[1].url)).toBe('gemini-3-flash-preview');
+    // Ascending-scarcity order: the scarcest 20-RPD bucket first, then the next.
+    expect(model(calls[0].url)).toBe(GENAI_ROTATION_MODELS[0]);
+    expect(model(calls[1].url)).toBe(GENAI_ROTATION_MODELS[1]);
+    expect(model(calls[0].url)).toBe('gemini-3.6-flash');
+  });
+
+  it('the rotation list is ordered by ascending daily free-tier bucket', () => {
+    // The whole point of the ordering: a 500-RPD lite model must never be tried
+    // before a 20-RPD one, or the large bucket drains while the small ones
+    // expire unused at midnight PT.
+    const rpd = GENAI_ROTATION_MODELS.map((m) => DEFAULT_QUOTA_LIMITS[m]?.rpd);
+    expect(rpd).not.toContain(undefined);
+    expect(rpd).toEqual([...rpd].sort((a, b) => a! - b!));
+    expect(rpd.reduce((sum, n) => sum! + n!, 0)).toBe(1100);
   });
 
   it('regression: does NOT retry on 429 when rotation is disabled', async () => {
@@ -99,11 +111,7 @@ describe('GeminiClient', () => {
 
   it('regression: exhausts all rotation models when every one returns 429', async () => {
     const { client, calls } = makeClient(
-      [
-        errorResponse(429, 'RESOURCE_EXHAUSTED'),
-        errorResponse(429, 'RESOURCE_EXHAUSTED'),
-        errorResponse(429, 'RESOURCE_EXHAUSTED'),
-      ],
+      GENAI_ROTATION_MODELS.map(() => errorResponse(429, 'RESOURCE_EXHAUSTED')),
       { rotationEnabled: true },
     );
     await expect(client.generateText('prompt')).rejects.toMatchObject({ status: 429 });

@@ -36,14 +36,34 @@ import type {
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
 /**
- * Tiered rotation list: premium models first (20 RPD each), lite fallback
- * last (500 RPD). The list is iterated IN ORDER (no shuffle) — smart models
- * get first crack, and when their daily quota is exhausted (429), the
- * high-quota lite model handles the rest.
+ * Tiered rotation list, iterated IN ORDER (no shuffle) and ordered by ASCENDING
+ * daily free-tier bucket: the five 20-RPD models first (most capable first
+ * among equals), then the two 500-RPD lite models. 1,100 free requests/day in
+ * total.
+ *
+ * Ascending-scarcity is what maximizes the free tier. Every model has its own
+ * independent daily bucket that resets at midnight PT and never carries over,
+ * so the day's ceiling is the SUM of the buckets — but only if the small ones
+ * are spent before the big one. Leading with a 500-RPD lite model would drain
+ * the large bucket while the 20-RPD buckets sat idle and expired unused; this
+ * order can actually realize all 1,100. It also happens to be capability-
+ * descending, so the smartest model always gets first crack.
+ *
+ * The per-model 429 cooldown is recorded against that model's OWN rate pool
+ * (see `recordCooldown(..., modelId)` below), so exhausting one model never
+ * backpressures its siblings — the loop really does walk to the next bucket.
+ *
+ * Gemma 4 is deliberately excluded despite its enormous 14.4K RPD: at 16K TPM
+ * it cannot carry this app's book-text prompts, and it has no inline-image
+ * input for table adaptation.
  */
 export const GENAI_ROTATION_MODELS = [
+  'gemini-3.6-flash',
   'gemini-3.5-flash',
   'gemini-3-flash-preview',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-3.5-flash-lite',
   'gemini-3.1-flash-lite',
 ] as const;
 

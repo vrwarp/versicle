@@ -495,10 +495,18 @@ At the composition root, `getConfig` is `() => useGenAIStore.getState()` — a l
 #### Rotation models
 
 ```typescript
-export const GENAI_ROTATION_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'] as const;
+export const GENAI_ROTATION_MODELS = [
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-3-flash-preview',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+] as const;
 ```
 
-When `rotationEnabled` is true in the config, `modelsToTry()` runs a Fisher-Yates shuffle over this array and tries each model in turn, continuing on `GenAIHttpError` with `status === 429` (GG-15 fix — the legacy used a biased `sort(() => Math.random() - 0.5)`).
+When `rotationEnabled` is true in the config, `modelsToTry()` walks this array **in order** (no shuffle) and tries each model in turn, continuing on `GenAIHttpError` with `status === 429` or on a pre-network `NetRateLimitedError`. The order is ascending free-tier daily bucket — the five 20-RPD models, then the two 500-RPD lite models, 1,100 requests/day in total. Every model has an independent bucket that resets at midnight PT and never carries over, so leading with a lite model would drain the 500-RPD bucket while the scarce 20-RPD buckets expired unused; this ordering realizes the full sum, and is capability-descending as a side effect. The 429 cooldown is recorded against the failing model's OWN rate pool (`recordCooldown(…, modelId)`), so exhausting one model never backpressures its siblings.
 
 #### Request flow
 

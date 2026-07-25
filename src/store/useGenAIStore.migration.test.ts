@@ -99,7 +99,7 @@ describe('genai-storage v0→v1 migration (captured-blob regression)', () => {
     expect(raw).not.toContain('usageStats');
     expect(raw).not.toContain('Full book text sample');
     const parsed = JSON.parse(raw);
-    expect(parsed.version).toBe(3);
+    expect(parsed.version).toBe(4);
     expect(parsed.state.apiKey).toBe('user-api-key-123');
   });
 
@@ -146,7 +146,7 @@ describe('genai-storage v0→v1 migration (captured-blob regression)', () => {
     // The rewritten blob is at v3 and carries the switched model.
     useGenAIStore.getState().setEnabled(true);
     const parsed = JSON.parse(localStorage.getItem('genai-storage')!);
-    expect(parsed.version).toBe(3);
+    expect(parsed.version).toBe(4);
     expect(parsed.state.embeddingModel).toBe('gemini-embedding-2');
   });
 
@@ -196,5 +196,81 @@ describe('genai-storage v0→v1 migration (captured-blob regression)', () => {
     expect(map.default).toEqual({ rpm: 50, tpm: 15_000, rpd: 500 });
     expect(map['google-tts-chirp3-hd']).toEqual({ rpm: 100, tpm: 30_000, rpd: 500 });
     expect(map['google-tts-wavenet']).toEqual({ rpm: 100, tpm: 100_000, rpd: 2000 });
+  });
+
+  async function migrateV3Map(quotaLimitsMap: Record<string, unknown>) {
+    localStorage.setItem(
+      'genai-storage',
+      JSON.stringify({ state: { apiKey: 'key-v3', quotaLimitsMap }, version: 3 }),
+    );
+    const useGenAIStore = await loadFreshStore();
+    return useGenAIStore.getState().quotaLimitsMap;
+  }
+
+  it('v3→v4 re-keys the legacy slug pools onto their real model endpoint ids', async () => {
+    const map = await migrateV3Map({
+      default: { rpm: 50, tpm: 15_000, rpd: 500 },
+      'gemini-2.5-flash-tts': { rpm: 3, tpm: 10_000, rpd: 10 },
+      'gemini-3.1-flash-tts': { rpm: 3, tpm: 10_000, rpd: 10 },
+      'gemini-3-flash-live': { rpm: 999_999, tpm: 65_000, rpd: 999_999 },
+      'gemini-2.5-flash-native-audio-dialog': { rpm: 999_999, tpm: 1_000_000, rpd: 999_999 },
+      'gemini-3.5-live-translate': { rpm: 999_999, tpm: 20_000, rpd: 999_999 },
+      'imagen-4-generate': { rpm: 999_999, tpm: 999_999_999, rpd: 25 },
+    });
+
+    // The legacy slugs are gone…
+    for (const legacy of [
+      'gemini-2.5-flash-tts',
+      'gemini-3.1-flash-tts',
+      'gemini-3-flash-live',
+      'gemini-2.5-flash-native-audio-dialog',
+      'gemini-3.5-live-translate',
+      'imagen-4-generate',
+    ]) {
+      expect(map[legacy]).toBeUndefined();
+    }
+    // …and the endpoint-keyed pools carry the same budgets.
+    expect(map['gemini-2.5-flash-preview-tts']).toEqual({ rpm: 3, tpm: 10_000, rpd: 10 });
+    expect(map['gemini-3.1-flash-tts-preview']).toEqual({ rpm: 3, tpm: 10_000, rpd: 10 });
+    expect(map['gemini-3.1-flash-live-preview']).toEqual({ rpm: 999_999, tpm: 65_000, rpd: 999_999 });
+    expect(map['gemini-2.5-flash-native-audio-preview-12-2025']).toEqual({
+      rpm: 999_999,
+      tpm: 1_000_000,
+      rpd: 999_999,
+    });
+    expect(map['gemini-3.5-live-translate-preview']).toEqual({
+      rpm: 999_999,
+      tpm: 20_000,
+      rpd: 999_999,
+    });
+    expect(map['imagen-4.0-generate-001']).toEqual({ rpm: 999_999, tpm: 999_999_999, rpd: 25 });
+    // An unrelated pool the user had edited is untouched.
+    expect(map.default).toEqual({ rpm: 50, tpm: 15_000, rpd: 500 });
+  });
+
+  it('v3→v4 seeds the newly listed models, including the brand-new Gemini 3.6 Flash', async () => {
+    const map = await migrateV3Map({ default: { rpm: 50, tpm: 15_000, rpd: 500 } });
+
+    expect(map['gemini-3.6-flash']).toEqual({ rpm: 5, tpm: 250_000, rpd: 20 });
+    expect(map['gemini-3.5-flash-lite']).toEqual({ rpm: 15, tpm: 250_000, rpd: 500 });
+    expect(map['antigravity-preview-05-2026']).toEqual({ rpm: 60, tpm: 100_000, rpd: 100 });
+    // The app's default model alias gets its own ceiling instead of `default`.
+    expect(map['gemini-flash-lite-latest']).toEqual({ rpm: 15, tpm: 250_000, rpd: 500 });
+    // A zero free-tier allowance is persisted as zero, not silently widened.
+    expect(map['gemini-2.5-pro']).toEqual({ rpm: 0, tpm: 0, rpd: 0 });
+  });
+
+  it('v3→v4 refreshes the untouched Gemma defaults but keeps a user-edited one', async () => {
+    const map = await migrateV3Map({
+      // Exactly the superseded v3 default → refreshed to the real free tier.
+      'gemma-4-26b': { rpm: 15, tpm: 999_999_999, rpd: 1500 },
+      // Hand-edited → carried across the rename verbatim.
+      'gemma-4-31b': { rpm: 7, tpm: 5_000, rpd: 99 },
+    });
+
+    expect(map['gemma-4-26b']).toBeUndefined();
+    expect(map['gemma-4-31b']).toBeUndefined();
+    expect(map['gemma-4-26b-a4b-it']).toEqual({ rpm: 30, tpm: 16_000, rpd: 14_400 });
+    expect(map['gemma-4-31b-it']).toEqual({ rpm: 7, tpm: 5_000, rpd: 99 });
   });
 });
