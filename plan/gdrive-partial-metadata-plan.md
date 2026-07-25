@@ -276,9 +276,10 @@ Idle consumer inside `DriveMetadataService`:
   foregrounded or not; picks "new on Drive" diff first, then
   most-recently-modified.
 - Guards: online + silent token available + no foreground import running +
-  a per-session spend cap + skip entries with `status:'unextractable'` at
-  current md5 + consume persisted index only. Connection type is NOT a
-  guard — cellular trickles the same as Wi-Fi.
+  skip entries with `status:'unextractable'` at current md5 + consume
+  persisted index only. Connection type is NOT a guard — cellular trickles
+  the same as Wi-Fi — and there is no per-session spend cap; the unhydrated
+  remainder of the library is the bound.
 - Backoff: any 403/429 pauses the trickle for the session's remaining
   backoff window (don't let backoff retries eat the batch budget).
 - Consent surface: disclosure line with size estimate on the folder-link

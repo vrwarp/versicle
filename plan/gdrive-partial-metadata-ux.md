@@ -113,12 +113,16 @@ default-on" form was rejected):
   same average rate, ~90% radio-idle. The batch is not foreground-gated: it
   keeps firing while the app is backgrounded, subject to whatever timer
   throttling the host imposes.
-- **No metering guard.** Connection type is deliberately not consulted —
-  cellular is treated exactly like Wi-Fi. The per-session spend cap is the
-  only egress bound, and it is what the size disclosure is written against.
+- **No metering guard, no session spend cap.** Connection type is
+  deliberately not consulted — cellular is treated exactly like Wi-Fi — and
+  there is no per-session attempt budget on top. The bound is the library
+  itself: only not-yet-cached entries are fetched, staleness is not chased,
+  and unextractable files are negative-cached, so a hydrated index costs
+  nothing to keep sweeping. That total is what the size disclosure is
+  written against.
 - **Consent bar for default-on:** disclosure with a size estimate at
   folder-link time + a settings toggle + a visible activity indicator while
-  trickling + the per-session spend cap. Anything less → ship it opt-in. The
+  trickling. Anything less → ship it opt-in. The
   auto-scan precedent does NOT cover this: auto-scan is one metadata
   listing; trickle is continuous ranged downloads of book bytes.
 - **Negative caching (biggest miss in the naive spec).** Persist "no

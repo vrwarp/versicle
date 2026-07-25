@@ -167,6 +167,9 @@ export const messages = {
     'Are you sure you want to reset all rate limit pools to their default values? This will overwrite your customized limits.',
   'syncSettings.clearConfig.title': 'Clear Firebase configuration?',
   'syncSettings.clearConfig.body': 'Are you sure you want to clear the Firebase configuration?',
+  'syncSettings.clearPreviewCache.title': 'Clear cached book previews?',
+  'syncSettings.clearPreviewCache.body':
+    'Frees {size} by removing {count} cached covers and details. Nothing in your library is deleted — previews are re-fetched as you browse Drive, or in the background if that is turned on.',
   'syncSettings.deleteWorkspace.title': 'Delete workspace "{name}"?',
   'syncSettings.deleteWorkspace.body':
     'This will permanently reclaim cloud storage for this workspace. Your local data will be preserved but sync will be disabled for this workspace ID.',

@@ -80,6 +80,46 @@ describe('drivePreviews repo', () => {
     expect(await drivePreviews.get('keep')).toBeDefined();
   });
 
+  it('reports counts and cover bytes, splitting the negative cache out', async () => {
+    await drivePreviews.put({
+      fileId: 'ok1',
+      status: 'ok',
+      cover: new Blob([new Uint8Array(1024)], { type: 'image/png' }),
+    });
+    await drivePreviews.put({
+      fileId: 'ok2',
+      status: 'ok',
+      cover: new Blob([new Uint8Array(512)], { type: 'image/png' }),
+    });
+    await drivePreviews.put({ fileId: 'bad', status: 'unextractable' });
+
+    expect(await drivePreviews.stats()).toEqual({ cached: 2, unextractable: 1, bytes: 1536 });
+  });
+
+  it('reports an empty cache as all zeroes', async () => {
+    expect(await drivePreviews.stats()).toEqual({ cached: 0, unextractable: 0, bytes: 0 });
+  });
+
+  it('clears every row — negative-cache rows included — and reports what it freed', async () => {
+    await drivePreviews.put({
+      fileId: 'ok1',
+      status: 'ok',
+      cover: new Blob([new Uint8Array(2048)], { type: 'image/png' }),
+    });
+    await drivePreviews.put({ fileId: 'bad', status: 'unextractable' });
+
+    const result = await drivePreviews.clear();
+    expect(result).toEqual({ deleted: 2, freedBytes: 2048 });
+    expect(await drivePreviews.listFileIds()).toEqual([]);
+    // The negative cache going too is the point: those files can be retried.
+    expect(await drivePreviews.get('bad')).toBeUndefined();
+    expect(await drivePreviews.stats()).toEqual({ cached: 0, unextractable: 0, bytes: 0 });
+  });
+
+  it('clearing an empty cache is a no-op, not an error', async () => {
+    expect(await drivePreviews.clear()).toEqual({ deleted: 0, freedBytes: 0 });
+  });
+
   it('evicts by LRU when over the byte budget', async () => {
     // Two ~2KB cover rows; a 3KB budget forces one eviction (the older).
     const big = () => new Blob([new Uint8Array(2048)], { type: 'image/png' });
