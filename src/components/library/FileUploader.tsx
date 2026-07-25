@@ -13,7 +13,7 @@ import { getGoogleAuthClient } from '@domains/google';
 import { useImportController } from '@app/library/useImportController';
 import { presentError } from '@app/errors/presentError';
 import { Button } from '../ui/Button';
-import { DriveImportDialog } from '../drive/DriveImportDialog';
+import { useNavigate } from 'react-router-dom';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('FileUploader');
@@ -28,6 +28,7 @@ const logger = createLogger('FileUploader');
 export const FileUploader: React.FC = () => {
   const isImporting = useLibraryStore(state => state.isImporting);
   const controller = useImportController();
+  const navigate = useNavigate();
 
   const { showToast } = useToastStore();
   const [dragActive, setDragActive] = useState(false);
@@ -163,13 +164,14 @@ export const FileUploader: React.FC = () => {
     }
   };
 
-  const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
-
+  // Browsing Drive is a route now (the shelf at /drive), not a modal. The
+  // token is still acquired from this gesture so the shelf can hydrate
+  // previews and import without needing a popup of its own.
   const handleBrowseDrive = async () => {
     try {
       await getGoogleAuthClient().getTokenInteractive('drive');
-      logger.debug("Drive token valid, opening picker");
-      setIsDriveImportOpen(true);
+      logger.debug("Drive token valid, opening the Drive shelf");
+      navigate('/drive');
     } catch (error) {
       logger.error("Failed to access Drive", error);
       showToast("Failed to access Google Drive. Please reconnect.", 'error');
@@ -282,11 +284,6 @@ export const FileUploader: React.FC = () => {
           }
         }}
         fileName={currentDuplicate?.name || ''}
-      />
-
-      <DriveImportDialog
-        isOpen={isDriveImportOpen}
-        onClose={() => setIsDriveImportOpen(false)}
       />
 
     </div>

@@ -5,6 +5,7 @@ import { useLibraryStore } from '@store/useLibraryStore';
 import { useToastStore } from '@store/useToastStore';
 import { validateZipSignature } from '@lib/ingestion';
 import { DuplicateBookError } from '~types/errors';
+import { MemoryRouter } from 'react-router-dom';
 
 // Mock dependencies
 vi.mock('@store/useLibraryStore');
@@ -29,6 +30,7 @@ vi.mock('@app/library/useImportController', () => {
 });
 
 describe('FileUploader', () => {
+  // The Drive button navigates to the /drive shelf, so the component needs a router.
   const mockShowToast = vi.fn();
 
   beforeEach(() => {
@@ -54,12 +56,12 @@ describe('FileUploader', () => {
   });
 
   it('should render upload instructions', () => {
-    render(<FileUploader />);
+    render(<FileUploader />, { wrapper: MemoryRouter });
     expect(screen.getByText(/Drop EPUBs or ZIPs here/)).toBeInTheDocument();
   });
 
   it('should handle file selection', async () => {
-    const { container } = render(<FileUploader />);
+    const { container } = render(<FileUploader />, { wrapper: MemoryRouter });
 
     // Find input by selector directly as it has no label
     const input = container.querySelector('input[type="file"]');
@@ -76,7 +78,7 @@ describe('FileUploader', () => {
   });
 
   it('should call addBook when file is selected', async () => {
-    const { container } = render(<FileUploader />);
+    const { container } = render(<FileUploader />, { wrapper: MemoryRouter });
     const input = container.querySelector('input[type="file"]');
 
     const file = new File(['dummy'], 'test.epub', { type: 'application/epub+zip' });
@@ -95,12 +97,12 @@ describe('FileUploader', () => {
       return selector ? selector(state) : state;
     });
 
-    render(<FileUploader />);
+    render(<FileUploader />, { wrapper: MemoryRouter });
     expect(screen.getByText('Importing books...')).toBeInTheDocument();
   });
 
   it('should handle drag and drop', async () => {
-    const { container } = render(<FileUploader />);
+    const { container } = render(<FileUploader />, { wrapper: MemoryRouter });
     // Select the drop zone div (nested inside the wrapper)
     const dropZone = container.querySelector('.group.relative') as HTMLElement;
     expect(dropZone).toBeInTheDocument();
@@ -128,7 +130,7 @@ describe('FileUploader', () => {
   });
 
   it('should reject non-epub extension files', async () => {
-    const { container } = render(<FileUploader />);
+    const { container } = render(<FileUploader />, { wrapper: MemoryRouter });
     const dropZone = container.querySelector('.group.relative') as HTMLElement;
 
     const file = new File(['dummy'], 'test.pdf', { type: 'application/pdf' });
@@ -148,7 +150,7 @@ describe('FileUploader', () => {
     // Mock validation to fail
     (validateZipSignature as Mock).mockResolvedValue(false);
 
-    const { container } = render(<FileUploader />);
+    const { container } = render(<FileUploader />, { wrapper: MemoryRouter });
     const input = container.querySelector('input[type="file"]');
 
     const file = new File(['invalid content'], 'test.epub', { type: 'application/epub+zip' });
@@ -166,7 +168,7 @@ describe('FileUploader', () => {
     // Mock validation to fail
     (validateZipSignature as Mock).mockResolvedValue(false);
 
-    const { container } = render(<FileUploader />);
+    const { container } = render(<FileUploader />, { wrapper: MemoryRouter });
     const input = container.querySelector('input[type="file"]');
 
     const file = new File(['invalid content'], 'test.zip', { type: 'application/zip' });
@@ -185,7 +187,7 @@ describe('FileUploader', () => {
     // the dialog confirmation then calls replaceFile.
     mockAddBook.mockRejectedValueOnce(new DuplicateBookError("test.epub"));
 
-    const { container } = render(<FileUploader />);
+    const { container } = render(<FileUploader />, { wrapper: MemoryRouter });
     const input = container.querySelector('input[type="file"]');
     const file = new File(['dummy'], 'test.epub', { type: 'application/epub+zip' });
 

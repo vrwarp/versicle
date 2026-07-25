@@ -15,7 +15,6 @@ import { Button } from '../ui/Button';
 import { ImportSourceDialog } from './ImportSourceDialog';
 import { ContentMissingDialog } from './ContentMissingDialog';
 import { RestoreMismatchDialog } from './RestoreMismatchDialog';
-import { DriveImportDialog } from '../drive/DriveImportDialog';
 import { getGoogleAuthClient } from '@domains/google';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { useShallow } from 'zustand/react/shallow';
@@ -48,6 +47,14 @@ import { compareTitles } from '@kernel/locale/format';
  */
 const logger = createLogger('LibraryView');
 
+/** Header dropdown value → route. The shell renders every one of these. */
+const CONTEXT_ROUTES: Record<string, string> = {
+  library: '/',
+  notes: '/notes',
+  search: '/search',
+  drive: '/drive',
+};
+
 let libraryMountedMeasured = false;
 function measureLibraryMountedOnce(): void {
   if (libraryMountedMeasured) return;
@@ -70,10 +77,19 @@ const GlobalSemanticSearchViewLazy = React.lazy(
     'global-search',
   ),
 );
+// The Drive shelf (`/drive`) — lazy for the same reason as the other
+// contexts: the boot surface is the library, and the Drive preview stack
+// should not ride in its chunk.
+const DriveLibraryViewLazy = React.lazy(
+  importWithChunkReload(
+    () => import('../drive/DriveLibraryView').then((m) => ({ default: m.DriveLibraryView })),
+    'drive-shelf',
+  ),
+);
 
 interface LibraryViewProps {
-  /** Which context this route renders: the library grid or global notes. */
-  context?: 'library' | 'notes' | 'search';
+  /** Which context this route renders: the library grid, notes, search, or the Drive shelf. */
+  context?: 'library' | 'notes' | 'search' | 'drive';
 }
 
 export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' }) => {
@@ -158,8 +174,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
   // (src/app/boot/whenHydrated.ts). The prevBookCountRef heuristic that
   // duplicated it here is gone.
 
-  // Phase 5: Drive Import
-  const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
   const [isImportSourceOpen, setIsImportSourceOpen] = useState(false);
   const [isContentMissingOpen, setIsContentMissingOpen] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -167,13 +181,17 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
   // can proceed anyway from the mismatch warning.
   const [restoreMismatchFile, setRestoreMismatchFile] = useState<File | null>(null);
 
+  // The import dialog's "Google Drive" choice no longer opens a dialog — it
+  // switches to the Drive shelf route. The token is still acquired here, from
+  // the user's gesture, so the shelf can hydrate previews without a popup of
+  // its own (a popup outside a gesture is what gets a user force-disconnected).
   const handleBrowseDrive = async () => {
     try {
       // User gesture: silent token when cached, interactive connect otherwise.
       await getGoogleAuthClient().getTokenInteractive('drive');
-      setIsDriveImportOpen(true);
+      navigate('/drive');
     } catch (error) {
-      console.error("Failed to access Drive", error);
+      logger.error("Failed to access Drive", error);
       showToast("Please connect Google Drive in Settings first.", 'error');
     }
   };
@@ -512,16 +530,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
         />
       )}
 
-      <DriveImportDialog
-        isOpen={isDriveImportOpen}
-        onClose={() => setIsDriveImportOpen(false)}
-      />
-
       <header className="mb-6 flex flex-col gap-4">
         {/* Top Row: Title and Actions */}
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <Select value={context} onValueChange={(val) => navigate(val === 'notes' ? '/notes' : val === 'search' ? '/search' : '/')}>
+            <Select value={context} onValueChange={(val) => navigate(CONTEXT_ROUTES[val] ?? '/')}>
               <SelectTrigger className="w-auto text-2xl sm:text-3xl font-bold border-0 shadow-none p-0 h-auto focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none flex-shrink-0" aria-label="Select view context">
                 <SelectValue />
               </SelectTrigger>
@@ -529,45 +542,48 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
                 <SelectItem value="library">My Library</SelectItem>
                 <SelectItem value="notes">Notes</SelectItem>
                 <SelectItem value="search">Search</SelectItem>
+                <SelectItem value="drive">Google Drive</SelectItem>
               </SelectContent>
             </Select>
             <SyncPulseIndicator />
           </div>
 
           <div className="flex gap-2">
+            {/* The Drive shelf renders the same grid/list layouts, so it shares
+                the toggle (and the persisted preference behind it). */}
+            {(context === 'library' || context === 'drive') && (
+              <Button
+                variant="secondary"
+                size="icon"
+                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                className="shadow-sm"
+                aria-label={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
+                title={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
+                data-testid="view-toggle-button"
+              >
+                {viewMode === 'grid' ? <ListIcon className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
+              </Button>
+            )}
             {context === 'library' && (
-              <>
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                  className="shadow-sm"
-                  aria-label={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
-                  title={viewMode === 'grid' ? "Switch to list view" : "Switch to grid view"}
-                  data-testid="view-toggle-button"
-                >
-                  {viewMode === 'grid' ? <ListIcon className="w-4 h-4" /> : <LayoutGrid className="w-4 h-4" />}
-                </Button>
-                <Button
-                  onClick={() => setIsImportSourceOpen(true)}
-                  disabled={isImporting}
-                  className="gap-2 shadow-sm max-sm:px-3"
-                  data-testid="header-add-button"
-                  size={isImporting ? "icon" : "default"}
-                >
-                  {isImporting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                      <span className="sr-only" aria-live="polite">Importing...</span>
-                    </>
-                  ) : (
-                    <Upload className="w-4 h-4" aria-hidden="true" />
-                  )}
-                  <span aria-hidden={isImporting} className="font-medium hidden sm:inline">
-                    {isImporting ? "Importing..." : "Import Book"}
-                  </span>
-                </Button>
-              </>
+              <Button
+                onClick={() => setIsImportSourceOpen(true)}
+                disabled={isImporting}
+                className="gap-2 shadow-sm max-sm:px-3"
+                data-testid="header-add-button"
+                size={isImporting ? "icon" : "default"}
+              >
+                {isImporting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    <span className="sr-only" aria-live="polite">Importing...</span>
+                  </>
+                ) : (
+                  <Upload className="w-4 h-4" aria-hidden="true" />
+                )}
+                <span aria-hidden={isImporting} className="font-medium hidden sm:inline">
+                  {isImporting ? "Importing..." : "Import Book"}
+                </span>
+              </Button>
             )}
             <Button
               variant="secondary"
@@ -685,6 +701,16 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
           }
         >
           <GlobalSemanticSearchViewLazy />
+        </Suspense>
+      ) : context === 'drive' ? (
+        <Suspense
+          fallback={
+            <div className="flex justify-center items-center py-12 flex-1" role="status" aria-label="Loading Google Drive">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" aria-hidden="true" />
+            </div>
+          }
+        >
+          <DriveLibraryViewLazy viewMode={viewMode} />
         </Suspense>
       ) : (
         <section className="flex-1 w-full">

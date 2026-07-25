@@ -4,6 +4,7 @@ This directory contains the React components that make up the user interface.
 
 ## Directories
 
+*   **`drive/`**: The Google Drive shelf — the `/drive` route's file browser, its grid/list items, and the pre-import preview sheet.
 *   **`library/`**: Components specific to the "Library" view (book list, upload).
 *   **`reader/`**: Components specific to the "Reader" view (EPUB rendering, controls, sidebars).
 *   **`ui/`**: Reusable, generic UI components (buttons, dialogs, inputs), providing a consistent design system.
