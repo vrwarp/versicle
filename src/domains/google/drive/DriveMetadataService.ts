@@ -260,7 +260,7 @@ export class DriveMetadataService {
    * R7 trickle: hydrate one batch of not-yet-cached index entries at 'trickle'
    * priority (preempted by any interactive/viewport work). Ordered
    * most-recently-modified first (a proxy for "new on Drive"). This is the pure
-   * engine — the boot task owns the guards (online/token/unmetered/consent/byte
+   * engine — the boot task owns the guards (online/token/consent/byte
    * budget) and the cadence; the service just does the work when asked and
    * never triggers a scan (it reads the persisted index only). Stops the batch
    * early on an auth/offline outcome so it doesn't hammer a closed door.

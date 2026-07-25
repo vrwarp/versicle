@@ -149,9 +149,9 @@ describe('computeProtectedBookIds (Phase D never-evict-unconfirmed-upload)', () 
 });
 
 describe('shouldTrickleNow (R7 gate)', () => {
-  const ok = { onLine: true, visible: true, saveData: false, enabled: true, linked: true };
+  const ok = { onLine: true, enabled: true, linked: true };
 
-  it('allows only when opted-in, linked, online, foreground, and unmetered', () => {
+  it('allows when opted-in, linked, and online', () => {
     expect(shouldTrickleNow(ok)).toBe(true);
   });
 
@@ -167,11 +167,11 @@ describe('shouldTrickleNow (R7 gate)', () => {
     expect(shouldTrickleNow({ ...ok, onLine: false })).toBe(false);
   });
 
-  it('blocks when backgrounded', () => {
-    expect(shouldTrickleNow({ ...ok, visible: false })).toBe(false);
-  });
-
-  it('blocks on a metered (save-data) connection', () => {
-    expect(shouldTrickleNow({ ...ok, saveData: true })).toBe(false);
+  // Connection type and document visibility are deliberately NOT inputs: the
+  // gate's whole surface is these three fields, so an added metering or
+  // foreground check would fail this.
+  it('gates on exactly {onLine, enabled, linked} — no metering or visibility input', () => {
+    expect(Object.keys(ok).sort()).toEqual(['enabled', 'linked', 'onLine']);
+    expect(shouldTrickleNow({ ...ok, visible: false, saveData: true } as typeof ok)).toBe(true);
   });
 });

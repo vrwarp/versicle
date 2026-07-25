@@ -110,14 +110,15 @@ default-on" form was rejected):
   (same trap as R6).
 - **Batched, not ticked.** A request every 10 s pins the cellular radio at
   the dormancy-tail boundary indefinitely. Batch ~30 books every ~5 min —
-  same average rate, ~90% radio-idle. Foreground-only (Capacitor webviews
-  have no reliable background execution; don't pretend otherwise).
-- **Metering guard.** Unmetered-connections-only by default (Capacitor
-  Network plugin); on web, where metering is undetectable, unknown ≠
-  unmetered — apply a hard per-session byte cap (~20 MB) instead.
+  same average rate, ~90% radio-idle. The batch is not foreground-gated: it
+  keeps firing while the app is backgrounded, subject to whatever timer
+  throttling the host imposes.
+- **No metering guard.** Connection type is deliberately not consulted —
+  cellular is treated exactly like Wi-Fi. The per-session spend cap is the
+  only egress bound, and it is what the size disclosure is written against.
 - **Consent bar for default-on:** disclosure with a size estimate at
   folder-link time + a settings toggle + a visible activity indicator while
-  trickling + the metering guard. Anything less → ship it opt-in. The
+  trickling + the per-session spend cap. Anything less → ship it opt-in. The
   auto-scan precedent does NOT cover this: auto-scan is one metadata
   listing; trickle is continuous ranged downloads of book bytes.
 - **Negative caching (biggest miss in the naive spec).** Persist "no

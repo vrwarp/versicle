@@ -625,9 +625,9 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                             Build book previews in the background
                                         </Label>
                                         <p className="text-xs text-muted-foreground">
-                                            Fetches covers and details for your Drive books a little at a time
-                                            while the app is open (Wi-Fi only). Uses small partial downloads,
-                                            not full books.
+                                            Fetches covers and details for your Drive books a little at a time,
+                                            over Wi-Fi or cellular. Uses small partial downloads, not full
+                                            books.
                                         </p>
                                     </div>
                                     <Switch
