@@ -51,13 +51,44 @@ function isResourceExhausted(error: unknown): boolean {
 }
 
 /**
+ * The model itself is unusable for this key right now — retired, absent from
+ * this API version, or gated behind a tier the project is not on. Typed off the
+ * HTTP status plus the API's own `status` enum (attached to the error context by
+ * GeminiClient), never sniffed from the message text.
+ *
+ * A 404 is decisive on its own: the endpoint is `/models/<id>:generateContent`,
+ * so the only thing that can be Not Found is the model. A 400 is deliberately
+ * NOT treated as model-unavailable in general — a malformed prompt or a schema
+ * breach 400s identically on every model, and rotating would turn one bad
+ * request into a round trip per model. The single model-specific 400 is
+ * FAILED_PRECONDITION (model not available for this project/region/tier).
+ */
+export function isModelUnavailable(error: unknown): boolean {
+  if (!(error instanceof GenAIHttpError)) return false;
+  if (error.status === 404) return true;
+  return error.status === 400 && error.context?.apiStatus === 'FAILED_PRECONDITION';
+}
+
+/**
  * The rotation continue-predicate: keep rotating to the remaining models on a
- * server 429 ({@link isResourceExhausted}) OR on a PRE-NETWORK
- * {@link NetRateLimitedError}. The latter is the cooldown-backpressure case —
- * when model A's 429 sets a governor cooldown, model B's gateway acquire throws
+ * server 429 ({@link isResourceExhausted}), on an unusable model
+ * ({@link isModelUnavailable}), OR on a PRE-NETWORK {@link NetRateLimitedError}.
+ *
+ * The NetRateLimitedError arm is the cooldown-backpressure case — when model A's
+ * 429 sets a governor cooldown, model B's gateway acquire throws
  * NetRateLimitedError before any network call; without this, that cooldown would
  * abort rotation to the still-untried models.
+ *
+ * The isModelUnavailable arm keeps a RETIRED model from taking the rest of the
+ * chain down with it. Models shut down on Google's schedule, and a dead one
+ * answers 404 rather than 429 — without this arm the loop would rethrow on the
+ * spot and strand every model below it, including the high-daily-quota ones
+ * that carry the bulk of the day's traffic.
  */
 export function isRetryableForRotation(error: unknown): boolean {
-  return isResourceExhausted(error) || error instanceof NetRateLimitedError;
+  return (
+    isResourceExhausted(error) ||
+    isModelUnavailable(error) ||
+    error instanceof NetRateLimitedError
+  );
 }

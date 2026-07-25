@@ -42,7 +42,14 @@ const STORE = 'logs';
 export interface GenAILogRow {
   id: string;
   timestamp: number;
-  type: 'request' | 'response' | 'error';
+  /**
+   * Must stay in sync with the domain's `GenAILogEntry['type']` — the two
+   * shapes round-trip losslessly and the app layer casts between them.
+   * Widening this union is backward-compatible on its own: rows written by an
+   * older build simply never carry the newer members, so no store version bump
+   * is needed for a value-only addition like `'debug'`.
+   */
+  type: 'request' | 'response' | 'error' | 'debug';
   method: string;
   payload: unknown;
   bookTitle?: string;

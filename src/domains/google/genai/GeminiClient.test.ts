@@ -15,6 +15,7 @@ import type { GenAIConfig } from './contract';
 import type { EgressFn } from '@kernel/net';
 import { NetRateLimitedError } from '~types/errors';
 import type { GenAILogEntry } from './logging';
+import { DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';
 
 function geminiResponse(text: string, status = 200): Response {
   return new Response(
@@ -78,9 +79,32 @@ describe('GeminiClient', () => {
     await expect(client.generateText('prompt')).resolves.toBe('success');
     expect(calls).toHaveLength(2);
     const model = (url: string) => url.match(/models\/([^:]+):/)?.[1];
-    // Tiered order: premium first, then next
-    expect(model(calls[0].url)).toBe('gemini-3.5-flash');
-    expect(model(calls[1].url)).toBe('gemini-3-flash-preview');
+    expect(model(calls[0].url)).toBe(GENAI_ROTATION_MODELS[0]);
+    expect(model(calls[1].url)).toBe(GENAI_ROTATION_MODELS[1]);
+    expect(model(calls[0].url)).toBe('gemini-3.6-flash');
+  });
+
+  it('every rotation model has its own quota pool, summing to the free-tier day', () => {
+    // The daily ceiling is the SUM of the per-model buckets — order cannot add
+    // or lose quota, but a model with NO pool of its own silently inherits the
+    // far looser `default` pool, which would overrun its real free tier.
+    const rpd = GENAI_ROTATION_MODELS.map((m) => DEFAULT_QUOTA_LIMITS[m]?.rpd);
+    expect(rpd).not.toContain(undefined);
+    expect(rpd.reduce((sum, n) => sum! + n!, 0)).toBe(1100);
+  });
+
+  it('models with a shutdown date are ordered BELOW the high-daily-quota workhorses', () => {
+    // Retirement is the one failure the chain cannot fully absorb, so anything
+    // deprecating sits in the tail: a hard abort there costs the last 60
+    // requests of the day rather than the 1,000 the lite models carry.
+    const deprecating = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3-flash-preview'];
+    const workhorses = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+    const at = (m: string) => GENAI_ROTATION_MODELS.indexOf(m as never);
+    for (const tail of deprecating) {
+      for (const workhorse of workhorses) {
+        expect(at(tail)).toBeGreaterThan(at(workhorse));
+      }
+    }
   });
 
   it('regression: does NOT retry on 429 when rotation is disabled', async () => {
@@ -97,13 +121,68 @@ describe('GeminiClient', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('regression: exhausts all rotation models when every one returns 429', async () => {
+  it('a RETIRED model (404) rotates on instead of stranding the rest of the chain', async () => {
+    // Google shuts models down on its own schedule; a dead one answers 404, not
+    // 429. Without this the loop rethrows on the spot and every model below it
+    // — including the 500-RPD workhorses — goes unused for the rest of the day.
+    const { client, calls } = makeClient(
+      [errorResponse(404, 'models/gemini-3.6-flash is not found'), geminiResponse('success')],
+      { rotationEnabled: true },
+    );
+    await expect(client.generateText('prompt')).resolves.toBe('success');
+    expect(calls).toHaveLength(2);
+  });
+
+  it('a model gated behind a tier (400 FAILED_PRECONDITION) rotates on', async () => {
     const { client, calls } = makeClient(
       [
-        errorResponse(429, 'RESOURCE_EXHAUSTED'),
-        errorResponse(429, 'RESOURCE_EXHAUSTED'),
-        errorResponse(429, 'RESOURCE_EXHAUSTED'),
+        new Response(
+          JSON.stringify({ error: { code: 400, status: 'FAILED_PRECONDITION', message: 'billing' } }),
+          { status: 400 },
+        ),
+        geminiResponse('success'),
       ],
+      { rotationEnabled: true },
+    );
+    await expect(client.generateText('prompt')).resolves.toBe('success');
+    expect(calls).toHaveLength(2);
+  });
+
+  it('a malformed request (400 INVALID_ARGUMENT) does NOT rotate — it would fail identically on every model', async () => {
+    const { client, calls } = makeClient(
+      [
+        new Response(
+          JSON.stringify({ error: { code: 400, status: 'INVALID_ARGUMENT', message: 'bad schema' } }),
+          { status: 400 },
+        ),
+      ],
+      { rotationEnabled: true },
+    );
+    await expect(client.generateText('prompt')).rejects.toMatchObject({ status: 400 });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('stepping past an out-of-quota model logs at debug, a retired one at error', async () => {
+    const { client: quotaClient, logs: quotaLogs } = makeClient(
+      [errorResponse(429, 'RESOURCE_EXHAUSTED'), geminiResponse('ok')],
+      { rotationEnabled: true },
+    );
+    await quotaClient.generateText('prompt');
+    const quotaRotation = quotaLogs.filter((l) => l.type === 'error' || l.type === 'debug');
+    expect(quotaRotation.map((l) => l.type)).toEqual(['debug']);
+
+    const { client: deadClient, logs: deadLogs } = makeClient(
+      [errorResponse(404, 'not found'), geminiResponse('ok')],
+      { rotationEnabled: true },
+    );
+    await deadClient.generateText('prompt');
+    const deadRotation = deadLogs.filter((l) => l.type === 'error' || l.type === 'debug');
+    expect(deadRotation.map((l) => l.type)).toEqual(['error']);
+  });
+
+  it('regression: exhausts all rotation models when every one returns 429', async () => {
+    const { client, calls } = makeClient(
+      GENAI_ROTATION_MODELS.map(() => errorResponse(429, 'RESOURCE_EXHAUSTED')),
       { rotationEnabled: true },
     );
     await expect(client.generateText('prompt')).rejects.toMatchObject({ status: 429 });

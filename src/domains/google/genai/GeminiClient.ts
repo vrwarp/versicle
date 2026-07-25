@@ -22,6 +22,7 @@ import {
   GenAIHttpError,
   GenAIInvalidResponseError,
   GenAINotConfiguredError,
+  isModelUnavailable,
   isRetryableForRotation,
 } from './errors';
 import { redactPayload, type GenAILogEntry, type GenAILogSink } from './logging';
@@ -36,15 +37,45 @@ import type {
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
 /**
- * Tiered rotation list: premium models first (20 RPD each), lite fallback
- * last (500 RPD). The list is iterated IN ORDER (no shuffle) — smart models
- * get first crack, and when their daily quota is exhausted (429), the
- * high-quota lite model handles the rest.
+ * The free-tier rotation list, iterated IN ORDER (no shuffle). Each entry has
+ * its own daily bucket that resets at midnight PT, and the loop falls through to
+ * the next entry whenever one is spent, so the day's ceiling is the SUM of the
+ * buckets — 1,100 requests — REGARDLESS of order. Ordering does not add or lose
+ * quota; nothing is ever stranded, because a request that cannot be admitted at
+ * position N simply continues to N+1.
+ *
+ * What the order does decide is (a) which model serves the bulk of the day and
+ * (b) how much of the chain a hard failure takes down with it. Hence:
+ *
+ *  1-2. The two stable 20-RPD frontier models, newest first. There is no
+ *       per-call-type routing, so scarce premium quota cannot be RESERVED for
+ *       high-value calls — it is spent on whatever arrives first or it expires
+ *       at midnight. Leading with them at least guarantees it is spent.
+ *  3-4. The two stable 500-RPD lite models: the workhorses that serve ~91% of
+ *       the day.
+ *  5-7. Preview and deprecating models LAST. Google retires models on its own
+ *       schedule, and a retired model answers 404, not 429. Rotation now treats
+ *       that as continuable (see isModelUnavailable), but keeping anything with
+ *       a shutdown date below the workhorses means even a failure mode the
+ *       predicate does NOT cover costs only the last 60 requests of the day
+ *       instead of the first 1,040.
+ *
+ * The per-model 429 cooldown is recorded against that model's OWN rate pool
+ * (see `recordCooldown(..., modelId)` below), so exhausting one model never
+ * backpressures its siblings — the loop really does reach the next bucket.
+ *
+ * Gemma 4 is deliberately excluded despite its enormous 14.4K RPD: at 16K TPM
+ * it cannot carry this app's book-text prompts, and it has no inline-image
+ * input for table adaptation.
  */
 export const GENAI_ROTATION_MODELS = [
+  'gemini-3.6-flash',
   'gemini-3.5-flash',
-  'gemini-3-flash-preview',
+  'gemini-3.5-flash-lite',
   'gemini-3.1-flash-lite',
+  'gemini-3-flash-preview',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
 ] as const;
 
 
@@ -163,11 +194,20 @@ export class GeminiClient implements GenAIClient {
         // acquire backpressured before the network) — both leave the remaining
         // models worth trying.
         if (rotationEnabled && isRetryableForRotation(error)) {
+          // A retired/ungated model is ACTIONABLE — the rotation list needs
+          // editing — so it stays at 'error'. Stepping over a model that is
+          // merely out of quota is the expected steady state once the head of
+          // the list is spent for the day, and at ~5 entries per request it
+          // would evict everything worth reading from the capped ring buffer;
+          // that goes to 'debug'.
+          const unusable = isModelUnavailable(error);
           this.log(
-            'error',
+            unusable ? 'error' : 'debug',
             method,
             {
-              message: `Model ${modelId} unavailable (429 / cooldown backpressure). Retrying with next model...`,
+              message: unusable
+                ? `Model ${modelId} is unavailable (retired or not enabled for this key). Retrying with next model...`
+                : `Model ${modelId} out of quota (429 / cooldown backpressure). Retrying with next model...`,
               error: (error as Error).message,
             },
             context,

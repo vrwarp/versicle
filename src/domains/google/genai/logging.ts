@@ -14,7 +14,15 @@
 export interface GenAILogEntry {
   id: string;
   timestamp: number;
-  type: 'request' | 'response' | 'error';
+  /**
+   * `'debug'` is for high-volume, EXPECTED chatter that would otherwise crowd
+   * the capped ring buffer — model rotation stepping past an exhausted model is
+   * the motivating case: once the head of the rotation list has spent its daily
+   * quota, every subsequent request steps over it, so logging those at `'error'`
+   * evicted the entries worth reading within ~100 requests. `'error'` stays for
+   * outcomes a human should act on.
+   */
+  type: 'request' | 'response' | 'error' | 'debug';
   method: string;
   payload: unknown;
   bookTitle?: string;

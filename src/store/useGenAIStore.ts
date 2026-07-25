@@ -172,6 +172,28 @@ type PersistedGenAIState = Pick<
   | 'shareAiCaches'
 >;
 
+/**
+ * Sentinel for a budget the provider does NOT meter ("—" or "Unlimited" in the
+ * AI Studio rate-limit table): effectively no ceiling, but still a finite number
+ * so the governor's arithmetic and the settings meters stay well-defined.
+ */
+const UNMETERED_REQUESTS = 999_999;
+const UNMETERED_TOKENS = 999_999_999;
+
+/**
+ * Free-tier quota per rate pool. The pool key IS the model endpoint id the
+ * client sends (GeminiClient passes `ratePool: modelId`), so these keys must be
+ * the REAL Gemini API model codes — a display name or a family nickname would
+ * silently never bind and the pool would fall through to `default`.
+ *
+ * Numbers mirror the AI Studio rate-limit dashboard (free tier). Three readings
+ * of that table map onto the sentinels above:
+ *  - a number → that number,
+ *  - "—" / "Unlimited" → {@link UNMETERED_REQUESTS} / {@link UNMETERED_TOKENS},
+ *  - 0 → a genuine ZERO free-tier allowance. Left as zero deliberately: acquire
+ *    then backpressures pre-network with a typed rpm/rpd-exhausted error rather
+ *    than spending a round trip to collect a 429.
+ */
 export const DEFAULT_QUOTA_LIMITS: Record<string, QuotaLimits> = {
   default: { rpm: 100, tpm: 30_000, rpd: 1000 },
   'gemini-1.5-pro': { rpm: 2, tpm: 32_000, rpd: 50 },
@@ -183,25 +205,77 @@ export const DEFAULT_QUOTA_LIMITS: Record<string, QuotaLimits> = {
   'google-tts-standard': { rpm: 100, tpm: 100_000, rpd: 2000 },
   'google-tts-neural2': { rpm: 100, tpm: 30_000, rpd: 500 },
   'google-tts-polyglot': { rpm: 100, tpm: 30_000, rpd: 500 },
-  'gemini-embedding-001': { rpm: 100, tpm: 30_000, rpd: 1000 },
+
+  // --- Text-out models ---------------------------------------------------
+  // `gemini-flash-lite-latest` is the app's DEFAULT model and a real alias
+  // endpoint, so it needs its own pool: without one it fell through to
+  // `default` (100 rpm / 1000 rpd) — ~7x the real Flash-Lite ceiling. Google
+  // bills the alias against whichever Flash-Lite it resolves to, and both
+  // current Flash-Lite generations carry the same 15/250K/500 free tier, so
+  // that is the honest ceiling to hold it to. (The governor keys pools by the
+  // literal string sent, so the alias and the concrete model still meter
+  // separately here — this caps each at the right ceiling, not their sum.)
+  'gemini-flash-lite-latest': { rpm: 15, tpm: 250_000, rpd: 500 },
+  'gemini-2.0-flash': { rpm: 0, tpm: 0, rpd: 0 },
+  'gemini-2.0-flash-lite': { rpm: 0, tpm: 0, rpd: 0 },
   'gemini-2.5-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
   'gemini-2.5-flash-lite': { rpm: 10, tpm: 250_000, rpd: 20 },
-  'gemini-2.5-flash-tts': { rpm: 3, tpm: 10_000, rpd: 10 },
+  'gemini-2.5-pro': { rpm: 0, tpm: 0, rpd: 0 },
   'gemini-3-flash-preview': { rpm: 5, tpm: 250_000, rpd: 20 },
   'gemini-3.1-flash-lite': { rpm: 15, tpm: 250_000, rpd: 500 },
-  'gemini-3.1-flash-tts': { rpm: 3, tpm: 10_000, rpd: 10 },
+  'gemini-3.1-pro-preview': { rpm: 0, tpm: 0, rpd: 0 },
   'gemini-3.5-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+  'gemini-3.5-flash-lite': { rpm: 15, tpm: 250_000, rpd: 500 },
+  'gemini-3.6-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+
+  // --- Agents (Interactions API; keyed by their "Agent code") ------------
+  'antigravity-preview-05-2026': { rpm: 60, tpm: 100_000, rpd: 100 },
+  'deep-research-pro-preview-12-2025': { rpm: 0, tpm: 0, rpd: 0 },
+
+  // --- Multi-modal generative models -------------------------------------
+  'gemini-2.5-flash-image': { rpm: 0, tpm: 0, rpd: 0 },
+  'gemini-2.5-flash-preview-tts': { rpm: 3, tpm: 10_000, rpd: 10 },
+  'gemini-2.5-pro-preview-tts': { rpm: 0, tpm: 0, rpd: 0 },
+  'gemini-3-pro-image': { rpm: 0, tpm: 0, rpd: 0 },
+  'gemini-3.1-flash-image': { rpm: 0, tpm: 0, rpd: 0 },
+  'gemini-3.1-flash-lite-image': { rpm: 0, tpm: 0, rpd: 0 },
+  'gemini-3.1-flash-tts-preview': { rpm: 3, tpm: 10_000, rpd: 10 },
+  'gemini-omni-flash-preview': { rpm: 0, tpm: 0, rpd: 0 },
+  'imagen-4.0-fast-generate-001': { rpm: UNMETERED_REQUESTS, tpm: UNMETERED_TOKENS, rpd: 25 },
+  'imagen-4.0-generate-001': { rpm: UNMETERED_REQUESTS, tpm: UNMETERED_TOKENS, rpd: 25 },
+  'imagen-4.0-ultra-generate-001': { rpm: UNMETERED_REQUESTS, tpm: UNMETERED_TOKENS, rpd: 25 },
+  'lyria-3-clip-preview': { rpm: 0, tpm: 0, rpd: 0 },
+  'lyria-3-pro-preview': { rpm: 0, tpm: 0, rpd: 0 },
+  // The dashboard's "Veo 3 …" rows are family buckets; the only Veo 3
+  // generation still served by the Gemini API is 3.1, so the pools key on the
+  // 3.1 endpoints (the 3.0 codes are deprecated and pending shutdown).
+  'veo-3.1-fast-generate-preview': { rpm: 0, tpm: UNMETERED_TOKENS, rpd: 0 },
+  'veo-3.1-generate-preview': { rpm: 0, tpm: UNMETERED_TOKENS, rpd: 0 },
+  'veo-3.1-lite-generate-preview': { rpm: 0, tpm: UNMETERED_TOKENS, rpd: 0 },
+
+  // --- Live API ----------------------------------------------------------
+  'gemini-2.5-flash-native-audio-preview-12-2025': {
+    rpm: UNMETERED_REQUESTS,
+    tpm: 1_000_000,
+    rpd: UNMETERED_REQUESTS,
+  },
+  'gemini-3.1-flash-live-preview': { rpm: UNMETERED_REQUESTS, tpm: 65_000, rpd: UNMETERED_REQUESTS },
+  'gemini-3.5-live-translate-preview': {
+    rpm: UNMETERED_REQUESTS,
+    tpm: 20_000,
+    rpd: UNMETERED_REQUESTS,
+  },
+
+  // --- Other models ------------------------------------------------------
+  'gemini-2.5-computer-use-preview-10-2025': { rpm: 0, tpm: 0, rpd: 0 },
+  'gemini-embedding-001': { rpm: 100, tpm: 30_000, rpd: 1000 },
   'gemini-embedding-2': { rpm: 100, tpm: 30_000, rpd: 1000 },
   'gemini-robotics-er-1.5-preview': { rpm: 10, tpm: 250_000, rpd: 20 },
   'gemini-robotics-er-1.6-preview': { rpm: 5, tpm: 250_000, rpd: 20 },
-  'gemma-4-26b': { rpm: 15, tpm: 999_999_999, rpd: 1500 },
-  'gemma-4-31b': { rpm: 15, tpm: 999_999_999, rpd: 1500 },
-  'imagen-4-fast-generate': { rpm: 999_999, tpm: 999_999_999, rpd: 25 },
-  'imagen-4-generate': { rpm: 999_999, tpm: 999_999_999, rpd: 25 },
-  'imagen-4-ultra-generate': { rpm: 999_999, tpm: 999_999_999, rpd: 25 },
-  'gemini-2.5-flash-native-audio-dialog': { rpm: 999_999, tpm: 1_000_000, rpd: 999_999 },
-  'gemini-3-flash-live': { rpm: 999_999, tpm: 65_000, rpd: 999_999 },
-  'gemini-3.5-live-translate': { rpm: 999_999, tpm: 20_000, rpd: 999_999 },
+  'gemma-4-26b-a4b-it': { rpm: 30, tpm: 16_000, rpd: 14_400 },
+  'gemma-4-31b-it': { rpm: 30, tpm: 16_000, rpd: 14_400 },
+
+  // --- Tool-usage pools (separate AI Studio tables, not the model table) --
   'deep-research-pro-preview-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
   'gemini-2-flash-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
   'gemini-2.0-flash-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
@@ -216,6 +290,41 @@ export const DEFAULT_QUOTA_LIMITS: Record<string, QuotaLimits> = {
   'gemini-2.5-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
   'default-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
 };
+
+/**
+ * v3→v4 re-keying: legacy pool key → the REAL model endpoint id. The old keys
+ * were display-name-ish slugs that never matched what the client actually sends
+ * as `ratePool`, so those pools silently fell through to `default` instead of
+ * enforcing the model's own free-tier ceiling.
+ */
+const V4_POOL_RENAMES: Record<string, string> = {
+  'gemini-2.5-flash-tts': 'gemini-2.5-flash-preview-tts',
+  'gemini-3.1-flash-tts': 'gemini-3.1-flash-tts-preview',
+  // The Gemini 3 family's Live model shipped as 3.1; there is no
+  // `gemini-3-flash-live` endpoint (the dashboard row is a family bucket).
+  'gemini-3-flash-live': 'gemini-3.1-flash-live-preview',
+  'gemini-2.5-flash-native-audio-dialog': 'gemini-2.5-flash-native-audio-preview-12-2025',
+  'gemini-3.5-live-translate': 'gemini-3.5-live-translate-preview',
+  'gemma-4-26b': 'gemma-4-26b-a4b-it',
+  'gemma-4-31b': 'gemma-4-31b-it',
+  'imagen-4-fast-generate': 'imagen-4.0-fast-generate-001',
+  'imagen-4-generate': 'imagen-4.0-generate-001',
+  'imagen-4-ultra-generate': 'imagen-4.0-ultra-generate-001',
+};
+
+/**
+ * The v3 defaults for the only pools whose NUMBERS (not just their key) changed
+ * in v4. A persisted value equal to one of these is an untouched old default and
+ * is refreshed to the new figure; anything else is a deliberate user edit and is
+ * carried across the rename untouched.
+ */
+const V3_SUPERSEDED_DEFAULTS: Record<string, QuotaLimits> = {
+  'gemma-4-26b': { rpm: 15, tpm: 999_999_999, rpd: 1500 },
+  'gemma-4-31b': { rpm: 15, tpm: 999_999_999, rpd: 1500 },
+};
+
+const sameLimits = (a: QuotaLimits, b: QuotaLimits): boolean =>
+  a.rpm === b.rpm && a.tpm === b.tpm && a.rpd === b.rpd;
 
 export const useGenAIStore = create<GenAIState>()(
   persist(
@@ -304,7 +413,7 @@ export const useGenAIStore = create<GenAIState>()(
     }),
     {
       name: 'genai-storage',
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedGenAIState => ({
         apiKey: state.apiKey,
@@ -346,6 +455,16 @@ export const useGenAIStore = create<GenAIState>()(
        * v2 → v3: seed default limits for newly supported Google TTS pools
        * (chirp3-hd, wavenet, studio, standard, neural2, polyglot) so that
        * they can be configured individually.
+       *
+       * v3 → v4: re-key the Gemini pools onto their REAL API endpoint ids
+       * ({@link V4_POOL_RENAMES}) and seed every model now listed in the
+       * free-tier table. Pool keys are matched against the model id the client
+       * sends, so a slug like `gemma-4-26b` or `imagen-4-generate` never bound
+       * to anything — those pools were dead entries in the settings UI while
+       * the real request fell through to the far looser `default` pool. User
+       * edits survive: a persisted value is carried across the rename as-is,
+       * and only a value still equal to its superseded v3 default
+       * ({@link V3_SUPERSEDED_DEFAULTS}) is refreshed to the new figure.
        */
       migrate: (persistedState, version) => {
         if (persistedState && typeof persistedState === 'object') {
@@ -413,6 +532,25 @@ export const useGenAIStore = create<GenAIState>()(
             'google-tts-neural2': { rpm: 100, tpm: 30_000, rpd: 500 },
             'google-tts-polyglot': { rpm: 100, tpm: 30_000, rpd: 500 },
           };
+        }
+        if (version < 4 && persistedState && typeof persistedState === 'object') {
+          const state = persistedState as Record<string, unknown>;
+          const map = { ...((state.quotaLimitsMap as Record<string, QuotaLimits> | undefined) || {}) };
+          for (const [legacyKey, endpointKey] of Object.entries(V4_POOL_RENAMES)) {
+            const persisted = map[legacyKey];
+            if (!persisted) continue;
+            delete map[legacyKey];
+            // An explicit entry already under the endpoint key wins — it is the
+            // newer of the two and re-keying must never clobber it.
+            if (map[endpointKey]) continue;
+            const superseded = V3_SUPERSEDED_DEFAULTS[legacyKey];
+            const refreshed = superseded && sameLimits(persisted, superseded);
+            if (!refreshed) map[endpointKey] = persisted;
+          }
+          // Seed pools this blob has never seen (new models, re-keyed pools
+          // whose stale numbers were dropped above) without touching any
+          // limit the user already has.
+          state.quotaLimitsMap = { ...DEFAULT_QUOTA_LIMITS, ...map };
         }
         return persistedState as PersistedGenAIState;
       },
