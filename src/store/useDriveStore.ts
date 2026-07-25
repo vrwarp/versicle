@@ -28,9 +28,9 @@ interface DriveConfigState {
 
     /**
      * R7 opt-in: build rich Drive previews (covers + metadata) in the
-     * background while the app is open. Default OFF — trickle hydration is
-     * continuous ranged egress of book bytes, so it is a deliberate choice,
-     * not the auto-scan default. Persisted.
+     * background. Default OFF — trickle hydration is continuous ranged egress
+     * of book bytes over any connection, so it is a deliberate choice, not the
+     * auto-scan default. Persisted.
      */
     trickleEnabled: boolean;
 

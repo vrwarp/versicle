@@ -234,65 +234,61 @@ export const driveAutoScanTask: BootTask = {
 // ── R7: passive trickle hydration of the Drive preview index ────────────────
 
 /**
- * Best-effort "safe to trickle now" gate. Foreground-only (Capacitor webviews
- * have no reliable background execution), online, unmetered (saveData off), and
- * only when the user opted in AND a folder is linked. Pure for testability.
+ * Best-effort "safe to trickle now" gate: online, and only when the user opted
+ * in AND a folder is linked. Pure for testability.
+ *
+ * Deliberately does NOT gate on connection type or visibility. Metering is not
+ * consulted — ranged preview reads are small — so cellular is treated the same
+ * as Wi-Fi. Nor is the tab required to be foregrounded: the batch keeps running
+ * when the app is backgrounded, subject to whatever timer throttling the host
+ * applies.
  */
 export function shouldTrickleNow(env: {
   onLine: boolean;
-  visible: boolean;
-  saveData: boolean;
   enabled: boolean;
   linked: boolean;
 }): boolean {
-  return env.enabled && env.linked && env.onLine && env.visible && !env.saveData;
+  return env.enabled && env.linked && env.onLine;
 }
 
 const TRICKLE_START_DELAY_MS = 15_000;
 const TRICKLE_INTERVAL_MS = 5 * 60 * 1000;
 const TRICKLE_BATCH_SIZE = 30;
-/**
- * Coarse per-session spend cap (attempts ≈ books ≈ bytes): on metered-unknown
- * connections (web can't always detect) this bounds a session to ~60 previews
- * (~a few MB of ranged reads) — the byte-cap proxy the critique asked for.
- */
-const TRICKLE_SESSION_ATTEMPT_CAP = 60;
 
 /**
  * R7: an idle, batched consumer that builds the rich Drive preview index in
- * the background. Opt-in (useDriveStore.trickleEnabled, default off), batched
- * (~30 books every 5 min — radio-friendly vs. a per-10s tick), foreground-only,
- * unmetered, and session-capped. It rides DriveMetadataService.hydrateBatch,
- * which reads the PERSISTED index only (never a scan) and skips negative-cache
- * rows, so a broken file is never retried.
+ * the background. Opt-in (useDriveStore.trickleEnabled, default off) and
+ * batched (~30 books every 5 min — radio-friendly vs. a per-10s tick). It
+ * rides DriveMetadataService.hydrateBatch, which reads the PERSISTED index
+ * only (never a scan) and skips negative-cache rows, so a broken file is never
+ * retried.
+ *
+ * There is no session spend cap: the work is bounded by the library itself.
+ * Each batch hydrates only not-yet-cached entries, md5 staleness is
+ * deliberately not chased, and unextractable files are negative-cached — so
+ * once the index is hydrated the batches find nothing and cost nothing.
  */
 export const driveTrickleTask: BootTask = {
   name: 'drive/trickle-hydration',
   run: (ctx) => {
-    let attemptedThisSession = 0;
     let stopped = false;
 
     const readEnv = () => {
       const s = useDriveStore.getState();
-      const nav = navigator as Navigator & { connection?: { saveData?: boolean } };
       return {
         onLine: typeof navigator === 'undefined' ? true : navigator.onLine !== false,
-        visible: typeof document === 'undefined' ? true : document.visibilityState === 'visible',
-        saveData: nav.connection?.saveData === true,
         enabled: s.trickleEnabled,
         linked: !!s.linkedFolderId,
       };
     };
 
     const runBatch = async () => {
-      if (stopped || attemptedThisSession >= TRICKLE_SESSION_ATTEMPT_CAP) return;
+      if (stopped) return;
       if (!shouldTrickleNow(readEnv())) return;
       try {
-        const remainingBudget = TRICKLE_SESSION_ATTEMPT_CAP - attemptedThisSession;
         const result = await getDriveMetadataService().hydrateBatch({
-          batchSize: Math.min(TRICKLE_BATCH_SIZE, remainingBudget),
+          batchSize: TRICKLE_BATCH_SIZE,
         });
-        attemptedThisSession += result.attempted;
         if (result.remaining === 0 && result.attempted > 0) {
           logger.info('Drive trickle: preview index fully hydrated.');
         }

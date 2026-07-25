@@ -506,6 +506,8 @@ This is the most UI-dense presentational component, managing two distinct integr
 
 **Google Drive subsection** — Connect/disconnect buttons that call `getGoogleAuthClient().connect/disconnect('drive')`. When connected, a Drive folder picker modal (`DriveFolderPicker`) links a library folder, and a Scan button calls `getDriveLibrarySync().checkForNewFiles({ interactive: true })`. Google client ID and iOS client ID inputs are shown only when Drive is not connected, supporting custom deployment overrides.
 
+Once a folder is linked, two more rows appear. The **"Build book previews in the background"** switch is the R7 trickle opt-in (`useDriveStore.trickleEnabled`, default OFF), driving the `drive/trickle-hydration` boot task; its gate is `{onLine, enabled, linked}` only — connection type and tab visibility are deliberately not consulted, so the trickle runs on cellular and while backgrounded, and there is no per-session spend cap. Below it, the **Preview Cache** row reads `drivePreviews.stats()` on mount (cached rows / negative-cache rows / stored cover bytes) and renders "N of M books cached • size", where M is `useDriveStore.index.length`; unextractable rows are called out separately because they explain why N never reaches M. Its "Clear Cache" button confirms via `useConfirm({danger: true})` then calls `drivePreviews.clear()`, which drops the negative cache too — that is the only way to retry files that failed extraction — and re-reads the stats afterward. The button is disabled while clearing and when the cache is already empty.
+
 **Config clear**: Uses `useConfirm` with the `danger: true` flag to wipe all Firebase config fields and disable sync.
 
 ### Devices Panel

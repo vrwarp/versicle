@@ -42,6 +42,8 @@ import { DriveFolderPicker } from '../drive/DriveFolderPicker';
 import { Switch } from '../ui/Switch';
 import { useDriveStore } from '@store/useDriveStore';
 import { getDriveLibrarySync } from '@domains/google';
+import { drivePreviews, type DrivePreviewStats } from '@data/repos/drivePreviews';
+import { formatBytes, formatNumber } from '@kernel/locale/format';
 import { useToastStore } from '@store/useToastStore';
 import { getSyncOrchestratorAsync } from '@app/sync/createSync';
 import { useSyncStore } from '@store/useSyncStore';
@@ -110,8 +112,13 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
 
     // Drive Folder Picker State
     const [isPickerOpen, setIsPickerOpen] = React.useState(false);
-    const { linkedFolderName, setLinkedFolder, trickleEnabled, setTrickleEnabled } = useDriveStore();
+    const { linkedFolderName, setLinkedFolder, trickleEnabled, setTrickleEnabled, index: driveIndex } = useDriveStore();
     const [isScanning, setIsScanning] = React.useState(false);
+
+    // Preview-cache occupancy. Re-read on mount and after a clear; the trickle
+    // writes on a 5 min cadence, so a settings visit is a fresh enough sample.
+    const [previewStats, setPreviewStats] = React.useState<DrivePreviewStats | null>(null);
+    const [isClearingPreviews, setIsClearingPreviews] = React.useState(false);
     const { showToast } = useToastStore();
     const confirm = useConfirm();
 
@@ -230,6 +237,46 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
             showToast('Failed to scan for books.', 'error');
         } finally {
             setIsScanning(false);
+        }
+    };
+
+    const refreshPreviewStats = React.useCallback(async () => {
+        try {
+            setPreviewStats(await drivePreviews.stats());
+        } catch (error) {
+            console.error("Failed to read preview cache stats", error);
+            setPreviewStats(null);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        if (!linkedFolderName) return;
+        void refreshPreviewStats();
+    }, [linkedFolderName, refreshPreviewStats]);
+
+    const handleClearPreviewCache = async () => {
+        if (!previewStats) return;
+        const proceed = await confirm({
+            titleKey: 'syncSettings.clearPreviewCache.title',
+            bodyKey: 'syncSettings.clearPreviewCache.body',
+            params: {
+                count: formatNumber(previewStats.cached + previewStats.unextractable),
+                size: formatBytes(previewStats.bytes),
+            },
+            danger: true,
+        });
+        if (!proceed) return;
+
+        setIsClearingPreviews(true);
+        try {
+            const { deleted, freedBytes } = await drivePreviews.clear();
+            showToast(`Cleared ${formatNumber(deleted)} previews (${formatBytes(freedBytes)}).`, 'success');
+        } catch (error) {
+            console.error("Failed to clear the preview cache", error);
+            showToast('Failed to clear the preview cache.', 'error');
+        } finally {
+            setIsClearingPreviews(false);
+            void refreshPreviewStats();
         }
     };
 
@@ -625,9 +672,9 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                             Build book previews in the background
                                         </Label>
                                         <p className="text-xs text-muted-foreground">
-                                            Fetches covers and details for your Drive books a little at a time
-                                            while the app is open (Wi-Fi only). Uses small partial downloads,
-                                            not full books.
+                                            Fetches covers and details for your Drive books a little at a time,
+                                            over Wi-Fi or cellular. Uses small partial downloads, not full
+                                            books.
                                         </p>
                                     </div>
                                     <Switch
@@ -636,6 +683,47 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                         onCheckedChange={setTrickleEnabled}
                                         aria-label="Build Drive book previews in the background"
                                     />
+                                </div>
+                            )}
+
+                            {/* Preview cache occupancy + the manual purge. */}
+                            {linkedFolderName && (
+                                <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+                                    <div className="space-y-0.5 pr-4">
+                                        <Label className="text-sm font-medium">Preview Cache</Label>
+                                        <p className="text-xs text-muted-foreground" data-testid="drive-preview-cache-stats">
+                                            {previewStats === null
+                                                ? 'Checking cached previews…'
+                                                : previewStats.cached + previewStats.unextractable === 0
+                                                    ? 'Nothing cached yet.'
+                                                    : `${formatNumber(previewStats.cached)} of ${formatNumber(driveIndex.length)} books cached • ${formatBytes(previewStats.bytes)}`}
+                                            {previewStats && previewStats.unextractable > 0
+                                                ? ` • ${formatNumber(previewStats.unextractable)} couldn't be read`
+                                                : ''}
+                                        </p>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleClearPreviewCache}
+                                        disabled={
+                                            isClearingPreviews ||
+                                            previewStats === null ||
+                                            previewStats.cached + previewStats.unextractable === 0
+                                        }
+                                    >
+                                        {isClearingPreviews ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-3 w-3 animate-spin" aria-hidden="true" />
+                                                Clearing...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Trash2 className="mr-2 h-3 w-3" aria-hidden="true" />
+                                                Clear Cache
+                                            </>
+                                        )}
+                                    </Button>
                                 </div>
                             )}
                         </div>

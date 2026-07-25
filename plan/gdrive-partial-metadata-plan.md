@@ -272,18 +272,19 @@ egress.*
 ## 8. Phase 5 — R7 Trickle Hydration
 
 Idle consumer inside `DriveMetadataService`:
-- Batched: ~30 unhydrated index entries every ~5 min (radio-friendly), only
-  while app foregrounded; picks "new on Drive" diff first, then
+- Batched: ~30 unhydrated index entries every ~5 min (radio-friendly),
+  foregrounded or not; picks "new on Drive" diff first, then
   most-recently-modified.
 - Guards: online + silent token available + no foreground import running +
-  unmetered connection (Capacitor Network plugin; on web treat unknown as
-  metered and enforce a ~20 MB/session byte cap) + skip entries with
-  `status:'unextractable'` at current md5 + consume persisted index only.
+  skip entries with `status:'unextractable'` at current md5 + consume
+  persisted index only. Connection type is NOT a guard — cellular trickles
+  the same as Wi-Fi — and there is no per-session spend cap; the unhydrated
+  remainder of the library is the bound.
 - Backoff: any 403/429 pauses the trickle for the session's remaining
   backoff window (don't let backoff retries eat the batch budget).
 - Consent surface: disclosure line with size estimate on the folder-link
   confirmation (DriveFolderPicker flow), settings toggle under Sync/Drive
-  settings ("Build Drive book previews in the background — Wi-Fi only"),
+  settings ("Build book previews in the background"),
   subtle activity indicator while a batch runs. Default-on ONLY with all
   three shipped; otherwise ship opt-in.
 - Egress visibility: rides the existing gateway counters (Network activity

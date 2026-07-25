@@ -30,6 +30,16 @@ const LAST_ACCESSED_BUMP_INTERVAL_MS = 60 * 60 * 1000;
 /** Deletes per gated transaction during eviction. */
 const EVICTION_DELETE_BATCH = 50;
 
+/** Cache occupancy, as reported by the Drive settings surface. */
+export interface DrivePreviewStats {
+  /** Rows carrying an extracted preview (`status:'ok'`). */
+  cached: number;
+  /** Negative-cache rows — files that yielded no metadata at their md5. */
+  unextractable: number;
+  /** Stored cover bytes. Covers dominate; the text fields are rounding error. */
+  bytes: number;
+}
+
 /** A preview as handed to callers: cover re-wrapped as a Blob (or undefined). */
 interface DrivePreview {
   fileId: string;
@@ -156,6 +166,54 @@ class DrivePreviewsRepo {
       await write(['cache_drive_previews'], (tx) => {
         tx.objectStore('cache_drive_previews').delete(fileId);
       });
+    } catch (error) {
+      handleDbError(error);
+    }
+  }
+
+  /**
+   * Row counts + stored cover bytes, for the settings occupancy readout.
+   * Streams a readonly cursor rather than `getAll` — the latter would
+   * materialize every cover buffer just to measure it.
+   */
+  async stats(): Promise<DrivePreviewStats> {
+    try {
+      const db = await getConnection();
+      const tx = db.transaction('cache_drive_previews', 'readonly');
+      let cached = 0;
+      let unextractable = 0;
+      let bytes = 0;
+      let cursor = await tx.store.openCursor();
+      while (cursor) {
+        const row = cursor.value;
+        if (row.status === 'unextractable') unextractable += 1;
+        else cached += 1;
+        bytes += rowByteSize(row);
+        cursor = await cursor.continue();
+      }
+      await tx.done;
+      return { cached, unextractable, bytes };
+    } catch (error) {
+      handleDbError(error);
+    }
+  }
+
+  /**
+   * Drop every cached preview (the settings "Clear cache" action). Measures
+   * first, then clears in one gated transaction — same read-then-write shape
+   * as {@link runEviction}, so a row written in between is wiped but not
+   * counted. Clearing the negative cache too is deliberate: it is the only
+   * way to retry files that failed extraction.
+   */
+  async clear(): Promise<{ deleted: number; freedBytes: number }> {
+    try {
+      const { cached, unextractable, bytes } = await this.stats();
+      await write(['cache_drive_previews'], (tx) => {
+        tx.objectStore('cache_drive_previews').clear();
+      });
+      const deleted = cached + unextractable;
+      logger.info(`Drive preview cache cleared: ${deleted} row(s), freed ${bytes} bytes.`);
+      return { deleted, freedBytes: bytes };
     } catch (error) {
       handleDbError(error);
     }
