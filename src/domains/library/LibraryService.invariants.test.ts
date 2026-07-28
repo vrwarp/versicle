@@ -354,11 +354,8 @@ describe('LibraryService invariants (I-1..I-5)', () => {
 
   describe('regression: Defer clearing hydration loading states in finally', () => {
     it('maintains isHydrating=true while concurrent hydrate calls are running', async () => {
-      let callCount = 0;
-
       const wf = makeWorkflows({
         getBookMetadataBulk: vi.fn(async (ids: string[]) => {
-          callCount++;
           await tick(50);
           return ids.map(id => makeBookMetadata({ id }));
         }),
