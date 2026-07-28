@@ -352,6 +352,45 @@ describe('LibraryService invariants (I-1..I-5)', () => {
     });
   });
 
+  describe('regression: Defer clearing hydration loading states in finally', () => {
+    it('maintains isHydrating=true while concurrent hydrate calls are running', async () => {
+      let callCount = 0;
+
+      const wf = makeWorkflows({
+        getBookMetadataBulk: vi.fn(async (ids: string[]) => {
+          callCount++;
+          await tick(50);
+          return ids.map(id => makeBookMetadata({ id }));
+        }),
+        getAvailableResourceIds: vi.fn(async () => {
+          await tick(50);
+          return new Set<string>();
+        }),
+      });
+
+      useBookStore.setState({
+        books: { 'book1': makeInventoryItem({ bookId: 'book1' }) }
+      });
+
+      // Start first hydrate
+      const p1 = wf.hydrate();
+
+      // While first is running, start second
+      await tick(10);
+      const p2 = wf.hydrate(['book1']);
+
+      // After first hydrate finishes...
+      await p1;
+
+      // We expect isHydrating to remain TRUE because p2 is still running!
+      // But currently, p1's finally block unconditionally sets it to false.
+      expect(useLibraryStore.getState().isHydrating).toBe(true);
+
+      await p2;
+      expect(useLibraryStore.getState().isHydrating).toBe(false);
+    });
+  });
+
   describe('property: seeded hydrate-vs-mutation interleavings reach a sequentially-reachable state', () => {
     /**
      * The generalization the five point fixes approximate: interleaving
