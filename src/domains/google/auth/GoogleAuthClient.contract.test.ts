@@ -198,6 +198,35 @@ describe('GoogleAuthClient contract', () => {
       await expect(client.getTokenInteractive('drive')).resolves.toBe('new-token');
       expect(login).toHaveBeenCalledTimes(2);
     });
+
+    describe('regression: a failed interactive connect surfaces as the typed reconnect signal', () => {
+      it('wraps a connect failure in GoogleAuthRequiredError (connect-failed) with the cause attached', async () => {
+        const { client, login } = makeClient();
+        const popupError = new Error('Popup closed');
+        login.mockRejectedValueOnce(popupError);
+
+        const rejection = await client.getTokenInteractive('drive').then(
+          () => {
+            throw new Error('expected rejection');
+          },
+          (e: unknown) => e,
+        );
+        expect(rejection).toBeInstanceOf(GoogleAuthRequiredError);
+        expect((rejection as GoogleAuthRequiredError).context).toMatchObject({
+          serviceId: 'drive',
+          reason: 'connect-failed',
+        });
+        expect((rejection as GoogleAuthRequiredError).cause).toBe(popupError);
+      });
+
+      it('does not wrap non-auth errors from the silent path', async () => {
+        const { client } = makeClient();
+        // Unknown service fails locally in getToken — before connect is reached.
+        await expect(
+          client.getTokenInteractive('calendar' as GoogleServiceId),
+        ).rejects.toBeInstanceOf(GoogleUnknownServiceError);
+      });
+    });
   });
 
   describe('revocation matrix (the GG-2 reversal)', () => {

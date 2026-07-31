@@ -15,7 +15,7 @@ interface FirebaseConfig {
     measurementId?: string;
 }
 
-import { getGoogleAuthClient } from '@domains/google';
+import { getGoogleAuthClient, GoogleAuthRequiredError } from '@domains/google';
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 import type { FirebaseAuthStatus } from '~types/sync';
 
@@ -234,7 +234,11 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
             }
         } catch (error) {
             console.error("Scan failed", error);
-            showToast('Failed to scan for books.', 'error');
+            if (error instanceof GoogleAuthRequiredError) {
+                showToast('Google Drive needs to be reconnected. Sign in and try again.', 'error');
+            } else {
+                showToast('Failed to scan for books.', 'error');
+            }
         } finally {
             setIsScanning(false);
         }
@@ -286,7 +290,10 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
             // Pass login_hint if we have the firebase email to encourage same-account usage
             await getGoogleAuthClient().connect('drive', firebaseUserEmail || undefined);
         } catch (error) {
+            // A failed connect must never be silent — the user clicked the
+            // button and is watching for the outcome.
             console.error("Failed to connect Drive", error);
+            showToast('Failed to connect Google Drive. Please try again.', 'error');
         } finally {
             setIsDriveConnecting(false);
         }
