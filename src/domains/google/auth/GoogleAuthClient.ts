@@ -141,7 +141,17 @@ export class GoogleAuthClient {
       return await this.getToken(serviceId);
     } catch (error) {
       if (error instanceof GoogleAuthRequiredError) {
-        return (await this.connect(serviceId)).accessToken;
+        try {
+          return (await this.connect(serviceId)).accessToken;
+        } catch (connectError) {
+          // The interactive escalation itself failed (popup blocked/closed,
+          // plugin not initialized, network). Rethrow as the typed
+          // reconnect signal — otherwise callers that branch on
+          // GOOGLE_AUTH_REQUIRED classify this as a generic failure and
+          // never show their reconnect affordance. The raw failure stays
+          // on `cause` for logs.
+          throw new GoogleAuthRequiredError(serviceId, 'connect-failed', connectError);
+        }
       }
       throw error;
     }

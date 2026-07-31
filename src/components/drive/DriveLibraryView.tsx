@@ -28,7 +28,7 @@ import { LibrarySearchBar, type LibrarySearchBarRef } from '../library/LibrarySe
 import { useDriveStore, type DriveFileIndex } from '@store/useDriveStore';
 import { useBookStore } from '@store/useBookStore';
 import { useToastStore } from '@store/useToastStore';
-import { getDriveLibrarySync } from '@domains/google';
+import { getDriveLibrarySync, GoogleAuthRequiredError } from '@domains/google';
 import { compareTitles, formatRelativeTime } from '@kernel/locale/format';
 import { createLogger } from '@lib/logger';
 import { DriveBookCard } from './DriveBookCard';
@@ -143,7 +143,11 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
       showToast(`Imported "${file.name}"`, 'success');
     } catch (error) {
       logger.error('Drive import failed', error);
-      showToast(`Failed to import "${file.name}"`, 'error');
+      if (error instanceof GoogleAuthRequiredError) {
+        showToast('Google Drive needs to be reconnected. Sign in and try again.', 'error');
+      } else {
+        showToast(`Failed to import "${file.name}"`, 'error');
+      }
     } finally {
       setImportingId(null);
     }
@@ -151,10 +155,17 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
 
   const handleRefresh = useCallback(async () => {
     try {
-      await getDriveLibrarySync().scanAndIndex();
+      // User gesture: interactive token acquisition — after a reload or token
+      // expiry the silent path can only fail, so Refresh must be allowed to
+      // reprompt for sign-in instead of failing behind a generic toast.
+      await getDriveLibrarySync().scanAndIndex({ interactive: true });
     } catch (error) {
       logger.error('Drive index refresh failed', error);
-      showToast('Failed to refresh index', 'error');
+      if (error instanceof GoogleAuthRequiredError) {
+        showToast('Google Drive needs to be reconnected. Sign in and try again.', 'error');
+      } else {
+        showToast('Failed to refresh index', 'error');
+      }
     }
   }, [showToast]);
 
