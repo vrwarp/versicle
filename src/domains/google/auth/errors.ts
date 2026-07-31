@@ -6,15 +6,24 @@
 import { AppError } from '~types/errors';
 
 /**
- * A silent token acquisition needs user interaction (no cached credential,
- * expired credential, or insufficient scopes). Background flows catch this
- * and surface a reconnect affordance — they must NEVER open login UI (GG-2).
+ * A token acquisition needs (more) user interaction: no cached credential,
+ * expired credential, insufficient scopes, or an interactive connect that
+ * failed to produce one ('connect-failed' — popup blocked/closed, plugin not
+ * initialized; the raw failure rides along as `cause`). Background flows catch
+ * this and surface a reconnect affordance — they must NEVER open login UI
+ * (GG-2); interactive flows use it to say "reconnect Google Drive" instead of
+ * a generic failure.
  */
 export class GoogleAuthRequiredError extends AppError {
-  constructor(serviceId: string, reason: 'no-credential' | 'expired' | 'insufficient-scopes') {
+  constructor(
+    serviceId: string,
+    reason: 'no-credential' | 'expired' | 'insufficient-scopes' | 'connect-failed',
+    cause?: unknown,
+  ) {
     super(`Google ${serviceId} access requires sign-in (${reason}).`, {
       code: 'GOOGLE_AUTH_REQUIRED',
       context: { serviceId, reason },
+      cause,
     });
     this.name = 'GoogleAuthRequiredError';
   }

@@ -5,6 +5,7 @@ import { DriveLibraryView } from './DriveLibraryView';
 import { useDriveStore } from '@store/useDriveStore';
 import { useBookStore } from '@store/useBookStore';
 import { useToastStore } from '@store/useToastStore';
+import { GoogleAuthRequiredError } from '@domains/google/auth/errors';
 import type { DriveFileIndex } from '@store/useDriveStore';
 
 const { driveSync, metadataService } = vi.hoisted(() => ({
@@ -152,10 +153,24 @@ describe('DriveLibraryView', () => {
       expect(screen.getByTestId('drive-refresh-button')).toHaveTextContent('Refresh');
     });
 
-    it('calls scanAndIndex when refresh is clicked', () => {
+    it('calls scanAndIndex interactively when refresh is clicked (user gesture may reprompt sign-in)', () => {
       renderShelf();
       fireEvent.click(screen.getByTestId('drive-refresh-button'));
-      expect(driveSync.scanAndIndex).toHaveBeenCalled();
+      expect(driveSync.scanAndIndex).toHaveBeenCalledWith({ interactive: true });
+    });
+
+    it('regression: an auth failure surfaces a reconnect toast, not a generic one', async () => {
+      driveSync.scanAndIndex.mockRejectedValue(
+        new GoogleAuthRequiredError('drive', 'no-credential'),
+      );
+      renderShelf();
+      fireEvent.click(screen.getByTestId('drive-refresh-button'));
+      await waitFor(() => {
+        expect(mockShowToast).toHaveBeenCalledWith(
+          'Google Drive needs to be reconnected. Sign in and try again.',
+          'error',
+        );
+      });
     });
 
     it('shows the scanning state while a scan is in flight', () => {
@@ -297,6 +312,23 @@ describe('DriveLibraryView', () => {
         expect(mockShowToast).toHaveBeenCalledWith('Failed to import "Book 000.epub"', 'error');
       });
       expect(screen.getByTestId('drive-list-item-file-0')).toBeInTheDocument();
+    });
+
+    it('regression: an auth failure during import asks for a reconnect', async () => {
+      setDriveState({ index: makeFiles(1) });
+      driveSync.importFile.mockRejectedValue(
+        new GoogleAuthRequiredError('drive', 'connect-failed', new Error('Popup closed')),
+      );
+      renderShelf('list');
+
+      fireEvent.click(screen.getByTestId('drive-import-file-0'));
+
+      await waitFor(() => {
+        expect(mockShowToast).toHaveBeenCalledWith(
+          'Google Drive needs to be reconnected. Sign in and try again.',
+          'error',
+        );
+      });
     });
   });
 });
