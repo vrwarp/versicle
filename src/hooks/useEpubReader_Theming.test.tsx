@@ -170,6 +170,7 @@ describe('regression: theme change does not reflow (D5)', () => {
       ready: Promise.resolve(), destroy: vi.fn(),
       locations: { generate: vi.fn().mockResolvedValue(undefined), save: vi.fn(() => '[]'), load: vi.fn(), percentageFromCfi: vi.fn(), length: vi.fn(() => 0) },
       spine: { get: vi.fn(), hooks: { serialize: { register: vi.fn() } } },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any));
 
     render(<TestHost initialLocation="epubcfi(/stale)" getInitialLocation={() => 'epubcfi(/fresh)'} />);
