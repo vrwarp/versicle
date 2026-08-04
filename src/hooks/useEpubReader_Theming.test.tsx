@@ -71,9 +71,11 @@ vi.mock('epubjs', () => ({
   })),
 }));
 
-const TestHost: React.FC<{ theme?: string; viewMode?: 'paginated' | 'scrolled' }> = ({
+const TestHost: React.FC<{ theme?: string; viewMode?: 'paginated' | 'scrolled'; getInitialLocation?: () => string; initialLocation?: string }> = ({
   theme = 'light',
   viewMode = 'paginated',
+  getInitialLocation,
+  initialLocation,
 }) => {
   const viewerRef = useRef<HTMLDivElement>(null);
   const options: EpubReaderOptions = {
@@ -84,6 +86,8 @@ const TestHost: React.FC<{ theme?: string; viewMode?: 'paginated' | 'scrolled' }
     fontSize: 100,
     lineHeight: 1.5,
     shouldForceFont: false,
+    getInitialLocation,
+    initialLocation,
   };
   useEpubReader('theming-book', viewerRef as unknown as React.RefObject<HTMLElement>, options);
   return <div ref={viewerRef} data-testid="viewer" />;
@@ -141,5 +145,40 @@ describe('regression: theme change does not reflow (D5)', () => {
 
     await waitFor(() => expect(slot.flow).toHaveBeenCalledWith('scrolled-doc'));
     expect(slot.display).toHaveBeenCalledWith('epubcfi(/6/4!/4/2)');
+  });
+
+  it('initial theme application falls back to getInitialLocation() if r.location is missing', async () => {
+    const { default: EpubCtor } = await import('epubjs');
+
+    // Create a new mock that returns undefined location
+    vi.mocked(EpubCtor).mockImplementationOnce(() => ({
+      renderTo: vi.fn().mockImplementation((element: HTMLElement) => {
+        const iframe = document.createElement('iframe');
+        element.appendChild(iframe);
+        slot.flow = vi.fn();
+        slot.display = vi.fn().mockResolvedValue(undefined);
+        slot.select = vi.fn();
+        return {
+          themes: { register: vi.fn(), select: slot.select, fontSize: vi.fn(), font: vi.fn(), default: vi.fn() },
+          display: slot.display,
+          on: vi.fn(), off: vi.fn(), hooks: { content: { register: vi.fn() } },
+          spread: vi.fn(), flow: slot.flow, resize: vi.fn(), getRange: vi.fn(), getContents: vi.fn(() => []),
+          location: undefined, // Missing location
+        };
+      }),
+      loaded: { navigation: Promise.resolve({ toc: [] }) },
+      ready: Promise.resolve(), destroy: vi.fn(),
+      locations: { generate: vi.fn().mockResolvedValue(undefined), save: vi.fn(() => '[]'), load: vi.fn(), percentageFromCfi: vi.fn(), length: vi.fn(() => 0) },
+      spine: { get: vi.fn(), hooks: { serialize: { register: vi.fn() } } },
+    } as any));
+
+    render(<TestHost initialLocation="epubcfi(/stale)" getInitialLocation={() => 'epubcfi(/fresh)'} />);
+
+    await waitFor(() => expect(slot.select).toHaveBeenCalled());
+
+    // 1st call: initial book display (startLocation via getInitialLocation)
+    // 2nd call: post-theming re-scroll (currentLoc fallback to getInitialLocation)
+    expect(slot.display).toHaveBeenCalledTimes(2);
+    expect(slot.display).toHaveBeenLastCalledWith('epubcfi(/fresh)');
   });
 });

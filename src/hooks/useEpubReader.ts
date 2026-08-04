@@ -493,7 +493,7 @@ export function useEpubReader(
 
     if (isInitialApplyRef.current) {
       isInitialApplyRef.current = false;
-      const currentLoc = (r.location as typeof r.location | undefined)?.start?.cfi || options.initialLocation;
+      const currentLoc = (r.location as typeof r.location | undefined)?.start?.cfi || (options.getInitialLocation ? options.getInitialLocation() : options.initialLocation);
       if (currentLoc) {
         const redisplayStart = performance.now();
         void Promise.resolve(r.display(currentLoc)).then(() => {
