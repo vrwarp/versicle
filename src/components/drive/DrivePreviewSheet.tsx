@@ -7,7 +7,10 @@
  *
  * The detected language is shown as an editable-looking suggestion, never a
  * silent config change. The dedup line is informational — it never blocks an
- * import, because EPUB identifiers/titles are too unreliable to gate on.
+ * import, because EPUB identifiers/titles are too unreliable to gate on — but
+ * it does say WHICH outcome is coming: a filename already in the library is
+ * the one signal the import pipeline itself acts on (Replace), while a
+ * title-only match still adds a separate entry.
  */
 import React, { useMemo } from 'react';
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from '../ui/Modal';
@@ -25,19 +28,53 @@ interface DrivePreviewSheetProps {
   importing?: boolean;
 }
 
-/** Best-effort dedup: does the library already hold a book with this title? */
-function useLibraryMatch(title?: string, author?: string): string | undefined {
+interface LibraryMatch {
+  /** "Title — Author" of the book already held. */
+  label: string;
+  /**
+   * The match is on the SOURCE FILENAME — the same key
+   * `ImportOrchestrator.findExistingBookIdByFilename` gates on, so importing
+   * this file will land on the Replace prompt rather than adding a new book.
+   */
+  byFilename: boolean;
+}
+
+/**
+ * Best-effort dedup hint. Two signals, deliberately distinguished because they
+ * lead to different outcomes:
+ *
+ *  - **Filename** — authoritative. It is exactly what the import gate checks,
+ *    so a hit here means the import resolves to Replace, not a second copy.
+ *  - **Title** — advisory. The same book under a different filename imports
+ *    cleanly as a separate entry, which the user may or may not want.
+ *
+ * Neither blocks the import; the sheet only states which one is about to
+ * happen (the previous title-only hint promised "import anyway?" even when the
+ * pipeline was about to refuse a plain add).
+ */
+function useLibraryMatch(filename?: string, title?: string): LibraryMatch | undefined {
   const books = useBookStore((s) => s.books);
   return useMemo(() => {
+    const describe = (bookTitle?: string, bookAuthor?: string) =>
+      bookAuthor ? `${bookTitle} — ${bookAuthor}` : bookTitle || 'Untitled';
+
+    if (filename) {
+      for (const book of Object.values(books)) {
+        if (book.sourceFilename === filename) {
+          return { label: describe(book.title, book.author), byFilename: true };
+        }
+      }
+    }
+
     if (!title) return undefined;
     const normalized = title.trim().toLowerCase();
     for (const book of Object.values(books)) {
       if (book.title?.trim().toLowerCase() === normalized) {
-        return author && book.author ? `${book.title} — ${book.author}` : book.title;
+        return { label: describe(book.title, book.author), byFilename: false };
       }
     }
     return undefined;
-  }, [books, title, author]);
+  }, [books, filename, title]);
 }
 
 export const DrivePreviewSheet: React.FC<DrivePreviewSheetProps> = ({
@@ -47,7 +84,7 @@ export const DrivePreviewSheet: React.FC<DrivePreviewSheetProps> = ({
   importing = false,
 }) => {
   const preview = useDrivePreview(file?.id, { priority: 'interactive', interactive: true });
-  const match = useLibraryMatch(preview.title, preview.author);
+  const match = useLibraryMatch(file?.name, preview.title);
 
   const displayTitle = preview.title || file?.name || 'Untitled';
 
@@ -98,8 +135,10 @@ export const DrivePreviewSheet: React.FC<DrivePreviewSheetProps> = ({
         )}
 
         {match && (
-          <p className="text-xs text-amber-600 border-t pt-3">
-            Looks like “{match}” is already in your library — import anyway?
+          <p className="text-xs text-amber-600 border-t pt-3" data-testid="drive-preview-dedup">
+            {match.byFilename
+              ? `“${match.label}” is already in your library — importing asks whether to replace it (your progress and notes are kept).`
+              : `Looks like “${match.label}” is already in your library — import anyway?`}
           </p>
         )}
 

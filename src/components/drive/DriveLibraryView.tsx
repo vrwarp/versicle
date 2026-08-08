@@ -18,6 +18,13 @@
  *
  * The view is read-only over the PERSISTED index: nothing here triggers a Drive
  * scan except the explicit Refresh control.
+ *
+ * Importing a file the library already holds is a QUESTION, not a failure: the
+ * shelf raises the library's own ReplaceBookDialog and, on confirmation,
+ * re-imports with `{ overwrite: true }` (the orchestrator's Replace path, which
+ * keeps the existing book's progress, notes and tags). Reporting that case as
+ * "Failed to import" — which is what the retired dialog and this view both did
+ * — named no cause and left the user no way through.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -25,10 +32,13 @@ import { Cloud, FolderSearch, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 import { LibrarySearchBar, type LibrarySearchBarRef } from '../library/LibrarySearchBar';
+import { ReplaceBookDialog } from '../library/ReplaceBookDialog';
 import { useDriveStore, type DriveFileIndex } from '@store/useDriveStore';
 import { useBookStore } from '@store/useBookStore';
 import { useToastStore } from '@store/useToastStore';
 import { getDriveLibrarySync, GoogleAuthRequiredError } from '@domains/google';
+import { DuplicateBookError } from '~types/errors';
+import { presentError } from '@app/errors/presentError';
 import { compareTitles, formatRelativeTime } from '@kernel/locale/format';
 import { createLogger } from '@lib/logger';
 import { DriveBookCard } from './DriveBookCard';
@@ -68,6 +78,7 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
   const [sortOrder, setSortOrder] = useState<DriveSortOrder>('recent');
   const [importingId, setImportingId] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<DriveFileIndex | null>(null);
+  const [duplicateFile, setDuplicateFile] = useState<DriveFileIndex | null>(null);
   const searchBarRef = useRef<LibrarySearchBarRef>(null);
 
   /** Filenames the library already holds — the "already imported" signal. */
@@ -134,24 +145,70 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
     return () => observer.disconnect();
   }, [visibleCount, total, listKey]);
 
-  const handleImport = useCallback(async (file: DriveFileIndex) => {
-    if (importingId) return; // One import at a time.
+  /** Download + import one Drive file; `overwrite` takes the Replace path. */
+  const runImport = useCallback(async (file: DriveFileIndex, options?: { overwrite?: boolean }) => {
     setImportingId(file.id);
     try {
       // User gesture: interactive token acquisition.
-      await getDriveLibrarySync().importFile(file.id, file.name, undefined, { interactive: true });
-      showToast(`Imported "${file.name}"`, 'success');
-    } catch (error) {
-      logger.error('Drive import failed', error);
-      if (error instanceof GoogleAuthRequiredError) {
-        showToast('Google Drive needs to be reconnected. Sign in and try again.', 'error');
-      } else {
-        showToast(`Failed to import "${file.name}"`, 'error');
-      }
+      await getDriveLibrarySync().importFile(file.id, file.name, options, { interactive: true });
+      showToast(
+        options?.overwrite ? `Replaced "${file.name}"` : `Imported "${file.name}"`,
+        'success',
+      );
     } finally {
       setImportingId(null);
     }
-  }, [importingId, showToast]);
+  }, [showToast]);
+
+  /** Toast for a genuinely failed import/replace (never for a duplicate). */
+  const reportFailure = useCallback((verb: 'import' | 'replace', file: DriveFileIndex, error: unknown) => {
+    logger.error(`Drive ${verb} failed`, error);
+    if (error instanceof GoogleAuthRequiredError) {
+      showToast('Google Drive needs to be reconnected. Sign in and try again.', 'error');
+    } else {
+      // presentError maps error.code — the UI never relays raw service prose.
+      showToast(`Failed to ${verb} "${file.name}": ${presentError(error)}`, 'error');
+    }
+  }, [showToast]);
+
+  const handleImport = useCallback(async (file: DriveFileIndex) => {
+    if (importingId) return; // One import at a time.
+
+    // Ask BEFORE downloading. `libraryFilenames` reads the same inventory the
+    // orchestrator's filename gate does, so this is the identical verdict —
+    // just reached without first pulling the whole EPUB over the wire only to
+    // hand back a question the user may answer with "cancel".
+    if (libraryFilenames.has(file.name)) {
+      setDuplicateFile(file);
+      return;
+    }
+
+    try {
+      await runImport(file);
+    } catch (error) {
+      // Backstop for the gate's other half: the orchestrator also consults the
+      // DB filename index, which can hold a book the inventory projection has
+      // not caught up with. A duplicate is a PROMPT, not a failure — the
+      // Replace path preserves the existing book's progress, notes and tags.
+      if (error instanceof DuplicateBookError) {
+        setDuplicateFile(file);
+        return;
+      }
+      reportFailure('import', file, error);
+    }
+  }, [importingId, libraryFilenames, runImport, reportFailure]);
+
+  const handleConfirmReplace = useCallback(async () => {
+    const file = duplicateFile;
+    if (!file) return;
+    try {
+      await runImport(file, { overwrite: true });
+    } catch (error) {
+      reportFailure('replace', file, error);
+      // Rethrow: ReplaceBookDialog keeps itself open so the user can retry.
+      throw error;
+    }
+  }, [duplicateFile, runImport, reportFailure]);
 
   const handleRefresh = useCallback(async () => {
     try {
@@ -363,6 +420,13 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
         importing={!!previewFile && importingId === previewFile.id}
         onClose={() => setPreviewFile(null)}
         onImport={(file) => { setPreviewFile(null); handleImport(file); }}
+      />
+
+      <ReplaceBookDialog
+        isOpen={!!duplicateFile}
+        onClose={() => setDuplicateFile(null)}
+        onConfirm={handleConfirmReplace}
+        fileName={duplicateFile?.name || ''}
       />
     </div>
   );

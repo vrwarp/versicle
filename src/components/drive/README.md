@@ -28,6 +28,25 @@ put cover art.
 *   **`DrivePreviewSheet.tsx`**: the pre-import preview — cover, verified
     metadata, size, and a best-effort "already in your library" hint.
 
+## Importing a file the library already holds
+
+A filename the library already holds is a *question*, not an error. The import
+pipeline gates on `sourceFilename` (`ImportOrchestrator.findExistingBookIdByFilename`)
+and answers a hit with `DuplicateBookError`; the shelf turns that into the same
+`ReplaceBookDialog` the library's own upload flows use, and confirming re-imports
+with `{ overwrite: true }` — the Replace path, which keeps the existing book's
+progress, notes and tags.
+
+The shelf asks *before* downloading whenever its own inventory-backed filename
+set already knows the name (the "In library" badge's source, and the same
+inventory the gate reads), so a cancelled prompt costs no bandwidth. The
+`DuplicateBookError` catch remains as the backstop for the gate's other half,
+the DB filename index, which the projection can lag behind.
+
+`DrivePreviewSheet` distinguishes the two dedup signals for the same reason: a
+**filename** match predicts the Replace prompt, while a **title-only** match
+really does import as a separate entry.
+
 ## Folder linking
 
 *   **`DriveFolderPicker.tsx`** / **`useDriveBrowser.ts`**: the folder browser
