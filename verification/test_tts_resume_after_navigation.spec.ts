@@ -1,5 +1,14 @@
+import type { Page } from "@playwright/test";
 import { test, expect } from "./utils";
 import { captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter, waitForPersistedWrites } from "./utils";
+
+/** Read the live TTS playback status out of the ephemeral playback store. */
+function ttsStatus(page: Page): Promise<string> {
+  return page.evaluate(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    () => (window as any).useTTSPlaybackStore.getState().status as string
+  );
+}
 
 test("tts resume after leaving book", async ({ page, baseURL }) => {
   console.log("Starting Resume After Navigation Test...");
@@ -178,4 +187,60 @@ test("tts position persists across reload", async ({ page }) => {
   console.log("Position Persistence Across Reload Test Passed!");
 
   await captureScreenshot(page, "position_persistence_success");
+});
+
+/**
+ * Regression: playback survives a round-trip to the library.
+ *
+ * Leaving the book unmounts ReaderShell (and with it `useTTS`) but deliberately
+ * does NOT stop the engine — audio keeps going while the user browses. Coming
+ * back re-mounts `useTTS`, whose mount effect calls `loadVoices()`. That used to
+ * re-issue `setProviderById(<the id already active>)`, and the engine's provider
+ * swap begins with an unconditional `stopInternal()` — so re-entering the book
+ * silently killed the audio.
+ */
+test("tts keeps playing when returning to the book from the library", async ({ page, baseURL }) => {
+  const finalBaseURL = baseURL || "http://localhost:5173";
+  await resetApp(page);
+  await ensureLibraryWithBook(page);
+
+  // Open the book and land on a chapter with real content.
+  await page.locator("[data-testid^='book-card-']").first().click();
+  await expect(page.getByTestId("reader-back-button")).toBeVisible();
+  await navigateToChapter(page);
+
+  // Start playback from the compass pill (NOT the audio deck: closing the deck
+  // with Escape would trigger the 'tts-active' stop shortcut and mask the bug).
+  await expect(page.getByTestId("compass-pill-active")).toBeVisible({ timeout: 10000 });
+  await page.getByTestId("compass-pill-active").getByLabel("Play").click();
+  await page.waitForFunction(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    () => (window as any).useTTSPlaybackStore?.getState?.().isPlaying === true,
+    undefined,
+    { timeout: 15000 }
+  );
+
+  // Go back to the library.
+  await page.getByTestId("reader-back-button").click();
+  await expect(page).toHaveURL(new RegExp(finalBaseURL.replace(/\/$/, "") + "/?$"), { timeout: 10000 });
+
+  // Browsing the library must not disturb playback (the documented behavior).
+  await expect
+    .poll(() => ttsStatus(page), { timeout: 5000 })
+    .toMatch(/^(playing|loading)$/);
+  await captureScreenshot(page, "tts_still_playing_in_library");
+
+  // Re-enter the book. Playback must STILL be running.
+  await page.locator("[data-testid^='book-card-']").first().click();
+  await expect(page.getByTestId("reader-back-button")).toBeVisible();
+
+  // The reader chrome above proves ReaderShell (and with it useTTS) mounted; this
+  // settle covers the async tail of its mount effects. A fixed settle is the honest
+  // tool here because the assertion is an ABSENCE — there is no "the engine was not
+  // stopped" event to await, and this is not a persistence wait.
+  await page.waitForTimeout(2000);
+  const statusAfterReturn = await ttsStatus(page);
+  console.log(`TTS status after returning to the book: ${statusAfterReturn}`);
+  await captureScreenshot(page, "tts_after_returning_to_book");
+  expect(statusAfterReturn).toMatch(/^(playing|loading)$/);
 });
