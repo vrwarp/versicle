@@ -6,6 +6,8 @@ import { useDriveStore } from '@store/useDriveStore';
 import { useBookStore } from '@store/useBookStore';
 import { useToastStore } from '@store/useToastStore';
 import { GoogleAuthRequiredError } from '@domains/google/auth/errors';
+import { AppError, DuplicateBookError } from '~types/errors';
+import { useBackNavigationStore, BackButtonPriority } from '@store/useBackNavigationStore';
 import type { DriveFileIndex } from '@store/useDriveStore';
 
 const { driveSync, metadataService } = vi.hoisted(() => ({
@@ -98,6 +100,16 @@ function makeFiles(count: number, prefix = 'Book'): DriveFileIndex[] {
 
 const mockShowToast = vi.fn();
 
+/**
+ * The handler BackNavigationManager would run for a back press — the highest
+ * priority one, which is how the manager itself picks.
+ */
+function topBackHandler(): (() => Promise<void> | void) | undefined {
+  const [top] = useBackNavigationStore.getState().handlers;
+  expect(top?.priority).toBe(BackButtonPriority.MODAL);
+  return top?.handler;
+}
+
 function setDriveState(overrides: Partial<DriveStoreState> = {}): void {
   const state: DriveStoreState = {
     index: [],
@@ -129,6 +141,8 @@ describe('DriveLibraryView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     observers.length = 0;
+    // Real store (not mocked): clear any handler a leaked mount left behind.
+    useBackNavigationStore.setState({ handlers: [] });
     globalThis.IntersectionObserver =
       FakeIntersectionObserver as unknown as typeof IntersectionObserver;
     metadataService.getPreview.mockResolvedValue({ status: 'error' });
@@ -309,9 +323,203 @@ describe('DriveLibraryView', () => {
       fireEvent.click(screen.getByTestId('drive-import-file-0'));
 
       await waitFor(() => {
-        expect(mockShowToast).toHaveBeenCalledWith('Failed to import "Book 000.epub"', 'error');
+        expect(mockShowToast).toHaveBeenCalledWith(
+          'Failed to import "Book 000.epub": Something went wrong. Please try again.',
+          'error',
+        );
       });
       expect(screen.getByTestId('drive-list-item-file-0')).toBeInTheDocument();
+    });
+
+    it('maps a typed failure through presentError instead of relaying service prose', async () => {
+      setDriveState({ index: makeFiles(1) });
+      driveSync.importFile.mockRejectedValue(
+        new AppError('QuotaExceededError: the disk is full', { code: 'DB_QUOTA_EXCEEDED' }),
+      );
+      renderShelf('list');
+
+      fireEvent.click(screen.getByTestId('drive-import-file-0'));
+
+      await waitFor(() => {
+        expect(mockShowToast).toHaveBeenCalledWith(
+          'Failed to import "Book 000.epub": Device storage full. Please delete some books.',
+          'error',
+        );
+      });
+    });
+
+    // The shelf's own "In library" badge and the preview sheet's dedup hint
+    // both promise an "import anyway", and the orchestrator answers a filename
+    // duplicate with DuplicateBookError rather than a real failure. Reporting
+    // that as "Failed to import" was the bug: it read as data loss, named no
+    // cause, and left the user no way through.
+    describe('duplicates', () => {
+      it('prompts to replace instead of reporting a failure', async () => {
+        setDriveState({ index: makeFiles(1) });
+        setLibraryBooks({ b1: { sourceFilename: 'Book 000.epub' } });
+        renderShelf('list');
+
+        fireEvent.click(screen.getByTestId('drive-import-file-0'));
+
+        await screen.findByText(
+          '"Book 000.epub" already exists in your library. Do you want to replace it?',
+        );
+        expect(mockShowToast).not.toHaveBeenCalled();
+      });
+
+      it('asks before spending the download when the filename is already known', async () => {
+        setDriveState({ index: makeFiles(1) });
+        setLibraryBooks({ b1: { sourceFilename: 'Book 000.epub' } });
+        renderShelf('list');
+
+        fireEvent.click(screen.getByTestId('drive-import-file-0'));
+
+        await screen.findByTestId('confirm-replace');
+        expect(driveSync.importFile).not.toHaveBeenCalled();
+      });
+
+      // The orchestrator's gate has a second half — the DB filename index —
+      // that the shelf's inventory-backed set cannot see.
+      it('prompts on a DuplicateBookError the inventory did not predict', async () => {
+        setDriveState({ index: makeFiles(1) });
+        setLibraryBooks({}); // inventory projection has not caught up
+        driveSync.importFile.mockRejectedValue(new DuplicateBookError('Book 000.epub'));
+        renderShelf('list');
+
+        fireEvent.click(screen.getByTestId('drive-import-file-0'));
+
+        await screen.findByTestId('confirm-replace');
+        expect(mockShowToast).not.toHaveBeenCalled();
+      });
+
+      it('re-imports with overwrite when the replace is confirmed', async () => {
+        setDriveState({ index: makeFiles(1) });
+        setLibraryBooks({ b1: { sourceFilename: 'Book 000.epub' } });
+        renderShelf('list');
+
+        fireEvent.click(screen.getByTestId('drive-import-file-0'));
+        const confirm = await screen.findByTestId('confirm-replace');
+
+        driveSync.importFile.mockResolvedValue(undefined);
+        fireEvent.click(confirm);
+
+        await waitFor(() => {
+          expect(driveSync.importFile).toHaveBeenCalledWith(
+            'file-0',
+            'Book 000.epub',
+            { overwrite: true },
+            { interactive: true },
+          );
+        });
+        await waitFor(() => {
+          expect(mockShowToast).toHaveBeenCalledWith('Replaced "Book 000.epub"', 'success');
+        });
+      });
+
+      it('keeps the prompt open and explains a failed replace', async () => {
+        setDriveState({ index: makeFiles(1) });
+        setLibraryBooks({ b1: { sourceFilename: 'Book 000.epub' } });
+        renderShelf('list');
+
+        fireEvent.click(screen.getByTestId('drive-import-file-0'));
+        const confirm = await screen.findByTestId('confirm-replace');
+
+        driveSync.importFile.mockRejectedValue(new Error('network died'));
+        fireEvent.click(confirm);
+
+        await waitFor(() => {
+          expect(mockShowToast).toHaveBeenCalledWith(
+            'Failed to replace "Book 000.epub": Something went wrong. Please try again.',
+            'error',
+          );
+        });
+        expect(screen.getByTestId('confirm-replace')).toBeInTheDocument();
+      });
+
+      it('dismisses the prompt without importing when cancelled', async () => {
+        setDriveState({ index: makeFiles(1) });
+        setLibraryBooks({ b1: { sourceFilename: 'Book 000.epub' } });
+        renderShelf('list');
+
+        fireEvent.click(screen.getByTestId('drive-import-file-0'));
+        await screen.findByTestId('confirm-replace');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+        await waitFor(() => {
+          expect(screen.queryByTestId('confirm-replace')).not.toBeInTheDocument();
+        });
+        expect(driveSync.importFile).not.toHaveBeenCalled();
+      });
+    });
+
+    // The shelf renders inside LibraryView, which registers guards for its own
+    // dialogs; without matching ones here, back left /drive with a sheet open
+    // on top of it.
+    describe('back navigation', () => {
+      it('registers no guard while the shelf has nothing open', () => {
+        setDriveState({ index: makeFiles(1) });
+        renderShelf('list');
+        expect(useBackNavigationStore.getState().handlers).toHaveLength(0);
+      });
+
+      it('closes the preview sheet instead of leaving the shelf', async () => {
+        setDriveState({ index: makeFiles(1) });
+        renderShelf('grid');
+
+        fireEvent.click(screen.getByTestId('drive-card-file-0'));
+        await screen.findByText('Review this book before importing it.');
+
+        await act(async () => {
+          await topBackHandler()!();
+        });
+
+        await waitFor(() => {
+          expect(
+            screen.queryByText('Review this book before importing it.'),
+          ).not.toBeInTheDocument();
+        });
+      });
+
+      it('dismisses the replace prompt instead of leaving the shelf', async () => {
+        setDriveState({ index: makeFiles(1) });
+        setLibraryBooks({ b1: { sourceFilename: 'Book 000.epub' } });
+        renderShelf('list');
+
+        fireEvent.click(screen.getByTestId('drive-import-file-0'));
+        await screen.findByTestId('confirm-replace');
+
+        await act(async () => {
+          await topBackHandler()!();
+        });
+
+        await waitFor(() => {
+          expect(screen.queryByTestId('confirm-replace')).not.toBeInTheDocument();
+        });
+      });
+
+      it('holds the replace prompt open while the replace is in flight', async () => {
+        setDriveState({ index: makeFiles(1) });
+        setLibraryBooks({ b1: { sourceFilename: 'Book 000.epub' } });
+        renderShelf('list');
+
+        fireEvent.click(screen.getByTestId('drive-import-file-0'));
+        const confirm = await screen.findByTestId('confirm-replace');
+
+        // Import that never settles: the dialog is mid-replace, where it also
+        // refuses its own Cancel.
+        driveSync.importFile.mockReturnValue(new Promise(() => {}));
+        fireEvent.click(confirm);
+        await waitFor(() => expect(driveSync.importFile).toHaveBeenCalled());
+
+        // A guard is still registered (back must not fall through to leaving
+        // the route either), it simply declines to act.
+        await act(async () => {
+          await topBackHandler()!();
+        });
+
+        expect(screen.getByTestId('confirm-replace')).toBeInTheDocument();
+      });
     });
 
     it('regression: an auth failure during import asks for a reconnect', async () => {
