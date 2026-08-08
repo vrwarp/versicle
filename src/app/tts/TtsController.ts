@@ -57,6 +57,18 @@ export class TtsController {
     private initialized = false;
     /** Mirror of the last setBookId — the consent prompt's subject. */
     private currentBookId: string | null = null;
+    /**
+     * The provider id `loadVoices` has already applied to the engine. `null` means
+     * "must (re-)apply" — the initial state, and what the settings watchers reset it
+     * to when a swap is genuinely required (provider change, API-key commit).
+     *
+     * Why this exists: `loadVoices()` runs on EVERY reader mount (the useTTS mount
+     * effect), and `PlaybackController.setProviderById` opens with an unconditional
+     * `stopInternal()`. Re-issuing the provider that is already active therefore
+     * killed in-flight audio — the "TTS stops when I come back into the book from
+     * the library" bug. Pinned by regression: reader re-entry keeps playing.
+     */
+    private appliedProviderId: string | null = null;
 
     constructor(engine: TtsEngine = getAudioPlayer()) {
         this.engine = engine;
@@ -158,7 +170,10 @@ export class TtsController {
                 && s.providerId in s.apiKeys
                 && s.apiKeys[s.providerId as keyof typeof s.apiKeys] !== prev.apiKeys[s.providerId as keyof typeof prev.apiKeys]) {
                 // API key committed for the ACTIVE provider: force a re-init
-                // (the legacy setApiKey → setProviderId(providerId) chain).
+                // (the legacy setApiKey → setProviderId(providerId) chain). The id
+                // is unchanged, so the idempotence guard must be invalidated by
+                // hand — the provider instance really does have to be rebuilt.
+                this.appliedProviderId = null;
                 void this.loadVoices();
             }
         });
@@ -317,13 +332,22 @@ export class TtsController {
      * (saved profile voice → language match → English → first). Moved verbatim
      * from the legacy `useTTSStore.loadVoices` action, with the resolved voice
      * landing in the playback store and the id in the settings profile.
+     *
+     * Safe to call while audio is playing: the provider swap is skipped when the
+     * requested provider is already the applied one (see {@link appliedProviderId}).
      */
     loadVoices = async (): Promise<void> => {
         // Ensure provider is set on player (in case of fresh load). The id is plain
         // data on both engine paths; the main-thread backend constructs the live
         // provider (with API keys + active language) via the shared factory.
+        //
+        // The swap is DESTRUCTIVE (the engine stops playback before rebuilding the
+        // provider), so it is issued only when something actually changed.
         const { providerId } = useTTSSettingsStore.getState();
-        await this.engine.setProviderById(providerId);
+        if (this.appliedProviderId !== providerId) {
+            await this.engine.setProviderById(providerId);
+            this.appliedProviderId = providerId;
+        }
 
         await this.engine.init();
         const voices = await this.engine.getVoices();

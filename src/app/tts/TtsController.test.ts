@@ -430,6 +430,41 @@ describe('TtsController', () => {
             expect(playback().voice?.id).toBe('v-en');
         });
 
+        // Regression: reader re-entry keeps playing.
+        //
+        // `useTTS` calls loadVoices() on EVERY reader mount, so leaving a book for
+        // the library and walking back in re-ran the provider swap — and
+        // PlaybackController.setProviderById opens with stopInternal(), which killed
+        // the audio that had happily kept playing over in the library.
+        it('loadVoices does NOT re-swap the provider when it is already applied', async () => {
+            const { engine, raw } = makeFakeEngine();
+            const controller = new TtsController(engine);
+
+            await controller.loadVoices();
+            expect(raw.setProviderById).toHaveBeenCalledTimes(1);
+            raw.setProviderById.mockClear();
+
+            // The second reader mount: voices reload, provider stays put.
+            await controller.loadVoices();
+
+            expect(raw.setProviderById).not.toHaveBeenCalled();
+            expect(raw.getVoices).toHaveBeenCalledTimes(2);
+        });
+
+        it('an API-key commit still forces the swap a later loadVoices would skip', async () => {
+            useTTSSettingsStore.setState({ providerId: 'google' });
+            const { engine, raw } = makeFakeEngine();
+            const controller = new TtsController(engine);
+            controller.initialize();
+
+            await controller.loadVoices();
+            raw.setProviderById.mockClear();
+
+            settings().setApiKey('google', 'fresh-key');
+
+            await vi.waitFor(() => expect(raw.setProviderById).toHaveBeenCalledWith('google'));
+        });
+
         it('downloadVoice tracks progress state and surfaces failures', async () => {
             const { engine, raw } = makeFakeEngine();
             const controller = new TtsController(engine);
