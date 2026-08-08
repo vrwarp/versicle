@@ -36,6 +36,8 @@ import { ReplaceBookDialog } from '../library/ReplaceBookDialog';
 import { useDriveStore, type DriveFileIndex } from '@store/useDriveStore';
 import { useBookStore } from '@store/useBookStore';
 import { useToastStore } from '@store/useToastStore';
+import { BackButtonPriority } from '@store/useBackNavigationStore';
+import { useNavigationGuard } from '@hooks/useNavigationGuard';
 import { getDriveLibrarySync, GoogleAuthRequiredError } from '@domains/google';
 import { DuplicateBookError } from '~types/errors';
 import { presentError } from '@app/errors/presentError';
@@ -197,6 +199,26 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
       reportFailure('import', file, error);
     }
   }, [importingId, libraryFilenames, runImport, reportFailure]);
+
+  // Back button (Android hardware / browser) closes the shelf's sheets rather
+  // than leaving /drive under them — the same MODAL-priority contract the
+  // library's own dialogs register (LibraryView).
+  useNavigationGuard(
+    useCallback(() => setPreviewFile(null), []),
+    BackButtonPriority.MODAL,
+    !!previewFile,
+  );
+  useNavigationGuard(
+    // Mid-replace this is deliberately inert: ReplaceBookDialog refuses its own
+    // close while the import is in flight, and back must not undercut that by
+    // unmounting the dialog — or, with no handler registered, the whole shelf.
+    useCallback(() => {
+      if (importingId) return;
+      setDuplicateFile(null);
+    }, [importingId]),
+    BackButtonPriority.MODAL,
+    !!duplicateFile,
+  );
 
   const handleConfirmReplace = useCallback(async () => {
     const file = duplicateFile;

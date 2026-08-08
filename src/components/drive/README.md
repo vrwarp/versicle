@@ -47,6 +47,15 @@ the DB filename index, which the projection can lag behind.
 **filename** match predicts the Replace prompt, while a **title-only** match
 really does import as a separate entry.
 
+## Back navigation
+
+Both shelf sheets register a `useNavigationGuard` at `BackButtonPriority.MODAL`,
+matching what `LibraryView` does for its own dialogs — the shelf renders inside
+it, so without them a back press left `/drive` with a sheet open on top of it.
+The replace prompt's guard is inert while the replace is in flight: the dialog
+refuses its own close there, and back must not undercut that (nor, by
+registering nothing, fall through to leaving the route).
+
 ## Folder linking
 
 *   **`DriveFolderPicker.tsx`** / **`useDriveBrowser.ts`**: the folder browser
