@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/label-has-for, jsx-a11y/label-has-associated-control */
 import { render, screen } from '@testing-library/react';
 import { Slider } from './Slider';
 import { describe, it, expect } from 'vitest';

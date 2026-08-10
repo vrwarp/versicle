@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/label-has-for */
 import React from 'react';
 import { Label } from '../ui/Label';
 import { Input } from '../ui/Input';

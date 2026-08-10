@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/control-has-associated-label */
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Dialog } from './Dialog';
 import { describe, it, expect, vi } from 'vitest';

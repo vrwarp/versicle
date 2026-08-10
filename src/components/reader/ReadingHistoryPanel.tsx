@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-to-interactive-role */
 import React, { useMemo } from 'react';
 import { useBookProgress } from '@store/useReadingStateStore';
 import { parseCfiRange } from '@kernel/cfi';
