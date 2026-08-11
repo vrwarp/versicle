@@ -969,6 +969,7 @@ under `android/app/src/test/java/com/vrwarp/versicle/`:
 | Test class | What it verifies |
 |---|---|
 | `MainActivityTest` | `BridgeActivity` starts, Capacitor bridge initialises, `MediaSession` and `TextToSpeech` plugins are registered |
+| `MainActivityWebViewRecoveryTest` | The two launch-survival behaviours of §18 — the debug WebView-store reset is gated on "first activity in a fresh process" + "APK changed", and a dead renderer recreates the activity (bounded) instead of letting the framework kill the app |
 | `MediaSessionPluginTest` | `MediaSessionPlugin` is retrievable from the bridge; `setMetadata` and `setPlaybackState` do not crash |
 | `TextToSpeechPluginTest` | `TextToSpeechPlugin` is retrievable; `speak()` and `getSupportedLanguages()` do not crash |
 | `BatteryOptimizationTest` | `BatteryOptimizationPlugin` is retrievable; `isBatteryOptimizationEnabled()` does not crash |
@@ -1004,6 +1005,48 @@ that the Capacitor mock setup (which many other test files share) is correct.
 ---
 
 ## 18. Edge cases and failure modes
+
+### The app disappearing on launch
+
+Two independent mechanisms could end the app process during or just after launch, both
+presenting the same way to the user: the app opens, vanishes within a second with no
+crash dialog, and works on the very next try. Both are handled in
+[MainActivity.java](../../android/app/src/main/java/com/vrwarp/versicle/MainActivity.java).
+
+**1. A dead WebView renderer used to kill the whole app.** Android's contract for
+`WebViewClient.onRenderProcessGone` is that returning `false` terminates the app process.
+Capacitor's `BridgeWebViewClient` returns `false` unless some registered `WebViewListener`
+returns `true`, and the app registered none — so a renderer OOM (boot runs library
+hydration, CRDT migrations and every background task at once, and Piper voice models pin
+tens of MB) or an Android System WebView package update mid-session simply ended the
+process. `MainActivity` now installs a `WebViewListener` on the **bridge builder** (before
+`super.onCreate()`, because `BridgeActivity` copies the builder's listener list into the
+bridge while creating the WebView) that detaches and destroys the unusable WebView and
+calls `recreate()`, so a renderer loss becomes an app reload — all state is in IndexedDB.
+Recovery is bounded (3 per process, ≥5 s apart); past the budget the activity finishes
+rather than spinning in a recreate loop.
+
+**2. The debug WebView-store reset used to run on every launch.** Debug builds drop
+Chromium's `Service Worker` and `HTTP Cache` stores under `app_webview` so a freshly
+`cap sync`-ed `sw.js` is re-read instead of being served from the ScriptCache. That reset
+is now gated twice:
+
+- **First activity in the process only.** Chromium opens those stores once per *process*
+  and holds them for its lifetime. The process routinely outlives the activity —
+  `App.exitApp()` is `Activity.finish()`, which does not end the process, and Android
+  keeps the emptied process cached — so a relaunch often builds a new `MainActivity`
+  inside a process whose Chromium stack is already live. Deleting its LevelDB files
+  underneath it is what took that launch down, and why the *next* launch always worked:
+  the crash finally cleared the stale process.
+- **Only when `PackageInfo.lastUpdateTime` changed.** A post-`cap sync` reinstall is the
+  only case the reset exists for. Running it every launch also forced a full
+  service-worker re-register plus re-precache on every cold start, and walked the whole
+  `app_webview` tree on the main thread before the activity was created.
+
+The old code also constructed a throwaway `new WebView(this)` **before** `super.onCreate()`
+and **outside** the `try`/`catch`, so a momentarily unavailable WebView provider (Play
+Store swapping the Android System WebView package — which also kills live WebViews) threw
+straight out of `onCreate`. That WebView is gone; the store reset covers the same caches.
 
 ### Background audio gap on pause
 
