@@ -611,6 +611,28 @@ One important difference: the native plugin does **not** support `seekto`
 (received in full-screen progress bars) is passed through but is also mapped to a
 no-op in the worker engine client because the engine uses `onSeek` for all seeking.
 
+#### Degraded-session notice
+
+The native plugin can fail to create its Media3 session. Since
+`@jofr/capacitor-media-session` `7213e7e` it retries once with a fresh id and then
+starts *sessionless* rather than throwing out of `Service.onCreate` — which used to
+kill the whole app process on launch (§18). Reading aloud is unaffected; what is
+lost for that run is the media notification and the lock-screen / hardware-button
+controls.
+
+`MediaSessionManager` subscribes to the plugin's `sessionunavailable` event and
+forwards it to an injected `onSessionUnavailable` callback, which travels out
+through `PlatformEvents` to the composition root
+([createWorkerEngineClient](../../src/app/tts/createWorkerEngineClient.ts)) where it
+becomes a `tts.mediaSessionUnavailable` info toast. The hop through `PlatformEvents`
+is not ceremony: `src/lib` may not import `src/store` (dependency-cruiser
+`lib-not-to-store`), so the manager cannot raise a toast itself.
+
+The plugin **retains** that event until a listener consumes it. Its service binds at
+bridge-init time, long before the web app mounts, so a failure that happened during
+launch is still delivered to a listener registered much later — without retention
+the one signal explaining a missing media notification would always be dropped.
+
 #### Artwork processing
 
 `setMetadata` calls `processArtwork`, which:
@@ -1042,6 +1064,15 @@ is now gated twice:
   only case the reset exists for. Running it every launch also forced a full
   service-worker re-register plus re-precache on every cold start, and walked the whole
   `app_webview` tree on the main thread before the activity was created.
+
+A third mechanism lived in the plugin rather than the app: `MediaSessionService.onCreate`
+rethrew an `IllegalStateException` from `MediaSession.Builder.build()` / `addSession()`.
+That is inside `Service.onCreate`, where an exception terminates the app process — and
+because `foregroundService: "always"` makes `MediaSessionPlugin.load()` bind the service at
+bridge-init, it ran on every launch. Fixed upstream in
+[capacitor-media-session#7](https://github.com/vrwarp/capacitor-media-session/pull/7)
+(pinned at `7213e7e`): session creation retries once with a fresh id and then degrades to a
+sessionless service, reported to JS as `sessionunavailable` (§7.3).
 
 The old code also constructed a throwaway `new WebView(this)` **before** `super.onCreate()`
 and **outside** the `try`/`catch`, so a momentarily unavailable WebView provider (Play

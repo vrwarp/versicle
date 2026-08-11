@@ -49,6 +49,7 @@ describe('PlatformIntegration', () => {
             onSeek: vi.fn(),
             onSeekTo: vi.fn(),
             onBookmark: vi.fn(),
+            onSessionUnavailable: vi.fn(),
         };
         platform = new PlatformIntegration(events);
     });
@@ -161,6 +162,13 @@ describe('PlatformIntegration', () => {
             capturedMsm.callbacks.onSeekBackward();
             expect(events.onSeek).toHaveBeenCalledWith(-10);
             expect(events.onSeekTo).not.toHaveBeenCalled();
+        });
+
+        it('passes onSessionUnavailable through to the injected handler', () => {
+            // src/lib may not reach src/store (depcruise lib-not-to-store), so the degraded-session
+            // notice has to travel out through PlatformEvents to the composition root's toast.
+            capturedMsm.callbacks.onSessionUnavailable('IllegalStateException: boom');
+            expect(events.onSessionUnavailable).toHaveBeenCalledWith('IllegalStateException: boom');
         });
     });
 });
