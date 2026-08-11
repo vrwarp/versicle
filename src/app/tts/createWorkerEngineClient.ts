@@ -160,6 +160,17 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         // v4.1.0). Routes to the worker engine, which captures an audio-bookmark
         // at the current location (the same capture the pause→play Dragnet uses).
         onBookmark: () => { logger.info('transport bookmark -> engine.captureBookmark()'); void engine.captureBookmark(); },
+        // Android media session could not be created (capacitor-media-session 7213e7e): the
+        // plugin retries once and then starts sessionless instead of throwing out of
+        // Service.onCreate, which used to take the whole app process down on launch. Reading
+        // aloud is unaffected, so this is 'info', not 'error' — but it is worth saying out
+        // loud, because otherwise the lock-screen controls are just silently missing. The
+        // toast lands here rather than in MediaSessionManager because src/lib may not reach
+        // src/store (depcruise `lib-not-to-store`).
+        onSessionUnavailable: (reason) => {
+            logger.warn('media session unavailable — no lock-screen/notification controls:', reason);
+            useToastStore.getState().showToast('tts.mediaSessionUnavailable', 'info', 10000);
+        },
     });
 
     const host: EngineHost = {

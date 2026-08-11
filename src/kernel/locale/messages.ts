@@ -132,6 +132,8 @@ export const messages = {
   'app.updateReady': 'A new version of Versicle is ready.',
   'app.swDegraded':
     'Offline features are unavailable in this session — book covers may not display. Reload to retry.',
+  'tts.mediaSessionUnavailable':
+    'Lock-screen and notification playback controls are unavailable in this session. Reading aloud still works. Restart the app to retry.',
   'data.clearAll.title': 'Delete ALL data?',
   'data.clearAll.body':
     'Are you sure you want to delete ALL data? This includes books, annotations, and settings.',

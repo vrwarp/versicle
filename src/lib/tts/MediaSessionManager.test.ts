@@ -321,6 +321,30 @@ describe('MediaSessionManager', () => {
       expect(MediaSession.addListener).toHaveBeenCalledWith('artworkload', expect.any(Function));
     });
 
+    it('routes the sessionunavailable event to onSessionUnavailable', async () => {
+      // The plugin retains this event until consumed, so registering it here — long after
+      // the native service bound at bridge-init — still delivers a failure that happened
+      // during launch.
+      const onSessionUnavailable = vi.fn();
+      new MediaSessionManager({ ...callbacks, onSessionUnavailable });
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      const handler = (MediaSession.addListener as Mock).mock.calls
+        .find(([eventName]) => eventName === 'sessionunavailable')?.[1] as (e: { reason: string }) => void;
+      expect(handler).toBeDefined();
+
+      handler({ reason: 'IllegalStateException: Session ID must be unique. ID=MediaSession-0' });
+      expect(onSessionUnavailable).toHaveBeenCalledWith(
+        'IllegalStateException: Session ID must be unique. ID=MediaSession-0');
+    });
+
+    it('does not subscribe to sessionunavailable when no callback was supplied', async () => {
+      new MediaSessionManager(callbacks);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(MediaSession.addListener).not.toHaveBeenCalledWith(
+        'sessionunavailable', expect.any(Function));
+    });
+
     it('updates native metadata correctly with artwork processing', async () => {
       const manager = new MediaSessionManager(callbacks);
       const metadata = {
