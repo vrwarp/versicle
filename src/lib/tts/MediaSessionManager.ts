@@ -50,6 +50,15 @@ export interface MediaSessionCallbacks {
    * Web/iOS do not surface them, so this never fires there.
    */
   onBookmark?: () => void;
+  /**
+   * The native plugin could not create the Android media session (it retries once, then
+   * starts without one rather than crashing the app — capacitor-media-session 7213e7e).
+   * There is no media notification and no lock-screen / hardware-button control for the
+   * rest of this run; playback itself is unaffected.
+   *
+   * Android-only: Web/iOS use `navigator.mediaSession`, which has no such failure mode.
+   */
+  onSessionUnavailable?: (reason: string) => void;
 }
 
 /**
@@ -132,6 +141,17 @@ export class MediaSessionManager {
       MediaSession.addListener('artworkload', (event) => {
         logger.warn('artworkload', event.loaded ? 'loaded' : 'FAILED', event.src ?? '');
       }).catch((e) => logger.warn('artworkload listener registration failed', e));
+
+      // Degraded-session notice (plugin 7213e7e). The plugin RETAINS this event until a
+      // listener consumes it: the native service binds at bridge-init, long before this
+      // code runs, so without retention the one signal explaining a missing media
+      // notification would always be dropped. Registering late is therefore fine.
+      if (this.callbacks.onSessionUnavailable) {
+        MediaSession.addListener('sessionunavailable', (event) => {
+          logger.warn('sessionunavailable — no media notification or lock-screen controls this run:', event.reason);
+          this.callbacks.onSessionUnavailable!(event.reason);
+        }).catch((e) => logger.warn('sessionunavailable listener registration failed', e));
+      }
     } else if (this.hasWebMediaSession) {
       // WEB MODE
       for (const [action, handler] of actionHandlers) {

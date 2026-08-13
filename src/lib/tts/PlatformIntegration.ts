@@ -36,6 +36,17 @@ export interface PlatformEvents {
      * a no-op on Web/iOS where custom actions are not surfaced).
      */
     onBookmark: () => void;
+    /**
+     * Triggered when the native plugin reports that it could not create the Android media
+     * session, so this run has no media notification and no lock-screen / hardware-button
+     * controls. TTS itself keeps working — only the OS-side session is missing.
+     *
+     * Injected rather than surfaced here because `src/lib` may not reach `src/store`
+     * (depcruise `lib-not-to-store`); the composition root turns it into a toast.
+     *
+     * @param reason Diagnostic detail from the plugin (exception class + message).
+     */
+    onSessionUnavailable?: (reason: string) => void;
 }
 
 /**
@@ -89,6 +100,7 @@ export class PlatformIntegration implements MediaPlatform {
                 }
             },
             onBookmark: events.onBookmark,
+            onSessionUnavailable: events.onSessionUnavailable,
         });
     }
 
