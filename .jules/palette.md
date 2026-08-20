@@ -173,3 +173,6 @@
 ## 2026-07-16 - Add title tooltips to icon-only buttons
 **Learning:** Icon-only buttons lacking `title` attributes lack visual cues for mouse users, even if they have `aria-label` for screen readers.
 **Action:** Always provide `title` attributes for icon-only action buttons in addition to `aria-label`.
+## 2026-08-20 - Keyboard Accessibility for Hover-Revealed Buttons
+**Learning:** Found that elements like the "Delete" or "Unstar" buttons inside search history pills were only visible on mouse hover (`opacity-0 group-hover:opacity-100`). This completely hides them from keyboard users navigating via Tab, even though they technically receive focus, creating a confusing and inaccessible experience where focus seems to disappear.
+**Action:** When hiding interactive elements until hover, always pair `group-hover:opacity-100` with `focus-visible:opacity-100` (e.g., `opacity-0 group-hover:opacity-100 focus-visible:opacity-100`) so the elements reveal themselves when accessed via keyboard navigation.
