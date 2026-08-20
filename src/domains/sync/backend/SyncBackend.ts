@@ -51,6 +51,13 @@ export interface SyncConnectionEvents {
   'sync-failure': (error: unknown) => void;
   'save-rejected': (event: SaveRejectedEvent) => void;
   'corrupted-document': (event: { docId: string }) => void;
+  /**
+   * The replicated document moved to a new epoch (y-cinder squash). The
+   * underlying provider has already fenced itself — no data flows in
+   * either direction until the local doc is rebuilt from the new epoch's
+   * snapshot. `self` marks the connection that initiated the squash.
+   */
+  'epoch-changed': (event: { epoch: number; previousEpoch: number; self: boolean }) => void;
 }
 
 export interface SyncConnection {

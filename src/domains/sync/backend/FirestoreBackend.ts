@@ -485,6 +485,22 @@ export class FirestoreBackend implements SyncBackend {
       emitter.emit('corrupted-document', event)) as never);
     // Live since the y-cinder `saved` fork delta (P9 surgery 1).
     p.on('saved', ((at: number) => emitter.emit('saved', at)) as never);
+    // Epoch transitions (y-cinder squash — the long-lived-document floor
+    // reset). Both events mean the same thing for this connection: the
+    // provider has fenced itself and the local doc must be rebuilt from
+    // the new epoch's snapshot before syncing can resume.
+    p.on('epoch-changed', ((event: { previousEpoch: number; epoch: number }) =>
+      emitter.emit('epoch-changed', {
+        epoch: event.epoch,
+        previousEpoch: event.previousEpoch,
+        self: false,
+      })) as never);
+    p.on('squashed', ((event: { epoch: number }) =>
+      emitter.emit('epoch-changed', {
+        epoch: event.epoch,
+        previousEpoch: event.epoch - 1,
+        self: true,
+      })) as never);
 
     let destroyed = false;
     return {
