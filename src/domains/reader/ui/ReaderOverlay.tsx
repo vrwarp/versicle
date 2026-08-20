@@ -34,6 +34,12 @@ export type ReaderOverlayProps = (DecorativeOverlayProps | InteractiveOverlayPro
   containerNode: Element | null;
   /** Extra classes (e.g. z-index) merged onto the overlay root. */
   className?: string;
+  /**
+   * Inline styles on the overlay root — the intended carrier for CSS custom
+   * properties the children read (theme-dependent values live HERE so a
+   * theme change touches one node, not every child).
+   */
+  style?: React.CSSProperties;
   children: React.ReactNode;
 };
 
@@ -42,6 +48,7 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
   label,
   containerNode,
   className,
+  style,
   children,
 }) => {
   if (!containerNode) return null;
@@ -50,6 +57,7 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
     mode === 'decorative' ? (
       <div
         className={cn('absolute inset-0 pointer-events-none overflow-visible', className)}
+        style={style}
         aria-hidden="true"
       >
         {children}
@@ -57,6 +65,7 @@ export const ReaderOverlay: React.FC<ReaderOverlayProps> = ({
     ) : (
       <div
         className={cn('absolute inset-0 pointer-events-none overflow-visible', className)}
+        style={style}
         role="group"
         aria-label={label}
       >

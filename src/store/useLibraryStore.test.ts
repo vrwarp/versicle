@@ -59,6 +59,62 @@ describe('useLibraryStore (UI projection)', () => {
     expect(set.has('y')).toBe(true);
   });
 
+  it('bulk writes land every entry in ONE reference change (boot hydration)', () => {
+    const s = useLibraryStore.getState();
+    const existing = makeBookMetadata({ id: 'a' });
+    s.setStaticMetadata('a', existing);
+    s.markOffloaded('x');
+
+    let staticWrites = 0;
+    let offloadedWrites = 0;
+    let prevStatic = useLibraryStore.getState().staticMetadata;
+    let prevOffloaded = useLibraryStore.getState().offloadedBookIds;
+    const unsubscribe = useLibraryStore.subscribe((state) => {
+      if (state.staticMetadata !== prevStatic) {
+        staticWrites++;
+        prevStatic = state.staticMetadata;
+      }
+      if (state.offloadedBookIds !== prevOffloaded) {
+        offloadedWrites++;
+        prevOffloaded = state.offloadedBookIds;
+      }
+    });
+
+    const b = makeBookMetadata({ id: 'b' });
+    const c = makeBookMetadata({ id: 'c' });
+    useLibraryStore.getState().setStaticMetadataMany([['b', b], ['c', c]]);
+    useLibraryStore.getState().markOffloadedMany(['y', 'z']);
+    unsubscribe();
+
+    // The whole batch is ONE identity change each — the per-key form made
+    // libraryViewStore re-derive the entire shelf once per book.
+    expect(staticWrites).toBe(1);
+    expect(offloadedWrites).toBe(1);
+
+    const after = useLibraryStore.getState();
+    expect(Object.keys(after.staticMetadata).sort()).toEqual(['a', 'b', 'c']);
+    expect(after.staticMetadata.a).toBe(existing); // untouched keys preserved
+    expect([...after.offloadedBookIds].sort()).toEqual(['x', 'y', 'z']);
+  });
+
+  it('bulk writes with nothing new preserve references (render stability)', () => {
+    const s = useLibraryStore.getState();
+    const meta = makeBookMetadata({ id: 'a' });
+    s.setStaticMetadata('a', meta);
+    s.markOffloaded('x');
+
+    const staticBefore = useLibraryStore.getState().staticMetadata;
+    const offloadedBefore = useLibraryStore.getState().offloadedBookIds;
+
+    useLibraryStore.getState().setStaticMetadataMany([['a', meta]]);
+    useLibraryStore.getState().setStaticMetadataMany([]);
+    useLibraryStore.getState().markOffloadedMany(['x']);
+    useLibraryStore.getState().markOffloadedMany([]);
+
+    expect(useLibraryStore.getState().staticMetadata).toBe(staticBefore);
+    expect(useLibraryStore.getState().offloadedBookIds).toBe(offloadedBefore);
+  });
+
   it('regression: no-op writes preserve references (render stability)', () => {
     const s = useLibraryStore.getState();
     const meta = makeBookMetadata({ id: 'a' });

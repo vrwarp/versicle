@@ -98,7 +98,19 @@ class StubEngine {
   }
 }
 
-const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 5));
+/**
+ * Drain the processor's async pass. Turn-based rather than a fixed delay:
+ * the pass yields to the MACROTASK queue between time-sliced slices, and on
+ * a loaded machine even a two-character fixture node can exceed the slice
+ * budget — a fixed 5ms sleep then lands before the pass finishes (a real
+ * flake seen under parallel load). Draining N turns is both faster and
+ * robust; the awaited module loads resolve as microtasks in turn 1.
+ */
+const settle = async () => {
+  for (let i = 0; i < 20; i++) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+};
 
 describe('ChineseContentProcessor (CH-2 matrix)', () => {
   let prefs: ChineseReadingPrefs;
@@ -290,12 +302,16 @@ describe('ChineseContentProcessor (CH-2 matrix)', () => {
 
   it('a superseded run abandons its writes (per-run cancellation token)', async () => {
     const engine = new StubEngine();
-    engine.views = [makeView('ch1.xhtml', '你好')];
+    const view = makeView('ch1.xhtml', '你好');
+    engine.views = [view];
     const processor = new ChineseContentProcessor(engine.asEngine(), hooks());
     processor.start();
     await settle();
 
     onPositions.mockClear();
+    // Move the geometry so the runs below produce CHANGED positions (an
+    // unchanged pass deliberately never emits — see the no-op pin below).
+    view.setIframeOffset({ top: 42, left: 0 });
     processor.refresh(); // run A — superseded immediately…
     processor.refresh(); // …by run B
     await settle();
@@ -303,6 +319,65 @@ describe('ChineseContentProcessor (CH-2 matrix)', () => {
     // Exactly ONE emission lands: run A hit the stale-token check after its
     // first await and dropped its write.
     expect(onPositions).toHaveBeenCalledTimes(1);
+    expect(positions[0].top).toBe(42);
+    processor.dispose();
+  });
+
+  it('a no-op remeasure (unchanged geometry) does not emit (jank guard)', async () => {
+    const engine = new StubEngine();
+    const view = makeView('ch1.xhtml', '你好');
+    engine.views = [view];
+    const processor = new ChineseContentProcessor(engine.asEngine(), hooks());
+    processor.start();
+    await settle();
+    expect(positions).toHaveLength(2);
+
+    onPositions.mockClear();
+    // Page turns / scroll-settle relocations re-measure but the in-iframe
+    // rects (and offsets here) are unchanged — the overlay must not be
+    // re-rendered for identical output.
+    engine.emit({
+      type: 'relocated',
+      location: {
+        startCfi: 'epubcfi(/6/2!/4/2)',
+        endCfi: 'epubcfi(/6/2!/4/4)',
+        sectionHref: 'ch1.xhtml',
+        percentage: 0.25,
+        atStart: false,
+        atEnd: false,
+      },
+    });
+    await settle();
+    engine.emit({ type: 'resized' });
+    await settle();
+
+    expect(onPositions).not.toHaveBeenCalled();
+    processor.dispose();
+  });
+
+  it('drops a view whose iframe left the DOM (missed contentDestroyed)', async () => {
+    const engine = new StubEngine();
+    const view = makeView('ch1.xhtml', '你好');
+    engine.views = [view];
+    const processor = new ChineseContentProcessor(engine.asEngine(), hooks());
+    processor.start();
+    await settle();
+    expect(positions).toHaveLength(2);
+
+    // Simulate epub.js destroying the section without the engine relaying it:
+    // the iframe element is disconnected from the parent document.
+    (view.window.frameElement as unknown as { isConnected: boolean }).isConnected = false;
+    onPositions.mockClear();
+    processor.refresh();
+    await settle();
+
+    expect(positions).toEqual([]);
+    expect(onPositions).toHaveBeenCalledTimes(1);
+    // …and the dead view is gone for good: another refresh has nothing to do.
+    onPositions.mockClear();
+    processor.refresh();
+    await settle();
+    expect(onPositions).not.toHaveBeenCalled();
     processor.dispose();
   });
 

@@ -249,12 +249,7 @@ export function useGlobalSearch() {
       // 4. Quantize query vector
       const { vectors: queryVec, scale: queryScale } = quantizer.quantizeInt8PerVector(queryFloat);
 
-      const textMap = new Map<string, string>();
-
       const rankPromises = candidates.map(async ({ book, embedded, corpus }) => {
-        for (const s of corpus.sections) {
-          textMap.set(`${book.bookId}|${s.href}`, s.text);
-        }
         const textByHref = new Map<string, { title: string; text: string }>(
           corpus.sections.map((s) => [s.href, { title: s.title, text: s.text }])
         );

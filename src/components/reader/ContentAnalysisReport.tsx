@@ -15,8 +15,12 @@ interface ContentAnalysisReportProps {
 }
 
 export const ContentAnalysisReport: React.FC<ContentAnalysisReportProps> = ({ isOpen, onClose, engine }) => {
-    const { sections } = useContentAnalysisStore();
-    const { currentBookId, toc } = useReaderUIStore();
+    const sections = useContentAnalysisStore(state => state.sections);
+    // Scoped selectors (jank fix): the bare useReaderUIStore() call
+    // re-rendered this panel on every UI-store change (compass, immersive
+    // mode, section title churn) while mounted.
+    const currentBookId = useReaderUIStore(state => state.currentBookId);
+    const toc = useReaderUIStore(state => state.toc);
 
     const [filterType, setFilterType] = useState<ContentType | 'all'>('all');
     const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());

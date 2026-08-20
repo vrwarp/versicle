@@ -149,7 +149,12 @@ export function useEpubReader(
   const prevSize = useRef({ width: 0, height: 0 });
   const resizeRaf = useRef<number | null>(null);
   const applyStylesRef = useRef<() => void>(() => { });
-  const { forceTraditionalChinese, showPinyin, pinyinSize } = usePreferencesStore();
+  // Scoped selector (jank fix): the bare usePreferencesStore() call
+  // subscribed this hook's host — the whole reader tree — to EVERY
+  // preference field. Only showPinyin feeds the theme spec (its 1.8
+  // line-height floor); the Chinese content pass itself is event-driven via
+  // the app controller, not this hook.
+  const showPinyin = usePreferencesStore(state => state.showPinyin);
   /** Disconnects the shared sandbox-patching observer (epubSecurity). */
   const sandboxObserverRef = useRef<(() => void) | null>(null);
 
@@ -513,9 +518,11 @@ export function useEpubReader(
     options.initialLocation,
     metadata?.baseFontSize,
     metadata?.baseLineHeight,
-    forceTraditionalChinese,
+    // showPinyin is a ReaderThemeSpec input (line-height floor).
+    // forceTraditionalChinese / pinyinSize deliberately are NOT deps: neither
+    // feeds the spec, so both re-applied the whole theme (iframe CSS churn +
+    // reflow) for changes the content pass / overlay handle themselves.
     showPinyin,
-    pinyinSize
   ]);
 
   return { engine, isReady, areLocationsReady, isLoading, metadata, toc, error };

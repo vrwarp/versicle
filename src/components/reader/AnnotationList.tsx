@@ -22,7 +22,11 @@ interface Props {
  * @returns A React component rendering the annotation list.
  */
 export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
-  const { annotations, remove, update } = useAnnotationStore();
+  // Scoped selectors (jank fix): the bare useAnnotationStore() call
+  // re-rendered this list on every annotation-store change, selected or not.
+  const annotations = useAnnotationStore(state => state.annotations);
+  const remove = useAnnotationStore(state => state.remove);
+  const update = useAnnotationStore(state => state.update);
   const confirmDelete = useConfirm();
   // Content-language attribution for book excerpts (i18n ADR §3).
   const contentLang = useBook(bookId ?? null)?.language;
@@ -48,9 +52,16 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
     setEditingId(null);
   };
 
-  const annotationList = Object.values(annotations)
-    .filter(a => !bookId || a.bookId === bookId)
-    .sort((a, b) => a.created - b.created);
+  // Memoized (jank fix): this filter+sort ran in the render body, so every
+  // keystroke in the inline note editor below re-sorted the whole library's
+  // annotations.
+  const annotationList = React.useMemo(
+    () =>
+      Object.values(annotations)
+        .filter(a => !bookId || a.bookId === bookId)
+        .sort((a, b) => a.created - b.created),
+    [annotations, bookId],
+  );
 
   if (annotationList.length === 0) {
     return <div className="p-4 text-sm text-gray-500 text-center">No annotations yet. Select text to highlight.</div>;

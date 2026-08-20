@@ -65,48 +65,62 @@ function createZeroDelayTick(): {
   };
 }
 
-function getCanvasLineHeight(element: HTMLElement, win: Window = window) {
-    const computedStyle = win.getComputedStyle(element);
-    
+/**
+ * ONE measuring canvas for the whole extraction pass. These helpers run per
+ * sampled paragraph per chapter, so a 300-section book used to allocate tens
+ * of thousands of canvases + 2D contexts; the context is stateless between
+ * calls here (every call sets `font` before measuring), so a single shared
+ * one is equivalent. Created lazily and cached (null = 2D unavailable).
+ */
+let measureContext: CanvasRenderingContext2D | null | undefined;
+
+function getMeasureContext(): CanvasRenderingContext2D | null {
+    if (measureContext === undefined) {
+        measureContext = document.createElement("canvas").getContext("2d");
+    }
+    return measureContext;
+}
+
+/** The canvas `font` shorthand for an element's resolved style. */
+function fontStringOf(computedStyle: CSSStyleDeclaration): string {
+    return `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
+}
+
+function getCanvasLineHeight(computedStyle: CSSStyleDeclaration) {
     if (computedStyle.lineHeight !== "normal") {
         return parseFloat(computedStyle.lineHeight);
     }
 
-    // Create an off-screen canvas
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d");
+    const context = getMeasureContext();
     if (!context) return 0;
-    
+
     // Reconstruct the exact font string (e.g., "400 16px Times")
-    context.font = `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
-    
+    context.font = fontStringOf(computedStyle);
+
     // Measure a standard character
     const metrics = context.measureText("M");
-    
+
     // Calculate total pixel height based on font bounding box
     // Note: fontBoundingBox is supported in all modern browsers
     const actualLineHeight = metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent;
-    
+
     return actualLineHeight;
 }
 
-function getActualInkHeight(element: HTMLElement, textToMeasure = "M", win: Window = window) {
-    const computedStyle = win.getComputedStyle(element);
-    
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d");
+function getActualInkHeight(computedStyle: CSSStyleDeclaration, textToMeasure = "M") {
+    const context = getMeasureContext();
     if (!context) return 0;
-    
+
     // Set the canvas font to match the element exactly
-    context.font = `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
-    
+    context.font = fontStringOf(computedStyle);
+
     // Measure the exact text
     const metrics = context.measureText(textToMeasure);
-    
+
     // actualBoundingBoxAscent: pixels from the baseline to the top of the highest letter
     // actualBoundingBoxDescent: pixels from the baseline to the bottom of the lowest letter (e.g., 'g', 'j')
     const actualInkHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-    
+
     return actualInkHeight;
 }
 
@@ -134,8 +148,12 @@ function accumulateChapterStyles(doc: Document, win: Window, accumulator: StyleA
     if (parentTag === 'aside' || parentTag === 'nav' || parentTag === 'footer') {
       continue;
     }
-    const fontSize = getActualInkHeight(p as HTMLElement, text, win);
-    let lineHeight = getCanvasLineHeight(p as HTMLElement, win);
+    // ONE resolved-style read per paragraph, shared by both measurements
+    // (each helper used to call getComputedStyle itself — two cross-realm
+    // style resolutions per paragraph).
+    const computedStyle = win.getComputedStyle(p as HTMLElement);
+    const fontSize = getActualInkHeight(computedStyle, text);
+    let lineHeight = getCanvasLineHeight(computedStyle);
 
     if (isNaN(lineHeight)) {
       lineHeight = fontSize * 1.2; // Standard browser default fallback
