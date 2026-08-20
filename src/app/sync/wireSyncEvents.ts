@@ -99,6 +99,15 @@ export function wireSyncEvents(): () => void {
         toast('sync.persistenceUnavailable', 'error');
         break;
 
+      case 'epoch-changed':
+        // y-cinder epoch squash: the provider fenced itself; the local doc
+        // must be rebuilt from the new epoch's snapshot before syncing can
+        // resume. Until the staged-swap recovery flow is wired, surface it
+        // — data is safe (nothing was applied or dropped), sync is simply
+        // paused for this tab until reload.
+        toast(event.self ? 'sync.epochChanged.self' : 'sync.epochChanged', 'info', 10000);
+        break;
+
       case 'workspace-purged':
         // The honest delete / purge maintenance action (P4-6): tell the
         // user what actually got removed remotely. Params arrive

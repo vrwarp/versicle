@@ -120,6 +120,10 @@ export const messages = {
   'sync.saveRejected.maxRetries': 'Sync save failed: Max retries exceeded. Check connection.',
   'sync.persistenceUnavailable': 'Offline sync unavailable (persistence failed)',
   'sync.workspacePurged': 'Remote workspace data purged ({docs}, {blobs}).',
+  'sync.epochChanged':
+    'Sync storage was rebuilt on another device. Reload the app to pick up the optimized library.',
+  'sync.epochChanged.self':
+    'Sync storage optimized. Reload the app to complete the switch.',
 
   // --- confirms/alerts: app shell + data management (§D codemod) -------
   'app.resetAll.title': 'Delete all data?',

@@ -53,6 +53,15 @@ export type SyncEvent =
   | { type: 'workspace-purged'; report: { docsDeleted: number; blobsDeleted: number } }
   /** Doc-level quarantine fired (§D5): the client is obsolete vs the fleet. */
   | { type: 'obsolete'; incomingVersion: number }
+  /**
+   * The replicated document was squashed into a new epoch (y-cinder's
+   * long-lived-document floor reset — see y-cinder docs/performance.md).
+   * The provider has stopped syncing: old-epoch and new-epoch id spaces
+   * cannot merge. `self` is true on the device that ran the squash.
+   * Recovery = rebuild the local doc from the new epoch's snapshot (the
+   * staged-swap machinery is the intended vehicle) and reconnect.
+   */
+  | { type: 'epoch-changed'; epoch: number; previousEpoch: number; self: boolean }
   | { type: 'local-persistence-unavailable' };
 
 export interface SyncEventBus {

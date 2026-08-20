@@ -157,6 +157,17 @@ describe('wireSyncEvents (single SyncEvent subscriber)', () => {
 
     bus.emit({ type: 'local-persistence-unavailable' });
     expectToastShown('Offline sync unavailable (persistence failed)', 'error');
+
+    // Epoch squash (y-cinder floor reset): both directions surface, with
+    // distinct copy for the squashing device vs bystanders.
+    bus.emit({ type: 'epoch-changed', epoch: 2, previousEpoch: 1, self: false });
+    expectToastShown(
+      'Sync storage was rebuilt on another device. Reload the app to pick up the optimized library.',
+      'info',
+      10000
+    );
+    bus.emit({ type: 'epoch-changed', epoch: 2, previousEpoch: 1, self: true });
+    expectToastShown('Sync storage optimized. Reload the app to complete the switch.', 'info', 10000);
   });
 
   it('unsubscribing stops all presentation', () => {

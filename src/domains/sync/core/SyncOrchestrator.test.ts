@@ -372,6 +372,43 @@ describe('SyncOrchestrator', () => {
             expectToastShown(showToastMock, 'Sync save failed: Max retries exceeded. Check connection.', 'error', 5000);
         });
 
+        it('should fence the connection and surface epoch-changed (remote squash)', async () => {
+            const { useToastStore } = await import('@store/useToastStore');
+            const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
+
+            // y-cinder squash on another device: the provider has fenced
+            // itself; the transport reports the connection down and the
+            // user is told how to recover.
+            mockFireProviderInstance.emit('epoch-changed', {
+                previousEpoch: 0,
+                epoch: 1,
+                localState: new Uint8Array([0, 0])
+            });
+
+            expect(orchestrator.getStatus()).toBe('disconnected');
+            expectToastShown(
+                showToastMock,
+                'Sync storage was rebuilt on another device. Reload the app to pick up the optimized library.',
+                'info',
+                10000
+            );
+        });
+
+        it('should surface the self-squash variant of epoch-changed', async () => {
+            const { useToastStore } = await import('@store/useToastStore');
+            const showToastMock = vi.spyOn(useToastStore.getState(), 'showToast');
+
+            mockFireProviderInstance.emit('squashed', { epoch: 3 });
+
+            expect(orchestrator.getStatus()).toBe('disconnected');
+            expectToastShown(
+                showToastMock,
+                'Sync storage optimized. Reload the app to complete the switch.',
+                'info',
+                10000
+            );
+        });
+
         describe('regression: permission-denied surfaces a "rules out of date" hint (BYO-Firebase lockout)', () => {
             const permissionDeniedError = () =>
                 Object.assign(new Error('Missing or insufficient permissions.'), {

@@ -90,6 +90,26 @@ export class ProviderConnection {
         events.emit({ type: 'flushed', at });
       });
 
+      // Epoch transition (y-cinder squash): the provider has fenced
+      // itself — nothing syncs in either direction until the local doc is
+      // rebuilt from the new epoch's snapshot. Surface it and report the
+      // connection down; the recovery flow (staged swap + reload) is the
+      // subscriber's decision.
+      connection.on('epoch-changed', (event) => {
+        logger.warn(
+          `Replicated document moved to epoch ${event.epoch} ` +
+            `(local epoch ${event.previousEpoch}${event.self ? ', squashed by this device' : ''}). ` +
+            'Sync is fenced until the local doc is rebuilt from the new snapshot.'
+        );
+        deps.setStatus('disconnected');
+        events.emit({
+          type: 'epoch-changed',
+          epoch: event.epoch,
+          previousEpoch: event.previousEpoch,
+          self: event.self,
+        });
+      });
+
       // Quarantine layer 2 — live observer (§D5.2): y-cinder applies
       // remote updates to the doc internally, so the guard sits on the
       // `meta` map and fires synchronously on transaction commit. The
