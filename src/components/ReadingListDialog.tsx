@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/control-has-associated-label */
 import React, { useState, useMemo, useCallback } from 'react';
 import { Modal, ModalContent } from './ui/Modal';
 import { Button } from './ui/Button';

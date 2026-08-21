@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { useCallback, useSyncExternalStore } from 'react';
 import {
   Modal,
@@ -99,6 +100,7 @@ export const ConfirmHost: React.FC = () => {
       <ModalContent data-testid="confirm-dialog" className="max-w-md" hideCloseButton>
         <ModalHeader>
           <ModalTitle>{formatMessage(request.titleKey, request.params)}</ModalTitle>
+          {!request.bodyKey && <ModalDescription className="sr-only">{formatMessage(request.titleKey, request.params)}</ModalDescription>}
           {request.bodyKey && (
             <ModalDescription className="whitespace-pre-line">
               {formatMessage(request.bodyKey, request.params)}

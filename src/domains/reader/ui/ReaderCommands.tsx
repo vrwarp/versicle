@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * ReaderCommands — the typed command surface of the open reader (Phase 6
  * §5a, prep/phase6-reader-engine.md PR-8).

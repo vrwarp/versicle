@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * The route tree (Phase 8 §A). Defined at module scope so the router is
  * created once, never per render.

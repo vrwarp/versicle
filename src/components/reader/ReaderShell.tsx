@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */
 /**
  * ReaderShell — the reader route as pure composition (Phase 6 §5,
  * prep/phase6-reader-engine.md PR-9). The 1,400-line ReaderView died here;

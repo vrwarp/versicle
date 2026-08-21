@@ -389,7 +389,6 @@ export function useReaderController(
     lineHeight,
     fontProfiles,
     shouldForceFont,
-    bookId,
     dispatchCompass,
     bookMetadata,
     initialLocation,
