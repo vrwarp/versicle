@@ -63,15 +63,16 @@ const SearchHistorySection = React.memo<SearchHistorySectionProps>(({ onPillClic
             >
               <button
                 onClick={() => onPillClick(item.query)}
-                className="flex items-center gap-1.5 focus:outline-none"
+                className="flex items-center gap-1.5 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500/50"
               >
                 <Star className="w-3.5 h-3.5 fill-current" />
                 <span>{item.query}</span>
               </button>
               <button
                 onClick={() => toggleSaved(item.query)}
-                className="ml-1.5 opacity-0 group-hover:opacity-100 p-0.5 rounded-full hover:bg-yellow-500/20 transition-all"
+                className="ml-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-0.5 rounded-full hover:bg-yellow-500/20 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500/50"
                 title="Unstar search"
+                aria-label="Unstar search"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -91,14 +92,15 @@ const SearchHistorySection = React.memo<SearchHistorySectionProps>(({ onPillClic
             >
               <button
                 onClick={() => onPillClick(item.query)}
-                className="focus:outline-none"
+                className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span>{item.query}</span>
               </button>
               <button
                 onClick={() => deleteQuery(item.query)}
-                className="ml-1.5 opacity-0 group-hover:opacity-100 p-0.5 rounded-full hover:bg-muted-foreground/15 transition-all text-muted-foreground"
+                className="ml-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-0.5 rounded-full hover:bg-muted-foreground/15 transition-all text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 title="Delete from history"
+                aria-label="Delete from history"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -440,8 +442,9 @@ export const GlobalSemanticSearchView: React.FC = () => {
                 onClick={() => {
                   setSearchParams({});
                 }}
-                className="p-1 hover:bg-muted rounded-full transition-colors"
-                aria-label="Clear search input"
+                className="p-1 hover:bg-muted rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Clear search"
+                title="Clear search"
               >
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
@@ -450,8 +453,9 @@ export const GlobalSemanticSearchView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => toggleSaved(inputVal)}
-                className="p-1.5 hover:bg-muted rounded-full transition-colors"
+                className="p-1.5 hover:bg-muted rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={isStarred ? "Unsave query" : "Save query"}
+                title={isStarred ? "Unsave query" : "Save query"}
               >
                 <Star
                   className={`w-4 h-4 transition-colors ${
