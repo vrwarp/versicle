@@ -67,6 +67,7 @@ const ReaderCommandsContext = createContext<ReaderCommandsContextValue | null>(n
 /** Out-of-tree handle (CompassPill in RootLayout). Module-scope, inert. */
 let registered: ReaderCommands | null = null;
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const readerCommandsRegistry = {
   get(): ReaderCommands | null {
     return registered;
@@ -78,6 +79,7 @@ export const readerCommandsRegistry = {
  * the provider (and directly by test fixtures standing in for it).
  * Replacement overrides previous; only the current owner clears.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function registerReaderCommands(commands: ReaderCommands): () => void {
   registered = commands;
   return () => {
@@ -101,6 +103,7 @@ export const ReaderCommandsProvider: React.FC<{
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useReaderCommands(): ReaderCommands {
   const ctx = useContext(ReaderCommandsContext);
   if (!ctx) {
@@ -110,6 +113,7 @@ export function useReaderCommands(): ReaderCommands {
 }
 
 /** The live engine for in-tree consumers (null while the book loads). */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useReaderEngine(): ReaderEngine | null {
   const ctx = useContext(ReaderCommandsContext);
   if (!ctx) {

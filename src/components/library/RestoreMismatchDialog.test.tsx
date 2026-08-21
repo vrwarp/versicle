@@ -52,11 +52,13 @@ describe('RestoreMismatchDialog', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onProceed when Proceed Anyway is clicked', () => {
+  it('calls onProceed when Proceed Anyway is clicked', async () => {
     const onProceed = vi.fn().mockResolvedValue(undefined);
     render(<RestoreMismatchDialog {...defaultProps} onProceed={onProceed} />);
 
-    fireEvent.click(screen.getByTestId('restore-mismatch-proceed'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('restore-mismatch-proceed'));
+    });
     expect(onProceed).toHaveBeenCalledTimes(1);
   });
 

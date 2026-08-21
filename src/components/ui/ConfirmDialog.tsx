@@ -62,6 +62,7 @@ function getSnapshot(): readonly PendingConfirm[] {
  * Ask the user to confirm. Resolves `true` on confirm, `false` on cancel
  * or dismiss (Escape / overlay click). Callable from non-React code.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function confirmDialog(request: ConfirmRequest): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     setQueue([...queue, { request, resolve }]);
@@ -69,6 +70,7 @@ export function confirmDialog(request: ConfirmRequest): Promise<boolean> {
 }
 
 /** Hook flavor — the conventional component-side spelling. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useConfirm(): (request: ConfirmRequest) => Promise<boolean> {
   return useCallback((request: ConfirmRequest) => confirmDialog(request), []);
 }
@@ -127,6 +129,7 @@ export const ConfirmHost: React.FC = () => {
 };
 
 /** Test seam: drop queued requests (resolving them as cancelled). */
+// eslint-disable-next-line react-refresh/only-export-components
 export function resetConfirmQueueForTests(): void {
   for (const entry of queue) entry.resolve(false);
   setQueue([]);
