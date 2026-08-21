@@ -55,7 +55,7 @@ export interface LibraryServiceDeps {
 }
 
 export class LibraryService {
-  private hydrating = false;
+  private hydrateCount = 0;
   private unsubscribeInventory: (() => void) | null = null;
   private knownBookIds = new Set<string>();
 
@@ -99,9 +99,9 @@ export class LibraryService {
       projection.setHasHydrated(true);
       return;
     }
-    if (this.hydrating && !forceBookIds) return;
+    if (this.hydrateCount > 0 && !forceBookIds) return;
 
-    this.hydrating = true;
+    this.hydrateCount++;
     projection.setHydrating(true);
     try {
       // Capture the offloaded snapshot BEFORE any async work to detect
@@ -168,9 +168,11 @@ export class LibraryService {
     } catch (err) {
       logger.error('Failed to hydrate static metadata:', err);
     } finally {
-      this.hydrating = false;
-      projection.setHydrating(false);
-      projection.setHasHydrated(true);
+      this.hydrateCount--;
+      if (this.hydrateCount === 0) {
+        projection.setHydrating(false);
+        projection.setHasHydrated(true);
+      }
     }
   }
 
