@@ -87,7 +87,7 @@
     "yjs": "^13.6.20",
     "zod": "^4.3.5",
     "zustand": "^5.0.9",
-    "zustand-middleware-yjs": "git+https://github.com/vrwarp/zustand-middleware-yjs.git#9ae2f50de07b67be4583d1b0f1b2b2be4d8fdab8"
+    "zustand-middleware-yjs": "git+https://github.com/vrwarp/zustand-middleware-yjs.git#e6e3b7f1f3bcf77fadb7be4e2c692d86c58d7f31"
   },
   "engines": {
     "node": ">=25 <26"
