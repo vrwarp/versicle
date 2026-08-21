@@ -87,6 +87,16 @@ graph TD
   - **Logic**: Uses a Mutex pattern (`navigator.locks`) for cross-context exclusive write locking, falling back to a promise chain where Web Locks are unavailable.
   - **Trade-offs**: Writes are serialized, meaning a long-running transaction can stall the entire system.
 
+- **`src/lib/BackupService.ts`**
+  - **Goal**: Safely export and restore application state and user data (Yjs/Zustand) locally.
+  - **Logic**: Creates "Light" (JSON) and "Full" (ZIP) backups. Restores destructively by wiping IDB data after validating the manifest and creating a dry-run checkpoint to prevent data loss.
+  - **Trade-offs**: Destructive restore (wipes existing IDB data before apply); builds the zip in memory when processing book blobs.
+
+- **`src/lib/MaintenanceService.ts`**
+  - **Goal**: Scan for and prune orphaned or corrupted data to maintain database health.
+  - **Logic**: Implements idempotent scanner functions (e.g., `repairCorruptCoverBlobsOnce`) to repair corrupted covers from legacy backups.
+  - **Trade-offs**: Relies on a localStorage flag (`alreadyDone`) to limit execution per device, which means clearing browser data can trigger redundant scans.
+
 - **`src/workers/search.worker.ts`**
   - **Goal**: Fast, offline full-text search without blocking the main thread UI.
   - **Logic**: Runs `SearchEngine` with Comlink to process searches asynchronously in a Web Worker.

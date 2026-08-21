@@ -166,6 +166,7 @@ npm test                                   # unit/integration tests (vitest)
 npx vitest run src/lib/ingestion.test.ts   # a single test file
 npm run lint                               # eslint
 npx tsc -b                                 # typecheck (app + tests + e2e)
+npm run docs:generate                      # drift gate test for generated documentation
 ```
 
 #### Android Tests (Docker)
