@@ -135,7 +135,10 @@ const VocabTile: React.FC<{
 };
 
 export const VocabTriageCard: React.FC<{ text: string }> = ({ text }) => {
-  const { knownCharacters, toggleKnownCharacter } = useVocabularyStore();
+  // Scoped selectors (jank fix): the bare useVocabularyStore() call
+  // re-rendered the card on EVERY store change, selected or not.
+  const knownCharacters = useVocabularyStore(state => state.knownCharacters);
+  const toggleKnownCharacter = useVocabularyStore(state => state.toggleKnownCharacter);
   const [tiles, setTiles] = useState<Map<number, TileData>>(new Map());
   const [dictStatus, setDictStatus] = useState<DictionaryStatus>('empty');
 

@@ -22,6 +22,8 @@ interface EngineFixture {
   /** Drives a relocation however the implementation needs. */
   relocate: () => Promise<void> | void;
   knownHref: string;
+  /** epub.js fixture only: fire a raw rendition event through the adapter. */
+  fireRenditionEvent?: (event: string, ...args: unknown[]) => void;
 }
 
 function makeEpubJsFixture(): EngineFixture {
@@ -114,6 +116,8 @@ function makeEpubJsFixture(): EngineFixture {
     engine,
     relocate: () => engine.display('chapter1.xhtml'),
     knownHref: 'chapter1.xhtml',
+    fireRenditionEvent: (event, ...args) =>
+      (handlers.get(event) ?? []).forEach((h) => h(...args)),
   };
 }
 
@@ -243,3 +247,19 @@ function describeReaderEngineContract(name: string, makeFixture: () => EngineFix
 
 describeReaderEngineContract('FakeReaderEngine', makeFakeFixture);
 describeReaderEngineContract('EpubJsEngine (jsdom doubles)', makeEpubJsFixture);
+
+describe('EpubJsEngine section teardown relay', () => {
+  it("relays rendition 'removed' as contentDestroyed with the section href", () => {
+    const { engine, fireRenditionEvent } = makeEpubJsFixture();
+    const events: ReaderEngineEvent[] = [];
+    engine.subscribe((e) => events.push(e));
+
+    fireRenditionEvent!('removed', { href: 'chapter1.xhtml' });
+    expect(events).toEqual([{ type: 'contentDestroyed', sectionHref: 'chapter1.xhtml' }]);
+
+    // A section without an href (defensive) is not relayed.
+    fireRenditionEvent!('removed', {});
+    fireRenditionEvent!('removed', undefined);
+    expect(events).toHaveLength(1);
+  });
+});

@@ -16,3 +16,15 @@ export interface PinyinPosition {
   width: number;
   height: number;
 }
+
+/**
+ * A subscribable snapshot of the merged overlay positions (jank fix): the
+ * app controller feeds processor emissions into one of these instead of
+ * React state, so a geometry update re-renders ONLY the overlay portal
+ * (via useSyncExternalStore in its host), never the whole reader shell.
+ * Shape matches the useSyncExternalStore contract.
+ */
+export interface PinyinPositionsSource {
+  subscribe(onChange: () => void): () => void;
+  getSnapshot(): PinyinPosition[];
+}

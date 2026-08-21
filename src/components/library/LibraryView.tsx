@@ -405,7 +405,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
   // OPTIMIZATION: Memoize rendered VDOM items to prevent O(N) allocation on every keystroke in the search bar.
   // When `searchQuery` updates (keystroke), LibraryView re-renders immediately, but `debouncedSearchQuery`
   // (and thus `filteredAndSortedBooks`) stays the same until the debounce delay elapses.
+  // Only the ACTIVE layout's item array is built (jank fix): both used to be
+  // computed on every library change, allocating two full element trees for
+  // an N-book library when exactly one of them is ever rendered.
   const renderedGridItems = useMemo(() => {
+    if (viewMode !== 'grid') return null;
     return filteredAndSortedBooks.map((book) => {
       const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
       return (
@@ -422,9 +426,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
         </div>
       );
     });
-  }, [filteredAndSortedBooks, staticMetadata, offloadedBookIds, handleBookOpen, handleDelete, handleOffload, handleRestore, handleResumeReading]);
+  }, [viewMode, filteredAndSortedBooks, staticMetadata, offloadedBookIds, handleBookOpen, handleDelete, handleOffload, handleRestore, handleResumeReading]);
 
   const renderedListItems = useMemo(() => {
+    if (viewMode !== 'list') return null;
     return filteredAndSortedBooks.map((book) => {
       const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
       return (
@@ -439,7 +444,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
         />
       );
     });
-  }, [filteredAndSortedBooks, staticMetadata, offloadedBookIds, handleBookOpen, handleDelete, handleOffload, handleRestore]);
+  }, [viewMode, filteredAndSortedBooks, staticMetadata, offloadedBookIds, handleBookOpen, handleDelete, handleOffload, handleRestore]);
 
 
   return (

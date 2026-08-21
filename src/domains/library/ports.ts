@@ -45,9 +45,18 @@ export interface BatchImportSummary {
 export interface LibraryProjectionPort {
   staticIds(): ReadonlySet<string>;
   setStatic(bookId: string, meta: BookMetadata): void;
+  /**
+   * Bulk `setStatic` — ONE projection write for the whole batch. Boot
+   * hydration writes every book's manifest at once, and per-key writes make
+   * that quadratic on the critical path (each one re-derives the library
+   * view for the entire shelf).
+   */
+  setStaticMany(entries: ReadonlyArray<readonly [string, BookMetadata]>): void;
   removeStatic(bookId: string): void;
   offloaded(): ReadonlySet<string>;
   addOffloaded(bookId: string): void;
+  /** Bulk `addOffloaded` — ONE projection write for the whole batch. */
+  addOffloadedMany(bookIds: readonly string[]): void;
   removeOffloaded(bookId: string): void;
   setHydrating(isHydrating: boolean): void;
   setHasHydrated(hasHydrated: boolean): void;

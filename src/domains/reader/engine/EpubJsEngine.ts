@@ -450,6 +450,18 @@ export class EpubJsEngine implements ReaderEngine {
       this.emit({ type: 'resized' });
     });
 
+    // Section teardown (EVENTS.RENDITION.REMOVED — the default manager
+    // destroys the outgoing view on display/clear). Without this the
+    // content-processor seam never learned a section died, so its per-section
+    // state (and the detached document behind it) accumulated per chapter
+    // visited — every preference refresh then re-walked dead DOMs.
+    on('removed', (section) => {
+      const href = (section as { href?: string } | undefined)?.href;
+      if (typeof href === 'string' && href) {
+        this.emit({ type: 'contentDestroyed', sectionHref: href });
+      }
+    });
+
     // Per-section content pipeline: emit contentRendered and set the
     // accessible iframe title (the C7 SR contract: every reader iframe is
     // named for screen readers at content render).

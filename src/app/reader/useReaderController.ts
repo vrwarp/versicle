@@ -28,7 +28,7 @@ import { SearchSession, createWorkerSearchEngineFactory, EmbeddingIndexer } from
 import { getEmbeddingClient, type EmbeddingClient } from '@domains/google';
 import { getArtifactConsult } from '@app/google/artifactConsult';
 import { registerChineseReading, getBookBaseLanguage } from '@domains/chinese';
-import type { PinyinPosition } from '@domains/chinese/types';
+import type { PinyinPosition, PinyinPositionsSource } from '@domains/chinese/types';
 import type { BookMetadata } from '~types/book';
 import type { DetailedSearchResult } from '~types/search';
 import { searchTextRepo } from '@data/repos/searchText';
@@ -78,6 +78,32 @@ const embeddingQuantizer = new SearchEngine();
 // book finishes indexing during a normal reading session.
 const EMBEDDING_RETRY_DELAY_MS = 90_000;
 
+/**
+ * The writable half of {@link PinyinPositionsSource}: closure-based (methods
+ * are `this`-free, safe to pass unbound to useSyncExternalStore). `set`
+ * no-ops on the empty→empty transition so books without pinyin never notify.
+ */
+function createPinyinPositionsFeed(): PinyinPositionsSource & {
+  set(next: PinyinPosition[]): void;
+} {
+  let positions: PinyinPosition[] = [];
+  const listeners = new Set<() => void>();
+  return {
+    subscribe: (onChange: () => void) => {
+      listeners.add(onChange);
+      return () => {
+        listeners.delete(onChange);
+      };
+    },
+    getSnapshot: () => positions,
+    set: (next: PinyinPosition[]) => {
+      if (next === positions || (next.length === 0 && positions.length === 0)) return;
+      positions = next;
+      listeners.forEach((listener) => listener());
+    },
+  };
+}
+
 export interface ReaderController {
   engine: ReaderEngine | null;
   isReady: boolean;
@@ -86,7 +112,13 @@ export interface ReaderController {
   highlights: HighlightLayerManager | null;
   containerNode: Element | null;
   commands: ReaderCommands;
-  pinyinPositions: PinyinPosition[];
+  /**
+   * Pinyin overlay geometry as a SUBSCRIBABLE source, not React state (jank
+   * fix): position emissions land here and re-render only the overlay host
+   * (useSyncExternalStore), never this controller's whole host tree — the
+   * legacy useState re-rendered the entire shell per remeasure.
+   */
+  pinyinPositionsSource: PinyinPositionsSource;
   /** Bumps when a reading-history entry lands (ReadingHistoryPanel refresh). */
   historyTick: number;
   viewerRef: React.RefObject<HTMLDivElement | null>;
@@ -232,7 +264,11 @@ export function useReaderController(
   const audio = useAudioCommands();
 
   const [historyTick, setHistoryTick] = useState(0);
-  const [pinyinPositions, setPinyinPositions] = useState<PinyinPosition[]>([]);
+  const pinyinFeedRef = useRef<ReturnType<typeof createPinyinPositionsFeed> | null>(null);
+  if (!pinyinFeedRef.current) {
+    pinyinFeedRef.current = createPinyinPositionsFeed();
+  }
+  const pinyinFeed = pinyinFeedRef.current;
 
   // Reading-session recording (Phase 6 §6): one recorder per book.
   const recorderRef = useRef<ReadingSessionRecorder | null>(null);
@@ -489,7 +525,7 @@ export function useReaderController(
   const bookLanguage = bookMetadata?.language;
   useEffect(() => {
     if (!engine || getBookBaseLanguage(bookLanguage) !== 'zh') {
-      setPinyinPositions(prev => (prev.length === 0 ? prev : []));
+      pinyinFeed.set([]);
       return;
     }
     const registration = registerChineseReading(engine, {
@@ -500,13 +536,15 @@ export function useReaderController(
           showPinyin: prefs.showPinyin,
         };
       },
-      onPositions: (positions) => setPinyinPositions(positions),
+      onPositions: (positions) => pinyinFeed.set(positions),
     });
+    // pinyinSize is deliberately NOT a refresh trigger: it only scales the
+    // overlay's font (positions are size-independent), so refreshing on it
+    // re-ran the full chapter pass for a pure style change.
     const unsubscribePrefs = usePreferencesStore.subscribe((state, prev) => {
       if (
         state.forceTraditionalChinese !== prev.forceTraditionalChinese ||
-        state.showPinyin !== prev.showPinyin ||
-        state.pinyinSize !== prev.pinyinSize
+        state.showPinyin !== prev.showPinyin
       ) {
         registration.refresh();
       }
@@ -514,9 +552,9 @@ export function useReaderController(
     return () => {
       unsubscribePrefs();
       registration.dispose();
-      setPinyinPositions(prev => (prev.length === 0 ? prev : []));
+      pinyinFeed.set([]);
     };
-  }, [engine, bookLanguage]);
+  }, [engine, bookLanguage, pinyinFeed]);
 
   // Check version and redirect if outdated
   useEffect(() => {
@@ -604,7 +642,7 @@ export function useReaderController(
       searchSessionRef.current?.dispose();
       setCurrentBookId(null);
       reset(); // Also returns the compass interaction to idle.
-      setPinyinPositions(prev => prev.length === 0 ? prev : []);
+      pinyinFeedRef.current?.set([]);
     };
   }, [reset, setCurrentBookId]);
 
@@ -811,7 +849,7 @@ export function useReaderController(
     highlights: engine?.highlights ?? null,
     containerNode: engine?.getOverlayContainer() ?? null,
     commands,
-    pinyinPositions,
+    pinyinPositionsSource: pinyinFeed,
     historyTick,
     viewerRef,
     scrollWrapperRef,

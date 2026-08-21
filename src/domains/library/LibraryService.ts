@@ -18,6 +18,7 @@
  * at the PR-L4 cutover with its assertions unchanged.
  */
 import { createLogger } from '@lib/logger';
+import type { BookMetadata } from '~types/book';
 import type { UserInventoryItem } from '~types/user-data';
 import type { KeyedMutex } from './mutex';
 import type { InventoryPort, LibraryProjectionPort, LibraryPersistence } from './ports';
@@ -116,6 +117,11 @@ export class LibraryService {
 
       const force = new Set(forceBookIds ?? []);
       const staticIds = projection.staticIds();
+      // Collected, then written ONCE (boot critical path): a per-book write
+      // re-derives the whole library view per book, so hydrating an N-book
+      // shelf cost N rebuilds + N sorts. The per-key merge semantics below
+      // are unchanged — only the number of projection writes is.
+      const hydrated: Array<readonly [string, BookMetadata]> = [];
       for (const manifest of manifests) {
         if (!manifest || !manifest.id) continue;
         // I-2: never resurrect — inventory presence checked at WRITE time.
@@ -123,8 +129,9 @@ export class LibraryService {
         // I-1: per-key merge — existing (possibly newer) entries are kept
         // unless this id was explicitly forced.
         if (staticIds.has(manifest.id) && !force.has(manifest.id)) continue;
-        projection.setStatic(manifest.id, manifest);
+        hydrated.push([manifest.id, manifest]);
       }
+      if (hydrated.length > 0) projection.setStaticMany(hydrated);
 
       // Offloaded status — per-key deltas only (I-5).
       try {
@@ -142,14 +149,19 @@ export class LibraryService {
         }
 
         const current = projection.offloaded();
+        const toMark: string[] = [];
         for (const id of offloadedNow) {
           // Concurrently cleared while the DB read was pending (e.g. a
           // restore) → do NOT re-add from the stale snapshot.
           if (offloadedBefore.has(id) && !current.has(id)) continue;
           // I-2 sibling: never mark books that left the inventory.
           if (!inventory.get(id)) continue;
-          if (!current.has(id)) projection.addOffloaded(id);
+          if (!current.has(id)) toMark.push(id);
         }
+        // One write (see setStaticMany above). `current` is the pre-loop set
+        // instance either way — the per-key form replaced it on each add, so
+        // its membership checks were already reading the pre-loop state.
+        if (toMark.length > 0) projection.addOffloadedMany(toMark);
       } catch (e) {
         logger.error('Failed to hydrate offload status:', e);
       }

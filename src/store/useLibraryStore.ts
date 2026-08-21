@@ -40,8 +40,12 @@ interface LibraryState {
 
   // === Projection primitives (the LibraryProjectionPort surface) ===
   setStaticMetadata: (bookId: string, meta: BookMetadata) => void;
+  /** Bulk form of {@link setStaticMetadata} — ONE write, one notification. */
+  setStaticMetadataMany: (entries: ReadonlyArray<readonly [string, BookMetadata]>) => void;
   removeStaticMetadata: (bookId: string) => void;
   markOffloaded: (bookId: string) => void;
+  /** Bulk form of {@link markOffloaded} — ONE write, one notification. */
+  markOffloadedMany: (bookIds: readonly string[]) => void;
   unmarkOffloaded: (bookId: string) => void;
   setHydrating: (isHydrating: boolean) => void;
   setHasHydrated: (hasHydrated: boolean) => void;
@@ -75,6 +79,21 @@ export const useLibraryStore = create<LibraryState>()((set) => ({
       return { staticMetadata: { ...state.staticMetadata, [bookId]: meta } };
     }),
 
+  // Boot hydration writes the whole manifest set at once. Done one key at a
+  // time this was quadratic: each write spread the entire staticMetadata map
+  // AND changed its identity, and every identity change makes
+  // libraryViewStore drop its per-book memo and re-sort all N books.
+  setStaticMetadataMany: (entries) =>
+    set((state) => {
+      let next: Record<string, BookMetadata> | null = null;
+      for (const [bookId, meta] of entries) {
+        if (state.staticMetadata[bookId] === meta) continue;
+        if (!next) next = { ...state.staticMetadata };
+        next[bookId] = meta;
+      }
+      return next ? { staticMetadata: next } : state;
+    }),
+
   removeStaticMetadata: (bookId) =>
     set((state) => {
       if (!(bookId in state.staticMetadata)) return state;
@@ -87,6 +106,17 @@ export const useLibraryStore = create<LibraryState>()((set) => ({
     set((state) => {
       if (state.offloadedBookIds.has(bookId)) return state;
       return { offloadedBookIds: new Set(state.offloadedBookIds).add(bookId) };
+    }),
+
+  markOffloadedMany: (bookIds) =>
+    set((state) => {
+      let next: Set<string> | null = null;
+      for (const bookId of bookIds) {
+        if (state.offloadedBookIds.has(bookId)) continue;
+        if (!next) next = new Set(state.offloadedBookIds);
+        next.add(bookId);
+      }
+      return next ? { offloadedBookIds: next } : state;
     }),
 
   unmarkOffloaded: (bookId) =>

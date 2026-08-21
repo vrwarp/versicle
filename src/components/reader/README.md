@@ -26,9 +26,14 @@ sole runtime epubjs importer, lint-enforced).
   (render-isolation keeper; rides the ReaderCommands context).
 * **`HistoryHighlighter.tsx`** / **`useHistoryHighlights.ts`** — reading
   history highlight layer.
-* **`PinyinOverlay.tsx`** — decorative pinyin geometry portal; positions
-  come from `domains/chinese` via the app controller; known-character
-  suppression compares canonical (simplified) keys (CRDT v7).
+* **`PinyinOverlay.tsx`** — decorative pinyin geometry portal; known-character
+  suppression compares canonical (simplified) keys (CRDT v7). Positions come
+  from `domains/chinese` via the app controller, but as a SUBSCRIBABLE source
+  consumed by the `PinyinOverlayHost` export (`useSyncExternalStore`), so a
+  geometry update re-renders only this portal and never the shell. The span
+  list is memoized on the positions + vocabulary; theme halo and user pinyin
+  size ride CSS custom properties on the overlay root, so neither re-renders
+  the (thousands of) spans.
 * **`AnnotationMarkerOverlay.tsx`**, **`ReaderHighlightsStyles.tsx`** —
   geometry portal + the parent-document half of the ONE highlight styles
   registry (`domains/reader/engine/highlightStyles`).

@@ -61,9 +61,11 @@ export function buildProjectionPort(): LibraryProjectionPort {
   return {
     staticIds: () => new Set(Object.keys(s().staticMetadata)),
     setStatic: (bookId, meta) => s().setStaticMetadata(bookId, meta),
+    setStaticMany: (entries) => s().setStaticMetadataMany(entries),
     removeStatic: (bookId) => s().removeStaticMetadata(bookId),
     offloaded: () => s().offloadedBookIds,
     addOffloaded: (bookId) => s().markOffloaded(bookId),
+    addOffloadedMany: (bookIds) => s().markOffloadedMany(bookIds),
     removeOffloaded: (bookId) => s().unmarkOffloaded(bookId),
     setHydrating: (isHydrating) => s().setHydrating(isHydrating),
     setHasHydrated: (hasHydrated) => s().setHasHydrated(hasHydrated),

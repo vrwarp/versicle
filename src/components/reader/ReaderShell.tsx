@@ -37,7 +37,7 @@ import { ReaderSidebars } from './shell/ReaderSidebars';
 import { ReaderViewport } from './shell/ReaderViewport';
 import { ReaderTTSController } from './ReaderTTSController';
 import { HistoryHighlighter } from './HistoryHighlighter';
-import { PinyinOverlay } from './PinyinOverlay';
+import { PinyinOverlayHost } from './PinyinOverlay';
 import { SyncStatusPanel } from './SyncStatusPanel';
 import { ContentAnalysisLegend } from './ContentAnalysisLegend';
 import { ReaderHighlightsStyles } from './ReaderHighlightsStyles';
@@ -120,9 +120,11 @@ export const ReaderShell: React.FC = () => {
                         }}
                     />
 
-                    {/* Pinyin Overlay (Ephemeral UI) */}
-                    <PinyinOverlay
-                        positions={controller.pinyinPositions}
+                    {/* Pinyin Overlay (Ephemeral UI) — subscribes to the
+                        controller's positions source itself, so geometry
+                        churn re-renders only the overlay subtree. */}
+                    <PinyinOverlayHost
+                        source={controller.pinyinPositionsSource}
                         pinyinSize={pinyinSize}
                         containerNode={controller.containerNode}
                     />
