@@ -95,12 +95,11 @@ describe('the SyncEvent bus', () => {
 
   it('a subscriber unsubscribing itself mid-dispatch does not skip its peers', () => {
     const seen: string[] = [];
-    let off: (() => void) | undefined;
     const first = (): void => {
       seen.push('first');
-      off?.();
+      off();
     };
-    off = getSyncEventBus().on(first);
+    const off = getSyncEventBus().on(first);
     subscribe(() => seen.push('second'));
 
     getSyncEventBus().emit({ type: 'flushed', at: 1 });
