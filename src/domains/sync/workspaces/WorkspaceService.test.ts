@@ -118,12 +118,6 @@ const makeHarness = (overrides: Partial<WorkspaceServiceDeps> = {}): Harness => 
 
 let connectOptionsSeen: Array<Record<string, unknown>> = [];
 
-const idleConnection: SyncConnection = {
-  on: () => undefined,
-  off: () => undefined,
-  destroy: () => undefined,
-};
-
 /** A connection that reports `synced` on the next macrotask. */
 const syncingConnection = (): SyncConnection => ({
   on: (event, cb) => {
