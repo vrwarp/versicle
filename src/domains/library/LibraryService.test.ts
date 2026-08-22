@@ -8,7 +8,7 @@
  * persistence capability probes, the hydration guards, the delta
  * subscription, and each failure arm's exact recovery.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { BookMetadata } from '~types/book';
 import type { UserInventoryItem } from '~types/user-data';
 import { LibraryService, type LibraryServiceDeps } from './LibraryService';

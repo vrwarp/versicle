@@ -33,7 +33,7 @@ const destroyCalls: string[] = [];
 const epubOptions: unknown[] = [];
 
 vi.mock('epubjs', () => ({
-  default: (file: unknown, opts: unknown) => {
+  default: (_file: unknown, opts: unknown) => {
     epubOptions.push(opts);
     return {
       ready: Promise.resolve(),
