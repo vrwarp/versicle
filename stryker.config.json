@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Scoped mutation testing over the sync domain. See vitest.mutation.config.ts for why the scope is narrowed rather than repo-wide.",
+  "packageManager": "npm",
+  "testRunner": "vitest",
+  "vitest": { "configFile": "vitest.mutation.config.ts" },
+  "reporters": ["html", "clear-text", "progress"],
+  "htmlReporter": { "fileName": "reports/mutation/index.html" },
+  "coverageAnalysis": "perTest",
+  "concurrency": 3,
+  "timeoutMS": 30000,
+  "mutate": [
+    "src/domains/sync/**/*.ts",
+    "src/app/sync/**/*.ts",
+    "!src/**/*.{test,spec}.{ts,tsx}",
+    "!src/domains/sync/backend/Mock*.ts"
+  ],
+  "thresholds": { "high": 90, "low": 70, "break": 0 },
+  "tempDirName": ".stryker-tmp",
+  "cleanTempDir": true
+}
