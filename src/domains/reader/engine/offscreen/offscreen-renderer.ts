@@ -13,6 +13,13 @@ import { createLogger } from '@lib/logger';
 import { measureTotal } from '@lib/perf';
 import { internals } from '../epubjsInternals';
 import type { Rendition } from 'epubjs';
+import {
+  accumulateChapterStyles,
+  calculateDominantStyle,
+  createZeroDelayTick,
+  type StyleAccumulator,
+} from './styleSampling';
+import { collectSpineItems, deriveChapterTitle, shouldYieldToMainThread } from './chapterShape';
 
 const logger = createLogger('OffscreenRenderer');
 
@@ -29,173 +36,6 @@ export interface OffscreenExtractionResult {
   chapters: ProcessedChapter[];
   baseFontSize?: number;
   baseLineHeight?: number;
-}
-
-type StyleAccumulator = Map<number, { count: number; charCount: number; totalLineHeight: number }>;
-
-/**
- * Zero-delay macrotask scheduler for epub.js queues (see QueueInternals).
- *
- * epub.js runs every queued task on a requestAnimationFrame tick, and one
- * `rendition.display()` crosses its queue several times — so each chapter of
- * the extraction loop pays multiple frame-lengths of pure idle (measured
- * ~40% of extraction wall time on Chromium, more on WebKit, on the Alice
- * fixture). Nothing this pipeline renders is ever painted, so frame
- * alignment buys nothing here. A MessageChannel macrotask (setTimeout(0) is
- * clamped to 4ms when chained) keeps queue tasks running back-to-back while
- * still yielding to the event loop for iframe load events. The LIVE reader
- * keeps the default rAF tick: it paints, and frame batching is correct there.
- */
-function createZeroDelayTick(): {
-  tick: (this: unknown, callback: (time: number) => void) => void;
-  dispose: () => void;
-} {
-  const channel = new MessageChannel();
-  const pending: Array<() => void> = [];
-  channel.port1.onmessage = () => pending.shift()?.();
-  return {
-    tick: (callback) => {
-      pending.push(() => callback(performance.now()));
-      channel.port2.postMessage(null);
-    },
-    dispose: () => {
-      channel.port1.close();
-      channel.port2.close();
-    },
-  };
-}
-
-/**
- * ONE measuring canvas for the whole extraction pass. These helpers run per
- * sampled paragraph per chapter, so a 300-section book used to allocate tens
- * of thousands of canvases + 2D contexts; the context is stateless between
- * calls here (every call sets `font` before measuring), so a single shared
- * one is equivalent. Created lazily and cached (null = 2D unavailable).
- */
-let measureContext: CanvasRenderingContext2D | null | undefined;
-
-function getMeasureContext(): CanvasRenderingContext2D | null {
-    if (measureContext === undefined) {
-        measureContext = document.createElement("canvas").getContext("2d");
-    }
-    return measureContext;
-}
-
-/** The canvas `font` shorthand for an element's resolved style. */
-function fontStringOf(computedStyle: CSSStyleDeclaration): string {
-    return `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
-}
-
-function getCanvasLineHeight(computedStyle: CSSStyleDeclaration) {
-    if (computedStyle.lineHeight !== "normal") {
-        return parseFloat(computedStyle.lineHeight);
-    }
-
-    const context = getMeasureContext();
-    if (!context) return 0;
-
-    // Reconstruct the exact font string (e.g., "400 16px Times")
-    context.font = fontStringOf(computedStyle);
-
-    // Measure a standard character
-    const metrics = context.measureText("M");
-
-    // Calculate total pixel height based on font bounding box
-    // Note: fontBoundingBox is supported in all modern browsers
-    const actualLineHeight = metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent;
-
-    return actualLineHeight;
-}
-
-function getActualInkHeight(computedStyle: CSSStyleDeclaration, textToMeasure = "M") {
-    const context = getMeasureContext();
-    if (!context) return 0;
-
-    // Set the canvas font to match the element exactly
-    context.font = fontStringOf(computedStyle);
-
-    // Measure the exact text
-    const metrics = context.measureText(textToMeasure);
-
-    // actualBoundingBoxAscent: pixels from the baseline to the top of the highest letter
-    // actualBoundingBoxDescent: pixels from the baseline to the bottom of the lowest letter (e.g., 'g', 'j')
-    const actualInkHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-
-    return actualInkHeight;
-}
-
-/**
- * Samples the dominant font size of a single document/chapter and adds it to the global accumulator.
- * Uses an early exit to avoid end-of-chapter footnotes.
- */
-function accumulateChapterStyles(doc: Document, win: Window, accumulator: StyleAccumulator): void {
-  const paragraphs = Array.from(doc.querySelectorAll('p, div.paragraph, div.bodytext, div.calibre1'));
-  if (paragraphs.length === 0) return;
-
-  let totalSampledChars = 0;
-  const MAX_SAMPLE_CHARS = 5000;
-
-  for (const p of paragraphs) {
-    if (totalSampledChars >= MAX_SAMPLE_CHARS) break;
-
-    const text = p.textContent?.trim() || '';
-
-    // Filter 1: Ignore short strings (ToC, headings)
-    if (text.length < 50) continue;
-
-    // Filter 2: Ignore explicit metadata containers
-    const parentTag = p.parentElement?.tagName.toLowerCase();
-    if (parentTag === 'aside' || parentTag === 'nav' || parentTag === 'footer') {
-      continue;
-    }
-    // ONE resolved-style read per paragraph, shared by both measurements
-    // (each helper used to call getComputedStyle itself — two cross-realm
-    // style resolutions per paragraph).
-    const computedStyle = win.getComputedStyle(p as HTMLElement);
-    const fontSize = getActualInkHeight(computedStyle, text);
-    let lineHeight = getCanvasLineHeight(computedStyle);
-
-    if (isNaN(lineHeight)) {
-      lineHeight = fontSize * 1.2; // Standard browser default fallback
-    }
-
-    if (!isNaN(fontSize) && fontSize > 0) {
-      // Round to 1 decimal place to prevent floating point fragmentation mapping (e.g., 16.001px vs 16.0px)
-      const roundedSize = Math.round(fontSize * 10) / 10;
-
-      const existing = accumulator.get(roundedSize) || { count: 0, charCount: 0, totalLineHeight: 0 };
-      existing.count += 1;
-      existing.charCount += text.length;
-      existing.totalLineHeight += lineHeight;
-      accumulator.set(roundedSize, existing);
-
-      totalSampledChars += text.length;
-    }
-  }
-}
-
-/**
- * Evaluates the global accumulator to find the mathematically dominant style.
- */
-function calculateDominantStyle(accumulator: StyleAccumulator): { fontSize: number; lineHeight: number } | null {
-  if (accumulator.size === 0) return null;
-
-  let dominantSize = 0;
-  let maxVolume = -1;
-
-  for (const [size, data] of accumulator.entries()) {
-    if (data.charCount > maxVolume) {
-      maxVolume = data.charCount;
-      dominantSize = size;
-    }
-  }
-
-  const dominantData = accumulator.get(dominantSize)!;
-
-  return {
-    fontSize: dominantSize,
-    lineHeight: dominantData.totalLineHeight / dominantData.count
-  };
 }
 
 /**
@@ -262,17 +102,9 @@ export async function extractContentOffscreen(
     // helper also patches iframes already present).
     disconnectSandboxObserver = observeAndPatchSandbox(container);
 
-    // Access spine items
+    // Access spine items (epub.js exposes `each` or `items` by version)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const spine = book.spine as any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const items: any[] = [];
-    if (spine.each) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      spine.each((item: any) => items.push(item));
-    } else if (spine.items) {
-      items.push(...spine.items);
-    }
+    const items = collectSpineItems<any>(book.spine);
 
     const totalItems = items.length;
     // OPTIMIZATION: Track time to yield only when necessary to avoid artificial delays
@@ -319,21 +151,7 @@ export async function extractContentOffscreen(
         }
 
         // Determine title
-        let title = '';
-        const headings = doc.querySelectorAll('h1, h2, h3');
-        if (headings.length > 0) {
-          title = headings[0].textContent || '';
-        }
-        if (!title.trim()) {
-          const p = doc.querySelector('p');
-          if (p && p.textContent) title = p.textContent;
-        }
-        if (!title.trim()) {
-          title = body.textContent || '';
-        }
-        title = title.replace(/\s+/g, ' ').trim();
-        if (title.length > 60) title = title.substring(0, 60) + '...';
-        if (!title) title = `Chapter ${i + 1}`;
+        const title = deriveChapterTitle(doc, body.textContent || '', i);
 
         // Extract sentences with CFIs
         const sentencesStart = performance.now();
@@ -384,7 +202,7 @@ export async function extractContentOffscreen(
       // OPTIMIZATION: Instead of waiting 50ms every chapter (which adds seconds of delay for large books),
       // we only yield if we've been blocking the main thread for more than 16ms (1 frame).
       // When we do yield, we use setTimeout(0) to resume as soon as possible.
-      if (performance.now() - lastYieldTime > 16) {
+      if (shouldYieldToMainThread(lastYieldTime, performance.now())) {
         await new Promise(r => setTimeout(r, 0));
         lastYieldTime = performance.now();
       }

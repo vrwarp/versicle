@@ -154,8 +154,8 @@ review/test-enforced. Source audit: plan/overhaul/prep/phase9-close.md §3.
 
 Ratchet counters (live, from the committed baselines): dependency-cruiser
 total **34** (`lib-not-to-store` 19 + `worker-no-state-typegraph` 15; every other rule at
-error/0), lint-debt allowlist **20** `any`-sites +
-**25** disables (`lint-debt-allowlist.json`), coverage
+error/0), lint-debt allowlist **17** `any`-sites +
+**23** disables (`lint-debt-allowlist.json`), coverage
 floor `coverage-baseline.json`, bundle budget `bundle-baseline.json`.
 
 ## 4. Persisted formats (the format-change chain)

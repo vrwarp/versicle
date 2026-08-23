@@ -30,7 +30,8 @@
     "coverage": "vitest run --coverage",
     "preview": "vite preview",
     "postinstall": "patch-package",
-    "test:emulator": "firebase emulators:exec --only auth,firestore,storage --project demo-versicle-sync-contract 'vitest run --no-file-parallelism src/lib/sync/syncBackendContract.emulator.test.ts src/lib/sync/security-rules.test.ts'"
+    "test:emulator": "firebase emulators:exec --only auth,firestore,storage --project demo-versicle-sync-contract 'vitest run --no-file-parallelism src/lib/sync/syncBackendContract.emulator.test.ts src/lib/sync/security-rules.test.ts'",
+    "test:mutation": "stryker run"
   },
   "dependencies": {
     "@capacitor-community/safe-area": "^7.0.0",
@@ -98,6 +99,8 @@
     "@eslint/js": "^9.39.2",
     "@firebase/rules-unit-testing": "^4.0.1",
     "@playwright/test": "^1.60.0",
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",

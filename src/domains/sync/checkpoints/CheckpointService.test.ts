@@ -73,6 +73,7 @@ import { getYDoc } from '@store/yjs-provider';
 const yDoc = getYDoc();
 
 let tempDocCounter = 0;
+let probeCounter = 0;
 
 /** Drop the main Yjs database (shared by the S.2 and P4-5 hard-path suites). */
 const deleteMainDb = () => new Promise<void>((resolve, reject) => {
@@ -626,6 +627,249 @@ describe('CheckpointService', () => {
             });
 
             expect(setActiveWorkspaceId).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('size, cadence and teardown details', () => {
+        it('reports a MINIMUM of 1KB for a tiny snapshot', async () => {
+            mocks.add.mockResolvedValue(1);
+            mocks.count.mockResolvedValue(1);
+            // An almost-empty doc encodes to well under 1KiB.
+
+            await CheckpointService.createCheckpoint('manual');
+
+            expect(mocks.add.mock.calls[0][0].size).toBe(1);
+            expect(mocks.add.mock.calls[0][0].blob.byteLength).toBeLessThan(1024);
+        });
+
+        it('reports the real KiB size once the snapshot is large enough', async () => {
+            mocks.add.mockResolvedValue(1);
+            mocks.count.mockResolvedValue(1);
+            yDoc.getMap('library').set('big', 'x'.repeat(40_000));
+
+            await CheckpointService.createCheckpoint('manual');
+
+            const { blob, size } = mocks.add.mock.calls[0][0];
+            expect(size).toBe(Math.round(blob.byteLength / 1024));
+            expect(size).toBeGreaterThan(1);
+        });
+
+        it('records the trigger and a real timestamp', async () => {
+            mocks.add.mockResolvedValue(1);
+            mocks.count.mockResolvedValue(1);
+
+            await CheckpointService.createCheckpoint('pre-migration');
+
+            expect(mocks.add.mock.calls[0][0].trigger).toBe('pre-migration');
+            expect(mocks.add.mock.calls[0][0].timestamp).toBeGreaterThan(0);
+        });
+
+        it('deletes a checkpoint through the repo', async () => {
+            const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+            info.mockClear();
+            mocks.getAll.mockResolvedValue([{ id: 7, timestamp: 1 }]);
+
+            await CheckpointService.deleteCheckpoint(7);
+
+            expect(mocks.del).toHaveBeenCalledWith(7);
+            expect(info.mock.calls.map((c) => c.map(String).join(' ')).join('\n')).toContain(
+                'Deleted checkpoint #7'
+            );
+        });
+
+        it('logs under the CheckpointService namespace', async () => {
+            const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+            info.mockClear();
+            mocks.getAll.mockResolvedValue([]);
+
+            await CheckpointService.deleteCheckpoint(1);
+
+            expect(info.mock.calls.map((c) => c.map(String).join(' ')).join('\n')).toContain(
+                '[CheckpointService]'
+            );
+        });
+
+        it('reads one checkpoint through the repo', async () => {
+            mocks.get.mockResolvedValue({ id: 3, timestamp: 1 });
+
+            await expect(CheckpointService.getCheckpoint(3)).resolves.toMatchObject({ id: 3 });
+        });
+    });
+
+    describe('createAutomaticCheckpoint — the cadence gate', () => {
+        beforeEach(() => {
+            mocks.add.mockResolvedValue(99);
+            mocks.count.mockResolvedValue(1);
+        });
+
+        it('creates one when no prior checkpoint carries the trigger', async () => {
+            mocks.getAll.mockResolvedValue([]);
+
+            await expect(CheckpointService.createAutomaticCheckpoint('pre-sync', 1000)).resolves.toBe(99);
+            expect(mocks.add).toHaveBeenCalledTimes(1);
+        });
+
+        it('SKIPS while the interval has not elapsed', async () => {
+            mocks.getAll.mockResolvedValue([
+                { id: 1, trigger: 'pre-sync', timestamp: Date.now() - 500 },
+            ]);
+
+            await expect(CheckpointService.createAutomaticCheckpoint('pre-sync', 1000)).resolves.toBeNull();
+            expect(mocks.add).not.toHaveBeenCalled();
+        });
+
+        it('creates one once the interval has been REACHED, not merely passed', async () => {
+            const interval = 1000;
+            mocks.getAll.mockResolvedValue([
+                { id: 1, trigger: 'pre-sync', timestamp: Date.now() - interval },
+            ]);
+
+            await expect(
+                CheckpointService.createAutomaticCheckpoint('pre-sync', interval)
+            ).resolves.toBe(99);
+        });
+
+        it('creates one when the interval is well past', async () => {
+            mocks.getAll.mockResolvedValue([
+                { id: 1, trigger: 'pre-sync', timestamp: Date.now() - 5000 },
+            ]);
+
+            await expect(CheckpointService.createAutomaticCheckpoint('pre-sync', 1000)).resolves.toBe(99);
+        });
+    });
+
+    describe('restoreCheckpoint — the injected pauseSync handle', () => {
+        /**
+         * The soft path clears every root type before applying, and the
+         * shared yDoc carries history from earlier tests — so each case
+         * probes its OWN key rather than a shared one.
+         */
+        let probeKey = '';
+        const blobOf = (value: string): Uint8Array => {
+            probeKey = `probe-${probeCounter++}`;
+            const doc = new Y.Doc();
+            doc.getMap('library').set(probeKey, value);
+            const update = Y.encodeStateAsUpdate(doc);
+            doc.destroy();
+            return update;
+        };
+
+        it('runs the handle and says so, before touching anything', async () => {
+            const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+            info.mockClear();
+            const order: string[] = [];
+            mocks.get.mockResolvedValue({ id: 1, blob: blobOf('restored') });
+
+            await CheckpointService.restoreCheckpoint(1, {
+                pauseSync: () => {
+                    order.push('pauseSync');
+                },
+            });
+
+            expect(order).toEqual(['pauseSync']);
+            expect(info.mock.calls.map((c) => c.map(String).join(' ')).join('\n')).toContain(
+                'Sync disconnected for restore'
+            );
+        });
+
+        it('does not block the restore when the handle REJECTS', async () => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            warn.mockClear();
+            mocks.get.mockResolvedValue({ id: 1, blob: blobOf('restored') });
+
+            await expect(
+                CheckpointService.restoreCheckpoint(1, {
+                    pauseSync: async () => {
+                        throw new Error('orchestrator gone');
+                    },
+                })
+            ).resolves.toBeUndefined();
+
+            expect(warn.mock.calls.map((c) => c.map(String).join(' ')).join('\n')).toContain(
+                'Failed to disconnect sync during restore'
+            );
+            expect(yDoc.getMap('library').get(probeKey)).toBe('restored');
+        });
+
+        it('is a no-op when no handle was injected', async () => {
+            mocks.get.mockResolvedValue({ id: 1, blob: blobOf('restored') });
+
+            await expect(CheckpointService.restoreCheckpoint(1)).resolves.toBeUndefined();
+            expect(yDoc.getMap('library').get(probeKey)).toBe('restored');
+        });
+
+        it('refuses a missing or blob-less checkpoint before anything destructive', async () => {
+            const pauseSync = vi.fn();
+            mocks.get.mockResolvedValue(undefined);
+            await expect(CheckpointService.restoreCheckpoint(1, { pauseSync })).rejects.toThrow(
+                'Checkpoint corrupted'
+            );
+
+            mocks.get.mockResolvedValue({ id: 1 });
+            await expect(CheckpointService.restoreCheckpoint(1, { pauseSync })).rejects.toThrow(
+                'Checkpoint corrupted'
+            );
+
+            expect(pauseSync).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('restoreCheckpoint — the in-memory soft fallback', () => {
+        const blobWithEveryRootType = (): Uint8Array => {
+            const doc = new Y.Doc();
+            doc.getMap('library').set('kept', 'map-value');
+            doc.getArray('queue').insert(0, ['restored-item']);
+            doc.getText('notes').insert(0, 'restored text');
+            doc.getXmlFragment('body').insert(0, [new Y.XmlText('restored xml')]);
+            const update = Y.encodeStateAsUpdate(doc);
+            doc.destroy();
+            return update;
+        };
+
+        it('CLEARS every root type before applying, whatever its kind', async () => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            warn.mockClear();
+            // Stale local content in each root type the clearing loop handles.
+            yDoc.getMap('library').set('stale', 'gone');
+            yDoc.getArray('queue').insert(0, ['stale-item']);
+            yDoc.getText('notes').insert(0, 'stale text');
+            yDoc.getXmlFragment('body').insert(0, [new Y.XmlText('stale xml')]);
+            mocks.get.mockResolvedValue({ id: 1, blob: blobWithEveryRootType() });
+
+            await CheckpointService.restoreCheckpoint(1);
+
+            expect(yDoc.getMap('library').get('stale')).toBeUndefined();
+            expect(yDoc.getMap('library').get('kept')).toBe('map-value');
+            expect(yDoc.getArray('queue').toJSON()).toEqual(['restored-item']);
+            expect(yDoc.getText('notes').toString()).toBe('restored text');
+            expect(yDoc.getXmlFragment('body').toString()).toBe('restored xml');
+            expect(warn.mock.calls.map((c) => c.map(String).join(' ')).join('\n')).toContain(
+                'Yjs Persistence not active'
+            );
+        });
+
+        it('applies the whole swap in ONE transaction, tagged for observers', async () => {
+            const origins: unknown[] = [];
+            const listener = (_u: Uint8Array, origin: unknown) => origins.push(origin);
+            yDoc.on('update', listener);
+            mocks.get.mockResolvedValue({ id: 1, blob: blobWithEveryRootType() });
+
+            try {
+                await CheckpointService.restoreCheckpoint(1);
+            } finally {
+                yDoc.off('update', listener);
+            }
+
+            expect(origins).toEqual(['restore-checkpoint']);
+        });
+
+        it('clears the migration state machine once the swap landed', async () => {
+            MigrationStateService.setStaged('ws_target', 3, 'ws_before');
+            mocks.get.mockResolvedValue({ id: 1, blob: blobWithEveryRootType() });
+
+            await CheckpointService.restoreCheckpoint(1);
+
+            expect(MigrationStateService.getState()).toBeNull();
         });
     });
 });

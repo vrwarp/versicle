@@ -182,4 +182,118 @@ describe('runReingestWave', () => {
     expect(report.reingested).toEqual(['a']);
     expect(deps.reingest).toHaveBeenCalledTimes(1);
   });
+
+  it('yields to the host between books, and defaults to a real macrotask yield', async () => {
+    const yields: number[] = [];
+    const deps = makeDeps({
+      listVersions: vi.fn(async () => new Map([['a', 2], ['b', 2]])),
+      yieldToHost: async () => {
+        yields.push(yields.length);
+      },
+    });
+
+    await runReingestWave(deps);
+
+    // One per detection-loop book plus one per processed book.
+    expect(yields.length).toBe(4);
+  });
+
+  it('the DEFAULT yield actually yields (no injected scheduler)', async () => {
+    const deps = makeDeps({ listVersions: vi.fn(async () => new Map([['a', 2]])) });
+    delete (deps as Partial<ReingestWaveDeps>).yieldToHost;
+    let macrotaskRan = false;
+    setTimeout(() => {
+      macrotaskRan = true;
+    }, 0);
+
+    await runReingestWave(deps);
+
+    // The wave awaited at least one real macrotask, so the timer above fired.
+    expect(macrotaskRan).toBe(true);
+    expect(deps.reingest).toHaveBeenCalledWith('a');
+  });
+
+  it('stops during DETECTION, before any book is touched', async () => {
+    const deps = makeDeps({
+      listVersions: vi.fn(async () => new Map([['a', 2], ['b', 2]])),
+      shouldContinue: () => false,
+    });
+
+    const report = await runReingestWave(deps);
+
+    expect(report).toEqual({ restamped: [], reingested: [], failed: [], skipped: [] });
+    expect(deps.reingest).not.toHaveBeenCalled();
+    expect(deps.listRows).not.toHaveBeenCalled();
+  });
+
+  it('a wave that did nothing at all logs nothing', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    info.mockClear();
+    const deps = makeDeps({ listVersions: vi.fn(async () => new Map([['v3', 3]])) });
+
+    const report = await runReingestWave(deps);
+
+    expect(report.restamped).toEqual([]);
+    expect(info.mock.calls.some((c) => c.map(String).join(' ').includes('Re-ingest wave'))).toBe(
+      false
+    );
+  });
+
+  it('a wave that ONLY skipped logs nothing either — nothing changed', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    info.mockClear();
+    const deps = makeDeps({
+      listVersions: vi.fn(async () => new Map([['ghost', 2]])),
+      hasLocalBinary: vi.fn(async () => false),
+    });
+
+    const report = await runReingestWave(deps);
+
+    expect(report.skipped).toEqual(['ghost']);
+    expect(info.mock.calls.some((c) => c.map(String).join(' ').includes('Re-ingest wave'))).toBe(
+      false
+    );
+  });
+
+  it.each([
+    ['restamped', new Map([['a', 1]]), true],
+    ['reingested', new Map([['a', 2]]), false],
+  ])('a wave that %s summarizes its counts', async (_label, versions, invariant) => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    info.mockClear();
+    const deps = makeDeps({
+      listVersions: vi.fn(async () => versions as Map<string, number>),
+      listRows: vi.fn(async (bookId: string) => [row(bookId, [invariant ? 'ascii' : 'caf\u00e9'])]),
+    });
+
+    await runReingestWave(deps);
+
+    const line = info.mock.calls.map((c) => c.map(String).join(' ')).join('\n');
+    expect(line).toContain('Re-ingest wave');
+    expect(line).toContain('restamped');
+    expect(line).toContain('skipped (no binary)');
+  });
+
+  it('a wave whose only outcome is a FAILURE still summarizes, and names the book', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    info.mockClear();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    warn.mockClear();
+    const deps = makeDeps({
+      listVersions: vi.fn(async () => new Map([['broken', 2]])),
+      reingest: vi.fn(async () => {
+        throw new Error('extraction collapsed');
+      }),
+    });
+
+    const report = await runReingestWave(deps);
+
+    expect(report.failed).toEqual(['broken']);
+    expect(info.mock.calls.map((c) => c.map(String).join(' ')).join('\n')).toContain(
+      '1 failed (old rows retained)'
+    );
+    expect(warn.mock.calls.map((c) => c.map(String).join(' ')).join('\n')).toContain(
+      'Re-ingest failed for broken; old rows retained'
+    );
+  });
 });

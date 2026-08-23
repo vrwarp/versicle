@@ -177,4 +177,134 @@ describe('wireSyncEvents (single SyncEvent subscriber)', () => {
     // Re-wire so afterEach's unwire is a no-op double-call (idempotent).
     unwire = wireSyncEvents();
   });
+  /*
+   * Pluralization is hand-rolled (the catalog carries no ICU plural
+   * support), so the singular/plural boundary is real logic and was
+   * entirely unasserted — mutation testing reported both ternaries and
+   * both comparison operators as surviving. A purge report that reads
+   * "1 documents" is the visible symptom; the invisible one is the
+   * comparison silently inverting.
+   */
+  describe('workspace-purged pluralization', () => {
+    const emitPurge = (docsDeleted: number, blobsDeleted: number) => {
+      getSyncEventBus().emit({
+        type: 'workspace-purged',
+        report: { docsDeleted, blobsDeleted },
+      } as never);
+    };
+
+    const lastPurgeText = (): string => {
+      const call = showToast.mock.calls.at(-1);
+      return call ? resolveMessage(call[0]) : '';
+    };
+
+    it('uses the singular form for exactly one', () => {
+      emitPurge(1, 1);
+      const text = lastPurgeText();
+
+      expect(text).toContain('1 document');
+      expect(text).not.toContain('1 documents');
+      expect(text).toContain('1 blob');
+      expect(text).not.toContain('1 blobs');
+    });
+
+    it('uses the plural form for more than one', () => {
+      emitPurge(2, 3);
+      const text = lastPurgeText();
+
+      expect(text).toContain('2 documents');
+      expect(text).toContain('3 blobs');
+    });
+
+    it('uses the plural form for zero', () => {
+      emitPurge(0, 0);
+      const text = lastPurgeText();
+
+      expect(text).toContain('0 documents');
+      expect(text).toContain('0 blobs');
+    });
+
+    it('pluralizes documents and blobs independently', () => {
+      emitPurge(1, 5);
+      const text = lastPurgeText();
+
+      expect(text).toContain('1 document');
+      expect(text).not.toContain('1 documents');
+      expect(text).toContain('5 blobs');
+    });
+  });
+
+  /*
+   * The epoch-changed copy forks on whether THIS device performed the
+   * squash. Telling a user another device rebuilt the document when they
+   * did it themselves (or the reverse) is the whole point of the flag.
+   */
+  describe('epoch-changed self vs remote copy', () => {
+    it('uses the self copy when this device squashed', () => {
+      getSyncEventBus().emit({ type: 'epoch-changed', self: true } as never);
+      expect(resolveMessage(showToast.mock.calls.at(-1)?.[0])).toBe(
+        formatMessage('sync.epochChanged.self'),
+      );
+    });
+
+    it('uses the remote copy when another device squashed', () => {
+      getSyncEventBus().emit({ type: 'epoch-changed', self: false } as never);
+      expect(resolveMessage(showToast.mock.calls.at(-1)?.[0])).toBe(
+        formatMessage('sync.epochChanged'),
+      );
+    });
+  });
+
+
+  /*
+   * The silent arms. Each of these is an event the subscriber must
+   * deliberately NOT surface — a toast here is noise the user cannot act
+   * on, and a missing guard turns every intermediate switch phase or
+   * ordinary connection blip into an error banner.
+   */
+  describe('events the subscriber stays quiet about', () => {
+    const countBefore = () => showToast.mock.calls.length;
+
+    it('says nothing for the intermediate switch phases', () => {
+      const before = countBefore();
+
+      for (const phase of ['verifying', 'staged', 'applying'] as const) {
+        getSyncEventBus().emit({ type: 'switch', phase });
+      }
+
+      expect(showToast.mock.calls.length).toBe(before);
+    });
+
+    it('says nothing for an ordinary connection error', () => {
+      const before = countBefore();
+
+      getSyncEventBus().emit({ type: 'connection-error', permissionDenied: false });
+
+      expect(showToast.mock.calls.length).toBe(before);
+    });
+
+    it('says nothing for a save rejection with no matching copy', () => {
+      const before = countBefore();
+
+      getSyncEventBus().emit({
+        type: 'save-rejected',
+        code: 'permission-denied',
+        permissionDenied: false,
+      });
+
+      expect(showToast.mock.calls.length).toBe(before);
+    });
+
+    it('says nothing for an event it does not handle', () => {
+      const before = countBefore();
+
+      getSyncEventBus().emit({ type: 'not-a-real-event' } as never);
+
+      expect(showToast.mock.calls.length).toBe(before);
+    });
+
+    it('handles the obsolete quarantine when sync never composed', () => {
+      expect(() => getSyncEventBus().emit({ type: 'obsolete', incomingVersion: 9 })).not.toThrow();
+    });
+  });
 });
