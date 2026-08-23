@@ -8,7 +8,7 @@
  * idempotent by bookkeeping). A failed remove must still drop the entry,
  * for the mirror reason.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { HighlightLayerManager, type AnnotatingRendition } from './HighlightLayerManager';
 
 interface Spy {

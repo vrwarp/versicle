@@ -255,4 +255,56 @@ describe('wireSyncEvents (single SyncEvent subscriber)', () => {
     });
   });
 
+
+  /*
+   * The silent arms. Each of these is an event the subscriber must
+   * deliberately NOT surface — a toast here is noise the user cannot act
+   * on, and a missing guard turns every intermediate switch phase or
+   * ordinary connection blip into an error banner.
+   */
+  describe('events the subscriber stays quiet about', () => {
+    const countBefore = () => showToast.mock.calls.length;
+
+    it('says nothing for the intermediate switch phases', () => {
+      const before = countBefore();
+
+      for (const phase of ['verifying', 'staged', 'applying'] as const) {
+        getSyncEventBus().emit({ type: 'switch', phase });
+      }
+
+      expect(showToast.mock.calls.length).toBe(before);
+    });
+
+    it('says nothing for an ordinary connection error', () => {
+      const before = countBefore();
+
+      getSyncEventBus().emit({ type: 'connection-error', permissionDenied: false });
+
+      expect(showToast.mock.calls.length).toBe(before);
+    });
+
+    it('says nothing for a save rejection with no matching copy', () => {
+      const before = countBefore();
+
+      getSyncEventBus().emit({
+        type: 'save-rejected',
+        code: 'permission-denied',
+        permissionDenied: false,
+      });
+
+      expect(showToast.mock.calls.length).toBe(before);
+    });
+
+    it('says nothing for an event it does not handle', () => {
+      const before = countBefore();
+
+      getSyncEventBus().emit({ type: 'not-a-real-event' } as never);
+
+      expect(showToast.mock.calls.length).toBe(before);
+    });
+
+    it('handles the obsolete quarantine when sync never composed', () => {
+      expect(() => getSyncEventBus().emit({ type: 'obsolete', incomingVersion: 9 })).not.toThrow();
+    });
+  });
 });
