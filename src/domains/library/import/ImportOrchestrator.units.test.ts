@@ -10,7 +10,7 @@
  * byte-weighted progress, restore acceptance's hash-then-fingerprint
  * ladder, and what each register flavor preserves versus overwrites.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { BookMetadata } from '~types/book';
 import type { UserInventoryItem, ReadingListEntry } from '~types/user-data';
 import type { StaticManifestRow } from '@data/rows/static';
