@@ -8,12 +8,17 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 const getLocations = vi.fn();
 const saveLocations = vi.fn();
+const measured: string[] = [];
 
 vi.mock('@data/repos/bookContent', () => ({
   bookContent: {
     getLocations: (...args: unknown[]) => getLocations(...args),
     saveLocations: (...args: unknown[]) => saveLocations(...args),
   },
+}));
+
+vi.mock('@lib/perf', () => ({
+  measureSince: (label: string) => measured.push(label),
 }));
 
 const { initializeLocations } = await import('./locations');
@@ -36,6 +41,7 @@ beforeEach(() => {
   getLocations.mockReset();
   saveLocations.mockReset();
   saveLocations.mockResolvedValue(undefined);
+  measured.length = 0;
 });
 
 afterEach(() => {
@@ -174,5 +180,46 @@ describe('initializeLocations without a saved registry', () => {
 
     await new Promise((resolve) => { setTimeout(resolve, 0); });
     expect(onReady).not.toHaveBeenCalled();
+  });
+});
+
+describe('initializeLocations — instrumentation', () => {
+  const deps = (book: never) => ({
+    book,
+    bookId: 'book-1',
+    isCurrent: () => true,
+    onReady: () => undefined,
+  });
+
+  it('times the LOAD path under its own label', async () => {
+    getLocations.mockResolvedValue({ locations: 'saved-registry' });
+    const { book } = makeBook();
+
+    await initializeLocations(deps(book));
+
+    expect(measured).toEqual(['reader:locations-load']);
+  });
+
+  it('times the GENERATE path under a distinct label', async () => {
+    getLocations.mockResolvedValue(undefined);
+    const { book } = makeBook();
+
+    await initializeLocations(deps(book));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(measured).toEqual(['reader:locations-generate']);
+  });
+
+  it('names the module when a generation failure is logged', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    getLocations.mockResolvedValue(undefined);
+    const { book } = makeBook(Promise.reject(new Error('epubjs exploded')));
+
+    await initializeLocations(deps(book));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const line = warn.mock.calls.map((c) => c.map(String).join(' ')).join('\n');
+    expect(line).toContain('[reader-locations]');
+    expect(line).toContain('Location generation failed');
   });
 });
