@@ -4,8 +4,10 @@ name: Mutation testing
 # for every push. It runs weekly and on demand instead; `npm run test:mutation`
 # is the local equivalent.
 #
-# Scope: the sync domain only (see vitest.mutation.config.ts) — the full
-# suite is 3,300+ tests and cannot be run once per mutant.
+# Scope: the sync, reader and library domains plus app/sync (see
+# vitest.mutation.config.ts) — the full suite is 4,300+ tests and cannot be
+# run once per mutant, so the mutation config narrows `include` to the
+# suites covering those domains.
 on:
   schedule:
     - cron: '0 4 * * 1'

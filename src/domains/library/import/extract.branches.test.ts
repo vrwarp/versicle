@@ -99,7 +99,7 @@ beforeEach(() => {
   mockPalette.mockReset().mockResolvedValue({
     palette: [1, 2, 3],
     perceptualPalette: { vibrant: [10, 20, 30] },
-  } as Awaited<ReturnType<typeof extractCoverPalette>>);
+  } as unknown as Awaited<ReturnType<typeof extractCoverPalette>>);
   mockFetch.mockReset().mockResolvedValue(coverResponse());
   mockOffscreen.mockReset().mockResolvedValue({
     chapters: [chapter()],
@@ -358,7 +358,7 @@ describe('extractBook — the metadata pass', () => {
 });
 
 describe('extractBook — the full pass', () => {
-  const fullOpts = { depth: 'full' as const, extraction: { minSentenceLength: 2 } };
+  const fullOpts = { depth: 'full' as const, extraction: { sanitizationEnabled: true } };
 
   it('passes the book language down to the sentence extractor as the locale', async () => {
     bookShape.metadata = { title: 'T', creator: 'A', language: 'fr-FR' };
@@ -367,7 +367,7 @@ describe('extractBook — the full pass', () => {
 
     expect(mockOffscreen).toHaveBeenCalledWith(
       expect.any(File),
-      expect.objectContaining({ minSentenceLength: 2, locale: 'fr' }),
+      expect.objectContaining({ sanitizationEnabled: true, locale: 'fr' }),
       undefined,
       undefined
     );

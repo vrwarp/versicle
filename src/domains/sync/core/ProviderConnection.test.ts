@@ -217,11 +217,7 @@ describe('ProviderConnection.attach — transport event normalization', () => {
   it('a rejected save forwards code and size alongside the denial flag', () => {
     const conn = attach();
 
-    conn.fire('save-rejected', {
-      code: 'document-too-large',
-      sizeBytes: 1_234_567,
-      permissionDenied: false,
-    });
+    conn.fire('save-rejected', { code: 'document-too-large', sizeBytes: 1_234_567 });
 
     expect(harness.statuses).toEqual(['error']);
     expect(harness.events).toEqual([

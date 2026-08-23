@@ -7,12 +7,12 @@
  * captures the dependency object and exercises every closure in it.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { SyncOrchestratorDeps } from '@domains/sync/core/SyncOrchestrator';
+import type { SyncOrchestratorDeps } from '@domains/sync/core/ports';
 import { useSyncStore } from '@store/useSyncStore';
 import { useBookStore } from '@store/useBookStore';
 import { composeSyncOrchestrator } from './composeSync';
 
-const createSyncOrchestrator = vi.fn(() => ({ orchestrator: true }));
+const createSyncOrchestrator = vi.fn<(deps: unknown) => unknown>(() => ({ orchestrator: true }));
 const FirestoreBackendCtor = vi.fn();
 const checkpointCalls: unknown[][] = [];
 const migrationCalls: unknown[][] = [];
@@ -79,7 +79,7 @@ const compose = (
   args: Parameters<typeof composeSyncOrchestrator>[0] = { selection: null, isEnabled: () => true }
 ): SyncOrchestratorDeps => {
   composeSyncOrchestrator(args);
-  return createSyncOrchestrator.mock.calls.at(-1)![0] as unknown as SyncOrchestratorDeps;
+  return createSyncOrchestrator.mock.calls.at(-1)?.[0] as unknown as SyncOrchestratorDeps;
 };
 
 beforeEach(() => {

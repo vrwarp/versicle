@@ -124,16 +124,8 @@ describe('createSyncConnectionEmitter', () => {
     const cb = vi.fn();
     emitter.on('save-rejected', cb);
 
-    emitter.emit('save-rejected', {
-      code: 'document-too-large',
-      sizeBytes: 99,
-      permissionDenied: false,
-    });
+    emitter.emit('save-rejected', { code: 'document-too-large', sizeBytes: 99 });
 
-    expect(cb).toHaveBeenCalledWith({
-      code: 'document-too-large',
-      sizeBytes: 99,
-      permissionDenied: false,
-    });
+    expect(cb).toHaveBeenCalledWith({ code: 'document-too-large', sizeBytes: 99 });
   });
 });

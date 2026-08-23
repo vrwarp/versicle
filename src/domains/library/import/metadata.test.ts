@@ -211,7 +211,7 @@ describe('getSanitizedBookMetadata sanitization reporting', () => {
   it('preserves fields it does not sanitize', () => {
     const result = getSanitizedBookMetadata({ ...validRecord(), coverUrl: 'blob:abc' });
 
-    expect((result?.sanitized as Record<string, unknown>).coverUrl).toBe('blob:abc');
+    expect((result?.sanitized as unknown as Record<string, unknown>).coverUrl).toBe('blob:abc');
     expect(result?.sanitized.id).toBe('book-1');
     expect(result?.sanitized.addedAt).toBe(1_700_000_000_000);
   });

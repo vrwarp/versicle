@@ -7,14 +7,14 @@
  * highlight flow.
  */
 import type { Contents } from 'epubjs';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { attachSelectionBridge, markProgrammaticSelection } from './selectionBridge';
 
 interface Harness {
   contents: Contents;
   fire: (type: string) => void;
   setSelection: (options?: { collapsed?: boolean; rangeCount?: number; throwOnGet?: boolean }) => void;
-  onSelection: ReturnType<typeof vi.fn>;
+  onSelection: Mock<(cfiRange: string, range: Range, contents: Contents) => void>;
   cfiFromRange: ReturnType<typeof vi.fn>;
   win: Window;
 }
@@ -37,7 +37,7 @@ const makeHarness = (over: { cfi?: string } = {}): Harness => {
 
   const cfiFromRange = vi.fn(() => over.cfi ?? 'epubcfi(/6/4!/4/2,/1:0,/1:9)');
   const contents = { document: doc, window: win, cfiFromRange } as unknown as Contents;
-  const onSelection = vi.fn();
+  const onSelection = vi.fn<(cfiRange: string, range: Range, contents: Contents) => void>();
 
   return {
     contents,
@@ -75,7 +75,7 @@ describe('attachSelectionBridge wiring', () => {
   it('does nothing when the section has no document', () => {
     const contents = { document: null } as unknown as Contents;
 
-    expect(() => attachSelectionBridge(contents, vi.fn())).not.toThrow();
+    expect(() => attachSelectionBridge(contents, vi.fn<(cfiRange: string, range: Range, contents: Contents) => void>())).not.toThrow();
   });
 
   /* epub.js re-fires content hooks on re-render of the same Contents. */

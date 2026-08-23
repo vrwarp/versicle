@@ -142,7 +142,7 @@ const makeBackend = (overrides: Partial<SyncBackend> = {}): SyncBackend => ({
   deleteArtifactHead: async () => undefined,
   sweepArtifacts: async () => ({ headsDeleted: 0, blobsDeleted: 0 }),
   connect: (doc, _workspaceId, options) => {
-    connectOptionsSeen.push({ ...(options as Record<string, unknown>) });
+    connectOptionsSeen.push({ ...(options as unknown as Record<string, unknown>) });
     Y.applyUpdate(doc, buildUpdate(SCHEMA_VERSION));
     return syncingConnection();
   },

@@ -17,8 +17,9 @@ import {
   matchesLegacyFingerprint,
 } from './identity';
 
-const bytes = (...values: number[]): ArrayBuffer => new Uint8Array(values).buffer;
-const blobOf = (data: Uint8Array): Blob => new Blob([data]);
+const bytes = (...values: number[]): ArrayBuffer =>
+  new Uint8Array(values).buffer as ArrayBuffer;
+const blobOf = (data: Uint8Array): Blob => new Blob([data as BlobPart]);
 const filled = (n: number, value = 0x41): Uint8Array => new Uint8Array(n).fill(value);
 
 describe('cheapHash (djb2)', () => {
@@ -42,7 +43,7 @@ describe('cheapHash (djb2)', () => {
   });
 
   it('emits unsigned hex — never a negative or 0x-prefixed string', () => {
-    const hash = cheapHash(filled(2000, 0xff).buffer);
+    const hash = cheapHash(filled(2000, 0xff).buffer as ArrayBuffer);
 
     expect(hash).toMatch(/^[0-9a-f]+$/);
   });

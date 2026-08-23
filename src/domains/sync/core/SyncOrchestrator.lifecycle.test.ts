@@ -126,7 +126,7 @@ const build = (
     sweepArtifacts: async () => ({ headsDeleted: 0, blobsDeleted: 0 }),
     connect: (_doc, workspaceId, opts) => {
       calls.push(`connect:${workspaceId}`);
-      connectOptions.push({ ...(opts as Record<string, unknown>) });
+      connectOptions.push({ ...(opts as unknown as Record<string, unknown>) });
       return idleConnection();
     },
     ...over.backend,

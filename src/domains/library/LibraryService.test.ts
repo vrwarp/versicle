@@ -18,7 +18,8 @@ import type { InventoryPort, LibraryPersistence, LibraryProjectionPort } from '.
 const meta = (id: string, over: Partial<BookMetadata> = {}): BookMetadata =>
   ({ id, title: `Title ${id}`, ...over }) as BookMetadata;
 
-const item = (id: string): UserInventoryItem => ({ id, addedAt: 1 }) as UserInventoryItem;
+const item = (id: string): UserInventoryItem =>
+  ({ bookId: id, addedAt: 1 }) as unknown as UserInventoryItem;
 
 interface Fakes {
   service: LibraryService;

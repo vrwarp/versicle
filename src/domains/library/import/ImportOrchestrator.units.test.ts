@@ -668,7 +668,8 @@ describe('ImportOrchestrator — ZIP expansion', () => {
 });
 
 describe('ImportOrchestrator.restore — acceptance and registration', () => {
-  const fileWith = (bytes: Uint8Array) => epubFile('book.epub', bytes);
+  const fileWith = (bytes: Uint8Array) =>
+    epubFile('book.epub', bytes as Uint8Array<ArrayBuffer>);
 
   it('accepts a matching contentHash and restores the binary in place', async () => {
     const bytes = new Uint8Array([9, 9, 9]);
