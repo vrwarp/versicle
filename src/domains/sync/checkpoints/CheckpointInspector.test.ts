@@ -101,14 +101,15 @@ describe('CheckpointInspector', () => {
       }
   });
 
-  describe('dynamic root-type discovery', () => {
+  describe('root-type discovery', () => {
     /**
-     * `docToJson` has to GUESS each root's type — Map, then Array, then
-     * Text — because a doc hydrated from a blob holds AbstractTypes. The
-     * guessing shows up on the LIVE doc, whose roots are concrete: if a
-     * fallback is missing, that whole store silently vanishes from the
-     * diff, and the recovery UI shows "nothing will be lost" for data that
-     * would be.
+     * `docToJson` has to work out each root's type on BOTH sides of the
+     * diff, and the two sides are shaped differently: the live doc holds
+     * concrete types, a doc hydrated from a checkpoint blob holds
+     * `AbstractType`. `Doc.get` coerces the latter instead of throwing, so
+     * a getMap-first ladder silently read every Array or Text root as an
+     * empty map — making that store diff as "everything removed" from a
+     * screen whose job is to say what a restore would cost.
      */
     const blobWith = (mutate: (doc: Y.Doc) => void): Uint8Array => {
       const doc = new Y.Doc();
@@ -118,34 +119,121 @@ describe('CheckpointInspector', () => {
       return update;
     };
 
-    it('reads an ARRAY root after the map attempt fails', () => {
+    it('reads an ARRAY root on the CHECKPOINT side, not as an empty map', () => {
       yDoc.getArray('queue').insert(0, ['live-item']);
-      const blob = blobWith((doc) => doc.getMap('library').set('k', 1));
+      const blob = blobWith((doc) => doc.getArray('queue').insert(0, ['checkpoint-item']));
 
       const diffs = CheckpointInspector.diffCheckpoint(blob);
 
-      expect(diffs.queue).toBeDefined();
-      expect(diffs.queue.removed).toEqual({ '0': 'live-item' });
+      expect(diffs.queue.modified['0']).toEqual({
+        old: 'live-item',
+        new: 'checkpoint-item',
+      });
+      expect(diffs.queue.removed).toEqual({});
     });
 
-    it('reads a TEXT root after both the map and array attempts fail', () => {
+    /**
+     * KNOWN LIMITATION, pinned so a change to it is deliberate: `deepDiff`
+     * walks object KEYS, and a Text root reads as a plain string, so its
+     * content never reaches the comparison — a changed Text root reports as
+     * no change at all. `readRoot` still reads Text correctly (that is what
+     * keeps it out of the "everything removed" trap the Array roots were
+     * in), but surfacing a scalar root would mean changing `DiffResult`'s
+     * shape, which is UI-facing. Versicle stores no Text roots today.
+     */
+    it('does not surface a TEXT root change — deepDiff compares object keys', () => {
       yDoc.getText('notes').insert(0, 'live');
-      const blob = blobWith((doc) => doc.getMap('library').set('k', 1));
+      const blob = blobWith((doc) => doc.getText('notes').insert(0, 'checkpoint'));
+
+      expect(CheckpointInspector.diffCheckpoint(blob).notes).toEqual({
+        added: {},
+        removed: {},
+        modified: {},
+        unchangedCount: 0,
+      });
+    });
+
+    it('does not invent a removal for an array that did not change', () => {
+      yDoc.getArray('queue').insert(0, ['same']);
+      const blob = blobWith((doc) => doc.getArray('queue').insert(0, ['same']));
+
+      expect(CheckpointInspector.diffCheckpoint(blob).queue).toEqual({
+        added: {},
+        removed: {},
+        modified: {},
+        unchangedCount: 1,
+      });
+    });
+
+    it('reports a genuine array growth as added, not as a wholesale swap', () => {
+      yDoc.getArray('queue').insert(0, ['a']);
+      const blob = blobWith((doc) => doc.getArray('queue').insert(0, ['a', 'b']));
 
       const diffs = CheckpointInspector.diffCheckpoint(blob);
 
-      expect(diffs.notes).toBeDefined();
+      expect(diffs.queue.added).toEqual({ '1': 'b' });
+      expect(diffs.queue.unchangedCount).toBe(1);
     });
 
-    it('skips a root type it cannot read, without losing its siblings', () => {
+    it('reads an ARRAY root on the LIVE side too', () => {
+      yDoc.getArray('queue').insert(0, ['live-only']);
+      const blob = blobWith((doc) => doc.getMap('library').set('k', 1));
+
+      expect(CheckpointInspector.diffCheckpoint(blob).queue.removed).toEqual({
+        '0': 'live-only',
+      });
+    });
+
+    it('handles an array of nested types', () => {
+      const row = new Y.Map();
+      row.set('title', 'live');
+      yDoc.getArray('rows').insert(0, [row]);
+      const blob = blobWith((doc) => {
+        const other = new Y.Map();
+        other.set('title', 'checkpoint');
+        doc.getArray('rows').insert(0, [other]);
+      });
+
+      expect(CheckpointInspector.diffCheckpoint(blob).rows.modified['0']).toEqual({
+        old: { title: 'live' },
+        new: { title: 'checkpoint' },
+      });
+    });
+
+    it('SKIPS an xml root on both sides, so it never reads as a change', () => {
       yDoc.getXmlFragment('body').insert(0, [new Y.XmlText('live xml')]);
+      const blob = blobWith((doc) => {
+        doc.getXmlFragment('body').insert(0, [new Y.XmlText('checkpoint xml')]);
+        doc.getMap('library').set('kept', 2);
+      });
       yDoc.getMap('library').set('kept', 1);
-      const blob = blobWith((doc) => doc.getMap('library').set('kept', 2));
 
       const diffs = CheckpointInspector.diffCheckpoint(blob);
 
       expect(diffs.body).toBeUndefined();
       expect(diffs.library.modified.kept).toEqual({ old: 1, new: 2 });
+    });
+
+    it('still reads map roots — the only kind versicle actually stores', () => {
+      yDoc.getMap('library').set('a', 1);
+      const blob = blobWith((doc) => doc.getMap('library').set('a', 2));
+
+      expect(CheckpointInspector.diffCheckpoint(blob).library.modified.a).toEqual({
+        old: 1,
+        new: 2,
+      });
+    });
+
+    it('treats an empty root as an empty map on both sides', () => {
+      yDoc.getArray('empty');
+      const blob = blobWith((doc) => doc.getMap('library').set('k', 1));
+
+      expect(CheckpointInspector.diffCheckpoint(blob).empty).toEqual({
+        added: {},
+        removed: {},
+        modified: {},
+        unchangedCount: 0,
+      });
     });
 
     it('diffs every root the two docs hold BETWEEN them', () => {
@@ -165,9 +253,7 @@ describe('CheckpointInspector', () => {
       yDoc.getMap('library').set('same', 'v');
       const blob = blobWith((doc) => doc.getMap('library').set('same', 'v'));
 
-      const diffs = CheckpointInspector.diffCheckpoint(blob);
-
-      expect(diffs.library).toEqual({
+      expect(CheckpointInspector.diffCheckpoint(blob).library).toEqual({
         added: {},
         removed: {},
         modified: {},

@@ -9,6 +9,13 @@ export interface DiffResult {
   unchangedCount: number;
 }
 
+/** Xml roots are not represented in the diff — see readRoot. */
+function isXmlType(type: unknown): boolean {
+  return (
+    type instanceof Y.XmlElement || type instanceof Y.XmlText || type instanceof Y.XmlFragment
+  );
+}
+
 export class CheckpointInspector {
   /**
    * Generates a diff: Live State vs Checkpoint Blob
@@ -37,38 +44,64 @@ export class CheckpointInspector {
   private static docToJson(doc: Y.Doc): Record<string, unknown> {
     const json: Record<string, unknown> = {};
 
-    // Iterate all shared types in the document
-    // doc.share contains all top-level types (Map, Array, etc.)
-    const allKeys = Array.from(doc.share.keys());
-
-    for (const key of allKeys) {
-      // Dynamic Type Discovery
-      // When hydrating a doc from blob, items in share are AbstractType.
-      // We must attempt to retrieve them as specific types to access content.
-      try {
-        // Try Map (most common)
-        const map = doc.getMap(key);
-        // access toJSON to verify it works (might throw if type mismatch actually happens on access?)
-        // actually getMap throws if type mismatch.
-        json[key] = map.toJSON();
-      } catch {
-        try {
-          // Try Array
-          const arr = doc.getArray(key);
-          json[key] = arr.toJSON();
-        } catch {
-          // Try Text or others if needed, or ignore
-          try {
-             const text = doc.getText(key);
-             json[key] = text.toJSON();
-          } catch {
-             // Unknown type or Xml, skip
-          }
-        }
-      }
+    // doc.share holds every top-level type (Map, Array, Text, …).
+    for (const key of Array.from(doc.share.keys())) {
+      const value = CheckpointInspector.readRoot(doc, key);
+      if (value !== undefined) json[key] = value;
     }
 
     return json;
+  }
+
+  /**
+   * One root type as JSON, for either side of the diff.
+   *
+   * The LIVE doc holds concrete types, but a doc hydrated from a checkpoint
+   * blob holds `AbstractType` roots — and `Doc.get` COERCES those into
+   * whichever constructor it is asked for rather than throwing. So the
+   * previous try/catch ladder (getMap → getArray → getText) never fell
+   * through on the checkpoint side: an Array or Text root came back as an
+   * empty map, and that store then diffed as "everything removed" — the
+   * worst possible answer from a screen whose whole job is to say what a
+   * destructive restore would cost. Infer from the STRUCTURE instead, so
+   * both sides of the diff read the same root the same way.
+   *
+   * Xml roots are deliberately absent from the diff, on both sides —
+   * symmetry is what stops a skipped root reading as a change. Versicle
+   * stores none today: every root of the replicated doc is a Map.
+   *
+   * A Text root reads correctly here but still does not SHOW a change:
+   * {@link deepDiff} walks object keys, and a string has none. Surfacing a
+   * scalar root would mean changing `DiffResult`'s UI-facing shape, so it is
+   * left alone and pinned as a known limitation in the suite.
+   */
+  private static readRoot(doc: Y.Doc, key: string): unknown {
+    const shared = doc.share.get(key);
+    if (!shared) return undefined;
+
+    // Live doc: the root already is the type it will stay. (YXmlElement
+    // extends YXmlFragment, so this covers both.)
+    if (shared instanceof Y.XmlFragment) return undefined;
+    if (shared instanceof Y.Map || shared instanceof Y.Array || shared instanceof Y.Text) {
+      return shared.toJSON();
+    }
+
+    // Hydrated doc: an AbstractType carrying the content but not the class.
+    const start = (shared as unknown as { _start: Y.Item | null })._start;
+    if (start === null) {
+      // No sequence content, so map-like. A wholly empty root reads as {}
+      // under either interpretation, which makes the choice immaterial.
+      return doc.getMap(key).toJSON();
+    }
+
+    const content = start.content;
+    if (content instanceof Y.ContentString || content instanceof Y.ContentFormat) {
+      return doc.getText(key).toJSON();
+    }
+    if (content instanceof Y.ContentType && isXmlType(content.type)) {
+      return undefined;
+    }
+    return doc.getArray(key).toJSON();
   }
 
   private static deepDiff(live: unknown, checkpoint: unknown): DiffResult {

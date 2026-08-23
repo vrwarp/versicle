@@ -82,13 +82,13 @@
     "ua-parser-js": "^2.0.8",
     "uuid": "^13.0.0",
     "vite-plugin-pwa": "^1.2.0",
-    "y-cinder": "github:vrwarp/y-cinder#f22cf67a6c7ffc0f3a725d07e840d61e90d9f4b6",
-    "y-idb": "github:vrwarp/y-idb#6468ff1d2f77cebfefc82112567378d840baec2a",
+    "y-cinder": "github:vrwarp/y-cinder#4297ea9cffee7b73e78aaa1640885ec7e3209218",
+    "y-idb": "github:vrwarp/y-idb#b54f17ee0ef60c3a456d25b4d74b62bc180aeb30",
     "y-protocols": "^1.0.7",
     "yjs": "^13.6.20",
     "zod": "^4.3.5",
     "zustand": "^5.0.9",
-    "zustand-middleware-yjs": "git+https://github.com/vrwarp/zustand-middleware-yjs.git#e6e3b7f1f3bcf77fadb7be4e2c692d86c58d7f31"
+    "zustand-middleware-yjs": "git+https://github.com/vrwarp/zustand-middleware-yjs.git#012177b8ad1fcd7dd153d75e0f085e363bbffa68"
   },
   "engines": {
     "node": ">=25 <26"
