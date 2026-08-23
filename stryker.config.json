@@ -28,9 +28,9 @@
     "!src/domains/reader/engine/FakeReaderEngine.ts"
   ],
   "thresholds": {
-    "high": 90,
-    "low": 70,
-    "break": 0
+    "high": 95,
+    "low": 85,
+    "break": 85
   },
   "tempDirName": ".stryker-tmp",
   "cleanTempDir": true
