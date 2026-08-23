@@ -146,4 +146,157 @@ describe('extractContentOffscreen', () => {
 
     consoleSpy.mockRestore();
   });
+
+  it('reports progress per chapter and completion at the end', async () => {
+    mockRendition.getContents.mockReturnValue([]);
+    const onProgress = vi.fn();
+
+    await extractContentOffscreen(new Blob(['x']), {}, onProgress);
+
+    expect(onProgress.mock.calls).toEqual([
+      [0, 'Processing chapter 1 of 2'],
+      [50, 'Processing chapter 2 of 2'],
+      [100, 'Ingestion complete'],
+    ]);
+  });
+
+  it('walks an `each`-style spine as well as an items array', async () => {
+    mockBook.spine = {
+      each: (cb: (item: { href: string }) => void) => {
+        cb({ href: 'a.xhtml' });
+        cb({ href: 'b.xhtml' });
+        cb({ href: 'c.xhtml' });
+      },
+      hooks: { serialize: { register: vi.fn() } },
+    };
+    mockRendition.getContents.mockReturnValue([]);
+
+    await extractContentOffscreen(new Blob(['x']));
+
+    expect(mockRendition.display).toHaveBeenCalledTimes(3);
+  });
+
+  it('renders through a scrolled single-column flow (no columnization)', async () => {
+    mockRendition.getContents.mockReturnValue([]);
+
+    await extractContentOffscreen(new Blob(['x']));
+
+    expect(mockBook.renderTo).toHaveBeenCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({ flow: 'scrolled-doc', manager: 'default' }),
+    );
+  });
+
+  it('mounts the container OFFSCREEN and removes it afterwards', async () => {
+    mockRendition.getContents.mockReturnValue([]);
+    const before = document.body.childElementCount;
+    let mounted: HTMLElement | undefined;
+    mockBook.renderTo = vi.fn((container: HTMLElement) => {
+      mounted = container;
+      expect(container.parentNode).toBe(document.body);
+      expect(container.style.visibility).toBe('hidden');
+      expect(container.style.position).toBe('absolute');
+      return mockRendition;
+    });
+
+    await extractContentOffscreen(new Blob(['x']));
+
+    expect(mounted).toBeDefined();
+    expect(mounted?.parentNode).toBeNull();
+    expect(document.body.childElementCount).toBe(before);
+  });
+
+  it('re-ticks the epub.js queue onto the zero-delay scheduler when one exists', async () => {
+    mockRendition.q = { tick: undefined };
+    mockRendition.getContents.mockReturnValue([]);
+
+    await extractContentOffscreen(new Blob(['x']));
+
+    expect(mockRendition.q.tick).toEqual(expect.any(Function));
+  });
+
+  it('tolerates a rendition with no internal queue', async () => {
+    mockRendition.getContents.mockReturnValue([]);
+
+    await expect(extractContentOffscreen(new Blob(['x']))).resolves.toBeDefined();
+  });
+
+  it('skips a chapter whose contents never materialized', async () => {
+    mockRendition.getContents.mockReturnValue([]);
+
+    const result = await extractContentOffscreen(new Blob(['x']));
+
+    expect(result.chapters).toEqual([]);
+  });
+
+  it('names each chapter and carries its href and text', async () => {
+    const doc = document.implementation.createHTMLDocument();
+    doc.body.innerHTML = '<h1>Down the Rabbit-Hole</h1><p>Alice was beginning.</p>';
+    mockRendition.getContents.mockReturnValue([
+      { document: doc, cfiFromRange: vi.fn(), cfiFromNode: vi.fn() },
+    ]);
+
+    const result = await extractContentOffscreen(new Blob(['x']));
+
+    expect(result.chapters).toHaveLength(2);
+    expect(result.chapters[0]).toMatchObject({
+      href: 'chapter1.xhtml',
+      title: 'Down the Rabbit-Hole',
+    });
+    expect(result.chapters[0].textContent).toContain('Alice was beginning');
+  });
+
+  it('ABORTS between chapters on a cancelled signal, and still tears down', async () => {
+    mockRendition.getContents.mockReturnValue([]);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      extractContentOffscreen(new Blob(['x']), {}, undefined, controller.signal),
+    ).rejects.toThrow('Extraction cancelled');
+
+    expect(mockRendition.display).not.toHaveBeenCalled();
+    expect(mockBook.destroy).toHaveBeenCalled();
+  });
+
+  it('stops mid-book when the signal aborts partway', async () => {
+    mockRendition.getContents.mockReturnValue([]);
+    const controller = new AbortController();
+    mockRendition.display = vi.fn(async () => {
+      controller.abort();
+    });
+
+    await expect(
+      extractContentOffscreen(new Blob(['x']), {}, undefined, controller.signal),
+    ).rejects.toThrow('Extraction cancelled');
+
+    expect(mockRendition.display).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports no base styles when nothing could be measured', async () => {
+    mockRendition.getContents.mockReturnValue([]);
+
+    const result = await extractContentOffscreen(new Blob(['x']));
+
+    expect(result.baseFontSize).toBeUndefined();
+    expect(result.baseLineHeight).toBeUndefined();
+  });
+
+  it('tears the book down even when a chapter render throws', async () => {
+    mockRendition.display = vi.fn(async () => {
+      throw new Error('render failed');
+    });
+
+    await expect(extractContentOffscreen(new Blob(['x']))).rejects.toThrow('render failed');
+
+    expect(mockBook.destroy).toHaveBeenCalled();
+  });
+
+  it('swallows a book that never opened during teardown', async () => {
+    mockBook.opened = Promise.reject(new Error('never opened'));
+    mockRendition.getContents.mockReturnValue([]);
+
+    await expect(extractContentOffscreen(new Blob(['x']))).resolves.toBeDefined();
+    expect(mockBook.destroy).toHaveBeenCalled();
+  });
 });
