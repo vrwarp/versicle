@@ -7,8 +7,11 @@
 # and opens a PR so the upgrade is reviewed (entry-count delta, license header)
 # before it ships. It never pushes to a protected branch directly.
 #
-# Requires repo setting: Settings → Actions → General → "Allow GitHub Actions
-# to create and approve pull requests" (so the bot can open the PR).
+# Opening the PR automatically needs the repo setting: Settings → Actions →
+# General → "Allow GitHub Actions to create and approve pull requests". While
+# that setting is off, GitHub rejects the PR call, so the job instead files a
+# tracking issue carrying a one-click compare link for the already-pushed
+# branch rather than failing every month.
 name: Update dictionary
 
 on:
@@ -20,6 +23,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 jobs:
   update:
@@ -54,10 +58,39 @@ jobs:
           git add scripts/cedict.lock.json scripts/cedict-source.zip
           git commit -m "chore(dict): refresh CC-CEDICT snapshot to ${RELEASE}"
           git push -f -u origin "$BRANCH"
-          if [ "$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')" = "0" ]; then
-            gh pr create --head "$BRANCH" --base "$BASE" \
-              --title "chore(dict): refresh CC-CEDICT snapshot to ${RELEASE}" \
-              --body "Automated monthly CC-CEDICT refresh from the MDBG export (release ${RELEASE}, ${ENTRIES} entries). Re-vendors \`scripts/cedict-source.zip\` and re-pins \`scripts/cedict.lock.json\`. Review the entry-count delta before merging."
-          else
+          if [ "$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')" != "0" ]; then
             echo "PR for $BRANCH already open — force-pushed the latest snapshot to it."
+            exit 0
           fi
+          if CREATE_OUT=$(gh pr create --head "$BRANCH" --base "$BASE" \
+            --title "chore(dict): refresh CC-CEDICT snapshot to ${RELEASE}" \
+            --body "Automated monthly CC-CEDICT refresh from the MDBG export (release ${RELEASE}, ${ENTRIES} entries). Re-vendors \`scripts/cedict-source.zip\` and re-pins \`scripts/cedict.lock.json\`. Review the entry-count delta before merging." 2>&1); then
+            echo "$CREATE_OUT"
+            exit 0
+          fi
+          echo "$CREATE_OUT" >&2
+          if ! grep -qi "not permitted to create or approve pull requests" <<< "$CREATE_OUT"; then
+            exit 1
+          fi
+          # Actions is barred from opening PRs here (repo setting in the header
+          # comment). The refreshed snapshot is already pushed, so hand a human
+          # the one-click link through a tracking issue instead of failing.
+          COMPARE_URL="${{ github.server_url }}/${{ github.repository }}/compare/${BASE}...${BRANCH}?expand=1"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          export ISSUE_TITLE="chore(dict): CC-CEDICT refresh needs a manually opened PR"
+          ISSUE_BODY=$(printf '%s\n' \
+            "The monthly CC-CEDICT refresh (release ${RELEASE}, ${ENTRIES} entries) is pushed to \`${BRANCH}\`, but GitHub Actions is not permitted to open PRs in this repo." \
+            "" \
+            "- Open the PR: ${COMPARE_URL}" \
+            "- To let this workflow open PRs itself, enable Settings → Actions → General → \"Allow GitHub Actions to create and approve pull requests\", then close this issue." \
+            "" \
+            "Filed by the Update dictionary workflow (${RUN_URL}).")
+          EXISTING=$(gh issue list --state open --limit 100 --json number,title \
+            --jq '[.[] | select(.title == env.ISSUE_TITLE)][0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "$ISSUE_BODY"
+            echo "Updated existing tracking issue #${EXISTING}."
+          else
+            gh issue create --title "$ISSUE_TITLE" --body "$ISSUE_BODY"
+          fi
+          echo "::warning title=CC-CEDICT PR not opened::GitHub Actions may not open PRs in this repo, so the refreshed snapshot sits on ${BRANCH} with a tracking issue instead. Enable 'Allow GitHub Actions to create and approve pull requests' under Settings → Actions → General to restore full automation."
