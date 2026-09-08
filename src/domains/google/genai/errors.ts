@@ -92,3 +92,60 @@ export function isRetryableForRotation(error: unknown): boolean {
     error instanceof NetRateLimitedError
   );
 }
+
+/**
+ * A log-safe, structured description of ANY failure the GenAI clients can
+ * raise — typed AppErrors (code / HTTP status / quota context), pre-network
+ * gateway refusals (NET_RATE_LIMITED, NET_CONSENT_REQUIRED, NET_OFFLINE),
+ * caller aborts, and plain network errors alike. It is what the activity log
+ * records for a TERMINAL failure, so an exported log can say WHY a request
+ * died instead of leaving a request entry with no outcome at all (the
+ * Jul–Sep 2026 export had 74 such entries, 26% of all detection attempts).
+ */
+export interface GenAIFailureDescription {
+  error: string;
+  name?: string;
+  code?: string;
+  status?: number;
+  apiStatus?: string;
+  retryable?: boolean;
+  retryAfterMs?: number;
+  dailyQuotaExhausted?: boolean;
+  quotaIds?: string[];
+  /** The governor's refusal reason for a pre-network NET_RATE_LIMITED. */
+  reason?: string;
+  /** True for a caller-driven abort (AbortSignal) — expected, not actionable. */
+  aborted: boolean;
+}
+
+export function describeGenAIFailure(error: unknown): GenAIFailureDescription {
+  if (error instanceof AppError) {
+    const ctx = error.context ?? {};
+    const out: GenAIFailureDescription = {
+      error: error.message,
+      name: error.name,
+      code: error.code,
+      retryable: error.retryable,
+      aborted: false,
+    };
+    if (typeof ctx.status === 'number') out.status = ctx.status;
+    if (typeof ctx.apiStatus === 'string') out.apiStatus = ctx.apiStatus;
+    if (typeof ctx.retryAfterMs === 'number') out.retryAfterMs = ctx.retryAfterMs;
+    if (typeof ctx.dailyQuotaExhausted === 'boolean') out.dailyQuotaExhausted = ctx.dailyQuotaExhausted;
+    if (Array.isArray(ctx.quotaIds)) out.quotaIds = ctx.quotaIds.map(String);
+    if (typeof ctx.reason === 'string') out.reason = ctx.reason;
+    return out;
+  }
+  // Duck-typed: a DOMException (AbortError) is not `instanceof Error` in
+  // every realm (jsdom, some worker contexts), but always carries name/message.
+  if (typeof error === 'object' && error !== null) {
+    const { name, message } = error as { name?: unknown; message?: unknown };
+    const out: GenAIFailureDescription = {
+      error: typeof message === 'string' ? message : String(error),
+      aborted: name === 'AbortError',
+    };
+    if (typeof name === 'string') out.name = name;
+    return out;
+  }
+  return { error: String(error), aborted: false };
+}

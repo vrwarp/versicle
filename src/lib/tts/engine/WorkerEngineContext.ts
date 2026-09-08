@@ -41,8 +41,7 @@ import type {
     BookMetadata,
     GenAIPort,
     BookContentPort,
-    SessionStore,
-} from './EngineContext';
+    SessionStore, GenAICallContext } from './EngineContext';
 import { repoBookContentPort, createRepoSessionStore } from './repoPorts';
 
 /** Main-thread → worker state replication messages. */
@@ -151,7 +150,7 @@ export class WorkerEngineContext implements EngineContext {
         this.genAIIsConfiguredFn = opts.genAIIsConfigured ?? (async () => false);
         this.genAIConfigureFn = opts.genAIConfigure ?? (() => {});
         this.genAIDetectFn = opts.genAIDetectContentTypes ??
-            (async () => ({ classifications: [], justification: '', agreedWithHeuristic: false }));
+            (async () => ({ classifications: [], justification: '', agreedWithHeuristic: null }));
         this.genAIAdaptFn = opts.genAIGenerateTableAdaptations ?? (async () => []);
         this.minSentenceLength = opts.defaultMinSentenceLength ?? ((lang) => (lang.startsWith('zh') ? 6 : 36));
         this.content = opts.content ?? repoBookContentPort;
@@ -230,12 +229,12 @@ export class WorkerEngineContext implements EngineContext {
         detectContentTypes: (
             nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
             hints: { enumeratorCandidate: number },
-            context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
+            context?: GenAICallContext,
         ) => this.genAIDetectFn(nodes, hints, context),
         generateTableAdaptations: (
             nodes: { rootCfi: string; imageBlob: Blob }[],
             thinkingBudget: number,
-            context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
+            context?: GenAICallContext,
         ) => this.genAIAdaptFn(nodes, thinkingBudget, context),
     };
 

@@ -17,9 +17,16 @@ import { NetRateLimitedError } from '~types/errors';
 import type { GenAILogEntry } from './logging';
 import { DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';
 
-function geminiResponse(text: string, status = 200): Response {
+function geminiResponse(
+  text: string,
+  status = 200,
+  usageMetadata?: Record<string, number>,
+): Response {
   return new Response(
-    JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }),
+    JSON.stringify({
+      candidates: [{ content: { parts: [{ text }] } }],
+      ...(usageMetadata ? { usageMetadata } : {}),
+    }),
     { status, headers: { 'Content-Type': 'application/json' } },
   );
 }
@@ -341,5 +348,213 @@ describe('GeminiClient', () => {
         ['response', 'myMethod'],
       ]);
     });
+  });
+});
+
+/**
+ * Every request entry must be followed by a response OR an error entry that
+ * says why the request died. The Jul–Sep 2026 export had 74 detection
+ * requests (26%) with no logged outcome at all: non-429 HTTP errors,
+ * rotation-off 429s, pre-network gateway refusals and network errors all
+ * threw without logging.
+ */
+describe('GeminiClient terminal outcomes are always logged', () => {
+  const errorEntries = (logs: GenAILogEntry[]) => logs.filter((l) => l.type === 'error');
+
+  it('a 429 with rotation OFF logs an error entry with status, code and model', async () => {
+    const { client, logs } = makeClient([errorResponse(429, 'RESOURCE_EXHAUSTED')]);
+    await expect(client.generateText('prompt')).rejects.toBeInstanceOf(GenAIHttpError);
+    expect(errorEntries(logs)).toHaveLength(1);
+    expect(errorEntries(logs)[0].payload).toMatchObject({
+      message: 'Request failed',
+      model: 'my-specific-model',
+      status: 429,
+      code: 'GENAI_UNKNOWN',
+      retryable: true,
+      aborted: false,
+    });
+  });
+
+  it('a 5xx with rotation ON logs an error entry (it is not a rotation case)', async () => {
+    const { client, logs } = makeClient([errorResponse(503, 'The service is currently unavailable.')], {
+      rotationEnabled: true,
+    });
+    await expect(client.generateText('prompt')).rejects.toMatchObject({ status: 503 });
+    expect(errorEntries(logs).map((l) => (l.payload as { status?: number }).status)).toEqual([503]);
+    expect((errorEntries(logs)[0].payload as { error: string }).error).toBe(
+      'The service is currently unavailable.',
+    );
+  });
+
+  it('a pre-network gateway refusal with rotation OFF logs its code and reason', async () => {
+    const egress = vi.fn(async () => {
+      throw new NetRateLimitedError(1000, { lane: 'fg', reason: 'cooldown', ratePool: 'm' });
+    }) as unknown as EgressFn;
+    const logs: GenAILogEntry[] = [];
+    const client = new GeminiClient({
+      getConfig: () => ({ apiKey: 'k', model: 'm', rotationEnabled: false }),
+      egress,
+      onLog: (entry) => logs.push(entry),
+    });
+    await expect(client.generateText('prompt')).rejects.toBeInstanceOf(NetRateLimitedError);
+    expect(errorEntries(logs)[0].payload).toMatchObject({
+      code: 'NET_RATE_LIMITED',
+      reason: 'cooldown',
+      retryAfterMs: 1000,
+    });
+  });
+
+  it('exhausting every rotation model logs ONE terminal error after the debug steps', async () => {
+    const { client, logs } = makeClient(
+      GENAI_ROTATION_MODELS.map(() => errorResponse(429, 'RESOURCE_EXHAUSTED')),
+      { rotationEnabled: true },
+    );
+    await expect(client.generateText('prompt')).rejects.toMatchObject({ status: 429 });
+    expect(logs.filter((l) => l.type === 'debug')).toHaveLength(GENAI_ROTATION_MODELS.length);
+    expect(errorEntries(logs)).toHaveLength(1);
+    expect(errorEntries(logs)[0].payload).toMatchObject({
+      message: `All ${GENAI_ROTATION_MODELS.length} rotation models failed`,
+      status: 429,
+    });
+  });
+
+  it('a caller abort is logged at debug, not error', async () => {
+    const egress = vi.fn(async () => {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }) as unknown as EgressFn;
+    const logs: GenAILogEntry[] = [];
+    const client = new GeminiClient({
+      getConfig: () => ({ apiKey: 'k', model: 'm', rotationEnabled: false }),
+      egress,
+      onLog: (entry) => logs.push(entry),
+    });
+    await expect(client.generateText('prompt')).rejects.toThrow('aborted');
+    expect(errorEntries(logs)).toHaveLength(0);
+    expect(logs.filter((l) => l.type === 'debug')[0].payload).toMatchObject({ aborted: true });
+  });
+
+  it('a validation failure logs the raw response text ONCE (no duplicate terminal entry)', async () => {
+    const { client, logs } = makeClient([geminiResponse('{"referenceStartIndex": 0}')]);
+    await expect(
+      client.generateStructured({
+        method: 'detectContentTypes',
+        prompt: 'p',
+        responseSchema: {},
+        validate: () => {
+          throw new GenAIInvalidResponseError('rejected');
+        },
+      }),
+    ).rejects.toThrow('rejected');
+    expect(errorEntries(logs)).toHaveLength(1);
+    expect(errorEntries(logs)[0].payload).toMatchObject({
+      message: 'Response failed validation',
+      error: 'rejected',
+      text: '{"referenceStartIndex": 0}',
+      model: 'my-specific-model',
+    });
+  });
+
+  it('an unparseable response logs once, with the text', async () => {
+    const { client, logs } = makeClient([geminiResponse('not json {')]);
+    await expect(
+      client.generateStructured({ method: 'x', prompt: 'p', responseSchema: {}, validate: (raw) => raw }),
+    ).rejects.toBeInstanceOf(GenAIInvalidResponseError);
+    expect(errorEntries(logs)).toHaveLength(1);
+    expect(errorEntries(logs)[0].payload).toMatchObject({ message: 'Failed to parse JSON', text: 'not json {' });
+  });
+
+  it('response entries carry the serving model, latency and the API token usage', async () => {
+    let t = 1_000;
+    const logs: GenAILogEntry[] = [];
+    const egress = vi.fn(async () => {
+      t += 4_200;
+      return geminiResponse('"ok"', 200, { promptTokenCount: 1874, candidatesTokenCount: 60, totalTokenCount: 1934 });
+    }) as unknown as EgressFn;
+    const client = new GeminiClient({
+      getConfig: () => ({ apiKey: 'k', model: 'gemini-3.6-flash', rotationEnabled: false }),
+      egress,
+      onLog: (entry) => logs.push(entry),
+      now: () => t,
+    });
+    await client.generateStructured({ method: 'x', prompt: 'p', responseSchema: {}, validate: (raw) => raw });
+    const response = logs.find((l) => l.type === 'response');
+    expect(response?.payload).toMatchObject({
+      model: 'gemini-3.6-flash',
+      latencyMs: 4_200,
+      usage: { promptTokenCount: 1874, candidatesTokenCount: 60, totalTokenCount: 1934 },
+    });
+  });
+});
+
+describe('GeminiClient 429 cooldowns follow the server\'s own quota signals', () => {
+  function quotaBody(quotaId: string, retryDelay?: string) {
+    return {
+      error: {
+        code: 429,
+        status: 'RESOURCE_EXHAUSTED',
+        message: 'You exceeded your current quota.',
+        details: [
+          { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId }] },
+          ...(retryDelay ? [{ '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay }] : []),
+        ],
+      },
+    };
+  }
+  function clientWith(response: Response) {
+    const recordCooldown = vi.fn();
+    const egress = vi.fn(async () => response) as unknown as EgressFn;
+    const logs: GenAILogEntry[] = [];
+    const client = new GeminiClient({
+      getConfig: () => ({ apiKey: 'k', model: 'gemini-3.6-flash', rotationEnabled: false }),
+      egress,
+      onLog: (entry) => logs.push(entry),
+      governor: { commit: vi.fn(), recordCooldown },
+      now: () => Date.UTC(2026, 8, 3, 14, 7, 15), // 07:07 PT
+    });
+    return { client, recordCooldown, logs };
+  }
+
+  it('a per-minute exhaustion waits exactly the RetryInfo delay', async () => {
+    const { client, recordCooldown } = clientWith(
+      new Response(JSON.stringify(quotaBody('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', '18s')), { status: 429 }),
+    );
+    await expect(client.generateText('p')).rejects.toBeInstanceOf(GenAIHttpError);
+    expect(recordCooldown).toHaveBeenCalledWith(18_000, 'gemini-3.6-flash');
+  });
+
+  it('a Retry-After header wins over the body hint', async () => {
+    const { client, recordCooldown } = clientWith(
+      new Response(JSON.stringify(quotaBody('GenerateRequestsPerMinutePerProjectPerModel-FreeTier', '18s')), {
+        status: 429,
+        headers: { 'Retry-After': '7' },
+      }),
+    );
+    await expect(client.generateText('p')).rejects.toBeInstanceOf(GenAIHttpError);
+    expect(recordCooldown).toHaveBeenCalledWith(7_000, 'gemini-3.6-flash');
+  });
+
+  it('a DAILY exhaustion cools the pool down until the next Pacific day and says so in the log', async () => {
+    const { client, recordCooldown, logs } = clientWith(
+      new Response(JSON.stringify(quotaBody('GenerateRequestsPerDayPerProjectPerModel-FreeTier', '18s')), { status: 429 }),
+    );
+    await expect(client.generateText('p')).rejects.toMatchObject({
+      context: expect.objectContaining({ dailyQuotaExhausted: true }),
+    });
+    const [ms, pool] = recordCooldown.mock.calls[0] as [number, string];
+    expect(pool).toBe('gemini-3.6-flash');
+    // 07:07 PT → the day flips at midnight PT, 17 probe-hours later (coarse bound).
+    expect(ms).toBe(17 * 3_600_000);
+    const error = logs.find((l) => l.type === 'error');
+    expect(error?.payload).toMatchObject({
+      dailyQuotaExhausted: true,
+      quotaIds: ['GenerateRequestsPerDayPerProjectPerModel-FreeTier'],
+      retryAfterMs: 17 * 3_600_000,
+    });
+  });
+
+  it('with no hint at all the default 30 s cooldown applies', async () => {
+    const { client, recordCooldown } = clientWith(errorResponse(429, 'RESOURCE_EXHAUSTED'));
+    await expect(client.generateText('p')).rejects.toBeInstanceOf(GenAIHttpError);
+    expect(recordCooldown).toHaveBeenCalledWith(30_000, 'gemini-3.6-flash');
   });
 });

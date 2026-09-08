@@ -58,6 +58,13 @@ interface GenAIState {
    */
   useBatchEmbedding: boolean;
   isEnabled: boolean;
+  /**
+   * Try the free-tier rotation list (GeminiClient.GENAI_ROTATION_MODELS) on a
+   * 429 instead of failing on the single configured model. Default ON since
+   * persist v5: the Jul–Sep 2026 log export showed rotation active on only 2
+   * of 47 days, and every request that hit a spent 20-requests-per-day
+   * frontier model with rotation off died without an answer.
+   */
   isModelRotationEnabled: boolean;
   isContentAnalysisEnabled: boolean;
   isTableAdaptationEnabled: boolean;
@@ -335,7 +342,7 @@ export const useGenAIStore = create<GenAIState>()(
       embeddingDims: 768,
       useBatchEmbedding: false,
       isEnabled: false,
-      isModelRotationEnabled: false,
+      isModelRotationEnabled: true,
       isContentAnalysisEnabled: false,
       isTableAdaptationEnabled: false,
       contentFilterSkipTypes: ['reference'],
@@ -413,7 +420,7 @@ export const useGenAIStore = create<GenAIState>()(
     }),
     {
       name: 'genai-storage',
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => localStorage),
       partialize: (state): PersistedGenAIState => ({
         apiKey: state.apiKey,
@@ -465,6 +472,11 @@ export const useGenAIStore = create<GenAIState>()(
        * edits survive: a persisted value is carried across the rename as-is,
        * and only a value still equal to its superseded v3 default
        * ({@link V3_SUPERSEDED_DEFAULTS}) is refreshed to the new figure.
+       *
+       * v4 → v5: model rotation ON becomes the default. The stored `false`
+       * of a pre-v5 blob is the OLD default — the settings UI never asked
+       * the user to choose it — so it is flipped once; a user who switches
+       * rotation off again on a v5 blob keeps it off.
        */
       migrate: (persistedState, version) => {
         if (persistedState && typeof persistedState === 'object') {
@@ -476,6 +488,9 @@ export const useGenAIStore = create<GenAIState>()(
           if (version < 2 && state.embeddingModel === 'gemini-embedding-001') {
             state.embeddingModel = 'gemini-embedding-2';
           }
+        }
+        if (version < 5 && persistedState && typeof persistedState === 'object') {
+          (persistedState as Record<string, unknown>).isModelRotationEnabled = true;
         }
         if (version < 2 && persistedState && typeof persistedState === 'object') {
           const state = persistedState as Record<string, unknown>;

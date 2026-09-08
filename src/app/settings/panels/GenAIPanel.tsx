@@ -88,11 +88,22 @@ const GenAIPanel: React.FC = () => {
   };
 
   const handleDownloadLogs = async () => {
-    const content = logs.map(log =>
-      `[${new Date(log.timestamp).toISOString()}] ${log.type.toUpperCase()} (${log.method}) \n` +
-      JSON.stringify(log.payload, null, 2) +
-      `\n${'-'.repeat(40)} \n`
-    ).join('\n');
+    // Header line: `[iso] TYPE (method)` plus, when the entry carries them,
+    // `cid=<correlationId>` (ties a call's request/response/error entries and
+    // the detector's telemetry record together) and the JSON-quoted book and
+    // section titles — so an exported log can be paired offline without
+    // guessing from timestamps.
+    const content = logs.map(log => {
+      const header = [`[${new Date(log.timestamp).toISOString()}] ${log.type.toUpperCase()} (${log.method})`];
+      if (log.correlationId) header.push(`cid=${log.correlationId}`);
+      if (log.bookTitle) header.push(`book=${JSON.stringify(log.bookTitle)}`);
+      if (log.sectionTitle) header.push(`section=${JSON.stringify(log.sectionTitle)}`);
+      return (
+        `${header.join(' ')} \n` +
+        JSON.stringify(log.payload, null, 2) +
+        `\n${'-'.repeat(40)} \n`
+      );
+    }).join('\n');
 
     const filename = `genai_logs_${new Date().toISOString()}.txt`;
 

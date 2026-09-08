@@ -41,11 +41,11 @@ export function genAIConfigure(apiKey: string, model: string): void {
 export async function genAIDetectContentTypes(
   nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
   hints: { enumeratorCandidate: number },
-  context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
+  context?: { bookId?: string; bookTitle?: string; sectionTitle?: string; correlationId?: string },
 ): Promise<{
   classifications: { id: string; type: ContentType }[];
   justification: string;
-  agreedWithHeuristic: boolean;
+  agreedWithHeuristic: boolean | null;
 }> {
   const { detectReferenceSection } = await import(
     '@domains/google/genai/features/referenceDetection'
@@ -67,7 +67,7 @@ export async function genAIDetectContentTypes(
 export async function genAIGenerateTableAdaptations(
   nodes: { rootCfi: string; imageBlob: Blob }[],
   thinkingBudget: number,
-  context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
+  context?: { bookId?: string; bookTitle?: string; sectionTitle?: string; correlationId?: string },
 ): Promise<{ cfi: string; adaptation: string }[]> {
   const { generateTableAdaptations } = await import(
     '@domains/google/genai/features/tableAdaptation'

@@ -14,16 +14,31 @@
  *  - D4 fix by construction: the input is `{groups, citationMarkers}` —
  *    sentences and markers ALWAYS travel together; there is no markers-less
  *    entry point.
+ *  - Model calls run ONE AT A TIME across sections (the load path and the
+ *    next-section prewarm used to fire two requests in the same millisecond
+ *    at a 5-requests-per-minute pool, and the Jul–Sep 2026 export showed one
+ *    of each such pair dying without an answer), and sections too small to
+ *    hold a reference tail never reach the model at all.
  */
 import type { CitationMarker } from '~types/cache';
 import type { CfiGroup } from '@kernel/cfi';
 import { attributeMarkersToGroups } from '@kernel/cfi';
 import { findTocItem } from '../reader/titleResolver';
+import { generateSecureId } from '../crypto';
 import { ensureGenAIReady } from './genaiReady';
 import type { GenAIPort, ContentAnalysisPort, BookInfoPort, BookContentPort } from './engine/EngineContext';
 
 /** Enumerator patterns for reference entries: "[1] Author", "1. Author", "1 Smith". */
 export const REFERENCE_ENUMERATOR_RE = /^\s*(?:\[(\d+)\]|(\d+)[.)]\s|(\d+)\s+[A-Z])/;
+
+/**
+ * Sections with this many groups or fewer are answered by the deterministic
+ * detector alone. A one-to-five group section cannot carry a body AND a
+ * reference tail worth a model call: on the Jul–Sep 2026 export 25 of 286
+ * detection requests (22 sections) were spent on such sections, and the
+ * validator already skipped its own checks for them.
+ */
+export const MAX_GROUPS_FOR_DETERMINISTIC_ONLY = 5;
 
 /** The narrow port slice the detector needs (injected; tests pass fakes). */
 export interface DetectorPorts {
@@ -37,15 +52,25 @@ export interface DetectorPorts {
 export interface DetectionObservation {
     bookId: string;
     sectionId: string;
+    /** Shared by the request/response/error log entries of this model call. */
+    correlationId: string;
     groups: CfiGroup[];
     markers: CitationMarker[];
     /** Per-marker group attribution (see attributeMarkersToGroups). */
     markerGroupIndex: number[];
     geminiCfi: string | undefined;
+    /** The model's referenceStartIndex (-1 = no reference section). */
+    referenceStartIndex: number;
+    /**
+     * referenceStartIndex / groups.length, or null when -1. The former 40%
+     * validation guard lives on here as a REVIEW signal, not a rejection.
+     */
+    positionFraction: number | null;
     detShadowCfi: string | null;
     enumeratorCandidateIndex: number;
     markerDropoffIndex: number;
-    agreedWithHeuristic: boolean;
+    /** null when no deterministic hint was given (nothing to agree with). */
+    agreedWithHeuristic: boolean | null;
     justification: string;
 }
 
@@ -65,6 +90,8 @@ const LOADING_TIMEOUT = 60 * 1000; // 1 minute (in case process died)
 
 export class ReferenceSectionDetector {
     private detectionPromises = new Map<string, Promise<string | undefined | null>>();
+    /** The one-at-a-time chain every model call joins (see the header). */
+    private modelCallChain: Promise<unknown> = Promise.resolve();
 
     constructor(
         private readonly ports: DetectorPorts,
@@ -125,13 +152,31 @@ export class ReferenceSectionDetector {
         // 2. If not found, detect
         const strategy = genAI.getSettings().referenceDetectionStrategy;
 
-        // Deterministic-only path
-        if (strategy === 'deterministic') {
+        // Deterministic-only path: the configured strategy, or a section too
+        // small to be worth a model call.
+        if (strategy === 'deterministic' || groups.length <= MAX_GROUPS_FOR_DETERMINISTIC_ONLY) {
             const detIndex = runDeterministicDetector(groups);
             const detCfi = detIndex >= 0 ? groups[detIndex]?.rootCfi : null;
             await contentAnalysis.saveReferenceStartCfi(bookId, sectionId, detCfi ?? undefined);
             return detCfi ?? undefined;
         }
+
+        // Model calls are serialized across sections: join the chain, and keep
+        // the chain alive whatever this call's outcome.
+        const run = this.modelCallChain.then(
+            () => this.detectWithModel(bookId, sectionId, groups, citationMarkers),
+        );
+        this.modelCallChain = run.catch(() => undefined);
+        return run;
+    }
+
+    private async detectWithModel(
+        bookId: string,
+        sectionId: string,
+        groups: CfiGroup[],
+        citationMarkers: CitationMarker[],
+    ): Promise<string | undefined | null> {
+        const { contentAnalysis, genAI } = this.ports;
 
         // Hoisted for the catch block: the deterministic shadow result doubles
         // as the terminal fallback when the model's answer fails validation.
@@ -166,23 +211,38 @@ export class ReferenceSectionDetector {
             });
 
             const { bookTitle, sectionTitle } = await this.lookupTitles(bookId, sectionId);
+            // One id per model call, stamped on every log entry the client
+            // writes for it AND on the telemetry record below, so an exported
+            // log pairs request, response/error and telemetry without guessing.
+            const correlationId = generateSecureId();
 
             const { classifications: results, justification, agreedWithHeuristic } = await genAI.detectContentTypes(
                 nodesToDetect,
                 { enumeratorCandidate: enumeratorCandidateIndex },
                 // bookId rides to the egress consent gate (P9 threading).
-                { bookId, bookTitle, sectionTitle }
+                { bookId, bookTitle, sectionTitle, correlationId }
             );
 
-            // Find the first result marked as reference
+            // Find the first result marked as reference. Its id IS the group
+            // index (ids were minted from the index above), which stays true
+            // even for a partial classification list.
             const referenceResult = results.find(res => res.type === 'reference');
             const referenceStartCfi = referenceResult ? idToCfiMap.get(referenceResult.id) : undefined;
+            const parsedId = referenceResult ? Number.parseInt(referenceResult.id, 10) : -1;
+            const referenceStartIndex = referenceResult
+                ? (Number.isInteger(parsedId) && parsedId >= 0 ? parsedId : results.indexOf(referenceResult))
+                : -1;
 
             // Deterministic shadow result mapped back to rootCfi for telemetry
             const detShadowCfi = enumeratorCandidateIndex >= 0 ? groups[enumeratorCandidateIndex]?.rootCfi ?? null : null;
             this.telemetry?.onDetection({
-                bookId, sectionId, groups, markers, markerGroupIndex,
-                geminiCfi: referenceStartCfi, detShadowCfi,
+                bookId, sectionId, correlationId, groups, markers, markerGroupIndex,
+                geminiCfi: referenceStartCfi,
+                referenceStartIndex,
+                positionFraction: referenceStartIndex >= 0 && groups.length > 0
+                    ? referenceStartIndex / groups.length
+                    : null,
+                detShadowCfi,
                 enumeratorCandidateIndex, markerDropoffIndex, agreedWithHeuristic, justification,
             });
 
@@ -198,7 +258,9 @@ export class ReferenceSectionDetector {
             // Persist the deterministic shadow result as the terminal answer
             // instead. Transient failures (429s, network) keep the retry path.
             // Branch by stable code, not instanceof — the error may have
-            // crossed a worker boundary (types/errors.ts contract).
+            // crossed a worker boundary (types/errors.ts contract; the
+            // Comlink transfer handler in lib/comlinkAppError.ts is what
+            // keeps `code` alive across it).
             if ((e as { code?: string } | null)?.code === 'GENAI_INVALID_RESPONSE') {
                 const detCfi = enumeratorCandidateIndex >= 0
                     ? groups[enumeratorCandidateIndex]?.rootCfi

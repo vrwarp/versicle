@@ -21,8 +21,9 @@ export function createGenAILogTelemetry(genAI: Pick<GenAIPort, 'addLog'>): Detec
     return {
         onDetection(observation: DetectionObservation): void {
             const {
-                bookId, sectionId, groups, markers, markerGroupIndex,
-                geminiCfi, detShadowCfi, enumeratorCandidateIndex, markerDropoffIndex,
+                bookId, sectionId, correlationId, groups, markers, markerGroupIndex,
+                geminiCfi, referenceStartIndex, positionFraction,
+                detShadowCfi, enumeratorCandidateIndex, markerDropoffIndex,
                 agreedWithHeuristic, justification,
             } = observation;
             const n = groups.length;
@@ -112,13 +113,17 @@ export function createGenAILogTelemetry(genAI: Pick<GenAIPort, 'addLog'>): Detec
                 timestamp: Date.now(),
                 type: 'response',
                 method: 'detectReferenceStart',
+                correlationId,
                 payload: {
                     bookId,
                     sectionId,
+                    correlationId,
                     groupCount: n,
                     markerCount: markers.length,
                     orphanMarkerCount: markerGroupIndex.filter(gi => gi === -1).length,
                     geminiCfi,
+                    referenceStartIndex,
+                    positionFraction,
                     detShadowCfi,
                     enumeratorCandidateIndex,
                     markerDropoffIndex,

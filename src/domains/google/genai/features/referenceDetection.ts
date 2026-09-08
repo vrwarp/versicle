@@ -12,6 +12,21 @@
  * synced contentAnalysis map. Out-of-range now throws
  * GENAI_INVALID_RESPONSE and the callers' status:'error' machinery handles
  * it.
+ *
+ * The former 40% positional guard is GONE. On the Jul–Sep 2026 activity-log
+ * export it fired nine times on five sections and every one was a correct
+ * answer — an "End Notes" section, a chapter whose 158 numbered endnotes start
+ * at 35% of the groups, a "Further Reading" bibliography and two index
+ * sections — while never once catching a wrong one. Rejecting those answers
+ * read the notes aloud and burned a retry on every revisit. The detector now
+ * records the position fraction of every accepted answer in the
+ * `detectReferenceStart` telemetry instead, so an early index stays visible
+ * to offline review without being enforced online.
+ *
+ * `agreedWithHeuristic` is only requested (and only required by the response
+ * schema) when a deterministic hint was actually given: without a hint there
+ * is nothing to agree with, and a forced boolean was pure noise — 195 of 197
+ * logged answers carried a meaningless value.
  */
 import { z } from 'zod';
 import { GenAIInvalidResponseError } from '../errors';
@@ -29,7 +44,20 @@ export interface ReferenceDetectionNode {
 export interface ReferenceDetectionResult {
   classifications: { id: string; type: DetectedContentType }[];
   justification: string;
-  agreedWithHeuristic: boolean;
+  /**
+   * The model's verdict on the deterministic hint (HINT A); `null` when no
+   * hint was given, so no agreement was asked for.
+   */
+  agreedWithHeuristic: boolean | null;
+}
+
+/** Caller context threaded to the client (consent gate + log correlation). */
+export interface ReferenceDetectionContext {
+  bookId?: string;
+  bookTitle?: string;
+  sectionTitle?: string;
+  /** Ties the request/response/error entries of one detection together in the log. */
+  correlationId?: string;
 }
 
 function truncateWords(text: string, maxWords: number): string {
@@ -48,53 +76,28 @@ function truncateChars(text: string, maxChars: number): string {
 const responseZod = z.object({
   justification: z.string(),
   referenceStartIndex: z.number(),
-  agreedWithHeuristic: z.boolean(),
+  agreedWithHeuristic: z.boolean().optional(),
 });
 
 /**
- * Matches text that IS a references heading — the entire string is the heading
- * (plus trailing punctuation), never merely prefixed by it, so a chapter titled
- * "Notes from Underground" can't match while "End Notes." does.
+ * The JSON-mode response schema. `agreedWithHeuristic` is present — and
+ * required — only when the prompt carried a hint to agree or disagree with.
  */
-const REFERENCES_HEADING_RE =
-  /^(?:end\s?notes?|footnotes?|notes|references|reference\s+list|bibliography|works\s+cited|citations?|sources)\s*[.:]?$/i;
-
-/** Minimum leadsWithMarker density (and absolute count) for the endnote-block exemption. */
-const MARKER_RUN_MIN_FRACTION = 0.6;
-const MARKER_RUN_MIN_COUNT = 3;
-
-/**
- * Whether an early-chapter referenceStartIndex is corroborated by structural
- * evidence that the claimed span really is a reference block — the
- * dedicated-endnotes-section case the positional guard used to reject
- * (observed: a 7-group section titled "End Notes" whose entire body is
- * numbered citations; the model's correct index 0 failed the 40% guard on
- * every revisit, burning quota without ever converging).
- */
-function isCorroboratedReferenceBlock(
-  index: number,
-  nodes: ReferenceDetectionNode[],
-  sectionTitle?: string,
-): boolean {
-  if (sectionTitle && REFERENCES_HEADING_RE.test(sectionTitle.trim())) return true;
-  // The group at the claimed start is itself a references heading.
-  const startText = nodes[index]?.sampleText.trim();
-  if (startText && REFERENCES_HEADING_RE.test(startText)) return true;
-  // The claimed span is dominated by groups that open with citation anchors.
-  const span = nodes.slice(index);
-  const leading = span.filter((n) => n.leadsWithMarker).length;
-  return leading >= MARKER_RUN_MIN_COUNT && leading / span.length >= MARKER_RUN_MIN_FRACTION;
+export function buildResponseSchema(withHint: boolean): object {
+  return {
+    type: SchemaType.OBJECT,
+    properties: {
+      justification: { type: SchemaType.STRING },
+      referenceStartIndex: { type: SchemaType.INTEGER },
+      ...(withHint ? { agreedWithHeuristic: { type: SchemaType.BOOLEAN } } : {}),
+    },
+    required: [
+      'justification',
+      'referenceStartIndex',
+      ...(withHint ? ['agreedWithHeuristic'] : []),
+    ],
+  };
 }
-
-const responseSchema = {
-  type: SchemaType.OBJECT,
-  properties: {
-    justification: { type: SchemaType.STRING },
-    referenceStartIndex: { type: SchemaType.INTEGER },
-    agreedWithHeuristic: { type: SchemaType.BOOLEAN },
-  },
-  required: ['justification', 'referenceStartIndex', 'agreedWithHeuristic'],
-};
 
 function buildPrompt(
   nodes: ReferenceDetectionNode[],
@@ -144,9 +147,8 @@ ${JSON.stringify(renderedNodes)}`;
 
 export function validateReferenceDetection(
   raw: unknown,
-  nodes: ReferenceDetectionNode[],
-  context?: { sectionTitle?: string },
-): z.infer<typeof responseZod> {
+  nodes: ReadonlyArray<ReferenceDetectionNode>,
+): { justification: string; referenceStartIndex: number; agreedWithHeuristic: boolean | null } {
   const nodeCount = nodes.length;
   const parsed = responseZod.safeParse(raw);
   if (!parsed.success) {
@@ -162,44 +164,29 @@ export function validateReferenceDetection(
       { referenceStartIndex: index, nodeCount },
     );
   }
-  // Positional guard: a reference section beginning before 40% of the chapter
-  // is almost certainly a false positive (e.g. epigraph attributions). The
-  // deterministic detector uses 60%; we are more lenient for the model but
-  // still catch extreme early-chapter misclassifications. Exception: a
-  // dedicated notes/bibliography section legitimately starts near index 0 —
-  // accept an early index when the section title, the start group's own text,
-  // or a dense leadsWithMarker run corroborates it.
-  const MIN_POSITION_FRACTION = 0.4;
-  if (
-    index >= 0 &&
-    nodeCount > 5 &&
-    index < nodeCount * MIN_POSITION_FRACTION &&
-    !isCorroboratedReferenceBlock(index, nodes, context?.sectionTitle)
-  ) {
-    throw new GenAIInvalidResponseError(
-      `referenceStartIndex ${index} is before 40% of chapter (${nodeCount} groups) — likely false positive`,
-      { referenceStartIndex: index, nodeCount, positionFraction: index / nodeCount },
-    );
-  }
-  return parsed.data;
+  return {
+    justification: parsed.data.justification,
+    referenceStartIndex: index,
+    agreedWithHeuristic: parsed.data.agreedWithHeuristic ?? null,
+  };
 }
 
 export async function detectReferenceSection(
   client: GenAIClient,
   nodes: ReferenceDetectionNode[],
   hints: { enumeratorCandidate: number },
-  context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
+  context?: ReferenceDetectionContext,
 ): Promise<ReferenceDetectionResult> {
   if (nodes.length === 0) {
-    return { classifications: [], justification: '', agreedWithHeuristic: false };
+    return { classifications: [], justification: '', agreedWithHeuristic: null };
   }
 
+  const withHint = hints.enumeratorCandidate >= 0;
   const result = await client.generateStructured({
     method: 'detectContentTypes',
     prompt: buildPrompt(nodes, hints),
-    responseSchema,
-    validate: (raw) =>
-      validateReferenceDetection(raw, nodes, { sectionTitle: context?.sectionTitle }),
+    responseSchema: buildResponseSchema(withHint),
+    validate: (raw) => validateReferenceDetection(raw, nodes),
     context,
   });
 
@@ -214,6 +201,6 @@ export async function detectReferenceSection(
   return {
     classifications,
     justification: result.justification,
-    agreedWithHeuristic: result.agreedWithHeuristic,
+    agreedWithHeuristic: withHint ? result.agreedWithHeuristic : null,
   };
 }

@@ -9,6 +9,10 @@
  * Mirrors src/workers/search.worker.ts.
  */
 import * as Comlink from 'comlink';
+import { installAppErrorTransferHandler } from '@lib/comlinkAppError';
 import { WorkerTtsEngine } from '@lib/tts/engine/WorkerTtsEngine';
 
+// Keep AppError codes intact across the boundary (the host's GenAI calls
+// throw typed errors the engine branches on; see lib/comlinkAppError.ts).
+installAppErrorTransferHandler();
 Comlink.expose(new WorkerTtsEngine());

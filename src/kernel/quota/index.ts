@@ -20,4 +20,4 @@ export {
 // spend reconciler (app/quota/embedSpendReconciler.ts) uses the EXACT SAME
 // helper the governor uses — their per-day stamps must match or a sibling
 // device's spend would be silently dropped.
-export { ptDayString } from './ptDay';
+export { ptDayString, msUntilNextPtDay } from './ptDay';

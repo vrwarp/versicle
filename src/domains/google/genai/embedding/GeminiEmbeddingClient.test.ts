@@ -322,3 +322,110 @@ describe('embedding holder NOT-CONFIGURED default', () => {
     });
   });
 });
+
+/**
+ * A 429 must leave the governor a cooldown taken from the server's own signal
+ * and a log entry that says which quota was spent. Before this the client
+ * recorded nothing, so the indexer's next request went out at once.
+ */
+describe('GeminiEmbeddingClient quota cooldowns + activity summaries', () => {
+  function quotaResponse(quotaId: string, retryDelay = '34s', headers: Record<string, string> = {}): Response {
+    return new Response(
+      JSON.stringify({
+        error: {
+          code: 429,
+          status: 'RESOURCE_EXHAUSTED',
+          message: 'You exceeded your current quota. Please retry in 34.79s.',
+          details: [
+            { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId }] },
+            { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay },
+          ],
+        },
+      }),
+      { status: 429, headers },
+    );
+  }
+
+  function clientWith(responses: Response[], now: () => number = () => Date.UTC(2026, 8, 3, 14, 7, 15)) {
+    const queue = [...responses];
+    const recordCooldown = vi.fn();
+    const logs: GenAILogEntry[] = [];
+    const egress = vi.fn(async () => {
+      const next = queue.shift();
+      if (!next) throw new Error('egress queue exhausted');
+      return next;
+    }) as unknown as EgressFn;
+    const client = new GeminiEmbeddingClient({
+      getConfig: () => ({ apiKey: 'k', model: 'gemini-embedding-2', dims: 768 }),
+      egress,
+      onLog: (entry) => logs.push(entry),
+      governor: { recordCooldown },
+      now,
+    });
+    return { client, recordCooldown, logs };
+  }
+
+  it('a per-minute 429 records the RetryInfo delay as the cooldown on the model pool', async () => {
+    const { client, recordCooldown, logs } = clientWith([
+      quotaResponse('EmbedContentRequestsPerMinutePerProjectPerModel-FreeTier', '34s'),
+    ]);
+    await expect(client.embed(['a'], { profile: 'document', lane: 'fgd' })).rejects.toBeInstanceOf(GenAIHttpError);
+    expect(recordCooldown).toHaveBeenCalledWith(34_000, 'gemini-embedding-2');
+    const error = logs.find((l) => l.type === 'error');
+    expect(error?.method).toBe('embedOne');
+    expect(error?.payload).toMatchObject({
+      status: 429,
+      model: 'gemini-embedding-2',
+      dims: 768,
+      lane: 'fgd',
+      profile: 'document',
+      retryAfterMs: 34_000,
+      dailyQuotaExhausted: false,
+      quotaIds: ['EmbedContentRequestsPerMinutePerProjectPerModel-FreeTier'],
+    });
+  });
+
+  it('a DAILY 429 cools the pool down until the next Pacific day and the thrown error carries the wait', async () => {
+    const { client, recordCooldown } = clientWith([
+      quotaResponse('EmbedContentRequestsPerDayPerProjectPerModel-FreeTier'),
+    ]);
+    const error = await client.embed(['a'], { profile: 'document' }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(GenAIHttpError);
+    // 07:07 PT → 17 probe-hours to the day flip (coarse upper bound).
+    expect(recordCooldown).toHaveBeenCalledWith(17 * 3_600_000, 'gemini-embedding-2');
+    expect((error as GenAIHttpError).context).toMatchObject({
+      dailyQuotaExhausted: true,
+      retryAfterMs: 17 * 3_600_000,
+    });
+  });
+
+  it('a Retry-After header wins over the body hint', async () => {
+    const { client, recordCooldown } = clientWith([
+      quotaResponse('EmbedContentRequestsPerMinutePerProjectPerModel-FreeTier', '34s', { 'Retry-After': '5' }),
+    ]);
+    await expect(client.embed(['a'], { profile: 'query' })).rejects.toBeInstanceOf(GenAIHttpError);
+    expect(recordCooldown).toHaveBeenCalledWith(5_000, 'gemini-embedding-2');
+  });
+
+  it('successful calls are summarized at debug at most once a minute', async () => {
+    let t = 1_000_000;
+    const ok = () => embedResponse([0.1, 0.2]);
+    const { client, logs } = clientWith([ok(), ok(), ok(), ok(), ok(), ok()], () => t);
+    const summaries = () => logs.filter((l) => l.type === 'debug' && l.method === 'embed');
+
+    await client.embed(['a'], { profile: 'document', lane: 'fgd' });
+    expect(summaries()).toHaveLength(1); // the first call of a quiet period emits at once
+    expect(summaries()[0].payload).toMatchObject({ calls: 1, texts: 1, requests: 1, failures: 0, lane: 'fgd' });
+
+    t += 10_000;
+    await client.embed(['b', 'c'], { profile: 'document', lane: 'fgd' });
+    t += 10_000;
+    await client.embed(['d'], { profile: 'document', lane: 'fgd' });
+    expect(summaries()).toHaveLength(1); // still inside the minute
+
+    t += 50_000;
+    await client.embed(['e', 'f'], { profile: 'document', lane: 'fgd' });
+    expect(summaries()).toHaveLength(2);
+    expect(summaries()[1].payload).toMatchObject({ calls: 3, texts: 5, requests: 5, failures: 0 });
+  });
+});

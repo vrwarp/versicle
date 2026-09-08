@@ -4,11 +4,14 @@
  * in-process factory instead — see SearchSession.test.ts.
  */
 import * as Comlink from 'comlink';
+import { installAppErrorTransferHandler } from '@lib/comlinkAppError';
 import type { SearchEngine } from '@lib/search-engine';
 import type { SearchEngineHandle } from './SearchSession';
 
 export function createWorkerSearchEngineFactory(): () => SearchEngineHandle {
   return () => {
+    // Both sides of the channel carry AppError codes (lib/comlinkAppError.ts).
+    installAppErrorTransferHandler();
     const worker = new Worker(new URL('../../workers/search.worker.ts', import.meta.url), {
       type: 'module',
     });

@@ -15,17 +15,26 @@
  *    throw GENAI_INVALID_RESPONSE.
  *  - Logs are redacted (inlineData → {byteCount, hash}) BEFORE they reach
  *    the injected sink (privacy D3).
+ *  - EVERY terminal outcome is logged: a request entry is always followed by
+ *    a response entry or an error entry carrying the failure's code, HTTP
+ *    status and quota context (the Jul–Sep 2026 export showed 26% of
+ *    detection requests with no logged outcome — non-429 HTTP errors,
+ *    rotation-off 429s and pre-network refusals all used to throw silently).
+ *    Response entries also carry the serving model, latency and the API's
+ *    token usage so an export can be evaluated offline.
  */
 import { egress, retryAfterMs, type EgressFn } from '@kernel/net';
-import type { QuotaGovernor } from '@kernel/quota';
+import { msUntilNextPtDay, type QuotaGovernor } from '@kernel/quota';
 import {
   GenAIHttpError,
   GenAIInvalidResponseError,
   GenAINotConfiguredError,
+  describeGenAIFailure,
   isModelUnavailable,
   isRetryableForRotation,
 } from './errors';
 import { redactPayload, type GenAILogEntry, type GenAILogSink } from './logging';
+import { parseQuotaSignals } from './quotaSignals';
 import type {
   GenAIClient,
   GenAIConfigProvider,
@@ -87,9 +96,17 @@ function generateLogId(): string {
   }
 }
 
+/** The API's per-response token accounting (`usageMetadata`), as logged. */
+export interface GeminiUsage {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  thoughtsTokenCount?: number;
+  totalTokenCount?: number;
+}
+
 interface GeminiResponseBody {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
-  usageMetadata?: { totalTokenCount?: number };
+  usageMetadata?: GeminiUsage;
   error?: { code?: number; message?: string; status?: string };
 }
 
@@ -117,7 +134,7 @@ function estTokens(prompt: GenAIPrompt): number {
   return Math.ceil(text.length / 4);
 }
 
-/** Default cooldown when a 429 carries no usable `Retry-After` header. */
+/** Default cooldown when a 429 carries no usable `Retry-After` header or RetryInfo. */
 const DEFAULT_COOLDOWN_MS = 30_000;
 
 export interface GeminiClientDeps {
@@ -132,13 +149,38 @@ export interface GeminiClientDeps {
    * it without one).
    */
   governor?: GenAIQuotaGovernor;
+  /** Wall clock (injected for tests). */
+  now?: () => number;
+}
+
+/** Copy the usage fields the log records (drops anything the API adds later). */
+function pickUsage(usage: GeminiUsage | undefined): GeminiUsage | undefined {
+  if (!usage) return undefined;
+  const out: GeminiUsage = {};
+  if (typeof usage.promptTokenCount === 'number') out.promptTokenCount = usage.promptTokenCount;
+  if (typeof usage.candidatesTokenCount === 'number') out.candidatesTokenCount = usage.candidatesTokenCount;
+  if (typeof usage.thoughtsTokenCount === 'number') out.thoughtsTokenCount = usage.thoughtsTokenCount;
+  if (typeof usage.totalTokenCount === 'number') out.totalTokenCount = usage.totalTokenCount;
+  return out;
 }
 
 export class GeminiClient implements GenAIClient {
+  /**
+   * Errors that already produced their own 'error' log entry (JSON parse and
+   * validation failures log the raw response text at the failure site), so
+   * the terminal-failure logger in {@link executeWithRetry} does not record
+   * the same failure twice.
+   */
+  private readonly alreadyLogged = new WeakSet<object>();
+
   constructor(private readonly deps: GeminiClientDeps) {}
 
   private get egress(): EgressFn {
     return this.deps.egress ?? egress;
+  }
+
+  private now(): number {
+    return this.deps.now ? this.deps.now() : Date.now();
   }
 
   isConfigured(): boolean {
@@ -163,6 +205,27 @@ export class GeminiClient implements GenAIClient {
     });
   }
 
+  private markLogged(error: unknown): void {
+    if (typeof error === 'object' && error !== null) this.alreadyLogged.add(error);
+  }
+
+  /**
+   * Record the outcome of a request that will NOT be retried. A caller-driven
+   * abort is expected chatter (the user navigated away) and goes to 'debug';
+   * everything else is an outcome a human should be able to find in the log.
+   */
+  private logTerminalFailure(
+    method: string,
+    modelId: string,
+    error: unknown,
+    context: GenAIRequestContext | undefined,
+    message: string,
+  ): void {
+    if (typeof error === 'object' && error !== null && this.alreadyLogged.has(error)) return;
+    const failure = describeGenAIFailure(error);
+    this.log(failure.aborted ? 'debug' : 'error', method, { message, model: modelId, ...failure }, context);
+  }
+
   /** Model list per call: rotation shuffles the constant; else the config model. */
   private modelsToTry(): string[] {
     const config = this.deps.getConfig();
@@ -183,8 +246,9 @@ export class GeminiClient implements GenAIClient {
     }
 
     const rotationEnabled = this.deps.getConfig().rotationEnabled;
+    const models = this.modelsToTry();
     let lastError: unknown = null;
-    for (const modelId of this.modelsToTry()) {
+    for (const modelId of models) {
       try {
         return await operation(modelId);
       } catch (error) {
@@ -208,15 +272,24 @@ export class GeminiClient implements GenAIClient {
               message: unusable
                 ? `Model ${modelId} is unavailable (retired or not enabled for this key). Retrying with next model...`
                 : `Model ${modelId} out of quota (429 / cooldown backpressure). Retrying with next model...`,
-              error: (error as Error).message,
+              model: modelId,
+              ...describeGenAIFailure(error),
             },
             context,
           );
           continue;
         }
+        this.logTerminalFailure(method, modelId, error, context, 'Request failed');
         throw error;
       }
     }
+    this.logTerminalFailure(
+      method,
+      models[models.length - 1],
+      lastError,
+      context,
+      `All ${models.length} rotation models failed`,
+    );
     throw lastError;
   }
 
@@ -226,7 +299,7 @@ export class GeminiClient implements GenAIClient {
     generationConfig: Record<string, unknown> | undefined,
     context: GenAIRequestContext | undefined,
     signal: AbortSignal | undefined,
-  ): Promise<string> {
+  ): Promise<{ text: string; usage?: GeminiUsage }> {
     const config = this.deps.getConfig();
     const contents =
       typeof prompt === 'string'
@@ -277,23 +350,41 @@ export class GeminiClient implements GenAIClient {
         .catch(() => ({}))) as GeminiResponseBody;
       // Feed a 429 to the governor as a cooldown signal, then RE-THROW so
       // executeWithRetry's rotation path still sees it (the governor never
-      // swallows the error the rotation loop branches on).
+      // swallows the error the rotation loop branches on). The cooldown is
+      // the server's own hint (Retry-After header, else the RetryInfo detail
+      // or the "retry in Ns" message text); a DAILY quota exhaustion cools
+      // the pool down until the next Pacific day — re-sending before then can
+      // only collect another 429.
+      let quotaContext: Record<string, unknown> = {};
       if (response.status === 429) {
-        this.deps.governor?.recordCooldown(retryAfterMs(response, DEFAULT_COOLDOWN_MS), modelId);
+        const signals = parseQuotaSignals(body);
+        const headerMs = retryAfterMs(response, -1);
+        const cooldownMs = signals.dailyQuotaExhausted
+          ? msUntilNextPtDay(this.now())
+          : headerMs >= 0
+            ? headerMs
+            : (signals.retryAfterMs ?? DEFAULT_COOLDOWN_MS);
+        this.deps.governor?.recordCooldown(cooldownMs, modelId);
+        quotaContext = {
+          retryAfterMs: cooldownMs,
+          dailyQuotaExhausted: signals.dailyQuotaExhausted,
+          quotaIds: signals.quotaIds,
+        };
       }
       throw new GenAIHttpError(
         body.error?.message || `Gemini request failed: ${response.status}`,
         response.status,
-        { apiStatus: body.error?.status, model: modelId },
+        { apiStatus: body.error?.status, model: modelId, ...quotaContext },
       );
     }
 
     const body = (await response.json()) as GeminiResponseBody;
     // Reconcile with the real cost when the API reports it; else the estimate.
     commit(body.usageMetadata?.totalTokenCount ?? estimate);
-    return (body.candidates?.[0]?.content?.parts ?? [])
+    const text = (body.candidates?.[0]?.content?.parts ?? [])
       .map((part) => part.text ?? '')
       .join('');
+    return { text, usage: pickUsage(body.usageMetadata) };
   }
 
   async generateStructured<T>(request: GenAIRequest<T>): Promise<T> {
@@ -312,7 +403,8 @@ export class GeminiClient implements GenAIClient {
           context,
         );
 
-        const text = await this.callGemini(
+        const startedAt = this.now();
+        const { text, usage } = await this.callGemini(
           modelId,
           request.prompt,
           {
@@ -323,6 +415,7 @@ export class GeminiClient implements GenAIClient {
           context,
           request.signal,
         );
+        const latencyMs = this.now() - startedAt;
 
         let parsed: unknown;
         try {
@@ -331,32 +424,53 @@ export class GeminiClient implements GenAIClient {
           this.log(
             'error',
             request.method,
-            { message: 'Failed to parse JSON', text, error: (error as Error).message },
+            {
+              message: 'Failed to parse JSON',
+              text,
+              error: (error as Error).message,
+              model: modelId,
+              latencyMs,
+              usage,
+            },
             context,
           );
-          throw new GenAIInvalidResponseError(
+          const invalid = new GenAIInvalidResponseError(
             'Failed to parse GenAI response as JSON',
             { method: request.method },
             error,
           );
+          this.markLogged(invalid);
+          throw invalid;
         }
 
         let validated: T;
         try {
           validated = request.validate(parsed);
         } catch (error) {
+          // The raw text rides along so a rejected answer can be audited
+          // offline — without it the export only knows the rejection reason.
           this.log(
             'error',
             request.method,
             {
               message: 'Response failed validation',
               error: (error as Error).message,
+              text,
+              model: modelId,
+              latencyMs,
+              usage,
             },
             context,
           );
+          this.markLogged(error);
           throw error;
         }
-        this.log('response', request.method, { text, parsed }, context);
+        this.log(
+          'response',
+          request.method,
+          { text, parsed, model: modelId, latencyMs, usage },
+          context,
+        );
         return validated;
       },
       request.method,
@@ -368,8 +482,14 @@ export class GeminiClient implements GenAIClient {
     return this.executeWithRetry(
       async (modelId) => {
         this.log('request', 'generateContent', { prompt, model: modelId }, context);
-        const text = await this.callGemini(modelId, prompt, undefined, context, undefined);
-        this.log('response', 'generateContent', { text }, context);
+        const startedAt = this.now();
+        const { text, usage } = await this.callGemini(modelId, prompt, undefined, context, undefined);
+        this.log(
+          'response',
+          'generateContent',
+          { text, model: modelId, latencyMs: this.now() - startedAt, usage },
+          context,
+        );
         return text;
       },
       'generateContent',

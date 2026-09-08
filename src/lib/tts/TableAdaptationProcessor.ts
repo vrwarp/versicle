@@ -102,7 +102,11 @@ export class TableAdaptationProcessor {
                 // bookId rides to the egress consent gate (P9 threading).
                 const results = await this.ctx.genAI.generateTableAdaptations(nodes, 512, { bookId, bookTitle, sectionTitle });
 
-                // 5. Update DB
+                // 5. Update DB. A non-table the model skipped arrives with an
+                // EMPTY adaptation and is persisted as such: the empty text
+                // keeps it out of the work set on every later visit (never
+                // re-sent) and out of the sentence mapping below (never
+                // narrated) — mapSentencesToAdaptations ignores empty text.
                 await this.ctx.contentAnalysis.saveTableAdaptations(bookId, sectionId, results.map(r => ({
                     rootCfi: r.cfi,
                     text: r.adaptation
@@ -231,7 +235,8 @@ export class TableAdaptationProcessor {
             }
         }
 
-        // Construct result
+        // Construct result. An empty text is a persisted "not a table" verdict:
+        // the sentences under that root play as they are.
         for (const [root, indices] of tableIndices.entries()) {
             const text = adaptationsMap.get(root);
             if (text) {

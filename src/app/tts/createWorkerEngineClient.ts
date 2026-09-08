@@ -16,6 +16,7 @@
  * unsubscribe). See PORTING-TO-WORKER.md.
  */
 import * as Comlink from 'comlink';
+import { installAppErrorTransferHandler } from '@lib/comlinkAppError';
 import { Capacitor } from '@capacitor/core';
 import { TTSProviderManager } from '@lib/tts/TTSProviderManager';
 import { storeProviderBuildContext } from './providerBuildContext';
@@ -106,6 +107,10 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
         logger.error('TTS worker error', workerError);
     });
 
+    // The host side of the AppError transfer handler: errors the host's GenAI
+    // calls throw reach the worker's detector WITH their `code` (the terminal
+    // fallback for a validation-rejected answer branches on it).
+    installAppErrorTransferHandler();
     const engine = Comlink.wrap<WorkerTtsEngine>(worker);
 
     const withWorkerGuard = async <T>(label: string, op: Promise<T>): Promise<T> => {
