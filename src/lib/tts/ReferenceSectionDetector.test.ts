@@ -10,6 +10,7 @@ import {
     runDeterministicDetector,
     computeMarkerDropoffIndex,
     collectReferenceTailIndices,
+    MAX_GROUPS_FOR_DETERMINISTIC_ONLY,
 } from './ReferenceSectionDetector';
 import type { DetectionObservation } from './ReferenceSectionDetector';
 import { FakeEngineContext } from './engine/FakeEngineContext';
@@ -195,6 +196,102 @@ describe('ReferenceSectionDetector', () => {
 
             expect(result).toBeNull();
             expect(ctx.detectContentTypesCalls).toHaveLength(0);
+        });
+    });
+
+    describe('sections too small for a model call', () => {
+        it('answers a <= 5-group section from the deterministic detector alone (no model call)', async () => {
+            const { ctx, detector } = makeDetector({});
+            ctx.genAIConfigured = true;
+            const tiny = [
+                group('epubcfi(/6/4!/4/2,,)', 'Body paragraph one.', [0]),
+                group('epubcfi(/6/4!/4/4,,)', 'Body paragraph two.', [1]),
+                group('epubcfi(/6/4!/4/6,,)', 'Body paragraph three.', [2]),
+                group('epubcfi(/6/4!/4/8,,)', '[1] Smith, A Source.', [3]),
+                group('epubcfi(/6/4!/4/10,,)', '[2] Jones, Another Source.', [4]),
+            ];
+            expect(tiny.length).toBeLessThanOrEqual(MAX_GROUPS_FOR_DETERMINISTIC_ONLY);
+
+            const result = await detector.detect('b', 's', { groups: tiny, citationMarkers: [] });
+
+            // The enumerator run at group 3 (>= 60% of 5 groups) is the answer, persisted as success.
+            expect(result).toBe('epubcfi(/6/4!/4/8,,)');
+            expect(ctx.detectContentTypesCalls).toHaveLength(0);
+            expect(ctx.savedReferenceCfis).toEqual([{ bookId: 'b', sectionId: 's', cfi: 'epubcfi(/6/4!/4/8,,)' }]);
+        });
+
+        it('a 6-group section still goes to the model', async () => {
+            const { ctx, detector } = makeDetector({});
+            ctx.genAIConfigured = true;
+            const six = REFERENCE_TAIL_GROUPS.slice(0, 6);
+            await detector.detect('b', 's', { groups: six, citationMarkers: [] });
+            expect(ctx.detectContentTypesCalls).toHaveLength(1);
+        });
+    });
+
+    describe('model calls are serialized across sections', () => {
+        it('the second section\'s model call does not start until the first has finished', async () => {
+            const { ctx, detector } = makeDetector({});
+            ctx.genAIConfigured = true;
+            const started: string[] = [];
+            let releaseFirst!: () => void;
+            const firstDone = new Promise<void>((resolve) => { releaseFirst = resolve; });
+            vi.spyOn(ctx.genAI, 'detectContentTypes').mockImplementation(async (_nodes, _hints, context) => {
+                started.push(context?.bookId ?? '?');
+                if (started.length === 1) await firstDone;
+                return { classifications: [], justification: '', agreedWithHeuristic: null };
+            });
+
+            const input = { groups: REFERENCE_TAIL_GROUPS, citationMarkers: [] };
+            const p1 = detector.detect('b1', 's1', input);
+            const p2 = detector.detect('b2', 's2', input);
+            await new Promise((r) => setTimeout(r, 20));
+            expect(started).toEqual(['b1']);
+
+            releaseFirst();
+            await Promise.all([p1, p2]);
+            expect(started).toEqual(['b1', 'b2']);
+        });
+
+        it('a failing first call does not wedge the chain', async () => {
+            const { ctx, detector } = makeDetector({});
+            ctx.genAIConfigured = true;
+            vi.spyOn(ctx.genAI, 'detectContentTypes')
+                .mockRejectedValueOnce(new Error('boom'))
+                .mockResolvedValueOnce({ classifications: [], justification: '', agreedWithHeuristic: null });
+            const input = { groups: REFERENCE_TAIL_GROUPS, citationMarkers: [] };
+            expect(await detector.detect('b', 's1', input)).toBeNull();
+            expect(await detector.detect('b', 's2', input)).toBeUndefined();
+        });
+    });
+
+    describe('log correlation + position telemetry', () => {
+        it('stamps one correlationId on the model call context and the telemetry record, with the model\'s index and position', async () => {
+            const observations: DetectionObservation[] = [];
+            const { ctx, detector } = makeDetector({}, { onDetection: (o) => observations.push(o) });
+            ctx.genAIConfigured = true;
+            ctx.contentTypeDetections = {
+                classifications: [{ id: '8', type: 'reference' }, { id: '9', type: 'reference' }],
+                justification: 'tail', agreedWithHeuristic: null,
+            };
+
+            await detector.detect('b', 's', { groups: REFERENCE_TAIL_GROUPS, citationMarkers: [] });
+
+            const context = ctx.detectContentTypesCalls[0].context;
+            expect(context?.correlationId).toEqual(expect.any(String));
+            expect(observations[0].correlationId).toBe(context?.correlationId);
+            expect(observations[0].referenceStartIndex).toBe(8);
+            expect(observations[0].positionFraction).toBeCloseTo(0.8);
+            expect(observations[0].agreedWithHeuristic).toBeNull();
+        });
+
+        it('reports index -1 and a null position when the model found nothing', async () => {
+            const observations: DetectionObservation[] = [];
+            const { ctx, detector } = makeDetector({}, { onDetection: (o) => observations.push(o) });
+            ctx.genAIConfigured = true;
+            await detector.detect('b', 's', { groups: REFERENCE_TAIL_GROUPS, citationMarkers: [] });
+            expect(observations[0].referenceStartIndex).toBe(-1);
+            expect(observations[0].positionFraction).toBeNull();
         });
     });
 

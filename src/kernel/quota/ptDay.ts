@@ -36,3 +36,20 @@ export function ptDayString(epochMs: number): string {
   // changes cannot reorder the key.
   return `${year}-${pad2(Number(month))}-${pad2(Number(day))}`;
 }
+
+/**
+ * Milliseconds from `epochMs` to the next midnight-Pacific day boundary — the
+ * moment a spent daily budget becomes usable again. Probes forward one hour at
+ * a time until the PT day key flips (DST-safe through `ptDayString`), so the
+ * value is a coarse upper bound: at most one hour past the true boundary.
+ */
+export function msUntilNextPtDay(epochMs: number): number {
+  const today = ptDayString(epochMs);
+  for (let h = 1; h <= 26; h++) {
+    const probe = epochMs + h * 3_600_000;
+    if (ptDayString(probe) !== today) {
+      return h * 3_600_000;
+    }
+  }
+  return 24 * 3_600_000;
+}

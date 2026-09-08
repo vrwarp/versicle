@@ -74,6 +74,38 @@ describe('TableAdaptationProcessor', () => {
             expect(foundAdaptations).toBeDefined();
             expect(foundAdaptations[0].text).toBe('Adapted text');
         });
+
+        it('a persisted "not a table" verdict (empty text) is neither re-sent to the model nor narrated', async () => {
+            const sentences: SentenceNode[] = [{ text: 'Caption under the illustration', cfi: 'epubcfi(/6/14!/4/2/1:0)' }];
+            vi.mocked(useGenAIStore.getState).mockReturnValue({
+                isEnabled: true,
+                isTableAdaptationEnabled: true,
+                apiKey: 'test-key',
+                model: 'gemini-1.5-flash',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            } as any);
+            // The model already said "not a table" for this image on an earlier visit.
+            vi.mocked(contentAnalysisRepository.getContentAnalysis).mockResolvedValue({
+                tableAdaptations: [{ rootCfi: 'epubcfi(/6/14!/4/2)', text: '' }],
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            } as any);
+            vi.mocked(bookContent.getTableImages).mockResolvedValue([
+                { id: 'img', bookId: 'book1', sectionId: 'section1', cfi: 'epubcfi(/6/14!/4/2)', imageBlob: new Blob(['x']) },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ] as any);
+            const ctx = createZustandEngineContext();
+            const generate = vi.spyOn(ctx.genAI, 'generateTableAdaptations');
+            const onAdaptationsFound = vi.fn();
+
+            await new TableAdaptationProcessor(ctx).processTableAdaptations('book1', 'section1', sentences, onAdaptationsFound);
+
+            expect(generate).not.toHaveBeenCalled();
+            expect(contentAnalysisRepository.saveTableAdaptations).not.toHaveBeenCalled();
+            // An empty verdict never replaces the sentences under the image.
+            for (const call of onAdaptationsFound.mock.calls) {
+                expect(call[0]).toEqual([]);
+            }
+        });
     });
 });
 

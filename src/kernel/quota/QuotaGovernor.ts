@@ -47,7 +47,7 @@
  * the governor — it only ever asks the port for "today's usage".
  */
 import { NetRateLimitedError } from '~types/errors';
-import { ptDayString } from './ptDay';
+import { ptDayString, msUntilNextPtDay } from './ptDay';
 
 /**
  * Egress priority lane. Three tiers, highest → lowest priority:
@@ -434,19 +434,9 @@ export class QuotaGovernor {
     }
   }
 
-  /** Milliseconds from `at` to the next midnight-PT day boundary. */
+  /** Milliseconds from `at` to the next midnight-PT day boundary (shared helper). */
   private msUntilNextPtDay(at: number): number {
-    // Walk forward to the first ms whose PT day differs, then snap to the
-    // start of that minute is unnecessary precision — a coarse bound suffices
-    // for the retryAfter hint. Probe by adding hours until the day flips.
-    const today = ptDayString(at);
-    for (let h = 1; h <= 26; h++) {
-      const probe = at + h * 3_600_000;
-      if (ptDayString(probe) !== today) {
-        return h * 3_600_000;
-      }
-    }
-    return 24 * 3_600_000;
+    return msUntilNextPtDay(at);
   }
 
   /** Current per-lane usage (the shared {@link LaneUsage} shape) for a pool. */

@@ -26,6 +26,7 @@ import { ReadingSessionRecorder } from '@domains/reader/session/ReadingSessionRe
 import type { ReaderCommands } from '@domains/reader/ui/ReaderCommands';
 import { SearchSession, createWorkerSearchEngineFactory, EmbeddingIndexer } from '@domains/search';
 import { getEmbeddingClient, type EmbeddingClient } from '@domains/google';
+import { retryAfterMsOf } from '~types/errors';
 import { getArtifactConsult } from '@app/google/artifactConsult';
 import { registerChineseReading, getBookBaseLanguage } from '@domains/chinese';
 import type { PinyinPosition, PinyinPositionsSource } from '@domains/chinese/types';
@@ -75,7 +76,11 @@ const embeddingQuantizer = new SearchEngine();
 
 // How long to wait before retrying a failed foreground embedding pass: 90 s —
 // long enough for a minute-window rate limit to clear, short enough that the
-// book finishes indexing during a normal reading session.
+// book finishes indexing during a normal reading session. A rate-limit error
+// that names a LONGER wait (a spent daily budget carries the time to the next
+// midnight-Pacific reset) overrides it: re-sending before then can only
+// collect another 429, which is exactly what the Jul–Sep 2026 log showed
+// (five identical daily-cap errors 91 s apart).
 const EMBEDDING_RETRY_DELAY_MS = 90_000;
 
 /**
@@ -431,6 +436,14 @@ export function useReaderController(
         const s = useGenAIStore.getState();
         return { model: s.embeddingModel, dims: s.embeddingDims };
       },
+      // One `embedIndexRun` summary per pass that did work or stopped early,
+      // into the same activity log the clients write.
+      log: (entry) =>
+        useGenAIStore.getState().addLog({
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+          ...entry,
+        }),
       // Before spending Gemini quota to embed this book on reader-open, check
       // whether another of the user's devices already uploaded its embeddings to
       // the user's own cloud, and if so download them instead. interactive: true
@@ -504,8 +517,9 @@ export function useReaderController(
     const attempt = () => {
       const currentCfi = useReadingStateStore.getState().getProgress(bookId)?.currentCfi;
       void searchSession.enqueueEmbedding(bookId, currentCfi).catch((e) => {
-        logger.error('Embedding indexer failed; retrying in 90s', e);
-        if (!cancelled) retryTimer = setTimeout(attempt, EMBEDDING_RETRY_DELAY_MS);
+        const delayMs = Math.max(EMBEDDING_RETRY_DELAY_MS, retryAfterMsOf(e) ?? 0);
+        logger.error(`Embedding indexer failed; retrying in ${Math.round(delayMs / 1000)}s`, e);
+        if (!cancelled) retryTimer = setTimeout(attempt, delayMs);
       });
     };
     attempt();

@@ -8,6 +8,14 @@
  * them via Map lookup); shape breaches throw GENAI_INVALID_RESPONSE.
  * NOTE the prompt embeds full-resolution table screenshots as inlineData —
  * the client REDACTS those from the activity log (logging.ts).
+ *
+ * `isTable`: the ingest-side table detector hands this feature images that
+ * are not tables — on the Jul–Sep 2026 export three of the four narrated
+ * "tables" were portrait illustrations with quotes, a full index page and a
+ * strip of social-media icons — and the old prompt forced a narration of
+ * whatever it got. The model now says whether the image IS a data table; a
+ * non-table comes back as a skipped entry (empty adaptation) that the
+ * processor persists so the image is never sent again and never narrated.
  */
 import { z } from 'zod';
 import { GenAIInvalidResponseError } from '../errors';
@@ -20,10 +28,21 @@ export interface TableAdaptationNode {
 
 export interface TableAdaptationResult {
   cfi: string;
+  /** Empty for a skipped (non-table) image. */
   adaptation: string;
+  /** False when the model judged the image not to be a data table. */
+  isTable: boolean;
 }
 
-const responseZod = z.array(z.object({ cfi: z.string(), adaptation: z.string() }));
+const responseZod = z.array(
+  z.object({
+    cfi: z.string(),
+    // Optional for tolerance: a model that omits the flag is treated as the
+    // legacy "everything is a table" behavior.
+    isTable: z.boolean().optional(),
+    adaptation: z.string(),
+  }),
+);
 
 const responseSchema = {
   type: SchemaType.ARRAY,
@@ -31,9 +50,10 @@ const responseSchema = {
     type: SchemaType.OBJECT,
     properties: {
       cfi: { type: SchemaType.STRING },
+      isTable: { type: SchemaType.BOOLEAN },
       adaptation: { type: SchemaType.STRING },
     },
-    required: ['cfi', 'adaptation'],
+    required: ['cfi', 'isTable', 'adaptation'],
   },
 };
 
@@ -45,12 +65,14 @@ CORE RULES:
   2. HEADER ANCHORING: Always anchor cell data to its column and row headers so the listener doesn't lose context.
   3. NO PLACEHOLDERS: Do not use phrases like "This is a placeholder" or describe the technical identifiers (CFIs).
   4. ACCURACY: If a cell is unreadable, skip it rather than hallucinating a value.
-  5. JSON FORMAT: Return exactly a JSON array of objects: { "cfi": string, "adaptation": string }.
+  5. NOT A TABLE: If an image is not a data table — an illustration, photograph, portrait, decorative graphic, icon row, cover, or a page of running text or an index — set "isTable" to false and return an empty "adaptation" for it. Never narrate or summarize a non-table.
+  6. JSON FORMAT: Return exactly a JSON array of objects: { "cfi": string, "isTable": boolean, "adaptation": string }.
 
 PROCESS:
-  - Step 1: Transcribe the headers and data.
-  - Step 2: Synthesize into a narrative.
-  - Step 3: Match the 'cfi' identifier provided before each image exactly.
+  - Step 1: Decide whether the image is a data table (rows and columns of values).
+  - Step 2: Transcribe the headers and data.
+  - Step 3: Synthesize into a narrative.
+  - Step 4: Match the 'cfi' identifier provided before each image exactly.
     `;
 
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -77,7 +99,19 @@ export function validateTableAdaptations(
       { issues: parsed.error.issues.slice(0, 5).map((i) => i.message) },
     );
   }
-  return parsed.data.filter((entry) => inputCfis.has(entry.cfi));
+  const results: TableAdaptationResult[] = [];
+  for (const entry of parsed.data) {
+    if (!inputCfis.has(entry.cfi)) continue;
+    const isTable = entry.isTable ?? true;
+    if (!isTable) {
+      // A skipped image is still a RESULT: the processor persists it with an
+      // empty adaptation so the image is not re-sent on every visit.
+      results.push({ cfi: entry.cfi, adaptation: '', isTable: false });
+    } else if (entry.adaptation.trim() !== '') {
+      results.push({ cfi: entry.cfi, adaptation: entry.adaptation, isTable: true });
+    }
+  }
+  return results;
 }
 
 export async function generateTableAdaptations(

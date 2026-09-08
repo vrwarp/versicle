@@ -29,7 +29,7 @@
  */
 import type { BootTask } from '../bootstrap';
 import { ACTIVE_DEVICE_WINDOW_MS } from '@app/quota/embedSpendReconciler';
-import { NetRateLimitedError } from '~types/errors';
+import { NetRateLimitedError, retryAfterMsOf } from '~types/errors';
 import { EmbeddingIndexer } from '@domains/search';
 import { getEmbeddingClient } from '@domains/google';
 import { getArtifactConsult } from '@app/google/artifactConsult';
@@ -61,7 +61,18 @@ const ERROR_RETRY_DELAY_MS = 90_000;
  * `'retry'` when the pass hit an error (rate-limit backpressure or a per-book
  * failure) — the boot task re-runs it after {@link ERROR_RETRY_DELAY_MS}.
  */
-export type BackfillOutcome = 'complete' | 'retry';
+type BackfillOutcome = 'complete' | 'retry';
+
+/**
+ * A pass's outcome plus, when it stopped on a rate limit, the wait the quota
+ * asked for (a spent daily budget carries the time to the next Pacific-day
+ * reset). The boot task sleeps the LARGER of that and the fixed delay, so a
+ * spent day costs one pre-network refusal instead of a wake-up every 90 s.
+ */
+export interface BackfillResult {
+  outcome: BackfillOutcome;
+  retryAfterMs?: number;
+}
 
 /** The injected seams (the boot task binds the real stores/repos/governor). */
 export interface EmbeddingBackfillDeps {
@@ -124,15 +135,15 @@ function isSelfActive(deps: EmbeddingBackfillDeps): boolean {
  */
 export async function runEmbeddingBackfill(
   deps: EmbeddingBackfillDeps,
-): Promise<BackfillOutcome> {
-  if (!deps.isOptInEnabled()) return 'complete';
-  if (!deps.isClientConfigured()) return 'complete';
-  if (!isSelfActive(deps)) return 'complete';
+): Promise<BackfillResult> {
+  if (!deps.isOptInEnabled()) return { outcome: 'complete' };
+  if (!deps.isClientConfigured()) return { outcome: 'complete' };
+  if (!isSelfActive(deps)) return { outcome: 'complete' };
 
   let hadError = false;
 
   for (const bookId of deps.listBooks()) {
-    if (!deps.shouldContinue()) return 'complete';
+    if (!deps.shouldContinue()) return { outcome: 'complete' };
 
     // Every book whose binary is present locally is a candidate — the
     // background lane covers the WHOLE on-device library (the foreground
@@ -161,17 +172,20 @@ export async function runEmbeddingBackfill(
     if (remaining <= 0) {
       logger.info('Background embedding paused: cross-device bg RPD ceiling reached.');
       // Not an error: the daily budget resets at midnight PT; resume next boot.
-      return 'complete';
+      return { outcome: 'complete' };
     }
 
     try {
       // A background embed is ALWAYS interactive:false — never the user-gesture path.
       await deps.enqueue(bookId, { interactive: false, lane: 'bg' });
     } catch (err) {
-      if (err instanceof NetRateLimitedError) {
-        // Backpressured: stop the trickle; the caller retries after the delay.
-        logger.info('Background embedding backpressured; retrying shortly.');
-        return 'retry';
+      const retryAfterMs = retryAfterMsOf(err);
+      if (err instanceof NetRateLimitedError || retryAfterMs !== undefined) {
+        // Backpressured (the governor refused pre-network, or the server
+        // answered 429): stop the trickle; the caller retries after the wait
+        // the quota named, or the fixed delay when it named none.
+        logger.info('Background embedding backpressured; retrying after the quota wait.');
+        return { outcome: 'retry', retryAfterMs };
       }
       // Per-book failure (e.g. a transient extract error) — log, move on, and
       // signal a retry pass so the failed book gets another attempt after the
@@ -180,7 +194,7 @@ export async function runEmbeddingBackfill(
       hadError = true;
     }
   }
-  return hadError ? 'retry' : 'complete';
+  return { outcome: hadError ? 'retry' : 'complete' };
 }
 
 /**
@@ -266,11 +280,12 @@ export const embeddingBackfillTask: BootTask = {
         },
         shouldContinue: () => !cancelled && useGenAIStore.getState().preEmbedLibrary,
       })
-        .then((outcome) => {
+        .then(({ outcome, retryAfterMs }) => {
           // An errored pass re-runs after the delay; the resume-skip makes the
-          // retry cheap (only the failed/remaining books actually embed).
+          // retry cheap (only the failed/remaining books actually embed). A
+          // rate-limit stop sleeps as long as the quota needs, if longer.
           if (outcome === 'retry' && !cancelled) {
-            retryTimer = setTimeout(runPass, ERROR_RETRY_DELAY_MS);
+            retryTimer = setTimeout(runPass, Math.max(ERROR_RETRY_DELAY_MS, retryAfterMs ?? 0));
           }
         })
         .catch((err) => {

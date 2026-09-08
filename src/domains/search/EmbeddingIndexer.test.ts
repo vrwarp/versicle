@@ -8,6 +8,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { EmbeddingIndexer, orderOutward } from './EmbeddingIndexer';
 import type { SearchTextSource } from './SearchSession';
 import { MockEmbeddingClient, type EmbeddingProfile } from '@domains/google';
+import { AppError, NetRateLimitedError } from '~types/errors';
 import type { CacheEmbeddingsRow, CacheEmbedJobsRow } from '@data/rows/cache';
 
 interface CapturedEmbedCall {
@@ -624,5 +625,108 @@ describe('EmbeddingIndexer', () => {
     expect(puts).toHaveLength(1);
     const sec = puts[0].sections[0];
     expect(new Int8Array(sec.vectors).length).toBe(4 * sec.chunks.length);
+  });
+});
+
+/**
+ * Rate-limit handling: a busy minute is retried in place with a backoff that
+ * honors the quota's own wait; a spent DAILY budget stops the pass at once
+ * (the error carries the wait the scheduler sleeps); every pass that did work
+ * or stopped early leaves one `embedIndexRun` summary in the activity log.
+ */
+describe('EmbeddingIndexer rate-limit backoff + pass summary', () => {
+  function rateLimited(retryAfterMs: number, extra: Record<string, unknown> = {}) {
+    return new AppError('429', { code: 'GENAI_UNKNOWN', context: { status: 429, retryAfterMs, ...extra }, retryable: true });
+  }
+
+  function makeIndexer(embedImpl: (texts: string[]) => Promise<{ vectors: Float32Array[] }>) {
+    const { repo } = makeRepo();
+    const sleeps: number[] = [];
+    const logs: { type: string; method: string; payload: Record<string, unknown> }[] = [];
+    let t = 0;
+    const indexer = new EmbeddingIndexer({
+      embeddingClient: { isConfigured: () => true, embed: vi.fn(embedImpl) },
+      textSource: makeTextSource([section('ch1', 'h1'), section('ch2', 'h2')]),
+      embeddingsRepo: repo,
+      quantize: () => ({ vectors: new Int8Array([1, 2, 3, 4]), scale: 1 }),
+      getConfig: () => ({ model: 'gemini-embedding-2', dims: 4 }),
+      log: (entry) => logs.push(entry),
+      sleep: async (ms) => {
+        sleeps.push(ms);
+        t += ms;
+      },
+      now: () => t,
+    });
+    return { indexer, sleeps, logs };
+  }
+
+  const vectors = (n: number) => ({ vectors: Array.from({ length: n }, () => new Float32Array([1, 0, 0, 0])) });
+
+  it('retries a per-minute limit in place, waiting the larger of the hint and the exponential floor', async () => {
+    let calls = 0;
+    const { indexer, sleeps, logs } = makeIndexer(async (texts) => {
+      calls += 1;
+      if (calls <= 2) throw rateLimited(calls === 1 ? 30_000 : 1_000);
+      return vectors(texts.length);
+    });
+    await indexer.enqueue('book');
+    // First wait: the 30 s hint beats the 2 s floor; second: the 4 s floor beats the 1 s hint.
+    expect(sleeps).toEqual([30_000, 4_000]);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      type: 'response',
+      method: 'embedIndexRun',
+      payload: { sectionsEmbedded: 2, rateLimits: 2, waitedMs: 34_000, bookId: 'book' },
+    });
+  });
+
+  it('a governor pre-network refusal (NET_RATE_LIMITED) is retried the same way', async () => {
+    let calls = 0;
+    const { indexer, sleeps } = makeIndexer(async (texts) => {
+      calls += 1;
+      if (calls === 1) throw new NetRateLimitedError(2_500, { lane: 'fgd', reason: 'cooldown' });
+      return vectors(texts.length);
+    });
+    await indexer.enqueue('book');
+    expect(sleeps).toEqual([2_500]);
+  });
+
+  it('a spent DAILY budget stops the pass at once and rethrows with the wait', async () => {
+    const { indexer, sleeps, logs } = makeIndexer(async () => {
+      throw rateLimited(9 * 3_600_000, { dailyQuotaExhausted: true });
+    });
+    await expect(indexer.enqueue('book')).rejects.toMatchObject({ context: { retryAfterMs: 9 * 3_600_000 } });
+    expect(sleeps).toEqual([]);
+    expect(logs[0]).toMatchObject({ type: 'error', payload: { stoppedReason: 'daily-quota', sectionsEmbedded: 0 } });
+  });
+
+  it('a long wait (> 60 s) is not slept inline; the pass stops so the scheduler sleeps it', async () => {
+    const { indexer, sleeps, logs } = makeIndexer(async () => {
+      throw rateLimited(120_000);
+    });
+    await expect(indexer.enqueue('book')).rejects.toBeInstanceOf(AppError);
+    expect(sleeps).toEqual([]);
+    expect(logs[0].payload).toMatchObject({ stoppedReason: 'rate-limit-long-wait' });
+  });
+
+  it('gives up after four inline retries', async () => {
+    const { indexer, sleeps, logs } = makeIndexer(async () => {
+      throw rateLimited(1_000);
+    });
+    await expect(indexer.enqueue('book')).rejects.toBeInstanceOf(AppError);
+    expect(sleeps).toEqual([2_000, 4_000, 8_000, 16_000]);
+    expect(logs[0].payload).toMatchObject({ stoppedReason: 'rate-limit-retries-exhausted', rateLimits: 5 });
+  });
+
+  it('a non-rate-limit error is not retried and is reported as an error stop', async () => {
+    let calls = 0;
+    const { indexer, sleeps, logs } = makeIndexer(async () => {
+      calls += 1;
+      throw new TypeError('network down');
+    });
+    await expect(indexer.enqueue('book')).rejects.toThrow('network down');
+    expect(calls).toBe(1);
+    expect(sleeps).toEqual([]);
+    expect(logs[0].payload).toMatchObject({ stoppedReason: 'error' });
   });
 });

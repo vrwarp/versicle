@@ -24,6 +24,7 @@
  * ARE persisted, and the read path recovers CFIs from those at query time.
  */
 import { parseCfiTokens, tryParseCfiPoint } from '@kernel/cfi';
+import { AppError, retryAfterMsOf } from '~types/errors';
 import { chunkSection } from './chunker';
 import { effectiveSectionHash } from './sectionHash';
 import { CURRENT_QUANT } from './embeddingPort';
@@ -116,6 +117,64 @@ interface EmbeddingConsultPort {
   hydrate(bookId: string): Promise<boolean>;
 }
 
+/** One activity-log entry the indexer emits (the app stamps id + timestamp). */
+interface EmbeddingIndexerLogEntry {
+  type: 'response' | 'error' | 'debug';
+  method: 'embedIndexRun';
+  payload: Record<string, unknown>;
+}
+
+/**
+ * Why an embedding pass stopped early. Rate-limit stops carry the wait the
+ * quota needs on the thrown error (see {@link retryAfterMsOf}); the caller's
+ * scheduler sleeps that long instead of polling a fixed timer.
+ */
+type EmbeddingPassStop =
+  | 'daily-quota'
+  | 'rate-limit-long-wait'
+  | 'rate-limit-retries-exhausted'
+  | 'error';
+
+/**
+ * Inline rate-limit backoff. A rate-limited section is retried in place while
+ * the wait is short (a busy minute window): the delay is the larger of the
+ * server/governor hint and an exponential floor (2 s, 4 s, 8 s, 16 s). A long
+ * wait — a spent DAILY budget carries the time to the next Pacific-day reset —
+ * or a fifth consecutive limit stops the pass and rethrows, so the scheduler
+ * above sleeps for the real duration. The Jul–Sep 2026 export showed 16
+ * requests in 6.5 minutes at 1–8 s spacing against a per-minute limit, and
+ * five requests 91 s apart into a spent daily cap; neither could succeed.
+ */
+const RATE_LIMIT_MAX_RETRIES = 4;
+const RATE_LIMIT_MAX_INLINE_WAIT_MS = 60_000;
+const RATE_LIMIT_BASE_WAIT_MS = 2_000;
+const RATE_LIMIT_DEFAULT_WAIT_MS = 30_000;
+
+/** The wait a rate-limit error asks for, or undefined when it is not a rate limit. */
+function rateLimitWaitMs(error: unknown): number | undefined {
+  if (!(error instanceof AppError)) return undefined;
+  const rateLimited = error.code === 'NET_RATE_LIMITED' || error.context?.status === 429;
+  if (!rateLimited) return undefined;
+  return retryAfterMsOf(error) ?? RATE_LIMIT_DEFAULT_WAIT_MS;
+}
+
+/** A spent daily budget: the governor's rpd refusal or the server's PerDay quota. */
+function isDailyExhaustion(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  return error.context?.dailyQuotaExhausted === true || error.context?.reason === 'rpd-exhausted';
+}
+
+interface PassStats {
+  startedAt: number;
+  sectionsTotal: number;
+  resumed: number;
+  embedded: number;
+  chunks: number;
+  rateLimits: number;
+  waitedMs: number;
+  stoppedReason?: EmbeddingPassStop;
+}
+
 interface EmbeddingIndexerDeps {
   embeddingClient: EmbeddingClientPort;
   textSource: SearchTextSource;
@@ -123,6 +182,17 @@ interface EmbeddingIndexerDeps {
   quantize: QuantizePort;
   /** Embedding stamp config (read once per enqueue). */
   getConfig: () => { model: string; dims: number };
+  /**
+   * Optional activity-log sink for the per-pass summary (`embedIndexRun`):
+   * sections embedded/resumed, chunks, rate-limit waits, duration and why the
+   * pass stopped. Emitted only when the pass did work or stopped early, so a
+   * reader-open over an already-embedded book leaves no entry.
+   */
+  log?: (entry: EmbeddingIndexerLogEntry) => void;
+  /** Sleep seam for the inline rate-limit backoff (injected for tests). */
+  sleep?: (ms: number) => Promise<void>;
+  /** Wall clock (injected for tests). */
+  now?: () => number;
   /**
    * Optional reuse of embeddings generated on another device. When present,
    * `enqueue` checks it BEFORE the embed loop; on a full hit it downloads those
@@ -134,6 +204,76 @@ interface EmbeddingIndexerDeps {
 
 export class EmbeddingIndexer {
   constructor(private readonly deps: EmbeddingIndexerDeps) {}
+
+  private now(): number {
+    return this.deps.now ? this.deps.now() : Date.now();
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return this.deps.sleep
+      ? this.deps.sleep(ms)
+      : new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** Embed with the inline rate-limit backoff described at {@link RATE_LIMIT_MAX_RETRIES}. */
+  private async embedWithBackoff(
+    texts: string[],
+    opts: Parameters<EmbeddingClientPort['embed']>[1],
+    pass: PassStats,
+  ): Promise<{ vectors: Float32Array[] }> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.deps.embeddingClient.embed(texts, opts);
+      } catch (error) {
+        const wait = rateLimitWaitMs(error);
+        if (wait === undefined) {
+          pass.stoppedReason = 'error';
+          throw error;
+        }
+        pass.rateLimits += 1;
+        if (isDailyExhaustion(error)) {
+          pass.stoppedReason = 'daily-quota';
+          throw error;
+        }
+        if (wait > RATE_LIMIT_MAX_INLINE_WAIT_MS) {
+          pass.stoppedReason = 'rate-limit-long-wait';
+          throw error;
+        }
+        if (attempt >= RATE_LIMIT_MAX_RETRIES) {
+          pass.stoppedReason = 'rate-limit-retries-exhausted';
+          throw error;
+        }
+        const delay = Math.min(
+          RATE_LIMIT_MAX_INLINE_WAIT_MS,
+          Math.max(wait, RATE_LIMIT_BASE_WAIT_MS * 2 ** attempt),
+        );
+        pass.waitedMs += delay;
+        await this.sleep(delay);
+      }
+    }
+  }
+
+  private logPass(bookId: string, lane: string, pass: PassStats): void {
+    if (!this.deps.log) return;
+    if (pass.embedded === 0 && !pass.stoppedReason) return;
+    this.deps.log({
+      type: pass.stoppedReason ? 'error' : 'response',
+      method: 'embedIndexRun',
+      payload: {
+        message: pass.stoppedReason ? `embedding pass stopped: ${pass.stoppedReason}` : 'embedding pass complete',
+        bookId,
+        lane,
+        sectionsTotal: pass.sectionsTotal,
+        sectionsResumed: pass.resumed,
+        sectionsEmbedded: pass.embedded,
+        chunks: pass.chunks,
+        rateLimits: pass.rateLimits,
+        waitedMs: pass.waitedMs,
+        durationMs: this.now() - pass.startedAt,
+        ...(pass.stoppedReason ? { stoppedReason: pass.stoppedReason } : {}),
+      },
+    });
+  }
 
   /**
    * Embed `bookId`'s document corpus, outward from `currentCfi`. No-op when the
@@ -216,6 +356,36 @@ export class EmbeddingIndexer {
       (!stampMismatch && persisted?.sections ? persisted.sections : []).map((s) => s.href),
     );
 
+    const lane = opts?.lane ?? 'fgd';
+    const pass: PassStats = {
+      startedAt: this.now(),
+      sectionsTotal: order.length,
+      resumed: 0,
+      embedded: 0,
+      chunks: 0,
+      rateLimits: 0,
+      waitedMs: 0,
+    };
+    try {
+      await this.embedSections(bookId, corpus, order, config, job, embeddedSections, jobSections, persistedHrefs, opts, pass);
+    } finally {
+      this.logPass(bookId, lane, pass);
+    }
+  }
+
+  private async embedSections(
+    bookId: string,
+    corpus: NonNullable<Awaited<ReturnType<SearchTextSource['get']>>>,
+    order: number[],
+    config: { model: string; dims: number },
+    job: CacheEmbedJobsRow | undefined,
+    embeddedSections: CacheEmbeddingsRow['sections'],
+    jobSections: CacheEmbedJobsRow['sections'],
+    persistedHrefs: Set<string>,
+    opts: { interactive?: boolean; lane?: 'fg' | 'fgd' | 'bg' } | undefined,
+    pass: PassStats,
+  ): Promise<void> {
+    const sections = corpus.sections;
     for (const idx of order) {
       const section = sections[idx];
       // Prefer the extractor's stamped hash; derive it from the section text
@@ -238,6 +408,7 @@ export class EmbeddingIndexer {
         prior.sectionTextHash === sectionTextHash &&
         persistedHrefs.has(section.href)
       ) {
+        pass.resumed += 1;
         continue;
       }
 
@@ -248,7 +419,7 @@ export class EmbeddingIndexer {
       });
       if (chunks.length === 0) continue;
 
-      const { vectors } = await this.deps.embeddingClient.embed(
+      const { vectors } = await this.embedWithBackoff(
         chunks.map((c) => c.text),
         {
           profile: 'document',
@@ -256,7 +427,10 @@ export class EmbeddingIndexer {
           interactive: opts?.interactive ?? true,
           lane: opts?.lane ?? 'fgd',
         },
+        pass,
       );
+      pass.embedded += 1;
+      pass.chunks += chunks.length;
 
       // Quantize each returned float32 vector to int8 plus a per-vector scale,
       // then pack the int8 rows back-to-back and the float32 scales alongside.

@@ -242,7 +242,10 @@ export function wireGoogleDomain(): void {
   // the store, so an embeddingModel/embeddingDims edit takes effect on the next
   // embed; log entries arrive pre-redacted into the same in-memory log buffer as
   // the GenAI client. The foreground-lane acquire at the gateway already
-  // throttles it, so no governor commit is wired here.
+  // throttles it (no governor commit), but a 429 DOES feed the governor a
+  // cooldown — the server's own retry hint, or until the next Pacific day for
+  // a spent daily budget — so the indexer's next acquire is refused before the
+  // network instead of collecting another 429.
   setEmbeddingClient(
     makeLazyEmbeddingClient({
       getConfig: (): EmbeddingConfig => {
@@ -256,6 +259,7 @@ export function wireGoogleDomain(): void {
         };
       },
       onLog: (entry) => useGenAIStore.getState().addLog(entry),
+      governor,
     }),
   );
 

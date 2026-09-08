@@ -158,13 +158,19 @@ describe('regression: AudioContentPipeline.test (content filtering)', () => {
 });
 
 describe('D4: {sentences, citationMarkers} always travel together (5c-PR2)', () => {
+    // Six body groups + the marked entry: sections of five groups or fewer are
+    // answered deterministically without a model call (MAX_GROUPS_FOR_DETERMINISTIC_ONLY).
     const MARKED_SENTENCES = [
-        { text: 'Body text with a citation.', cfi: 'epubcfi(/6/4!/4/2/1:0)', sourceIndices: [0] },
-        { text: '1 Smith, The Source. More of the entry text here.', cfi: 'epubcfi(/6/4!/4/6/1:0)', sourceIndices: [1] },
+        ...Array.from({ length: 6 }, (_, i) => ({
+            text: `Body text with a citation, paragraph ${i}.`,
+            cfi: `epubcfi(/6/4!/4/${2 * i + 2}/1:0)`,
+            sourceIndices: [i],
+        })),
+        { text: '1 Smith, The Source. More of the entry text here.', cfi: 'epubcfi(/6/4!/4/14/1:0)', sourceIndices: [6] },
     ];
-    // A leading marker INSIDE the second group's bounds.
+    // A leading marker INSIDE the last group's bounds.
     const MARKERS: CitationMarker[] = [{
-        cfi: 'epubcfi(/6/4!/4/6/1:0)',
+        cfi: 'epubcfi(/6/4!/4/14/1:0)',
         markerText: '1', super: true, numeric: true, glued: false, leading: true,
     }];
 

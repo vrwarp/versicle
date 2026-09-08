@@ -99,7 +99,21 @@ interface TTSConfigPort {
 interface ContentTypeDetectionResult {
     classifications: { id: string; type: ContentType }[];
     justification: string;
-    agreedWithHeuristic: boolean;
+    /** The model's verdict on the deterministic hint; null when no hint was given. */
+    agreedWithHeuristic: boolean | null;
+}
+
+/**
+ * Caller context for a model call: bookId feeds the egress consent gate,
+ * the titles are display context on the log entries, and correlationId
+ * ties one call's request/response/error entries (and the detector's
+ * telemetry record) together in the activity log.
+ */
+export interface GenAICallContext {
+    bookId?: string;
+    bookTitle?: string;
+    sectionTitle?: string;
+    correlationId?: string;
 }
 
 /**
@@ -127,13 +141,13 @@ export interface GenAIPort {
     detectContentTypes(
         nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
         hints: { enumeratorCandidate: number },
-        context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
+        context?: GenAICallContext,
     ): Promise<ContentTypeDetectionResult>;
     /** Generate TTS-friendly narrative adaptations for table images via the model (bookId: see detectContentTypes). */
     generateTableAdaptations(
         nodes: { rootCfi: string; imageBlob: Blob }[],
         thinkingBudget: number,
-        context?: { bookId?: string; bookTitle?: string; sectionTitle?: string },
+        context?: GenAICallContext,
     ): Promise<{ cfi: string; adaptation: string }[]>;
 }
 

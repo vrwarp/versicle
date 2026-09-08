@@ -87,13 +87,13 @@ function makeDeps(overrides: Partial<EmbeddingBackfillDeps> = {}) {
 describe('runEmbeddingBackfill (E2)', () => {
   it('opt-in OFF: no-ops (never enqueues)', async () => {
     const { deps, enqueued } = makeDeps({ isOptInEnabled: () => false });
-    await expect(runEmbeddingBackfill(deps)).resolves.toBe('complete');
+    await expect(runEmbeddingBackfill(deps)).resolves.toMatchObject({ outcome: 'complete' });
     expect(enqueued).toHaveLength(0);
   });
 
   it('client unconfigured: no-ops', async () => {
     const { deps, enqueued } = makeDeps({ isClientConfigured: () => false });
-    await expect(runEmbeddingBackfill(deps)).resolves.toBe('complete');
+    await expect(runEmbeddingBackfill(deps)).resolves.toMatchObject({ outcome: 'complete' });
     expect(enqueued).toHaveLength(0);
   });
 
@@ -113,7 +113,7 @@ describe('runEmbeddingBackfill (E2)', () => {
       listBooks: () => ['b1', 'b2', 'b3'],
       hasLocalBinary: async (id) => ({ b1: true, b2: true, b3: false })[id] ?? false,
     });
-    await expect(runEmbeddingBackfill(deps)).resolves.toBe('complete');
+    await expect(runEmbeddingBackfill(deps)).resolves.toMatchObject({ outcome: 'complete' });
 
     expect(enqueued.map((e) => e.bookId)).toEqual(['b1', 'b2']);
     for (const call of enqueued) {
@@ -129,7 +129,7 @@ describe('runEmbeddingBackfill (E2)', () => {
       getBgLimits: () => ({ ...LIMITS, rpd: 200 }),
       getBgUsedRpd: () => 200,
     });
-    await expect(runEmbeddingBackfill(deps)).resolves.toBe('complete');
+    await expect(runEmbeddingBackfill(deps)).resolves.toMatchObject({ outcome: 'complete' });
     expect(enqueued).toHaveLength(0);
   });
 
@@ -146,7 +146,7 @@ describe('runEmbeddingBackfill (E2)', () => {
         used += 1; // each enqueue spends one bg request
       },
     });
-    await expect(runEmbeddingBackfill(deps)).resolves.toBe('complete');
+    await expect(runEmbeddingBackfill(deps)).resolves.toMatchObject({ outcome: 'complete' });
     expect(captured).toEqual(['b1']);
   });
 
@@ -159,7 +159,7 @@ describe('runEmbeddingBackfill (E2)', () => {
         captured.push(bookId);
       },
     });
-    await expect(runEmbeddingBackfill(deps)).resolves.toBe('retry');
+    await expect(runEmbeddingBackfill(deps)).resolves.toMatchObject({ outcome: 'retry' });
     // b1 backpressured → trickle stopped; b2 never attempted.
     expect(captured).toHaveLength(0);
   });
@@ -175,7 +175,7 @@ describe('runEmbeddingBackfill (E2)', () => {
     });
     // The pass finishes the remaining books but reports 'retry' so the failed
     // book gets another attempt after the delay.
-    await expect(runEmbeddingBackfill(deps)).resolves.toBe('retry');
+    await expect(runEmbeddingBackfill(deps)).resolves.toMatchObject({ outcome: 'retry' });
     expect(captured).toEqual(['b2']);
   });
 
@@ -190,7 +190,7 @@ describe('runEmbeddingBackfill (E2)', () => {
         live = false; // user toggled the opt-in off after the first book
       },
     });
-    await expect(runEmbeddingBackfill(deps)).resolves.toBe('complete');
+    await expect(runEmbeddingBackfill(deps)).resolves.toMatchObject({ outcome: 'complete' });
     expect(captured).toEqual(['b1']);
   });
 });

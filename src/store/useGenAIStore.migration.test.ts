@@ -99,7 +99,7 @@ describe('genai-storage v0→v1 migration (captured-blob regression)', () => {
     expect(raw).not.toContain('usageStats');
     expect(raw).not.toContain('Full book text sample');
     const parsed = JSON.parse(raw);
-    expect(parsed.version).toBe(4);
+    expect(parsed.version).toBe(5);
     expect(parsed.state.apiKey).toBe('user-api-key-123');
   });
 
@@ -146,7 +146,7 @@ describe('genai-storage v0→v1 migration (captured-blob regression)', () => {
     // The rewritten blob is at v3 and carries the switched model.
     useGenAIStore.getState().setEnabled(true);
     const parsed = JSON.parse(localStorage.getItem('genai-storage')!);
-    expect(parsed.version).toBe(4);
+    expect(parsed.version).toBe(5);
     expect(parsed.state.embeddingModel).toBe('gemini-embedding-2');
   });
 
@@ -272,5 +272,35 @@ describe('genai-storage v0→v1 migration (captured-blob regression)', () => {
     expect(map['gemma-4-31b']).toBeUndefined();
     expect(map['gemma-4-26b-a4b-it']).toEqual({ rpm: 30, tpm: 16_000, rpd: 14_400 });
     expect(map['gemma-4-31b-it']).toEqual({ rpm: 7, tpm: 5_000, rpd: 99 });
+  });
+});
+
+describe('genai-storage v4→v5 migration (model rotation on by default)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('a fresh store defaults to rotation ON', async () => {
+    const useGenAIStore = await loadFreshStore();
+    expect(useGenAIStore.getState().isModelRotationEnabled).toBe(true);
+  });
+
+  it('flips the pre-v5 persisted false (the old default) to true once', async () => {
+    localStorage.setItem(
+      'genai-storage',
+      JSON.stringify({ state: { apiKey: 'key-v4', isModelRotationEnabled: false }, version: 4 }),
+    );
+    const useGenAIStore = await loadFreshStore();
+    expect(useGenAIStore.getState().isModelRotationEnabled).toBe(true);
+    expect(useGenAIStore.getState().apiKey).toBe('key-v4');
+  });
+
+  it('a v5 blob that says false is a deliberate choice and stays false', async () => {
+    localStorage.setItem(
+      'genai-storage',
+      JSON.stringify({ state: { apiKey: 'key-v5', isModelRotationEnabled: false }, version: 5 }),
+    );
+    const useGenAIStore = await loadFreshStore();
+    expect(useGenAIStore.getState().isModelRotationEnabled).toBe(false);
   });
 });

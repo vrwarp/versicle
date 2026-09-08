@@ -8,6 +8,7 @@
  * It is intentionally permissive (sensible defaults, every method a no-op unless it
  * records something) so tests opt into only the surface they care about.
  */
+import type { ContentType } from '~types/content-analysis';
 import type {
     EngineContext,
     CompiledLexicon,
@@ -47,8 +48,8 @@ export class FakeEngineContext implements EngineContext {
     /** Whether the fake GenAI client reports itself as configured. */
     genAIConfigured = false;
     /** Configurable model-call results for the GenAI port. */
-    contentTypeDetections: { classifications: { id: string; type: string }[]; justification: string; agreedWithHeuristic: boolean } =
-        { classifications: [], justification: '', agreedWithHeuristic: false };
+    contentTypeDetections: { classifications: { id: string; type: ContentType }[]; justification: string; agreedWithHeuristic: boolean | null } =
+        { classifications: [], justification: '', agreedWithHeuristic: null };
     tableAdaptationResults: { cfi: string; adaptation: string }[] = [];
 
     // --- Recorded outputs (assert against these) ---
@@ -56,7 +57,11 @@ export class FakeEngineContext implements EngineContext {
     readonly addedAnnotations: AnnotationInput[] = [];
     readonly genAILogs: GenAILogEntry[] = [];
     readonly genAIConfigureCalls: Array<{ apiKey: string; model: string }> = [];
-    readonly detectContentTypesCalls: Array<{ nodes: { id: string; sampleText: string }[]; hints: { enumeratorCandidate: number } }> = [];
+    readonly detectContentTypesCalls: Array<{
+        nodes: { id: string; sampleText: string }[];
+        hints: { enumeratorCandidate: number };
+        context?: { bookId?: string; bookTitle?: string; sectionTitle?: string; correlationId?: string };
+    }> = [];
     readonly generateTableAdaptationsCalls: Array<{ nodes: { rootCfi: string }[]; thinkingBudget: number }> = [];
     readonly ttsProgressWrites: Array<{ bookId: string; queueIndex: number; sectionIndex: number }> = [];
     readonly completedRanges: Array<{ bookId: string; cfiRange: string; type?: ReadingEventType }> = [];
@@ -94,9 +99,10 @@ export class FakeEngineContext implements EngineContext {
         detectContentTypes: async (
             nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
             hints: { enumeratorCandidate: number },
+            context?: { bookId?: string; bookTitle?: string; sectionTitle?: string; correlationId?: string },
         ) => {
-            this.detectContentTypesCalls.push({ nodes, hints });
-            return this.contentTypeDetections as never;
+            this.detectContentTypesCalls.push({ nodes, hints, context });
+            return this.contentTypeDetections;
         },
         generateTableAdaptations: async (
             nodes: { rootCfi: string; imageBlob: Blob }[],

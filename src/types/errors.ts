@@ -338,3 +338,17 @@ export class NetRateLimitedError extends AppError {
     this.name = 'NetRateLimitedError';
   }
 }
+
+/**
+ * The server- or governor-suggested wait carried by a rate-limit error
+ * (`context.retryAfterMs` on {@link NetRateLimitedError} and on the GenAI
+ * clients' 429 errors), or `undefined` for any other error. Schedulers use it
+ * to sleep exactly as long as the quota needs — a spent DAILY budget carries
+ * the time to the next midnight-Pacific reset — instead of polling on a fixed
+ * timer that can only collect more 429s.
+ */
+export function retryAfterMsOf(error: unknown): number | undefined {
+  if (!(error instanceof AppError)) return undefined;
+  const value = error.context?.retryAfterMs;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}

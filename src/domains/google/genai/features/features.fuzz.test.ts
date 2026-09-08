@@ -16,6 +16,7 @@ import { validateTocTitles, generateTocTitles } from './tocTitles';
 import {
   validateReferenceDetection,
   detectReferenceSection,
+  buildResponseSchema,
   type ReferenceDetectionNode,
 } from './referenceDetection';
 import { validateTableAdaptations } from './tableAdaptation';
@@ -60,87 +61,57 @@ describe('referenceDetection validation', () => {
     ).rejects.toBeInstanceOf(GenAIInvalidResponseError);
   });
 
-  it('positional guard: early-chapter indices throw for sections with > 5 groups', () => {
-    // Index 4 in a 29-group section (13.8%) — the exact bug case from the evaluation
-    expect(() =>
-      validateReferenceDetection({ ...base, referenceStartIndex: 4 }, mkNodes(29)),
-    ).toThrow(GenAIInvalidResponseError);
-    // Index 1 in a 29-group section (3.4%)
-    expect(() =>
-      validateReferenceDetection({ ...base, referenceStartIndex: 1 }, mkNodes(29)),
-    ).toThrow(GenAIInvalidResponseError);
-    // Index 2 in a 10-group section (20%)
-    expect(() =>
-      validateReferenceDetection({ ...base, referenceStartIndex: 2 }, mkNodes(10)),
-    ).toThrow(GenAIInvalidResponseError);
-  });
-
-  it('positional guard: indices at or past 40% are accepted', () => {
-    // Index 12 in a 29-group section (41.4%) — just past the threshold
-    expect(
-      validateReferenceDetection({ ...base, referenceStartIndex: 12 }, mkNodes(29))
-        .referenceStartIndex,
-    ).toBe(12);
-    // Index 4 in a 10-group section (40%) — exactly at threshold
-    expect(
-      validateReferenceDetection({ ...base, referenceStartIndex: 4 }, mkNodes(10))
-        .referenceStartIndex,
-    ).toBe(4);
-    // -1 (no references) always accepted
-    expect(
-      validateReferenceDetection({ ...base, referenceStartIndex: -1 }, mkNodes(29))
-        .referenceStartIndex,
-    ).toBe(-1);
-  });
-
-  it('positional guard: bypassed for short sections (nodeCount <= 5)', () => {
-    // Index 0 in a 3-group section — the whole section may be references
-    expect(
-      validateReferenceDetection({ ...base, referenceStartIndex: 0 }, mkNodes(3))
-        .referenceStartIndex,
-    ).toBe(0);
-    // Index 1 in a 5-group section
-    expect(
-      validateReferenceDetection({ ...base, referenceStartIndex: 1 }, mkNodes(5))
-        .referenceStartIndex,
-    ).toBe(1);
-  });
-
-  it('regression: dedicated endnotes section — heading group corroborates index 0 (the "End Notes" loop)', () => {
-    // The observed production failure: a 7-group section whose group 0 is the
-    // heading "End Notes." and whose body is numbered citations. The model's
-    // correct index 0 used to fail the 40% guard on every revisit.
-    const nodes: ReferenceDetectionNode[] = [
+  it('early-chapter indices are ACCEPTED: the 40% positional guard is gone', () => {
+    // Every rejection the guard produced on the Jul–Sep 2026 export was a
+    // correct answer. The five observed cases, reconstructed from the prompts:
+    //  - "End Notes." heading + six numbered citations (index 0 of 7)
+    //  - a chapter whose 158 numbered endnotes start at group 84 of 242 (35%)
+    //  - "Further Reading." + a 78-entry bibliography (index 0 of 79)
+    //  - "General Index." (index 0 of 878) and "Scripture Index." (0 of 286)
+    const endNotes: ReferenceDetectionNode[] = [
       { id: '0', sampleText: 'End Notes.' },
       ...Array.from({ length: 6 }, (_, i) => ({
         id: String(i + 1),
         sampleText: `${i + 1} Author, Title, Publisher, 2001.`,
       })),
     ];
-    expect(
-      validateReferenceDetection({ ...base, referenceStartIndex: 0 }, nodes).referenceStartIndex,
-    ).toBe(0);
+    expect(validateReferenceDetection({ ...base, referenceStartIndex: 0 }, endNotes).referenceStartIndex).toBe(0);
+    expect(validateReferenceDetection({ ...base, referenceStartIndex: 84 }, mkNodes(242)).referenceStartIndex).toBe(84);
+    expect(validateReferenceDetection({ ...base, referenceStartIndex: 0 }, mkNodes(79)).referenceStartIndex).toBe(0);
+    expect(validateReferenceDetection({ ...base, referenceStartIndex: 0 }, mkNodes(878)).referenceStartIndex).toBe(0);
+    // The former guard's own "bug case" (index 4 of 29) is now the model's call.
+    expect(validateReferenceDetection({ ...base, referenceStartIndex: 4 }, mkNodes(29)).referenceStartIndex).toBe(4);
   });
 
-  it('early index corroborated by a references-like section title is accepted', () => {
+  it('agreedWithHeuristic is optional in the response and null when absent', () => {
+    const result = validateReferenceDetection(
+      { justification: 'no hint given', referenceStartIndex: -1 },
+      mkNodes(10),
+    );
+    expect(result.agreedWithHeuristic).toBeNull();
     expect(
-      validateReferenceDetection({ ...base, referenceStartIndex: 0 }, mkNodes(10), {
-        sectionTitle: 'Notes',
-      }).referenceStartIndex,
-    ).toBe(0);
-    // A title merely CONTAINING a keyword must not corroborate
-    expect(() =>
-      validateReferenceDetection({ ...base, referenceStartIndex: 0 }, mkNodes(10), {
-        sectionTitle: 'Notes from Underground',
-      }),
-    ).toThrow(GenAIInvalidResponseError);
+      validateReferenceDetection({ ...base, referenceStartIndex: 2 }, mkNodes(10)).agreedWithHeuristic,
+    ).toBe(true);
   });
 
-  it('early index corroborated by a dense leadsWithMarker run is accepted', () => {
-    const nodes = mkNodes(10).map((n, i) => (i >= 2 ? { ...n, leadsWithMarker: true } : n));
-    expect(
-      validateReferenceDetection({ ...base, referenceStartIndex: 2 }, nodes).referenceStartIndex,
-    ).toBe(2);
+  it('the response schema requires agreedWithHeuristic only when a hint is present', () => {
+    const withHint = buildResponseSchema(true) as { required: string[]; properties: Record<string, unknown> };
+    const withoutHint = buildResponseSchema(false) as { required: string[]; properties: Record<string, unknown> };
+    expect(withHint.required).toContain('agreedWithHeuristic');
+    expect(withHint.properties).toHaveProperty('agreedWithHeuristic');
+    expect(withoutHint.required).not.toContain('agreedWithHeuristic');
+    expect(withoutHint.properties).not.toHaveProperty('agreedWithHeuristic');
+  });
+
+  it('detectReferenceSection reports null agreement when no hint was given, even if the model echoes one', async () => {
+    const client = new MockGenAIClient({
+      response: { ...base, referenceStartIndex: -1 },
+      delayMs: 0,
+    });
+    const result = await detectReferenceSection(client, mkNodes(3), { enumeratorCandidate: -1 });
+    expect(result.agreedWithHeuristic).toBeNull();
+    const hinted = await detectReferenceSection(client, mkNodes(3), { enumeratorCandidate: 1 });
+    expect(hinted.agreedWithHeuristic).toBe(true);
   });
 
   it('maps a valid index to reference/main classifications (pinned semantics)', async () => {
@@ -226,12 +197,35 @@ describe('tableAdaptation validation', () => {
   it('drops hallucinated CFIs, keeps real ones', () => {
     const result = validateTableAdaptations(
       [
-        { cfi: 'epubcfi(/6/2)', adaptation: 'The table shows…' },
-        { cfi: 'epubcfi(/666/13)', adaptation: 'hallucinated' },
+        { cfi: 'epubcfi(/6/2)', isTable: true, adaptation: 'The table shows…' },
+        { cfi: 'epubcfi(/666/13)', isTable: true, adaptation: 'hallucinated' },
       ],
       inputCfis,
     );
-    expect(result).toEqual([{ cfi: 'epubcfi(/6/2)', adaptation: 'The table shows…' }]);
+    expect(result).toEqual([{ cfi: 'epubcfi(/6/2)', adaptation: 'The table shows…', isTable: true }]);
+  });
+
+  it('a non-table comes back as a skipped entry with an empty adaptation, never a narration', () => {
+    const result = validateTableAdaptations(
+      [
+        { cfi: 'epubcfi(/6/2)', isTable: false, adaptation: 'An illustration featuring Isaac Newton…' },
+        { cfi: 'epubcfi(/6/4)', isTable: true, adaptation: 'In the row for 2020…' },
+      ],
+      inputCfis,
+    );
+    expect(result).toEqual([
+      { cfi: 'epubcfi(/6/2)', adaptation: '', isTable: false },
+      { cfi: 'epubcfi(/6/4)', adaptation: 'In the row for 2020…', isTable: true },
+    ]);
+  });
+
+  it('a missing isTable flag is the legacy behavior (a table); an empty table narration is dropped', () => {
+    expect(
+      validateTableAdaptations([{ cfi: 'epubcfi(/6/2)', adaptation: 'Legacy shape.' }], inputCfis),
+    ).toEqual([{ cfi: 'epubcfi(/6/2)', adaptation: 'Legacy shape.', isTable: true }]);
+    expect(
+      validateTableAdaptations([{ cfi: 'epubcfi(/6/2)', isTable: true, adaptation: '   ' }], inputCfis),
+    ).toEqual([]);
   });
 
   it('throws on shape breaches', () => {
