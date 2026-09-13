@@ -72,6 +72,7 @@ const SearchHistorySection = React.memo<SearchHistorySectionProps>(({ onPillClic
                 onClick={() => toggleSaved(item.query)}
                 className="ml-1.5 opacity-0 group-hover:opacity-100 p-0.5 rounded-full hover:bg-yellow-500/20 transition-all"
                 title="Unstar search"
+                aria-label="Unstar search"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -99,6 +100,7 @@ const SearchHistorySection = React.memo<SearchHistorySectionProps>(({ onPillClic
                 onClick={() => deleteQuery(item.query)}
                 className="ml-1.5 opacity-0 group-hover:opacity-100 p-0.5 rounded-full hover:bg-muted-foreground/15 transition-all text-muted-foreground"
                 title="Delete from history"
+                aria-label="Delete from history"
               >
                 <X className="w-3 h-3" />
               </button>

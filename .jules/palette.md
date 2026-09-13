@@ -173,3 +173,6 @@
 ## 2026-07-16 - Add title tooltips to icon-only buttons
 **Learning:** Icon-only buttons lacking `title` attributes lack visual cues for mouse users, even if they have `aria-label` for screen readers.
 **Action:** Always provide `title` attributes for icon-only action buttons in addition to `aria-label`.
+## 2026-08-13 - Add ARIA labels to search history buttons
+**Learning:** Icon-only buttons used for secondary actions (like 'unstar' or 'delete' in history pills) were missing `aria-label` attributes, despite having `title` attributes. Screen readers rely on `aria-label` (or similar) when there is no visible text.
+**Action:** Always ensure icon-only buttons have an explicit `aria-label` attribute, even if a `title` is present for visual tooltips, to ensure full accessibility for screen reader users.
