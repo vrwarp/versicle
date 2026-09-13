@@ -82,49 +82,66 @@ export function useGlobalSearch() {
     async function loadStatuses() {
       const list: BookIndexingStatus[] = [];
       const sortedBooks = [...books].sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0));
-      for (const book of sortedBooks) {
-        const text = await searchTextRepo.get(book.id);
-        const embed = await embeddingsRepo.get(book.id);
+      const CHUNK_SIZE = 10;
+      for (let i = 0; i < sortedBooks.length; i += CHUNK_SIZE) {
+        if (!active) break;
+        const chunk = sortedBooks.slice(i, i + CHUNK_SIZE);
+        const results = await Promise.all(
+          chunk.map(async (book) => {
+            const [text, embed] = await Promise.all([
+              searchTextRepo.get(book.id),
+              embeddingsRepo.get(book.id),
+            ]);
+            return { book, text, embed };
+          })
+        );
 
-        const itemBase = {
-          bookId: book.id,
-          title: book.title,
-          author: book.author || '',
-          coverPalette: book.coverPalette,
-          coverUrl: book.coverUrl,
-          coverBlob: book.coverBlob,
-        };
+        for (const { book, text, embed } of results) {
+          const itemBase = {
+            bookId: book.id,
+            title: book.title,
+            author: book.author || '',
+            coverPalette: book.coverPalette,
+            coverUrl: book.coverUrl,
+            coverBlob: book.coverBlob,
+          };
 
-        if (!text) {
-          list.push({
-            ...itemBase,
-            status: 'unindexed',
-          });
-        } else if (!embed || embed.sections.length === 0) {
-          list.push({
-            ...itemBase,
-            status: 'unindexed',
-          });
-        } else {
-          // Only text-bearing sections can be embedded: a text-less spine item
-          // (image-only cover page, blank section-break page) yields zero
-          // chunks and never lands in the embeddings row, so counting it in the
-          // total would strand the book at N-1/N — perpetually one section shy.
-          const total = text.sections.filter((s) => sectionHasEmbeddableText(s.text)).length;
-          const embedded = embed.sections.length;
-          if (embedded >= total) {
+          if (!text) {
             list.push({
               ...itemBase,
-              status: 'indexed',
+              status: 'unindexed',
+            });
+          } else if (!embed || embed.sections.length === 0) {
+            list.push({
+              ...itemBase,
+              status: 'unindexed',
             });
           } else {
-            list.push({
-              ...itemBase,
-              status: 'partial',
-              progressLabel: `${embedded}/${total} chapters`,
-              progressPercent: Math.round((embedded / total) * 100),
-            });
+            // Only text-bearing sections can be embedded: a text-less spine item
+            // (image-only cover page, blank section-break page) yields zero
+            // chunks and never lands in the embeddings row, so counting it in the
+            // total would strand the book at N-1/N — perpetually one section shy.
+            const total = text.sections.filter((s) => sectionHasEmbeddableText(s.text)).length;
+            const embedded = embed.sections.length;
+            if (embedded >= total) {
+              list.push({
+                ...itemBase,
+                status: 'indexed',
+              });
+            } else {
+              list.push({
+                ...itemBase,
+                status: 'partial',
+                progressLabel: `${embedded}/${total} chapters`,
+                progressPercent: Math.round((embedded / total) * 100),
+              });
+            }
           }
+        }
+
+        if (active && i + CHUNK_SIZE < sortedBooks.length) {
+          // Yield to main thread
+          await new Promise(resolve => setTimeout(resolve, 0));
         }
       }
       if (active) {
