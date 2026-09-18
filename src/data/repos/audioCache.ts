@@ -30,14 +30,33 @@
  * multi-hundred-KB `audio` ArrayBuffer, so the old unconditional scan cost
  * the whole 512 MiB budget in deserialization per sweep.
  *
- * The tracked total is a HINT only. It is maintained in memory by
- * {@link AudioCacheRepo.putSegment} (+= byteLength) and by the eviction
- * delete batches (-= freed), and is persisted inside those same gated
- * transactions. It never decides WHAT to evict: whenever it says "over
- * budget" (or is absent) the sweep falls back to the full scan, which is the
- * source of truth and re-seeds the total from the rows themselves. A
- * stale-high total costs one extra scan; a stale-low total delays a sweep
- * until the next scan corrects it.
+ * The tracked total is a HINT only. It never decides WHAT to evict: whenever
+ * it says "over budget" (or is absent) the sweep falls back to the full scan,
+ * which is the source of truth and re-seeds the total from the rows
+ * themselves. A stale-high total costs one extra scan; a stale-low total
+ * delays a sweep until the next scan corrects it.
+ *
+ * It is maintained DURABLY, not just in memory: {@link AudioCacheRepo.putSegment}
+ * folds the segment's bytes into the total inside the SAME gated transaction
+ * that writes the row (the base value is read outside the gate — the
+ * read-modify-write recipe in write-gate.ts — and the populate callback stays
+ * synchronous). That matters because the sweep only runs at boot and after
+ * every {@link EVICTION_PUT_INTERVAL} puts: a session that synthesizes fewer
+ * segments than that and then closes used to take its whole accounting to the
+ * grave, so the stored hint could sit frozen under budget while the cache grew
+ * across sessions and the budget stopped being enforced. The eviction delete
+ * batches keep carrying the corrected total in their own transactions.
+ *
+ * {@link AudioCacheRepo.deltaBytes} is only the remainder that could not be
+ * folded yet (the hint absent, or a put that raced a sweep's write). Every
+ * gated write that carries a total subtracts EXACTLY the snapshot it folded
+ * in — never a blind reset — so bytes a put added meanwhile stay pending
+ * instead of being erased. All remaining ways the hint can be wrong are the
+ * safe way (reading high ⇒ one extra scan): a put that REPLACES a key
+ * over-counts the old row, and two puts that overlap read the same base, so
+ * the later commit can drop the earlier's bytes — last-write-wins, exactly as
+ * across contexts (the worker and the main thread each keep their own
+ * remainder), and any scan re-establishes the truth.
  *
  * IDB v25 (P3-13, D7) added the `by_lastAccessed` index and this module's
  * post-open idle `size` backfill ({@link AudioCacheRepo.backfillSizesOnce},
@@ -86,11 +105,12 @@ class AudioCacheRepo {
   private putsSinceEviction = 0;
 
   /**
-   * Net byte change this context has made since the persisted total was last
-   * written (puts add, evictions reset it). The persisted value itself is
-   * re-read per sweep rather than cached, so another tab's or the TTS
-   * worker's writes are picked up; concurrent deltas are last-write-wins,
-   * which a later scan corrects.
+   * Bytes this context has committed that the persisted total does NOT include
+   * yet — the remainder {@link AudioCacheRepo.putSegment}'s fold could not
+   * carry (the hint absent, or a put that raced a sweep's own write). The
+   * persisted value is re-read per put and per sweep rather than cached, so
+   * another tab's or the TTS worker's writes are picked up; concurrent writes
+   * are last-write-wins, which a later scan corrects.
    */
   private deltaBytes = 0;
 
@@ -131,7 +151,17 @@ class AudioCacheRepo {
   async putSegment(key: string, audio: ArrayBuffer, alignment?: Timepoint[]): Promise<void> {
     try {
       const now = Date.now();
-      await write(['cache_audio_blobs'], (tx) => {
+      const db = await getConnection();
+      // Running total (hint): read the base OUTSIDE the gate, then fold this
+      // segment's bytes (plus whatever an earlier put could not fold) into the
+      // SAME gated transaction as the row, so the hint survives a page close
+      // even when no sweep ever runs. A put that REPLACES an existing key
+      // over-counts by the old row's size — which only ever buys an earlier
+      // full scan, and that scan re-establishes the truth.
+      const stored = await this.readStoredTotal(db);
+      const accounted = stored === null ? 0 : this.deltaBytes;
+      const folded = stored === null ? null : Math.max(0, stored + accounted + audio.byteLength);
+      await write(['cache_audio_blobs', 'app_metadata'], (tx) => {
         tx.objectStore('cache_audio_blobs').put({
           key,
           audio,
@@ -140,11 +170,19 @@ class AudioCacheRepo {
           lastAccessed: now,
           size: audio.byteLength,
         });
+        if (folded !== null) {
+          tx.objectStore('app_metadata').put(folded, APP_METADATA_KEYS.audioCacheTotalBytes);
+        }
       });
-      // Running total (hint): a put that REPLACES an existing key over-counts
-      // by the old row's size — which only ever buys an earlier full scan,
-      // and that scan re-establishes the truth.
-      this.deltaBytes += audio.byteLength;
+      if (folded === null) {
+        // The hint has never been established: the next sweep's scan seeds it
+        // from the rows themselves, this row included.
+        this.deltaBytes += audio.byteLength;
+      } else {
+        // Subtract exactly what the written value accounted for (our own bytes
+        // are in it), leaving anything a concurrent put added meanwhile.
+        this.settleDelta(accounted);
+      }
     } catch (error) {
       handleDbError(error);
     }
@@ -225,23 +263,38 @@ class AudioCacheRepo {
   }
 
   /**
-   * The tracked byte total (persisted hint + this session's net delta), or
-   * null while it has never been established. Read OUTSIDE the gate.
+   * The persisted hint as it stands on disk, or null while it has never been
+   * established (or holds a non-number). Read OUTSIDE the gate — the
+   * read-modify-write recipe in write-gate.ts.
    */
-  private async trackedTotal(
+  private async readStoredTotal(
     db: Awaited<ReturnType<typeof getConnection>>,
   ): Promise<number | null> {
     const stored = await db.get('app_metadata', APP_METADATA_KEYS.audioCacheTotalBytes);
     if (typeof stored !== 'number' || !Number.isFinite(stored)) return null;
-    return Math.max(0, stored + this.deltaBytes);
+    return stored;
   }
 
-  /** Adopt `total` as the established value and persist it (one gated put). */
-  private async persistTotal(total: number): Promise<void> {
-    this.deltaBytes = 0;
+  /**
+   * Retire the part of {@link deltaBytes} a just-committed total accounted for.
+   * NEVER a reset: bytes a putSegment added after `accounted` was snapshotted
+   * are not in the written value, so they stay pending for the next fold.
+   */
+  private settleDelta(accounted: number): void {
+    if (accounted <= 0) return;
+    this.deltaBytes = Math.max(0, this.deltaBytes - accounted);
+  }
+
+  /**
+   * Adopt `total` as the established value and persist it (one gated put).
+   * `accounted` is the {@link deltaBytes} snapshot `total` already covers; it
+   * is settled only AFTER the write lands.
+   */
+  private async persistTotal(total: number, accounted: number): Promise<void> {
     await write(['app_metadata'], (tx) => {
       tx.objectStore('app_metadata').put(total, APP_METADATA_KEYS.audioCacheTotalBytes);
     });
+    this.settleDelta(accounted);
   }
 
   /**
@@ -261,13 +314,19 @@ class AudioCacheRepo {
       // common case for both callers (boot + every EVICTION_PUT_INTERVAL
       // puts) and the whole point of tracking — the scan below deserializes
       // every row's audio buffer.
-      const tracked = await this.trackedTotal(db);
+      const stored = await this.readStoredTotal(db);
+      const pending = this.deltaBytes;
+      const tracked = stored === null ? null : Math.max(0, stored + pending);
       if (tracked !== null && tracked <= budgetBytes) {
-        if (this.deltaBytes !== 0) await this.persistTotal(tracked);
+        if (pending > 0) await this.persistTotal(tracked, pending);
         return { deleted: 0, freedBytes: 0, scanned: 0 };
       }
 
-      // Pass 1: streaming scan (no getAll — rows hold multi-MB blobs).
+      // Pass 1: streaming scan (no getAll — rows hold multi-MB blobs). The
+      // scan's own total supersedes the hint, so it covers the bytes pending
+      // RIGHT NOW (their rows are committed) but not a put that lands while it
+      // runs — hence the snapshot, settled once a scan-derived total commits.
+      let credit = this.deltaBytes;
       const entries: { key: string; lastAccessed: number; size: number }[] = [];
       let totalBytes = 0;
       {
@@ -286,7 +345,7 @@ class AudioCacheRepo {
 
       if (totalBytes <= budgetBytes) {
         // The scan is the source of truth — seed/correct the tracked total.
-        await this.persistTotal(totalBytes);
+        await this.persistTotal(totalBytes, credit);
         return { deleted: 0, freedBytes: 0, scanned };
       }
 
@@ -308,12 +367,18 @@ class AudioCacheRepo {
         if (batch.length === 0) return;
         const keys = batch;
         batch = [];
-        this.deltaBytes = 0;
+        // Every batch total derives from the one scan, so the scan's credit is
+        // settled once — by the first batch that commits. A put that lands
+        // between batches keeps its bytes pending (this total does not carry
+        // them) and the next fold or sweep picks them up.
+        const spend = credit;
+        credit = 0;
         await write(['cache_audio_blobs', 'app_metadata'], (tx) => {
           const store = tx.objectStore('cache_audio_blobs');
           for (const key of keys) store.delete(key);
           tx.objectStore('app_metadata').put(runningTotal, APP_METADATA_KEYS.audioCacheTotalBytes);
         });
+        this.settleDelta(spend);
       };
 
       for (const entry of candidates) {
@@ -329,7 +394,7 @@ class AudioCacheRepo {
       await flushBatch(remaining);
       // Nothing was evictable (every row inside the 24 h window): the scan's
       // total still has to land so the next sweep does not rescan.
-      if (deleted === 0) await this.persistTotal(totalBytes);
+      if (deleted === 0) await this.persistTotal(totalBytes, credit);
 
       if (deleted > 0) {
         logger.info(

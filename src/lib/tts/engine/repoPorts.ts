@@ -24,11 +24,14 @@ export const repoBookContentPort: BookContentPort = bookContent;
  * AudioPlayerService read sessions while the QueueModel wrote them; now one
  * object does both, per book, in order).
  *
- * It also closes the repo's documented P13a cold-start gap: a `saveQueue` on
- * an unseeded in-memory mirror used to construct a fresh record and clobber a
- * persisted `lastPauseTime` from the previous session. Here every persist for
- * a book is chained behind one `getSession` seed read, so the mirror is
- * always populated before the first write.
+ * Every persist for a book is chained behind one `getSession` seed read, so
+ * the first write of a session is ordered after the row it may have to
+ * preserve (P13a). That memo is an ORDERING optimization, not the guarantee:
+ * the repo's mirror is a bounded LRU, so a book it seeded can be evicted
+ * mid-session while this map still says "seeded". Cold-safety therefore lives
+ * in the repo — `saveQueue` marks a record it had to build from scratch and
+ * the flush merges the persisted row in before the put (playbackCache.ts).
+ * Do not re-derive that invariant from this memo.
  *
  * WebKit-detach discipline: see the {@link SessionStore} port docs — writes
  * are debounced/fire-and-forget; callers never await them inside the

@@ -136,6 +136,59 @@ describe('data/repos/playbackCache', () => {
     });
   });
 
+  /**
+   * The mirror's 4-entry LRU broke the "seed once per book" premise its consumer
+   * (createRepoSessionStore) memoizes: once a book is evicted, a saveQueue built
+   * its record from scratch — `{bookId, playbackQueue, updatedAt}` — and the next
+   * write dropped every other field the persisted row carried, the previous
+   * session's pause stamp included. saveQueue is cold-safe now: the flush merges
+   * the persisted row in first (outside the gate, before the synchronous put).
+   */
+  describe('regression: a cold saveQueue keeps what the persisted row carried', () => {
+    it('re-seeds an LRU-evicted book from disk instead of clobbering its pause stamp', async () => {
+      const db = await getConnection();
+      await playbackCache.savePauseTime('cold-a', 4242);
+      playbackCache.saveQueue('cold-a', [{ text: 'First', cfi: 'cfi-first' }]);
+      await playbackCache.flushPending();
+      expect((await db.get('cache_session_state', 'cold-a'))?.lastPauseTime).toBe(4242);
+
+      // The engine touches four more books: the 4-entry mirror evicts book A.
+      for (const id of ['cold-b', 'cold-c', 'cold-d', 'cold-e']) {
+        playbackCache.saveQueue(id, [{ text: id, cfi: `cfi-${id}` }]);
+        await playbackCache.flushPending();
+      }
+
+      // A later persist for A — its consumer still believes A was seeded once
+      // and never re-reads, so the repo has to be the one that stays honest.
+      playbackCache.saveQueue('cold-a', [{ text: 'Later', cfi: 'cfi-later' }]);
+      await playbackCache.flushPending();
+
+      const row = await db.get('cache_session_state', 'cold-a');
+      expect(row?.playbackQueue).toEqual([{ text: 'Later', cfi: 'cfi-later' }]);
+      expect(row?.lastPauseTime, 'the persisted pause stamp must survive').toBe(4242);
+    });
+
+    it('still lets savePauseTime(null) clear the stamp on a cold record', async () => {
+      const db = await getConnection();
+      await db.put('cache_session_state', {
+        bookId: 'cold-clear',
+        playbackQueue: [{ text: 'Persisted', cfi: 'cfi-p' }],
+        lastPauseTime: 99,
+        updatedAt: 1,
+      });
+
+      // Cold saveQueue (nothing mirrored) followed by an explicit clear: the
+      // merge restores absent fields, never overrides a deliberate update.
+      playbackCache.saveQueue('cold-clear', [{ text: 'New', cfi: 'cfi-n' }]);
+      await playbackCache.savePauseTime('cold-clear', null);
+      await playbackCache.flushPending();
+
+      const row = await db.get('cache_session_state', 'cold-clear');
+      expect(row?.playbackQueue).toEqual([{ text: 'New', cfi: 'cfi-n' }]);
+      expect(row?.lastPauseTime).toBeUndefined();
+    });
+  });
+
   describe('regression: teardown drops (never flushes) the pending write (absorbed from db/DBService.test.ts)', () => {
     it('dropPending prevents a scheduled saveQueue from ever reaching disk', async () => {
       const db = await getConnection();

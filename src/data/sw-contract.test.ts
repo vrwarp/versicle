@@ -236,3 +236,92 @@ describe('regression: cover reads share one connection', () => {
         }
     });
 });
+
+/**
+ * The idle-close timer was module-level and unbound: its callback closed
+ * whatever `dbPromise` happened to hold 30s later, nothing cancelled it when a
+ * new request began, and `terminated`/a failed open dropped the connection
+ * while leaving it armed. So a read that was in flight when another tab's
+ * upgrade closed connection C1 armed a timer from its `finally` AFTER C1 was
+ * gone — and that timer closed C2 out from under live cover requests.
+ */
+describe('regression: the idle close is bound to the connection it was armed for', () => {
+    const openConnection = () => ({
+        objectStoreNames: { contains: vi.fn(() => true) },
+        get: vi.fn(async () => ({ coverBlob: new Blob(['x'], { type: 'image/webp' }) })),
+        close: vi.fn(),
+    });
+
+    beforeEach(async () => {
+        await closeCoverConnection();
+        vi.clearAllMocks();
+    });
+
+    afterEach(async () => {
+        vi.useRealTimers();
+        await closeCoverConnection();
+    });
+
+    it('still closes its OWN connection once the burst goes idle', async () => {
+        const c1 = openConnection();
+        vi.mocked(idb.openDB).mockResolvedValue(c1 as unknown as idb.IDBPDatabase);
+        vi.useFakeTimers();
+
+        await getCoverFromDB('book-1');
+        expect(c1.close).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(c1.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('a timer armed for a closed connection cannot close its successor', async () => {
+        const c1 = openConnection();
+        const c2 = openConnection();
+        // The first read hangs until we release it — it is still in flight when
+        // the upgrade closes C1, exactly like a cover read during a paint.
+        let releaseFirstRead!: (cover: { coverBlob: Blob }) => void;
+        c1.get.mockImplementationOnce(
+            () => new Promise((resolve) => { releaseFirstRead = resolve; }),
+        );
+        vi.mocked(idb.openDB)
+            .mockResolvedValueOnce(c1 as unknown as idb.IDBPDatabase)
+            .mockResolvedValueOnce(c2 as unknown as idb.IDBPDatabase);
+        vi.useFakeTimers();
+
+        const inFlight = getCoverFromDB('book-1');
+        await Promise.resolve();
+        await Promise.resolve();
+
+        // Another tab starts an upgrade: C1 is closed and dropped.
+        const options = vi.mocked(idb.openDB).mock.calls[0][2];
+        options?.blocking?.(1, 2, {} as IDBVersionChangeEvent);
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(c1.close).toHaveBeenCalledTimes(1);
+
+        // The in-flight read finishes and arms the idle close from its finally —
+        // for a connection that no longer exists.
+        releaseFirstRead({ coverBlob: new Blob(['x'], { type: 'image/webp' }) });
+        await inFlight;
+
+        // …then the next cover request opens C2 and is STILL IN FLIGHT when the
+        // stale timer comes due (the burst the SW is actually serving).
+        let releaseSecondRead!: (cover: { coverBlob: Blob }) => void;
+        c2.get.mockImplementationOnce(
+            () => new Promise((resolve) => { releaseSecondRead = resolve; }),
+        );
+        const live = getCoverFromDB('book-2');
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(idb.openDB).toHaveBeenCalledTimes(2);
+
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(c2.close).not.toHaveBeenCalled();
+
+        releaseSecondRead({ coverBlob: new Blob(['x'], { type: 'image/webp' }) });
+        await expect(live).resolves.toBeInstanceOf(Blob);
+        // C2 survived, so the next cover still rides the same connection.
+        await expect(getCoverFromDB('book-3')).resolves.toBeInstanceOf(Blob);
+        expect(idb.openDB).toHaveBeenCalledTimes(2);
+    });
+});

@@ -17,6 +17,13 @@
  * upgrade is never blocked by a cover read, and `terminated` drops it so the
  * next request reopens.
  *
+ * The idle timer is BOUND to the connection it was armed for and cancelled
+ * when a new request starts. Neither is cosmetic: `blocking`/`terminated`/a
+ * failed open drop the memoized promise while reads are still in flight, and
+ * each of those reads arms the timer from its `finally` afterwards — an
+ * unbound timer would then close whichever connection the NEXT burst had
+ * opened, mid-read, 30s later.
+ *
  * The legacy `'books'`-store fallback survives until P9: a pre-v18
  * straggler's covers must render before their first main-app upgrade.
  */
@@ -37,15 +44,28 @@ const IDLE_CLOSE_MS = 30_000;
 let dbPromise: Promise<IDBPDatabase> | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
+function cancelIdleClose(): void {
+  if (idleTimer !== null) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+}
+
+/** Drop `promise` as the shared connection, if it still is the shared one. */
+function forgetConnection(promise: Promise<IDBPDatabase>): void {
+  if (dbPromise !== promise) return;
+  dbPromise = null;
+  // The armed timer belongs to the connection being dropped; nothing may
+  // inherit it.
+  cancelIdleClose();
+}
+
 /**
  * Close the shared cover connection (if any) and cancel the idle timer.
  * Idempotent; safe to call while an open is still in flight.
  */
 export async function closeCoverConnection(): Promise<void> {
-  if (idleTimer !== null) {
-    clearTimeout(idleTimer);
-    idleTimer = null;
-  }
+  cancelIdleClose();
   const promise = dbPromise;
   dbPromise = null;
   if (!promise) return;
@@ -56,27 +76,39 @@ export async function closeCoverConnection(): Promise<void> {
   }
 }
 
-function scheduleIdleClose(): void {
-  if (idleTimer !== null) clearTimeout(idleTimer);
+/**
+ * Arm the idle close for `connection` — the connection the finished request
+ * actually used. A request that outlived its connection (its promise is no
+ * longer the shared one) arms nothing, and a timer that does fire re-checks
+ * the binding, so a successor connection is never closed out from under live
+ * requests.
+ */
+function scheduleIdleClose(connection: Promise<IDBPDatabase>): void {
+  cancelIdleClose();
+  if (dbPromise !== connection) return;
   idleTimer = setTimeout(() => {
     idleTimer = null;
+    if (dbPromise !== connection) return;
     void closeCoverConnection();
   }, IDLE_CLOSE_MS);
 }
 
 function getCoverConnection(): Promise<IDBPDatabase> {
+  // A new request begins: whatever idle close was armed for the burst before
+  // it must not fire while this one is in flight.
+  cancelIdleClose();
   if (!dbPromise) {
-    const promise = openDB(DB_NAME, undefined, {
+    const promise: Promise<IDBPDatabase> = openDB(DB_NAME, undefined, {
       // Never block another context's upgrade behind a cover read.
       blocking() {
         void closeCoverConnection();
       },
       terminated() {
-        if (dbPromise === promise) dbPromise = null;
+        forgetConnection(promise);
       },
     }).catch((error) => {
       // Never cache a failed open (connection.ts's reset-on-failure).
-      if (dbPromise === promise) dbPromise = null;
+      forgetConnection(promise);
       throw error;
     });
     dbPromise = promise;
@@ -85,7 +117,8 @@ function getCoverConnection(): Promise<IDBPDatabase> {
 }
 
 export async function getCoverFromDB(bookId: string): Promise<Blob | ArrayBuffer | undefined> {
-  const db = await getCoverConnection();
+  const connection = getCoverConnection();
+  const db = await connection;
 
   try {
     // V18 Architecture
@@ -102,7 +135,7 @@ export async function getCoverFromDB(bookId: string): Promise<Blob | ArrayBuffer
 
     return undefined;
   } finally {
-      scheduleIdleClose();
+      scheduleIdleClose(connection);
   }
 }
 
