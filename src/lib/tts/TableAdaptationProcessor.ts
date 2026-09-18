@@ -7,6 +7,15 @@ import type { TableLocation } from '@data/repos/bookContent';
 import type { EngineContext } from './engine/EngineContext';
 import { ensureGenAIReady } from './genaiReady';
 
+/**
+ * A table root as the adaptation cache keys it: legacy Range CFIs (e.g. from the buggy
+ * `cfiFromRange`) collapse to their Point CFI parent, everything else passes through.
+ */
+function normalizeTableCfi(cfi: string): string {
+    const range = parseCfiRange(cfi);
+    return (range && range.parent) ? `epubcfi(${range.parent})` : cfi;
+}
+
 export class TableAdaptationProcessor {
     private tableAnalysisPromises = new Map<string, Promise<void>>();
     private readonly ctx: EngineContext;
@@ -15,10 +24,18 @@ export class TableAdaptationProcessor {
      * no pixels). Both this processor and SectionAnalysisDriver.buildGroups
      * need the CFIs on EVERY section load and every prewarm; the table set
      * cannot change while a book is open, so one read per book is enough.
-     * Switching books drops the previous entry — the only stale window is a
-     * reprocess of the book that is currently open (there is no engine-side
-     * notification for it today), which costs stale grouping until the next
-     * book switch, never a wrong adaptation: the pixels are always re-read.
+     *
+     * Switching books drops the previous entry. The one stale window is a
+     * reprocess of the book that is currently open: it deletes the book's
+     * table rows and writes new ones keyed `${bookId}-${cfi}`, so any CFI
+     * drift changes every row id and the memo's ids stop resolving. That
+     * costs stale grouping until the next book switch — and it WOULD cost the
+     * section's adaptations outright (a work set of stale ids matches no live
+     * blob, leaving nothing to send the model), which is why
+     * {@link processTableAdaptations} detects the total blob miss and heals
+     * from the live read. There is no engine-side reprocess notification
+     * today; reprocess writes IndexedDB directly, with no store to subscribe
+     * to (unlike the lexicon invalidation ping).
      */
     private locationsBookId: string | null = null;
     private locationsPromise: Promise<TableLocation[]> | null = null;
@@ -45,6 +62,13 @@ export class TableAdaptationProcessor {
             });
         }
         return this.locationsPromise;
+    }
+
+    /** Forget the memo for `bookId`, so the next {@link getTableLocations} re-reads. */
+    private invalidateTableLocations(bookId: string): void {
+        if (this.locationsBookId !== bookId) return;
+        this.locationsBookId = null;
+        this.locationsPromise = null;
     }
 
     /**
@@ -91,13 +115,10 @@ export class TableAdaptationProcessor {
             // actually reach the model. Normalizing legacy Range CFIs (e.g.
             // from buggy cfiFromRange) to their Point CFI parents.
             const locations = await this.getTableLocations(bookId);
-            const sectionTables = locations.filter(t => t.sectionId === sectionId).map(t => {
-                const range = parseCfiRange(t.cfi);
-                return {
-                    ...t,
-                    cfi: (range && range.parent) ? `epubcfi(${range.parent})` : t.cfi
-                };
-            });
+            const sectionTables = locations.filter(t => t.sectionId === sectionId).map(t => ({
+                ...t,
+                cfi: normalizeTableCfi(t.cfi),
+            }));
 
             if (sectionTables.length === 0) return;
 
@@ -114,9 +135,23 @@ export class TableAdaptationProcessor {
                 // materialized).
                 const images = await this.ctx.content.getTableImages(bookId, sectionId);
                 const blobsById = new Map(images.map(img => [img.id, img.imageBlob]));
-                const nodes = workSet
+                let nodes = workSet
                     .map(t => ({ rootCfi: t.cfi, imageBlob: blobsById.get(t.id) }))
                     .filter((n): n is { rootCfi: string; imageBlob: Blob } => n.imageBlob !== undefined);
+
+                if (nodes.length === 0 && workSet.length > 0) {
+                    // Wanted tables, resolved none: every memoized row id is gone,
+                    // which is what a reprocess of the OPEN book does (it rewrites
+                    // this book's rows, and CFI drift re-keys them). Drop the memo
+                    // so the next read — here and in buildGroups — is fresh, and
+                    // rebuild the work set from the live rows already in hand, so
+                    // the section still gets its adaptations instead of silently
+                    // getting none for the rest of the session.
+                    this.invalidateTableLocations(bookId);
+                    nodes = images
+                        .map(img => ({ rootCfi: normalizeTableCfi(img.cfi), imageBlob: img.imageBlob }))
+                        .filter(n => !existingAdaptations.has(n.rootCfi));
+                }
 
                 if (nodes.length === 0) return;
 

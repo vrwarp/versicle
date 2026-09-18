@@ -925,9 +925,9 @@ const SLICE_BUILDERS: Record<
 | `activeLanguage` | boot | current active language string | Equality-guarded: fires only when the language actually changes |
 | `genAI` | boot | `GenAISettingsSnapshot` | Equality guard on the 6 fields the engine reads; filters out `addLog` host command echoes |
 | `lexicon` | boot | incrementing version number | Only an invalidation ping; the engine pulls the assembled lexicon via the port |
-| `analysis` | boot | `ContentAnalysisSnapshot` (all section analyses) | Full snapshot on every content-analysis store change |
-| `bookLanguage` | per-book | language string for a specific book | Pre-pushed for the active book by `setBook`; live-updated by subscription |
-| `progress` | per-book | reading progress for a specific book | Live-updated by subscription for the current book |
+| `analysis` | boot | `ContentAnalysisSnapshot` — cross-book at boot, then scoped to the open book | Boot pushes every book's analyses and replaces the worker's cache wholesale. Afterwards only the OPEN book is pushed: a single changed entry as a `{key, analysis}` delta that merges, and several changes (or a deletion) as a map tagged with its `bookId`, which replaces that book's prefix and leaves every other book's entries alone. An untagged map still means the cross-book boot snapshot, so anything added to the per-book pre-push must carry `bookId` |
+| `bookLanguage` | per-book | language string for a specific book | Pre-pushed for the active book by `setBook`; live-updated by subscription. Equality-guarded against a module-level mirror of the worker's cache that BOTH writers record into — a guard remembering only its own pushes goes stale as soon as the pre-push runs |
+| `progress` | per-book | the two fields the engine reads (`currentQueueIndex`, `currentSectionIndex`) | Pre-pushed by `setBook` and equality-guarded. Deliberately narrow: the engine's own host commands write this store twice per spoken sentence, so replicating the whole row echoed it straight back |
 
 ### 9.4 Boot Sequence
 

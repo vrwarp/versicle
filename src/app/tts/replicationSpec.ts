@@ -87,6 +87,19 @@ function genAIEngineView(s: ReturnType<typeof useGenAIStore.getState>) {
     };
 }
 
+/**
+ * What the worker's `bookLanguages` cache currently holds, per book — the echo guard for the
+ * `bookLanguage` slice. Module-level because that cache has TWO writers: this file's
+ * subscription AND {@link bookSnapshotUpdates}, the setBook pre-push the client calls
+ * directly. A guard that remembers only its own pushes goes stale the moment the other writer
+ * runs; both record here instead, so the guard always compares against what the worker
+ * actually has.
+ *
+ * {@link createReplicatedSlices} clears it: the table is built once per worker client, and a
+ * fresh worker starts with an empty cache.
+ */
+const replicatedBookLanguage = new Map<string, string>();
+
 export interface ReplicatedSliceSpec {
     kind: EngineStateUpdate['kind'];
     /**
@@ -213,8 +226,12 @@ const SLICE_BUILDERS: Record<
                     push({ kind: 'analysis', key: changed[0], analysis: plain(only) });
                     return;
                 }
-                // Several entries, or a removal: replace the cache with this book's map.
-                push({ kind: 'analysis', snapshot: { sections: plain(scopeToBook(sections, prefix)) } });
+                // Several entries, or a removal: replace this BOOK'S entries with its map.
+                // `bookId` is what makes that a prefix-scoped replace on the worker side —
+                // without it the worker treats a map as authoritative for the whole cache and
+                // drops every other book's boot-replicated entries (a book switch pushes no
+                // analysis, so they never come back).
+                push({ kind: 'analysis', bookId, snapshot: { sections: plain(scopeToBook(sections, prefix)) } });
             }),
     }),
 
@@ -226,19 +243,23 @@ const SLICE_BUILDERS: Record<
         kind: 'bookLanguage',
         replication: 'per-book',
         snapshot: () => [],
-        subscribe: (push) => {
-            let lastBookId: string | null = null;
-            let lastLang: string | null = null;
-            return useBookStore.subscribe((state) => {
+        // Echo guard on {@link replicatedBookLanguage} — the worker's cache, not this
+        // subscription's own history. The two writers diverge otherwise: while the current
+        // book id is null this subscription drops every language write, so its private memory
+        // keeps the pre-window value while `bookSnapshotUpdates` re-pushes the store's real
+        // one on reopen. A later write back to the pre-window language then looks like "no
+        // news" and is suppressed, leaving the worker on a language the store no longer has —
+        // and since `bookListeners` only fire on an applied update, PlaybackController's
+        // language sync never re-reads it (wrong voice until the next book switch).
+        subscribe: (push) =>
+            useBookStore.subscribe((state) => {
                 const bookId = deps.getCurrentBookId();
                 if (!bookId) return;
                 const lang = state.books[bookId]?.language || 'en';
-                if (bookId === lastBookId && lang === lastLang) return;
-                lastBookId = bookId;
-                lastLang = lang;
+                if (replicatedBookLanguage.get(bookId) === lang) return;
+                replicatedBookLanguage.set(bookId, lang);
                 push({ kind: 'bookLanguage', bookId, lang });
-            });
-        },
+            }),
     }),
 
     progress: (deps) => ({
@@ -249,6 +270,14 @@ const SLICE_BUILDERS: Record<
         // Equality-guarded on the ENGINE view (see toProgressEngineView): the engine's own
         // per-sentence writes come back through this subscription, and only a queue/section
         // move is news to it.
+        //
+        // This memory is subscription-private, unlike {@link replicatedBookLanguage}, and can
+        // drift from the worker's cache the same way across a null-book window. It is inert
+        // here: the engine's ONLY read of replicated progress is restoreQueue, which runs
+        // inside setBookId — immediately after `bookSnapshotUpdates` pushed the authoritative
+        // value — and nothing re-reads it until the next setBookId pre-pushes again. A
+        // suppressed push can therefore leave a stale cache entry, but no reader ever observes
+        // it. (Wrong-voice bugs need a reader that keeps reading; bookLanguage has one.)
         subscribe: (push) => {
             const last = new Map<string, string>();
             return useReadingStateStore.subscribe(() => {
@@ -301,8 +330,9 @@ export interface ReplicationDeps {
     getCurrentBookId(): string | null;
 }
 
-/** Build the full replication table. */
+/** Build the full replication table (once per worker client — see {@link replicatedBookLanguage}). */
 export function createReplicatedSlices(deps: ReplicationDeps): ReplicatedSliceSpec[] {
+    replicatedBookLanguage.clear();
     return (Object.keys(SLICE_BUILDERS) as EngineStateUpdate['kind'][]).map((kind) =>
         SLICE_BUILDERS[kind](deps)
     );
@@ -315,6 +345,9 @@ export function createReplicatedSlices(deps: ReplicationDeps): ReplicatedSliceSp
 export function bookSnapshotUpdates(bookId: string): EngineStateUpdate[] {
     const lang = useBookStore.getState().books[bookId]?.language || 'en';
     const progress = useReadingStateStore.getState().getProgress(bookId);
+    // This push is the OTHER writer of the worker's bookLanguage cache: record it, or the
+    // slice's echo guard keeps comparing against a value the worker no longer holds.
+    replicatedBookLanguage.set(bookId, lang);
     return [
         { kind: 'bookLanguage', bookId, lang },
         { kind: 'progress', bookId, progress: toProgressEngineView(progress) },

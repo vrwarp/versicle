@@ -72,6 +72,56 @@ describe('WorkerEngineContext (replicated-state context for the worker)', () => 
         });
     });
 
+    describe('regression: a book-scoped analysis map replaces only that book', () => {
+        // The host's live subscription is scoped to the OPEN book, so its multi-change
+        // fallback carries that book's map — but the map form used to replace the WHOLE
+        // cache. Every other book's boot-replicated entries went with it, and a book switch
+        // pushes language + progress only (never analysis), so they never came back: the
+        // AnalysisApplier then found nothing on section load and neither applied nor cleared
+        // the skip mask and table adaptations.
+        const boot = () => {
+            const { ctx } = makeCtx();
+            const entries = {
+                s1: { status: 'success', generatedAt: 1 } as SectionAnalysis,
+                s2: { status: 'success', generatedAt: 1 } as SectionAnalysis,
+                other: { status: 'success', generatedAt: 1 } as SectionAnalysis,
+            };
+            ctx.applyUpdate({
+                kind: 'analysis',
+                snapshot: { sections: { 'b1/s1': entries.s1, 'b1/s2': entries.s2, 'b2/s9': entries.other } },
+            });
+            return { ctx, entries };
+        };
+
+        it('keeps the other books while replacing the named book, deletions included', () => {
+            const { ctx, entries } = boot();
+            const s1b = { status: 'success', generatedAt: 2 } as SectionAnalysis;
+
+            // Two of b1's entries changed in one store write and b1/s2 went away.
+            ctx.applyUpdate({ kind: 'analysis', bookId: 'b1', snapshot: { sections: { 'b1/s1': s1b } } });
+
+            expect(ctx.contentAnalysis.getAnalysis('b1', 's1')).toBe(s1b);
+            expect(ctx.contentAnalysis.getAnalysis('b1', 's2'), 'the scoped map is authoritative for its own prefix').toBeUndefined();
+            expect(ctx.contentAnalysis.getAnalysis('b2', 's9'), "another book's entries survive").toBe(entries.other);
+        });
+
+        it('clearing the open book empties only that book', () => {
+            const { ctx, entries } = boot();
+            ctx.applyUpdate({ kind: 'analysis', bookId: 'b1', snapshot: { sections: {} } });
+
+            expect(ctx.contentAnalysis.getAnalysis('b1', 's1')).toBeUndefined();
+            expect(ctx.contentAnalysis.getAnalysis('b2', 's9')).toBe(entries.other);
+        });
+
+        it('an UNSCOPED map is still the cross-book boot snapshot — a full replace', () => {
+            const { ctx } = makeCtx();
+            const s1 = { status: 'success', generatedAt: 1 } as SectionAnalysis;
+            ctx.applyUpdate({ kind: 'analysis', snapshot: { sections: { 'b1/s1': s1 } } });
+            ctx.applyUpdate({ kind: 'analysis', snapshot: { sections: {} } });
+            expect(ctx.contentAnalysis.getSnapshot()).toEqual({ sections: {} });
+        });
+    });
+
     it('routes writes and side effects outbound as host commands', () => {
         const { ctx, commands } = makeCtx();
 

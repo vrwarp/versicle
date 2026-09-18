@@ -341,7 +341,7 @@ describe('replication spec completeness', () => {
             unsub();
         });
 
-        it('falls back to a BOOK-SCOPED full map when several entries change at once', () => {
+        it('falls back to a BOOK-SCOPED, BOOK-TAGGED full map when several entries change at once', () => {
             seed();
             const slice = makeSlices('b1').find((s) => s.kind === 'analysis')!;
             const pushed: EngineStateUpdate[] = [];
@@ -356,8 +356,101 @@ describe('replication spec completeness', () => {
             });
 
             expect(pushed).toHaveLength(1);
-            const snapshot = (pushed[0] as unknown as { snapshot: { sections: Record<string, unknown> } }).snapshot;
-            expect(Object.keys(snapshot.sections).sort()).toEqual(['b1/s1', 'b1/s2']);
+            const update = pushed[0] as unknown as { bookId?: string; snapshot: { sections: Record<string, unknown> } };
+            expect(Object.keys(update.snapshot.sections).sort()).toEqual(['b1/s1', 'b1/s2']);
+            // The map carries the book it is authoritative FOR. Without that tag the worker
+            // treats a map as the whole cache and drops every other book (see the regression
+            // block below); the payload's key set alone does not say which shape this is.
+            expect(update.bookId).toBe('b1');
+            unsub();
+        });
+    });
+
+    describe('regression: a book-scoped analysis map must not wipe the other books', () => {
+        // The two sides of this one kind have to agree on SCOPE. The host scopes its
+        // multi-change fallback to the open book — the whole point of the change was to stop
+        // deep-cloning a cross-library map on every write — while the worker used to treat
+        // any map as authoritative for its entire cache. Other books' boot-replicated
+        // entries were silently dropped, and a book switch pushes language + progress only,
+        // never analysis, so they never came back: the AnalysisApplier found nothing on
+        // section load and neither applied nor cleared that book's mask/adaptations.
+        const otherBook = { status: 'success', generatedAt: 1 };
+
+        function bootedWorker() {
+            fakeStores.analysis.state = {
+                sections: { 'b1/s1': { status: 'success', generatedAt: 1 }, 'b2/s9': otherBook },
+            };
+            const ctx = new WorkerEngineContext({ post: vi.fn() });
+            const slice = makeSlices('b1').find((s) => s.kind === 'analysis')!;
+            // Boot replicates cross-book (the engine has no book yet), then b1 is opened.
+            for (const update of slice.snapshot()) ctx.applyUpdate(update);
+            return { ctx, unsub: slice.subscribe((u) => ctx.applyUpdate(u)) };
+        }
+
+        it('keeps book B when a multi-entry write lands for the open book A', () => {
+            const { ctx, unsub } = bootedWorker();
+
+            // A remote sync lands two of the open book's analyses in ONE store write.
+            fakeStores.analysis.emit({
+                sections: {
+                    'b1/s1': { status: 'success', generatedAt: 3 },
+                    'b1/s2': { status: 'loading', generatedAt: 3 },
+                    'b2/s9': otherBook,
+                },
+            });
+
+            expect(ctx.contentAnalysis.getAnalysis('b1', 's2')).toBeDefined();
+            expect(
+                ctx.contentAnalysis.getAnalysis('b2', 's9'),
+                'switching to b2 pushes no analysis — this entry is all the engine will ever have',
+            ).toEqual(otherBook);
+            unsub();
+        });
+
+        it('deleting the open book\'s analyses empties only that book', () => {
+            const { ctx, unsub } = bootedWorker();
+
+            fakeStores.analysis.emit({ sections: { 'b2/s9': otherBook } });
+
+            expect(ctx.contentAnalysis.getAnalysis('b1', 's1')).toBeUndefined();
+            expect(ctx.contentAnalysis.getAnalysis('b2', 's9')).toEqual(otherBook);
+            unsub();
+        });
+    });
+
+    describe('regression: the bookLanguage echo guard tracks the WORKER cache, not one writer', () => {
+        // That cache has two writers — this slice's subscription and the setBook pre-push
+        // (bookSnapshotUpdates) — and the guard used to remember only its own pushes. Any
+        // window with no current book desynchronizes them: the subscription drops the writes
+        // it sees there, so a later write back to the pre-window language looks like "no
+        // news" and is suppressed, leaving the worker on a language the store no longer has.
+        // PlaybackController's language sync only re-reads when an update is APPLIED
+        // (bookListeners), so TTS keeps the wrong voice until the next book switch.
+        it('re-pushes a language the setBook pre-push overwrote while no book was open', () => {
+            const ctx = new WorkerEngineContext({ post: vi.fn() });
+            fakeStores.book.state = { books: { b1: { bookId: 'b1', language: 'fr' } } };
+
+            let currentBookId: string | null = 'b1';
+            const slice = createReplicatedSlices({ getCurrentBookId: () => currentBookId })
+                .find((s) => s.kind === 'bookLanguage')!;
+            const unsub = slice.subscribe((u) => ctx.applyUpdate(u));
+
+            fakeStores.book.emit({ books: { b1: { bookId: 'b1', language: 'fr' } } });
+            expect(ctx.book.getBookLanguage('b1')).toBe('fr');
+
+            // The reader closes (setBook(null)); edits in this window never cross.
+            currentBookId = null;
+            fakeStores.book.emit({ books: { b1: { bookId: 'b1', language: 'de' } } });
+
+            // Reopening pre-pushes the store's real value — the other writer of this cache.
+            currentBookId = 'b1';
+            for (const update of bookSnapshotUpdates('b1')) ctx.applyUpdate(update);
+            expect(ctx.book.getBookLanguage('b1')).toBe('de');
+
+            // Back to the pre-window language: news to the WORKER, whatever this
+            // subscription pushed last.
+            fakeStores.book.emit({ books: { b1: { bookId: 'b1', language: 'fr' } } });
+            expect(ctx.book.getBookLanguage('b1')).toBe('fr');
             unsub();
         });
     });

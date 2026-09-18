@@ -62,11 +62,16 @@ export type EngineStateUpdate =
     | { kind: 'genAI'; settings: GenAISettingsSnapshot }
     | { kind: 'activeLanguage'; lang: string }
     | { kind: 'bookLanguage'; bookId: string; lang: string }
-    // Two shapes, one kind: the full map (boot snapshot / book switch — it REPLACES the
-    // cache) and a single-entry delta, which merges. The host pushes a delta for the common
-    // case (one section's analysis changed), so a content-analysis write no longer deep-clones
-    // and structured-clones the whole cross-book map.
-    | { kind: 'analysis'; snapshot: ContentAnalysisSnapshot }
+    // Two shapes, one kind: a map and a single-entry delta, which merges. The host pushes a
+    // delta for the common case (one section's analysis changed), so a content-analysis write
+    // no longer deep-clones and structured-clones the whole cross-book map.
+    //
+    // The map form's SCOPE is `bookId`: omitted it is the cross-book boot snapshot and
+    // replaces the cache wholesale; set, the payload holds only `${bookId}/…` keys and
+    // replaces ONLY that prefix — the live subscription is scoped to the open book, and other
+    // books' boot-replicated entries must survive a write to the open one (they are what the
+    // engine reads after a book switch, which pushes no analysis of its own).
+    | { kind: 'analysis'; snapshot: ContentAnalysisSnapshot; bookId?: string }
     | { kind: 'analysis'; key: string; analysis: SectionAnalysis }
     | { kind: 'progress'; bookId: string; progress: ProgressEngineView }
     // Lexicon invalidation ping (5c-PR3): the assembled rules are PULLED via the
@@ -194,11 +199,14 @@ export class WorkerEngineContext implements EngineContext {
                 break;
             case 'analysis': {
                 // A delta merges into the cached map (shallow copy — entry identities are
-                // preserved, which the AnalysisApplier's generatedAt dedup relies on); the
-                // full-map form replaces it.
+                // preserved, which the AnalysisApplier's generatedAt dedup relies on); a map
+                // replaces the cache, wholly (boot) or within its book's prefix (see the
+                // `bookId` field on the update).
                 const snapshot = 'key' in update
                     ? { sections: { ...(this.analysisSnapshot?.sections ?? {}), [update.key]: update.analysis } }
-                    : update.snapshot;
+                    : update.bookId === undefined
+                        ? update.snapshot
+                        : { sections: { ...this.sectionsOutsideBook(update.bookId), ...update.snapshot.sections } };
                 this.analysisSnapshot = snapshot;
                 this.analysisListeners.forEach((l) => l(snapshot));
                 break;
@@ -216,6 +224,21 @@ export class WorkerEngineContext implements EngineContext {
                 throw new Error(`WorkerEngineContext: unhandled state update ${JSON.stringify(unhandled)}`);
             }
         }
+    }
+
+    /**
+     * The cached analyses that do NOT belong to `bookId` — the part a book-scoped map must
+     * leave alone. Keys are `${bookId}/${sectionId}`; the scoped payload is authoritative for
+     * its own prefix (so a deletion in the open book really deletes) and says nothing about
+     * the rest.
+     */
+    private sectionsOutsideBook(bookId: string): Record<string, SectionAnalysis> {
+        const prefix = `${bookId}/`;
+        const kept: Record<string, SectionAnalysis> = {};
+        for (const [key, analysis] of Object.entries(this.analysisSnapshot?.sections ?? {})) {
+            if (!key.startsWith(prefix)) kept[key] = analysis;
+        }
+        return kept;
     }
 
     /** Loud accessor for a boot-replicated slice: throwing beats serving a silent default. */

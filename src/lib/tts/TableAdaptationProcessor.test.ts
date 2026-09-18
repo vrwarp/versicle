@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createZustandEngineContext } from '@app/tts/createZustandEngineContext';
 import { TableAdaptationProcessor } from './TableAdaptationProcessor';
+import { FakeEngineContext } from './engine/FakeEngineContext';
 import { bookContent } from '@data/repos/bookContent';
 import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
 import { useGenAIStore } from '@store/useGenAIStore';
@@ -139,5 +140,60 @@ describe('regression: AudioContentPipeline_TableCfi', () => {
         expect(indices).toContain(0); // Inside
         expect(indices).not.toContain(1); // Outside
         expect(indices.length).toBe(1);
+    });
+});
+
+describe('regression: a reprocess of the OPEN book must not skip its adaptations', () => {
+    // The per-book table-location memo outlives a reprocess of the book that is open.
+    // A reprocess deletes that book's table-image rows and writes new ones keyed
+    // `${bookId}-${cfi}`, so any CFI drift re-keys every row: the memo's ids resolve to no
+    // live blob, the node list comes out empty and the method returned silently — no table
+    // adaptation for that section for the rest of the session. Before the memo, the work set
+    // and the blobs came from the same live read, so a reprocess degraded gracefully.
+    //
+    // Driven through FakeEngineContext (no module mocks): its content port serves both
+    // listTableLocations and getTableImages from `tableLocations`, so rewriting that array
+    // after the memo is warmed IS the reprocess.
+    const OLD_CFI = 'epubcfi(/6/14!/4/2)';
+    const NEW_CFI = 'epubcfi(/6/14!/4/4)';
+    const SENTENCES: SentenceNode[] = [{ text: 'Row one, column one.', cfi: 'epubcfi(/6/14!/4/4/1:0)' }];
+
+    async function reprocessedWhileOpen() {
+        const ctx = new FakeEngineContext();
+        ctx.genAISettings = { isEnabled: true, isTableAdaptationEnabled: true, apiKey: 'test-key' };
+        ctx.genAIConfigured = true;
+        ctx.tableAdaptationResults = [{ cfi: NEW_CFI, adaptation: 'A table, in words.' }];
+        ctx.tableLocations['book1'] = [{ id: `book1-${OLD_CFI}`, cfi: OLD_CFI, sectionId: 'section1' }];
+
+        const processor = new TableAdaptationProcessor(ctx);
+        // Warmed by the first section load (SectionAnalysisDriver.buildGroups shares this memo).
+        await processor.getTableLocations('book1');
+        // …and now the open book is reprocessed: same table, drifted CFI, new row id.
+        ctx.tableLocations['book1'] = [{ id: `book1-${NEW_CFI}`, cfi: NEW_CFI, sectionId: 'section1' }];
+        return { ctx, processor };
+    }
+
+    it('still sends the section\'s tables to the model when every memoized row id is gone', async () => {
+        const { ctx, processor } = await reprocessedWhileOpen();
+
+        await processor.processTableAdaptations('book1', 'section1', SENTENCES, () => {});
+
+        expect(ctx.generateTableAdaptationsCalls).toHaveLength(1);
+        expect(ctx.generateTableAdaptationsCalls[0].nodes.map(n => n.rootCfi)).toEqual([NEW_CFI]);
+        expect(ctx.savedTableAdaptations).toEqual([{
+            bookId: 'book1',
+            sectionId: 'section1',
+            adaptations: [{ rootCfi: NEW_CFI, text: 'A table, in words.' }],
+        }]);
+    });
+
+    it('drops the stale memo, so the grouping read heals too', async () => {
+        const { ctx, processor } = await reprocessedWhileOpen();
+        expect(ctx.tableLocationReads).toEqual(['book1']);
+
+        await processor.processTableAdaptations('book1', 'section1', SENTENCES, () => {});
+        await processor.getTableLocations('book1');
+
+        expect(ctx.tableLocationReads).toEqual(['book1', 'book1']);
     });
 });
