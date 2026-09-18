@@ -220,10 +220,18 @@ export function useReaderController(
   // `bookMetadata` changes identity on every page turn and TTS sentence. The
   // full projection still flows out of the controller — ImportJumpPrompt reads
   // `progress`/`currentCfi` off it — but the reader ENGINE consumes only the
-  // fields below (useEpubReader: the theme spec's baseFontSize/baseLineHeight,
-  // the synthetic-TOC pair at load time) plus the version the redirect checks.
-  // Narrowing them into their own memo keeps `readerOptions` and the
-  // version-check effect stable across progress-only writes.
+  // fields below plus the version the redirect checks. useEpubReader reads, off
+  // the metadata it is handed: the theme spec's baseFontSize/baseLineHeight,
+  // the synthetic-TOC pair (useSyntheticToc/syntheticToc) at load time, and
+  // `currentCfi` as its LAST-RESORT start location. Narrowing them into their
+  // own memo keeps `readerOptions` and the version-check effect stable across
+  // progress-only writes: every hoisted dependency is a primitive, so a
+  // progress write that moves none of them does not move the memo either.
+  //
+  // Every field useEpubReader consumes has to be listed here — the narrowed
+  // object still satisfies `BookMetadata` (every consumed field is optional),
+  // so an omission is a SILENT drop, not a type error. useReaderController's
+  // suite gates that against the hook's source.
   const hasBookMetadata = bookMetadata != null;
   const metaId = bookMetadata?.id;
   const metaTitle = bookMetadata?.title;
@@ -235,6 +243,8 @@ export function useReaderController(
   const metaBaseLineHeight = bookMetadata?.baseLineHeight;
   const metaUseSyntheticToc = bookMetadata?.useSyntheticToc;
   const metaSyntheticToc = bookMetadata?.syntheticToc;
+  // A string, so hoisting it keeps the memo free of identity churn.
+  const metaCurrentCfi = bookMetadata?.currentCfi;
   const readerMetadata = useMemo<BookMetadata | null>(
     () =>
       !hasBookMetadata
@@ -252,6 +262,7 @@ export function useReaderController(
             baseLineHeight: metaBaseLineHeight,
             useSyntheticToc: metaUseSyntheticToc,
             syntheticToc: metaSyntheticToc,
+            currentCfi: metaCurrentCfi,
           },
     [
       hasBookMetadata,
@@ -265,6 +276,7 @@ export function useReaderController(
       metaBaseLineHeight,
       metaUseSyntheticToc,
       metaSyntheticToc,
+      metaCurrentCfi,
     ],
   );
 

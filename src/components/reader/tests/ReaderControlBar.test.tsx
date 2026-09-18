@@ -19,6 +19,7 @@ const {
   mockUseLastReadBook,
   mockUsePercentage,
   mockUseRemoteProgress,
+  progressObjectSelectorCalls,
 } = vi.hoisted(() => {
   return {
     mockUseBookChrome: vi.fn(),
@@ -28,6 +29,8 @@ const {
     mockUseLastReadBook: vi.fn(),
     mockUsePercentage: vi.fn(),
     mockUseRemoteProgress: vi.fn(),
+    // Tripwire log for the progress-OBJECT selectors (see the mock below).
+    progressObjectSelectorCalls: [] as string[],
   };
 });
 
@@ -66,7 +69,21 @@ vi.mock('@store/useReadingStateStore', () => ({
     }
   ),
   useBookPercentage: (bookId: any) => mockUsePercentage(bookId),
-  useCurrentDevicePercentage: (bookId: any) => mockUsePercentage(bookId)
+  useCurrentDevicePercentage: (bookId: any) => mockUsePercentage(bookId),
+  // Tripwire: the progress-OBJECT selector the bar must never reach for again.
+  // It returns a usable entry rather than throwing, so a component that calls
+  // it still renders its percentage — the test then fails on the CALL, which is
+  // the thing that costs a re-render, not on a crash.
+  useBookProgress: (bookId: any) => {
+    progressObjectSelectorCalls.push(`useBookProgress(${bookId})`);
+    return {
+      bookId,
+      percentage: mockUsePercentage(bookId),
+      currentCfi: '',
+      lastRead: 0,
+      completedRanges: [],
+    };
+  },
 }));
 
 // Mock selectors
@@ -144,6 +161,7 @@ const readerUIState = (overrides: Record<string, unknown> = {}) => ({
 describe('ReaderControlBar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    progressObjectSelectorCalls.length = 0;
 
     // Default mocks
     mockUseBookChrome.mockReturnValue(null);
@@ -459,12 +477,15 @@ describe('ReaderControlBar', () => {
 
       render(<ReaderControlBar />);
 
+      // The number selector is what fed the pill…
       expect(screen.getByText('25% complete')).toBeInTheDocument();
-      // Every percentage read returns a number, so an unchanged percentage is
-      // Object.is-equal at the selector and never reaches React.
-      for (const call of mockUsePercentage.mock.results) {
-        expect(typeof call.value).toBe('number');
-      }
+      expect(mockUsePercentage).toHaveBeenCalledWith('123');
+      // …and no progress-OBJECT subscription was opened for it. Those selectors
+      // hand back a fresh object on every progress write — a TTS queue tick, a
+      // playback-position save, a re-relocation to the same page — so holding
+      // one re-rendered this app-wide bar for values it does not draw. A number
+      // is Object.is-equal instead, and the write stops at the selector.
+      expect(progressObjectSelectorCalls).toEqual([]);
       expect(mockUseBookJoin).not.toHaveBeenCalled();
     });
   });

@@ -648,14 +648,16 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             return useReadingListStore;
         };
 
-        it('upserts once for two writes at the same displayed percentage, and carries bookId', async () => {
+        it('upserts once for two writes at the same exported percentage, and carries bookId', async () => {
             const useReadingListStore = await seedInventory();
             const upsert = vi.spyOn(useReadingListStore.getState(), 'upsertEntry');
 
             useReadingStateStore.getState().updateReadingSession(BOOK_ID, 'epubcfi(/6/2)', 0.42, [
                 { range: 'epubcfi(/6/2)', type: 'page' as const },
             ]);
-            useReadingStateStore.getState().updateReadingSession(BOOK_ID, 'epubcfi(/6/4)', 0.4201, [
+            // 0.42004 is the SAME value once the CSV serializes it (toFixed(4)),
+            // so the mirror still skips — the per-page-turn write is still gone.
+            useReadingStateStore.getState().updateReadingSession(BOOK_ID, 'epubcfi(/6/4)', 0.42004, [
                 { range: 'epubcfi(/6/4)', type: 'page' as const },
             ]);
 
@@ -678,6 +680,92 @@ describe('useReadingStateStore - Per-Device Progress', () => {
 
             expect(upsert).toHaveBeenCalledTimes(2);
             expect(useReadingListStore.getState().entries[FILENAME].percentage).toBe(0.43);
+        });
+    });
+
+    /**
+     * The skip above decides on the DISPLAYED/EXPORTED fields only, so both of
+     * the things it does NOT compare have to stay bounded:
+     *
+     *  - `lastUpdated` is written by the upsert but never compared, so an
+     *    unbounded skip freezes it for the whole span of reading that holds the
+     *    other fields still. The ReadingListDialog "Last Read" cell, that
+     *    dialog's default sort and the CSV export's "Date Read" column all read
+     *    it (src/components/ReadingListDialog.tsx, src/lib/csv.ts).
+     *  - `percentage` is compared rounded, and the CSV export serializes
+     *    `percentage.toFixed(4)` (src/lib/csv.ts) — four decimals, so rounding
+     *    the comparison to whole percents let the exported column trail
+     *    visibly.
+     */
+    describe('regression: the reading-list mirror skip is bounded in time and precision', () => {
+        const BOOK_ID = 'book-reading-list-bounds';
+        const FILENAME = 'reading-list-bounds.epub';
+
+        const seedInventory = async () => {
+            const { useBookStore } = await import('./useBookStore');
+            const { useReadingListStore } = await import('./useReadingListStore');
+            useReadingListStore.setState({ entries: {} });
+            useBookStore.setState({
+                books: {
+                    [BOOK_ID]: {
+                        bookId: BOOK_ID,
+                        title: 'Inventory Title',
+                        author: 'Inventory Author',
+                        addedAt: 0,
+                        lastInteraction: 0,
+                        sourceFilename: FILENAME,
+                        tags: [],
+                        status: 'reading' as const,
+                    }
+                }
+            });
+            return useReadingListStore;
+        };
+
+        it('advances lastUpdated once the stored entry goes stale, at an unchanged percentage', async () => {
+            const useReadingListStore = await seedInventory();
+
+            // A finished book, left open: percentage and status hold still, so
+            // every field the skip compares matches on the next write.
+            const upsert = vi.spyOn(useReadingListStore.getState(), 'upsertEntry');
+            useReadingStateStore.getState().updateLocation(BOOK_ID, 'epubcfi(/6/2)', 1);
+            const seeded = useReadingListStore.getState().entries[FILENAME];
+            expect(seeded.status).toBe('read');
+            upsert.mockClear();
+
+            // Moments later: still skipped — the per-page-turn write stays gone.
+            useReadingStateStore.getState().updateLocation(BOOK_ID, 'epubcfi(/6/2)', 1);
+            expect(upsert).not.toHaveBeenCalled();
+            expect(useReadingListStore.getState().entries[FILENAME].lastUpdated).toBe(seeded.lastUpdated);
+
+            // Six minutes on (the entry is now past the staleness bound), e.g.
+            // the read rolled over midnight: the identical write must land or
+            // the exported "Date Read" still names the previous day.
+            const stale = Date.now() - 6 * 60 * 1000;
+            useReadingListStore.setState({
+                entries: { [FILENAME]: { ...useReadingListStore.getState().entries[FILENAME], lastUpdated: stale } },
+            });
+
+            useReadingStateStore.getState().updateLocation(BOOK_ID, 'epubcfi(/6/2)', 1);
+
+            expect(upsert).toHaveBeenCalledTimes(1);
+            expect(useReadingListStore.getState().entries[FILENAME].lastUpdated).toBeGreaterThan(stale);
+        });
+
+        it('upserts when the percentage moves at the precision the CSV serializes', async () => {
+            const useReadingListStore = await seedInventory();
+
+            const upsert = vi.spyOn(useReadingListStore.getState(), 'upsertEntry');
+            useReadingStateStore.getState().updateLocation(BOOK_ID, 'epubcfi(/6/2)', 0.416);
+            upsert.mockClear();
+
+            // 41.6% -> 42.49%: identical at DISPLAY precision (Math.round(p*100)
+            // is 42 either way) but two different values in the export's
+            // four-decimal Percentage column.
+            useReadingStateStore.getState().updateLocation(BOOK_ID, 'epubcfi(/6/4)', 0.4249);
+
+            expect(upsert).toHaveBeenCalledTimes(1);
+            expect(useReadingListStore.getState().entries[FILENAME].percentage.toFixed(4)).toBe('0.4249');
         });
     });
 });

@@ -57,8 +57,15 @@ const EMPTY_METERS: QuotaMeters = {
  * True when two meter snapshots carry the same numbers. The poll runs every
  * second while the GenAI tab is open and the figures are usually IDENTICAL
  * (nothing spent since the last tick), but a fresh object was set every time —
- * re-rendering the whole 900-line tab once a second for nothing. Comparing here
- * lets the hook return the PREVIOUS object, which React treats as no change.
+ * re-rendering GenAIPanel, and with it the ~900-line GenAISettingsTab, which is
+ * a plain unmemoized child. Comparing here lets the hook return the PREVIOUS
+ * object, which React treats as no change.
+ *
+ * What that removes is the PANEL's per-second render and the duplicate tab
+ * render it caused: two tab renders a second become one. It does NOT leave the
+ * settings tab idle — GenAISettingsTab runs its own 1 s `setTick` interval to
+ * refresh its per-pool rows, so it still commits once a second on its own.
+ * Ending that costs a change in the tab, not here.
  */
 function sameMeters(a: QuotaMeters, b: QuotaMeters): boolean {
   return (

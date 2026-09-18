@@ -12,6 +12,35 @@ const HISTORY_PRUNE_SIZE = 200;
 const MERGE_TIME_WINDOW = 20 * 60 * 1000; // 20 minutes
 
 /**
+ * The precision the reading-list `percentage` is compared at in the mirror
+ * skip below: 1/10_000. That is what the CSV export actually serializes —
+ * `exportReadingListToCSV` writes `entry.percentage.toFixed(4)` (src/lib/csv.ts)
+ * — and it is FINER than anything the UI renders (ReadingListDialog shows
+ * `Math.round(percentage * 100)`). Comparing at the coarser display precision
+ * let the stored value trail by up to half a percent, which the four-decimal
+ * export column showed verbatim.
+ */
+const PERCENTAGE_COMPARE_SCALE = 10_000;
+
+/**
+ * How stale the mirrored `lastUpdated` may get before the skip below gives up
+ * and writes anyway: 5 minutes.
+ *
+ * `lastUpdated` is written by the upsert but is NOT part of the comparison, so
+ * without a bound it stops advancing for as long as every compared field holds
+ * still — a whole span of reading inside one 1/10_000 step, or a book finished
+ * just after midnight (0.995 -> 1.0, both 'read'). Three consumers read the
+ * field: the ReadingListDialog "Last Read" cell, that dialog's default sort,
+ * and the CSV export's "Date Read" column, so a frozen stamp is user-visible.
+ *
+ * The bound keeps the per-page-turn write amplification gone — at most one
+ * upsert per 5 minutes of otherwise-unchanged reading — while capping how far
+ * the date can drift. `Math.abs` so a future-dated stamp from a clock-skewed
+ * device also forces the write instead of freezing until the clock catches up.
+ */
+const READING_LIST_MIRROR_MAX_STALENESS_MS = 5 * 60 * 1000;
+
+/**
  * perf: structural equality for the CFI-range arrays. `mergeCfiRanges` ALWAYS
  * returns a fresh array, so a merge that changed nothing still handed the Yjs
  * scoped diff a new identity — and the diff Object.is-skips unchanged arrays
@@ -29,10 +58,14 @@ const sameCfiRanges = (a: string[], b: string[]): boolean =>
  * `upsertEntry` spreads the whole entries map (O(M)) and opens a SECOND Yjs
  * transaction, and libraryViewStore subscribes to both stores — so an
  * unconditional upsert made every page turn recompute the library projection
- * twice. The write is now skipped while no user-visible field moved;
- * `percentage` is compared at DISPLAY precision (ReadingListDialog and the CSV
- * export both render `Math.round(percentage * 100)`), so the stored value may
- * trail by under half a percent until the next visible change.
+ * twice. The write is now skipped while no user-visible field moved AND the
+ * stored entry is still fresh.
+ *
+ * The drift the skip can produce is therefore bounded twice over:
+ * `percentage` is compared at the precision the CSV export SERIALIZES
+ * (`toFixed(4)` — see PERCENTAGE_COMPARE_SCALE), so the stored value can trail
+ * by under 1/10_000; and `lastUpdated` can trail by at most
+ * READING_LIST_MIRROR_MAX_STALENESS_MS.
  *
  * fix: the entry also carries the `bookId` FK (types/user-data.ts §D). The
  * previous whole-entry rebuild omitted it, so every page turn DROPPED the FK
@@ -60,12 +93,16 @@ function syncReadingListEntry(bookId: string, percentage: number, now: number): 
     const existing = useReadingListStore.getState().entries?.[next.filename];
     if (
         existing &&
+        // `lastUpdated` is not compared (it moves on every call by definition),
+        // so the skip is only allowed while the stored stamp is still fresh.
+        Math.abs(now - existing.lastUpdated) < READING_LIST_MIRROR_MAX_STALENESS_MS &&
         existing.bookId === next.bookId &&
         existing.title === next.title &&
         existing.author === next.author &&
         existing.status === next.status &&
         existing.rating === next.rating &&
-        Math.round(existing.percentage * 100) === Math.round(next.percentage * 100)
+        Math.round(existing.percentage * PERCENTAGE_COMPARE_SCALE) ===
+            Math.round(next.percentage * PERCENTAGE_COMPARE_SCALE)
     ) {
         return;
     }

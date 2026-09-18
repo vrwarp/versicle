@@ -30,10 +30,12 @@ describe('useDriveStore', () => {
  * possible) and zustand persist re-runs partialize + JSON.stringify and calls
  * `localStorage.setItem` SYNCHRONOUSLY after EVERY set — including
  * `setScanning(true)`, whose flag is not even in the allowlist. The deduped
- * storage (src/lib/persistStorage.ts) drops the commit when the payload is
- * byte-identical to the last one written.
+ * storage (src/lib/persistStorage.ts) wraps the backing store UNDER
+ * `createJSONStorage`, so partialize and the stringify still run; what it drops
+ * is the localStorage COMMIT when the payload is byte-identical to the last one
+ * written. That is what the spy below counts.
  */
-describe('regression: does not re-serialize the Drive index on unrelated writes', () => {
+describe('regression: does not re-commit the Drive index to localStorage on unrelated writes', () => {
     const bigIndex = () =>
         Array.from({ length: 1000 }, (_, i) => ({
             id: `file-${i}`,

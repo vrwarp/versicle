@@ -97,11 +97,14 @@ export const useDriveStore = create<DriveConfigState>()(
         }),
         {
             name: 'drive-config-storage',
-            // Deduped: the scanned `index` (one row per Drive file — thousands
-            // are possible) is in the allowlist below, and persist re-runs
-            // partialize + JSON.stringify + a synchronous localStorage commit
-            // after EVERY set. `setScanning(true)` alone used to re-serialize
-            // the whole index although `isScanning` is not persisted at all.
+            // Deduped COMMITS: the scanned `index` (one row per Drive file —
+            // thousands are possible) is in the allowlist below, and persist
+            // re-runs partialize + JSON.stringify + a synchronous
+            // localStorage.setItem after EVERY set — `setScanning(true)`
+            // included, although `isScanning` is not persisted at all. The
+            // wrapper sits BELOW createJSONStorage, so partialize and the
+            // stringify still run on that set; what disappears is the storage
+            // commit of the whole index for a payload that did not change.
             storage: createDedupedJSONStorage<PersistedDriveState>(),
             partialize: (state): PersistedDriveState => ({
                 linkedFolderId: state.linkedFolderId,

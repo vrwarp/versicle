@@ -54,10 +54,13 @@ describe('useQuotaMeters', () => {
 
   /**
    * The poll built a fresh meters object every second whether or not a single
-   * number had moved, re-rendering the 900-line GenAI settings tab (and every
-   * meter bar in it) once a second for nothing.
+   * number had moved, so GenAIPanel re-rendered — and with it the ~900-line
+   * GenAISettingsTab (every meter bar in it), which is an unmemoized child.
+   * That is the render the bail-out removes. The tab keeps its OWN 1 s
+   * `setTick` interval and still commits once a second, so what this buys is
+   * one tab render a second instead of two, not an idle tab.
    */
-  describe('regression: an unchanged meter does not re-render', () => {
+  describe('regression: an unchanged meter does not re-render the panel', () => {
     it('keeps the same meters object across ticks while the snapshot is unchanged', () => {
       vi.useFakeTimers();
       const { result } = renderHook(() => useQuotaMeters());

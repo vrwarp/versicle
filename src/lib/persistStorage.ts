@@ -13,10 +13,14 @@ import { createJSONStorage, type PersistStorage, type StateStorage } from 'zusta
  * thread on a serialize + storage commit of the whole persisted blob per
  * update — during a GenAI backfill, many per second.
  *
- * The wrapper below skips the commit when the serialized payload is
- * byte-identical to the last string it wrote (or read) for that key. The
- * stored bytes are therefore always what an unwrapped persist would have
- * stored; only the redundant commits disappear.
+ * The wrapper below wraps the BACKING `StateStorage`, i.e. it sits UNDER
+ * `createJSONStorage`. partialize and the `JSON.stringify` therefore still run
+ * on every set — persist calls partialize itself, above any storage layer, and
+ * the wrapper needs the serialized string to compare. What it drops is the
+ * storage COMMIT, when that string is byte-identical to the last one it wrote
+ * (or read) for the key. The stored bytes are therefore always what an
+ * unwrapped persist would have stored; only the redundant `setItem` calls —
+ * the synchronous main-thread part — disappear.
  *
  * ASSUMPTION: within a page session this wrapper is the only writer of the
  * keys it owns. The app's data wipe (`src/data/wipe.ts`) removes them behind
@@ -64,10 +68,11 @@ function dedupeWrites(base: StateStorage): StateStorage {
 }
 
 /**
- * `createJSONStorage(() => localStorage)` with the identical-payload skip.
- * Drop-in for a persist `storage` option; like `createJSONStorage`, it returns
- * `undefined` when localStorage is unreachable (persist then warns and keeps
- * the store in memory).
+ * `createJSONStorage(() => localStorage)` with the identical-payload skip
+ * applied to the serialized string, i.e. to `setItem` and not to the
+ * serialization. Drop-in for a persist `storage` option; like
+ * `createJSONStorage`, it returns `undefined` when localStorage is unreachable
+ * (persist then warns and keeps the store in memory).
  */
 export function createDedupedJSONStorage<S>(): PersistStorage<S> | undefined {
   return createJSONStorage<S>(() => dedupeWrites(localStorage));
