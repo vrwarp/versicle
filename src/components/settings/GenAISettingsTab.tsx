@@ -85,6 +85,14 @@ function formatEtaWithPool(ms: number | null, poolKey: string | null): string {
 
 
 
+/**
+ * How many log entries the 160px debug box actually renders (newest first).
+ * The buffer holds up to `maxLogs` (1000); rendering all of them — each with a
+ * stringified prompt/response payload — is work no one can read. The rest are
+ * summarized by a line, and Download Logs still exports the whole buffer.
+ */
+const MAX_RENDERED_LOGS = 50;
+
 export interface GenAISettingsTabProps {
     // Core settings
     isEnabled: boolean;
@@ -252,6 +260,27 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
 
     const [searchQuery, setSearchQuery] = React.useState('');
     const [, setTick] = React.useState(0);
+
+    // The log box re-rendered EVERY row on EVERY render — including the 1 s
+    // tick below, which exists for the live quota snapshots read straight from
+    // the governor further down. With maxLogs up to 1000 that meant a thousand
+    // JSON.stringify calls per second over full prompt/response payloads, into
+    // a 160px scroll box. The rows are derived (and stringified) ONCE per logs
+    // change, newest first, and the tail beyond MAX_RENDERED_LOGS is summarized
+    // rather than rendered — Download Logs still exports every entry.
+    const logRows = React.useMemo(() => {
+        const newestFirst = logs.slice().reverse();
+        return newestFirst.slice(0, MAX_RENDERED_LOGS).map((log) => ({
+            id: log.id,
+            time: formatTime(log.timestamp),
+            type: log.type.toUpperCase(),
+            method: log.method,
+            bookTitle: log.bookTitle,
+            sectionTitle: log.sectionTitle,
+            correlationId: log.correlationId,
+            payload: JSON.stringify(log.payload),
+        }));
+    }, [logs]);
     const [showPreEmbedDetails, setShowPreEmbedDetails] = React.useState(false);
     const [showShareCachesDetails, setShowShareCachesDetails] = React.useState(false);
 
@@ -522,23 +551,30 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
                                     {logs.length === 0 ? (
                                         <span className="text-muted-foreground">No logs available.</span>
                                     ) : (
-                                        logs.slice().reverse().map(log => (
-                                            <div key={log.id} className="mb-2 border-b last:border-0 pb-2">
-                                                <div className="font-semibold text-primary">
-                                                    [{formatTime(log.timestamp)}] {log.type.toUpperCase()} - {log.method}
-                                                </div>
-                                                {(log.bookTitle || log.sectionTitle || log.correlationId) && (
-                                                    <div className="text-muted-foreground mb-1">
-                                                        {log.bookTitle && <span>Book: {log.bookTitle} </span>}
-                                                        {log.sectionTitle && <span>| Section: {log.sectionTitle} </span>}
-                                                        {log.correlationId && <span>| Correlation: {log.correlationId}</span>}
+                                        <>
+                                            {logRows.map(row => (
+                                                <div key={row.id} className="mb-2 border-b last:border-0 pb-2">
+                                                    <div className="font-semibold text-primary">
+                                                        [{row.time}] {row.type} - {row.method}
                                                     </div>
-                                                )}
-                                                <div className="whitespace-pre-wrap truncate line-clamp-2">
-                                                    {JSON.stringify(log.payload)}
+                                                    {(row.bookTitle || row.sectionTitle || row.correlationId) && (
+                                                        <div className="text-muted-foreground mb-1">
+                                                            {row.bookTitle && <span>Book: {row.bookTitle} </span>}
+                                                            {row.sectionTitle && <span>| Section: {row.sectionTitle} </span>}
+                                                            {row.correlationId && <span>| Correlation: {row.correlationId}</span>}
+                                                        </div>
+                                                    )}
+                                                    <div className="whitespace-pre-wrap truncate line-clamp-2">
+                                                        {row.payload}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))
+                                            ))}
+                                            {logs.length > logRows.length && (
+                                                <div className="text-muted-foreground">
+                                                    Showing the latest {logRows.length} of {logs.length} entries — Download Logs exports all of them.
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             </div>

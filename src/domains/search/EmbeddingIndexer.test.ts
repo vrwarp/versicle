@@ -52,17 +52,21 @@ type PersistedStamp = Pick<CacheEmbeddingsRow, 'model' | 'dims' | 'quant'> & {
 function makeRepo(job?: CacheEmbedJobsRow, persisted?: PersistedStamp) {
   const puts: CacheEmbeddingsRow[] = [];
   const jobPuts: CacheEmbedJobsRow[] = [];
+  /** Interleaving of the two stores, so "vectors before journal" is checkable. */
+  const writeOrder: ('put' | 'putJob')[] = [];
   const repo = {
     get: vi.fn(async () => persisted),
     getJob: vi.fn(async () => job),
     put: vi.fn(async (row: CacheEmbeddingsRow) => {
+      writeOrder.push('put');
       puts.push(row);
     }),
     putJob: vi.fn(async (row: CacheEmbedJobsRow) => {
+      writeOrder.push('putJob');
       jobPuts.push(row);
     }),
   };
-  return { repo, puts, jobPuts };
+  return { repo, puts, jobPuts, writeOrder };
 }
 
 /** A textSource over the given sections (each with a long enough text to chunk). */
@@ -125,9 +129,12 @@ describe('EmbeddingIndexer', () => {
     // A position CFI whose spine step /6 maps to ordinal (6-2)/2 = 2.
     await indexer.enqueue('bk-1', 'epubcfi(/6/6!/4/2/1:0)');
 
-    // The current section (ordinal 2 → s2) is persisted first, then the fan-out.
-    const persistedOrder = puts.map((p) => p.sections[p.sections.length - 1].href);
-    expect(persistedOrder[0]).toBe('s2.xhtml');
+    // The current section (ordinal 2 → s2) is embedded first, then the fan-out.
+    // Writes are BATCHED, so the embed order is read off the row's section
+    // order (sections are appended in the order they were embedded) rather than
+    // off one write per section.
+    const embedOrder = puts[puts.length - 1].sections.map((s) => s.href);
+    expect(embedOrder[0]).toBe('s2.xhtml');
     // Every section ends up embedded.
     const finalHrefs = puts[puts.length - 1].sections.map((s) => s.href);
     expect(new Set(finalHrefs)).toEqual(new Set(['s0.xhtml', 's1.xhtml', 's2.xhtml', 's3.xhtml']));
@@ -147,7 +154,8 @@ describe('EmbeddingIndexer', () => {
     });
 
     await indexer.enqueue('bk-1', 'not-a-cfi');
-    expect(puts[0].sections[puts[0].sections.length - 1].href).toBe('s0.xhtml');
+    // Section 0 was embedded FIRST (appended first to the batched row).
+    expect(puts[puts.length - 1].sections[0].href).toBe('s0.xhtml');
   });
 
   it('resume-skips a section whose {href, sectionTextHash} job entry already matches', async () => {
@@ -625,6 +633,173 @@ describe('EmbeddingIndexer', () => {
     expect(puts).toHaveLength(1);
     const sec = puts[0].sections[0];
     expect(new Int8Array(sec.vectors).length).toBe(4 * sec.chunks.length);
+  });
+
+  /**
+   * Writing after EVERY section re-serialized the whole per-book row (every
+   * ArrayBuffer embedded so far) through the gated IDB path, on the main thread,
+   * while the user reads: O(sections²) bytes — a 30-section book moved ~15× the
+   * bytes it had to, a 100-section book ~50×. Writes are now batched, and the
+   * journal row may never claim a section whose vectors were not written with it.
+   */
+  describe('regression: embedding writes are batched', () => {
+    const twentySections = () =>
+      Array.from({ length: 20 }, (_unused, i) => section(`s${i}.xhtml`, `h${i}`));
+
+    it('flushes every few sections, not once per section, and the final row holds them all', async () => {
+      const { client, calls } = makeEmbeddingClient();
+      const { repo, puts, jobPuts, writeOrder } = makeRepo();
+      const indexer = new EmbeddingIndexer({
+        embeddingClient: client,
+        textSource: makeTextSource(twentySections()),
+        embeddingsRepo: repo,
+        quantize,
+        getConfig: config,
+      });
+
+      await indexer.enqueue('bk-1');
+
+      expect(calls).toHaveLength(20); // every section still embedded
+      expect(puts.length).toBeLessThanOrEqual(5); // was 20 (one per section)
+      // Nothing is lost: the final row carries all twenty sections.
+      const finalHrefs = puts[puts.length - 1].sections.map((s) => s.href);
+      expect(new Set(finalHrefs).size).toBe(20);
+      // Vectors are written BEFORE the journal for every batch…
+      expect(writeOrder).toEqual(
+        Array.from({ length: puts.length }, () => ['put', 'putJob'] as const).flat(),
+      );
+      // …and no journal write ever lists a section absent from the vectors row
+      // written with it (the resume-corruption window stays closed).
+      expect(jobPuts).toHaveLength(puts.length);
+      jobPuts.forEach((jobRow, i) => {
+        const vectorHrefs = new Set(puts[i].sections.map((s) => s.href));
+        for (const entry of jobRow.sections) expect(vectorHrefs.has(entry.href)).toBe(true);
+      });
+    });
+
+    it('an abort mid-batch persists the trailing batch and never leaves the journal ahead of the vectors', async () => {
+      let embeds = 0;
+      const client = {
+        isConfigured: () => true,
+        embed: vi.fn(async (texts: string[]) => {
+          embeds += 1;
+          if (embeds === 8) throw new TypeError('network down');
+          return { vectors: texts.map(() => new Float32Array([0.5, -0.25, 0.75, -0.5])) };
+        }),
+      };
+      const { repo, puts, jobPuts } = makeRepo();
+      const indexer = new EmbeddingIndexer({
+        embeddingClient: client,
+        textSource: makeTextSource(twentySections()),
+        embeddingsRepo: repo,
+        quantize,
+        getConfig: config,
+      });
+
+      await expect(indexer.enqueue('bk-1')).rejects.toThrow('network down');
+
+      // The 7 sections embedded before the failure were persisted (the pass is
+      // resumable) by the batch flush plus ONE trailing flush — not by seven
+      // whole-row writes — and the journal never claims more than the vectors row.
+      const finalRow = puts[puts.length - 1];
+      expect(finalRow.sections).toHaveLength(7);
+      expect(puts.length).toBeLessThanOrEqual(2);
+      expect(jobPuts).toHaveLength(puts.length);
+      jobPuts.forEach((jobRow, i) => {
+        const vectorHrefs = new Set(puts[i].sections.map((s) => s.href));
+        for (const entry of jobRow.sections) expect(vectorHrefs.has(entry.href)).toBe(true);
+      });
+    });
+  });
+
+  /**
+   * The job row now carries how many sections CAN be embedded, so the library
+   * search view can render an indexed/partial badge from this row alone instead
+   * of loading every book's whole search text plus its whole vector row.
+   */
+  describe('regression: job row carries the embeddable-section count', () => {
+    it('stamps embeddableSections (text-less spine items excluded)', async () => {
+      const sections = [
+        section('s0.xhtml', 'h0'),
+        section('s1.xhtml', 'h1'),
+        // An image-only page: no embeddable text, never lands in the row.
+        { href: 'cover.xhtml', title: 'Cover', text: '   ', sectionTextHash: 'hc' },
+      ];
+      const { client } = makeEmbeddingClient();
+      const { repo, jobPuts } = makeRepo();
+      const indexer = new EmbeddingIndexer({
+        embeddingClient: client,
+        textSource: makeTextSource(sections),
+        embeddingsRepo: repo,
+        quantize,
+        getConfig: config,
+      });
+
+      await indexer.enqueue('bk-1');
+
+      expect(jobPuts.length).toBeGreaterThan(0);
+      for (const jobRow of jobPuts) expect(jobRow.embeddableSections).toBe(2);
+      // The stamp matches what actually got embedded.
+      expect(jobPuts[jobPuts.length - 1].sections).toHaveLength(2);
+    });
+  });
+
+  /**
+   * A reader-open over an already-embedded book used to COPY every persisted
+   * vector buffer (toArrayBuffer = slice) just to seed the read-modify-write
+   * accumulator, before discovering that every section resume-skips. The seed is
+   * now lazy: a fully-resumed pass touches no buffer and writes nothing.
+   */
+  describe('regression: a fully-resumed pass does no work', () => {
+    it('never reads the persisted buffers and never writes', async () => {
+      const sections = [section('s0.xhtml', 'h0'), section('s1.xhtml', 'h1')];
+      const priorJob: CacheEmbedJobsRow = {
+        bookId: 'bk-1',
+        extractionVersion: 3,
+        sections: [
+          { href: 's0.xhtml', embeddedThroughChunk: 1, sectionTextHash: 'h0' },
+          { href: 's1.xhtml', embeddedThroughChunk: 1, sectionTextHash: 'h1' },
+        ],
+        updatedAt: 0,
+      };
+      // Counting getters: reading `vectors`/`scales` is what a copy would do.
+      let bufferReads = 0;
+      const priorSection = (href: string, hash: string): PriorSection => ({
+        href,
+        sectionTextHash: hash,
+        chunks: [{ cfiStart: '', cfiEnd: '', tokenCount: 9 }],
+        get vectors() {
+          bufferReads += 1;
+          return new Int8Array([1, 2, 3, 4]);
+        },
+        get scales() {
+          bufferReads += 1;
+          return new Float32Array([0.125]);
+        },
+      });
+      const persisted: PersistedStamp = {
+        model: 'gemini-embedding-001',
+        dims: 4,
+        quant: 'int8-pervec',
+        sections: [priorSection('s0.xhtml', 'h0'), priorSection('s1.xhtml', 'h1')],
+      };
+      const { client, calls } = makeEmbeddingClient();
+      const { repo, puts, jobPuts } = makeRepo(priorJob, persisted);
+      const indexer = new EmbeddingIndexer({
+        embeddingClient: client,
+        textSource: makeTextSource(sections),
+        embeddingsRepo: repo,
+        quantize,
+        getConfig: config,
+      });
+
+      await indexer.enqueue('bk-1');
+
+      expect(calls).toHaveLength(0); // everything resume-skipped
+      expect(puts).toHaveLength(0);
+      expect(jobPuts).toHaveLength(0);
+      expect(bufferReads).toBe(0); // no vector buffer was copied
+    });
   });
 });
 

@@ -274,6 +274,12 @@ export class SearchSession {
   /**
    * Returns the embedding progress status for the book. Returns null if
    * semantic search is disabled, unconfigured, or the ports are absent.
+   *
+   * Counts from the RESUME JOURNAL (`getJob`) when the port exposes one and its
+   * entries carry section hashes — the panel polls this every few seconds while
+   * the indexer is rewriting the vectors row, and the journal carries the same
+   * {href, sectionTextHash} pairs for a fraction of the bytes. Falls back to the
+   * full vectors row otherwise.
    */
   async getEmbeddingStatus(bookId: string): Promise<EmbeddingStatus | null> {
     const { embeddingClient, embeddingsSource, getSemanticConfig, textSource } = this.opts;
@@ -297,10 +303,6 @@ export class SearchSession {
       // chunks and is never written into the embeddings row, so including it in
       // the total would leave the book perpetually one section shy of done.
       const totalSections = corpus.sections.filter((s) => sectionHasEmbeddableText(s.text)).length;
-      const embedded = await embeddingsSource.get(bookId);
-      if (!embedded || embedded.sections.length === 0) {
-        return { totalSections, embeddedSections: 0 };
-      }
 
       // Cross-reference text hashes to count only matching/up-to-date sections.
       // Use the EFFECTIVE hash (stamped, or derived from the section text for
@@ -310,16 +312,34 @@ export class SearchSession {
       const corpusHashes = new Map(
         corpus.sections.map((s) => [s.href, effectiveSectionHash(s.text, s.sectionTextHash)]),
       );
-      let embeddedSections = 0;
-
-      for (const section of embedded.sections) {
-        const liveHash = corpusHashes.get(section.href);
-        if (liveHash !== undefined && section.sectionTextHash === liveHash) {
-          embeddedSections++;
+      const countMatching = (
+        sections: { href: string; sectionTextHash?: string }[],
+      ): number => {
+        let matching = 0;
+        for (const section of sections) {
+          const liveHash = corpusHashes.get(section.href);
+          if (liveHash !== undefined && section.sectionTextHash === liveHash) matching++;
         }
+        return matching;
+      };
+
+      // The resume journal carries the SAME {href, sectionTextHash} pairs the
+      // vectors row does, in a few hundred bytes instead of megabytes of packed
+      // int8. The panel polls this every few seconds while the indexer is
+      // rewriting the vectors row, so count from the journal whenever it is
+      // available and complete (every entry hash-stamped). A journal that is
+      // absent, or predates the hash stamp, falls back to the full-row read.
+      const job = await embeddingsSource.getJob?.(bookId);
+      if (job && job.sections.every((s) => typeof s.sectionTextHash === 'string')) {
+        return { totalSections, embeddedSections: countMatching(job.sections) };
       }
 
-      return { totalSections, embeddedSections };
+      const embedded = await embeddingsSource.get(bookId);
+      if (!embedded || embedded.sections.length === 0) {
+        return { totalSections, embeddedSections: 0 };
+      }
+
+      return { totalSections, embeddedSections: countMatching(embedded.sections) };
     } catch {
       return null;
     }

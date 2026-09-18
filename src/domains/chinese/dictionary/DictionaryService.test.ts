@@ -138,6 +138,53 @@ describe('DictionaryService', () => {
     expect(await service.getEntry('我')).toEqual(['wǒ', 'I; me']);
   });
 
+  /**
+   * The import ran `Object.entries(data)` over ~198 000 headwords on the MAIN
+   * thread — one two-element array per entry, ~100 MB of transient heap, all of
+   * it built BEFORE the first row was written. The pairs for a chunk are now
+   * built inside the write loop, so at most one chunk is materialized at a time.
+   */
+  describe('regression: dictionary import does not build a full entries array', () => {
+    it('materializes at most one chunk of pairs before the first write', async () => {
+      const ENTRY_COUNT = 12_000; // > 2 chunks (IMPORT_CHUNK_SIZE = 5000)
+      const raw: Record<string, DictEntryTuple> = {};
+      for (let i = 0; i < ENTRY_COUNT; i++) raw[`w${i}`] = [`p${i}`, `d${i}`];
+
+      // Counts how many VALUES have been read off the parsed payload (the
+      // `then` probe `await` performs on the resolved object is not one).
+      let valueReads = 0;
+      const counted = new Proxy(raw, {
+        get(target, prop, receiver) {
+          if (typeof prop === 'string' && prop in target) valueReads += 1;
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+
+      const service = new DictionaryService({
+        fetch: async (url: string) =>
+          url === '/dict/cedict.json' ? jsonResponse(counted) : jsonResponse(null, false, 404),
+      });
+
+      let readsAtFirstWrite: number | null = null;
+      service.subscribe((progress) => {
+        if (readsAtFirstWrite === null && progress.status === 'importing' && progress.imported > 0) {
+          readsAtFirstWrite = valueReads;
+        }
+      });
+
+      await service.ensureReady();
+
+      // Before: every one of the 12 000 values was read (and paired) up front.
+      expect(readsAtFirstWrite).not.toBeNull();
+      expect(readsAtFirstWrite).toBeLessThanOrEqual(5000);
+      // The import itself is unchanged: every entry landed, exactly once.
+      expect(service.getProgress()).toMatchObject({ status: 'ready', total: ENTRY_COUNT });
+      expect(valueReads).toBe(ENTRY_COUNT);
+      expect(await service.getEntry('w11999')).toEqual(['p11999', 'd11999']);
+      expect(await service.getEntry('w0')).toEqual(['p0', 'd0']);
+    });
+  });
+
   it('getEntries batches; getCompound resolves the longest hit in the selection', async () => {
     const service = new DictionaryService({ fetch: fetchOk });
     await service.ensureReady();
@@ -148,5 +195,10 @@ describe('DictionaryService', () => {
 
     const compound = await service.getCompound('我的朋友', 2);
     expect(compound).toMatchObject({ word: '朋友', pinyin: 'péng you' });
+
+    // The batched form resolves every index in ONE dictionary transaction.
+    const compounds = await service.getCompounds('我的朋友', [0, 2, 3]);
+    expect(compounds.get(2)).toMatchObject({ word: '朋友', pinyin: 'péng you' });
+    expect(compounds.get(0)).toBeNull();
   });
 });

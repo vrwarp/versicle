@@ -65,4 +65,48 @@ describe('fuseRrf', () => {
     const { results } = fuseRrf([], semantic);
     expect(results.map((r) => r.href)).toEqual(['z', 'y']);
   });
+
+  /**
+   * The semantic side contributes up to 50 chunk rows PER SECTION, so a
+   * 30-section book fused ~1500 hits into an uncapped list the search panel
+   * rendered one `<li>` at a time. The fused page is now cut after the score
+   * sort, and says so.
+   */
+  describe('regression: fused results are capped', () => {
+    it('keeps the best-ranked page and flags the cut as truncated', () => {
+      const semantic = Array.from({ length: 1500 }, (_unused, i) => hit('ch1.xhtml', i * 10));
+
+      const { results, truncated } = fuseRrf([], semantic);
+
+      expect(results).toHaveLength(100);
+      expect(truncated).toBe(true);
+      // The survivors are the top of the ranking, in order — nothing reshuffled.
+      expect(results.map((r) => r.charOffset)).toEqual(
+        semantic.slice(0, 100).map((r) => r.charOffset),
+      );
+    });
+
+    it('every regex hit survives the cap (regex is never displaced by semantic)', () => {
+      const regex = Array.from({ length: 50 }, (_unused, i) => hit('ch1.xhtml', i * 10, i + 1));
+      const semantic = Array.from({ length: 1500 }, (_unused, i) => hit('ch2.xhtml', i * 10));
+
+      const { results } = fuseRrf(regex, semantic);
+
+      expect(results).toHaveLength(100);
+      for (const r of regex) {
+        expect(results.some((x) => x.href === r.href && x.charOffset === r.charOffset)).toBe(true);
+      }
+    });
+
+    it('does not flag truncation when everything fits', () => {
+      expect(fuseRrf([hit('a', 0)], [hit('b', 1)]).truncated).toBe(false);
+    });
+
+    it('honors an explicit limit', () => {
+      const semantic = Array.from({ length: 10 }, (_unused, i) => hit('ch1.xhtml', i));
+      const { results, truncated } = fuseRrf([], semantic, { limit: 3 });
+      expect(results).toHaveLength(3);
+      expect(truncated).toBe(true);
+    });
+  });
 });

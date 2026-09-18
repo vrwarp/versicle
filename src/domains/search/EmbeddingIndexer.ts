@@ -15,9 +15,14 @@
  *  - per section: skips it when the resume journal already records this section
  *    (keyed by href + text hash) as fully embedded; otherwise chunks the text,
  *    embeds the chunks (threading consent + quota lane through the client to the
- *    gateway), quantizes each vector to int8, packs the int8 rows + float32
- *    scales, persists them, and updates the resume journal per section so an
- *    interrupted pass can pick up where it left off.
+ *    gateway), quantizes each vector to int8, and packs the int8 rows + float32
+ *    scales into the row under construction,
+ *  - persists that row + the resume journal in BATCHES (every
+ *    {@link FLUSH_EVERY_SECTIONS} sections or {@link FLUSH_AFTER_BYTES}, plus
+ *    an unconditional flush when the pass ends — including when it aborts), so
+ *    an interrupted pass picks up where it left off without re-serializing the
+ *    whole book after every single section. The vectors row is always written
+ *    BEFORE the journal for the same batch.
  *
  * Chunk CFIs are persisted as empty strings here: the chunker works on plain
  * text and cannot produce a CFI without the live reader view. The char offsets
@@ -25,7 +30,7 @@
  */
 import { parseCfiTokens, tryParseCfiPoint } from '@kernel/cfi';
 import { AppError, retryAfterMsOf } from '~types/errors';
-import { chunkSection } from './chunker';
+import { chunkSection, sectionHasEmbeddableText } from './chunker';
 import { effectiveSectionHash } from './sectionHash';
 import { CURRENT_QUANT } from './embeddingPort';
 import type { SearchTextSource } from './SearchSession';
@@ -86,6 +91,41 @@ function toArrayBuffer(buf: ArrayBufferLike | ArrayBufferView): ArrayBuffer {
     return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
   }
   return buf as ArrayBuffer;
+}
+
+/**
+ * One entry of the embeddings row under construction: either a section CARRIED
+ * FORWARD from the persisted row (held as the read-side view, untouched) or a
+ * section embedded by this pass.
+ *
+ * Carried-forward entries are deliberately NOT converted up front: normalizing
+ * a view to an ArrayBuffer is a `slice` — a full COPY of that section's vectors
+ * — and a pass that resume-skips everything (the common reader-open case) would
+ * otherwise copy the whole book's vectors just to throw them away. The copy is
+ * taken lazily by {@link materializeRowSection}, i.e. only when a write actually
+ * carries the section, and memoized so repeated batch writes copy it once.
+ */
+interface PendingRowSection {
+  href: string;
+  /** The persisted section as read (present until this pass re-embeds it). */
+  prior?: PriorEmbeddedSection;
+  /** The write-shaped section: this pass's output, or the memoized conversion. */
+  row?: CacheEmbeddingsRow['sections'][number];
+}
+
+/** The write-shaped section for a pending entry, converting+memoizing on first use. */
+function materializeRowSection(entry: PendingRowSection): CacheEmbeddingsRow['sections'][number] {
+  if (!entry.row) {
+    const prior = entry.prior!;
+    entry.row = {
+      href: prior.href,
+      sectionTextHash: prior.sectionTextHash,
+      chunks: prior.chunks,
+      vectors: toArrayBuffer(prior.vectors),
+      scales: toArrayBuffer(prior.scales),
+    };
+  }
+  return entry.row;
 }
 
 /** The slice of the embeddings repo the indexer consumes (injected port). */
@@ -149,6 +189,16 @@ const RATE_LIMIT_MAX_RETRIES = 4;
 const RATE_LIMIT_MAX_INLINE_WAIT_MS = 60_000;
 const RATE_LIMIT_BASE_WAIT_MS = 2_000;
 const RATE_LIMIT_DEFAULT_WAIT_MS = 30_000;
+
+/**
+ * Batched-write thresholds. Every write re-serializes the ENTIRE per-book row
+ * (every section's vectors so far), so writing per section costs O(sections²)
+ * bytes through the gated IDB path — a 100-section book moved ~50× the bytes it
+ * had to. Flushing every few sections (or once a batch holds this many bytes)
+ * keeps the resume granularity fine while making the write cost linear again.
+ */
+const FLUSH_EVERY_SECTIONS = 5;
+const FLUSH_AFTER_BYTES = 256 * 1024;
 
 /** The wait a rate-limit error asks for, or undefined when it is not a rate limit. */
 function rateLimitWaitMs(error: unknown): number | undefined {
@@ -335,16 +385,13 @@ export class EmbeddingIndexer {
     // space, so we start empty (the whole-book re-embed). Each section is
     // pushed-or-REPLACED by href in the loop; this-pass sections merge over any
     // carried-forward entry for the same href.
-    const embeddedSections: CacheEmbeddingsRow['sections'] =
-      !stampMismatch && persisted?.sections
-        ? persisted.sections.map((s) => ({
-            href: s.href,
-            sectionTextHash: s.sectionTextHash,
-            chunks: s.chunks,
-            vectors: toArrayBuffer(s.vectors),
-            scales: toArrayBuffer(s.scales),
-          }))
-        : [];
+    //
+    // The seed holds the prior sections AS READ ({@link PendingRowSection}); the
+    // ArrayBuffer copy each one needs on write is taken lazily, only when a
+    // write actually carries it, so a pass that resume-skips everything copies
+    // nothing at all.
+    const priorSections = !stampMismatch && persisted?.sections ? persisted.sections : [];
+    const rowSections: PendingRowSection[] = priorSections.map((s) => ({ href: s.href, prior: s }));
     const jobSections: CacheEmbedJobsRow['sections'] = job ? [...job.sections] : [];
 
     // The set of hrefs whose VECTORS actually live in the persisted embeddings
@@ -352,9 +399,13 @@ export class EmbeddingIndexer {
     // a corrupt-resume window (a crash between writing the journal and writing
     // the vectors, or a partial download) — it must be treated as a MISS and
     // re-embedded, NOT resume-skipped forever.
-    const persistedHrefs = new Set(
-      (!stampMismatch && persisted?.sections ? persisted.sections : []).map((s) => s.href),
-    );
+    const persistedHrefs = new Set(priorSections.map((s) => s.href));
+
+    // How many sections can be embedded at all (a text-less spine item yields no
+    // chunks and never lands in the row). Stamped on every job write so the
+    // library-wide progress badge can be read from the job row ALONE, without
+    // loading the book's whole search text and its whole vector row.
+    const embeddableSections = sections.filter((s) => sectionHasEmbeddableText(s.text)).length;
 
     const lane = opts?.lane ?? 'fgd';
     const pass: PassStats = {
@@ -367,131 +418,193 @@ export class EmbeddingIndexer {
       waitedMs: 0,
     };
     try {
-      await this.embedSections(bookId, corpus, order, config, job, embeddedSections, jobSections, persistedHrefs, opts, pass);
+      await this.embedSections({
+        bookId,
+        corpus,
+        order,
+        config,
+        job,
+        rowSections,
+        jobSections,
+        persistedHrefs,
+        embeddableSections,
+        opts,
+        pass,
+      });
     } finally {
       this.logPass(bookId, lane, pass);
     }
   }
 
-  private async embedSections(
-    bookId: string,
-    corpus: NonNullable<Awaited<ReturnType<SearchTextSource['get']>>>,
-    order: number[],
-    config: { model: string; dims: number },
-    job: CacheEmbedJobsRow | undefined,
-    embeddedSections: CacheEmbeddingsRow['sections'],
-    jobSections: CacheEmbedJobsRow['sections'],
-    persistedHrefs: Set<string>,
-    opts: { interactive?: boolean; lane?: 'fg' | 'fgd' | 'bg' } | undefined,
-    pass: PassStats,
-  ): Promise<void> {
+  private async embedSections(args: {
+    bookId: string;
+    corpus: NonNullable<Awaited<ReturnType<SearchTextSource['get']>>>;
+    order: number[];
+    config: { model: string; dims: number };
+    job: CacheEmbedJobsRow | undefined;
+    rowSections: PendingRowSection[];
+    jobSections: CacheEmbedJobsRow['sections'];
+    persistedHrefs: Set<string>;
+    embeddableSections: number;
+    opts: { interactive?: boolean; lane?: 'fg' | 'fgd' | 'bg' } | undefined;
+    pass: PassStats;
+  }): Promise<void> {
+    const { bookId, corpus, order, config, job, rowSections, jobSections, persistedHrefs, embeddableSections, opts, pass } = args;
     const sections = corpus.sections;
-    for (const idx of order) {
-      const section = sections[idx];
-      // Prefer the extractor's stamped hash; derive it from the section text
-      // when the corpus predates the field (version-3 corpora written before it
-      // existed, which are never re-extracted). Without this, a hash-less corpus
-      // falls to '' and NO section ever resume-skips — the whole book re-embeds
-      // on every reader pass. The derived value matches what re-extraction would
-      // stamp, so it is a stable, comparable key.
-      const sectionTextHash = effectiveSectionHash(section.text, section.sectionTextHash);
 
-      // Resume-skip: the journal already records this {href, sectionTextHash}
-      // as fully embedded AND its vectors are present in the persisted row (the
-      // guard above). A re-extracted section (text-hash mismatch), an older
-      // journal row without a hash, OR a section the journal marks complete but
-      // whose vectors are missing all fall through and re-embed.
-      const prior = job?.sections.find((s) => s.href === section.href);
-      if (
-        prior &&
-        sectionTextHash !== '' &&
-        prior.sectionTextHash === sectionTextHash &&
-        persistedHrefs.has(section.href)
-      ) {
-        pass.resumed += 1;
-        continue;
-      }
+    // Batched persistence. Writing after EVERY section re-serialized the whole
+    // row each time — O(sections²) bytes structured-cloned through the gated IDB
+    // path while the user reads. The batch flushes every
+    // {@link FLUSH_EVERY_SECTIONS} sections or once it holds
+    // {@link FLUSH_AFTER_BYTES}, and unconditionally at the end of the pass
+    // (including an aborted one), so an interrupted pass still leaves resumable
+    // progress — at most one batch of work is redone.
+    let rowDims = config.dims;
+    let sectionsSinceFlush = 0;
+    let bytesSinceFlush = 0;
 
-      const { chunks } = chunkSection({
-        href: section.href,
-        title: section.title,
-        text: section.text,
-      });
-      if (chunks.length === 0) continue;
-
-      const { vectors } = await this.embedWithBackoff(
-        chunks.map((c) => c.text),
-        {
-          profile: 'document',
-          bookId,
-          interactive: opts?.interactive ?? true,
-          lane: opts?.lane ?? 'fgd',
-        },
-        pass,
-      );
-      pass.embedded += 1;
-      pass.chunks += chunks.length;
-
-      // Quantize each returned float32 vector to int8 plus a per-vector scale,
-      // then pack the int8 rows back-to-back and the float32 scales alongside.
-      const dims = vectors[0]?.length ?? config.dims;
-      const packed = new Int8Array(vectors.length * dims);
-      const scales = new Float32Array(vectors.length);
-      vectors.forEach((vec, i) => {
-        const { vectors: q, scale } = this.deps.quantize(vec);
-        packed.set(q, i * dims);
-        scales[i] = scale;
-      });
-
-      const embeddedSection = {
-        href: section.href,
-        sectionTextHash,
-        // CFIs are left empty: the chunker works on plain text and cannot
-        // produce a CFI without the live reader view. The CHAR offsets ARE
-        // persisted so the read path can recover the char offset/length without
-        // re-segmenting. Older rows lack them and fall back to re-segmentation.
-        chunks: chunks.map((c) => ({
-          cfiStart: '',
-          cfiEnd: '',
-          tokenCount: c.tokenCount,
-          charStart: c.charStart,
-          charEnd: c.charEnd,
-        })),
-        vectors: packed.buffer,
-        scales: scales.buffer,
-      };
-      // Push-or-REPLACE by href (mirrors the jobSections merge below) so a
-      // re-embedded section updates its carried-forward entry instead of
-      // duplicating it.
-      const existingIdx = embeddedSections.findIndex((s) => s.href === section.href);
-      if (existingIdx >= 0) embeddedSections[existingIdx] = embeddedSection;
-      else embeddedSections.push(embeddedSection);
-
-      // Mark this section fully embedded for resumability ({href, sectionTextHash}
-      // via the embeddedThroughChunk count, stamped with the section hash so a
-      // re-extracted section is re-embedded).
-      const jobEntry = { href: section.href, embeddedThroughChunk: chunks.length, sectionTextHash };
-      const existingJobIdx = jobSections.findIndex((s) => s.href === section.href);
-      if (existingJobIdx >= 0) jobSections[existingJobIdx] = jobEntry;
-      else jobSections.push(jobEntry);
-
-      // Persist incrementally so a mid-pass abort leaves resumable progress.
-      // Snapshot the arrays (don't share the mutable accumulators with the
-      // repo) so each persisted row is an independent point-in-time value.
+    const flush = async (): Promise<void> => {
+      if (sectionsSinceFlush === 0) return;
+      sectionsSinceFlush = 0;
+      bytesSinceFlush = 0;
+      // The VECTORS row is written BEFORE the job row for the same batch, and
+      // both carry exactly the same set of sections: the resume path treats a
+      // journal entry whose vectors are absent as a MISS (persistedHrefs above),
+      // so this order can only under-claim progress, never over-claim it.
       await this.deps.embeddingsRepo.put({
         bookId,
         model: config.model,
-        dims,
+        dims: rowDims,
         quant: 'int8-pervec',
         extractionVersion: corpus.extractionVersion,
-        sections: [...embeddedSections],
+        sections: rowSections.map(materializeRowSection),
       });
       await this.deps.embeddingsRepo.putJob({
         bookId,
         extractionVersion: corpus.extractionVersion,
         sections: [...jobSections],
+        embeddableSections,
         updatedAt: Date.now(),
       });
+    };
+
+    let failed = false;
+    try {
+      for (const idx of order) {
+        const section = sections[idx];
+        // Prefer the extractor's stamped hash; derive it from the section text
+        // when the corpus predates the field (version-3 corpora written before it
+        // existed, which are never re-extracted). Without this, a hash-less corpus
+        // falls to '' and NO section ever resume-skips — the whole book re-embeds
+        // on every reader pass. The derived value matches what re-extraction would
+        // stamp, so it is a stable, comparable key.
+        const sectionTextHash = effectiveSectionHash(section.text, section.sectionTextHash);
+
+        // Resume-skip: the journal already records this {href, sectionTextHash}
+        // as fully embedded AND its vectors are present in the persisted row (the
+        // guard above). A re-extracted section (text-hash mismatch), an older
+        // journal row without a hash, OR a section the journal marks complete but
+        // whose vectors are missing all fall through and re-embed.
+        const prior = job?.sections.find((s) => s.href === section.href);
+        if (
+          prior &&
+          sectionTextHash !== '' &&
+          prior.sectionTextHash === sectionTextHash &&
+          persistedHrefs.has(section.href)
+        ) {
+          pass.resumed += 1;
+          continue;
+        }
+
+        const { chunks } = chunkSection({
+          href: section.href,
+          title: section.title,
+          text: section.text,
+        });
+        if (chunks.length === 0) continue;
+
+        const { vectors } = await this.embedWithBackoff(
+          chunks.map((c) => c.text),
+          {
+            profile: 'document',
+            bookId,
+            interactive: opts?.interactive ?? true,
+            lane: opts?.lane ?? 'fgd',
+          },
+          pass,
+        );
+        pass.embedded += 1;
+        pass.chunks += chunks.length;
+
+        // Quantize each returned float32 vector to int8 plus a per-vector scale,
+        // then pack the int8 rows back-to-back and the float32 scales alongside.
+        const dims = vectors[0]?.length ?? config.dims;
+        const packed = new Int8Array(vectors.length * dims);
+        const scales = new Float32Array(vectors.length);
+        vectors.forEach((vec, i) => {
+          const { vectors: q, scale } = this.deps.quantize(vec);
+          packed.set(q, i * dims);
+          scales[i] = scale;
+        });
+
+        const embeddedSection = {
+          href: section.href,
+          sectionTextHash,
+          // CFIs are left empty: the chunker works on plain text and cannot
+          // produce a CFI without the live reader view. The CHAR offsets ARE
+          // persisted so the read path can recover the char offset/length without
+          // re-segmenting. Older rows lack them and fall back to re-segmentation.
+          chunks: chunks.map((c) => ({
+            cfiStart: '',
+            cfiEnd: '',
+            tokenCount: c.tokenCount,
+            charStart: c.charStart,
+            charEnd: c.charEnd,
+          })),
+          vectors: packed.buffer,
+          scales: scales.buffer,
+        };
+        rowDims = dims;
+        // Push-or-REPLACE by href (mirrors the jobSections merge below) so a
+        // re-embedded section updates its carried-forward entry instead of
+        // duplicating it.
+        const existingIdx = rowSections.findIndex((s) => s.href === section.href);
+        if (existingIdx >= 0) rowSections[existingIdx] = { href: section.href, row: embeddedSection };
+        else rowSections.push({ href: section.href, row: embeddedSection });
+
+        // Mark this section fully embedded for resumability ({href, sectionTextHash}
+        // via the embeddedThroughChunk count, stamped with the section hash so a
+        // re-extracted section is re-embedded).
+        const jobEntry = { href: section.href, embeddedThroughChunk: chunks.length, sectionTextHash };
+        const existingJobIdx = jobSections.findIndex((s) => s.href === section.href);
+        if (existingJobIdx >= 0) jobSections[existingJobIdx] = jobEntry;
+        else jobSections.push(jobEntry);
+
+        // Persist in BATCHES so a mid-pass abort leaves resumable progress
+        // without re-serializing the whole row after every single section.
+        sectionsSinceFlush += 1;
+        bytesSinceFlush += packed.byteLength + scales.byteLength;
+        if (sectionsSinceFlush >= FLUSH_EVERY_SECTIONS || bytesSinceFlush >= FLUSH_AFTER_BYTES) {
+          await flush();
+        }
+      }
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      // Always persist the trailing partial batch — including when the pass
+      // aborted (rate limit, spent quota, network failure), which is exactly
+      // when resumable progress matters. A write failure while an abort is
+      // already propagating must not mask the original error.
+      if (failed) {
+        try {
+          await flush();
+        } catch {
+          /* the original failure wins */
+        }
+      } else {
+        await flush();
+      }
     }
   }
 }

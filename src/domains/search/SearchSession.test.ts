@@ -11,6 +11,7 @@ import { effectiveSectionHash } from './sectionHash';
 import { MockEmbeddingClient } from '@domains/google';
 import { NetRateLimitedError } from '~types/errors';
 import type { EmbeddedRowView, EmbeddingClientPort } from './embeddingPort';
+import type { CacheEmbedJobsRow } from '@data/rows/cache';
 
 function makeFactory() {
   const created: { engine: SearchEngine; dispose: ReturnType<typeof vi.fn> }[] = [];
@@ -591,6 +592,134 @@ describe('SearchSession — hybrid semantic query path (Increment D)', () => {
       await expect(session.getEmbeddingStatus('bk-1')).resolves.toEqual({
         totalSections: 1,
         embeddedSections: 1,
+      });
+    });
+
+    /**
+     * The search panel polls this every 3 s while the indexer is REWRITING the
+     * vectors row. Deserializing the whole packed-int8 row each poll, just to
+     * count sections, was pure waste: the resume journal carries the same
+     * {href, sectionTextHash} pairs in a few hundred bytes.
+     */
+    describe('regression: status does not read the vector row', () => {
+      const jobRow = (sections: { href: string; sectionTextHash?: string }[]): CacheEmbedJobsRow => ({
+        bookId: 'bk-1',
+        extractionVersion: 3,
+        sections: sections.map((s) => ({ ...s, embeddedThroughChunk: 1 })),
+        embeddableSections: sections.length,
+        updatedAt: 0,
+      });
+
+      it('counts from the job row, never touching the packed vectors', async () => {
+        const { factory } = makeFactory();
+        const queryClient = new MockEmbeddingClient({ dims: DIMS });
+        const get = vi.fn(async () => undefined);
+        const getJob = vi.fn(async () => jobRow([{ href: SEMANTIC_HREF, sectionTextHash: 'h1' }]));
+
+        const session = new SearchSession({
+          engineFactory: factory,
+          textSource: {
+            get: vi.fn(async () => ({
+              extractionVersion: 3,
+              sections: [{ href: SEMANTIC_HREF, title: 'Ch 1', text: SEMANTIC_TEXT, sectionTextHash: 'h1' }],
+            })),
+          },
+          embeddingClient: queryClient,
+          embeddingsSource: { get, getJob },
+          getSemanticConfig: semanticConfig(true),
+        });
+
+        await expect(session.getEmbeddingStatus('bk-1')).resolves.toEqual({
+          totalSections: 1,
+          embeddedSections: 1,
+        });
+        expect(getJob).toHaveBeenCalledTimes(1);
+        expect(get).not.toHaveBeenCalled();
+      });
+
+      it('still honors the corpus hash: a re-extracted section does not count', async () => {
+        const { factory } = makeFactory();
+        const queryClient = new MockEmbeddingClient({ dims: DIMS });
+        const get = vi.fn(async () => undefined);
+
+        const session = new SearchSession({
+          engineFactory: factory,
+          textSource: {
+            get: vi.fn(async () => ({
+              extractionVersion: 3,
+              sections: [{ href: SEMANTIC_HREF, title: 'Ch 1', text: SEMANTIC_TEXT, sectionTextHash: 'h2' }],
+            })),
+          },
+          embeddingClient: queryClient,
+          embeddingsSource: { get, getJob: vi.fn(async () => jobRow([{ href: SEMANTIC_HREF, sectionTextHash: 'h1' }])) },
+          getSemanticConfig: semanticConfig(true),
+        });
+
+        await expect(session.getEmbeddingStatus('bk-1')).resolves.toEqual({
+          totalSections: 1,
+          embeddedSections: 0,
+        });
+        expect(get).not.toHaveBeenCalled();
+      });
+
+      it('falls back to the vector row when the journal is absent or pre-dates the hash stamp', async () => {
+        const { factory } = makeFactory();
+        const queryClient = new MockEmbeddingClient({ dims: DIMS });
+        const embedded = {
+          extractionVersion: 3,
+          sections: [{ href: SEMANTIC_HREF, sectionTextHash: 'h1' }],
+        };
+        const textSource: SearchTextSource = {
+          get: vi.fn(async () => ({
+            extractionVersion: 3,
+            sections: [{ href: SEMANTIC_HREF, title: 'Ch 1', text: SEMANTIC_TEXT, sectionTextHash: 'h1' }],
+          })),
+        };
+
+        // (a) no journal row at all
+        const getNoJob = vi.fn(async () => embedded as unknown as EmbeddedRowView);
+        const noJob = new SearchSession({
+          engineFactory: factory,
+          textSource,
+          embeddingClient: queryClient,
+          embeddingsSource: { get: getNoJob, getJob: vi.fn(async () => undefined) },
+          getSemanticConfig: semanticConfig(true),
+        });
+        await expect(noJob.getEmbeddingStatus('bk-1')).resolves.toEqual({
+          totalSections: 1,
+          embeddedSections: 1,
+        });
+        expect(getNoJob).toHaveBeenCalledTimes(1);
+
+        // (b) a legacy journal row whose entries carry no hash
+        const getLegacy = vi.fn(async () => embedded as unknown as EmbeddedRowView);
+        const legacy = new SearchSession({
+          engineFactory: factory,
+          textSource,
+          embeddingClient: queryClient,
+          embeddingsSource: { get: getLegacy, getJob: vi.fn(async () => jobRow([{ href: SEMANTIC_HREF }])) },
+          getSemanticConfig: semanticConfig(true),
+        });
+        await expect(legacy.getEmbeddingStatus('bk-1')).resolves.toEqual({
+          totalSections: 1,
+          embeddedSections: 1,
+        });
+        expect(getLegacy).toHaveBeenCalledTimes(1);
+
+        // (c) a port without getJob at all (older injections/doubles)
+        const getNoPort = vi.fn(async () => embedded as unknown as EmbeddedRowView);
+        const noPort = new SearchSession({
+          engineFactory: factory,
+          textSource,
+          embeddingClient: queryClient,
+          embeddingsSource: { get: getNoPort },
+          getSemanticConfig: semanticConfig(true),
+        });
+        await expect(noPort.getEmbeddingStatus('bk-1')).resolves.toEqual({
+          totalSections: 1,
+          embeddedSections: 1,
+        });
+        expect(getNoPort).toHaveBeenCalledTimes(1);
       });
     });
   });

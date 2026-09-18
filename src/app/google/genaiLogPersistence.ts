@@ -28,6 +28,8 @@ import { useGenAIStore } from '@store/useGenAIStore';
 
 let initialized = false;
 let unsubscribe: (() => void) | null = null;
+/** The live mirror's id set, exposed only through the TEST-ONLY accessor below. */
+let knownIdsForTests: ReadonlySet<string> | null = null;
 
 /**
  * Hydrate the store's log buffer from the side DB, then mirror every buffer
@@ -43,6 +45,7 @@ export function initGenAILogPersistence(): Promise<void> {
   // array from the front — those entries stay persisted until pruned) and
   // never re-writes the rows hydration itself just loaded.
   const knownIds = new Set<string>();
+  knownIdsForTests = knownIds;
 
   // Persist anything logged BEFORE this init ran (early-boot entries) — the
   // subscription below only sees future changes.
@@ -71,6 +74,13 @@ export function initGenAILogPersistence(): Promise<void> {
       knownIds.add(entry.id);
       genaiLogsRepo.append(entry, state.maxLogs);
     }
+    // Re-key the set to what the buffer STILL holds. The ring buffer trims from
+    // the front, so ids of trimmed entries used to stay in this set forever —
+    // one leaked string per log entry for the life of the session. Rebuilding
+    // bounds it by maxLogs, and a trimmed id can never come back (ids are
+    // minted per entry), so nothing is ever re-appended.
+    knownIds.clear();
+    for (const entry of logs) knownIds.add(entry.id);
   });
 
   return genaiLogsRepo
@@ -83,6 +93,14 @@ export function initGenAILogPersistence(): Promise<void> {
       // modules); the rows round-trip losslessly.
       useGenAIStore.getState().hydrateLogs(entries as GenAILogEntry[]);
     });
+}
+
+/**
+ * TEST-ONLY: how many entry ids the mirror is tracking. The set is bounded by
+ * the store's `maxLogs`; this is how the bound is asserted.
+ */
+export function __genaiLogPersistenceKnownIdsForTests(): number {
+  return knownIdsForTests?.size ?? 0;
 }
 
 /** TEST-ONLY: await every persistence op enqueued so far. */
@@ -98,4 +116,5 @@ export function __resetGenAILogPersistenceForTests(): void {
   unsubscribe?.();
   unsubscribe = null;
   initialized = false;
+  knownIdsForTests = null;
 }

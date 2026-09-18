@@ -25,7 +25,7 @@
 import { dictionary, type DictEntryTuple } from '@data/repos/dictionary';
 import { localFetch } from '@kernel/net';
 import { createLogger } from '@lib/logger';
-import { findCompoundWord, type CompoundHit } from './compoundLookup';
+import { findCompoundWord, findCompoundWords, type CompoundHit } from './compoundLookup';
 
 const logger = createLogger('DictionaryService');
 
@@ -99,6 +99,18 @@ export class DictionaryService {
     return findCompoundWord(text, charIndex, (words) => dictionary.getEntries(words));
   }
 
+  /**
+   * {@link getCompound} for many indices in ONE dictionary transaction — what
+   * the triage card needs for a whole selection (one lookup, not one per Han
+   * character).
+   */
+  async getCompounds(
+    text: string,
+    charIndices: readonly number[],
+  ): Promise<Map<number, CompoundHit | null>> {
+    return findCompoundWords(text, charIndices, (words) => dictionary.getEntries(words));
+  }
+
   private setProgress(next: DictionaryProgress): void {
     this.progress = next;
     for (const listener of this.listeners) listener({ ...next });
@@ -134,15 +146,25 @@ export class DictionaryService {
         );
       }
       const data = (await response.json()) as Record<string, DictEntryTuple>;
-      const entries = Object.entries(data);
-      const total = entries.length;
+      // Keys only. `Object.entries` built a ~200 000-element array of
+      // two-element arrays (one allocation per headword, ~100 MB of transient
+      // heap) on the MAIN thread before a single row was written; the keys
+      // array alone is one allocation, and each chunk's pairs are materialized
+      // inside the loop — never more than IMPORT_CHUNK_SIZE of them at a time.
+      const keys = Object.keys(data);
+      const total = keys.length;
       this.setProgress({ status: 'importing', imported: 0, total });
 
       // A previous half-built index (crash mid-import) must not survive.
       await dictionary.clearAll();
 
       for (let offset = 0; offset < total; offset += IMPORT_CHUNK_SIZE) {
-        const chunk = entries.slice(offset, offset + IMPORT_CHUNK_SIZE);
+        const end = Math.min(offset + IMPORT_CHUNK_SIZE, total);
+        const chunk: [string, DictEntryTuple][] = new Array(end - offset);
+        for (let i = offset; i < end; i++) {
+          const word = keys[i];
+          chunk[i - offset] = [word, data[word]];
+        }
         await dictionary.bulkPutEntries(chunk);
         this.setProgress({
           status: 'importing',
