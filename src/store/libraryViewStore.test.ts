@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useAllBooks, useLastReadBookId } from './libraryViewStore';
+import { useAllBooks, useLastReadBookId, useLastReadBook, useBook } from './libraryViewStore';
 import { useLibraryStore } from './useLibraryStore';
 import { useBookStore } from './useBookStore';
 import { useReadingStateStore } from './useReadingStateStore';
@@ -303,6 +303,55 @@ describe('selectors', () => {
 
       const { result } = renderHook(() => useLastReadBookId());
       expect(result.current).toBe('mine-old');
+    });
+  });
+
+  /**
+   * perf: `useLastReadBook` feeds the app-wide ReaderControlBar summary pill,
+   * which renders the title only. It used to go through the progress-joined
+   * `useBook`, so it subscribed to `state.progress[id]` — a NEW object on every
+   * write — and re-rendered the pill on every page turn AND every background
+   * TTS tick, even on the library route.
+   */
+  describe('regression: the last-read chrome projection ignores progress writes', () => {
+    beforeEach(() => {
+      act(() => {
+        useLocalHistoryStore.setState({ lastReadBookId: 'book-1' });
+      });
+      seedBooks({ 'book-1': makeInventoryItem({ bookId: 'book-1', title: 'Title' }) });
+      seedProgress({ 'book-1': { 'device-1': progressOf(0.5, 100, 'epubcfi(/6/2)') } });
+    });
+
+    it('keeps its identity across a progress write', () => {
+      let renders = 0;
+      const { result } = renderHook(() => {
+        renders += 1;
+        return useLastReadBook();
+      });
+
+      const before = result.current;
+      const rendersBefore = renders;
+      expect(before?.title).toBe('Title');
+
+      // A TTS queue tick: a fresh progress object, nothing the pill displays.
+      act(() => {
+        useReadingStateStore.getState().updateTTSProgress('book-1', 3, 1);
+      });
+
+      expect(result.current).toBe(before);
+      expect(renders).toBe(rendersBefore);
+    });
+
+    it('the full useBook join still tracks progress', () => {
+      const { result } = renderHook(() => useBook('book-1'));
+      expect(result.current?.progress).toBe(0.5);
+
+      act(() => {
+        useReadingStateStore.getState().updateLocation('book-1', 'epubcfi(/6/8)', 0.8);
+      });
+
+      expect(result.current?.progress).toBe(0.8);
+      expect(result.current?.currentCfi).toBe('epubcfi(/6/8)');
     });
   });
 });

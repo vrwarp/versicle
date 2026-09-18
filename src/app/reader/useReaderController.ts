@@ -212,6 +212,59 @@ export function useReaderController(
     };
   }, [rawBookMetadata]);
 
+  // perf: `useBook` returns a NEW object on every progress write (it subscribes
+  // to `state.progress[id]`, which is a fresh object per write), so
+  // `bookMetadata` changes identity on every page turn and TTS sentence. The
+  // full projection still flows out of the controller — ImportJumpPrompt reads
+  // `progress`/`currentCfi` off it — but the reader ENGINE consumes only the
+  // fields below (useEpubReader: the theme spec's baseFontSize/baseLineHeight,
+  // the synthetic-TOC pair at load time) plus the version the redirect checks.
+  // Narrowing them into their own memo keeps `readerOptions` and the
+  // version-check effect stable across progress-only writes.
+  const hasBookMetadata = bookMetadata != null;
+  const metaId = bookMetadata?.id;
+  const metaTitle = bookMetadata?.title;
+  const metaAuthor = bookMetadata?.author;
+  const metaAddedAt = bookMetadata?.addedAt;
+  const bookLanguage = bookMetadata?.language;
+  const metaVersion = bookMetadata?.version;
+  const metaBaseFontSize = bookMetadata?.baseFontSize;
+  const metaBaseLineHeight = bookMetadata?.baseLineHeight;
+  const metaUseSyntheticToc = bookMetadata?.useSyntheticToc;
+  const metaSyntheticToc = bookMetadata?.syntheticToc;
+  const readerMetadata = useMemo<BookMetadata | null>(
+    () =>
+      !hasBookMetadata
+        ? null
+        : {
+            // Defaults only satisfy the required BookMetadata fields; the real
+            // projection always carries them and the hook reads none of them.
+            id: metaId ?? '',
+            title: metaTitle ?? '',
+            author: metaAuthor ?? '',
+            addedAt: metaAddedAt ?? 0,
+            language: bookLanguage,
+            version: metaVersion,
+            baseFontSize: metaBaseFontSize,
+            baseLineHeight: metaBaseLineHeight,
+            useSyntheticToc: metaUseSyntheticToc,
+            syntheticToc: metaSyntheticToc,
+          },
+    [
+      hasBookMetadata,
+      metaId,
+      metaTitle,
+      metaAuthor,
+      metaAddedAt,
+      bookLanguage,
+      metaVersion,
+      metaBaseFontSize,
+      metaBaseLineHeight,
+      metaUseSyntheticToc,
+      metaSyntheticToc,
+    ],
+  );
+
   const [searchParams] = useSearchParams();
   const cfiOverride = searchParams.get('cfi');
   const locationOverride = searchParams.get('location');
@@ -289,12 +342,12 @@ export function useReaderController(
     currentTheme,
     customTheme,
     fontFamily,
-    fontSize: (fontProfiles[(bookMetadata?.language || 'en').split('-')[0]] || {}).fontSize || fontSize,
-    lineHeight: (fontProfiles[(bookMetadata?.language || 'en').split('-')[0]] || {}).lineHeight || lineHeight,
+    fontSize: (fontProfiles[(bookLanguage || 'en').split('-')[0]] || {}).fontSize || fontSize,
+    lineHeight: (fontProfiles[(bookLanguage || 'en').split('-')[0]] || {}).lineHeight || lineHeight,
     shouldForceFont,
     initialLocation,
     getInitialLocation,
-    metadata: bookMetadata,
+    metadata: readerMetadata,
     onLocationChange: (location, percentage, title, sectionId) => {
       // Initialize the recorder's previous-location tracker (legacy step 1
       // — it ran even when the import-jump check skipped the save).
@@ -396,7 +449,8 @@ export function useReaderController(
     shouldForceFont,
     bookId,
     dispatchCompass,
-    bookMetadata,
+    bookLanguage,
+    readerMetadata,
     initialLocation,
     getInitialLocation,
     coldOpenGuard,
@@ -420,8 +474,23 @@ export function useReaderController(
   // SearchSession per open reader — worker lifecycle owned here (created
   // lazily on first index/search), corpus from the searchText repo, engine
   // crashes reset the session and surface a toast (search.md #6).
+  //
+  // fix(reader): the session is keyed by bookId. React Router reuses the
+  // `/read/:id` element across a /read/A -> /read/B navigation, so this hook
+  // instance (and its refs) survives the book change — an unkeyed lazy
+  // `if (!ref.current)` would have handed book B book A's worker, corpus cache
+  // and navigator. Retiring the previous pair here (rather than in the unmount
+  // cleanup) keeps `searchSession` below pointing at the LIVE session in the
+  // same render that changed the id.
   const searchSessionRef = useRef<SearchSession | null>(null);
-  if (!searchSessionRef.current) {
+  const searchSessionBookIdRef = useRef<string | undefined>(undefined);
+  const searchNavigatorRef = useRef<SearchNavigator | null>(null);
+  if (!searchSessionRef.current || searchSessionBookIdRef.current !== bookId) {
+    searchNavigatorRef.current?.dispose();
+    searchNavigatorRef.current = null;
+    searchSessionRef.current?.dispose();
+    searchSessionBookIdRef.current = bookId;
+
     // Foreground document-embedding indexer: ports wired from the lazy embedding
     // client facade + the searchText/embeddings repos + the int8 quantizer.
     // bookId/CFI flow as arguments through enqueueEmbedding, so the search domain
@@ -487,7 +556,6 @@ export function useReaderController(
   }
   const searchSession = searchSessionRef.current;
 
-  const searchNavigatorRef = useRef<SearchNavigator | null>(null);
   if (!searchNavigatorRef.current) {
     searchNavigatorRef.current = createSearchNavigator(() => engineRef.current);
   }
@@ -536,7 +604,6 @@ export function useReaderController(
   // Preference reads stay store-side here (domains-no-store): injected as a
   // thunk, read at run time. Preference CHANGES drive an explicit refresh —
   // the legacy React-deps re-run, made event-driven (CH-2).
-  const bookLanguage = bookMetadata?.language;
   useEffect(() => {
     if (!engine || getBookBaseLanguage(bookLanguage) !== 'zh') {
       pinyinFeed.set([]);
@@ -570,15 +637,16 @@ export function useReaderController(
     };
   }, [engine, bookLanguage, pinyinFeed]);
 
-  // Check version and redirect if outdated
+  // Check version and redirect if outdated. Keyed on the narrowed projection
+  // so a progress-only write no longer re-runs it.
   useEffect(() => {
-    if (bookMetadata) {
-      const effectiveVersion = bookMetadata.version ?? 0;
+    if (readerMetadata) {
+      const effectiveVersion = readerMetadata.version ?? 0;
       if (effectiveVersion < CURRENT_BOOK_VERSION && bookId) {
         navigate('/', { state: { reprocessBookId: bookId } });
       }
     }
-  }, [bookMetadata, bookId, navigate]);
+  }, [readerMetadata, bookId, navigate]);
 
   // Reading-session recorder lifecycle (Phase 6 §6): one per book.
   // flushSync on teardown is the legacy unmount panic save.

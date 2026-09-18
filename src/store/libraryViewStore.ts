@@ -264,6 +264,74 @@ function ensureLibraryViewStarted(): void {
 // ── Consumer hooks (moved from the deleted selectors.ts façade) ────────────
 
 /**
+ * perf: the per-book reading-list join, indexed. `useBook`'s selector used to
+ * walk the whole entries map (up to twice — once for the FK, once for the
+ * fuzzy key, re-parsing every title/author) on EVERY store notification, and
+ * the reader plus the app-wide control bar hold several of those selectors.
+ * The maps are rebuilt only when the entries map's identity moves; join ORDER
+ * (FK → exact filename → fuzzy, first match wins) is unchanged.
+ */
+const perBookJoin = {
+  entries: undefined as Record<string, ReadingListEntry> | undefined,
+  fkMap: new Map<string, ReadingListEntry>(),
+  matchMap: new Map<string, ReadingListEntry>(),
+};
+
+function readingListIndex(entries: Record<string, ReadingListEntry>) {
+  if (perBookJoin.entries !== entries) {
+    const fkMap = new Map<string, ReadingListEntry>();
+    const matchMap = new Map<string, ReadingListEntry>();
+    for (const key in entries) {
+      if (!Object.prototype.hasOwnProperty.call(entries, key)) continue;
+      const item = entries[key];
+      if (item.bookId && !fkMap.has(item.bookId)) fkMap.set(item.bookId, item);
+      const matchKey = generateMatchKey(item.title, item.author);
+      if (matchKey && !matchMap.has(matchKey)) matchMap.set(matchKey, item);
+    }
+    perBookJoin.entries = entries;
+    perBookJoin.fkMap = fkMap;
+    perBookJoin.matchMap = matchMap;
+  }
+  return perBookJoin;
+}
+
+/**
+ * The CHROME projection for a book: identity, display strings and the
+ * synthetic-TOC preference — no progress and no reading-list join.
+ *
+ * perf: ReaderControlBar is mounted app-wide (RootLayout), so wiring it to the
+ * full {@link useBook} join subscribed the pill to `state.progress[id]` — a
+ * fresh object on every page turn and every TTS sentence — and re-ran the
+ * reading-list join twice per write, even on the library route.
+ */
+export interface BookChrome {
+  id: string;
+  bookId: string;
+  title: string;
+  syntheticToc?: NavigationItem[];
+  useSyntheticToc?: boolean;
+}
+
+export const useBookChrome = (id: string | null): BookChrome | null => {
+  const book = useBookStore(state => (id && state.books ? state.books[id] : null));
+  const staticMeta = useLibraryStore(state =>
+    id && state.staticMetadata ? state.staticMetadata[id] : null,
+  );
+
+  return useMemo(() => {
+    if (!book) return null;
+    return {
+      id: book.bookId,
+      bookId: book.bookId,
+      // Same precedence as useBook: user overrides > static metadata > snapshot.
+      title: book.customTitle || staticMeta?.title || book.title,
+      syntheticToc: staticMeta?.syntheticToc,
+      useSyntheticToc: book.useSyntheticToc,
+    };
+  }, [book, staticMeta]);
+};
+
+/**
  * Returns all books with static metadata, progress and the reading-list
  * entry merged — a plain subscription on the derived projection.
  */
@@ -300,24 +368,17 @@ export const useBook = (id: string | null) => {
   const sourceFilename = book?.sourceFilename;
   const readingListEntry = useReadingListStore(state => {
     if (!state.entries) return undefined;
+    const index = readingListIndex(state.entries);
     if (id) {
-      for (const key in state.entries) {
-        if (state.entries[key].bookId === id) return state.entries[key];
-      }
+      const byFk = index.fkMap.get(id);
+      if (byFk) return byFk;
     }
     if (sourceFilename && state.entries[sourceFilename]) {
       return state.entries[sourceFilename];
     }
     if (book?.title || book?.author) {
       const bookKey = generateMatchKey(book.title || '', book.author || '');
-      if (bookKey) {
-        for (const key in state.entries) {
-          const entry = state.entries[key];
-          if (generateMatchKey(entry.title, entry.author) === bookKey) {
-            return entry;
-          }
-        }
-      }
+      if (bookKey) return index.matchMap.get(bookKey);
     }
     return undefined;
   });
@@ -401,10 +462,15 @@ export const useLastReadBookId = () => {
 };
 
 /**
- * Returns the most recently read book with metadata merged.
- * Uses useLastReadBookId and useBook to avoid full library iteration.
+ * Returns the most recently read book's CHROME projection (identity + display
+ * strings). Uses useLastReadBookId to avoid full library iteration.
+ *
+ * perf: this feeds the app-wide ReaderControlBar summary pill, which renders
+ * the title only — the progress-joined {@link useBook} re-rendered the whole
+ * pill on every progress write (including background-TTS ticks on the library
+ * route). Progress comes from the percentage selectors instead.
  */
-export const useLastReadBook = () => {
+export const useLastReadBook = (): BookChrome | null => {
   const id = useLastReadBookId();
-  return useBook(id);
+  return useBookChrome(id);
 };

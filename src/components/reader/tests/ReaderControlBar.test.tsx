@@ -13,11 +13,20 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ReaderControlBar } from '../ReaderControlBar';
 
 // Hoisted mocks for selectors
-const { mockUseBook, mockUseLastReadBook, mockUseCurrentDeviceProgress, mockUseRemoteProgress } = vi.hoisted(() => {
+const {
+  mockUseBookChrome,
+  mockUseBookJoin,
+  mockUseLastReadBook,
+  mockUsePercentage,
+  mockUseRemoteProgress,
+} = vi.hoisted(() => {
   return {
-    mockUseBook: vi.fn(),
+    mockUseBookChrome: vi.fn(),
+    // The progress-joined projection. The bar must NOT reach for it — see the
+    // "app-wide subscriptions" regression block.
+    mockUseBookJoin: vi.fn(),
     mockUseLastReadBook: vi.fn(),
-    mockUseCurrentDeviceProgress: vi.fn(),
+    mockUsePercentage: vi.fn(),
     mockUseRemoteProgress: vi.fn(),
   };
 });
@@ -56,13 +65,14 @@ vi.mock('@store/useReadingStateStore', () => ({
       subscribe: (listener: unknown) => mockUseReadingStateStore.subscribe?.(listener),
     }
   ),
-  useCurrentDeviceProgress: (bookId: any) => mockUseCurrentDeviceProgress(bookId),
-  useBookProgress: (bookId: any) => mockUseCurrentDeviceProgress(bookId)
+  useBookPercentage: (bookId: any) => mockUsePercentage(bookId),
+  useCurrentDevicePercentage: (bookId: any) => mockUsePercentage(bookId)
 }));
 
 // Mock selectors
 vi.mock('@store/libraryViewStore', () => ({
-  useBook: (id: any) => mockUseBook(id),
+  useBook: (id: any) => mockUseBookJoin(id),
+  useBookChrome: (id: any) => mockUseBookChrome(id),
   useLastReadBook: () => mockUseLastReadBook(),
   useAllBooks: vi.fn(),
 }));
@@ -136,9 +146,9 @@ describe('ReaderControlBar', () => {
     vi.clearAllMocks();
 
     // Default mocks
-    mockUseBook.mockReturnValue(null);
+    mockUseBookChrome.mockReturnValue(null);
     mockUseLastReadBook.mockReturnValue(null);
-    mockUseCurrentDeviceProgress.mockReturnValue(null);
+    mockUsePercentage.mockReturnValue(0);
     mockUseRemoteProgress.mockReturnValue(null);
 
     // Default store states
@@ -223,8 +233,8 @@ describe('ReaderControlBar', () => {
       currentSectionTitle: 'Chapter 1',
       currentBookId: '123',
     })));
-    mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
-    mockUseCurrentDeviceProgress.mockImplementation((id) => id === '123' ? { percentage: 0.5 } : null);
+    mockUseBookChrome.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
+    mockUsePercentage.mockImplementation((id) => (id === '123' ? 0.5 : 0));
 
     render(<ReaderControlBar />);
     expect(screen.getByTestId('compass-pill-active')).toBeInTheDocument();
@@ -238,8 +248,8 @@ describe('ReaderControlBar', () => {
       currentSectionTitle: 'Chapter 1',
       currentBookId: '123',
     })));
-    mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
-    mockUseCurrentDeviceProgress.mockImplementation((id) => id === '123' ? { percentage: 0.75 } : null);
+    mockUseBookChrome.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
+    mockUsePercentage.mockImplementation((id) => (id === '123' ? 0.75 : 0));
 
     render(<ReaderControlBar />);
     expect(screen.getByTestId('compass-pill-compact')).toBeInTheDocument();
@@ -247,7 +257,7 @@ describe('ReaderControlBar', () => {
 
   it('renders the summary pill when on home with a last-read book (absorbed: descriptive aria-label)', () => {
     mockUseLastReadBook.mockReturnValue({ bookId: '123', id: '123', title: 'Book 123' });
-    mockUseCurrentDeviceProgress.mockImplementation((id) => id === '123' ? { percentage: 0.25 } : null);
+    mockUsePercentage.mockImplementation((id) => (id === '123' ? 0.25 : 0));
 
     render(<ReaderControlBar />);
 
@@ -263,7 +273,7 @@ describe('ReaderControlBar', () => {
 
   it('navigates to the book when clicking the summary pill', () => {
     mockUseLastReadBook.mockReturnValue({ bookId: '123', id: '123', title: 'Book 1' });
-    mockUseCurrentDeviceProgress.mockImplementation((id) => id === '123' ? { percentage: 0.25 } : null);
+    mockUsePercentage.mockImplementation((id) => (id === '123' ? 0.25 : 0));
 
     render(<ReaderControlBar />);
     fireEvent.click(screen.getByTestId('compass-pill-summary'));
@@ -274,7 +284,7 @@ describe('ReaderControlBar', () => {
     mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
       currentBookId: '123',
     })));
-    mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
+    mockUseBookChrome.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
     mockUseRemoteProgress.mockReturnValue({
       deviceId: 'phone-1',
       deviceName: 'Phone',
@@ -350,7 +360,7 @@ describe('ReaderControlBar', () => {
         currentBookId: '123',
         compass: annotationMode(),
       })));
-      mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
+      mockUseBookChrome.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
 
       const { rerender } = render(<ReaderControlBar />);
       const copyButton = screen.getByTestId('popover-copy-button');
@@ -394,7 +404,7 @@ describe('ReaderControlBar', () => {
         currentBookId: '123',
         currentSectionTitle: 'Chapter 1',
       })));
-      mockUseBook.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
+      mockUseBookChrome.mockImplementation((id) => id === '123' ? { bookId: '123', title: 'Book 1' } : null);
 
       const { rerender } = render(<ReaderControlBar />);
       // The active pill's focusable control is the center toggle (the prev/next
@@ -416,6 +426,46 @@ describe('ReaderControlBar', () => {
       expect(annotationPill.contains(document.activeElement)).toBe(false);
 
       document.body.removeChild(iframe);
+    });
+  });
+
+  /**
+   * perf: the bar is mounted app-wide (RootLayout), so every subscription it
+   * holds costs on every route. It used to hold five progress-derived
+   * subscriptions, two of them full `useBook` joins (reading-list scan
+   * included) whose results are a NEW object on every progress write — so a
+   * page turn, and even a background-TTS tick on the library route, re-rendered
+   * the whole pill twice over. It now takes the chrome projections and plain
+   * percentage numbers.
+   */
+  describe('regression: a progress-only write does not re-render the control bar', () => {
+    it('never subscribes to the progress-joined book projection', () => {
+      mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
+        currentSectionTitle: 'Chapter 1',
+        currentBookId: '123',
+      })));
+      mockUseBookChrome.mockImplementation((id) => (id === '123' ? { bookId: '123', id: '123', title: 'Book 1' } : null));
+      mockUsePercentage.mockImplementation((id) => (id === '123' ? 0.5 : 0));
+
+      render(<ReaderControlBar />);
+
+      expect(screen.getByTestId('compass-pill-active')).toBeInTheDocument();
+      expect(mockUseBookJoin).not.toHaveBeenCalled();
+    });
+
+    it('reads progress as a percentage number, not a progress object', () => {
+      mockUseLastReadBook.mockReturnValue({ bookId: '123', id: '123', title: 'Book 123' });
+      mockUsePercentage.mockImplementation((id) => (id === '123' ? 0.25 : 0));
+
+      render(<ReaderControlBar />);
+
+      expect(screen.getByText('25% complete')).toBeInTheDocument();
+      // Every percentage read returns a number, so an unchanged percentage is
+      // Object.is-equal at the selector and never reaches React.
+      for (const call of mockUsePercentage.mock.results) {
+        expect(typeof call.value).toBe('number');
+      }
+      expect(mockUseBookJoin).not.toHaveBeenCalled();
     });
   });
 });

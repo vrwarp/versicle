@@ -14,6 +14,15 @@ import { useBookStore } from '@store/useBookStore';
 import { useSmartTOC } from '@hooks/useSmartTOC';
 import { findTocItem } from '@lib/reader/titleResolver';
 
+/**
+ * perf: the shared empty synthetic TOC. A fresh `[]` per metadata identity
+ * change made `setSyntheticToc` commit a new state value on every page turn
+ * (bookMetadata's identity moves on every progress write), re-rendering
+ * ReaderSidebars and re-running two findTocItem walks for every book that has
+ * no synthetic TOC. With one shared reference React bails out instead.
+ */
+const NO_SYNTHETIC_TOC: NavigationItem[] = [];
+
 export interface TocController {
   toc: NavigationItem[];
   syntheticToc: NavigationItem[];
@@ -38,7 +47,7 @@ export function useTocController(opts: {
   const setCurrentSection = useReaderUIStore(state => state.setCurrentSection);
 
   const [useSyntheticToc, setUseSyntheticToc] = useState(false);
-  const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>([]);
+  const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>(NO_SYNTHETIC_TOC);
   // Tracks whether the user has explicitly toggled the switch in this session.
   // Prevents the bookMetadata effect from overriding their choice when Yjs
   // fires an observer after updateBook (which would cause a reset race).
@@ -77,16 +86,20 @@ export function useTocController(opts: {
 
   // Load synthetic TOC from metadata (deferred a microtask so the sync
   // never runs synchronously inside the effect — same observable behavior).
+  //
+  // perf: keyed on the two fields this effect reads (plus whether there IS
+  // metadata) rather than the whole `bookMetadata` object — its identity moves
+  // on every progress write, which re-scheduled this microtask on every page
+  // turn for no state change at all.
+  const hasBookMetadata = bookMetadata != null;
+  const metadataSyntheticToc = bookMetadata?.syntheticToc;
+  const metadataUseSyntheticToc = bookMetadata?.useSyntheticToc;
   useEffect(() => {
-    if (!bookMetadata) return;
+    if (!hasBookMetadata) return;
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      if (bookMetadata.syntheticToc) {
-        setSyntheticToc(bookMetadata.syntheticToc);
-      } else {
-        setSyntheticToc([]);
-      }
+      setSyntheticToc(metadataSyntheticToc ?? NO_SYNTHETIC_TOC);
 
       // Only initialize useSyntheticToc from metadata if the user hasn't
       // explicitly toggled it. When updateBook is called, the Yjs-backed store
@@ -96,13 +109,13 @@ export function useTocController(opts: {
         // bookMetadata.syntheticToc is always set from static_structure.toc (the original
         // epub TOC), so we can't use its presence to infer whether AI titles exist.
         // Only trust the explicit useSyntheticToc flag saved in the Yjs store.
-        setUseSyntheticToc(bookMetadata.useSyntheticToc === true);
+        setUseSyntheticToc(metadataUseSyntheticToc === true);
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [bookMetadata]);
+  }, [hasBookMetadata, metadataSyntheticToc, metadataUseSyntheticToc]);
 
   const onUseSyntheticTocChange = (val: boolean) => {
     userHasExplicitlySetSyntheticToc.current = true;
