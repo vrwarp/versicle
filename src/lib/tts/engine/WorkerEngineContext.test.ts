@@ -40,6 +40,38 @@ describe('WorkerEngineContext (replicated-state context for the worker)', () => 
         expect(ctx.contentAnalysis.getSnapshot().sections['b1/s1']).toBe(analysis);
     });
 
+    describe('regression: a single-entry analysis delta merges into the cached snapshot', () => {
+        // The host pushes a DELTA when one section's analysis changed, instead of deep-cloning
+        // and structured-cloning the whole cross-book `sections` map on every content-analysis
+        // write (including the worker's own markAnalysisLoading / saveTableAdaptations echoes).
+        it('replaces the keyed entry, keeps the others, and fires listeners once', () => {
+            const { ctx } = makeCtx();
+            const s1 = { status: 'success', generatedAt: 1 } as SectionAnalysis;
+            const s2 = { status: 'success', generatedAt: 1 } as SectionAnalysis;
+            ctx.applyUpdate({ kind: 'analysis', snapshot: { sections: { 'b1/s1': s1, 'b1/s2': s2 } } });
+
+            const listener = vi.fn();
+            ctx.contentAnalysis.subscribe(listener);
+
+            const s1b = { status: 'success', generatedAt: 2 } as SectionAnalysis;
+            ctx.applyUpdate({ kind: 'analysis', key: 'b1/s1', analysis: s1b });
+
+            expect(ctx.contentAnalysis.getAnalysis('b1', 's1')).toBe(s1b);
+            // The untouched entry survives — a delta merges, it does not replace the cache.
+            expect(ctx.contentAnalysis.getAnalysis('b1', 's2')).toBe(s2);
+            expect(listener).toHaveBeenCalledTimes(1);
+            expect(listener.mock.calls[0][0].sections['b1/s2']).toBe(s2);
+            expect(listener.mock.calls[0][0]).toBe(ctx.contentAnalysis.getSnapshot());
+        });
+
+        it('serves a delta that arrives before any full snapshot', () => {
+            const { ctx } = makeCtx();
+            const s1 = { status: 'success', generatedAt: 1 } as SectionAnalysis;
+            ctx.applyUpdate({ kind: 'analysis', key: 'b1/s1', analysis: s1 });
+            expect(ctx.contentAnalysis.getAnalysis('b1', 's1')).toBe(s1);
+        });
+    });
+
     it('routes writes and side effects outbound as host commands', () => {
         const { ctx, commands } = makeCtx();
 

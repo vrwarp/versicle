@@ -52,6 +52,30 @@ Added at vendor time (Versicle-authored, not from the patch script):
    terminal message (`output` / `complete` / `error`), so `PiperRuntime`
    (src/lib/tts/providers/PiperRuntime.ts) can drop stale replies instead of relying on
    per-call `onmessage` reassignment (the pre-5a cross-talk hazard).
+8. **Per-chunk `init` re-entry costs** — `PiperRuntime.generate()` posts one
+   `{kind:"init"}` per synthesized chunk, so everything `init()`/`phonemize()` re-did was
+   PER-SENTENCE work. Three changes, all inside the existing request-id protocol (the
+   protocol itself is untouched):
+   - a module-level `urlCache` + `assetUrl(url, blobs)` helper mints ONE object URL per
+     asset for the worker's lifetime. Each run previously called
+     `URL.createObjectURL` afresh for `piper_phonemize.{js,wasm,data}` and `ort.min.js`
+     and never revoked them, so the worker's blob-URL registry grew by four entries per
+     sentence, each pinning its blob.
+   - both `importScripts` calls are guarded on their global
+     (`typeof createPiperPhonemize === "undefined"`, `typeof ort === "undefined"`):
+     piper_phonemize.js (120 KB) and ort.min.js (540 KB) were re-parsed every sentence.
+   - the ONNX session cache releases what it drops: every `cachedSession[k].release()` is
+     awaited before the `cachedSession = {}` reset on a model switch (ort holds the model
+     weights in the WASM heap; dropping the reference alone never frees them), and the
+     model's object URL is revoked once `InferenceSession.create` resolves (ort fetches
+     that URL exactly once inside `create` and copies the bytes into the heap, so the URL
+     is dead afterwards — leaving it registered pinned the whole model blob).
+
+   NOT done here, and deliberately: reusing the Emscripten phonemizer *module* across
+   `callMain` invocations (a `createPiperPhonemize()` instance per sentence still
+   re-initialises the espeak-ng MEMFS image). `callMain` is not re-entrant in the general
+   case and the espeak data file is re-created per instance, so that one needs device
+   verification before it lands.
 
 ## Licensing
 

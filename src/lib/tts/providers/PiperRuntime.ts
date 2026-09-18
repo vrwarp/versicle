@@ -29,6 +29,13 @@ const DEFAULT_ASSETS_BASE = '/piper/';
 const DEFAULT_ONNX_BASE = '/piper/onnxruntime/';
 /** The durable model store. DO NOT rename: existing user downloads live here. */
 const DEFAULT_CACHE_NAME = 'piper-voices-v1';
+/**
+ * How long the synthesis worker may sit idle before it is torn down. `dispose()` only runs
+ * on a PROVIDER SWAP (TTSProviderManager), so before this a user who simply stopped
+ * listening kept the nested Piper worker — the ort WASM heap (~10 MB), the loaded model and
+ * the espeak MEMFS image (~18 MB) — alive for the rest of the session.
+ */
+const DEFAULT_IDLE_TEARDOWN_MS = 5 * 60_000;
 
 export interface PiperRuntimeOptions {
     /** Base URL for piper_worker.js + piper_phonemize.{js,wasm,data}. */
@@ -39,6 +46,12 @@ export interface PiperRuntimeOptions {
     cacheName?: string;
     /** In-memory model LRU budget (model+config pairs). */
     maxModelsInMemory?: number;
+    /**
+     * Idle window (ms) after which the worker is terminated and the hot model blobs are
+     * dropped; the next {@link PiperRuntime.generate} rebuilds both. `0` disables the timer.
+     * Uses the ambient `setTimeout`, so vitest fake timers drive it.
+     */
+    idleTeardownMs?: number;
 }
 
 export interface PiperGenerateRequest {
@@ -187,6 +200,7 @@ export class PiperRuntime {
     private readonly onnxBaseUrl: string;
     private readonly cacheName: string;
     private readonly maxModelsInMemory: number;
+    private readonly idleTeardownMs: number;
 
     private worker: Worker | null = null;
     private requestSeq = 0;
@@ -197,6 +211,8 @@ export class PiperRuntime {
     private assetBlobs: Record<string, Blob> = {};
     /** Hot model/config pairs, keyed by modelUrl, LRU-evicted beyond the budget. */
     private modelLru = new Map<string, { model: Blob; config: Blob; configUrl: string }>();
+    /** Armed at the end of every generate(); fires the idle teardown. */
+    private idleTimer: ReturnType<typeof setTimeout> | null = null;
     private disposed = false;
 
     constructor(opts: PiperRuntimeOptions = {}) {
@@ -204,6 +220,7 @@ export class PiperRuntime {
         this.onnxBaseUrl = opts.onnxBaseUrl ?? DEFAULT_ONNX_BASE;
         this.cacheName = opts.cacheName ?? DEFAULT_CACHE_NAME;
         this.maxModelsInMemory = opts.maxModelsInMemory ?? 2;
+        this.idleTeardownMs = opts.idleTeardownMs ?? DEFAULT_IDLE_TEARDOWN_MS;
     }
 
     // -----------------------------------------------------------------------
@@ -369,6 +386,45 @@ export class PiperRuntime {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Idle teardown: stopping playback must release the worker's memory.
+    // -----------------------------------------------------------------------
+
+    private clearIdleTimer(): void {
+        if (this.idleTimer !== null) {
+            clearTimeout(this.idleTimer);
+            this.idleTimer = null;
+        }
+    }
+
+    /** (Re)arm the idle window. Called once per generate(), after it settles. */
+    private armIdleTeardown(): void {
+        this.clearIdleTimer();
+        if (this.disposed || this.idleTeardownMs <= 0) return;
+        this.idleTimer = setTimeout(() => {
+            this.idleTimer = null;
+            this.releaseIdleResources();
+        }, this.idleTeardownMs);
+    }
+
+    /**
+     * Drop everything a resumed session can rebuild: the worker (ort WASM heap + loaded
+     * model + espeak MEMFS) and the hot model blobs. `ensureWorker()` re-creates the worker
+     * and `getModelPair()` re-reads the pair from the Cache API on the next request, so the
+     * only visible cost is a slower FIRST sentence after an idle gap. The small shared
+     * assets (`assetBlobs`) are kept deliberately — they are handed to the fresh worker, so
+     * it does not re-fetch the 18 MB phonemizer data image.
+     */
+    private releaseIdleResources(): void {
+        // A request that started between the timer firing and this callback keeps the worker.
+        if (this.pending) return;
+        if (this.worker) {
+            this.worker.terminate();
+            this.worker = null;
+        }
+        this.modelLru.clear();
+    }
+
     private terminateWorker(error: Error): void {
         const current = this.pending;
         this.pending = null;
@@ -390,39 +446,13 @@ export class PiperRuntime {
         }
         const run = async (): Promise<PiperGenerateResult> => {
             if (this.disposed) throw new Error('PiperRuntime is disposed');
-            const pair = await this.getModelPair(req.modelUrl, req.configUrl);
-
-            const worker = this.ensureWorker();
-            const id = ++this.requestSeq;
-
-            const result = new Promise<PiperGenerateResult>((resolve, reject) => {
-                this.pending = { id, resolve, reject, onProgress: req.onProgress };
-            });
-
-            // Blob map handed to the worker: shared assets it fetched before, plus
-            // the hot model pair when we have it (otherwise the worker XHRs the
-            // model itself and streams progress — the legacy zero-touch path).
-            const blobs: Record<string, Blob> = { ...this.assetBlobs };
-            if (pair) {
-                blobs[req.modelUrl] = pair.model;
-                blobs[req.configUrl] = pair.config;
+            // No teardown while a request is in flight; re-armed in the finally below.
+            this.clearIdleTimer();
+            try {
+                return await this.runGenerate(req);
+            } finally {
+                this.armIdleTeardown();
             }
-
-            worker.postMessage({
-                kind: 'init',
-                requestId: id,
-                input: req.text,
-                speakerId: req.speakerId,
-                blobs,
-                piperPhonemizeJsUrl: this.assetsBaseUrl + 'piper_phonemize.js',
-                piperPhonemizeWasmUrl: this.assetsBaseUrl + 'piper_phonemize.wasm',
-                piperPhonemizeDataUrl: this.assetsBaseUrl + 'piper_phonemize.data',
-                modelUrl: req.modelUrl,
-                modelConfigUrl: req.configUrl,
-                onnxruntimeUrl: this.onnxBaseUrl,
-            });
-
-            return await result;
         };
 
         // Serialize behind the tail; reset the tail on failure so the NEXT request
@@ -432,10 +462,49 @@ export class PiperRuntime {
         return settled;
     }
 
+    /** One request: resolve the model pair, (re)create the worker, post `init`, await the reply. */
+    private async runGenerate(req: PiperGenerateRequest): Promise<PiperGenerateResult> {
+        const pair = await this.getModelPair(req.modelUrl, req.configUrl);
+
+        const worker = this.ensureWorker();
+        const id = ++this.requestSeq;
+
+        const result = new Promise<PiperGenerateResult>((resolve, reject) => {
+            this.pending = { id, resolve, reject, onProgress: req.onProgress };
+        });
+
+        // Blob map handed to the worker: shared assets it fetched before, plus
+        // the hot model pair when we have it (otherwise the worker XHRs the
+        // model itself and streams progress — the legacy zero-touch path).
+        const blobs: Record<string, Blob> = { ...this.assetBlobs };
+        if (pair) {
+            blobs[req.modelUrl] = pair.model;
+            blobs[req.configUrl] = pair.config;
+        }
+
+        worker.postMessage({
+            kind: 'init',
+            requestId: id,
+            input: req.text,
+            speakerId: req.speakerId,
+            blobs,
+            piperPhonemizeJsUrl: this.assetsBaseUrl + 'piper_phonemize.js',
+            piperPhonemizeWasmUrl: this.assetsBaseUrl + 'piper_phonemize.wasm',
+            piperPhonemizeDataUrl: this.assetsBaseUrl + 'piper_phonemize.data',
+            modelUrl: req.modelUrl,
+            modelConfigUrl: req.configUrl,
+            onnxruntimeUrl: this.onnxBaseUrl,
+        });
+
+        return await result;
+    }
+
     /** Terminate the worker, drop hot blobs, and reject anything in flight. */
     dispose(): void {
         if (this.disposed) return;
         this.disposed = true;
+        // Never leave a live timer behind a disposed runtime.
+        this.clearIdleTimer();
         this.terminateWorker(new Error('PiperRuntime is disposed'));
         this.assetBlobs = {};
         this.modelLru.clear();

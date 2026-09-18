@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PiperProvider } from './PiperProvider';
 import { FakePiperRuntime } from './FakePiperRuntime';
+import { PiperRuntime } from './PiperRuntime';
 import { FakeAudioSink } from '../engine/FakeAudioSink';
 import { InMemoryTTSCache } from './describeProviderContract';
 
@@ -208,6 +209,111 @@ describe('PiperProvider', () => {
             };
             expect(strip(first)).toEqual(strip(second));
             expect(JSON.stringify(strip(first))).not.toContain('2.5');
+        });
+    });
+
+    describe('regression: idle teardown (PiperRuntime)', () => {
+        // `PiperRuntime.dispose()` is only reached from `PiperProvider.dispose()` on a
+        // PROVIDER SWAP, so stopping playback used to leave the nested Piper worker — the ort
+        // WASM heap (~10 MB), the loaded model and the espeak MEMFS image (~18 MB) — alive
+        // for the rest of the session. An idle timer now tears it down; the next request
+        // rebuilds the worker and re-reads the model pair from the Cache API.
+        const MODEL_URL = 'https://example.test/voice.onnx';
+        const CONFIG_URL = 'https://example.test/voice.onnx.json';
+        const IDLE_MS = 60_000;
+
+        class StubWorker {
+            static created: StubWorker[] = [];
+            terminated = false;
+            onmessage: ((event: { data: unknown }) => void) | null = null;
+            onerror: ((event: unknown) => void) | null = null;
+            constructor() { StubWorker.created.push(this); }
+            postMessage(data: { requestId: number }) {
+                // Reply on the request-id protocol (patch 7), on a real microtask so fake
+                // timers cannot stall it.
+                void Promise.resolve().then(() => this.onmessage?.({
+                    data: { kind: 'output', requestId: data.requestId, file: new Blob(), duration: 1 },
+                }));
+            }
+            terminate() { this.terminated = true; }
+        }
+
+        let cacheMatches: string[];
+
+        beforeEach(() => {
+            StubWorker.created = [];
+            cacheMatches = [];
+            const store = new Map<string, Blob>([
+                [MODEL_URL, new Blob(['model'])],
+                [CONFIG_URL, new Blob(['{}'])],
+            ]);
+            vi.stubGlobal('Worker', StubWorker);
+            // Minimal Cache API double. It yields `{ blob() }` rather than a real Response:
+            // the test env's Blob is not accepted by node's undici Response constructor, and
+            // `getModelPair` only ever calls `.blob()`.
+            vi.stubGlobal('caches', {
+                open: async () => ({
+                    match: async (url: string) => {
+                        cacheMatches.push(url);
+                        const blob = store.get(url);
+                        return blob ? { blob: async () => blob } : undefined;
+                    },
+                }),
+            });
+            vi.useFakeTimers();
+        });
+
+        afterEach(() => {
+            vi.useRealTimers();
+            vi.unstubAllGlobals();
+        });
+
+        const request = { text: 'Hello.', modelUrl: MODEL_URL, configUrl: CONFIG_URL };
+
+        it('terminates the idle worker and re-creates it on the next generate', async () => {
+            const runtime = new PiperRuntime({ idleTeardownMs: IDLE_MS });
+            await runtime.generate(request);
+            expect(StubWorker.created).toHaveLength(1);
+            expect(StubWorker.created[0].terminated).toBe(false);
+
+            await vi.advanceTimersByTimeAsync(IDLE_MS);
+            expect(StubWorker.created[0].terminated, 'the idle worker must be torn down').toBe(true);
+
+            // Behaviour preserved: the next request rebuilds the worker...
+            cacheMatches.length = 0;
+            await runtime.generate(request);
+            expect(StubWorker.created).toHaveLength(2);
+            expect(StubWorker.created[1].terminated).toBe(false);
+            // ...and the model pair comes back from the Cache API (the hot LRU was dropped).
+            expect(cacheMatches.sort()).toEqual([MODEL_URL, CONFIG_URL].sort());
+
+            runtime.dispose();
+        });
+
+        it('re-arms the window on every request, so continuous synthesis never tears down', async () => {
+            const runtime = new PiperRuntime({ idleTeardownMs: IDLE_MS });
+            await runtime.generate(request);
+
+            for (let i = 0; i < 3; i++) {
+                await vi.advanceTimersByTimeAsync(IDLE_MS - 1_000);
+                await runtime.generate(request);
+                expect(StubWorker.created).toHaveLength(1);
+                expect(StubWorker.created[0].terminated).toBe(false);
+            }
+
+            // The hot model pair survives too: only the first request touched the cache.
+            expect(cacheMatches).toEqual([MODEL_URL, CONFIG_URL]);
+            runtime.dispose();
+        });
+
+        it('leaves no live timer behind dispose()', async () => {
+            const runtime = new PiperRuntime({ idleTeardownMs: IDLE_MS });
+            await runtime.generate(request);
+            expect(vi.getTimerCount()).toBe(1);
+
+            runtime.dispose();
+            expect(vi.getTimerCount(), 'dispose() must not leave the idle timer armed').toBe(0);
+            expect(StubWorker.created[0].terminated).toBe(true);
         });
     });
 });

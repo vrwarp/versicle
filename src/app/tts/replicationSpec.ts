@@ -19,8 +19,8 @@ import { useGenAIStore } from '@store/useGenAIStore';
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
 import { useBookStore } from '@store/useBookStore';
 import { useReadingStateStore } from '@store/useReadingStateStore';
-import type { EngineStateUpdate } from '@lib/tts/engine/WorkerEngineContext';
-import type { TTSSettingsData } from '@lib/tts/engine/EngineContext';
+import type { EngineStateUpdate, ProgressEngineView } from '@lib/tts/engine/WorkerEngineContext';
+import type { TTSSettingsData, Progress, SectionAnalysis } from '@lib/tts/engine/EngineContext';
 
 /**
  * Strip non-structured-cloneable values before crossing the worker boundary. Zustand
@@ -53,6 +53,25 @@ export function toTTSSettingsData(s: Pick<TTSSettingsStoreState,
         sentenceStarters: s.sentenceStarters,
         sanitizationEnabled: s.sanitizationEnabled,
         isBibleLexiconEnabled: s.isBibleLexiconEnabled,
+    };
+}
+
+/**
+ * Narrow a `UserProgress` row to the fields the ENGINE reads (the progress analogue of
+ * {@link toTTSSettingsData}). `PlaybackController.restoreQueue` reads `currentQueueIndex` and
+ * `currentSectionIndex`; nothing else in src/lib/tts touches replicated progress.
+ *
+ * The engine's OWN host commands write this store per sentence (`updateTTSProgress`) and per
+ * finished sentence (`addCompletedRange`), so the old `plain(progress)` push deep-cloned and
+ * structured-cloned the whole row — `completedRanges` grows for the life of the book and
+ * `readingSessions` holds up to 500 entries — twice per sentence. Two numbers now cross, and
+ * the slice's equality guard drops the echo entirely.
+ */
+function toProgressEngineView(progress: Progress): ProgressEngineView {
+    if (!progress) return null;
+    return {
+        currentQueueIndex: progress.currentQueueIndex,
+        currentSectionIndex: progress.currentSectionIndex,
     };
 }
 
@@ -165,27 +184,61 @@ const SLICE_BUILDERS: Record<
         },
     }),
 
-    analysis: () => ({
+    // The content-analysis store is CROSS-BOOK (keys `${bookId}/${sectionId}`, entries carry
+    // tableAdaptations text), and the engine's own host commands write it
+    // (markAnalysisLoading / markAnalysisError / saveTableAdaptations). Pushing
+    // `plain(state.sections)` on every write deep-cloned the whole library's analyses (2.3 ms
+    // at 400 sections, 6.1 ms at 1000) plus the structured clone — for a change the engine can
+    // only consume for ONE section of ONE book. The live path now diffs entry identities
+    // against the previous state, scopes to the current book, and pushes a DELTA; the
+    // cross-book full map stays for the boot snapshot (the readiness gate needs it, and the
+    // engine has no book yet).
+    analysis: (deps) => ({
         kind: 'analysis',
         replication: 'boot',
         snapshot: () => [
             { kind: 'analysis', snapshot: { sections: plain(useContentAnalysisStore.getState().sections) } },
         ],
         subscribe: (push) =>
-            useContentAnalysisStore.subscribe((state) =>
-                push({ kind: 'analysis', snapshot: { sections: plain(state.sections) } })),
+            useContentAnalysisStore.subscribe((state, prev) => {
+                const bookId = deps.getCurrentBookId();
+                if (!bookId) return;
+                const prefix = `${bookId}/`;
+                const sections: Record<string, SectionAnalysis> = state.sections ?? {};
+                const changed = changedKeysForBook(prev?.sections ?? {}, sections, prefix);
+                if (changed.length === 0) return;
+                // The common case (one section's analysis changed) crosses as a single entry.
+                const only = changed.length === 1 ? sections[changed[0]] : undefined;
+                if (only) {
+                    push({ kind: 'analysis', key: changed[0], analysis: plain(only) });
+                    return;
+                }
+                // Several entries, or a removal: replace the cache with this book's map.
+                push({ kind: 'analysis', snapshot: { sections: plain(scopeToBook(sections, prefix)) } });
+            }),
     }),
 
-    bookLanguage: () => ({
+    // The worker only ever asks for the CURRENT book's language (PlaybackController's
+    // language sync + the queue-building path). Pushing one update per book in the library
+    // meant 300 Comlink messages — and 300 `bookListeners` firings inside the worker — for a
+    // 300-book library on every book-store write (a remote Yjs library update multiplies it).
+    bookLanguage: (deps) => ({
         kind: 'bookLanguage',
         replication: 'per-book',
         snapshot: () => [],
-        subscribe: (push) =>
-            useBookStore.subscribe((state) => {
-                for (const [bookId, book] of Object.entries(state.books)) {
-                    push({ kind: 'bookLanguage', bookId, lang: book?.language || 'en' });
-                }
-            }),
+        subscribe: (push) => {
+            let lastBookId: string | null = null;
+            let lastLang: string | null = null;
+            return useBookStore.subscribe((state) => {
+                const bookId = deps.getCurrentBookId();
+                if (!bookId) return;
+                const lang = state.books[bookId]?.language || 'en';
+                if (bookId === lastBookId && lang === lastLang) return;
+                lastBookId = bookId;
+                lastLang = lang;
+                push({ kind: 'bookLanguage', bookId, lang });
+            });
+        },
     }),
 
     progress: (deps) => ({
@@ -193,15 +246,55 @@ const SLICE_BUILDERS: Record<
         replication: 'per-book',
         snapshot: () => [],
         // Keep the active book's progress live (e.g. another device advanced it via sync).
-        subscribe: (push) =>
-            useReadingStateStore.subscribe(() => {
+        // Equality-guarded on the ENGINE view (see toProgressEngineView): the engine's own
+        // per-sentence writes come back through this subscription, and only a queue/section
+        // move is news to it.
+        subscribe: (push) => {
+            const last = new Map<string, string>();
+            return useReadingStateStore.subscribe(() => {
                 const bookId = deps.getCurrentBookId();
                 if (!bookId) return;
-                const progress = useReadingStateStore.getState().getProgress(bookId);
-                push({ kind: 'progress', bookId, progress: plain(progress) });
-            }),
+                const progress = toProgressEngineView(useReadingStateStore.getState().getProgress(bookId));
+                const view = JSON.stringify(progress);
+                if (last.get(bookId) === view) return;
+                last.set(bookId, view);
+                push({ kind: 'progress', bookId, progress });
+            });
+        },
     }),
 };
+
+/** This book's entries only — the cross-book map is never the engine's business. */
+function scopeToBook(
+    sections: Record<string, SectionAnalysis>,
+    prefix: string,
+): Record<string, SectionAnalysis> {
+    const scoped: Record<string, SectionAnalysis> = {};
+    for (const key of Object.keys(sections)) {
+        if (key.startsWith(prefix)) scoped[key] = sections[key];
+    }
+    return scoped;
+}
+
+/**
+ * Keys under `prefix` whose entry IDENTITY differs between two store states (added, replaced
+ * or removed). The store rebuilds `sections` with a spread on every write, so reference
+ * comparison is both correct and cheap — no clone, no deep compare.
+ */
+function changedKeysForBook(
+    prev: Record<string, SectionAnalysis>,
+    next: Record<string, SectionAnalysis>,
+    prefix: string,
+): string[] {
+    const changed: string[] = [];
+    for (const key of Object.keys(next)) {
+        if (key.startsWith(prefix) && next[key] !== prev[key]) changed.push(key);
+    }
+    for (const key of Object.keys(prev)) {
+        if (key.startsWith(prefix) && !(key in next)) changed.push(key);
+    }
+    return changed;
+}
 
 export interface ReplicationDeps {
     /** The book the engine is currently set to (drives the live per-book progress push). */
@@ -224,6 +317,6 @@ export function bookSnapshotUpdates(bookId: string): EngineStateUpdate[] {
     const progress = useReadingStateStore.getState().getProgress(bookId);
     return [
         { kind: 'bookLanguage', bookId, lang },
-        { kind: 'progress', bookId, progress: plain(progress) },
+        { kind: 'progress', bookId, progress: toProgressEngineView(progress) },
     ];
 }
