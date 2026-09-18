@@ -29,7 +29,12 @@ export interface TestLibrary {
 export function makeTestLibrary(opts: {
   persistence: LibraryPersistence;
   extract?: ImportOrchestratorDeps['extract'];
-  expandZip?: ImportOrchestratorDeps['expandZip'];
+  /**
+   * The ONE zip seam the orchestrator has: entries are enumerated (with read
+   * progress) and inflated one at a time. Injecting it exercises exactly the
+   * production path — there is no eager variant to fall back to.
+   */
+  listZipEpubs?: ImportOrchestratorDeps['listZipEpubs'];
   extractionOptions?: () => ExtractionOptions;
   now?: () => number;
   /** Phase D: the per-book cloud-artifact GC port (best-effort delete). */
@@ -48,7 +53,7 @@ export function makeTestLibrary(opts: {
     persistence: opts.persistence,
     extractionOptions: opts.extractionOptions ?? (() => ({})),
     extract: opts.extract,
-    expandZip: opts.expandZip,
+    listZipEpubs: opts.listZipEpubs,
     now: opts.now,
   });
 

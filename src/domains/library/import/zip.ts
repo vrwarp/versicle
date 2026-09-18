@@ -17,6 +17,40 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
 }
 
 /**
+ * Read the whole archive once, reporting read progress as it goes, and
+ * always finishing at 100 so a caller's byte-weighted bar reaches this
+ * file's share even when the platform emits no `progress` events.
+ *
+ * This costs no extra memory over handing the File to `loadAsync`: jszip's
+ * `prepareContent` runs exactly this FileReader itself for a Blob/File, and
+ * then does `new Uint8Array(arrayBuffer)` (`transform.arraybuffer.uint8array`
+ * in `jszip/lib/utils.js`) — a VIEW over the same buffer, not a copy. The
+ * `Uint8ArrayReader` it hands to `zipEntries.load` keeps that same view and
+ * serves entries with `subarray`. So the archive is resident exactly once
+ * either way; passing the buffer only moves the read to where we can watch it.
+ */
+function readArchiveWithProgress(file: File, onProgress: (percent: number) => void): Promise<ArrayBuffer> {
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        onProgress(100);
+        resolve(e.target.result as ArrayBuffer);
+      } else {
+        reject(new Error('Failed to read file'));
+      }
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) {
+        onProgress(Math.min(100, (e.loaded / e.total) * 100));
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
  * One EPUB inside a ZIP, NOT yet decompressed. `read()` inflates it on
  * demand so a batch importer can consume books one at a time instead of
  * holding every extracted EPUB of the archive in memory at once.
@@ -31,12 +65,20 @@ export interface ZipEpubEntry {
 /**
  * Enumerate the EPUB entries of a ZIP without decompressing any of them.
  *
- * The File is handed straight to `loadAsync`: reading it into an ArrayBuffer
- * first (the old FileReader progress path) put a second full copy of the
- * archive in memory on top of jszip's own view of it.
+ * Enumeration still has to read the whole archive (jszip parses the central
+ * directory out of the bytes), which for a multi-GB batch is seconds of
+ * nothing to look at. With `onProgress` the read goes through a FileReader
+ * so that wait is visible; see {@link readArchiveWithProgress} for why that
+ * does not cost a second copy. Without one, the File goes straight to
+ * `loadAsync`, which reads it the same way internally.
+ *
+ * @param file - The ZIP file to enumerate.
+ * @param onProgress - Optional READ progress (0-100); always ends at 100.
+ * @param signal - Aborts before the read and inside each `read()`.
  */
 export async function listZipEpubEntries(
   file: File,
+  onProgress?: (percent: number) => void,
   signal?: AbortSignal,
 ): Promise<ZipEpubEntry[]> {
   const { default: JSZipCtor } = await import('jszip');
@@ -45,7 +87,8 @@ export async function listZipEpubEntries(
   try {
     throwIfAborted(signal);
 
-    const zipContent = await zip.loadAsync(file);
+    const source = onProgress ? await readArchiveWithProgress(file, onProgress) : file;
+    const zipContent = await zip.loadAsync(source);
     const entries: ZipEpubEntry[] = [];
 
     zipContent.forEach((_, zipEntry) => {
@@ -90,7 +133,7 @@ export async function extractEpubsFromZip(
   onProgress?: (percent: number) => void,
   signal?: AbortSignal,
 ): Promise<File[]> {
-  const entries = await listZipEpubEntries(file, signal);
+  const entries = await listZipEpubEntries(file, undefined, signal);
   const epubFiles: File[] = [];
 
   try {

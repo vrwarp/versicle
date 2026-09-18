@@ -113,6 +113,7 @@ export async function extractContentOffscreen(
     let displayMs = 0;
     let stylesMs = 0;
     let sentencesMs = 0;
+    let sentencesYieldMs = 0;
     let tablesMs = 0;
 
     for (let i = 0; i < totalItems; i++) {
@@ -158,6 +159,14 @@ export async function extractContentOffscreen(
         // chapter loop uses below — a single-XHTML book used to block for
         // the whole book, since the only yield was between chapters.
         const sentencesStart = performance.now();
+        // The yields are deliberate sleeps INSIDE this window, and a chained
+        // zero-delay timeout is clamped once nesting passes a few levels — so
+        // wall-clock here would charge extraction hundreds of ms of pure sleep
+        // and make the one phase this loop optimized look like the slow one.
+        // The sibling accumulators measure work that never sleeps, so the
+        // yielded time is subtracted out (and reported on its own) to keep
+        // `sentences` a CPU measure comparable with them.
+        let yieldedMs = 0;
         const { sentences, citationMarkers } = await extractSentencesFromNodeAsync(body, (range) => {
           // contents.cfiFromRange returns the CFI for the range.
           // It should include the base CFI (spine index) if correctly initialized.
@@ -165,34 +174,53 @@ export async function extractContentOffscreen(
         }, options, {
           shouldYield: () => shouldYieldToMainThread(lastYieldTime, performance.now()),
           yieldFn: async () => {
+            const yieldStart = performance.now();
             await new Promise((r) => setTimeout(r, 0));
             lastYieldTime = performance.now();
+            yieldedMs += lastYieldTime - yieldStart;
           },
         });
-        sentencesMs += performance.now() - sentencesStart;
+        sentencesMs += performance.now() - sentencesStart - yieldedMs;
+        sentencesYieldMs += yieldedMs;
 
         // Table Capture
         const tablesStart = performance.now();
         const tables = doc.querySelectorAll('table');
+        // snapdom's caches are MODULE-GLOBAL and its default policy ('soft')
+        // clears only the per-capture style maps, so a whole book's table
+        // images/backgrounds/resources stayed resident for the rest of the
+        // session. 'disabled' resets EVERY cache at the start of a capture
+        // (`_t(options.cache)`, run first thing in the capture path), and also
+        // skips installing snapdom's document-wide MutationObserver.
+        //
+        // But 'disabled' also empties `defaultStyle` and `baseStyle`, which
+        // are keyed by TAG NAME — bounded by the HTML vocabulary, and the most
+        // expensive things snapdom caches: each miss appends a fresh element
+        // to a sandbox in the MAIN document and walks a full getComputedStyle.
+        // Per capture, a 300-table reference book re-probes ~10 tags 300 times
+        // over. So the reset runs at CHAPTER granularity: the first capture of
+        // the chapter reclaims the unbounded maps, the rest reuse the tag
+        // probes. Neither policy changes a capture's output — `defaultStyle`
+        // and `baseStyle` are derived from tag names in the MAIN document, not
+        // from the chapter, and the URL caches key on absolute URLs; only what
+        // is remembered between captures changes.
+        //
+        // Trade-off worth knowing: snapdom's observer install is a
+        // module-global latch, so the first non-'disabled' capture installs it
+        // once for the tab. One observer beats re-probing every tag per table.
+        let resetCachesForChapter = true;
         for (const table of tables) {
           try {
             const cfi = contents.cfiFromNode(table);
+            const cache = resetCachesForChapter ? 'disabled' : 'soft';
+            resetCachesForChapter = false;
 
             const blob = await snapdom.toBlob(table, {
               type: 'webp',
               quality: 0.1,
               scale: 0.5,
               backgroundColor: '#ffffff',
-              // snapdom's image/background/resource/font/style caches are
-              // MODULE-GLOBAL and its default policy ('soft') clears only the
-              // per-capture style maps, so a whole book's table resources
-              // stayed resident for the rest of the session. 'disabled' resets
-              // every cache at the start of each capture (@zumer/snapdom
-              // README "Cache control"; `_t(options.cache)` in the dist) and
-              // also skips installing snapdom's document-wide MutationObserver.
-              // Capture output is unaffected — only what is remembered between
-              // captures changes.
-              cache: 'disabled',
+              cache,
             });
 
             if (blob) {
@@ -230,6 +258,8 @@ export async function extractContentOffscreen(
     measureTotal('import:offscreen:display', displayMs);
     measureTotal('import:offscreen:styles', stylesMs);
     measureTotal('import:offscreen:sentences', sentencesMs);
+    // Emitted alongside, not folded in: the cost of being interruptible.
+    measureTotal('import:offscreen:sentences-yield', sentencesYieldMs);
     measureTotal('import:offscreen:tables', tablesMs);
 
     // After the for loop before finally block:

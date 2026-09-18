@@ -346,4 +346,145 @@ describe('extractContentOffscreen', () => {
       }));
     });
   });
+
+  /**
+   * `cache: 'disabled'` reclaims snapdom's unbounded module-global maps — but
+   * it also empties `defaultStyle`/`baseStyle`, which are keyed by tag name
+   * and are the most expensive things it caches (a miss = createElement into
+   * a sandbox in the MAIN document + a full getComputedStyle walk). Sending
+   * it on EVERY capture re-probed roughly ten tags per table; a ~300-table
+   * reference book paid that 300 times over. The reset belongs at chapter
+   * granularity, where the unbounded maps are actually worth reclaiming.
+   */
+  describe('regression: the snapdom cache reset is per chapter, not per table', () => {
+    const chapterWithTables = (count: number) => {
+      const mockDoc = document.implementation.createHTMLDocument();
+      for (let i = 0; i < count; i += 1) {
+        mockDoc.body.appendChild(mockDoc.createElement('table'));
+      }
+      mockRendition.getContents.mockReturnValue([{
+        document: mockDoc,
+        cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/1:0)'),
+        cfiFromNode: vi.fn(() => 'epubcfi(/6/2!/4/2)'),
+      }]);
+      (snapdom.toBlob as unknown as ReturnType<typeof vi.fn>)
+        .mockResolvedValue(new Blob(['image'], { type: 'image/webp' }));
+    };
+
+    const cachePolicies = () =>
+      (snapdom.toBlob as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .map((call: unknown[]) => (call[1] as { cache?: string }).cache);
+
+    it('disables caching for the first capture of each chapter and reuses it after', async () => {
+      // Two spine items × three tables each.
+      chapterWithTables(3);
+
+      await extractContentOffscreen(new Blob(['x']));
+
+      expect(cachePolicies()).toEqual([
+        'disabled', 'soft', 'soft',
+        'disabled', 'soft', 'soft',
+      ]);
+    });
+
+    it('still resets on the first capture when a chapter has a single table', async () => {
+      chapterWithTables(1);
+
+      await extractContentOffscreen(new Blob(['x']));
+
+      expect(cachePolicies()).toEqual(['disabled', 'disabled']);
+    });
+
+    it('captures every table either way — the policy changes nothing about the output', async () => {
+      chapterWithTables(3);
+
+      const { chapters } = await extractContentOffscreen(new Blob(['x']));
+
+      expect(chapters[0].tables).toHaveLength(3);
+      expect(chapters[0].tables?.every((t) => t.cfi === 'epubcfi(/6/2!/4/2)')).toBe(true);
+      expect(chapters[0].tables?.every((t) => t.imageBlob instanceof Blob)).toBe(true);
+    });
+  });
+
+  /**
+   * The sentences accumulator is wall-clock around the extraction call, and
+   * extraction now deliberately SLEEPS inside that window via the injected
+   * yield. Its sibling accumulators measure work that never sleeps, so the one
+   * phase this change optimized was the only measure inflated by its own
+   * yields — and chained zero-delay timeouts get clamped once nesting passes a
+   * few levels, so a multi-second extraction records hundreds of ms of sleep.
+   */
+  describe('regression: the sentences metric excludes its own yield sleep', () => {
+    const recordMeasures = () => {
+      const measures = new Map<string, number>();
+      vi.spyOn(performance, 'measure').mockImplementation(((
+        name: string,
+        opts: { start: number; end: number },
+      ) => {
+        measures.set(name, opts.end - opts.start);
+        return undefined as unknown as PerformanceMeasure;
+      }) as typeof performance.measure);
+      return measures;
+    };
+
+    /** An extractor that does no work at all, and only yields. */
+    const yieldOnly = (times: number) => {
+      vi.mocked(extractSentencesFromNodeAsync).mockImplementation(
+        async (_node, _cfi, _options, control) => {
+          for (let i = 0; i < times; i += 1) await control?.yieldFn?.();
+          return { sentences: [], citationMarkers: [] };
+        },
+      );
+    };
+
+    beforeEach(() => {
+      const mockDoc = document.implementation.createHTMLDocument();
+      mockRendition.getContents.mockReturnValue([{
+        document: mockDoc,
+        cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/1:0)'),
+        cfiFromNode: vi.fn(() => 'epubcfi(/6/2!/4/2)'),
+      }]);
+    });
+
+    afterEach(() => {
+      vi.mocked(extractSentencesFromNodeAsync)
+        .mockImplementation(async () => ({ sentences: [], citationMarkers: [] }));
+    });
+
+    it('reports the yielded time as its own measure', async () => {
+      const measures = recordMeasures();
+      yieldOnly(25);
+
+      await extractContentOffscreen(new Blob(['x']));
+
+      expect(measures.has('import:offscreen:sentences-yield')).toBe(true);
+      expect(measures.get('import:offscreen:sentences-yield')!).toBeGreaterThan(0);
+    });
+
+    it('does not charge that sleep to the sentences measure', async () => {
+      const measures = recordMeasures();
+      yieldOnly(25);
+
+      await extractContentOffscreen(new Blob(['x']));
+
+      // The extractor double burns no CPU, so essentially the whole window is
+      // sleep. Wall-clock would put all of it in `sentences`.
+      const sentences = measures.get('import:offscreen:sentences')!;
+      const yielded = measures.get('import:offscreen:sentences-yield')!;
+      expect(sentences).toBeLessThan(yielded);
+      expect(sentences).toBeGreaterThanOrEqual(0);
+    });
+
+    it('leaves the sibling accumulators measuring what they always did', async () => {
+      const measures = recordMeasures();
+      yieldOnly(5);
+
+      await extractContentOffscreen(new Blob(['x']));
+
+      for (const name of ['import:offscreen:display', 'import:offscreen:styles', 'import:offscreen:tables']) {
+        expect(measures.has(name)).toBe(true);
+        expect(measures.get(name)!).toBeGreaterThanOrEqual(0);
+      }
+    });
+  });
 });

@@ -311,10 +311,12 @@ describe('import flows characterization', () => {
     });
 
     it('expands ZIPs and accounts for corrupted archives as failures', async () => {
-      const expandZip = vi.fn(async (file: File) => {
+      // The lazy enumerator is the orchestrator's ONE zip seam: entries come
+      // back undecompressed and are inflated as their turn comes.
+      const listZipEpubs = vi.fn(async (file: File) => {
         if (file.name === 'bad.zip') throw new Error('Failed to process ZIP file.');
-        return [epubFile('inside.epub')];
-      }) as unknown as ImportOrchestratorDeps['expandZip'];
+        return [{ name: 'inside.epub', read: async () => epubFile('inside.epub') }];
+      }) as unknown as ImportOrchestratorDeps['listZipEpubs'];
       const persistence = makeLibraryPersistenceDouble({
         getBookIdByFilename: () => undefined,
         ingest: vi.fn(async () => undefined),
@@ -322,7 +324,7 @@ describe('import flows characterization', () => {
       const { orchestrator } = makeTestLibrary({
         persistence,
         extract: makeFakeExtract(),
-        expandZip,
+        listZipEpubs,
       });
 
       const summary = await orchestrator.importFiles([

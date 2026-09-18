@@ -40,9 +40,6 @@ import {
   type FullBookExtraction,
 } from './extract';
 import { listZipEpubEntries as realListZipEpubEntries } from './zip';
-// Type-only: the eager expander is never called by default any more — it
-// survives as the shape of the injectable `expandZip` seam.
-import type { extractEpubsFromZip as realExtractEpubsFromZip } from './zip';
 import { retargetExtraction } from './persist';
 import { computeContentHash, matchesLegacyFingerprint } from './identity';
 
@@ -84,12 +81,11 @@ export interface ImportOrchestratorDeps {
   /** Pure-function seams (default real; injected by tests). */
   extract?: typeof realExtractBook;
   /**
-   * EAGER zip expansion (every EPUB materialized up front). Only used when
-   * explicitly injected — production takes the lazy {@link listZipEpubs}
-   * path, which inflates one book at a time.
+   * Zip enumeration: the archive is read once (reporting read progress) and
+   * its entries are inflated on demand, one at a time. This is the ONE zip
+   * seam — there is no eager variant to inject, so a test that stubs it
+   * drives exactly the code production runs.
    */
-  expandZip?: typeof realExtractEpubsFromZip;
-  /** Lazy zip enumeration: entries are inflated on demand, one at a time. */
   listZipEpubs?: typeof realListZipEpubEntries;
   now?: () => number;
 }
@@ -112,7 +108,6 @@ interface QueueJob {
 
 export class ImportOrchestrator {
   private readonly extract: typeof realExtractBook;
-  private readonly expandZip: typeof realExtractEpubsFromZip | null;
   private readonly listZipEpubs: typeof realListZipEpubEntries;
   private readonly now: () => number;
   private normalQueue: QueueJob[] = [];
@@ -121,9 +116,6 @@ export class ImportOrchestrator {
 
   constructor(private readonly deps: ImportOrchestratorDeps) {
     this.extract = deps.extract ?? realExtractBook;
-    // An injected eager double wins (the existing test seam); otherwise the
-    // lazy enumerator is used and nothing is inflated before its turn.
-    this.expandZip = deps.expandZip ?? null;
     this.listZipEpubs = deps.listZipEpubs ?? realListZipEpubEntries;
     this.now = deps.now ?? Date.now;
   }
@@ -578,20 +570,14 @@ export class ImportOrchestrator {
       const name = file.name.toLowerCase();
       if (name.endsWith('.zip')) {
         try {
-          if (this.expandZip) {
-            // Injected eager double: keep the byte-weighted read progress.
-            const extracted = await this.expandZip(file, (percent) => {
-              const done = startBytes + (percent / 100) * file.size;
-              projection.uploadProgress(percentOf(done), `Processing ${file.name}...`);
-            });
-            sources.push(...extracted.map((epub) => ({ name: epub.name, read: async () => epub })));
-          } else {
-            const entries = await this.listZipEpubs(file);
-            sources.push(...entries.map((entry) => ({ name: entry.name, read: () => entry.read() })));
-            // Enumeration is the whole cost here — the entries are inflated
-            // later, one at a time, under importProgress.
-            projection.uploadProgress(percentOf(startBytes + file.size), `Processing ${file.name}...`);
-          }
+          // Enumeration reads the archive (and reports that read, weighted by
+          // this file's share of the batch's bytes); the entries themselves
+          // are inflated later, one at a time, under importProgress.
+          const entries = await this.listZipEpubs(file, (percent) => {
+            const done = startBytes + (percent / 100) * file.size;
+            projection.uploadProgress(percentOf(done), `Processing ${file.name}...`);
+          });
+          sources.push(...entries.map((entry) => ({ name: entry.name, read: () => entry.read() })));
         } catch (e) {
           logger.warn(`Failed to extract zip ${file.name}:`, e);
           summary.failed.push({

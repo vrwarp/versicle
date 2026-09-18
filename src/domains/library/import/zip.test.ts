@@ -172,10 +172,9 @@ describe('extractEpubsFromZip', () => {
 });
 
 /**
- * The expansion used to read the whole ZIP into an ArrayBuffer on top of
- * jszip's own view of it, then decompress EVERY entry into an `epubFiles`
- * array that the batch importer held for the entire run — a 40-book archive
- * meant 40 decompressed EPUBs resident at once.
+ * The expansion used to decompress EVERY entry into an `epubFiles` array that
+ * the batch importer held for the entire run — a 40-book archive meant 40
+ * decompressed EPUBs resident at once.
  */
 describe('regression: entries are handed off one at a time', () => {
   it('enumerates without decompressing anything', async () => {
@@ -209,7 +208,7 @@ describe('regression: entries are handed off one at a time', () => {
 
   it('throws CancellationError from read() once the signal aborts', async () => {
     const controller = new AbortController();
-    const entries = await listZipEpubEntries(await makeZip({ 'a.epub': 'one' }), controller.signal);
+    const entries = await listZipEpubEntries(await makeZip({ 'a.epub': 'one' }), undefined, controller.signal);
 
     controller.abort();
 
@@ -223,18 +222,81 @@ describe('regression: entries are handed off one at a time', () => {
       .rejects.toThrow('Failed to process ZIP file');
   });
 
-  it('never reads the archive into an ArrayBuffer of its own', async () => {
+  it('reads the archive once, whether or not progress is watched', async () => {
     const zip = await makeZip({ 'a.epub': 'one' });
     const readAsArrayBuffer = vi.spyOn(FileReader.prototype, 'readAsArrayBuffer');
 
     try {
       const entries = await listZipEpubEntries(zip);
       await entries[0].read();
-      // jszip reads the File itself (and only once, lazily per entry); the
-      // old code did a full FileReader pass first, doubling peak memory.
-      expect(readAsArrayBuffer.mock.calls.length).toBeLessThanOrEqual(1);
+      // jszip reads the File itself, once, and serves entries out of views
+      // over that single buffer (`Uint8ArrayReader.readData` → `subarray`).
+      const withoutProgress = readAsArrayBuffer.mock.calls.length;
+      readAsArrayBuffer.mockClear();
+
+      const watched = await listZipEpubEntries(zip, vi.fn());
+      await watched[0].read();
+
+      // Watching the read does NOT add a pass: our FileReader replaces the
+      // one jszip would have run itself (`prepareContent`), and the
+      // ArrayBuffer it produces is wrapped in a VIEW, not copied.
+      expect(readAsArrayBuffer.mock.calls.length).toBe(withoutProgress);
     } finally {
       readAsArrayBuffer.mockRestore();
     }
+  });
+});
+
+/**
+ * Enumeration still has to read the whole archive, and the lazy lister
+ * dropped the FileReader read-progress path that the eager one had — so the
+ * batch importer's upload bar sat frozen for the entire read of a large
+ * archive (a 1.2 GB ZIP of many EPUBs is seconds of nothing). The
+ * justification for dropping it — that reading into an ArrayBuffer "put a
+ * second full copy of the archive in memory" — is not how jszip behaves:
+ * `prepareContent` runs the SAME FileReader for a File and then converts the
+ * ArrayBuffer with `new Uint8Array(buffer)`, a view over that same buffer.
+ */
+describe('regression: the lazy lister reports read progress', () => {
+  it('reports progress and always finishes at 100', async () => {
+    const zip = await makeZip({ 'a.epub': 'one', 'b.epub': 'two' });
+    const onProgress = vi.fn();
+
+    const entries = await listZipEpubEntries(zip, onProgress);
+
+    expect(entries.map((e) => e.name).sort()).toEqual(['a.epub', 'b.epub']);
+    // jsdom's FileReader may emit no intermediate `progress` events for a
+    // small buffer; the contract that the caller's byte-weighted bar needs
+    // is that the read ends at this file's full share.
+    expect(onProgress).toHaveBeenCalled();
+    expect(onProgress.mock.calls.every(([p]) => p >= 0 && p <= 100)).toBe(true);
+    expect(onProgress.mock.calls.at(-1)).toEqual([100]);
+  });
+
+  it('enumerates the same entries with and without a progress callback', async () => {
+    const zip = await makeZip({ 'a/dup.epub': 'one', 'b/dup.epub': 'two', 'notes.txt': 'x' });
+
+    const watched = await listZipEpubEntries(zip, vi.fn());
+    const unwatched = await listZipEpubEntries(zip);
+
+    expect(watched.map((e) => e.name)).toEqual(unwatched.map((e) => e.name));
+    expect(await (await watched[0].read()).text()).toBe(await (await unwatched[0].read()).text());
+  });
+
+  it('still translates a corrupt archive when progress is watched', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(listZipEpubEntries(new File([new Uint8Array([1, 2, 3])], 'broken.zip'), vi.fn()))
+      .rejects.toThrow('Failed to process ZIP file');
+  });
+
+  it('aborts before reading when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    const onProgress = vi.fn();
+    controller.abort();
+
+    await expect(listZipEpubEntries(await makeZip({ 'a.epub': 'one' }), onProgress, controller.signal))
+      .rejects.toBeInstanceOf(CancellationError);
+    expect(onProgress).not.toHaveBeenCalled();
   });
 });
