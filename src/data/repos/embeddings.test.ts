@@ -14,7 +14,7 @@ import {
   type CacheEmbedJobsRow,
 } from './embeddings';
 import { bookContent } from './bookContent';
-import { closeConnection } from '../connection';
+import { closeConnection, getConnection } from '../connection';
 import { DB_NAME } from '../schema';
 
 function deleteAppDatabase(): Promise<void> {
@@ -284,7 +284,7 @@ describe('EmbeddingsRepo.runEviction (injected-recency LRU, Increment F §6/§8.
 
     const result = await embeddingsRepo.runEviction(new Map(), EMBEDDING_CACHE_BUDGET_BYTES);
 
-    expect(result).toEqual({ deleted: 0, freedBytes: 0 });
+    expect(result).toEqual({ deleted: 0, freedBytes: 0, scanned: 2 });
     await expect(embeddingsRepo.get('bk-1')).resolves.toMatchObject({ bookId: 'bk-1' });
     await expect(embeddingsRepo.get('bk-2')).resolves.toMatchObject({ bookId: 'bk-2' });
   });
@@ -316,6 +316,94 @@ describe('EmbeddingsRepo.runEviction (injected-recency LRU, Increment F §6/§8.
     await expect(embeddingsRepo.get('bk-protected')).resolves.toMatchObject({ bookId: 'bk-protected' });
     // …and the unprotected, more-recently-read book is the one evicted.
     await expect(embeddingsRepo.get('bk-evictable')).resolves.toBeUndefined();
+  });
+
+  /**
+   * perf: the sweep streams a VALUE cursor, so every book's packed int8
+   * vectors (budget 256 MiB) were deserialized on the main thread before the
+   * `totalBytes <= budgetBytes` early-out could run — at boot, every boot. A
+   * persisted running byte total (app_metadata['embedding-cache-total-bytes'])
+   * now answers "are we under budget?" without touching a single row, exactly
+   * as the audio cache's does.
+   */
+  describe('regression: eviction does not scan while under budget', () => {
+    it('skips the cursor entirely once the tracked total is known (scanned === 0)', async () => {
+      await embeddingsRepo.put(row('bk-1'));
+      await embeddingsRepo.put(row('bk-2'));
+
+      // First sweep establishes the total the expensive way.
+      const first = await embeddingsRepo.runEviction(new Map(), 10 * ROW_BYTES);
+      expect(first.scanned).toBe(2);
+
+      const db = await getConnection();
+      expect(await db.get('app_metadata', 'embedding-cache-total-bytes')).toBe(2 * ROW_BYTES);
+
+      // Second sweep: the tracked total answers it — no vectors deserialized.
+      const txSpy = vi.spyOn(db, 'transaction');
+      try {
+        const second = await embeddingsRepo.runEviction(new Map(), 10 * ROW_BYTES);
+        expect(second).toEqual({ deleted: 0, freedBytes: 0, scanned: 0 });
+        const readonlyScans = txSpy.mock.calls.filter(
+          ([stores, mode]) => mode === 'readonly' && String(stores).includes('cache_embeddings'),
+        );
+        expect(readonlyScans).toHaveLength(0);
+      } finally {
+        txSpy.mockRestore();
+      }
+
+      // …and nothing was evicted.
+      await expect(embeddingsRepo.get('bk-1')).resolves.toMatchObject({ bookId: 'bk-1' });
+      await expect(embeddingsRepo.get('bk-2')).resolves.toMatchObject({ bookId: 'bk-2' });
+    });
+
+    it('counts puts into the tracked total so growth still trips a sweep', async () => {
+      // Seed the persisted total at 0 with an empty-store sweep…
+      expect((await embeddingsRepo.runEviction(new Map(), ROW_BYTES)).scanned).toBe(0);
+      const db = await getConnection();
+      expect(await db.get('app_metadata', 'embedding-cache-total-bytes')).toBe(0);
+
+      // …then write enough bytes to exceed the budget: the next sweep scans.
+      await embeddingsRepo.put(row('grown'));
+      expect((await embeddingsRepo.runEviction(new Map(), ROW_BYTES - 1)).scanned).toBe(1);
+    });
+
+    it('keeps the hint in step with the delete batches (no extra sweep afterwards)', async () => {
+      await embeddingsRepo.put(row('bk-a'));
+      await embeddingsRepo.put(row('bk-b'));
+      await embeddingsRepo.put(row('bk-c'));
+
+      const recency = new Map<string, number>([
+        ['bk-a', 1_000],
+        ['bk-b', 2_000],
+        ['bk-c', 3_000],
+      ]);
+      const result = await embeddingsRepo.runEviction(recency, ROW_BYTES);
+      expect(result).toEqual({ deleted: 2, freedBytes: 2 * ROW_BYTES, scanned: 3 });
+
+      // The surviving row's bytes were persisted INSIDE the delete transaction…
+      const db = await getConnection();
+      expect(await db.get('app_metadata', 'embedding-cache-total-bytes')).toBe(ROW_BYTES);
+      // …so the follow-up sweep is free.
+      expect((await embeddingsRepo.runEviction(recency, ROW_BYTES)).scanned).toBe(0);
+    });
+
+    it('re-establishes the total when nothing was evictable (every book protected)', async () => {
+      await embeddingsRepo.put(row('bk-p1'));
+      await embeddingsRepo.put(row('bk-p2'));
+
+      const result = await embeddingsRepo.runEviction(
+        new Map(),
+        ROW_BYTES,
+        new Set(['bk-p1', 'bk-p2']),
+      );
+      expect(result).toEqual({ deleted: 0, freedBytes: 0, scanned: 2 });
+
+      const db = await getConnection();
+      expect(await db.get('app_metadata', 'embedding-cache-total-bytes')).toBe(2 * ROW_BYTES);
+      // Both survive: the hint never decides WHAT to delete.
+      await expect(embeddingsRepo.get('bk-p1')).resolves.toMatchObject({ bookId: 'bk-p1' });
+      await expect(embeddingsRepo.get('bk-p2')).resolves.toMatchObject({ bookId: 'bk-p2' });
+    });
   });
 
   it('an empty/omitted protectedBookIds set behaves exactly as today (regression)', async () => {

@@ -8,11 +8,13 @@
  * N can never commit after N+1 (the legacy out-of-order `currentCfi` bug,
  * reader.md D6).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { generateCfiRange } from '@kernel/cfi';
 import type { EngineLocation } from '@domains/reader/engine/ReaderEngine';
 import {
   ReadingSessionRecorder,
+  setActiveReadingSessionRecorder,
+  flushActiveReadingSession,
   type ReadingSessionRecorderDeps,
   type SessionResolver,
 } from './ReadingSessionRecorder';
@@ -52,6 +54,10 @@ function makeRecorder(overrides: Partial<ReadingSessionRecorderDeps> = {}) {
     getContext: () => context,
     onHistoryRecorded,
     now,
+    // These describes pin the per-commit WRITE SHAPES, so they run with the
+    // CRDT coalescing window disabled; the window itself is pinned by the
+    // 'regression: coalesced CRDT commits' block in the owning suite.
+    commitWindowMs: 0,
     ...overrides,
   });
   return { recorder, store, onHistoryRecorded, advance, context, now: () => nowValue };
@@ -338,5 +344,157 @@ describe('regression: serialized per-book writes (D6 fix, §6)', () => {
 
     const cfis = store.updateReadingSession.mock.calls.map((c) => c[1]);
     expect(cfis).toEqual([1, 2, 3, 4, 5].map((n) => loc(n).startCfi));
+  });
+});
+
+/**
+ * perf/durability: the progress store is a CRDT, and Yjs is append-only, so
+ * every relocation's own `updateReadingSession` left ~65 bytes of PERMANENT
+ * Y.Doc growth (tombstones and delete-set ranges survive `encodeStateAsUpdate`)
+ * — 22ms of cold-boot `Y.applyUpdate` at 500 turns against 283ms at 40k, and a
+ * document the user carries and syncs forever. Commits are merged into a time
+ * window and issued as ONE write; the durability contract is what these pin.
+ */
+describe('regression: coalesced CRDT commits', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A recorder with a live 5s window (the production default). */
+  const windowed = (overrides: Partial<ReadingSessionRecorderDeps> = {}) =>
+    makeRecorder({ commitWindowMs: 5_000, ...overrides });
+
+  const relocate = (
+    recorder: ReadingSessionRecorder,
+    n: number,
+    at: number,
+  ): boolean | undefined =>
+    recorder.onRelocated({
+      location: loc(n),
+      percentage: n / 10,
+      title: `T${n}`,
+      viewMode: 'paginated',
+      at,
+    });
+
+  it('merges a window of relocations into ONE store write, newest position last', async () => {
+    const { recorder, store, advance } = windowed();
+
+    for (let n = 1; n <= 3; n++) {
+      relocate(recorder, n, 100_000 + n * 1_000);
+      advance(1_000);
+      await vi.advanceTimersByTimeAsync(1_000);
+    }
+
+    // Still inside the window: nothing has reached the CRDT yet.
+    expect(store.updateReadingSession).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
+    const [bookId, cfi, pct, updates] = store.updateReadingSession.mock.calls[0];
+    expect(bookId).toBe('book-1');
+    // The LAST event owns the position…
+    expect(cfi).toBe(loc(3).startCfi);
+    expect(pct).toBe(0.3);
+    // …and no range is lost: 3 current ranges + the 2 qualifying previous ones.
+    expect(updates.map((u: { range: string }) => u.range)).toEqual([
+      generateCfiRange(loc(1).startCfi, loc(1).endCfi),
+      generateCfiRange(loc(1).startCfi, loc(1).endCfi),
+      generateCfiRange(loc(2).startCfi, loc(2).endCfi),
+      generateCfiRange(loc(2).startCfi, loc(2).endCfi),
+      generateCfiRange(loc(3).startCfi, loc(3).endCfi),
+    ]);
+  });
+
+  it('flushSync still drains the window immediately, before the panic segment', async () => {
+    const { recorder, store, advance } = windowed();
+
+    relocate(recorder, 1, 100_000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.updateReadingSession).not.toHaveBeenCalled();
+
+    advance(5_000);
+    recorder.flushSync();
+
+    expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
+    expect(store.updateReadingSession.mock.calls[0][1]).toBe(loc(1).startCfi);
+    expect(store.addCompletedRange).toHaveBeenCalledTimes(1);
+    // Ordering: the session write lands before the final completed range.
+    expect(store.updateReadingSession.mock.invocationCallOrder[0]).toBeLessThan(
+      store.addCompletedRange.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('flushPending drains the queue AND the window without a panic segment', async () => {
+    const { recorder, store, advance } = windowed();
+
+    relocate(recorder, 1, 100_000);
+    advance(3_000);
+    await vi.advanceTimersByTimeAsync(0);
+    relocate(recorder, 2, 103_000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.updateReadingSession).not.toHaveBeenCalled();
+
+    // What the owner wires to visibilitychange → hidden / pagehide.
+    recorder.flushPending();
+
+    expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
+    expect(store.updateReadingSession.mock.calls[0][1]).toBe(loc(2).startCfi);
+    expect(store.addCompletedRange).not.toHaveBeenCalled();
+
+    // Drained: the window timer has nothing left to write.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('the no-op guard reads the OPEN window, not the (still stale) store', async () => {
+    const { recorder, store } = windowed();
+
+    relocate(recorder, 1, 100_000);
+    await vi.advanceTimersByTimeAsync(0);
+    // The store has not been written yet, but the position is committed:
+    // a repeat relocation to it must still be a no-op.
+    expect(relocate(recorder, 1, 101_000)).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('the active-recorder registry drains the window (the E2E persistence flush)', async () => {
+    const { recorder, store } = windowed();
+    setActiveReadingSessionRecorder(recorder);
+    try {
+      relocate(recorder, 1, 100_000);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.updateReadingSession).not.toHaveBeenCalled();
+
+      flushActiveReadingSession();
+      expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
+      expect(store.updateReadingSession.mock.calls[0][1]).toBe(loc(1).startCfi);
+    } finally {
+      setActiveReadingSessionRecorder(null);
+    }
+    // Cleared: a stale registry entry must not write for a torn-down reader.
+    expect(() => flushActiveReadingSession()).not.toThrow();
+  });
+
+  it('dispose issues the window and leaves no timer behind', async () => {
+    const { recorder, store } = windowed();
+
+    relocate(recorder, 1, 100_000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.updateReadingSession).not.toHaveBeenCalled();
+
+    recorder.dispose();
+
+    expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
   });
 });

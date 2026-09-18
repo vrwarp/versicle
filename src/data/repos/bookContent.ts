@@ -165,6 +165,29 @@ class BookContentRepo {
     }
   }
 
+  /**
+   * ONE book's cover thumbnail, normalized to a Blob (rows persist it as an
+   * ArrayBuffer for WebKit IDB compatibility). Returns undefined when the book
+   * has no cover, or no manifest at all.
+   *
+   * perf (P-mem): this is the fallback lane's on-demand read. The merged
+   * metadata (app/repositories/BookRepository) no longer carries cover bytes
+   * while the page is service-worker controlled, so nothing pins the whole
+   * library's thumbnails; when the SW route is unavailable, `useCoverUrl`
+   * calls this for the covers actually being rendered instead.
+   */
+  async getCoverBlob(bookId: string): Promise<Blob | undefined> {
+    try {
+      const db = await getConnection();
+      const manifest = await db.get('static_manifests', bookId);
+      const raw = manifest?.coverBlob as unknown as Blob | ArrayBuffer | undefined;
+      if (!raw) return undefined;
+      return raw instanceof Blob ? raw : new Blob([raw]);
+    } catch (error) {
+      handleDbError(error);
+    }
+  }
+
   /** Single manifest row (used by reprocessing to compute the updated row). */
   async getManifest(bookId: string): Promise<StaticManifestRow | undefined> {
     try {

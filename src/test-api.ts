@@ -28,6 +28,7 @@ import { MockGenAIClient, setGenAIClient, type MockGenAIFixture } from './domain
 import { useContentAnalysisStore } from './store/useContentAnalysisStore';
 import { useGenAIStore } from './store/useGenAIStore';
 import { getActiveReaderEngine } from './domains/reader/engine/activeEngineRegistry';
+import { flushActiveReadingSession } from './domains/reader/session/ReadingSessionRecorder';
 import { getTtsController } from './app/tts/TtsController';
 import type { HighlightLayerId } from './domains/reader/engine/highlightStyles';
 import { createLogger } from './lib/logger';
@@ -37,6 +38,8 @@ const logger = createLogger('TestApi');
 export interface VersicleTestApi {
   /**
    * Deterministically flush every debounced persistence queue:
+   *  - the reading-session recorder's coalescing window (the merged
+   *    per-relocation CRDT commit), and
    *  - playbackCache `cache_session_state` writes (500ms debounce — the TTS
    *    playback queue / lastPauseTime mirror), and
    *  - the y-idb Yjs update queue (`writeDebounceMs: 200` — reading
@@ -174,6 +177,11 @@ async function flushYjsPersistence(): Promise<void> {
 }
 
 export async function flushPersistence(): Promise<void> {
+  // The reading-session recorder merges its CRDT commits into a time window,
+  // so the Y.Doc can trail the reader by a few seconds. Issue that window
+  // FIRST: a spec that turns a page and then flushes must persist where the
+  // reader IS, not where it was when the window opened.
+  flushActiveReadingSession();
   // Both writers funnel through the shared exclusive IDB write gate
   // (src/data/write-gate.ts), so flushing them sequentially is also the
   // ordering the app itself guarantees.

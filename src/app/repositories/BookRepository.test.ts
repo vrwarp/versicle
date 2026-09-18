@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { bookRepository } from './BookRepository';
 import { bookContent } from '@data/repos/bookContent';
 import { useBookStore } from '@store/useBookStore';
@@ -143,6 +143,75 @@ describe('BookRepository', () => {
 
             expect(bookRepository.getBookIdByFilename('two.epub')).toBe('b2');
             expect(bookRepository.getBookIdByFilename('nope.epub')).toBeUndefined();
+        });
+    });
+
+    /**
+     * perf (P-mem): every book's cover thumbnail used to be copied into a
+     * fresh Blob on the awaited boot path and then held — in the merged
+     * metadata, in the library projection and in `useBook` — for the life of
+     * the tab (~6-30MB on a 300-book shelf). Every real consumer prefers the
+     * service-worker route, which reads the bytes from the SW's own IndexedDB
+     * connection, so while the page is SW controlled the bytes never have to
+     * enter the app's heap at all; `hasCover` is what the projection needs.
+     */
+    describe('regression: cover bytes are not pinned while the SW serves covers', () => {
+        const setController = (controller: object | null) => {
+            Object.defineProperty(navigator, 'serviceWorker', {
+                value: { controller },
+                writable: true,
+                configurable: true,
+            });
+        };
+
+        afterEach(() => {
+            // Restore jsdom's default (no serviceWorker container at all).
+            Reflect.deleteProperty(navigator, 'serviceWorker');
+        });
+
+        it('omits coverBlob but still reports hasCover when a controller is active', async () => {
+            setController({});
+            vi.mocked(bookContent.getManifestBundle).mockResolvedValue(
+                bundle({ coverBlob: new ArrayBuffer(4) as never })
+            );
+
+            const meta = await bookRepository.getBookMetadata('b1');
+
+            expect(meta?.coverBlob).toBeUndefined();
+            expect(meta?.hasCover).toBe(true);
+        });
+
+        it('keeps the fallback blob when no controller is present', async () => {
+            setController(null);
+            vi.mocked(bookContent.getManifestBundle).mockResolvedValue(
+                bundle({ coverBlob: new ArrayBuffer(4) as never })
+            );
+
+            const meta = await bookRepository.getBookMetadata('b1');
+
+            expect(meta?.coverBlob).toBeInstanceOf(Blob);
+            expect(meta?.hasCover).toBe(true);
+        });
+
+        it('reports hasCover false for a coverless book in both lanes', async () => {
+            vi.mocked(bookContent.getManifestBundle).mockResolvedValue(bundle());
+            expect((await bookRepository.getBookMetadata('b1'))?.hasCover).toBe(false);
+
+            setController({});
+            expect((await bookRepository.getBookMetadata('b1'))?.hasCover).toBe(false);
+        });
+
+        it('holds no cover bytes for ANY book in the bulk boot read', async () => {
+            setController({});
+            vi.mocked(bookContent.getManifestBundleBulk).mockResolvedValue([
+                bundle({ bookId: 'a', coverBlob: new ArrayBuffer(4) as never }),
+                bundle({ bookId: 'b', coverBlob: new ArrayBuffer(4) as never }),
+            ]);
+
+            const result = await bookRepository.getBookMetadataBulk(['a', 'b']);
+
+            expect(result.map((m) => m?.coverBlob)).toEqual([undefined, undefined]);
+            expect(result.map((m) => m?.hasCover)).toEqual([true, true]);
         });
     });
 

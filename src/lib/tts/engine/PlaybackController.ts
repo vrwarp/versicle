@@ -411,9 +411,17 @@ export class PlaybackController implements TtsEngine {
             this.ctx.book.getMetadata(bookId).then(metadata => {
                 if (this.currentBookId === bookId) {
                     let coverUrlStr: string | undefined = metadata?.coverUrl;
-                    if (!coverUrlStr && metadata?.coverBlob) {
+                    // `hasCover` says a cover EXISTS; `coverBlob` is present
+                    // only in the fallback lane (BookRepository withholds the
+                    // bytes while the page is SW controlled, so nothing pins
+                    // the library's thumbnails). Bytes withheld ⇒ the SW route
+                    // is live by construction — use it. This runs in the TTS
+                    // worker, where `navigator.serviceWorker` does not exist,
+                    // so the controller probe alone cannot answer it.
+                    const coverExists = metadata?.hasCover ?? !!metadata?.coverBlob;
+                    if (!coverUrlStr && coverExists) {
                         const hasController = typeof navigator !== 'undefined' && !!navigator.serviceWorker?.controller;
-                        if (hasController) {
+                        if (hasController || !metadata?.coverBlob) {
                             coverUrlStr = coverUrl(bookId);
                         } else if (typeof URL !== 'undefined' && URL.createObjectURL) {
                             if (this.currentCoverUrl) {

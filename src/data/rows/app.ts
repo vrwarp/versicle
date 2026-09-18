@@ -135,6 +135,17 @@ export const APP_METADATA_KEYS = {
    */
   audioCacheTotalBytes: 'audio-cache-total-bytes',
   /**
+   * `number` — the embedding cache's running byte total (sum of every
+   * `cache_embeddings` row's packed `vectors`/`scales` byteLengths). Same
+   * HINT contract as {@link audioCacheTotalBytes}: it only ever decides
+   * whether the eviction sweep may SKIP its full scan, never what to delete,
+   * and any sweep that does scan re-establishes it from the rows themselves.
+   * A put that replaces an existing book's row over-counts (the old row's
+   * bytes are still included), which can only buy one earlier full scan.
+   * Read/written only by src/data/repos/embeddings.ts.
+   */
+  embeddingCacheTotalBytes: 'embedding-cache-total-bytes',
+  /**
    * `number` — the `TTS_EXTRACTION_VERSION` at which the §E re-ingest wave
    * last finished with ZERO candidate books (a converged library). Later
    * boots skip the whole-store candidacy scan

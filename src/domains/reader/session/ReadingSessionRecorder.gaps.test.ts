@@ -57,6 +57,10 @@ function makeRecorder(overrides: Partial<ReadingSessionRecorderDeps> = {}) {
     getContext: () => context,
     onHistoryRecorded,
     now: () => nowValue,
+    // These describes pin the per-commit WRITE SHAPES, so they run with the
+    // CRDT coalescing window disabled; the window itself is pinned by the
+    // 'regression: coalesced CRDT commits' block in the owning suite.
+    commitWindowMs: 0,
     ...overrides,
   });
   return { recorder, store, onHistoryRecorded, advance, context };

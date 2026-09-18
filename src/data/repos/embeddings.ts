@@ -23,12 +23,32 @@
  * crash window the two independent {@link EmbeddingsRepo.put} /
  * {@link EmbeddingsRepo.putJob} transactions could otherwise open.
  *
+ * The eviction sweep is GUARDED by a persisted running byte total
+ * (`app_metadata['embedding-cache-total-bytes']`, additive KV key — no DB
+ * bump), exactly as the audio cache's sweep is: a sweep whose tracked total is
+ * under budget returns without opening a cursor at all. That matters because
+ * the scan streams a VALUE cursor, so every book's packed int8 vectors (budget
+ * 256 MiB) were deserialized on the main thread before the under-budget
+ * early-out could run — at boot, every boot.
+ *
+ * The total is a HINT. {@link EmbeddingsRepo.put} / {@link EmbeddingsRepo.putHydrated}
+ * add the written row's bytes in memory and the eviction delete batches
+ * subtract what they freed (persisted inside those same gated transactions, no
+ * extra gate acquisitions). It never decides WHAT to evict: whenever it says
+ * "over budget", or is absent, the full scan runs, and the scan — the source of
+ * truth — re-seeds it. Every way it can be wrong is the SAFE way: a put that
+ * REPLACES a book's row over-counts (the old row's bytes stay in), and
+ * {@link EmbeddingsRepo.delete} (plus the book-deletion path, which clears both
+ * rows inline) does not subtract at all, so the total can only read high — which
+ * costs one extra scan and corrects itself.
+ *
  * (design: plan/shared-ai-cache-design.md)
  */
 import { getConnection } from '../connection';
 import { write } from '../write-gate';
 import { handleDbError } from '../errors';
 import type { CacheEmbeddingsRow, CacheEmbedJobsRow } from '../rows/cache';
+import { APP_METADATA_KEYS } from '../rows/app';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('EmbeddingsRepo');
@@ -48,6 +68,27 @@ const EVICTION_DELETE_BATCH = 50;
 const EMPTY_PROTECTED: ReadonlySet<string> = new Set();
 
 /**
+ * The eviction sweep's result. `scanned` is the number of rows the sweep
+ * deserialized — 0 whenever the tracked-total fast path held. (Not exported:
+ * callers consume it structurally through `runEviction`'s return type, as with
+ * the audio cache.)
+ */
+interface EmbeddingEvictionResult {
+  deleted: number;
+  freedBytes: number;
+  scanned: number;
+}
+
+/** Persisted byte cost of one embeddings row (never re-wraps the buffers). */
+function rowBytes(row: CacheEmbeddingsRow): number {
+  let size = 0;
+  for (const section of row.sections) {
+    size += section.vectors.byteLength + section.scales.byteLength;
+  }
+  return size;
+}
+
+/**
  * A `cache_embeddings` row as the read path hands it to callers: identical to
  * {@link CacheEmbeddingsRow} except the persisted binary buffers are re-wrapped
  * as the typed-array views the compute layer consumes. Persisting always uses
@@ -65,6 +106,14 @@ type CacheEmbeddingsView = Omit<CacheEmbeddingsRow, 'sections'> & {
 };
 
 class EmbeddingsRepo {
+  /**
+   * Net byte change this context has made since the persisted total was last
+   * written (puts add, sweeps reset it). The persisted value itself is re-read
+   * per sweep rather than cached, so another tab's writes are picked up;
+   * concurrent deltas are last-write-wins, which a later scan corrects.
+   */
+  private deltaBytes = 0;
+
   /**
    * The persisted embedding row for a book, or undefined when never embedded.
    * Re-wraps each section's `vectors` (→ Int8Array) and `scales`
@@ -110,6 +159,10 @@ class EmbeddingsRepo {
       await write(['cache_embeddings'], (tx) => {
         tx.objectStore('cache_embeddings').put(row);
       });
+      // Running total (hint): a put that REPLACES this book's row over-counts
+      // by the old row's size — which only ever buys an earlier full scan, and
+      // that scan re-establishes the truth.
+      this.deltaBytes += rowBytes(row);
     } catch (error) {
       handleDbError(error);
     }
@@ -146,6 +199,7 @@ class EmbeddingsRepo {
         tx.objectStore('cache_embeddings').put(row);
         tx.objectStore('cache_embed_jobs').put(jobRow);
       });
+      this.deltaBytes += rowBytes(row);
     } catch (error) {
       handleDbError(error);
     }
@@ -165,6 +219,26 @@ class EmbeddingsRepo {
     } catch (error) {
       handleDbError(error);
     }
+  }
+
+  /**
+   * The tracked byte total (persisted hint + this session's net delta), or
+   * null while it has never been established. Read OUTSIDE the gate.
+   */
+  private async trackedTotal(
+    db: Awaited<ReturnType<typeof getConnection>>,
+  ): Promise<number | null> {
+    const stored = await db.get('app_metadata', APP_METADATA_KEYS.embeddingCacheTotalBytes);
+    if (typeof stored !== 'number' || !Number.isFinite(stored)) return null;
+    return Math.max(0, stored + this.deltaBytes);
+  }
+
+  /** Adopt `total` as the established value and persist it (one gated put). */
+  private async persistTotal(total: number): Promise<void> {
+    this.deltaBytes = 0;
+    await write(['app_metadata'], (tx) => {
+      tx.objectStore('app_metadata').put(total, APP_METADATA_KEYS.embeddingCacheTotalBytes);
+    });
   }
 
   /**
@@ -195,14 +269,28 @@ class EmbeddingsRepo {
    * protects the ones that have not, so eviction can never destroy the last
    * remaining copy before it reaches the cloud. When sharing is off, the set is
    * empty and everything is evictable as usual.
+   *
+   * The whole thing is gated by the persisted running byte total: while it
+   * proves the cache is under `budgetBytes` the sweep returns immediately
+   * (`scanned: 0`) — no cursor, no vector deserialization. See the module
+   * docs for why that total is only ever a hint.
    */
   async runEviction(
     recencyByBookId: Map<string, number>,
     budgetBytes: number = EMBEDDING_CACHE_BUDGET_BYTES,
     protectedBookIds: ReadonlySet<string> = EMPTY_PROTECTED,
-  ): Promise<{ deleted: number; freedBytes: number }> {
+  ): Promise<EmbeddingEvictionResult> {
     try {
       const db = await getConnection();
+
+      // Fast path: the tracked total proves we are under budget. This is the
+      // common case for the boot task and the whole point of tracking — the
+      // scan below deserializes every book's packed int8 vectors.
+      const tracked = await this.trackedTotal(db);
+      if (tracked !== null && tracked <= budgetBytes) {
+        if (this.deltaBytes !== 0) await this.persistTotal(tracked);
+        return { deleted: 0, freedBytes: 0, scanned: 0 };
+      }
 
       // Pass 1: streaming scan (no getAll — rows hold packed vector blobs).
       const entries: { bookId: string; size: number }[] = [];
@@ -224,9 +312,12 @@ class EmbeddingsRepo {
         }
         await tx.done;
       }
+      const scanned = entries.length;
 
       if (totalBytes <= budgetBytes) {
-        return { deleted: 0, freedBytes: 0 };
+        // The scan is the source of truth — seed/correct the tracked total.
+        await this.persistTotal(totalBytes);
+        return { deleted: 0, freedBytes: 0, scanned };
       }
 
       // Pass 2: least-recently-read-first deletes (unknown bookId → 0 → first).
@@ -239,11 +330,15 @@ class EmbeddingsRepo {
       let remaining = totalBytes;
       let batch: string[] = [];
 
-      const flushBatch = async (): Promise<void> => {
+      // Each batch carries the updated total in the SAME transaction, so a
+      // sweep interrupted between batches leaves the hint consistent with what
+      // was actually deleted (no extra gate acquisitions).
+      const flushBatch = async (runningTotal: number): Promise<void> => {
         if (batch.length === 0) return;
         const ids = batch;
         batch = [];
-        await write(['cache_embeddings', 'cache_embed_jobs'], (tx) => {
+        this.deltaBytes = 0;
+        await write(['cache_embeddings', 'cache_embed_jobs', 'app_metadata'], (tx) => {
           const embeddings = tx.objectStore('cache_embeddings');
           const jobs = tx.objectStore('cache_embed_jobs');
           for (const id of ids) {
@@ -251,6 +346,10 @@ class EmbeddingsRepo {
             embeddings.delete(id);
             jobs.delete(id);
           }
+          tx.objectStore('app_metadata').put(
+            runningTotal,
+            APP_METADATA_KEYS.embeddingCacheTotalBytes,
+          );
         });
       };
 
@@ -265,10 +364,13 @@ class EmbeddingsRepo {
         freedBytes += entry.size;
         remaining -= entry.size;
         if (batch.length >= EVICTION_DELETE_BATCH) {
-          await flushBatch();
+          await flushBatch(remaining);
         }
       }
-      await flushBatch();
+      await flushBatch(remaining);
+      // Nothing was evictable (every candidate protected): the scan's total
+      // still has to land so the next sweep does not rescan.
+      if (deleted === 0) await this.persistTotal(totalBytes);
 
       if (deleted > 0) {
         logger.info(
@@ -276,11 +378,11 @@ class EmbeddingsRepo {
             `(${remaining} of ${budgetBytes} budget in use).`,
         );
       }
-      return { deleted, freedBytes };
+      return { deleted, freedBytes, scanned };
     } catch (error) {
       handleDbError(error);
     }
-    return { deleted: 0, freedBytes: 0 };
+    return { deleted: 0, freedBytes: 0, scanned: 0 };
   }
 }
 

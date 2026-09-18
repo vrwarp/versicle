@@ -167,7 +167,10 @@ describe('selectors', () => {
       expect(result.current[0].progress).toBe(0.7);
     });
 
-    it('should maintain object reference stability for unchanged books when progress updates', () => {
+    // `await act(async …)` throughout: the projection now rebuilds on a
+    // microtask (one flush per task instead of one per input notification),
+    // so the assertions have to let that microtask run.
+    it('should maintain object reference stability for unchanged books when progress updates', async () => {
       seedBooks({
         'book-a': makeInventoryItem({ bookId: 'book-a', title: 'Book A', lastInteraction: 100 }),
         'book-b': makeInventoryItem({ bookId: 'book-b', title: 'Book B', lastInteraction: 100 }),
@@ -184,7 +187,7 @@ describe('selectors', () => {
       expect(bookA_v1).toBeDefined();
       expect(bookB_v1).toBeDefined();
 
-      act(() => {
+      await act(async () => {
         useReadingStateStore.setState((state) => ({
           progress: { ...state.progress, 'book-a': { 'device-1': progressOf(0.5, 200) } },
         }));
@@ -202,7 +205,7 @@ describe('selectors', () => {
       expect(bookB_v2).toBe(bookB_v1);
     });
 
-    it('should maintain object reference stability for unchanged books when another book is updated in inventory', () => {
+    it('should maintain object reference stability for unchanged books when another book is updated in inventory', async () => {
       const bookA = makeInventoryItem({ bookId: 'book-a', title: 'Book A', lastInteraction: 100 });
       const bookB = makeInventoryItem({ bookId: 'book-b', title: 'Book B', lastInteraction: 100 });
       seedBooks({ 'book-a': bookA, 'book-b': bookB });
@@ -211,7 +214,7 @@ describe('selectors', () => {
       const firstRender = result.current;
       const bookB_v1 = firstRender.find((b) => b.id === 'book-b');
 
-      act(() => {
+      await act(async () => {
         useBookStore.setState({
           books: {
             'book-a': { ...bookA, title: 'Book A Updated', lastInteraction: 200 },
@@ -229,14 +232,14 @@ describe('selectors', () => {
       expect(bookB_v2).toBe(bookB_v1);
     });
 
-    it('should rebuild cache when staticMetadata dependencies change, avoiding stale cache reads', () => {
+    it('should rebuild cache when staticMetadata dependencies change, avoiding stale cache reads', async () => {
       seedBooks({ 'book-a': makeInventoryItem({ bookId: 'book-a', title: 'Book A', lastInteraction: 100 }) });
 
       const { result } = renderHook(() => useAllBooks());
       const bookA_v1 = result.current.find((b) => b.id === 'book-a');
       expect(bookA_v1?.title).toBe('Book A');
 
-      act(() => {
+      await act(async () => {
         useLibraryStore.getState().setStaticMetadata('book-a', makeBookMetadata({ id: 'book-a', title: 'Book A - Static Meta' }));
       });
 
@@ -260,6 +263,113 @@ describe('selectors', () => {
       expect(firstRender).toStrictEqual(secondRender);
       expect(firstRender).toBe(secondRender);
       expect(firstRender[0]).toBe(secondRender[0]);
+    });
+  });
+
+  /**
+   * perf (P-mem): cover thumbnails are served by the service worker straight
+   * from IndexedDB, so the merged metadata stops materializing a Blob per book
+   * while the page is SW controlled (app/repositories/BookRepository). The
+   * projection must still emit the SW route — it now reads `hasCover`, not the
+   * presence of the bytes.
+   */
+  describe('regression: the cover route survives without the cover bytes', () => {
+    it('emits coverUrl from hasCover alone, holding no blob', () => {
+      seedBooks({ b1: makeInventoryItem({ bookId: 'b1' }) });
+      act(() => {
+        useLibraryStore
+          .getState()
+          .setStaticMetadata('b1', makeBookMetadata({ id: 'b1', hasCover: true }));
+      });
+
+      const { result } = renderHook(() => useAllBooks());
+      expect(result.current[0].coverBlob).toBeUndefined();
+      expect(result.current[0].coverUrl).toBe('/__versicle__/covers/b1');
+
+      // The single-book join (the reader + the control bar) agrees.
+      const single = renderHook(() => useBook('b1'));
+      expect(single.result.current?.coverUrl).toBe('/__versicle__/covers/b1');
+    });
+
+    it('still derives the route from a materialized blob (no-controller lane)', () => {
+      seedBooks({ b1: makeInventoryItem({ bookId: 'b1' }) });
+      act(() => {
+        useLibraryStore
+          .getState()
+          .setStaticMetadata(
+            'b1',
+            makeBookMetadata({ id: 'b1', coverBlob: new Blob(['x']), hasCover: true }),
+          );
+      });
+
+      const { result } = renderHook(() => useAllBooks());
+      expect(result.current[0].coverUrl).toBe('/__versicle__/covers/b1');
+      expect(result.current[0].coverBlob).toBeInstanceOf(Blob);
+    });
+
+    it('emits no route for a book that has no cover at all', () => {
+      seedBooks({ b1: makeInventoryItem({ bookId: 'b1' }) });
+      act(() => {
+        useLibraryStore
+          .getState()
+          .setStaticMetadata('b1', makeBookMetadata({ id: 'b1', hasCover: false }));
+      });
+
+      const { result } = renderHook(() => useAllBooks());
+      expect(result.current[0].coverUrl).toBeUndefined();
+    });
+  });
+
+  /**
+   * perf: the projection listens to four input stores and a single page turn
+   * writes two of them, so it rebuilt the reading-list join maps and allocated
+   * a fresh N-element array TWICE per turn — and it did that even while the
+   * library view was unmounted, because the subscriptions start on first use
+   * and were never torn down.
+   *
+   * `getDeviceId` is read exactly once per phase-2 rebuild, so its call count
+   * is the rebuild count.
+   */
+  describe('regression: the projection rebuilds once per task, and not while idle', () => {
+    const rebuilds = () => vi.mocked(getDeviceId).mock.calls.length;
+
+    it('coalesces the two writes of one page turn into ONE rebuild', async () => {
+      seedBooks({ b1: makeInventoryItem({ bookId: 'b1', sourceFilename: 'book.epub' }) });
+      const { result } = renderHook(() => useAllBooks());
+      expect(result.current).toHaveLength(1);
+
+      vi.mocked(getDeviceId).mockClear();
+      await act(async () => {
+        // What updateReadingSession does per relocation: the progress write,
+        // then the reading-list mirror when a displayed field moved.
+        useReadingStateStore.setState({ progress: { b1: { 'device-1': progressOf(0.5, 200) } } });
+        useReadingListStore.setState({
+          entries: { 'book.epub': entry({ filename: 'book.epub', percentage: 0.5 }) },
+        });
+      });
+
+      expect(rebuilds()).toBe(1);
+      expect(result.current[0].progress).toBe(0.5);
+    });
+
+    it('does no work at all while nothing is subscribed, and the next reader sees it', async () => {
+      seedBooks({ b1: makeInventoryItem({ bookId: 'b1' }) });
+      const first = renderHook(() => useAllBooks());
+      expect(first.result.current).toHaveLength(1);
+
+      // The router swaps the library out for the reader.
+      first.unmount();
+
+      vi.mocked(getDeviceId).mockClear();
+      await act(async () => {
+        useReadingStateStore.setState({ progress: { b1: { 'device-1': progressOf(0.8, 300) } } });
+      });
+      // A page turn with the library unmounted rebuilds NOTHING.
+      expect(rebuilds()).toBe(0);
+
+      // …and coming back reads fresh rows on the very first render.
+      const second = renderHook(() => useAllBooks());
+      expect(second.result.current[0].progress).toBe(0.8);
     });
   });
 

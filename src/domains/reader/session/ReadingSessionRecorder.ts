@@ -21,6 +21,30 @@
  * (the legacy async body read them synchronously before its first await),
  * so queueing never inflates a dwell or mislabels a range.
  *
+ * COALESCED (perf, P-mem): every commit used to issue its own
+ * `store.updateReadingSession`, and the progress store is a CRDT — Yjs is
+ * append-only, so each write leaves permanent Y.Doc growth (tombstones and
+ * delete-set ranges survive `encodeStateAsUpdate`). Measured against the real
+ * vendored middleware that is ~65 bytes per page turn, which compounds into
+ * cold-boot `Y.applyUpdate` hydration of 22ms at 500 turns → 283ms at 40k, a
+ * per-write scoped-diff cost of 0.57ms → 2.49ms, and a document the user
+ * carries and syncs forever. Commits now land in a {@link COMMIT_WINDOW_MS}
+ * window and issue ONE store write per window: the updates concatenate in
+ * event order and the LAST event's `currentCfi`/`percentage` win, which is
+ * exactly what the store would have ended up with.
+ *
+ * Durability is the constraint, not the cadence. The window is drained:
+ *  - by {@link ReadingSessionRecorder.flushSync} (unmount panic save), whose
+ *    semantics are otherwise unchanged;
+ *  - by {@link ReadingSessionRecorder.flushPending}, which the owner wires to
+ *    `visibilitychange` → hidden and `pagehide` — the only signals a mobile
+ *    background kill reliably delivers — and which drains the FIFO too, so it
+ *    is strictly more durable than the un-coalesced code was at that instant;
+ *  - by `dispose()`, before the recorder goes quiet.
+ * The window's own timer never outlives disposal, and while a window is open
+ * the no-op CFI guard compares against ITS position rather than the store's,
+ * so the guard behaves exactly as it did when every commit wrote through.
+ *
  * Single-sourced per §6: the `'Chapter'` placeholder filter and the ONE
  * `buildUpdates({snap})` pass both the live path and flushSync use.
  *
@@ -91,7 +115,20 @@ export interface ReadingSessionRecorderDeps {
   /** Fires when a previous-range history entry was recorded (history tick). */
   onHistoryRecorded?: () => void;
   now?: () => number;
+  /**
+   * How long committed recordings are merged before ONE store write is
+   * issued (default {@link COMMIT_WINDOW_MS}). Injected so tests can drive it
+   * with fake timers; `0` disables coalescing and writes through per commit.
+   */
+  commitWindowMs?: number;
 }
+
+/**
+ * Default coalescing window. Long enough to merge a burst (scrolled mode, TTS
+ * sentence relocations, fast flipping) into one CRDT write; short enough that
+ * nothing but a hard crash between the flush signals can outrun it.
+ */
+const COMMIT_WINDOW_MS = 5_000;
 
 /**
  * The `'Chapter'` placeholder filter — single-sourced (§6: it was
@@ -127,6 +164,16 @@ export class ReadingSessionRecorder {
   private seqCounter = 0;
   /** Highest seq whose write has been committed (stale completions drop). */
   private committedSeq = 0;
+
+  /** The merged store write waiting on the current window, if any. */
+  private pendingCommit: {
+    currentCfi: string;
+    percentage: number;
+    updates: SessionUpdateEntry[];
+    historyAppended: boolean;
+  } | null = null;
+  /** The open window's timer. Never survives {@link dispose}. */
+  private pendingCommitTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly deps: ReadingSessionRecorderDeps) {}
 
@@ -165,8 +212,12 @@ export class ReadingSessionRecorder {
     this.prime(e.location, e.at);
 
     // Prevent infinite loop if CFI hasn't changed (handled in store
-    // usually, but double check)
-    if (e.location.startCfi === (this.deps.store.getCurrentCfi() || '')) return false;
+    // usually, but double check). An open window holds a position that HAS
+    // been committed but not yet written through, so it answers this instead
+    // of the store — which keeps the guard identical to the write-through
+    // behavior it replaced.
+    const savedCfi = this.pendingCommit ? this.pendingCommit.currentCfi : this.deps.store.getCurrentCfi() || '';
+    if (e.location.startCfi === savedCfi) return false;
 
     // Capture everything the recording needs AT EVENT TIME (the legacy
     // async body read all of this synchronously before its first await):
@@ -223,27 +274,73 @@ export class ReadingSessionRecorder {
   private commit(item: QueuedRecording, updates: SessionUpdateEntry[], historyAppended: boolean): void {
     if (item.seq <= this.committedSeq) return; // stale: already committed
     this.committedSeq = item.seq;
-    if (historyAppended) {
-      this.deps.onHistoryRecorded?.();
+
+    const windowMs = this.deps.commitWindowMs ?? COMMIT_WINDOW_MS;
+    if (windowMs <= 0) {
+      // Coalescing disabled: write through exactly as the legacy path did.
+      if (historyAppended) this.deps.onHistoryRecorded?.();
+      this.deps.store.updateReadingSession(
+        this.deps.bookId,
+        item.e.location.startCfi,
+        item.e.percentage,
+        updates,
+      );
+      return;
     }
-    this.deps.store.updateReadingSession(
-      this.deps.bookId,
-      item.e.location.startCfi,
-      item.e.percentage,
-      updates,
-    );
+
+    if (!this.pendingCommit) {
+      this.pendingCommit = {
+        currentCfi: item.e.location.startCfi,
+        percentage: item.e.percentage,
+        updates: [...updates],
+        historyAppended,
+      };
+    } else {
+      // Updates concatenate in event order; the LAST event owns the position
+      // (the store applies currentCfi/percentage after merging the ranges, so
+      // the merged write lands exactly where the per-commit writes would have).
+      this.pendingCommit.updates.push(...updates);
+      this.pendingCommit.currentCfi = item.e.location.startCfi;
+      this.pendingCommit.percentage = item.e.percentage;
+      this.pendingCommit.historyAppended = this.pendingCommit.historyAppended || historyAppended;
+    }
+
+    if (this.pendingCommitTimer === null) {
+      this.pendingCommitTimer = setTimeout(() => {
+        this.pendingCommitTimer = null;
+        this.flushWindow();
+      }, windowMs);
+    }
+  }
+
+  /** Issue the merged window's single store write (no-op when none is open). */
+  private flushWindow(): void {
+    if (this.pendingCommitTimer !== null) {
+      clearTimeout(this.pendingCommitTimer);
+      this.pendingCommitTimer = null;
+    }
+    const pending = this.pendingCommit;
+    this.pendingCommit = null;
+    if (!pending) return;
+    if (pending.historyAppended) this.deps.onHistoryRecorded?.();
+    try {
+      this.deps.store.updateReadingSession(
+        this.deps.bookId,
+        pending.currentCfi,
+        pending.percentage,
+        pending.updates,
+      );
+    } catch (err) {
+      logger.error('Failed to update reading session', err);
+    }
   }
 
   /**
-   * Unmount panic save: drains every recording still queued or in flight
-   * SYNCHRONOUSLY without snapping (raw ranges — the book may already be
-   * torn down mid-unmount; the late async completion of the in-flight item
-   * is dropped by the seq guard), then writes the legacy final segment.
+   * Drain the FIFO synchronously WITHOUT snapping (raw ranges — this runs
+   * when the page may be about to go away). Shared by {@link flushPending}
+   * and {@link flushSync}.
    */
-  flushSync(): void {
-    // 1. Drain the queue (snap=false). The in-flight recording (if any)
-    //    has not committed yet — commit it here; its async completion will
-    //    be stale and drop.
+  private drainQueue(): void {
     const toDrain: QueuedRecording[] = [];
     if (this.inFlight && this.inFlight.seq > this.committedSeq) {
       toDrain.push(this.inFlight);
@@ -257,6 +354,34 @@ export class ReadingSessionRecorder {
         logger.error('Session flush failed', err);
       }
     }
+  }
+
+  /**
+   * Durability drain WITHOUT the panic-save final segment: everything still
+   * queued or in flight is committed unsnapped and the coalescing window is
+   * issued immediately. The owner wires this to `visibilitychange` → hidden
+   * and `pagehide`, so a backgrounded (and possibly killed) tab can never lose
+   * the user's place to an unflushed window.
+   */
+  flushPending(): void {
+    this.drainQueue();
+    this.flushWindow();
+  }
+
+  /**
+   * Unmount panic save: drains every recording still queued or in flight
+   * SYNCHRONOUSLY without snapping (raw ranges — the book may already be
+   * torn down mid-unmount; the late async completion of the in-flight item
+   * is dropped by the seq guard), then writes the legacy final segment.
+   */
+  flushSync(): void {
+    // 1. Drain the queue (snap=false). The in-flight recording (if any)
+    //    has not committed yet — commit it here; its async completion will
+    //    be stale and drop. Then issue the coalescing window, so the store
+    //    write lands BEFORE the final panic segment, exactly as the
+    //    write-through commits did.
+    this.drainQueue();
+    this.flushWindow();
 
     // 2. Legacy final-segment panic save (verbatim semantics).
     if (!this.previous) return;
@@ -284,6 +409,11 @@ export class ReadingSessionRecorder {
   }
 
   dispose(): void {
+    // A window holds positions that ALREADY committed and have simply not
+    // been written through yet — dropping them would lose the user's place,
+    // so it is issued before the recorder goes quiet. (The shell calls
+    // flushSync first, so this is normally a no-op.)
+    this.flushWindow();
     this.disposed = true;
     // Anything still queued or in flight must not write post-dispose
     // (flushSync, called first by the shell, already drained it).
@@ -381,4 +511,29 @@ export class ReadingSessionRecorder {
     updates.push(this.currentEntry(item));
     return { updates, historyAppended };
   }
+}
+
+// ── Active-recorder registry ──────────────────────────────────────────────
+//
+// The coalescing window means the Y.Doc trails the reader by up to
+// COMMIT_WINDOW_MS, so anything that has to observe the CURRENT position from
+// outside the reader tree must be able to drain it. Same prod-safe shape as
+// domains/reader/engine/activeEngineRegistry: one module-scope variable, no
+// side effects, and no import of its consumers.
+//
+// Its consumer today is the E2E persistence flush
+// (`window.__versicleTest.flushPersistence`, src/test-api.ts): specs turn a
+// page and then flush, so the window has to be issued BEFORE y-idb drains or
+// the spec would persist a position the reader has already left.
+
+let activeRecorder: ReadingSessionRecorder | null = null;
+
+/** The reader lifecycle registers its live recorder here, and clears it. */
+export function setActiveReadingSessionRecorder(recorder: ReadingSessionRecorder | null): void {
+  activeRecorder = recorder;
+}
+
+/** Issue the live recorder's merged window right now (no-op when none). */
+export function flushActiveReadingSession(): void {
+  activeRecorder?.flushPending();
 }

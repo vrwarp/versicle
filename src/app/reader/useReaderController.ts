@@ -22,7 +22,10 @@ import { useShallow } from 'zustand/react/shallow';
 import { useEpubReader, type EpubReaderOptions } from '@hooks/useEpubReader';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
-import { ReadingSessionRecorder } from '@domains/reader/session/ReadingSessionRecorder';
+import {
+  ReadingSessionRecorder,
+  setActiveReadingSessionRecorder,
+} from '@domains/reader/session/ReadingSessionRecorder';
 import type { ReaderCommands } from '@domains/reader/ui/ReaderCommands';
 import { SearchSession, createWorkerSearchEngineFactory, EmbeddingIndexer } from '@domains/search';
 import { getEmbeddingClient, type EmbeddingClient } from '@domains/google';
@@ -649,7 +652,10 @@ export function useReaderController(
   }, [readerMetadata, bookId, navigate]);
 
   // Reading-session recorder lifecycle (Phase 6 §6): one per book.
-  // flushSync on teardown is the legacy unmount panic save.
+  // flushSync on teardown is the legacy unmount panic save; the recorder's
+  // coalescing window (one CRDT write per 5s instead of one per page turn) is
+  // additionally drained on `visibilitychange` → hidden and on `pagehide` —
+  // the only signals a mobile background kill reliably delivers.
   useEffect(() => {
     if (!bookId) return;
     const recorder = new ReadingSessionRecorder({
@@ -677,9 +683,21 @@ export function useReaderController(
       onHistoryRecorded: () => setHistoryTick(t => t + 1),
     });
     recorderRef.current = recorder;
+    setActiveReadingSessionRecorder(recorder);
+
+    const flushOnPageHide = () => recorder.flushPending();
+    const flushOnHidden = () => {
+      if (document.visibilityState === 'hidden') recorder.flushPending();
+    };
+    document.addEventListener('visibilitychange', flushOnHidden);
+    window.addEventListener('pagehide', flushOnPageHide);
+
     return () => {
+      document.removeEventListener('visibilitychange', flushOnHidden);
+      window.removeEventListener('pagehide', flushOnPageHide);
       recorder.flushSync();
       recorder.dispose();
+      setActiveReadingSessionRecorder(null);
       recorderRef.current = null;
     };
   }, [bookId, coldOpenGuard]);

@@ -140,8 +140,19 @@ interface Book {
   /**
    * The binary Blob of the cover image.
    * Stored in IndexedDB (books store).
+   *
+   * perf: merged metadata OMITS this while the page is service-worker
+   * controlled — the SW serves every cover straight from IndexedDB, so
+   * materializing N thumbnails into the projection only pinned them for the
+   * life of the tab. Use {@link hasCover} to decide whether a cover EXISTS.
    */
   coverBlob?: Blob;
+  /**
+   * Whether a cover image exists for this book, independent of whether
+   * {@link coverBlob} was materialized. Additive and optional: readers that
+   * predate it fall back to `coverBlob instanceof Blob`.
+   */
+  hasCover?: boolean;
   /** Timestamp when the book was added to the library. */
   addedAt: number;
   /**
