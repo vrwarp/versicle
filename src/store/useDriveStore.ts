@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { createDedupedJSONStorage } from '@lib/persistStorage';
 
 export interface DriveFileIndex {
     id: string;
@@ -46,6 +47,12 @@ interface DriveConfigState {
     findFile: (bookTitle: string, filename?: string) => DriveFileIndex | undefined;
 }
 
+/** The persisted slice (the partialize allowlist below). */
+type PersistedDriveState = Pick<
+    DriveConfigState,
+    'linkedFolderId' | 'linkedFolderName' | 'index' | 'lastScanTime' | 'trickleEnabled'
+>;
+
 export const useDriveStore = create<DriveConfigState>()(
     persist(
         (set, get) => ({
@@ -90,7 +97,13 @@ export const useDriveStore = create<DriveConfigState>()(
         }),
         {
             name: 'drive-config-storage',
-            partialize: (state) => ({
+            // Deduped: the scanned `index` (one row per Drive file — thousands
+            // are possible) is in the allowlist below, and persist re-runs
+            // partialize + JSON.stringify + a synchronous localStorage commit
+            // after EVERY set. `setScanning(true)` alone used to re-serialize
+            // the whole index although `isScanning` is not persisted at all.
+            storage: createDedupedJSONStorage<PersistedDriveState>(),
+            partialize: (state): PersistedDriveState => ({
                 linkedFolderId: state.linkedFolderId,
                 linkedFolderName: state.linkedFolderName,
                 index: state.index,

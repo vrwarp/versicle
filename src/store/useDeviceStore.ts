@@ -48,6 +48,13 @@ interface DeviceState {
      * record (design §3.4) for the project-wide cross-device quota sum. Writes
      * ONLY the given device's record via an immutable spread — never clobbers
      * another device's entry.
+     *
+     * COALESCED (see {@link EMBED_SPEND_RPD_STEP}): the QuotaGovernor calls
+     * this on every acquire AND every commit of an embedding request, and each
+     * accepted call is a CRDT write (Y.Doc transaction → y-idb row → outbound
+     * push) plus a re-render of every subscriber of `devices`. The value is a
+     * COARSE cross-device quota signal, so a same-day move smaller than the
+     * step is dropped; a day rollover always writes.
      */
     publishEmbedSpend: (deviceId: string, spend: { day: string; rpd: number; tpm?: number }) => void;
 
@@ -58,6 +65,16 @@ interface DeviceState {
 }
 
 const HEARTBEAT_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Minimum same-day `rpd` movement that earns a synced write in
+ * `publishEmbedSpend`. Readers (makeBackgroundQuotaLimits in
+ * app/google/wireGoogle.ts, useQuotaMeters) sum this across OTHER devices to
+ * divide a shared daily ceiling of ~1000 requests, so being up to 9 requests
+ * stale per sibling is within the noise of a signal that is already a
+ * microtask-batched CRDT replication away from live.
+ */
+const EMBED_SPEND_RPD_STEP = 10;
 
 export const useDeviceStore = create<DeviceState>()(
     defineSyncedStore(
@@ -154,6 +171,19 @@ export const useDeviceStore = create<DeviceState>()(
                 set((state) => {
                     const existing = state.devices[deviceId];
                     if (!existing) return state;
+                    const previous = existing.embedSpend;
+                    // Same day and a sub-step move: keep the stored (coarse)
+                    // figure and the state object, so no CRDT update and no
+                    // subscriber re-render. A new day ALWAYS writes — the
+                    // reconciler drops spend stamped with a prior PT day, so a
+                    // stale stamp would silently stop counting this device.
+                    if (
+                        previous !== undefined &&
+                        previous.day === spend.day &&
+                        Math.abs(spend.rpd - previous.rpd) < EMBED_SPEND_RPD_STEP
+                    ) {
+                        return state;
+                    }
                     return {
                         devices: {
                             ...state.devices,

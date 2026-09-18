@@ -4,6 +4,7 @@
  * cache clear) moved verbatim from the deleted GlobalSettingsDialog.
  */
 import React from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useGenAIStore, DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';
 import { useToastStore } from '@store/useToastStore';
 import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
@@ -19,42 +20,94 @@ const GenAIPanel: React.FC = () => {
   const showToast = useToastStore((state) => state.showToast);
   const confirm = useConfirm();
 
+  // Scoped subscriptions, NOT `useGenAIStore()`: the bare hook subscribes to
+  // the whole state object, so every store write — the embedding model, the
+  // boot-time quota providers, anything — re-rendered this panel and its
+  // (heavy) tab. The settings this panel actually shows:
   const {
     apiKey,
-    setApiKey,
     model,
-    setModel,
     isEnabled,
-    setEnabled,
     isModelRotationEnabled,
-    setModelRotationEnabled,
     isContentAnalysisEnabled,
-    setContentAnalysisEnabled,
     isTableAdaptationEnabled,
-    setTableAdaptationEnabled,
     contentFilterSkipTypes,
-    setContentFilterSkipTypes,
-    logs,
     maxLogs,
+    isDebugModeEnabled,
+    quotaLimitsMap,
+    bgThrottlePercent,
+    fgRpdHeadroom,
+    pauseAllGenAI,
+    preEmbedLibrary,
+    shareAiCaches,
+    getQuotaSnapshot
+  } = useGenAIStore(
+    useShallow((state) => ({
+      apiKey: state.apiKey,
+      model: state.model,
+      isEnabled: state.isEnabled,
+      isModelRotationEnabled: state.isModelRotationEnabled,
+      isContentAnalysisEnabled: state.isContentAnalysisEnabled,
+      isTableAdaptationEnabled: state.isTableAdaptationEnabled,
+      contentFilterSkipTypes: state.contentFilterSkipTypes,
+      maxLogs: state.maxLogs,
+      isDebugModeEnabled: state.isDebugModeEnabled,
+      quotaLimitsMap: state.quotaLimitsMap,
+      bgThrottlePercent: state.bgThrottlePercent,
+      fgRpdHeadroom: state.fgRpdHeadroom,
+      pauseAllGenAI: state.pauseAllGenAI,
+      preEmbedLibrary: state.preEmbedLibrary,
+      shareAiCaches: state.shareAiCaches,
+      getQuotaSnapshot: state.getQuotaSnapshot
+    }))
+  );
+
+  // Actions are created once by the store factory, so this subscription never
+  // notifies; it is here to keep the handlers off the whole-state hook.
+  const {
+    setApiKey,
+    setModel,
+    setEnabled,
+    setModelRotationEnabled,
+    setContentAnalysisEnabled,
+    setTableAdaptationEnabled,
+    setContentFilterSkipTypes,
     setMaxLogs,
     clearLogs,
-    isDebugModeEnabled,
     setDebugModeEnabled,
-    quotaLimitsMap,
     setQuotaLimitsForPool,
     resetAllQuotaLimits,
-    bgThrottlePercent,
     setBgThrottlePercent,
-    fgRpdHeadroom,
     setFgRpdHeadroom,
-    pauseAllGenAI,
     setPauseAllGenAI,
-    preEmbedLibrary,
     setPreEmbedLibrary,
-    shareAiCaches,
-    setShareAiCaches,
-    getQuotaSnapshot
-  } = useGenAIStore();
+    setShareAiCaches
+  } = useGenAIStore(
+    useShallow((state) => ({
+      setApiKey: state.setApiKey,
+      setModel: state.setModel,
+      setEnabled: state.setEnabled,
+      setModelRotationEnabled: state.setModelRotationEnabled,
+      setContentAnalysisEnabled: state.setContentAnalysisEnabled,
+      setTableAdaptationEnabled: state.setTableAdaptationEnabled,
+      setContentFilterSkipTypes: state.setContentFilterSkipTypes,
+      setMaxLogs: state.setMaxLogs,
+      clearLogs: state.clearLogs,
+      setDebugModeEnabled: state.setDebugModeEnabled,
+      setQuotaLimitsForPool: state.setQuotaLimitsForPool,
+      resetAllQuotaLimits: state.resetAllQuotaLimits,
+      setBgThrottlePercent: state.setBgThrottlePercent,
+      setFgRpdHeadroom: state.setFgRpdHeadroom,
+      setPauseAllGenAI: state.setPauseAllGenAI,
+      setPreEmbedLibrary: state.setPreEmbedLibrary,
+      setShareAiCaches: state.setShareAiCaches
+    }))
+  );
+
+  // The activity log gets its OWN subscription: the tab's Debug Logs list is
+  // always rendered, so an appended entry has to reach it — but it is the only
+  // thing an addLog re-renders here now.
+  const logs = useGenAIStore((state) => state.logs);
 
   const handleResetPoolLimits = (ratePool: string) => {
     const defaultLimits = DEFAULT_QUOTA_LIMITS[ratePool] || DEFAULT_QUOTA_LIMITS['default'] || { rpm: 100, tpm: 30000, rpd: 1000 };

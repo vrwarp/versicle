@@ -348,7 +348,13 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
 
 
   // OPTIMIZATION: Memoize filtered and sorted books
+  // Only the LIBRARY context consumes this (the search bar's counts and the
+  // grid/list bodies below are both inside `context === 'library'` branches).
+  // /notes, /search and /drive render their own lazy views, so filtering and
+  // the O(N log N) collator sort are pure waste there — return `books`
+  // untouched instead (identity-stable, so nothing downstream churns).
   const filteredAndSortedBooks = useMemo(() => {
+    if (context !== 'library') return books;
     // BOLT OPTIMIZATION: Use debounced search query to prevent filtering/sorting on every keystroke
     const query = debouncedSearchQuery.toLowerCase();
     const isDownloadedFilter = libraryFilterMode === 'downloaded';
@@ -400,7 +406,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
           return 0;
       }
     });
-  }, [books, debouncedSearchQuery, librarySortOrder, libraryFilterMode, staticMetadata]);
+  }, [context, books, debouncedSearchQuery, librarySortOrder, libraryFilterMode, staticMetadata]);
 
   // OPTIMIZATION: Memoize rendered VDOM items to prevent O(N) allocation on every keystroke in the search bar.
   // When `searchQuery` updates (keystroke), LibraryView re-renders immediately, but `debouncedSearchQuery`
@@ -408,8 +414,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
   // Only the ACTIVE layout's item array is built (jank fix): both used to be
   // computed on every library change, allocating two full element trees for
   // an N-book library when exactly one of them is ever rendered.
+  // Both are consumed ONLY under `context === 'library'`, so the other three
+  // contexts skip the whole element tree too (the Drive shelf is a separate
+  // lazy component and builds its own rows).
   const renderedGridItems = useMemo(() => {
-    if (viewMode !== 'grid') return null;
+    if (context !== 'library' || viewMode !== 'grid') return null;
     return filteredAndSortedBooks.map((book) => {
       const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
       return (
@@ -426,10 +435,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
         </div>
       );
     });
-  }, [viewMode, filteredAndSortedBooks, staticMetadata, offloadedBookIds, handleBookOpen, handleDelete, handleOffload, handleRestore, handleResumeReading]);
+  }, [context, viewMode, filteredAndSortedBooks, staticMetadata, offloadedBookIds, handleBookOpen, handleDelete, handleOffload, handleRestore, handleResumeReading]);
 
   const renderedListItems = useMemo(() => {
-    if (viewMode !== 'list') return null;
+    if (context !== 'library' || viewMode !== 'list') return null;
     return filteredAndSortedBooks.map((book) => {
       const isGhostBook = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
       return (
@@ -444,7 +453,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
         />
       );
     });
-  }, [viewMode, filteredAndSortedBooks, staticMetadata, offloadedBookIds, handleBookOpen, handleDelete, handleOffload, handleRestore]);
+  }, [context, viewMode, filteredAndSortedBooks, staticMetadata, offloadedBookIds, handleBookOpen, handleDelete, handleOffload, handleRestore]);
 
 
   return (

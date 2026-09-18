@@ -70,8 +70,27 @@ describe('wireSyncEvents (single SyncEvent subscriber)', () => {
       bus.emit({ type: 'flushed', at: 1234567890 });
       expect(useSyncStore.getState().lastSyncTime).toBe(1234567890);
 
-      bus.emit({ type: 'flushed', at: 1234567999 });
-      expect(useSyncStore.getState().lastSyncTime).toBe(1234567999);
+      // A LATER save re-stamps it. The store coalesces stamps inside one
+      // second (useSyncStore.test.ts pins why: every stamp is a synchronous
+      // localStorage write), so this one is a full second on.
+      bus.emit({ type: 'flushed', at: 1234568890 });
+      expect(useSyncStore.getState().lastSyncTime).toBe(1234568890);
+    });
+
+    it('regression: a burst of committed saves inside one second stamps once (no per-save localStorage write)', () => {
+      const bus = getSyncEventBus();
+      const setItem = vi.spyOn(window.localStorage, 'setItem');
+
+      for (let i = 0; i < 25; i++) {
+        bus.emit({ type: 'flushed', at: 1234567890 + i * 20 });
+      }
+
+      try {
+        expect(setItem.mock.calls.filter(([key]) => key === 'sync-storage')).toHaveLength(1);
+        expect(useSyncStore.getState().lastSyncTime).toBe(1234567890);
+      } finally {
+        setItem.mockRestore();
+      }
     });
 
     it("regression: status events never stamp lastSyncTime — 'flushed' is the only writer (the transitional connected-transition floor is dead)", () => {

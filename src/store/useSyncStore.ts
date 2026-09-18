@@ -50,8 +50,25 @@ interface SyncStore {
     // === Shared State ===
     /** Timestamp of last successful sync */
     lastSyncTime: number | null;
+    /**
+     * Stamp the last committed save. COALESCED to
+     * {@link LAST_SYNC_COALESCE_MS}: this store is persist-wrapped, and zustand
+     * persist re-serializes the whole partialized slice and calls
+     * `localStorage.setItem` SYNCHRONOUSLY after every `set` — so an unfiltered
+     * stamp turned each committed save (wireSyncEvents' `flushed` handler) into
+     * a blocking main-thread storage write. The only reader renders it through
+     * `formatTime` (short time — minutes), so the dropped sub-second precision
+     * is not observable.
+     */
     setLastSyncTime: (time: number) => void;
 }
+
+/**
+ * How close two committed-save timestamps have to be for the second to be
+ * dropped. One second: far below the minute granularity the sync-pulse tooltip
+ * renders, far above the burst rate of a flushing save queue.
+ */
+const LAST_SYNC_COALESCE_MS = 1000;
 
 const defaultFirebaseConfig: FirebaseConfigSettings = {
     apiKey: '',
@@ -64,7 +81,7 @@ const defaultFirebaseConfig: FirebaseConfigSettings = {
 
 export const useSyncStore = create<SyncStore>()(
     persist(
-        (set) => ({
+        (set, get) => ({
             // Onboarding
             hasCompletedOnboarding: false,
             setHasCompletedOnboarding: (completed) => set({ hasCompletedOnboarding: completed }),
@@ -94,7 +111,14 @@ export const useSyncStore = create<SyncStore>()(
 
             // Shared
             lastSyncTime: null,
-            setLastSyncTime: (time) => set({ lastSyncTime: time }),
+            setLastSyncTime: (time) => {
+                const previous = get().lastSyncTime;
+                // Skip the `set` ENTIRELY (not just the state change): persist
+                // writes after every set call, including one that returns an
+                // identical state.
+                if (previous !== null && Math.abs(time - previous) < LAST_SYNC_COALESCE_MS) return;
+                set({ lastSyncTime: time });
+            },
         }),
         {
             name: 'sync-storage',
