@@ -9,6 +9,13 @@
  * the per-section `occurrence`). `k=60` is the standard RRF constant — it
  * damps the head so a #1 in one list doesn't dwarf a strong #2/#3 in the other.
  *
+ * CONTRACT: a result's rank is its ARRAY INDEX, so BOTH lists must ALREADY be
+ * ordered best-first — this fuses rankings, it does not build them. Notably
+ * `semanticRank` returns EMBEDDED-SECTION order, not similarity order, so
+ * `SearchSession.search` sorts that list by descending cosine before calling
+ * in; hand a section-ordered list straight here and the cap below drops hits
+ * by chapter position instead of by match quality.
+ *
  * Pure: imports only ~types/search. Exact-match regex wins (names/quotes)
  * survive while "passage about X" semantic hits join, never displacing them.
  * `truncated` is carried through from the caller (the regex scan's honest cap).

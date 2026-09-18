@@ -17,7 +17,12 @@
  *    clears caches unconditionally.
  */
 import { AppError, NetRateLimitedError } from '~types/errors';
-import type { SearchBatchResult, SearchSection, EmbeddingStatus } from '~types/search';
+import type {
+  DetailedSearchResult,
+  SearchBatchResult,
+  SearchSection,
+  EmbeddingStatus,
+} from '~types/search';
 import { sectionHasEmbeddableText } from './chunker';
 import { effectiveSectionHash } from './sectionHash';
 import { QueryEmbeddingCache } from './queryEmbeddingCache';
@@ -250,7 +255,9 @@ export class SearchSession {
       });
       // Not embedded / stamp-mismatch / no hits → keep the pure regex result.
       if (semantic.length === 0) return regex;
-      return fuseRrf(regex.results, semantic, { truncated: regex.truncated });
+      return fuseRrf(regex.results, byDescendingSimilarity(semantic), {
+        truncated: regex.truncated,
+      });
     } catch (error) {
       // Only EXPECTED quota/network errors fall back to regex (semantic is
       // purely additive and must never regress full-text). Anything else (a
@@ -378,6 +385,28 @@ export class SearchSession {
       });
     }
   }
+}
+
+/**
+ * The semantic list, re-ordered into the QUALITY ranking {@link fuseRrf}
+ * consumes (descending cosine), as a copy — the caller's array is untouched.
+ *
+ * {@link semanticRank} deliberately assembles its rows in EMBEDDED-SECTION
+ * order (per-section top-k, sections concatenated front to back) so its
+ * concurrent per-section `rankInt8` calls stay byte-identical to a sequential
+ * pass. `fuseRrf` derives each row's rank from its ARRAY INDEX, so handing that
+ * list over unchanged made a hit's reciprocal-rank contribution a function of
+ * WHICH CHAPTER it came from rather than how well it matched: on a 30-section
+ * book a 0.91-cosine passage in section 24 sits at index ~460 and scores below
+ * every weak section-0 row. That only mis-ordered an uncapped fused list; with
+ * the fused cap it costs RESULTS — the strong late hit is dropped outright.
+ *
+ * The sort is stable, so equal-similarity rows keep their section order and the
+ * fused output stays deterministic. The REGEX list's ordering (the engine's own
+ * occurrence order, which is already its ranking) is never touched.
+ */
+function byDescendingSimilarity(semantic: DetailedSearchResult[]): DetailedSearchResult[] {
+  return [...semantic].sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0));
 }
 
 /**

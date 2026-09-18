@@ -372,6 +372,78 @@ describe('useGlobalSearch', () => {
   });
 
   /**
+   * The TOP_K cut was SILENT: nothing in the hook's return value or the view
+   * said the list had been cut, so a page filled by one strongly-matching book
+   * (20 rows per section, ~15% chunk overlap → near-duplicate high-scoring
+   * tuples) read as "Found 100 match(es)" — the whole answer, with every other
+   * book's best passage quietly gone.
+   */
+  describe('regression: global search reports the TOP_K cut', () => {
+    it('flags truncation when more tuples ranked than the page holds', async () => {
+      seedBooks('bk-1');
+      const { deps } = makeDeps({
+        corpora: new Map([['bk-1', corpusRow('bk-1', 200)]]),
+        embeddings: new Map([['bk-1', embeddedRow('bk-1', 200, 20)]]),
+        rowsPerSection: 20,
+      });
+
+      const { result } = renderHook(() => useGlobalSearch(deps));
+      await act(async () => {
+        await result.current.executeSearch('whale');
+      });
+
+      // 200 sections x 20 rows = 4000 ranked tuples, cut to a page of 100.
+      const total = result.current.results.reduce((n, group) => n + group.matches.length, 0);
+      expect(total).toBe(100);
+      expect(result.current.truncated).toBe(true);
+    });
+
+    it('does not flag truncation when the whole ranking fits on the page', async () => {
+      seedBooks('bk-1');
+      const { deps } = makeDeps({
+        corpora: new Map([['bk-1', corpusRow('bk-1', 2)]]),
+        embeddings: new Map([['bk-1', embeddedRow('bk-1', 2)]]),
+      });
+
+      const { result } = renderHook(() => useGlobalSearch(deps));
+      await act(async () => {
+        await result.current.executeSearch('whale');
+      });
+
+      const total = result.current.results.reduce((n, group) => n + group.matches.length, 0);
+      expect(total).toBe(2);
+      expect(result.current.truncated).toBe(false);
+    });
+
+    it('clears the flag when a later query is not cut', async () => {
+      seedBooks('bk-big', 'bk-small');
+      const { deps } = makeDeps({
+        corpora: new Map([
+          ['bk-big', corpusRow('bk-big', 200)],
+          ['bk-small', corpusRow('bk-small', 1)],
+        ]),
+        embeddings: new Map([
+          ['bk-big', embeddedRow('bk-big', 200, 20)],
+          ['bk-small', embeddedRow('bk-small', 1)],
+        ]),
+        rowsPerSection: 20,
+      });
+
+      const { result } = renderHook(() => useGlobalSearch(deps));
+      await act(async () => {
+        await result.current.executeSearch('whale');
+      });
+      expect(result.current.truncated).toBe(true);
+
+      // An empty query resets the view — the stale notice must go with it.
+      await act(async () => {
+        await result.current.executeSearch('   ');
+      });
+      expect(result.current.truncated).toBe(false);
+    });
+  });
+
+  /**
    * The badge grid read EVERY book's entire search text AND its entire packed
    * vector row just to decide indexed/partial/unindexed. The stamped job row
    * answers it on its own.

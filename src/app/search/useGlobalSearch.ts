@@ -174,6 +174,13 @@ export function useGlobalSearch(deps: Partial<GlobalSearchDeps> = {}) {
   const [results, setResults] = useState<GroupedBookMatches[]>([]);
   const [status, setStatus] = useState<SearchStatus>('idle');
   const [errorType, setErrorType] = useState<SearchErrorType | undefined>(undefined);
+  /**
+   * True when the {@link TOP_K} cut actually dropped ranked hits, so the view
+   * can say so instead of presenting a cut page as the whole answer (the
+   * reader's SearchPanel carries the same "Showing the first N matches" line
+   * for its own truncation).
+   */
+  const [truncated, setTruncated] = useState(false);
   const [indexingStatuses, setIndexingStatuses] = useState<BookIndexingStatus[]>([]);
 
   const activeHandleRef = useRef<SearchEngineHandle | null>(null);
@@ -286,6 +293,8 @@ export function useGlobalSearch(deps: Partial<GlobalSearchDeps> = {}) {
     // must abandon its results instead of racing this one into setState.
     const runToken = ++runTokenRef.current;
     const isCurrent = () => runTokenRef.current === runToken;
+    // Nothing has been cut yet; the slice below re-raises this when it cuts.
+    setTruncated(false);
 
     if (!trimmed) {
       lastQueryRef.current = '';
@@ -424,7 +433,15 @@ export function useGlobalSearch(deps: Partial<GlobalSearchDeps> = {}) {
         if (bookHits) rankedHits.push(...bookHits);
       }
       rankedHits.sort((a, b) => b.cosine - a.cosine);
-      const survivors = rankedHits.length > TOP_K ? rankedHits.slice(0, TOP_K) : rankedHits;
+      // Ranking keeps up to PER_SECTION_ROWS per section per book and the
+      // chunker overlaps ~15%, so ONE strongly-matching book routinely ranks
+      // more than TOP_K near-duplicate tuples and fills the whole page. Report
+      // the cut rather than letting the view present it as the whole answer.
+      // (Deliberately NOT a per-book quota: which passages the user gets is a
+      // ranking decision, not this perf change's to make, and near-duplicate
+      // overlapping chunks are a dedup problem, not a fairness one.)
+      const wasCut = rankedHits.length > TOP_K;
+      const survivors = wasCut ? rankedHits.slice(0, TOP_K) : rankedHits;
 
       // 5. Materialize ONLY the survivors: one excerpt + one sentence
       //    segmentation each, reading each surviving book's text once.
@@ -458,6 +475,9 @@ export function useGlobalSearch(deps: Partial<GlobalSearchDeps> = {}) {
       }
 
       setResults(grouped);
+      // Published with the results a superseded run never reaches, so the
+      // notice can never outlive the page it describes.
+      setTruncated(wasCut);
       setStatus('success');
 
       // 7. Add query to synced search history
@@ -614,6 +634,7 @@ export function useGlobalSearch(deps: Partial<GlobalSearchDeps> = {}) {
     status,
     setStatus,
     errorType,
+    truncated,
     indexingStatuses,
     recentQueries,
     savedQueries,
