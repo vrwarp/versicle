@@ -34,6 +34,10 @@ describe('data/repos/audioCache', () => {
   beforeEach(async () => {
     const db = await getConnection();
     await db.clear('cache_audio_blobs');
+    // The eviction sweep's persisted running byte total lives here; clearing
+    // it puts every test back on the "total unknown ⇒ full scan" path (rows
+    // seeded through db.put bypass the repo's accounting).
+    await db.clear('app_metadata');
   });
 
   afterEach(async () => {
@@ -97,7 +101,7 @@ describe('data/repos/audioCache', () => {
     it('no-ops when the cache is under budget', async () => {
       await seedRow('a', { size: 100, lastAccessed: Date.now() - 2 * DAY });
       const result = await audioCache.runEviction(1000);
-      expect(result).toEqual({ deleted: 0, freedBytes: 0 });
+      expect(result).toEqual({ deleted: 0, freedBytes: 0, scanned: 1 });
     });
 
     it('deletes oldest-first until under budget', async () => {
@@ -141,12 +145,20 @@ describe('data/repos/audioCache', () => {
       expect(await db.get('cache_audio_blobs', 'new-small')).toBeDefined();
     });
 
+    it('persists the scanned total so the next sweep can skip the scan', async () => {
+      await seedRow('a', { size: 100, lastAccessed: Date.now() - 2 * DAY });
+      await audioCache.runEviction(1000);
+      const db = await getConnection();
+      expect(await db.get('app_metadata', 'audio-cache-total-bytes')).toBe(100);
+    });
+
     it('uses the default 512 MiB budget constant', () => {
       expect(AUDIO_CACHE_BUDGET_BYTES).toBe(512 * 1024 * 1024);
     });
 
     it('runs a sweep after every N puts', async () => {
-      const sweepSpy = vi.spyOn(audioCache, 'runEviction').mockResolvedValue({ deleted: 0, freedBytes: 0 });
+      const sweepSpy = vi.spyOn(audioCache, 'runEviction')
+        .mockResolvedValue({ deleted: 0, freedBytes: 0, scanned: 0 });
       try {
         for (let i = 0; i < EVICTION_PUT_INTERVAL; i++) {
           await audioCache.putSegment(`burst-${i}`, new ArrayBuffer(1));
@@ -155,6 +167,77 @@ describe('data/repos/audioCache', () => {
       } finally {
         sweepSpy.mockRestore();
       }
+    });
+  });
+
+  /**
+   * Every sweep used to open a VALUE cursor over the whole store — at boot and
+   * after every EVICTION_PUT_INTERVAL puts — so each row's multi-hundred-KB
+   * audio ArrayBuffer was deserialized on the main thread before the
+   * `totalBytes <= budgetBytes` early-out could run. The persisted running
+   * total (app_metadata['audio-cache-total-bytes']) now answers "are we under
+   * budget?" without touching a single row.
+   */
+  describe('regression: eviction does not scan while under budget', () => {
+    it('skips the cursor entirely once the tracked total is known (scanned === 0)', async () => {
+      const now = Date.now();
+      await seedRow('kept-1', { size: 100, lastAccessed: now - 2 * DAY });
+      await seedRow('kept-2', { size: 100, lastAccessed: now - 3 * DAY });
+
+      // First sweep establishes the total the expensive way.
+      const first = await audioCache.runEviction(1000);
+      expect(first.scanned).toBe(2);
+
+      // Second sweep: the tracked total answers it — no rows deserialized.
+      const db = await getConnection();
+      const txSpy = vi.spyOn(db, 'transaction');
+      try {
+        const second = await audioCache.runEviction(1000);
+        expect(second).toEqual({ deleted: 0, freedBytes: 0, scanned: 0 });
+        const readonlyScans = txSpy.mock.calls.filter(
+          ([stores, mode]) => mode === 'readonly' && String(stores).includes('cache_audio_blobs'),
+        );
+        expect(readonlyScans).toHaveLength(0);
+      } finally {
+        txSpy.mockRestore();
+      }
+
+      // …and nothing was evicted.
+      expect(await db.get('cache_audio_blobs', 'kept-1')).toBeDefined();
+      expect(await db.get('cache_audio_blobs', 'kept-2')).toBeDefined();
+    });
+
+    it('counts puts into the tracked total so growth still trips a sweep', async () => {
+      // Seed the persisted total at 0 with an empty-store sweep…
+      expect((await audioCache.runEviction(500)).scanned).toBe(0);
+      const db = await getConnection();
+      expect(await db.get('app_metadata', 'audio-cache-total-bytes')).toBe(0);
+
+      // …then put enough bytes to exceed the budget: the next sweep must scan.
+      await audioCache.putSegment('grown', new ArrayBuffer(600));
+      const sweep = await audioCache.runEviction(500);
+      expect(sweep.scanned).toBe(1);
+    });
+
+    it('still scans and deletes correctly on a real overflow', async () => {
+      const now = Date.now();
+      for (let i = 0; i < 5; i++) {
+        await seedRow(`over-${i}`, { size: 1000, lastAccessed: now - (10 - i) * DAY });
+      }
+
+      const result = await audioCache.runEviction(2500);
+      expect(result.scanned).toBe(5);
+      expect(result.deleted).toBe(3);
+      expect(result.freedBytes).toBe(3000);
+
+      const db = await getConnection();
+      expect(await db.get('cache_audio_blobs', 'over-0')).toBeUndefined();
+      expect(await db.get('cache_audio_blobs', 'over-3')).toBeDefined();
+      // The delete batch carried the corrected total in the same transaction.
+      expect(await db.get('app_metadata', 'audio-cache-total-bytes')).toBe(2000);
+
+      // The next sweep is free.
+      expect((await audioCache.runEviction(2500)).scanned).toBe(0);
     });
   });
 });

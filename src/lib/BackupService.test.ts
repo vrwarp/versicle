@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import * as Y from 'yjs';
+import JSZip from 'jszip';
 import { BackupService, type BackupManifestV2, type BackupManifestV3 } from './BackupService';
 import { bookContent } from '@data/repos/bookContent';
 import { exportFile } from './export';
@@ -104,6 +105,218 @@ vi.mock('@store/useAnnotationStore', () => ({
     setState: vi.fn(),
   },
 }));
+
+/**
+ * uint8ArrayToBase64 built its output with a per-byte `binary +=
+ * String.fromCharCode(b)` — measured ~74 ms/MB, so a library with a few
+ * hundred covers spent well over a second blocking the main thread inside
+ * generateManifest. The chunked helpers must produce byte-identical output.
+ */
+describe('regression: base64 helpers are chunked', () => {
+  const service = new BackupService();
+  /** The pre-fix implementation, verbatim, as the oracle. */
+  const referenceEncode = (bytes: Uint8Array): string => {
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  };
+  const referenceDecode = (base64: string): Uint8Array => {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  };
+  const encode = (bytes: Uint8Array): string => service['uint8ArrayToBase64'](bytes);
+  const decode = (base64: string): Uint8Array => service['base64ToUint8Array'](base64);
+
+  const randomBytes = (length: number): Uint8Array => {
+    const bytes = new Uint8Array(length);
+    // Deterministic LCG: every byte value appears, including >0x7F.
+    let seed = 0x2f6e2b1;
+    for (let i = 0; i < length; i++) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      bytes[i] = (seed >>> 16) & 0xff;
+    }
+    return bytes;
+  };
+
+  it('encodes ≥1 MB byte-identically to the reference implementation', () => {
+    const bytes = randomBytes(1024 * 1024 + 7); // not a multiple of the window
+    expect(encode(bytes)).toBe(referenceEncode(bytes));
+  });
+
+  it('round-trips ≥1 MB of binary through both helpers', () => {
+    const bytes = randomBytes(1024 * 1024 + 7);
+    expect(Array.from(decode(encode(bytes)))).toEqual(Array.from(bytes));
+  });
+
+  it('decodes byte-identically to the reference implementation', () => {
+    const base64 = referenceEncode(randomBytes(300_000));
+    expect(Array.from(decode(base64))).toEqual(Array.from(referenceDecode(base64)));
+  });
+
+  it('agrees on window boundaries, padding and the empty input', () => {
+    for (const length of [0, 1, 2, 3, 0x7fff, 0x8000, 0x8001, 0x18000 - 1]) {
+      const bytes = randomBytes(length);
+      const encoded = encode(bytes);
+      expect(encoded).toBe(referenceEncode(bytes));
+      expect(Array.from(decode(encoded))).toEqual(Array.from(bytes));
+    }
+  });
+
+  it('still decodes whitespace-wrapped base64 (single-shot fallback)', () => {
+    const bytes = randomBytes(200_000);
+    const wrapped = referenceEncode(bytes).replace(/(.{76})/g, '$1\n');
+    expect(Array.from(decode(wrapped))).toEqual(Array.from(bytes));
+  });
+
+  it('stays far under a generous wall-clock budget, and beats the per-byte build', () => {
+    const bytes = randomBytes(4 * 1024 * 1024);
+
+    const chunkedStart = performance.now();
+    const encoded = encode(bytes);
+    decode(encoded);
+    const chunkedMs = performance.now() - chunkedStart;
+
+    const referenceStart = performance.now();
+    referenceDecode(referenceEncode(bytes));
+    const referenceMs = performance.now() - referenceStart;
+
+    // Absolute guard rail first (machine-independent sanity)…
+    expect(chunkedMs).toBeLessThan(2000);
+    // …then the point of the change: the per-byte string build is quadratic
+    // in practice (~450 ms for this input vs ~65 ms chunked). Asserting a
+    // RATIO keeps the test honest on slow CI without being flaky — the real
+    // gap is ~8×, the floor here is 2×.
+    expect(chunkedMs * 2).toBeLessThan(referenceMs);
+  });
+});
+
+/**
+ * createFullBackup used to call `zip.generateAsync({ type: 'blob' })`, which
+ * accumulates every chunk, concatenates them into one Uint8Array, converts
+ * that to an ArrayBuffer and only then builds the Blob — three copies of the
+ * whole library in memory at once (five on native, where export base64s it).
+ */
+describe('regression: full backup streams instead of accumulating', () => {
+  let service: BackupService;
+
+  beforeEach(async () => {
+    service = new BackupService();
+    vi.clearAllMocks();
+    vi.mocked(bookContent.listManifests).mockResolvedValue([]);
+    vi.mocked(bookContent.listLocations).mockResolvedValue([]);
+    const yjsProvider = await import('@store/yjs-provider');
+    const library = yjsProvider.getYDoc().getMap('library');
+    library.clear();
+    library.set('books', new Y.Map());
+    const books = library.get('books') as Y.Map<unknown>;
+    books.set('b1', { bookId: 'b1', title: 'Book 1' });
+    books.set('b2', { bookId: 'b2', title: 'Book 2' });
+    vi.spyOn(console, 'warn').mockImplementation(() => { });
+    vi.spyOn(console, 'error').mockImplementation(() => { });
+  });
+
+  /** Records the chunk list handed to the zip Blob constructor. */
+  function recordZipBlob(): { parts: () => BlobPart[]; restore: () => void } {
+    const Original = globalThis.Blob;
+    let captured: BlobPart[] = [];
+    class RecordingBlob extends Original {
+      constructor(parts?: BlobPart[], options?: BlobPropertyBag) {
+        super(parts, options);
+        if (options?.type === 'application/zip') captured = parts ?? [];
+      }
+    }
+    globalThis.Blob = RecordingBlob as unknown as typeof Blob;
+    return {
+      parts: () => captured,
+      restore: () => {
+        globalThis.Blob = Original;
+      },
+    };
+  }
+
+  it('never calls generateAsync and builds the Blob from ≥2 stream chunks', async () => {
+    const generateAsync = vi.spyOn(JSZip.prototype, 'generateAsync');
+    // A book big enough that the archive arrives in several chunks.
+    vi.mocked(bookContent.getBookFile).mockResolvedValue(new Uint8Array(400_000).buffer);
+    const recorder = recordZipBlob();
+
+    try {
+      await service.createFullBackup();
+    } finally {
+      recorder.restore();
+      generateAsync.mockRestore();
+    }
+
+    expect(generateAsync).not.toHaveBeenCalled();
+    const parts = recorder.parts();
+    expect(parts.length).toBeGreaterThanOrEqual(2);
+    expect(parts.every((part) => part instanceof Uint8Array)).toBe(true);
+  });
+
+  it('reports compression progress the whole way to 100', async () => {
+    vi.mocked(bookContent.getBookFile).mockResolvedValue(new Uint8Array(200_000).buffer);
+    const onProgress = vi.fn();
+
+    await service.createFullBackup(onProgress);
+
+    const percents = onProgress.mock.calls.map(([percent]) => percent as number);
+    expect(percents.some((p) => p > 90 && p <= 100)).toBe(true);
+    expect(percents[percents.length - 1]).toBe(100);
+    expect(onProgress).toHaveBeenLastCalledWith(100, 'Done!');
+  });
+
+  it('produces an archive the restore path reads back', async () => {
+    const bytes = new Uint8Array([80, 75, 3, 4, 42, 7, 9]);
+    vi.mocked(bookContent.getBookFile).mockResolvedValue(bytes.buffer);
+
+    await service.createFullBackup();
+    const { data } = vi.mocked(exportFile).mock.calls[0][0];
+    expect(data).toBeInstanceOf(Blob);
+
+    await service.restoreBackup(new File([data as Blob], 'versicle_backup_full.zip'));
+
+    const restored = vi.mocked(bookContent.restoreResource).mock.calls;
+    expect(restored.map(([bookId]) => bookId).sort()).toEqual(['b1', 'b2']);
+    expect(Array.from(new Uint8Array(restored[0][1]))).toEqual(Array.from(bytes));
+  });
+
+  it('inflates at most two entries at a time during a restore', async () => {
+    vi.mocked(bookContent.getBookFile).mockResolvedValue(new Uint8Array([1, 2, 3]).buffer);
+    const doc = (await import('@store/yjs-provider')).getYDoc();
+    const books = doc.getMap('library').get('books') as Y.Map<unknown>;
+    for (const id of ['b3', 'b4', 'b5', 'b6']) books.set(id, { bookId: id, title: id });
+
+    await service.createFullBackup();
+    const { data } = vi.mocked(exportFile).mock.calls[0][0];
+
+    const zip = await JSZip.loadAsync(data as Blob);
+    let inFlight = 0;
+    let peak = 0;
+    zip.folder('files')!.forEach((_path, entry) => {
+      const original = entry.async.bind(entry);
+      const counting = (async (type: Parameters<typeof original>[0]) => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return await original(type);
+        } finally {
+          inFlight -= 1;
+        }
+      }) as typeof original;
+      (entry as unknown as { async: typeof original }).async = counting;
+    });
+
+    const manifestText = await zip.file('manifest.json')!.async('string');
+    await service.processManifest(JSON.parse(manifestText) as BackupManifestV3, zip);
+
+    expect(vi.mocked(bookContent.restoreResource).mock.calls).toHaveLength(6);
+    expect(peak).toBeGreaterThan(0);
+    expect(peak).toBeLessThanOrEqual(2);
+  });
+});
 
 describe('BackupService (v2 - Yjs Snapshots)', () => {
   let service: BackupService;

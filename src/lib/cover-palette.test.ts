@@ -99,6 +99,55 @@ describe('extractCoverPalette', () => {
     });
 });
 
+/**
+ * The full-resolution ImageBitmap decoded from the cover was never closed —
+ * it lived until GC on the import AND reprocess paths.
+ */
+describe('regression: the source bitmap is closed', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('closes the decoded bitmap after a successful extraction', async () => {
+        const close = vi.fn();
+        const mockContext = {
+            drawImage: vi.fn(),
+            getImageData: vi.fn().mockReturnValue({ data: new Uint8ClampedArray(1024).fill(255) }),
+        };
+        (globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas = undefined;
+        vi.spyOn(document, 'createElement').mockReturnValue({
+            getContext: vi.fn().mockReturnValue(mockContext),
+        } as unknown as HTMLElement);
+        global.createImageBitmap = vi.fn().mockResolvedValue({ close } as unknown as ImageBitmap);
+
+        await extractCoverPalette(new Blob(['test']));
+
+        expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes it even when the canvas context is unavailable (early return)', async () => {
+        const close = vi.fn();
+        (globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas = undefined;
+        vi.spyOn(document, 'createElement').mockReturnValue({
+            getContext: vi.fn().mockReturnValue(null),
+        } as unknown as HTMLElement);
+        global.createImageBitmap = vi.fn().mockResolvedValue({ close } as unknown as ImageBitmap);
+
+        expect(await extractCoverPalette(new Blob(['test']))).toEqual({ palette: [] });
+        expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    it('survives a bitmap without close() (older engines, test doubles)', async () => {
+        (globalThis as { OffscreenCanvas?: unknown }).OffscreenCanvas = undefined;
+        vi.spyOn(document, 'createElement').mockReturnValue({
+            getContext: vi.fn().mockReturnValue(null),
+        } as unknown as HTMLElement);
+        global.createImageBitmap = vi.fn().mockResolvedValue({} as ImageBitmap);
+
+        expect(await extractCoverPalette(new Blob(['test']))).toEqual({ palette: [] });
+    });
+});
+
 describe('Perceptual Color Utils', () => {
     describe('rgbToXyz', () => {
         it('should correctly convert sRGB to XYZ', () => {

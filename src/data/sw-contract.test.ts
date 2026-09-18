@@ -2,8 +2,8 @@
 // src/sw-utils.ts into src/data/sw-contract.ts (P3-4; test-absorption
 // ledger, master plan §4 rule 8). The covers.ts suite below pins the
 // app↔SW cover-route contract that used to be five copy-pasted literals.
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getCoverFromDB, createCoverResponse, STATIC_MANIFESTS_STORE, BOOKS_STORE, DB_NAME } from './sw-contract';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { getCoverFromDB, createCoverResponse, closeCoverConnection, STATIC_MANIFESTS_STORE, BOOKS_STORE, DB_NAME } from './sw-contract';
 import { COVERS_ENDPOINT_PREFIX, coverUrl, parseCoverPath } from './covers';
 import * as idb from 'idb';
 
@@ -44,9 +44,16 @@ describe('Service Worker Database Utils', () => {
         close: vi.fn(),
     };
 
-    beforeEach(() => {
+    beforeEach(async () => {
+        // The cover connection is shared across calls now — drop it so each
+        // test starts from a cold open.
+        await closeCoverConnection();
         vi.clearAllMocks();
         vi.mocked(idb.openDB).mockResolvedValue(mockDb as unknown as idb.IDBPDatabase);
+    });
+
+    afterEach(async () => {
+        await closeCoverConnection();
     });
 
     it('retrieves cover from static_manifests in v18 architecture', async () => {
@@ -60,7 +67,6 @@ describe('Service Worker Database Utils', () => {
         expect(mockDb.objectStoreNames.contains).toHaveBeenCalledWith(STATIC_MANIFESTS_STORE);
         expect(mockDb.get).toHaveBeenCalledWith(STATIC_MANIFESTS_STORE, '123');
         expect(result).toBe(blob);
-        expect(mockDb.close).toHaveBeenCalled();
     });
 
     it('retrieves cover from books in legacy architecture', async () => {
@@ -75,14 +81,12 @@ describe('Service Worker Database Utils', () => {
         expect(mockDb.objectStoreNames.contains).toHaveBeenCalledWith(BOOKS_STORE);
         expect(mockDb.get).toHaveBeenCalledWith(BOOKS_STORE, '456');
         expect(result).toBe(blob);
-        expect(mockDb.close).toHaveBeenCalled();
     });
 
     it('returns undefined if no suitable store found', async () => {
          mockDb.objectStoreNames.contains.mockReturnValue(false);
          const result = await getCoverFromDB('789');
          expect(result).toBeUndefined();
-         expect(mockDb.close).toHaveBeenCalled();
     });
 
     it('returns 404 response when cover missing (undefined)', async () => {
@@ -91,7 +95,6 @@ describe('Service Worker Database Utils', () => {
 
          const response = await createCoverResponse('999');
          expect(response.status).toBe(404);
-         expect(mockDb.close).toHaveBeenCalled();
     });
 
     it('returns 200 response with correct blob when found', async () => {
@@ -139,7 +142,95 @@ describe('Service Worker Database Utils', () => {
             const response = await createCoverResponse('abc');
             expect(response.status).toBe(200);
             expect(response.headers.get('Content-Type')).toBe('image/png');
-            expect(mockDb.close).toHaveBeenCalled();
+        } finally {
+            global.Response = originalResponse;
+        }
+    });
+});
+
+/**
+ * getCoverFromDB opened a NEW IndexedDB connection per cover and closed it in
+ * a finally — one full open/close handshake per visible cover per paint, on
+ * the service worker's single thread.
+ */
+describe('regression: cover reads share one connection', () => {
+    const mockDb = {
+        objectStoreNames: { contains: vi.fn(() => true) },
+        get: vi.fn(async () => ({ coverBlob: new Blob(['x'], { type: 'image/webp' }) })),
+        close: vi.fn(),
+    };
+
+    beforeEach(async () => {
+        await closeCoverConnection();
+        vi.clearAllMocks();
+        mockDb.objectStoreNames.contains.mockReturnValue(true);
+        vi.mocked(idb.openDB).mockResolvedValue(mockDb as unknown as idb.IDBPDatabase);
+    });
+
+    afterEach(async () => {
+        await closeCoverConnection();
+    });
+
+    it('opens the database once across a burst of cover requests', async () => {
+        await Promise.all(Array.from({ length: 8 }, (_, i) => getCoverFromDB(`book-${i}`)));
+        await getCoverFromDB('book-later');
+
+        expect(idb.openDB).toHaveBeenCalledTimes(1);
+        expect(mockDb.get).toHaveBeenCalledTimes(9);
+        expect(mockDb.close).not.toHaveBeenCalled();
+    });
+
+    it('opens unversioned so the service worker can never trigger an upgrade', async () => {
+        await getCoverFromDB('book-1');
+
+        const [name, version] = vi.mocked(idb.openDB).mock.calls[0];
+        expect(name).toBe(DB_NAME);
+        expect(version).toBeUndefined();
+    });
+
+    it('closes the shared connection when another context needs an upgrade', async () => {
+        await getCoverFromDB('book-1');
+
+        const options = vi.mocked(idb.openDB).mock.calls[0][2];
+        options?.blocking?.(1, 2, {} as IDBVersionChangeEvent);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(mockDb.close).toHaveBeenCalledTimes(1);
+
+        // …and the next cover reopens.
+        await getCoverFromDB('book-2');
+        expect(idb.openDB).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not cache a failed open', async () => {
+        vi.mocked(idb.openDB).mockRejectedValueOnce(new Error('nope'));
+
+        await expect(getCoverFromDB('book-1')).rejects.toThrow('nope');
+        // The next request retries the open instead of replaying the failure.
+        await expect(getCoverFromDB('book-1')).resolves.toBeInstanceOf(Blob);
+        expect(idb.openDB).toHaveBeenCalledTimes(2);
+    });
+
+    it('serves an untyped (ArrayBuffer) cover as webp — what the capture path writes', async () => {
+        mockDb.get.mockResolvedValue({
+            coverBlob: new Uint8Array([1, 2, 3]).buffer as unknown as Blob,
+        });
+
+        const originalResponse = global.Response;
+        global.Response = class MockResponse {
+            status: number;
+            _headers: Map<string, string>;
+            constructor(_body: unknown, init?: { status?: number; headers?: Record<string, string> }) {
+                this.status = init?.status || 200;
+                this._headers = new Map(Object.entries(init?.headers || {}));
+            }
+            get headers() { return this._headers; }
+        } as unknown as typeof Response;
+
+        try {
+            const response = await createCoverResponse('book-1');
+            expect(response.headers.get('Content-Type')).toBe('image/webp');
         } finally {
             global.Response = originalResponse;
         }

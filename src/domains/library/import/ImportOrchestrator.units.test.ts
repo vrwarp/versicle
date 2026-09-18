@@ -667,6 +667,84 @@ describe('ImportOrchestrator — ZIP expansion', () => {
   });
 });
 
+/**
+ * expandToEpubs decompressed EVERY EPUB of EVERY zip up front and the batch
+ * loop then held that array for the whole run — a 40-book archive meant 40
+ * inflated EPUBs resident from the first import to the last. Entries are now
+ * enumerated cheaply and inflated one at a time, as their turn comes.
+ */
+describe('regression: ZIP entries are inflated one at a time', () => {
+  const lazyZip = (names: string[], onRead: (name: string) => void) =>
+    vi.fn(async () =>
+      names.map((name) => ({
+        name,
+        read: async () => {
+          onRead(name);
+          return epubFile(name);
+        },
+      })),
+    );
+
+  it('inflates each entry only when its import starts', async () => {
+    const reads: string[] = [];
+    const listZipEpubs = lazyZip(['inner-a.epub', 'inner-b.epub'], (n) => reads.push(n));
+    const imports: string[] = [];
+    const h = build({
+      expandZip: undefined,
+      listZipEpubs: listZipEpubs as unknown as ImportOrchestratorDeps['listZipEpubs'],
+    });
+    let n = 0;
+    h.extract.mockImplementation(async () => {
+      // Every earlier entry has been read; no later one has.
+      imports.push(reads.join(','));
+      return extraction({ bookId: `book-${n++}` });
+    });
+
+    const summary = await h.orchestrator.importFiles(
+      [new File([new Uint8Array(100)], 'books.zip', { type: 'application/zip' })],
+      { adoptGhosts: false },
+    );
+
+    expect(summary.imported).toBe(2);
+    expect(imports).toEqual(['inner-a.epub', 'inner-a.epub,inner-b.epub']);
+  });
+
+  it('never inflates an entry whose name already imported in this batch', async () => {
+    const reads: string[] = [];
+    const listZipEpubs = lazyZip(['dup.epub', 'dup.epub'], (n) => reads.push(n));
+    const h = build({
+      expandZip: undefined,
+      listZipEpubs: listZipEpubs as unknown as ImportOrchestratorDeps['listZipEpubs'],
+    });
+
+    const summary = await h.orchestrator.importFiles(
+      [new File([new Uint8Array(100)], 'books.zip', { type: 'application/zip' })],
+      { adoptGhosts: false },
+    );
+
+    expect(summary.skipped).toEqual(['dup.epub']);
+    expect(reads).toEqual(['dup.epub']);
+  });
+
+  it('records a failed inflation against the entry, and keeps going', async () => {
+    const h = build({
+      expandZip: undefined,
+      listZipEpubs: (async () => [
+        { name: 'broken.epub', read: async () => { throw new Error('bad entry'); } },
+        { name: 'fine.epub', read: async () => epubFile('fine.epub') },
+      ]) as unknown as ImportOrchestratorDeps['listZipEpubs'],
+    });
+
+    const summary = await h.orchestrator.importFiles(
+      [new File([new Uint8Array(100)], 'books.zip', { type: 'application/zip' })],
+      { adoptGhosts: false },
+    );
+
+    expect(summary.failed).toEqual([{ filename: 'broken.epub', reason: 'bad entry' }]);
+    expect(summary.imported).toBe(1);
+  });
+});
+
 describe('ImportOrchestrator.restore — acceptance and registration', () => {
   const fileWith = (bytes: Uint8Array) =>
     epubFile('book.epub', bytes as Uint8Array<ArrayBuffer>);

@@ -22,12 +22,26 @@
  * deletes oldest-first in small gated batches until under budget, skipping
  * rows touched in the last 24 h so audio cannot vanish mid-playback.
  *
+ * The scan is now GUARDED by a persisted running byte total
+ * (`app_metadata['audio-cache-total-bytes']`, additive KV key — no DB bump):
+ * a sweep whose tracked total is under budget returns without opening a
+ * cursor at all. This is what keeps the boot sweep and the every-50-puts
+ * sweep off the main thread — a value cursor deserializes each row's
+ * multi-hundred-KB `audio` ArrayBuffer, so the old unconditional scan cost
+ * the whole 512 MiB budget in deserialization per sweep.
+ *
+ * The tracked total is a HINT only. It is maintained in memory by
+ * {@link AudioCacheRepo.putSegment} (+= byteLength) and by the eviction
+ * delete batches (-= freed), and is persisted inside those same gated
+ * transactions. It never decides WHAT to evict: whenever it says "over
+ * budget" (or is absent) the sweep falls back to the full scan, which is the
+ * source of truth and re-seeds the total from the rows themselves. A
+ * stale-high total costs one extra scan; a stale-low total delays a sweep
+ * until the next scan corrects it.
+ *
  * IDB v25 (P3-13, D7) added the `by_lastAccessed` index and this module's
  * post-open idle `size` backfill ({@link AudioCacheRepo.backfillSizesOnce},
- * run once from the `background` boot phase). Re-pointing the eviction scan
- * at the index (iterate oldest-first, stop early once under budget) is a
- * named follow-up in the prep doc — the scan still needs the total-bytes
- * pass today.
+ * run once from the `background` boot phase).
  */
 import { getConnection } from '../connection';
 import { write } from '../write-gate';
@@ -57,8 +71,28 @@ export const EVICTION_PUT_INTERVAL = 50;
 /** Rows re-read + stamped per gated transaction during the size backfill. */
 const SIZE_BACKFILL_BATCH = 10;
 
+/**
+ * The eviction sweep's result. `scanned` is the number of rows the sweep
+ * deserialized — 0 whenever the tracked-total fast path held. (Not exported:
+ * callers use it structurally through `runEviction`'s return type.)
+ */
+interface AudioEvictionResult {
+  deleted: number;
+  freedBytes: number;
+  scanned: number;
+}
+
 class AudioCacheRepo {
   private putsSinceEviction = 0;
+
+  /**
+   * Net byte change this context has made since the persisted total was last
+   * written (puts add, evictions reset it). The persisted value itself is
+   * re-read per sweep rather than cached, so another tab's or the TTS
+   * worker's writes are picked up; concurrent deltas are last-write-wins,
+   * which a later scan corrects.
+   */
+  private deltaBytes = 0;
 
   /**
    * Read a cached segment. Keeps the `alignmentData` read-shim: rows written
@@ -107,6 +141,10 @@ class AudioCacheRepo {
           size: audio.byteLength,
         });
       });
+      // Running total (hint): a put that REPLACES an existing key over-counts
+      // by the old row's size — which only ever buys an earlier full scan,
+      // and that scan re-establishes the truth.
+      this.deltaBytes += audio.byteLength;
     } catch (error) {
       handleDbError(error);
     }
@@ -187,16 +225,47 @@ class AudioCacheRepo {
   }
 
   /**
-   * LRU eviction. Pass 1 streams a readonly cursor collecting
-   * `{key, lastAccessed, size}` one row at a time; pass 2 deletes
-   * oldest-first through the write gate in batches until the cache is under
-   * `budgetBytes`, skipping rows touched in the last 24 h.
+   * The tracked byte total (persisted hint + this session's net delta), or
+   * null while it has never been established. Read OUTSIDE the gate.
    */
-  async runEviction(
-    budgetBytes: number = AUDIO_CACHE_BUDGET_BYTES,
-  ): Promise<{ deleted: number; freedBytes: number }> {
+  private async trackedTotal(
+    db: Awaited<ReturnType<typeof getConnection>>,
+  ): Promise<number | null> {
+    const stored = await db.get('app_metadata', APP_METADATA_KEYS.audioCacheTotalBytes);
+    if (typeof stored !== 'number' || !Number.isFinite(stored)) return null;
+    return Math.max(0, stored + this.deltaBytes);
+  }
+
+  /** Adopt `total` as the established value and persist it (one gated put). */
+  private async persistTotal(total: number): Promise<void> {
+    this.deltaBytes = 0;
+    await write(['app_metadata'], (tx) => {
+      tx.objectStore('app_metadata').put(total, APP_METADATA_KEYS.audioCacheTotalBytes);
+    });
+  }
+
+  /**
+   * LRU eviction. The tracked byte total gates the scan: while it says the
+   * cache is under `budgetBytes` the sweep returns immediately (`scanned: 0`)
+   * — no cursor, no blob deserialization. Otherwise pass 1 streams a readonly
+   * cursor collecting `{key, lastAccessed, size}` one row at a time (and
+   * re-establishes the total from the rows themselves); pass 2 deletes
+   * oldest-first through the write gate in batches until the cache is under
+   * budget, skipping rows touched in the last 24 h.
+   */
+  async runEviction(budgetBytes: number = AUDIO_CACHE_BUDGET_BYTES): Promise<AudioEvictionResult> {
     try {
       const db = await getConnection();
+
+      // Fast path: the tracked total proves we are under budget. This is the
+      // common case for both callers (boot + every EVICTION_PUT_INTERVAL
+      // puts) and the whole point of tracking — the scan below deserializes
+      // every row's audio buffer.
+      const tracked = await this.trackedTotal(db);
+      if (tracked !== null && tracked <= budgetBytes) {
+        if (this.deltaBytes !== 0) await this.persistTotal(tracked);
+        return { deleted: 0, freedBytes: 0, scanned: 0 };
+      }
 
       // Pass 1: streaming scan (no getAll — rows hold multi-MB blobs).
       const entries: { key: string; lastAccessed: number; size: number }[] = [];
@@ -213,9 +282,12 @@ class AudioCacheRepo {
         }
         await tx.done;
       }
+      const scanned = entries.length;
 
       if (totalBytes <= budgetBytes) {
-        return { deleted: 0, freedBytes: 0 };
+        // The scan is the source of truth — seed/correct the tracked total.
+        await this.persistTotal(totalBytes);
+        return { deleted: 0, freedBytes: 0, scanned };
       }
 
       // Pass 2: oldest-first deletes, skipping recently-used rows.
@@ -229,13 +301,18 @@ class AudioCacheRepo {
       let remaining = totalBytes;
       let batch: string[] = [];
 
-      const flushBatch = async (): Promise<void> => {
+      // Each batch carries the updated total in the SAME transaction, so a
+      // sweep interrupted between batches leaves the hint consistent with
+      // what was actually deleted (no extra gate acquisitions).
+      const flushBatch = async (runningTotal: number): Promise<void> => {
         if (batch.length === 0) return;
         const keys = batch;
         batch = [];
-        await write(['cache_audio_blobs'], (tx) => {
+        this.deltaBytes = 0;
+        await write(['cache_audio_blobs', 'app_metadata'], (tx) => {
           const store = tx.objectStore('cache_audio_blobs');
           for (const key of keys) store.delete(key);
+          tx.objectStore('app_metadata').put(runningTotal, APP_METADATA_KEYS.audioCacheTotalBytes);
         });
       };
 
@@ -246,10 +323,13 @@ class AudioCacheRepo {
         freedBytes += entry.size;
         remaining -= entry.size;
         if (batch.length >= EVICTION_DELETE_BATCH) {
-          await flushBatch();
+          await flushBatch(remaining);
         }
       }
-      await flushBatch();
+      await flushBatch(remaining);
+      // Nothing was evictable (every row inside the 24 h window): the scan's
+      // total still has to land so the next sweep does not rescan.
+      if (deleted === 0) await this.persistTotal(totalBytes);
 
       if (deleted > 0) {
         logger.info(
@@ -257,11 +337,11 @@ class AudioCacheRepo {
             `(${remaining} of ${budgetBytes} budget in use).`,
         );
       }
-      return { deleted, freedBytes };
+      return { deleted, freedBytes, scanned };
     } catch (error) {
       handleDbError(error);
     }
-    return { deleted: 0, freedBytes: 0 };
+    return { deleted: 0, freedBytes: 0, scanned: 0 };
   }
 }
 

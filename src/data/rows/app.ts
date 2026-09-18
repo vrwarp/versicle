@@ -123,6 +123,26 @@ export const APP_METADATA_KEYS = {
    * rollover). Read/written only by src/data/repos/quotaCounter.ts.
    */
   quotaDailyUsage: 'quota-daily-usage',
+  /**
+   * `number` — the audio cache's running byte total (sum of every
+   * `cache_audio_blobs` row's `size`). A HINT, not a ledger: the eviction
+   * sweep reads it to skip the full store scan while the cache is provably
+   * under budget, and any sweep that does scan re-establishes it from the
+   * rows themselves. A stale-high value costs one extra scan; a stale-low
+   * value delays a sweep until the next scan corrects it. Never used to
+   * decide WHAT to delete (only the scan's own totals are).
+   * Read/written only by src/data/repos/audioCache.ts.
+   */
+  audioCacheTotalBytes: 'audio-cache-total-bytes',
+  /**
+   * `number` — the `TTS_EXTRACTION_VERSION` at which the §E re-ingest wave
+   * last finished with ZERO candidate books (a converged library). Later
+   * boots skip the whole-store candidacy scan
+   * (`bookContent.listTtsExtractionVersions`) while this equals the current
+   * constant; bumping the extraction version makes the stored value stale and
+   * the wave scans again. Written only after a completed, non-aborted wave.
+   */
+  reingestScanConverged: 'reingest-scan-converged',
 } as const;
 
 /**
@@ -207,7 +227,8 @@ export type AppMetadataValue =
   | SchemaHistoryEntry[]
   | LegacyRecoveryRecord
   | QuotaDailyUsageRow
-  | boolean;
+  | boolean
+  | number;
 
 // ── Compile-time drift guards (see rows/static.ts for the pattern) ────────
 type _CheckpointSchemaMatches = z.infer<typeof syncCheckpointRowSchema> extends SyncCheckpointRow ? true : never;

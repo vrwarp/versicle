@@ -50,6 +50,16 @@ export interface ReingestWaveDeps {
   yieldToHost?(): Promise<void>;
   /** Abort check between books (the settings defer toggle / shutdown). */
   shouldContinue?(): boolean;
+  /**
+   * The extraction version a previous wave converged at (zero candidates), if
+   * any. When it equals {@link TTS_EXTRACTION_VERSION} the wave returns
+   * immediately — WITHOUT calling {@link ReingestWaveDeps.listVersions},
+   * whose cursor materializes every sentence row of every book to read one
+   * integer each. Omitted ⇒ the wave always scans (the pre-marker behavior).
+   */
+  convergedVersion?(): Promise<number | undefined>;
+  /** Persist the convergence marker. Called only after a COMPLETED wave. */
+  markConverged?(version: number): Promise<void>;
 }
 
 export interface ReingestWaveReport {
@@ -101,6 +111,10 @@ export async function runReingestWave(deps: ReingestWaveDeps): Promise<ReingestW
   const yieldToHost = deps.yieldToHost ?? defaultYield;
   const shouldContinue = deps.shouldContinue ?? (() => true);
 
+  // A library that already converged at this extraction version has nothing
+  // to find — skip the whole-store candidacy scan until the constant moves.
+  if ((await deps.convergedVersion?.()) === TTS_EXTRACTION_VERSION) return report;
+
   const versions = await deps.listVersions();
   const drifted: string[] = [];
   const convergence: string[] = [];
@@ -150,5 +164,15 @@ export async function runReingestWave(deps: ReingestWaveDeps): Promise<ReingestW
         `${report.failed.length} failed (old rows retained), ${report.skipped.length} skipped (no binary).`,
     );
   }
+
+  // Convergence: this wave ran to completion and found NOTHING below the
+  // current version — no re-ingest candidate and no restamp. A book that was
+  // skipped for a missing binary is by construction one of those candidates,
+  // so it keeps the scan alive until its binary returns and it converges.
+  // Later boots can then skip the candidacy scan entirely.
+  if (drifted.length + convergence.length + report.restamped.length === 0) {
+    await deps.markConverged?.(TTS_EXTRACTION_VERSION);
+  }
+
   return report;
 }

@@ -343,6 +343,11 @@ export const reingestWaveTask: BootTask = {
     let cancelled = false;
     const timer = setTimeout(() => {
       void runReingestWave({
+        // The convergence marker gates the candidacy scan: once a wave has
+        // finished with zero candidates at this extraction version, later
+        // boots never re-materialize every book's sentence rows.
+        convergedVersion: () => bookContent.getReingestConvergedVersion(),
+        markConverged: (version) => bookContent.markReingestConverged(version),
         listVersions: () => bookContent.listTtsExtractionVersions(),
         listRows: (bookId) => bookContent.listTtsPrepForBook(bookId),
         restamp: (bookId, version) => bookContent.restampTtsPrep(bookId, version),

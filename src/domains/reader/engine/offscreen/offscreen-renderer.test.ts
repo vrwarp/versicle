@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { extractContentOffscreen } from './offscreen-renderer';
 import ePub from 'epubjs';
 import { snapdom } from '@zumer/snapdom';
+import { extractSentencesFromNodeAsync } from '@lib/ingestion/sentence-extraction';
 
 // Mock dependencies
 vi.mock('epubjs');
@@ -13,7 +14,7 @@ vi.mock('@zumer/snapdom', () => {
   };
 });
 vi.mock('@lib/ingestion/sentence-extraction', () => ({
-  extractSentencesFromNode: vi.fn(() => ({ sentences: [], citationMarkers: [] })),
+  extractSentencesFromNodeAsync: vi.fn(async () => ({ sentences: [], citationMarkers: [] })),
   ExtractionOptions: {}
 }));
 vi.mock('@lib/sanitizer', () => ({
@@ -298,5 +299,51 @@ describe('extractContentOffscreen', () => {
 
     await expect(extractContentOffscreen(new Blob(['x']))).resolves.toBeDefined();
     expect(mockBook.destroy).toHaveBeenCalled();
+  });
+
+  /**
+   * Extraction used to be one unbroken synchronous pass per chapter (the only
+   * yield was BETWEEN chapters), and every table capture left snapdom's
+   * module-global image/font/resource caches populated for the session.
+   */
+  describe('regression: the chapter pass yields and leaves no snapdom cache', () => {
+    it('hands the extractor a yield seam bound to the chapter budget', async () => {
+      const mockDoc = document.implementation.createHTMLDocument();
+      mockRendition.getContents.mockReturnValue([{
+        document: mockDoc,
+        cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/1:0)'),
+        cfiFromNode: vi.fn(() => 'epubcfi(/6/2!/4/2)'),
+      }]);
+
+      await extractContentOffscreen(new Blob(['x']));
+
+      const extractor = vi.mocked(extractSentencesFromNodeAsync);
+      expect(extractor).toHaveBeenCalled();
+      const control = extractor.mock.calls[0][3];
+      expect(typeof control?.shouldYield).toBe('function');
+      expect(typeof control?.yieldFn).toBe('function');
+      // The seam actually yields (and does not throw) when invoked.
+      await expect(control?.yieldFn?.()).resolves.toBeUndefined();
+      expect(typeof control?.shouldYield()).toBe('boolean');
+    });
+
+    it('captures tables with snapdom caching disabled', async () => {
+      const mockDoc = document.implementation.createHTMLDocument();
+      const table = mockDoc.createElement('table');
+      mockDoc.body.appendChild(table);
+      mockRendition.getContents.mockReturnValue([{
+        document: mockDoc,
+        cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/1:0)'),
+        cfiFromNode: vi.fn(() => 'epubcfi(/6/2!/4/2)'),
+      }]);
+      (snapdom.toBlob as unknown as ReturnType<typeof vi.fn>)
+        .mockResolvedValue(new Blob(['image'], { type: 'image/webp' }));
+
+      await extractContentOffscreen(new Blob(['x']));
+
+      expect(snapdom.toBlob).toHaveBeenCalledWith(table, expect.objectContaining({
+        cache: 'disabled',
+      }));
+    });
   });
 });

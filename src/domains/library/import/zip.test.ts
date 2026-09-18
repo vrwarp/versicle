@@ -8,7 +8,7 @@
 import JSZip from 'jszip';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CancellationError } from '@lib/cancellable-task-runner';
-import { extractEpubsFromZip } from './zip';
+import { extractEpubsFromZip, listZipEpubEntries } from './zip';
 
 /** Builds a real ZIP File containing the given entries. */
 const makeZip = async (entries: Record<string, string>): Promise<File> => {
@@ -168,5 +168,73 @@ describe('extractEpubsFromZip', () => {
       await expect(extractEpubsFromZip(new File([], 'empty.zip')))
         .rejects.toThrow('Failed to process ZIP file');
     });
+  });
+});
+
+/**
+ * The expansion used to read the whole ZIP into an ArrayBuffer on top of
+ * jszip's own view of it, then decompress EVERY entry into an `epubFiles`
+ * array that the batch importer held for the entire run — a 40-book archive
+ * meant 40 decompressed EPUBs resident at once.
+ */
+describe('regression: entries are handed off one at a time', () => {
+  it('enumerates without decompressing anything', async () => {
+    const zip = await makeZip({ 'a.epub': 'one', 'b.epub': 'two', 'notes.txt': 'x' });
+
+    const entries = await listZipEpubEntries(zip);
+
+    expect(entries.map((e) => e.name).sort()).toEqual(['a.epub', 'b.epub']);
+    // Nothing is a File yet — `read()` is what inflates.
+    expect(entries.every((e) => typeof e.read === 'function')).toBe(true);
+  });
+
+  it('inflates only the entry that is read', async () => {
+    const zip = await makeZip({ 'a.epub': 'one', 'b.epub': 'two' });
+    const entries = await listZipEpubEntries(zip);
+    const first = entries.find((e) => e.name === 'a.epub')!;
+
+    const file = await first.read();
+
+    expect(file).toBeInstanceOf(File);
+    expect(file.type).toBe('application/epub+zip');
+    expect(await file.text()).toBe('one');
+  });
+
+  it('flattens nested paths on the lazy path too', async () => {
+    const entries = await listZipEpubEntries(await makeZip({ 'books/deep/x.epub': 'one' }));
+
+    expect(entries[0].name).toBe('x.epub');
+    expect(await (await entries[0].read()).text()).toBe('one');
+  });
+
+  it('throws CancellationError from read() once the signal aborts', async () => {
+    const controller = new AbortController();
+    const entries = await listZipEpubEntries(await makeZip({ 'a.epub': 'one' }), controller.signal);
+
+    controller.abort();
+
+    await expect(entries[0].read()).rejects.toBeInstanceOf(CancellationError);
+  });
+
+  it('translates a corrupt archive the same way on the lazy path', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(listZipEpubEntries(new File([new Uint8Array([1, 2, 3])], 'broken.zip')))
+      .rejects.toThrow('Failed to process ZIP file');
+  });
+
+  it('never reads the archive into an ArrayBuffer of its own', async () => {
+    const zip = await makeZip({ 'a.epub': 'one' });
+    const readAsArrayBuffer = vi.spyOn(FileReader.prototype, 'readAsArrayBuffer');
+
+    try {
+      const entries = await listZipEpubEntries(zip);
+      await entries[0].read();
+      // jszip reads the File itself (and only once, lazily per entry); the
+      // old code did a full FileReader pass first, doubling peak memory.
+      expect(readAsArrayBuffer.mock.calls.length).toBeLessThanOrEqual(1);
+    } finally {
+      readAsArrayBuffer.mockRestore();
+    }
   });
 });

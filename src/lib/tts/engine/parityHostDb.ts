@@ -58,7 +58,7 @@ export function resetParityHostDb(db: ParityHostDbState): void {
  * The `BookContentPort` surface the engine graph touches in the parity
  * scenarios: PlaybackController (getSections/getTTSPreparation),
  * SectionAnalysisDriver + TableAdaptationProcessor
- * (getTTSPreparation/getTableImages/getBookStructure).
+ * (getTTSPreparation/listTableLocations/getTableImages/getBookStructure).
  * The seeded literals carry only the fields the engine reads, so the factory
  * casts once to the port type.
  */
@@ -78,6 +78,7 @@ export function createParityBookContent(db: ParityHostDbState): BookContentPort 
             return db.ttsContent[key];
         },
         getTableImages: async () => [],
+        listTableLocations: async () => [],
         getBookStructure: async () => undefined,
     } as unknown as BookContentPort;
 }

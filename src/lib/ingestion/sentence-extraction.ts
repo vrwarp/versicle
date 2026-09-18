@@ -79,12 +79,46 @@ function isLeadingInBlock(el: Element): boolean {
 }
 
 /**
+ * Every character that can survive `trim()` in a string CITATION_TEXT_RE can
+ * match: digits and bracket/paren glyphs (alternative 1), the symbol markers
+ * (alternative 2), and whitespace (trimmed away at the ends, fatal anywhere
+ * else).
+ */
+const CITATION_ALLOWED_TEXT_RE = /^[\s\d()[\]*†‡§¶]*$/;
+
+/**
+ * `el.textContent`, or null as soon as a character appears that
+ * CITATION_TEXT_RE could never match — such a character is not whitespace, so
+ * it survives the trim and the regex is guaranteed to fail. Detection runs on
+ * every <sup>/<sub>/<a>/<span> of every chapter, and a <span> wrapping a
+ * whole paragraph used to be flattened into a string just to fail that test.
+ */
+function citationCandidateText(el: Element): string | null {
+    let text = '';
+    const visit = (node: Node): boolean => {
+        if (node.nodeType === Node.TEXT_NODE || node.nodeType === Node.CDATA_SECTION_NODE) {
+            const data = node.textContent || '';
+            if (!CITATION_ALLOWED_TEXT_RE.test(data)) return false;
+            text += data;
+            return true;
+        }
+        for (const child of node.childNodes) {
+            if (!visit(child)) return false;
+        }
+        return true;
+    };
+    return visit(el) ? text : null;
+}
+
+/**
  * Classifies an inline element as a citation marker and captures its metadata.
  * Handles <sup>, <sub>, <a> with note-link semantics, and CSS-superscript <span>.
  */
 function detectCitationMarkerElement(el: Element, cfiGenerator: (range: Range) => string | null, doc: Document): CitationDetection {
     const tagName = el.tagName.toUpperCase();
-    const text = el.textContent?.trim() || '';
+    const candidate = citationCandidateText(el);
+    if (candidate === null) return NO_CITATION;
+    const text = candidate.trim();
 
     if (!CITATION_TEXT_RE.test(text)) return NO_CITATION;
 
@@ -182,19 +216,37 @@ const BLOCK_TAGS = new Set([
     'NAV', 'ADDRESS', 'HR'
 ]);
 
+/** Tags whose subtrees never contribute spoken text. */
+const IGNORED_TAGS = new Set([
+    'SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'IMG', 'VIDEO', 'AUDIO', 'IFRAME',
+    'OBJECT', 'TITLE', 'META', 'LINK', 'BASE', 'HEAD',
+]);
+
+/** Cooperative-yield seam for {@link extractSentencesFromNodeAsync}. */
+export interface ExtractionYieldControl {
+    /**
+     * Consulted at every flush point (block boundary). True hands the main
+     * thread back before the next block is segmented.
+     */
+    shouldYield(): boolean;
+    /** How to yield; defaults to a macrotask hop. */
+    yieldFn?(): Promise<void>;
+}
+
 /**
- * Extracts sentences from a DOM Node (e.g., document body).
+ * One extraction run, shared verbatim by the sync and async entry points.
  *
- * @param rootNode - The root DOM node to traverse.
- * @param cfiGenerator - A callback function that generates a CFI string from a DOM Range.
- * @param options - Configuration options for segmentation.
- * @returns An ExtractionResult with sentences and captured citation markers.
+ * `walk` is a generator that yields at every flush point — the only places
+ * where pausing is safe and useful, since a flush is where a block's buffered
+ * text is segmented, sanitized and turned into ranges + CFIs. The synchronous
+ * driver simply runs it to completion; the async one may await between
+ * yields. Output is identical either way: yielding changes no state.
  */
-export const extractSentencesFromNode = (
+function createExtractionRun(
     rootNode: Node,
     cfiGenerator: (range: Range) => string | null,
-    options: ExtractionOptions = {}
-): ExtractionResult => {
+    options: ExtractionOptions,
+): { walk: () => Generator<void, void, void>; finish: () => ExtractionResult } {
     // Collect raw sentences first
     const rawSentences: SentenceNode[] = [];
     const citationMarkers: CitationMarker[] = [];
@@ -241,6 +293,14 @@ export const extractSentencesFromNode = (
         const textForSegmentation = isPre ? textBuffer : textBuffer.replace(/[\n\r]/g, ' ');
         const segments = segmenter.segment(textForSegmentation);
 
+        // Segments arrive in order, so the node cursor only ever moves
+        // FORWARD: the node holding the previous segment's start is the
+        // earliest one this segment's start can be in. (The old loop restarted
+        // from node 0 for every segment — O(segments × nodes) per block, which
+        // is quadratic in a long paragraph of many inline runs.)
+        let startIndex = 0;
+        let startBase = 0;
+
         for (const segment of segments) {
             let processedText = segment.text;
 
@@ -253,40 +313,39 @@ export const extractSentencesFromNode = (
             const start = segment.index;
             const end = segment.index + segment.length;
 
-            const range = doc.createRange();
-            let currentBase = 0;
-            let startSet = false;
-            let endSet = false;
-
-            for (const { node, length } of textNodes) {
-                if (!startSet && currentBase + length > start) {
-                    const offset = Math.max(0, start - currentBase);
-                    range.setStart(node, offset);
-                    startSet = true;
-                }
-
-                if (!endSet && currentBase + length >= end) {
-                    const offset = Math.max(0, end - currentBase);
-                    range.setEnd(node, offset);
-                    endSet = true;
-                }
-
-                currentBase += length;
-                if (startSet && endSet) break;
+            while (
+                startIndex < textNodes.length &&
+                startBase + textNodes[startIndex].length <= start
+            ) {
+                startBase += textNodes[startIndex].length;
+                startIndex += 1;
             }
+            // Past the end of the buffered nodes: the old loop left startSet
+            // false and dropped the sentence.
+            if (startIndex >= textNodes.length) continue;
 
-            if (startSet && endSet) {
-                try {
-                    const cfi = cfiGenerator(range);
-                    if (cfi) {
-                        rawSentences.push({
-                            text: processedText.trim(),
-                            cfi: cfi
-                        });
-                    }
-                } catch (e) {
-                    logger.warn("Failed to generate CFI for range", e);
+            let endIndex = startIndex;
+            let endBase = startBase;
+            while (endIndex < textNodes.length && endBase + textNodes[endIndex].length < end) {
+                endBase += textNodes[endIndex].length;
+                endIndex += 1;
+            }
+            if (endIndex >= textNodes.length) continue; // endSet false
+
+            const range = doc.createRange();
+            range.setStart(textNodes[startIndex].node, Math.max(0, start - startBase));
+            range.setEnd(textNodes[endIndex].node, Math.max(0, end - endBase));
+
+            try {
+                const cfi = cfiGenerator(range);
+                if (cfi) {
+                    rawSentences.push({
+                        text: processedText.trim(),
+                        cfi: cfi
+                    });
                 }
+            } catch (e) {
+                logger.warn("Failed to generate CFI for range", e);
             }
         }
 
@@ -294,13 +353,13 @@ export const extractSentencesFromNode = (
         textNodes = [];
     };
 
-    const traverse = (node: Node) => {
+    function* traverse(node: Node): Generator<void, void, void> {
         if (node.nodeType === Node.ELEMENT_NODE) {
             const el = node as Element;
             const tagName = el.tagName.toUpperCase();
 
             // Skip ignored tags
-            if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'IMG', 'VIDEO', 'AUDIO', 'IFRAME', 'OBJECT', 'TITLE', 'META', 'LINK', 'BASE', 'HEAD'].includes(tagName)) {
+            if (IGNORED_TAGS.has(tagName)) {
                 return;
             }
 
@@ -317,15 +376,22 @@ export const extractSentencesFromNode = (
             const isBlock = BLOCK_TAGS.has(tagName);
             const isBreak = tagName === 'BR';
 
-            if (isBlock) flushBuffer();
+            if (isBlock) {
+                flushBuffer();
+                yield;
+            }
 
             if (isBreak) {
                 flushBuffer();
+                yield;
             } else {
-                node.childNodes.forEach(child => traverse(child));
+                for (const child of node.childNodes) yield* traverse(child);
             }
 
-            if (isBlock) flushBuffer();
+            if (isBlock) {
+                flushBuffer();
+                yield;
+            }
 
         } else if (node.nodeType === Node.TEXT_NODE) {
             const val = node.textContent || '';
@@ -334,17 +400,64 @@ export const extractSentencesFromNode = (
                 textNodes.push({ node, length: val.length });
             }
         }
+    }
+
+    return {
+        walk: () => traverse(rootNode),
+        finish: () => {
+            flushBuffer();
+
+            // Assign source indices to raw sentences
+            rawSentences.forEach((s, i) => {
+                s.sourceIndices = [i];
+            });
+
+            // RAW AT REST (extraction v3): no ingest-time refinement — persisted
+            // rows carry the raw segmentation; playback refines against current
+            // settings.
+            return { sentences: rawSentences, citationMarkers };
+        },
     };
+}
 
-    traverse(rootNode);
-    flushBuffer();
+/**
+ * Extracts sentences from a DOM Node (e.g., document body).
+ *
+ * @param rootNode - The root DOM node to traverse.
+ * @param cfiGenerator - A callback function that generates a CFI string from a DOM Range.
+ * @param options - Configuration options for segmentation.
+ * @returns An ExtractionResult with sentences and captured citation markers.
+ */
+export const extractSentencesFromNode = (
+    rootNode: Node,
+    cfiGenerator: (range: Range) => string | null,
+    options: ExtractionOptions = {}
+): ExtractionResult => {
+    const run = createExtractionRun(rootNode, cfiGenerator, options);
+    for (const _ of run.walk()) { /* run to completion, never yielding */ }
+    return run.finish();
+};
 
-    // Assign source indices to raw sentences
-    rawSentences.forEach((s, i) => {
-        s.sourceIndices = [i];
-    });
-
-    // RAW AT REST (extraction v3): no ingest-time refinement — persisted rows
-    // carry the raw segmentation; playback refines against current settings.
-    return { sentences: rawSentences, citationMarkers };
+/**
+ * The same extraction, able to hand the main thread back INSIDE a chapter.
+ *
+ * The synchronous pass is one unbroken traversal of a whole chapter — DOM
+ * walk, Intl.Segmenter, sanitization, createRange and a CFI per sentence —
+ * and the offscreen renderer could only yield BETWEEN chapters, so a
+ * single-XHTML book blocked the main thread for the entire book. `control`
+ * is consulted at each block boundary; the output is byte-identical to
+ * {@link extractSentencesFromNode} (the C8 fixtures pin it).
+ */
+export const extractSentencesFromNodeAsync = async (
+    rootNode: Node,
+    cfiGenerator: (range: Range) => string | null,
+    options: ExtractionOptions = {},
+    control?: ExtractionYieldControl,
+): Promise<ExtractionResult> => {
+    const run = createExtractionRun(rootNode, cfiGenerator, options);
+    const yieldToHost = control?.yieldFn ?? (() => new Promise<void>((r) => setTimeout(r, 0)));
+    for (const _ of run.walk()) {
+        if (control?.shouldYield()) await yieldToHost();
+    }
+    return run.finish();
 };

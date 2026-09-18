@@ -3,12 +3,25 @@ import {
     type ParsedCfiPoint,
 } from '@kernel/cfi';
 import type { SentenceNode } from '~types/tts-content';
+import type { TableLocation } from '@data/repos/bookContent';
 import type { EngineContext } from './engine/EngineContext';
 import { ensureGenAIReady } from './genaiReady';
 
 export class TableAdaptationProcessor {
     private tableAnalysisPromises = new Map<string, Promise<void>>();
     private readonly ctx: EngineContext;
+    /**
+     * Single-slot memo of the open book's table locations (id/cfi/sectionId,
+     * no pixels). Both this processor and SectionAnalysisDriver.buildGroups
+     * need the CFIs on EVERY section load and every prewarm; the table set
+     * cannot change while a book is open, so one read per book is enough.
+     * Switching books drops the previous entry — the only stale window is a
+     * reprocess of the book that is currently open (there is no engine-side
+     * notification for it today), which costs stale grouping until the next
+     * book switch, never a wrong adaptation: the pixels are always re-read.
+     */
+    private locationsBookId: string | null = null;
+    private locationsPromise: Promise<TableLocation[]> | null = null;
 
     /**
      * @param ctx The engine context. Required (no default) so this module never statically
@@ -17,6 +30,23 @@ export class TableAdaptationProcessor {
     constructor(ctx: EngineContext) {
         this.ctx = ctx;
     }
+    /**
+     * The open book's table locations, read once per book (see the memo
+     * fields). Shared with SectionAnalysisDriver.buildGroups, which needs the
+     * same CFIs for structural grouping.
+     */
+    async getTableLocations(bookId: string): Promise<TableLocation[]> {
+        if (this.locationsBookId !== bookId || !this.locationsPromise) {
+            this.locationsBookId = bookId;
+            this.locationsPromise = this.ctx.content.listTableLocations(bookId).catch((e) => {
+                // Never cache a rejection: the next section retries.
+                if (this.locationsBookId === bookId) this.locationsPromise = null;
+                throw e;
+            });
+        }
+        return this.locationsPromise;
+    }
+
     /**
      * Retrieves cached table adaptations from DB or triggers GenAI detection if missing.
      * Replaces `AudioContentPipeline.processTableAdaptations`.
@@ -55,31 +85,40 @@ export class TableAdaptationProcessor {
                 }
             }
 
-            // 2. Identify tables that actually exist in the current section
-            // Normalizing legacy Range CFIs (e.g. from buggy cfiFromRange) to their Point CFI parents
-            const tableImages = await this.ctx.content.getTableImages(bookId);
-            const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId).map(img => {
-                const range = parseCfiRange(img.cfi);
+            // 2. Identify tables that actually exist in the current section.
+            // LOCATIONS ONLY (no image bytes): the work set is decided from
+            // CFIs, and the pixels are fetched below for the few tables that
+            // actually reach the model. Normalizing legacy Range CFIs (e.g.
+            // from buggy cfiFromRange) to their Point CFI parents.
+            const locations = await this.getTableLocations(bookId);
+            const sectionTables = locations.filter(t => t.sectionId === sectionId).map(t => {
+                const range = parseCfiRange(t.cfi);
                 return {
-                    ...img,
-                    cfi: (range && range.parent) ? `epubcfi(${range.parent})` : img.cfi
+                    ...t,
+                    cfi: (range && range.parent) ? `epubcfi(${range.parent})` : t.cfi
                 };
             });
 
-            if (sectionTableImages.length === 0) return;
+            if (sectionTables.length === 0) return;
 
             // 3. Filter for those missing from the cache
-            const workSet = sectionTableImages.filter(img => !existingAdaptations.has(img.cfi));
+            const workSet = sectionTables.filter(t => !existingAdaptations.has(t.cfi));
 
             if (workSet.length === 0) return;
 
             // 4. Check if GenAI is enabled + configured (the ONE gate — 5c-PR2;
             // configures from the stored key, DEV/E2E-gated mock seam)
             if (await ensureGenAIReady(this.ctx.genAI)) {
-                const nodes = workSet.map(img => ({
-                    rootCfi: img.cfi,
-                    imageBlob: img.imageBlob
-                }));
+                // Pixels, at last — and only this section's (the repo filters
+                // before wrapping, so other sections' images are never
+                // materialized).
+                const images = await this.ctx.content.getTableImages(bookId, sectionId);
+                const blobsById = new Map(images.map(img => [img.id, img.imageBlob]));
+                const nodes = workSet
+                    .map(t => ({ rootCfi: t.cfi, imageBlob: blobsById.get(t.id) }))
+                    .filter((n): n is { rootCfi: string; imageBlob: Blob } => n.imageBlob !== undefined);
+
+                if (nodes.length === 0) return;
 
                 const bookMetadata = await this.ctx.book.getMetadata(bookId);
                 const bookTitle = bookMetadata?.title || 'Unknown Book';

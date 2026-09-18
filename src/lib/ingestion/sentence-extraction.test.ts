@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractSentencesFromNode, TTS_EXTRACTION_VERSION } from './sentence-extraction';
+import { extractSentencesFromNode, extractSentencesFromNodeAsync, TTS_EXTRACTION_VERSION } from './sentence-extraction';
 import { TextSegmenter, DEFAULT_SENTENCE_STARTERS } from '@lib/tts/TextSegmenter';
 import type { CacheTtsPreparation } from '~types/cache';
 
@@ -314,5 +314,97 @@ describe('extraction v3 — raw at rest (5c-PR4; phase5-tts-strangler.md §5c.1)
     const v3Row = { ...v1Row, extractionVersion: TTS_EXTRACTION_VERSION } as CacheTtsPreparation;
     expect(v1Row.extractionVersion).toBeUndefined();
     expect(v3Row.extractionVersion).toBe(3);
+  });
+});
+
+/**
+ * extractSentencesFromNode is one unbroken synchronous pass over a whole
+ * chapter — traverse + Intl.Segmenter + sanitize + createRange + a CFI per
+ * sentence — and the offscreen renderer could only yield BETWEEN chapters, so
+ * a single-XHTML book blocked the main thread for the entire book.
+ */
+describe('regression: extraction yields inside a large chapter', () => {
+  const buildChapter = (paragraphs: number): HTMLElement => {
+    const div = document.createElement('div');
+    div.innerHTML = Array.from(
+      { length: paragraphs },
+      (_, i) => `<p>Sentence number ${i} of the chapter. And a second one, number ${i}.</p>`,
+    ).join('');
+    return div;
+  };
+
+  const cfiGen = () => {
+    let n = 0;
+    return () => `cfi(${++n})`;
+  };
+
+  it('fires the injected yield and produces output identical to the sync pass', async () => {
+    const paragraphs = 2500; // ≈5000 sentences
+    const sync = extractSentencesFromNode(buildChapter(paragraphs), cfiGen());
+
+    let yields = 0;
+    const async = await extractSentencesFromNodeAsync(
+      buildChapter(paragraphs),
+      cfiGen(),
+      {},
+      {
+        shouldYield: () => true,
+        yieldFn: async () => {
+          yields += 1;
+        },
+      },
+    );
+
+    expect(yields).toBeGreaterThanOrEqual(1);
+    expect(async.sentences).toEqual(sync.sentences);
+    expect(async.citationMarkers).toEqual(sync.citationMarkers);
+  });
+
+  it('never yields when the budget says there is time', async () => {
+    let yields = 0;
+    const result = await extractSentencesFromNodeAsync(
+      buildChapter(10),
+      cfiGen(),
+      {},
+      {
+        shouldYield: () => false,
+        yieldFn: async () => {
+          yields += 1;
+        },
+      },
+    );
+
+    expect(yields).toBe(0);
+    expect(result.sentences).toHaveLength(20);
+  });
+
+  it('matches the sync pass on citation markers and nested inline structure', async () => {
+    const html = `
+      <p>Body text with a marker<sup><a href="#n1">1</a></sup> inside.</p>
+      <blockquote><p>Quoted line.<br>After the break.</p></blockquote>
+      <ul><li>Item one.</li><li>Item two<span>(2)</span> here.</li></ul>
+      <pre>literal
+      lines</pre>`;
+    const build = () => {
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      return div;
+    };
+
+    const sync = extractSentencesFromNode(build(), cfiGen());
+    const async = await extractSentencesFromNodeAsync(build(), cfiGen(), {}, {
+      shouldYield: () => true,
+      yieldFn: () => Promise.resolve(),
+    });
+
+    expect(async.sentences).toEqual(sync.sentences);
+    expect(async.citationMarkers).toEqual(sync.citationMarkers);
+  });
+
+  it('defaults to a macrotask hop when no yield function is supplied', async () => {
+    const result = await extractSentencesFromNodeAsync(buildChapter(3), cfiGen(), {}, {
+      shouldYield: () => true,
+    });
+    expect(result.sentences).toHaveLength(6);
   });
 });

@@ -191,11 +191,15 @@ export class SectionAnalysisDriver {
 
     /** Group raw sentences by structural root, snapped to this section's table roots. */
     private async buildGroups(bookId: string, sectionId: string, sentences: SentenceNode[]): Promise<CfiGroup[]> {
-        // Fetch table CFIs for grouping; filter by section to keep getParentCfi
-        // complexity at O(N_sentences * N_section_tables).
-        const tableImages = await this.ctx.content.getTableImages(bookId);
-        const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId);
-        const preprocessedTableRoots = preprocessBlockRoots(sectionTableImages.map(img => img.cfi));
+        // Table CFIs for grouping — LOCATIONS only (this needs no pixels), and
+        // through the table processor's per-book memo: buildGroups runs on
+        // every section load AND every prewarm, and the old getTableImages
+        // call re-read and re-wrapped every table image of the whole book
+        // each time. Filtered by section to keep getParentCfi complexity at
+        // O(N_sentences * N_section_tables).
+        const tables = await this.tableProcessor.getTableLocations(bookId);
+        const sectionTables = tables.filter(t => t.sectionId === sectionId);
+        const preprocessedTableRoots = preprocessBlockRoots(sectionTables.map(t => t.cfi));
         return groupSegmentsByRoot(sentences, preprocessedTableRoots);
     }
 }

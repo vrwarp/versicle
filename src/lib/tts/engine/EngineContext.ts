@@ -251,7 +251,11 @@ interface PlatformInfoPort {
  */
 export type BookContentPort = Pick<
     typeof bookContent,
-    'getSections' | 'getTTSPreparation' | 'getTableImages' | 'getBookStructure'
+    | 'getSections'
+    | 'getTTSPreparation'
+    | 'getTableImages'
+    | 'listTableLocations'
+    | 'getBookStructure'
 >;
 
 /** The persisted playback-session row the engine restores from. */

@@ -1,6 +1,6 @@
 import ePub from 'epubjs';
 import { snapdom } from '@zumer/snapdom';
-import { extractSentencesFromNode, type ExtractionOptions, type SentenceNode } from '@lib/ingestion/sentence-extraction';
+import { extractSentencesFromNodeAsync, type ExtractionOptions, type SentenceNode } from '@lib/ingestion/sentence-extraction';
 import type { CitationMarker } from '~types/cache';
 import {
   registerSanitizeHook,
@@ -153,13 +153,22 @@ export async function extractContentOffscreen(
         // Determine title
         const title = deriveChapterTitle(doc, body.textContent || '', i);
 
-        // Extract sentences with CFIs
+        // Extract sentences with CFIs. The async variant hands the main
+        // thread back at block boundaries on the SAME 16 ms budget the
+        // chapter loop uses below — a single-XHTML book used to block for
+        // the whole book, since the only yield was between chapters.
         const sentencesStart = performance.now();
-        const { sentences, citationMarkers } = extractSentencesFromNode(body, (range) => {
+        const { sentences, citationMarkers } = await extractSentencesFromNodeAsync(body, (range) => {
           // contents.cfiFromRange returns the CFI for the range.
           // It should include the base CFI (spine index) if correctly initialized.
           return contents.cfiFromRange(range);
-        }, options);
+        }, options, {
+          shouldYield: () => shouldYieldToMainThread(lastYieldTime, performance.now()),
+          yieldFn: async () => {
+            await new Promise((r) => setTimeout(r, 0));
+            lastYieldTime = performance.now();
+          },
+        });
         sentencesMs += performance.now() - sentencesStart;
 
         // Table Capture
@@ -174,6 +183,16 @@ export async function extractContentOffscreen(
               quality: 0.1,
               scale: 0.5,
               backgroundColor: '#ffffff',
+              // snapdom's image/background/resource/font/style caches are
+              // MODULE-GLOBAL and its default policy ('soft') clears only the
+              // per-capture style maps, so a whole book's table resources
+              // stayed resident for the rest of the session. 'disabled' resets
+              // every cache at the start of each capture (@zumer/snapdom
+              // README "Cache control"; `_t(options.cache)` in the dist) and
+              // also skips installing snapdom's document-wide MutationObserver.
+              // Capture output is unaffected — only what is remembered between
+              // captures changes.
+              cache: 'disabled',
             });
 
             if (blob) {

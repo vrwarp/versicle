@@ -9,6 +9,7 @@ import type { SentenceNode } from '~types/tts-content';
 vi.mock('@data/repos/bookContent', () => ({
     bookContent: {
         getTableImages: vi.fn(),
+        listTableLocations: vi.fn(),
         getBookStructure: vi.fn(),
     }
 }));
@@ -64,6 +65,7 @@ describe('TableAdaptationProcessor', () => {
             } as any);
 
             vi.mocked(bookContent.getTableImages).mockResolvedValue([]);
+            vi.mocked(bookContent.listTableLocations).mockResolvedValue([]);
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             let foundAdaptations: any = null;
@@ -93,6 +95,9 @@ describe('TableAdaptationProcessor', () => {
                 { id: 'img', bookId: 'book1', sectionId: 'section1', cfi: 'epubcfi(/6/14!/4/2)', imageBlob: new Blob(['x']) },
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             ] as any);
+            vi.mocked(bookContent.listTableLocations).mockResolvedValue([
+                { id: 'img', sectionId: 'section1', cfi: 'epubcfi(/6/14!/4/2)' },
+            ]);
             const ctx = createZustandEngineContext();
             const generate = vi.spyOn(ctx.genAI, 'generateTableAdaptations');
             const onAdaptationsFound = vi.fn();

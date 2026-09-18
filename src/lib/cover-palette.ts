@@ -99,8 +99,9 @@ function extractRegionColor(pixels: Pixel[], anchor: Point): Color {
 }
 
 export async function extractCoverPalette(blob: Blob): Promise<{ palette: number[], perceptualPalette?: PerceptualPalette }> {
+    let bitmap: ImageBitmap | undefined;
     try {
-        const bitmap = await createImageBitmap(blob);
+        bitmap = await createImageBitmap(blob);
         let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
 
         const size = 16; // 16x16 grid
@@ -194,6 +195,11 @@ export async function extractCoverPalette(blob: Blob): Promise<{ palette: number
     } catch (e) {
         console.warn('Failed to extract cover palette:', e);
         return { palette: [] };
+    } finally {
+        // A full-resolution decode of the cover — held until GC otherwise,
+        // and this runs per book on the import AND reprocess paths.
+        // Optional-call: test doubles and older engines may not implement it.
+        bitmap?.close?.();
     }
 }
 
