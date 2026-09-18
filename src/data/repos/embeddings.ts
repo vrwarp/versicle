@@ -31,16 +31,39 @@
  * 256 MiB) were deserialized on the main thread before the under-budget
  * early-out could run — at boot, every boot.
  *
- * The total is a HINT. {@link EmbeddingsRepo.put} / {@link EmbeddingsRepo.putHydrated}
- * add the written row's bytes in memory and the eviction delete batches
- * subtract what they freed (persisted inside those same gated transactions, no
- * extra gate acquisitions). It never decides WHAT to evict: whenever it says
- * "over budget", or is absent, the full scan runs, and the scan — the source of
- * truth — re-seeds it. Every way it can be wrong is the SAFE way: a put that
- * REPLACES a book's row over-counts (the old row's bytes stay in), and
- * {@link EmbeddingsRepo.delete} (plus the book-deletion path, which clears both
- * rows inline) does not subtract at all, so the total can only read high — which
- * costs one extra scan and corrects itself.
+ * The total is a HINT. It never decides WHAT to evict: whenever it says "over
+ * budget", or is absent, the full scan runs, and the scan — the source of
+ * truth — re-seeds it from the rows themselves.
+ *
+ * It is maintained DURABLY, not just in memory: BOTH write paths
+ * ({@link EmbeddingsRepo.put} and {@link EmbeddingsRepo.putHydrated}) fold the
+ * row's bytes into the total inside the SAME gated transaction that writes the
+ * row (the base value is read outside the gate — the read-modify-write recipe
+ * in write-gate.ts — and the populate callback stays synchronous). That matters
+ * even more here than for the audio cache, whose sweep also runs every N puts:
+ * this sweep runs ONLY as a boot task (app/boot/backgroundTasks.ts), and at
+ * boot the in-memory remainder is empty, so a hint written exclusively from
+ * inside the sweep could never advance again — every session's writes died with
+ * the page, the stored value sat frozen under budget, and the sweep went on
+ * skipping a cache that had grown past the budget, where the pre-change code
+ * rescanned at every boot and could not drift. The eviction delete batches keep
+ * carrying the corrected total in their own transactions.
+ *
+ * {@link EmbeddingsRepo.deltaBytes} is only the remainder that could not be
+ * folded yet (the hint absent, or a write that raced a sweep's own write).
+ * Every gated write that carries a total subtracts EXACTLY the snapshot it
+ * folded in — never a blind reset — so bytes another write added meanwhile stay
+ * pending instead of being erased. The ways the hint can still be wrong are
+ * mostly the safe way (reading high ⇒ one extra scan, which corrects it): a put
+ * that REPLACES a book's row over-counts by the old row's size, and the indexer
+ * re-puts the whole growing row once per flush batch, so embedding one book
+ * counts its bytes several times over; {@link EmbeddingsRepo.delete} (plus the
+ * book-deletion path, which clears both rows inline) does not subtract at all.
+ * The one way it can read low is last-write-wins: two writes that overlap read
+ * the same base, so the later commit can drop the earlier's bytes (a sweep's
+ * scan-derived total can likewise clobber a fold that landed while it ran) —
+ * bounded by how often writes overlap, never frozen, and any scan
+ * re-establishes the truth.
  *
  * (design: plan/shared-ai-cache-design.md)
  */
@@ -79,6 +102,19 @@ interface EmbeddingEvictionResult {
   scanned: number;
 }
 
+/**
+ * One write's planned fold into the running byte total: the value its own gated
+ * transaction should carry (`null` while the hint has never been established —
+ * there is nothing to fold into), the {@link EmbeddingsRepo.deltaBytes}
+ * snapshot that value already covers, and the row's own bytes (which stay
+ * pending when the fold cannot happen).
+ */
+interface FoldPlan {
+  folded: number | null;
+  accounted: number;
+  bytes: number;
+}
+
 /** Persisted byte cost of one embeddings row (never re-wraps the buffers). */
 function rowBytes(row: CacheEmbeddingsRow): number {
   let size = 0;
@@ -107,10 +143,13 @@ type CacheEmbeddingsView = Omit<CacheEmbeddingsRow, 'sections'> & {
 
 class EmbeddingsRepo {
   /**
-   * Net byte change this context has made since the persisted total was last
-   * written (puts add, sweeps reset it). The persisted value itself is re-read
-   * per sweep rather than cached, so another tab's writes are picked up;
-   * concurrent deltas are last-write-wins, which a later scan corrects.
+   * Bytes this context has committed that the persisted total does NOT include
+   * yet — the remainder {@link EmbeddingsRepo.put} /
+   * {@link EmbeddingsRepo.putHydrated}'s fold could not carry (the hint absent,
+   * or a write that raced a sweep's own write). The persisted value is re-read
+   * per write and per sweep rather than cached, so another tab's writes are
+   * picked up; concurrent writes are last-write-wins, which a later scan
+   * corrects.
    */
   private deltaBytes = 0;
 
@@ -156,13 +195,24 @@ class EmbeddingsRepo {
    */
   async put(row: CacheEmbeddingsRow): Promise<void> {
     try {
-      await write(['cache_embeddings'], (tx) => {
+      const db = await getConnection();
+      // Running total (hint): read the base OUTSIDE the gate, then fold this
+      // row's bytes (plus whatever an earlier write could not fold) into the
+      // SAME gated transaction as the row, so the hint survives a page close
+      // even though the sweep only ever runs at boot. A put that REPLACES this
+      // book's row over-counts by the old row's size — which only ever buys an
+      // earlier full scan, and that scan re-establishes the truth.
+      const plan = await this.planFold(db, rowBytes(row));
+      await write(['cache_embeddings', 'app_metadata'], (tx) => {
         tx.objectStore('cache_embeddings').put(row);
+        if (plan.folded !== null) {
+          tx.objectStore('app_metadata').put(
+            plan.folded,
+            APP_METADATA_KEYS.embeddingCacheTotalBytes,
+          );
+        }
       });
-      // Running total (hint): a put that REPLACES this book's row over-counts
-      // by the old row's size — which only ever buys an earlier full scan, and
-      // that scan re-establishes the truth.
-      this.deltaBytes += rowBytes(row);
+      this.settleFold(plan);
     } catch (error) {
       handleDbError(error);
     }
@@ -183,23 +233,35 @@ class EmbeddingsRepo {
    * Fill in a book's embeddings from a copy another device uploaded to the
    * user's own cloud (avoids re-spending Gemini quota to recompute them). Writes
    * the embedding row AND its companion `complete` job row in ONE gated
-   * cross-store transaction (the same two-store `write(...)` shape as
-   * {@link EmbeddingsRepo.delete}). Atomicity is the point: the plain
+   * cross-store transaction (the same cross-store `write(...)` shape as
+   * {@link EmbeddingsRepo.delete}, carrying the running-total fold as
+   * {@link EmbeddingsRepo.put} does). Atomicity is the point: the plain
    * {@link EmbeddingsRepo.put} / {@link EmbeddingsRepo.putJob} are two
-   * INDEPENDENT single-store transactions, so a crash between them here could
-   * mark a section done in the job row while its vectors are absent — and the
-   * resume logic, seeing it "done", would skip it forever (silently
-   * un-searchable). One transaction closes that window. The caller's `jobRow`
-   * must mark ONLY the sections actually present in `row` as complete, so a
-   * partial fill stays correct.
+   * INDEPENDENT transactions, so a crash between them here could mark a
+   * section done in the job row while its vectors are absent — and the resume
+   * logic, seeing it "done", would skip it forever (silently un-searchable).
+   * One transaction closes that window. The caller's `jobRow` must mark ONLY
+   * the sections actually present in `row` as complete, so a partial fill stays
+   * correct.
    */
   async putHydrated(row: CacheEmbeddingsRow, jobRow: CacheEmbedJobsRow): Promise<void> {
     try {
-      await write(['cache_embeddings', 'cache_embed_jobs'], (tx) => {
+      const db = await getConnection();
+      // Same durable fold as put(): base read outside the gate, the new value
+      // written by the row's own transaction (the atomic pair is untouched —
+      // app_metadata simply joins the same scope).
+      const plan = await this.planFold(db, rowBytes(row));
+      await write(['cache_embeddings', 'cache_embed_jobs', 'app_metadata'], (tx) => {
         tx.objectStore('cache_embeddings').put(row);
         tx.objectStore('cache_embed_jobs').put(jobRow);
+        if (plan.folded !== null) {
+          tx.objectStore('app_metadata').put(
+            plan.folded,
+            APP_METADATA_KEYS.embeddingCacheTotalBytes,
+          );
+        }
       });
-      this.deltaBytes += rowBytes(row);
+      this.settleFold(plan);
     } catch (error) {
       handleDbError(error);
     }
@@ -222,23 +284,71 @@ class EmbeddingsRepo {
   }
 
   /**
-   * The tracked byte total (persisted hint + this session's net delta), or
-   * null while it has never been established. Read OUTSIDE the gate.
+   * The persisted hint as it stands on disk, or null while it has never been
+   * established (or holds a non-number). Read OUTSIDE the gate — the
+   * read-modify-write recipe in write-gate.ts.
    */
-  private async trackedTotal(
+  private async readStoredTotal(
     db: Awaited<ReturnType<typeof getConnection>>,
   ): Promise<number | null> {
     const stored = await db.get('app_metadata', APP_METADATA_KEYS.embeddingCacheTotalBytes);
     if (typeof stored !== 'number' || !Number.isFinite(stored)) return null;
-    return Math.max(0, stored + this.deltaBytes);
+    return stored;
   }
 
-  /** Adopt `total` as the established value and persist it (one gated put). */
-  private async persistTotal(total: number): Promise<void> {
-    this.deltaBytes = 0;
+  /**
+   * Plan a write's fold into the running total: read the base OUTSIDE the gate
+   * and compute the value the write's own transaction will carry, together with
+   * the {@link deltaBytes} snapshot that value covers. Hand the plan back to
+   * {@link settleFold} once — and only once — the write has landed.
+   *
+   * The audio cache folds inline inside its single write path; this repo has
+   * TWO ({@link EmbeddingsRepo.put} and {@link EmbeddingsRepo.putHydrated}), so
+   * the arithmetic lives in one place and cannot drift between them.
+   */
+  private async planFold(
+    db: Awaited<ReturnType<typeof getConnection>>,
+    bytes: number,
+  ): Promise<FoldPlan> {
+    const stored = await this.readStoredTotal(db);
+    if (stored === null) return { folded: null, accounted: 0, bytes };
+    const accounted = this.deltaBytes;
+    return { folded: Math.max(0, stored + accounted + bytes), accounted, bytes };
+  }
+
+  /** Retire a fold once ITS gated write has committed. */
+  private settleFold(plan: FoldPlan): void {
+    if (plan.folded === null) {
+      // The hint has never been established: the next sweep's scan seeds it
+      // from the rows themselves, this row included.
+      this.deltaBytes += plan.bytes;
+      return;
+    }
+    // Subtract exactly what the written value accounted for (this row's own
+    // bytes are in it), leaving anything a concurrent write added meanwhile.
+    this.settleDelta(plan.accounted);
+  }
+
+  /**
+   * Retire the part of {@link deltaBytes} a just-committed total accounted for.
+   * NEVER a reset: bytes a write added after `accounted` was snapshotted are
+   * not in the written value, so they stay pending for the next fold.
+   */
+  private settleDelta(accounted: number): void {
+    if (accounted <= 0) return;
+    this.deltaBytes = Math.max(0, this.deltaBytes - accounted);
+  }
+
+  /**
+   * Adopt `total` as the established value and persist it (one gated put).
+   * `accounted` is the {@link deltaBytes} snapshot `total` already covers; it
+   * is settled only AFTER the write lands.
+   */
+  private async persistTotal(total: number, accounted: number): Promise<void> {
     await write(['app_metadata'], (tx) => {
       tx.objectStore('app_metadata').put(total, APP_METADATA_KEYS.embeddingCacheTotalBytes);
     });
+    this.settleDelta(accounted);
   }
 
   /**
@@ -286,13 +396,20 @@ class EmbeddingsRepo {
       // Fast path: the tracked total proves we are under budget. This is the
       // common case for the boot task and the whole point of tracking — the
       // scan below deserializes every book's packed int8 vectors.
-      const tracked = await this.trackedTotal(db);
+      const stored = await this.readStoredTotal(db);
+      const pending = this.deltaBytes;
+      const tracked = stored === null ? null : Math.max(0, stored + pending);
       if (tracked !== null && tracked <= budgetBytes) {
-        if (this.deltaBytes !== 0) await this.persistTotal(tracked);
+        if (pending > 0) await this.persistTotal(tracked, pending);
         return { deleted: 0, freedBytes: 0, scanned: 0 };
       }
 
-      // Pass 1: streaming scan (no getAll — rows hold packed vector blobs).
+      // Pass 1: streaming scan (no getAll — rows hold packed vector blobs). The
+      // scan's own total supersedes the hint, so it covers the bytes pending
+      // RIGHT NOW (their rows are committed) but not a write that lands while
+      // it runs — hence the snapshot, settled once a scan-derived total
+      // commits.
+      let credit = this.deltaBytes;
       const entries: { bookId: string; size: number }[] = [];
       let totalBytes = 0;
       {
@@ -316,7 +433,7 @@ class EmbeddingsRepo {
 
       if (totalBytes <= budgetBytes) {
         // The scan is the source of truth — seed/correct the tracked total.
-        await this.persistTotal(totalBytes);
+        await this.persistTotal(totalBytes, credit);
         return { deleted: 0, freedBytes: 0, scanned };
       }
 
@@ -337,7 +454,12 @@ class EmbeddingsRepo {
         if (batch.length === 0) return;
         const ids = batch;
         batch = [];
-        this.deltaBytes = 0;
+        // Every batch total derives from the one scan, so the scan's credit is
+        // settled once — by the first batch that commits. A write that lands
+        // between batches keeps its bytes pending (this total does not carry
+        // them) and the next fold or sweep picks them up.
+        const spend = credit;
+        credit = 0;
         await write(['cache_embeddings', 'cache_embed_jobs', 'app_metadata'], (tx) => {
           const embeddings = tx.objectStore('cache_embeddings');
           const jobs = tx.objectStore('cache_embed_jobs');
@@ -351,6 +473,7 @@ class EmbeddingsRepo {
             APP_METADATA_KEYS.embeddingCacheTotalBytes,
           );
         });
+        this.settleDelta(spend);
       };
 
       for (const entry of candidates) {
@@ -370,7 +493,7 @@ class EmbeddingsRepo {
       await flushBatch(remaining);
       // Nothing was evictable (every candidate protected): the scan's total
       // still has to land so the next sweep does not rescan.
-      if (deleted === 0) await this.persistTotal(totalBytes);
+      if (deleted === 0) await this.persistTotal(totalBytes, credit);
 
       if (deleted > 0) {
         logger.info(
