@@ -7,6 +7,12 @@
  * of its call sites, the panic save's 2s floor, and every catch — a
  * recording that throws must not stall the FIFO or lose the current
  * location.
+ *
+ * Every describe runs against BOTH branches of `commit()` (see {@link MODES}):
+ * the coalescing window the app ships, and the `commitWindowMs: 0`
+ * write-through branch. They used to run only against zero, which nothing in
+ * production selects — so the error arms in particular were being asserted
+ * against catches the app never reaches.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { generateCfiRange } from '@kernel/cfi';
@@ -31,11 +37,51 @@ const nullResolver: SessionResolver = {
   getLanguage: () => 'en',
 };
 
-const flush = () => new Promise((r) => setTimeout(r, 0));
+/** Mirrors the recorder's private production window (pinned in the owning suite). */
+const COMMIT_WINDOW_MS = 5_000;
+
+/**
+ * The two branches of {@link ReadingSessionRecorder.commit}. Only the first
+ * ships. They differ in more than timing: the write-through branch issues the
+ * store call from inside `commit()` (so a throwing store surfaces through the
+ * caller's catch — `pump`'s 'Failed to update reading session' or
+ * `drainQueue`'s 'Session flush failed'), while the coalesced branch buffers
+ * and issues from `flushWindow`, which has a catch of its own. Hence
+ * {@link Mode.drainFailureLog}.
+ */
+interface Mode {
+  label: string;
+  deps: Partial<ReadingSessionRecorderDeps>;
+  /** Which catch logs a store write that throws during the flushSync drain. */
+  drainFailureLog: string;
+}
+
+const MODES: Mode[] = [
+  {
+    label: 'coalesced (the production default window)',
+    deps: {},
+    drainFailureLog: 'Failed to update reading session',
+  },
+  {
+    label: 'write-through (commitWindowMs: 0)',
+    deps: { commitWindowMs: 0 },
+    drainFailureLog: 'Session flush failed',
+  },
+];
+
+/**
+ * Let the FIFO's async snap pass reach its commit, then let the coalescing
+ * window's timer fire — one settle means "one commit has reached the store"
+ * on both branches.
+ */
+const settle = async () => {
+  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(COMMIT_WINDOW_MS);
+};
 
 let errorLogs: unknown[][];
 
-function makeRecorder(overrides: Partial<ReadingSessionRecorderDeps> = {}) {
+function createRecorder(deps: Partial<ReadingSessionRecorderDeps> = {}) {
   const store = {
     getCurrentCfi: vi.fn<() => string | undefined>(() => undefined),
     updateReadingSession: vi.fn(),
@@ -57,16 +103,13 @@ function makeRecorder(overrides: Partial<ReadingSessionRecorderDeps> = {}) {
     getContext: () => context,
     onHistoryRecorded,
     now: () => nowValue,
-    // These describes pin the per-commit WRITE SHAPES, so they run with the
-    // CRDT coalescing window disabled; the window itself is pinned by the
-    // 'regression: coalesced CRDT commits' block in the owning suite.
-    commitWindowMs: 0,
-    ...overrides,
+    ...deps,
   });
   return { recorder, store, onHistoryRecorded, advance, context };
 }
 
 beforeEach(() => {
+  vi.useFakeTimers();
   errorLogs = [];
   vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => errorLogs.push(a));
   vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -74,9 +117,13 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
-describe('ReadingSessionRecorder — disposal', () => {
+describe.each(MODES)('ReadingSessionRecorder — disposal — $label', (mode) => {
+  const makeRecorder = (overrides: Partial<ReadingSessionRecorderDeps> = {}) =>
+    createRecorder({ ...mode.deps, ...overrides });
+
   it('a disposed recorder ignores prime and relocations', async () => {
     const { recorder, store } = makeRecorder();
 
@@ -85,7 +132,7 @@ describe('ReadingSessionRecorder — disposal', () => {
     expect(recorder.onRelocated({ location: loc(2), at: 2000, percentage: 0.2, viewMode: 'paginated', title: 'T' })).toBe(
       false
     );
-    await flush();
+    await settle();
 
     expect(store.updateReadingSession).not.toHaveBeenCalled();
   });
@@ -97,7 +144,7 @@ describe('ReadingSessionRecorder — disposal', () => {
     recorder.onRelocated({ location: loc(2), at: 105_000, percentage: 0.2, viewMode: 'paginated', title: 'T' });
 
     recorder.dispose();
-    await flush();
+    await settle();
 
     expect(store.updateReadingSession).not.toHaveBeenCalled();
   });
@@ -114,7 +161,10 @@ describe('ReadingSessionRecorder — disposal', () => {
   });
 });
 
-describe('ReadingSessionRecorder — prime', () => {
+describe.each(MODES)('ReadingSessionRecorder — prime — $label', (mode) => {
+  const makeRecorder = (overrides: Partial<ReadingSessionRecorderDeps> = {}) =>
+    createRecorder({ ...mode.deps, ...overrides });
+
   it('is idempotent: the FIRST location wins', async () => {
     const { recorder, store, advance } = makeRecorder();
 
@@ -122,14 +172,17 @@ describe('ReadingSessionRecorder — prime', () => {
     recorder.prime(loc(5), 100_000); // ignored
     advance(5000);
     recorder.onRelocated({ location: loc(2), at: 105_000, percentage: 0.2, viewMode: 'paginated', title: 'T' });
-    await flush();
+    await settle();
 
     const updates = store.updateReadingSession.mock.calls[0][3];
     expect(updates[0].range).toBe(generateCfiRange(loc(1).startCfi, loc(1).endCfi));
   });
 });
 
-describe('ReadingSessionRecorder — the no-op guard', () => {
+describe.each(MODES)('ReadingSessionRecorder — the no-op guard — $label', (mode) => {
+  const makeRecorder = (overrides: Partial<ReadingSessionRecorderDeps> = {}) =>
+    createRecorder({ ...mode.deps, ...overrides });
+
   it('skips a relocation to the ALREADY-SAVED cfi', async () => {
     const { recorder, store } = makeRecorder();
     store.getCurrentCfi.mockReturnValue(loc(2).startCfi);
@@ -141,7 +194,7 @@ describe('ReadingSessionRecorder — the no-op guard', () => {
       viewMode: 'paginated',
       title: 'T',
     });
-    await flush();
+    await settle();
 
     expect(recorded).toBe(false);
     expect(store.updateReadingSession).not.toHaveBeenCalled();
@@ -154,7 +207,7 @@ describe('ReadingSessionRecorder — the no-op guard', () => {
     expect(
       recorder.onRelocated({ location: loc(2), at: 1000, percentage: 0.2, viewMode: 'paginated', title: 'T' })
     ).toBe(true);
-    await flush();
+    await settle();
 
     expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
   });
@@ -167,155 +220,170 @@ describe('ReadingSessionRecorder — the no-op guard', () => {
     store.getCurrentCfi.mockReturnValue(undefined);
     advance(5000);
     recorder.onRelocated({ location: loc(2), at: 105_000, percentage: 0.2, viewMode: 'paginated', title: 'T' });
-    await flush();
+    await settle();
 
     const updates = store.updateReadingSession.mock.calls[0][3];
     expect(updates[0].range).toBe(generateCfiRange(loc(1).startCfi, loc(1).endCfi));
   });
 });
 
-describe('ReadingSessionRecorder — does the previous segment qualify?', () => {
-  const relocate = (
-    recorder: ReadingSessionRecorder,
-    n: number,
-    viewMode: 'paginated' | 'scrolled',
-    title = 'T'
-  ) =>
-    recorder.onRelocated({
-      location: loc(n),
-      at: 0,
-      percentage: n / 10,
-      viewMode,
-      title,
+describe.each(MODES)(
+  'ReadingSessionRecorder — does the previous segment qualify? — $label',
+  (mode) => {
+    const makeRecorder = (overrides: Partial<ReadingSessionRecorderDeps> = {}) =>
+      createRecorder({ ...mode.deps, ...overrides });
+
+    const relocate = (
+      recorder: ReadingSessionRecorder,
+      n: number,
+      viewMode: 'paginated' | 'scrolled',
+      title = 'T'
+    ) =>
+      recorder.onRelocated({
+        location: loc(n),
+        at: 0,
+        percentage: n / 10,
+        viewMode,
+        title,
+      });
+
+    it('a PAGINATED move always qualifies, however brief', async () => {
+      const { recorder, store, advance } = makeRecorder();
+      recorder.prime(loc(1), 100_000);
+      advance(10); // far under the scroll dwell floor
+
+      relocate(recorder, 2, 'paginated');
+      await settle();
+
+      expect(store.updateReadingSession.mock.calls[0][3]).toHaveLength(2);
     });
 
-  it('a PAGINATED move always qualifies, however brief', async () => {
-    const { recorder, store, advance } = makeRecorder();
-    recorder.prime(loc(1), 100_000);
-    advance(10); // far under the scroll dwell floor
+    it('a SCROLLED move needs more than 2s of dwell', async () => {
+      const brief = makeRecorder();
+      brief.recorder.prime(loc(1), 100_000);
+      brief.advance(2000); // exactly the floor — not "more than"
+      relocate(brief.recorder, 2, 'scrolled');
+      await settle();
+      expect(brief.store.updateReadingSession.mock.calls[0][3]).toHaveLength(1);
 
-    relocate(recorder, 2, 'paginated');
-    await flush();
+      const dwelt = makeRecorder();
+      dwelt.recorder.prime(loc(1), 100_000);
+      dwelt.advance(2001);
+      relocate(dwelt.recorder, 2, 'scrolled');
+      await settle();
+      expect(dwelt.store.updateReadingSession.mock.calls[0][3]).toHaveLength(2);
+    });
 
-    expect(store.updateReadingSession.mock.calls[0][3]).toHaveLength(2);
-  });
+    it('does not record a previous segment on the very first relocation', async () => {
+      const { recorder, store } = makeRecorder();
 
-  it('a SCROLLED move needs more than 2s of dwell', async () => {
-    const brief = makeRecorder();
-    brief.recorder.prime(loc(1), 100_000);
-    brief.advance(2000); // exactly the floor — not "more than"
-    relocate(brief.recorder, 2, 'scrolled');
-    await flush();
-    expect(brief.store.updateReadingSession.mock.calls[0][3]).toHaveLength(1);
+      relocate(recorder, 1, 'paginated');
+      await settle();
 
-    const dwelt = makeRecorder();
-    dwelt.recorder.prime(loc(1), 100_000);
-    dwelt.advance(2001);
-    relocate(dwelt.recorder, 2, 'scrolled');
-    await flush();
-    expect(dwelt.store.updateReadingSession.mock.calls[0][3]).toHaveLength(2);
-  });
+      expect(store.updateReadingSession.mock.calls[0][3]).toHaveLength(1);
+    });
 
-  it('does not record a previous segment on the very first relocation', async () => {
-    const { recorder, store } = makeRecorder();
+    it('does not record a previous segment that did not actually move', async () => {
+      const { recorder, store, advance } = makeRecorder();
+      recorder.prime(loc(2), 100_000);
+      advance(5000);
 
-    relocate(recorder, 1, 'paginated');
-    await flush();
+      // previous.start === the incoming start: no segment was traversed.
+      relocate(recorder, 2, 'paginated');
+      await settle();
 
-    expect(store.updateReadingSession.mock.calls[0][3]).toHaveLength(1);
-  });
+      expect(store.updateReadingSession.mock.calls[0][3]).toHaveLength(1);
+    });
 
-  it('does not record a previous segment that did not actually move', async () => {
-    const { recorder, store, advance } = makeRecorder();
-    recorder.prime(loc(2), 100_000);
-    advance(5000);
+    it('records nothing extra when there is no resolver', async () => {
+      const { recorder, store, advance } = makeRecorder({ getResolver: () => null });
+      recorder.prime(loc(1), 100_000);
+      advance(5000);
 
-    // previous.start === the incoming start: no segment was traversed.
-    relocate(recorder, 2, 'paginated');
-    await flush();
+      relocate(recorder, 2, 'paginated');
+      await settle();
 
-    expect(store.updateReadingSession.mock.calls[0][3]).toHaveLength(1);
-  });
+      expect(store.updateReadingSession.mock.calls[0][3]).toHaveLength(1);
+    });
 
-  it('records nothing extra when there is no resolver', async () => {
-    const { recorder, store, advance } = makeRecorder({ getResolver: () => null });
-    recorder.prime(loc(1), 100_000);
-    advance(5000);
+    it("stamps the entry type from the view mode", async () => {
+      const { recorder, store, advance } = makeRecorder();
+      recorder.prime(loc(1), 100_000);
+      advance(5000);
 
-    relocate(recorder, 2, 'paginated');
-    await flush();
+      relocate(recorder, 2, 'scrolled');
+      await settle();
 
-    expect(store.updateReadingSession.mock.calls[0][3]).toHaveLength(1);
-  });
+      const updates = store.updateReadingSession.mock.calls[0][3];
+      expect(updates.map((u: { type: string }) => u.type)).toEqual(['scroll', 'scroll']);
+    });
+  },
+);
 
-  it("stamps the entry type from the view mode", async () => {
-    const { recorder, store, advance } = makeRecorder();
-    recorder.prime(loc(1), 100_000);
-    advance(5000);
+describe.each(MODES)(
+  "ReadingSessionRecorder — the 'Chapter' placeholder filter — $label",
+  (mode) => {
+    const makeRecorder = (overrides: Partial<ReadingSessionRecorderDeps> = {}) =>
+      createRecorder({ ...mode.deps, ...overrides });
 
-    relocate(recorder, 2, 'scrolled');
-    await flush();
+    it('drops the PREVIOUS entry when its captured title is the placeholder', async () => {
+      const { recorder, store, advance, context } = makeRecorder();
+      recorder.prime(loc(1), 100_000);
+      context.title = 'Chapter';
+      advance(5000);
 
-    const updates = store.updateReadingSession.mock.calls[0][3];
-    expect(updates.map((u: { type: string }) => u.type)).toEqual(['scroll', 'scroll']);
-  });
-});
+      recorder.onRelocated({ location: loc(2), at: 0, percentage: 0.2, viewMode: 'paginated', title: 'Real' });
+      await settle();
 
-describe("ReadingSessionRecorder — the 'Chapter' placeholder filter", () => {
-  it('drops the PREVIOUS entry when its captured title is the placeholder', async () => {
-    const { recorder, store, advance, context } = makeRecorder();
-    recorder.prime(loc(1), 100_000);
-    context.title = 'Chapter';
-    advance(5000);
+      const updates = store.updateReadingSession.mock.calls[0][3];
+      expect(updates).toHaveLength(1);
+      expect(updates[0].label).toBe('Real');
+    });
 
-    recorder.onRelocated({ location: loc(2), at: 0, percentage: 0.2, viewMode: 'paginated', title: 'Real' });
-    await flush();
+    it('keeps a title that merely CONTAINS the placeholder word', async () => {
+      const { recorder, store, advance, context } = makeRecorder();
+      recorder.prime(loc(1), 100_000);
+      context.title = 'Chapter 3';
+      advance(5000);
 
-    const updates = store.updateReadingSession.mock.calls[0][3];
-    expect(updates).toHaveLength(1);
-    expect(updates[0].label).toBe('Real');
-  });
+      recorder.onRelocated({ location: loc(2), at: 0, percentage: 0.2, viewMode: 'paginated', title: 'Real' });
+      await settle();
 
-  it('keeps a title that merely CONTAINS the placeholder word', async () => {
-    const { recorder, store, advance, context } = makeRecorder();
-    recorder.prime(loc(1), 100_000);
-    context.title = 'Chapter 3';
-    advance(5000);
+      expect(store.updateReadingSession.mock.calls[0][3]).toHaveLength(2);
+    });
 
-    recorder.onRelocated({ location: loc(2), at: 0, percentage: 0.2, viewMode: 'paginated', title: 'Real' });
-    await flush();
+    it('does NOT announce a history entry when the placeholder dropped it', async () => {
+      const { recorder, onHistoryRecorded, advance, context } = makeRecorder();
+      recorder.prime(loc(1), 100_000);
+      context.title = 'Chapter';
+      advance(5000);
 
-    expect(store.updateReadingSession.mock.calls[0][3]).toHaveLength(2);
-  });
+      recorder.onRelocated({ location: loc(2), at: 0, percentage: 0.2, viewMode: 'paginated', title: 'Real' });
+      await settle();
 
-  it('does NOT announce a history entry when the placeholder dropped it', async () => {
-    const { recorder, onHistoryRecorded, advance, context } = makeRecorder();
-    recorder.prime(loc(1), 100_000);
-    context.title = 'Chapter';
-    advance(5000);
+      expect(onHistoryRecorded).not.toHaveBeenCalled();
+    });
 
-    recorder.onRelocated({ location: loc(2), at: 0, percentage: 0.2, viewMode: 'paginated', title: 'Real' });
-    await flush();
+    it('carries a NULL captured title through as an unlabeled entry', async () => {
+      const { recorder, store, advance, context } = makeRecorder();
+      recorder.prime(loc(1), 100_000);
+      context.title = null;
+      advance(5000);
 
-    expect(onHistoryRecorded).not.toHaveBeenCalled();
-  });
+      recorder.onRelocated({ location: loc(2), at: 0, percentage: 0.2, viewMode: 'paginated', title: 'Real' });
+      await settle();
 
-  it('carries a NULL captured title through as an unlabeled entry', async () => {
-    const { recorder, store, advance, context } = makeRecorder();
-    recorder.prime(loc(1), 100_000);
-    context.title = null;
-    advance(5000);
+      const updates = store.updateReadingSession.mock.calls[0][3];
+      expect(updates).toHaveLength(2);
+      expect(updates[0].label).toBeUndefined();
+    });
+  },
+);
 
-    recorder.onRelocated({ location: loc(2), at: 0, percentage: 0.2, viewMode: 'paginated', title: 'Real' });
-    await flush();
+describe.each(MODES)('ReadingSessionRecorder — failure arms — $label', (mode) => {
+  const makeRecorder = (overrides: Partial<ReadingSessionRecorderDeps> = {}) =>
+    createRecorder({ ...mode.deps, ...overrides });
 
-    const updates = store.updateReadingSession.mock.calls[0][3];
-    expect(updates).toHaveLength(2);
-    expect(updates[0].label).toBeUndefined();
-  });
-});
-
-describe('ReadingSessionRecorder — failure arms', () => {
   it('a snap failure still saves the CURRENT location', async () => {
     const resolver: SessionResolver = {
       getRange: async () => null,
@@ -328,7 +396,7 @@ describe('ReadingSessionRecorder — failure arms', () => {
     advance(5000);
 
     recorder.onRelocated({ location: loc(2), at: 0, percentage: 0.2, viewMode: 'paginated', title: 'T' });
-    await flush();
+    await settle();
 
     expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
     expect(store.updateReadingSession.mock.calls[0][3]).toHaveLength(1);
@@ -346,10 +414,10 @@ describe('ReadingSessionRecorder — failure arms', () => {
     advance(5000);
 
     recorder.onRelocated({ location: loc(2), at: 0, percentage: 0.2, viewMode: 'paginated', title: 'T' });
-    await flush();
+    await settle();
     advance(5000);
     recorder.onRelocated({ location: loc(3), at: 0, percentage: 0.3, viewMode: 'paginated', title: 'T' });
-    await flush();
+    await settle();
 
     expect(errorLogs.some((a) => a.some((x) => String(x).includes('Failed to update reading session')))).toBe(
       true
@@ -358,7 +426,10 @@ describe('ReadingSessionRecorder — failure arms', () => {
   });
 });
 
-describe('ReadingSessionRecorder.flushSync — the panic save', () => {
+describe.each(MODES)('ReadingSessionRecorder.flushSync — the panic save — $label', (mode) => {
+  const makeRecorder = (overrides: Partial<ReadingSessionRecorderDeps> = {}) =>
+    createRecorder({ ...mode.deps, ...overrides });
+
   it('does nothing at all when nothing was ever primed', () => {
     const { recorder, store } = makeRecorder();
 
@@ -449,7 +520,7 @@ describe('ReadingSessionRecorder.flushSync — the panic save', () => {
 
     recorder.flushSync();
     const afterFlush = store.updateReadingSession.mock.calls.length;
-    await flush();
+    await settle();
 
     expect(afterFlush).toBe(1);
     expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
@@ -467,7 +538,10 @@ describe('ReadingSessionRecorder.flushSync — the panic save', () => {
 
     recorder.flushSync();
 
-    expect(errorLogs.some((a) => a.some((x) => String(x).includes('Session flush failed')))).toBe(
+    // The catch differs by branch (see Mode.drainFailureLog) — what must hold
+    // on BOTH is that the throw is logged rather than swallowed, and that it
+    // does not take the final panic segment down with it.
+    expect(errorLogs.some((a) => a.some((x) => String(x).includes(mode.drainFailureLog)))).toBe(
       true
     );
     expect(store.addCompletedRange).toHaveBeenCalledTimes(1);

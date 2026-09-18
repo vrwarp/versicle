@@ -92,6 +92,38 @@ export function getYjsPersistence(): IndexeddbPersistence | null {
     return persistence;
 }
 
+/**
+ * Force the queued Yjs updates to disk NOW, bypassing the `writeDebounceMs`
+ * debounce configured above, and resolve once the IndexedDB transaction has
+ * committed. A no-op (already-resolved) when persistence was never started —
+ * in-memory mode, an unsupported browser — or has been destroyed.
+ *
+ * WHY THIS IS PRODUCTION CODE, not just an E2E seam. y-idb installs its own
+ * `pagehide` / `visibilitychange`→hidden listener that synchronously dumps
+ * whatever is in its queue at that instant, and it registers it when the
+ * binding is constructed — during boot, i.e. BEFORE any reader mounts. DOM
+ * listeners fire in registration order, so on a real backgrounding that
+ * built-in drain runs FIRST, and anything an app-level handler enqueues
+ * afterwards (the reading-session recorder's merged commit window, see
+ * domains/reader/session/ReadingSessionRecorder) lands in a queue whose
+ * unload drain has already gone by — with only the 200ms debounce timer
+ * behind it, which a frozen or killed page may never run. App-level handlers
+ * that flush user state on those events must therefore call this after
+ * writing to the store; otherwise the write is durable only in memory.
+ *
+ * The drain itself is the vendored fork's first-class `flush()`
+ * (packages/y-idb/PROVENANCE.md surgery 1): it runs the pending batch
+ * immediately, awaits the transaction commit, and loops until quiescent,
+ * including updates that arrive mid-flush. It retries a failing transaction
+ * forever (mirroring the internal machinery), so a caller that needs a bound
+ * must race it against its own deadline — `src/test-api.ts` does.
+ */
+export function flushYjsPersistence(): Promise<void> {
+    const binding = persistence;
+    if (!binding || binding._destroyed) return Promise.resolve();
+    return binding.flush();
+}
+
 // ─── Client Quarantine ──────────────────────────────────────────────────────
 /**
  * Fires when any quarantine layer sees a document from a newer schema

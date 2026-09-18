@@ -78,3 +78,102 @@ describe('regression: the narrowed reader metadata carries every field the engin
     ).toEqual([]);
   });
 });
+
+/**
+ * The recorder-lifecycle effect, sliced out of the controller source: from
+ * the recorder's construction to the effect's dependency array.
+ */
+function recorderLifecycleEffect(): string {
+  const start = CONTROLLER.indexOf('const recorder = new ReadingSessionRecorder({');
+  expect(start, 'the recorder lifecycle effect was restructured — update this gate').toBeGreaterThan(
+    -1,
+  );
+  const end = CONTROLLER.indexOf('}, [bookId, coldOpenGuard]);', start);
+  expect(end, 'the recorder effect’s dependency array moved — update this gate').toBeGreaterThan(-1);
+  return CONTROLLER.slice(start, end);
+}
+
+/** The source of the `{` … `}` (or `… ;`) that follows `at`. */
+function bodyAt(source: string, at: number): string {
+  if (source[at] !== '{') return source.slice(at, source.indexOf(';', at));
+  let depth = 0;
+  for (let i = at; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}' && --depth === 0) return source.slice(at, i + 1);
+  }
+  throw new Error('unbalanced handler body');
+}
+
+/** Every zero-arg arrow const declared in `block`, by name. */
+function arrowConsts(block: string): Map<string, string> {
+  const bodies = new Map<string, string>();
+  for (const m of block.matchAll(/const (\w+)\s*=\s*\(\)\s*=>\s*/g)) {
+    bodies.set(m[1], bodyAt(block, m.index + m[0].length));
+  }
+  return bodies;
+}
+
+/** One handler's body with its local zero-arg callees substituted in place. */
+function inlinedHandler(name: string, bodies: Map<string, string>, depth = 0): string {
+  const body = bodies.get(name);
+  expect(body, `handler ${name} is not declared in the recorder effect`).toBeDefined();
+  if (depth >= 4) return body!;
+  return body!.replace(/\b(\w+)\(\)/g, (whole, callee: string) =>
+    callee !== name && bodies.has(callee) ? inlinedHandler(callee, bodies, depth + 1) : whole,
+  );
+}
+
+/**
+ * durability regression: the recorder merges up to five seconds of
+ * relocations into ONE CRDT write, so between windows the user's place exists
+ * only in memory and these two events are what make it durable.
+ * `recorder.flushPending()` alone does NOT make it durable: it writes the
+ * merged commit into the CRDT store, which hands the bytes to y-idb, which
+ * holds them for `writeDebounceMs` (200ms, src/store/yjs-provider.ts). y-idb's
+ * own unload drain does not cover that write — the binding is constructed
+ * during boot, so its listener is registered first and fires BEFORE this
+ * handler, snapshotting a queue the merged commit has not been added to yet.
+ * A background kill inside that 200ms therefore loses the whole window, which
+ * the un-coalesced write-through path could not lose. The handler must end on
+ * disk: flushPending() first, then flushYjsPersistence().
+ */
+describe('regression: backgrounding drains the recorder window all the way to disk', () => {
+  it('imports the persistence drain from the store provider', () => {
+    expect(CONTROLLER).toMatch(
+      /import \{[^}]*\bflushYjsPersistence\b[^}]*\} from '@store\/yjs-provider';/,
+    );
+  });
+
+  it('flushes the recorder AND then the y-idb queue on both backgrounding signals', () => {
+    const effect = recorderLifecycleEffect();
+    const bodies = arrowConsts(effect);
+    const registered = new Map(
+      [
+        ...effect.matchAll(
+          /(?:document|window)\.addEventListener\(\s*'(visibilitychange|pagehide)'\s*,\s*(\w+)\s*\)/g,
+        ),
+      ].map((m) => [m[1], m[2]] as const),
+    );
+
+    expect([...registered.keys()].sort()).toEqual(['pagehide', 'visibilitychange']);
+
+    for (const [event, handler] of registered) {
+      const body = inlinedHandler(handler, bodies);
+      const recorderFlush = body.indexOf('recorder.flushPending()');
+      const persistenceFlush = body.indexOf('flushYjsPersistence(');
+
+      expect(recorderFlush, `${event} handler never issues the recorder's window`).toBeGreaterThan(
+        -1,
+      );
+      expect(
+        persistenceFlush,
+        `${event} handler leaves the merged commit behind y-idb's 200ms write debounce — ` +
+          'it must force the queue to disk with flushYjsPersistence()',
+      ).toBeGreaterThan(-1);
+      expect(
+        recorderFlush,
+        `${event} handler drains y-idb before the recorder window is even written`,
+      ).toBeLessThan(persistenceFlush);
+    }
+  });
+});

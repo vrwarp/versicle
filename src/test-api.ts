@@ -20,7 +20,7 @@
  * src/test-flags.ts.
  */
 import type { IndexeddbPersistence } from 'y-idb';
-import { getYjsPersistence, disconnectYjs } from './store/yjs-provider';
+import { getYjsPersistence, flushYjsPersistence, disconnectYjs } from './store/yjs-provider';
 import { playbackCache } from './data/repos/playbackCache';
 import { closeConnection } from './data/connection';
 import { wipeAllData } from './data/wipe';
@@ -146,15 +146,15 @@ declare global {
 const FLUSH_DEADLINE_MS = 10_000;
 
 /**
- * Drain the y-idb persistence queue via the vendored fork's first-class
- * `flush()` (packages/y-idb/PROVENANCE.md surgery 1): it bypasses the 200ms
- * write debounce, awaits the in-flight transaction commit, and loops until
- * quiescent — including updates that arrive mid-flush. The deadline race
- * keeps a hung IDB transaction failing the test loudly instead of stalling
- * the suite (flush() itself retries forever, mirroring the internal
- * machinery).
+ * Drain the y-idb persistence queue through the SAME production helper the
+ * reader's backgrounding handler uses (`flushYjsPersistence` in
+ * store/yjs-provider) — this module must not carry its own copy of the
+ * durability drain, or the two can drift and the E2E suite stops testing what
+ * ships. All this adds is the deadline race, which keeps a hung IDB
+ * transaction failing the test loudly instead of stalling the suite (the
+ * underlying `flush()` retries forever, mirroring the internal machinery).
  */
-async function flushYjsPersistence(): Promise<void> {
+async function flushYjsPersistenceWithinDeadline(): Promise<void> {
   const persistence: IndexeddbPersistence | null = getYjsPersistence();
   if (!persistence || persistence._destroyed) return;
 
@@ -170,7 +170,7 @@ async function flushYjsPersistence(): Promise<void> {
     }, FLUSH_DEADLINE_MS);
   });
   try {
-    await Promise.race([persistence.flush(), deadline]);
+    await Promise.race([flushYjsPersistence(), deadline]);
   } finally {
     clearTimeout(deadlineTimer);
   }
@@ -186,7 +186,7 @@ export async function flushPersistence(): Promise<void> {
   // (src/data/write-gate.ts), so flushing them sequentially is also the
   // ordering the app itself guarantees.
   await playbackCache.flushPending();
-  await flushYjsPersistence();
+  await flushYjsPersistenceWithinDeadline();
 }
 
 export function installTestApi(): void {

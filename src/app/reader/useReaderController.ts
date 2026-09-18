@@ -49,7 +49,7 @@ import { useBook } from '@store/libraryViewStore';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { createSearchNavigator, type SearchNavigator } from '@app/reader/searchNavigation';
 import { ColdOpenResumeGuard } from '@app/reader/coldOpenResumeGuard';
-import { isYjsSyncSettled } from '@store/yjs-provider';
+import { isYjsSyncSettled, flushYjsPersistence } from '@store/yjs-provider';
 import { getActiveReaderEngine } from '@domains/reader/engine/activeEngineRegistry';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import { createLogger } from '@lib/logger';
@@ -667,7 +667,9 @@ export function useReaderController(
   // flushSync on teardown is the legacy unmount panic save; the recorder's
   // coalescing window (one CRDT write per 5s instead of one per page turn) is
   // additionally drained on `visibilitychange` → hidden and on `pagehide` —
-  // the only signals a mobile background kill reliably delivers.
+  // the only signals a mobile background kill reliably delivers — and the
+  // y-idb queue is forced to disk behind it, so the drain ends on DISK and
+  // not in another debounce (see flushDurably below).
   useEffect(() => {
     if (!bookId) return;
     const recorder = new ReadingSessionRecorder({
@@ -697,9 +699,27 @@ export function useReaderController(
     recorderRef.current = recorder;
     setActiveReadingSessionRecorder(recorder);
 
-    const flushOnPageHide = () => recorder.flushPending();
+    // The durability drain, in two steps — BOTH are required.
+    //
+    // 1. flushPending() issues the recorder's merged commit window into the
+    //    CRDT store. That only puts bytes in y-idb's in-memory queue.
+    // 2. flushYjsPersistence() forces that queue to disk immediately instead
+    //    of leaving it behind the 200ms write debounce. y-idb has its own
+    //    unload drain, but it is registered at boot and therefore runs BEFORE
+    //    this handler (listeners fire in registration order) — it snapshots a
+    //    queue that does not yet contain step 1's write, and does not run
+    //    again. Without step 2 a background kill within ~200ms of the signal
+    //    loses the whole window, which is exactly what the un-coalesced
+    //    write-through path could not lose.
+    const flushDurably = () => {
+      recorder.flushPending();
+      void flushYjsPersistence().catch((e) =>
+        logger.error('Persistence flush on backgrounding failed', e),
+      );
+    };
+    const flushOnPageHide = () => flushDurably();
     const flushOnHidden = () => {
-      if (document.visibilityState === 'hidden') recorder.flushPending();
+      if (document.visibilityState === 'hidden') flushDurably();
     };
     document.addEventListener('visibilitychange', flushOnHidden);
     window.addEventListener('pagehide', flushOnPageHide);
