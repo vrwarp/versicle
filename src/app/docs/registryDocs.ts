@@ -66,7 +66,7 @@ export const SRC_MODULES: Readonly<Record<string, string>> = {
   assets: 'static imports (icons, images)',
   test: 'vitest setup + typed harness + fixtures (see TESTING.md)',
   verification: 'in-vitest characterization ports of two E2E journeys (drive sync, background crash)',
-  workers: 'worker entries (search, TTS) — import closures asserted by the worker-chunk check',
+  workers: 'worker entries (search, TTS, dictionary import) — import closures asserted by the worker-chunk check',
 };
 
 /** src/domains/* — gated: set equality with the directories on disk. */
@@ -517,6 +517,11 @@ graph TD
   - **Goal**: Offload heavy TTS processing (e.g. WASM inference) from the main thread.
   - **Logic**: Implements a worker-side \`TtsEngine\` communicating via message channels.
   - **Trade-offs**: Complex state synchronization with the main thread; serialization costs.
+
+- **\`src/workers/dictionaryImport.worker.ts\`**
+  - **Goal**: Keep the one-time CC-CEDICT import (a 15MB parse over ~198k keys) off the main thread, where it froze the UI for a second or more on mobile at the moment a word was tapped.
+  - **Logic**: Comlink-exposes \`runDictionaryImport\`, which fetches, parses and writes the compiled dictionary into the \`versicle-dict\` repo in chunks, reporting progress through a proxied callback. The repo owns its own connection and needs no write-gate coordination, so a second connection here is safe; the service keeps the progress/lookup surface and injects an in-process runner under test.
+  - **Trade-offs**: A worker that fails to load would hang the import, so the factory races the call against the worker's error events and terminates it on both paths.
 
 ### Hardening
 
