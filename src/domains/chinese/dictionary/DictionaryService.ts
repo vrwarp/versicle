@@ -10,24 +10,57 @@
  *  - the compiled dictionary lives in the `versicle-dict` IndexedDB
  *    database (src/data/repos/dictionary — rebuildable static content,
  *    wiped by wipeAllData, served CacheFirst by the SW under /dict/*);
- *  - the first use streams /dict/cedict.json into IDB in CHUNKED bulkPut
- *    transactions with progress + a LOUD error surface
- *    (status: 'empty'|'importing'|'ready'|'error' — CH-13's silent
- *    failure dies);
+ *  - the first use imports /dict/cedict.json into IDB IN A WORKER
+ *    (src/workers/dictionaryImport.worker.ts, driven through the
+ *    {@link DictionaryServiceDeps.runImport} port) with progress + a LOUD
+ *    error surface (status: 'empty'|'importing'|'ready'|'error' — CH-13's
+ *    silent failure dies);
  *  - lookups are async and per-word ({@link getEntry}/{@link getEntries});
  *    nothing retains the full map. The import is gated on first triage
  *    open (the consumer), not on selection.
  *
- * Boundary: domains-no-store; the service touches only data/ + kernel/net.
+ * What this class does NOT do any more: fetch, JSON.parse or write the
+ * payload. `await response.json()` on the 15,154,650-byte artifact measured
+ * 183 ms / ~104 MB of transient heap on desktop x86 — 1.2–2.4 s of frozen UI
+ * on a mid-range Android WebView, right when the user is waiting for the
+ * vocab card. That whole pipeline lives in ./importDictionary.ts and runs in
+ * the worker; the service owns the progress/subscribe surface, the meta
+ * stamps it reads back, and the lookup path. The port default is the worker
+ * (./workerFactory); tests inject `createInProcessDictionaryImport(fetch)` so
+ * they still exercise the real import logic.
+ *
+ * Boundary: domains-no-store; the service touches only data/ + the port.
  * No module-scope construction — consumers go through
- * {@link getDictionaryService} (lazy, side-effect free at import time).
+ * {@link getDictionaryService} (lazy, side-effect free at import time;
+ * constructing the service does NOT spawn the worker — that happens inside
+ * the first import that actually needs it).
  */
 import { dictionary, type DictEntryTuple } from '@data/repos/dictionary';
-import { localFetch } from '@kernel/net';
 import { createLogger } from '@lib/logger';
 import { findCompoundWord, findCompoundWords, type CompoundHit } from './compoundLookup';
+import {
+  META_ENTRY_COUNT,
+  META_IMPORTED_AT,
+  type DictionaryImportPort,
+  type DictionaryImportProgress,
+} from './importDictionary';
 
 const logger = createLogger('DictionaryService');
+
+/**
+ * The production import port: the Comlink-wrapped worker (./workerFactory).
+ *
+ * Loaded LAZILY on purpose. The import runs once per device, but this module
+ * rides the entry chunk (the triage card imports it), and a static edge put
+ * Comlink + the factory in there for ~1.7 kB gzip that virtually no session
+ * executes. A chunk that fails to load (stale precache, post-deploy 404)
+ * rejects here and becomes `status: 'error'` like any other import failure —
+ * never a spinner that waits forever.
+ */
+const workerDictionaryImport: DictionaryImportPort = async (onProgress) => {
+  const { createWorkerDictionaryImport } = await import('./workerFactory');
+  return createWorkerDictionaryImport()(onProgress);
+};
 
 export type DictionaryStatus = 'empty' | 'importing' | 'ready' | 'error';
 
@@ -40,25 +73,32 @@ export interface DictionaryProgress {
   error?: string;
 }
 
-const IMPORT_CHUNK_SIZE = 5000;
-const META_IMPORTED_AT = 'importedAt';
-const META_ENTRY_COUNT = 'entryCount';
-
 type Listener = (progress: DictionaryProgress) => void;
 
 export interface DictionaryServiceDeps {
-  /** Same-origin fetch (test seam). Defaults to kernel/net localFetch. */
-  fetch?: (url: string) => Promise<Response>;
+  /**
+   * The import port — fetch + parse + chunked write, as ONE call that
+   * resolves with the entry count.
+   *
+   * Defaults to the lazily-loaded worker port, so in production the 15 MB
+   * `JSON.parse` happens in `src/workers/dictionaryImport.worker.ts` and
+   * never on the main thread. Tests inject
+   * `createInProcessDictionaryImport(fetch)` (./importDictionary) to run the
+   * REAL import logic in-process, where vitest has no module worker to spawn.
+   */
+  runImport?: DictionaryImportPort;
 }
 
 export class DictionaryService {
   private progress: DictionaryProgress = { status: 'empty', imported: 0, total: 0 };
   private listeners = new Set<Listener>();
   private readyPromise: Promise<void> | null = null;
-  private readonly fetch: (url: string) => Promise<Response>;
+  private readonly runImport: DictionaryImportPort;
 
   constructor(deps: DictionaryServiceDeps = {}) {
-    this.fetch = deps.fetch ?? localFetch;
+    // Holding the port neither loads ./workerFactory nor spawns a worker;
+    // the first import that actually needs one does both.
+    this.runImport = deps.runImport ?? workerDictionaryImport;
   }
 
   getProgress(): DictionaryProgress {
@@ -126,71 +166,20 @@ export class DictionaryService {
 
     this.setProgress({ status: 'importing', imported: 0, total: 0 });
     try {
-      const response = await this.fetch('/dict/cedict.json');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      // The SPA-shell trap: when /dict/cedict.json is absent (the artifact is
-      // git-ignored — built by `npm run compile-dict`, in CI, and the Docker
-      // images), both the Vite dev server and GitHub Pages' 404.html serve the
-      // app's index.html with a 200, so `response.ok` passes and the JSON parse
-      // below dies on "<!doctype html>" with the opaque
-      //   SyntaxError: Unexpected token '<', "<!doctype "... is not valid JSON.
-      // Detect the HTML shell up front and fail with an actionable message.
-      const contentType = response.headers?.get('content-type') ?? '';
-      if (/\b(?:html|xml)\b/i.test(contentType)) {
-        throw new Error(
-          `Expected JSON from /dict/cedict.json but the server returned "${contentType}" ` +
-            `(the app shell). The compiled dictionary is missing — run \`npm run compile-dict\` ` +
-            `(it is git-ignored and built offline from the vendored CC-CEDICT snapshot).`,
-        );
-      }
-      const data = (await response.json()) as Record<string, DictEntryTuple>;
-      // Keys only. `Object.entries` built a ~200 000-element array of
-      // two-element arrays (one allocation per headword, ~100 MB of transient
-      // heap) on the MAIN thread before a single row was written; the keys
-      // array alone is one allocation, and each chunk's pairs are materialized
-      // inside the loop — never more than IMPORT_CHUNK_SIZE of them at a time.
-      const keys = Object.keys(data);
-      const total = keys.length;
-      this.setProgress({ status: 'importing', imported: 0, total });
-
-      // A previous half-built index (crash mid-import) must not survive.
-      await dictionary.clearAll();
-
-      for (let offset = 0; offset < total; offset += IMPORT_CHUNK_SIZE) {
-        const end = Math.min(offset + IMPORT_CHUNK_SIZE, total);
-        const chunk: [string, DictEntryTuple][] = new Array(end - offset);
-        for (let i = offset; i < end; i++) {
-          const word = keys[i];
-          chunk[i - offset] = [word, data[word]];
-        }
-        await dictionary.bulkPutEntries(chunk);
-        this.setProgress({
-          status: 'importing',
-          imported: Math.min(offset + IMPORT_CHUNK_SIZE, total),
-          total,
-        });
-        // Yield between transactions: the import runs on first triage open,
-        // potentially mid-reading on a low-end WebView.
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      }
-
-      // Provenance sidecar (PR-12 pipeline) — best effort, never fatal.
-      try {
-        const meta = await this.fetch('/dict/cedict.meta.json');
-        if (meta.ok) {
-          await dictionary.setMeta('source', await meta.json());
-        }
-      } catch {
-        /* sidecar absent in dev builds without compile-dict — fine */
-      }
-
-      await dictionary.setMeta(META_ENTRY_COUNT, total);
-      await dictionary.setMeta(META_IMPORTED_AT, Date.now());
+      // Everything heavy — the fetch, the 15 MB parse, clearAll(), the
+      // chunked bulkPut transactions and the provenance sidecar — happens
+      // behind this one call. The port emits the same progress sequence the
+      // inline loop used to publish directly.
+      const total = await this.runImport((progress: DictionaryImportProgress) => {
+        this.setProgress({ status: 'importing', imported: progress.imported, total: progress.total });
+      });
       this.setProgress({ status: 'ready', imported: total, total });
       logger.info(`Dictionary imported: ${total} entries.`);
     } catch (error) {
+      // Covers a failed import AND the failure a worker introduces: a module
+      // that never loads rejects here (workerFactory races the worker's
+      // `error` event against the Comlink call) instead of leaving every
+      // subscriber on 'importing' forever.
       const message = error instanceof Error ? error.message : String(error);
       logger.error('Dictionary import failed', error);
       this.setProgress({ status: 'error', imported: 0, total: 0, error: message });
