@@ -1,7 +1,8 @@
 export type ReferenceDetectionStrategy = 'gemini' | 'deterministic';
 
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
+import { createDedupedJSONStorage } from '@lib/persistStorage';
 import type { GenAILogEntry } from '@domains/google';
 import type { ContentType } from '~types/content-analysis';
 import type { QuotaLimits, LaneUsage } from '@kernel/quota';
@@ -421,7 +422,12 @@ export const useGenAIStore = create<GenAIState>()(
     {
       name: 'genai-storage',
       version: 5,
-      storage: createJSONStorage(() => localStorage),
+      // Deduped: `logs` is an in-memory ring buffer OUTSIDE the allowlist
+      // below, but persist re-serializes and re-writes the whole settings blob
+      // after every set — so each log line (GenAI request, embedding request,
+      // TTS worker log) used to cost a JSON.stringify of ~20 keys plus a
+      // synchronous localStorage commit of an unchanged payload.
+      storage: createDedupedJSONStorage<PersistedGenAIState>(),
       partialize: (state): PersistedGenAIState => ({
         apiKey: state.apiKey,
         model: state.model,

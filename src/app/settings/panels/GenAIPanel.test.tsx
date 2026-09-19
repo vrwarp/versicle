@@ -7,6 +7,7 @@
  * seeded snapshot plus the A6 cross-device sum — not fabricated.
  */
 import { screen, act, fireEvent } from '@testing-library/react';
+import { Profiler } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderWithStores, storeSeed } from '@test/harness';
 import { useGenAIStore } from '@store/useGenAIStore';
@@ -188,5 +189,82 @@ describe('GenAIPanel quota meters (wired §10.7)', () => {
 
     // Should be reset back to default limits (100)
     expect(defaultRow).toHaveTextContent('100');
+  });
+});
+
+/**
+ * F7c: the panel used to call `useGenAIStore()` with NO selector, subscribing
+ * to the whole state object — so ANY write to the GenAI store (the embedding
+ * model, the boot-time background-budget providers, a log line) re-rendered it
+ * and the heavy settings tab underneath. It now subscribes to the fields it
+ * actually renders.
+ *
+ * NOTE for the reader: an `addLog` still re-renders the panel, and must —
+ * GenAISettingsTab renders the Debug Logs list unconditionally from the `logs`
+ * prop, so the panel has to pass the new array down. What is gone is the
+ * re-render for everything the panel does NOT display.
+ */
+describe('regression: GenAI state the panel does not render does not re-render it', () => {
+  // GenAISettingsTab polls a 1s `setTick` interval of its own; frozen timers
+  // keep it out of the render counts below.
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const renderCounted = () => {
+    let renders = 0;
+    renderWithStores(
+      <Profiler
+        id="genai-panel"
+        onRender={() => {
+          renders++;
+        }}
+      >
+        <GenAIPanel />
+      </Profiler>,
+      { seeds: [storeSeed(useGenAIStore, { isEnabled: true })] },
+    );
+    expect(renders).toBeGreaterThan(0);
+    return {
+      reset: () => {
+        renders = 0;
+      },
+      count: () => renders,
+    };
+  };
+
+  it('ignores writes to fields the panel never reads', () => {
+    const probe = renderCounted();
+    probe.reset();
+
+    act(() => {
+      useGenAIStore.getState().setEmbeddingModel('gemini-embedding-2');
+      useGenAIStore.getState().setEmbeddingDims(1536);
+      useGenAIStore.getState().setUseBatchEmbedding(true);
+      useGenAIStore.getState().setReferenceDetectionStrategy('deterministic');
+      // The boot-time provider injection (wireGoogle) — pure plumbing.
+      useGenAIStore.getState().setBgBudgetProvider(
+        () => ({ rpm: 1, tpm: 1, rpd: 1, bgThrottlePercent: 0, fgRpdHeadroom: 0 }),
+        () => 0,
+      );
+    });
+
+    expect(probe.count()).toBe(0);
+  });
+
+  it('still re-renders for a setting it displays', () => {
+    const probe = renderCounted();
+    probe.reset();
+
+    act(() => {
+      useGenAIStore.getState().setModel('gemini-3-flash-preview');
+    });
+
+    // (>= 1: the tab schedules a nested update of its own on re-render.)
+    expect(probe.count()).toBeGreaterThanOrEqual(1);
   });
 });

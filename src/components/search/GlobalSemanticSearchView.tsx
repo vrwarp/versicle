@@ -186,6 +186,8 @@ IndexingStatusGrid.displayName = 'IndexingStatusGrid';
 interface SearchResultsListProps {
   query: string;
   results: GroupedBookMatches[];
+  /** The whole-library page was cut at the hook's TOP_K — say so under the list. */
+  truncated: boolean;
   onResultClick: (bookId: string, href: string, charOffset: number, matchLength: number) => void;
   triggerHighlightFor: (bookId: string, href: string, charOffset: number, excerpt: string) => void;
 }
@@ -293,7 +295,8 @@ const SearchMatchCard = React.memo<SearchMatchCardProps>(({
 });
 SearchMatchCard.displayName = 'SearchMatchCard';
 
-const SearchResultsList = React.memo<SearchResultsListProps>(({ query, results, onResultClick, triggerHighlightFor }) => {
+const SearchResultsList = React.memo<SearchResultsListProps>(({ query, results, truncated, onResultClick, triggerHighlightFor }) => {
+  const matchCount = results.reduce((acc, curr) => acc + curr.matches.length, 0);
   return (
     <div className="flex flex-col gap-6 animate-in fade-in duration-300">
       <div className="flex justify-between items-center border-b pb-2">
@@ -301,7 +304,7 @@ const SearchResultsList = React.memo<SearchResultsListProps>(({ query, results, 
           Search results for "{query}"
         </h3>
         <span className="text-sm text-muted-foreground font-medium">
-          Found {results.reduce((acc, curr) => acc + curr.matches.length, 0)} match(es) across {results.length} book(s)
+          Found {matchCount} match(es) across {results.length} book(s)
         </span>
       </div>
 
@@ -358,6 +361,11 @@ const SearchResultsList = React.memo<SearchResultsListProps>(({ query, results, 
               </div>
             </div>
           ))}
+          {truncated && (
+            <div className="text-center text-muted-foreground text-xs" role="status">
+              Showing the first {matchCount} matches
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -376,6 +384,7 @@ export const GlobalSemanticSearchView: React.FC = () => {
     results,
     status,
     errorType,
+    truncated,
     indexingStatuses,
     savedQueries,
     toggleSaved,
@@ -545,6 +554,7 @@ export const GlobalSemanticSearchView: React.FC = () => {
         <SearchResultsList
           query={query}
           results={results}
+          truncated={truncated}
           onResultClick={handleResultClick}
           triggerHighlightFor={triggerHighlightFor}
         />

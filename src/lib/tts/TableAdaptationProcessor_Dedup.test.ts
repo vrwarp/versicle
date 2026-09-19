@@ -15,6 +15,7 @@ const getContentAnalysisAsyncMock = contentAnalysisRepository.getContentAnalysis
 vi.mock('@data/repos/bookContent', () => ({
     bookContent: {
         getTableImages: vi.fn().mockResolvedValue([]),
+        listTableLocations: vi.fn().mockResolvedValue([]),
         getBookStructure: vi.fn().mockResolvedValue(null),
     }
 }));

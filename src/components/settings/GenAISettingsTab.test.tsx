@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, act } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { GenAISettingsTab, type GenAISettingsTabProps } from './GenAISettingsTab';
 
 // Mock UI components
@@ -193,6 +193,56 @@ describe('GenAISettingsTab', () => {
         render(<GenAISettingsTab {...defaultProps} isEnabled={true} logs={[]} />);
 
         expect(screen.getByText('Download Logs').closest('button')).toBeDisabled();
+    });
+
+    /**
+     * The tab re-renders itself once a second (the tick that refreshes the live
+     * governor snapshots read during render). Every one of those renders used to
+     * re-render AND re-`JSON.stringify` the ENTIRE log buffer — up to 1000 full
+     * prompt/response payloads per second — into a 160px scroll box.
+     */
+    describe('regression: the debug log box does not re-stringify on every tick', () => {
+        afterEach(() => {
+            vi.useRealTimers();
+        });
+
+        const bigLogs = Array.from({ length: 500 }, (_unused, i) => ({
+            id: `log-${i}`,
+            timestamp: 1_700_000_000_000 + i,
+            type: 'request',
+            method: 'analyze',
+            payload: { marker: true, index: i, prompt: 'x'.repeat(200) },
+        }));
+
+        it('stringifies each entry once per logs change, not once per tick', () => {
+            vi.useFakeTimers();
+            const stringify = vi.spyOn(JSON, 'stringify');
+            const payloadCalls = () =>
+                stringify.mock.calls.filter(
+                    ([value]) => typeof value === 'object' && value !== null && 'marker' in value,
+                ).length;
+
+            render(<GenAISettingsTab {...defaultProps} isEnabled={true} logs={bigLogs} />);
+            const afterMount = payloadCalls();
+            expect(afterMount).toBeGreaterThan(0);
+
+            // Five seconds of the 1 s tick.
+            act(() => {
+                vi.advanceTimersByTime(5000);
+            });
+
+            expect(payloadCalls()).toBe(afterMount);
+            stringify.mockRestore();
+        });
+
+        it('renders the newest entries and says how many it is showing', () => {
+            render(<GenAISettingsTab {...defaultProps} isEnabled={true} logs={bigLogs} />);
+
+            // Newest first (the buffer is oldest→newest).
+            expect(screen.getByText(/"index":499/)).toBeInTheDocument();
+            expect(screen.queryByText(/"index":0,/)).not.toBeInTheDocument();
+            expect(screen.getByText(/Showing the latest 50 of 500 entries/)).toBeInTheDocument();
+        });
     });
 
     // ── Quota & Usage (A7, §10.7 meters test at the presentational layer) ──

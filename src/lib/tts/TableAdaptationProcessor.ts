@@ -3,12 +3,52 @@ import {
     type ParsedCfiPoint,
 } from '@kernel/cfi';
 import type { SentenceNode } from '~types/tts-content';
+import type { TableLocation } from '@data/repos/bookContent';
 import type { EngineContext } from './engine/EngineContext';
 import { ensureGenAIReady } from './genaiReady';
+
+/**
+ * A table root as the adaptation cache keys it: legacy Range CFIs (e.g. from the buggy
+ * `cfiFromRange`) collapse to their Point CFI parent, everything else passes through.
+ */
+function normalizeTableCfi(cfi: string): string {
+    const range = parseCfiRange(cfi);
+    return (range && range.parent) ? `epubcfi(${range.parent})` : cfi;
+}
 
 export class TableAdaptationProcessor {
     private tableAnalysisPromises = new Map<string, Promise<void>>();
     private readonly ctx: EngineContext;
+    /**
+     * Single-slot memo of the open book's table locations (id/cfi/sectionId,
+     * no pixels). Both this processor and SectionAnalysisDriver.buildGroups
+     * need the CFIs on EVERY section load and every prewarm; the table set
+     * cannot change while a book is open, so one read per book is enough.
+     *
+     * Switching books drops the previous entry. The one stale window is a
+     * reprocess of the book that is currently open: it deletes the book's
+     * table rows and writes new ones keyed `${bookId}-${cfi}`, so any CFI
+     * drift changes every row id and the memo's ids stop resolving. That
+     * costs stale grouping until the next book switch — and it WOULD cost the
+     * section's adaptations outright (a work set of stale ids matches no live
+     * blob, leaving nothing to send the model), which is why
+     * {@link processTableAdaptations} detects the total blob miss and heals
+     * from the live read. A reprocess that MOVES a table to a different
+     * sectionId never reaches that lookup at all (the stale memo reports the
+     * section as tableless), so an empty section list is confirmed against the
+     * live rows once per book — see {@link emptySectionProbedBookId}. There is
+     * no engine-side reprocess notification today; reprocess writes IndexedDB
+     * directly, with no store to subscribe to (unlike the lexicon invalidation
+     * ping).
+     */
+    private locationsBookId: string | null = null;
+    private locationsPromise: Promise<TableLocation[]> | null = null;
+    /**
+     * The book whose empty section list has already been confirmed against the
+     * live table rows. Bounds that confirmation to ONE read per book instead of
+     * one per tableless section (see {@link processTableAdaptations} step 3).
+     */
+    private emptySectionProbedBookId: string | null = null;
 
     /**
      * @param ctx The engine context. Required (no default) so this module never statically
@@ -17,6 +57,30 @@ export class TableAdaptationProcessor {
     constructor(ctx: EngineContext) {
         this.ctx = ctx;
     }
+    /**
+     * The open book's table locations, read once per book (see the memo
+     * fields). Shared with SectionAnalysisDriver.buildGroups, which needs the
+     * same CFIs for structural grouping.
+     */
+    async getTableLocations(bookId: string): Promise<TableLocation[]> {
+        if (this.locationsBookId !== bookId || !this.locationsPromise) {
+            this.locationsBookId = bookId;
+            this.locationsPromise = this.ctx.content.listTableLocations(bookId).catch((e) => {
+                // Never cache a rejection: the next section retries.
+                if (this.locationsBookId === bookId) this.locationsPromise = null;
+                throw e;
+            });
+        }
+        return this.locationsPromise;
+    }
+
+    /** Forget the memo for `bookId`, so the next {@link getTableLocations} re-reads. */
+    private invalidateTableLocations(bookId: string): void {
+        if (this.locationsBookId !== bookId) return;
+        this.locationsBookId = null;
+        this.locationsPromise = null;
+    }
+
     /**
      * Retrieves cached table adaptations from DB or triggers GenAI detection if missing.
      * Replaces `AudioContentPipeline.processTableAdaptations`.
@@ -55,31 +119,72 @@ export class TableAdaptationProcessor {
                 }
             }
 
-            // 2. Identify tables that actually exist in the current section
-            // Normalizing legacy Range CFIs (e.g. from buggy cfiFromRange) to their Point CFI parents
-            const tableImages = await this.ctx.content.getTableImages(bookId);
-            const sectionTableImages = tableImages.filter(img => img.sectionId === sectionId).map(img => {
-                const range = parseCfiRange(img.cfi);
-                return {
-                    ...img,
-                    cfi: (range && range.parent) ? `epubcfi(${range.parent})` : img.cfi
-                };
-            });
-
-            if (sectionTableImages.length === 0) return;
+            // 2. Identify tables that actually exist in the current section.
+            // LOCATIONS ONLY (no image bytes): the work set is decided from
+            // CFIs, and the pixels are fetched below for the few tables that
+            // actually reach the model. Normalizing legacy Range CFIs (e.g.
+            // from buggy cfiFromRange) to their Point CFI parents.
+            const locations = await this.getTableLocations(bookId);
+            const sectionTables = locations.filter(t => t.sectionId === sectionId).map(t => ({
+                ...t,
+                cfi: normalizeTableCfi(t.cfi),
+            }));
 
             // 3. Filter for those missing from the cache
-            const workSet = sectionTableImages.filter(img => !existingAdaptations.has(img.cfi));
+            const workSet = sectionTables.filter(t => !existingAdaptations.has(t.cfi));
 
-            if (workSet.length === 0) return;
+            // An EMPTY section list is ambiguous while the memo can be stale: a
+            // reprocess that MOVED a table to a different sectionId empties this
+            // section's list, and returning on it would never reach the blob
+            // lookup the heal below hangs off — so the section would go without
+            // adaptations until the next book switch. It is therefore confirmed
+            // against the live rows, but only ONCE per book: the claim is made
+            // synchronously, so concurrent section loads cannot each pay for it,
+            // an accurate memo costs a single extra read for the WHOLE book, and
+            // a book with no tables at all never pays one per section. (A move
+            // into a section whose emptiness was already confirmed still waits
+            // for the book switch — a bounded check buys the common case, not
+            // every case.) The read itself stays behind the GenAI gate below:
+            // with no model to send tables to there is nothing to heal.
+            const verifyEmptySection = sectionTables.length === 0
+                && this.emptySectionProbedBookId !== bookId;
+            if (verifyEmptySection) this.emptySectionProbedBookId = bookId;
+
+            if (workSet.length === 0 && !verifyEmptySection) return;
 
             // 4. Check if GenAI is enabled + configured (the ONE gate — 5c-PR2;
             // configures from the stored key, DEV/E2E-gated mock seam)
             if (await ensureGenAIReady(this.ctx.genAI)) {
-                const nodes = workSet.map(img => ({
-                    rootCfi: img.cfi,
-                    imageBlob: img.imageBlob
-                }));
+                // Pixels, at last — and only this section's (the repo filters
+                // before wrapping, so other sections' images are never
+                // materialized).
+                const images = await this.ctx.content.getTableImages(bookId, sectionId);
+                const blobsById = new Map(images.map(img => [img.id, img.imageBlob]));
+                let nodes = workSet
+                    .map(t => ({ rootCfi: t.cfi, imageBlob: blobsById.get(t.id) }))
+                    .filter((n): n is { rootCfi: string; imageBlob: Blob } => n.imageBlob !== undefined);
+
+                if (nodes.length === 0 && (workSet.length > 0 || images.length > 0)) {
+                    // Wanted tables, resolved none — or wanted none and the live
+                    // rows say otherwise. Either way the memo disagrees with the
+                    // rows, which is what a reprocess of the OPEN book does: it
+                    // rewrites this book's rows, CFI drift re-keys every id
+                    // (`workSet.length > 0`, nothing resolves) and a table can
+                    // land in a different section than the memo remembers
+                    // (`images.length > 0` for a section the memo called empty).
+                    // Drop the memo so the next read — here and in buildGroups —
+                    // is fresh, and rebuild the work set from the live rows
+                    // already in hand, so the section still gets its adaptations
+                    // instead of silently getting none for the rest of the
+                    // session. A confirmed-empty section reads no images, so it
+                    // falls through with nothing to do and leaves the memo alone.
+                    this.invalidateTableLocations(bookId);
+                    nodes = images
+                        .map(img => ({ rootCfi: normalizeTableCfi(img.cfi), imageBlob: img.imageBlob }))
+                        .filter(n => !existingAdaptations.has(n.rootCfi));
+                }
+
+                if (nodes.length === 0) return;
 
                 const bookMetadata = await this.ctx.book.getMetadata(bookId);
                 const bookTitle = bookMetadata?.title || 'Unknown Book';

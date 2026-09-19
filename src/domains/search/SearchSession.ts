@@ -17,7 +17,12 @@
  *    clears caches unconditionally.
  */
 import { AppError, NetRateLimitedError } from '~types/errors';
-import type { SearchBatchResult, SearchSection, EmbeddingStatus } from '~types/search';
+import type {
+  DetailedSearchResult,
+  SearchBatchResult,
+  SearchSection,
+  EmbeddingStatus,
+} from '~types/search';
 import { sectionHasEmbeddableText } from './chunker';
 import { effectiveSectionHash } from './sectionHash';
 import { QueryEmbeddingCache } from './queryEmbeddingCache';
@@ -250,7 +255,9 @@ export class SearchSession {
       });
       // Not embedded / stamp-mismatch / no hits → keep the pure regex result.
       if (semantic.length === 0) return regex;
-      return fuseRrf(regex.results, semantic, { truncated: regex.truncated });
+      return fuseRrf(regex.results, byDescendingSimilarity(semantic), {
+        truncated: regex.truncated,
+      });
     } catch (error) {
       // Only EXPECTED quota/network errors fall back to regex (semantic is
       // purely additive and must never regress full-text). Anything else (a
@@ -274,6 +281,12 @@ export class SearchSession {
   /**
    * Returns the embedding progress status for the book. Returns null if
    * semantic search is disabled, unconfigured, or the ports are absent.
+   *
+   * Counts from the RESUME JOURNAL (`getJob`) when the port exposes one and its
+   * entries carry section hashes — the panel polls this every few seconds while
+   * the indexer is rewriting the vectors row, and the journal carries the same
+   * {href, sectionTextHash} pairs for a fraction of the bytes. Falls back to the
+   * full vectors row otherwise.
    */
   async getEmbeddingStatus(bookId: string): Promise<EmbeddingStatus | null> {
     const { embeddingClient, embeddingsSource, getSemanticConfig, textSource } = this.opts;
@@ -297,10 +310,6 @@ export class SearchSession {
       // chunks and is never written into the embeddings row, so including it in
       // the total would leave the book perpetually one section shy of done.
       const totalSections = corpus.sections.filter((s) => sectionHasEmbeddableText(s.text)).length;
-      const embedded = await embeddingsSource.get(bookId);
-      if (!embedded || embedded.sections.length === 0) {
-        return { totalSections, embeddedSections: 0 };
-      }
 
       // Cross-reference text hashes to count only matching/up-to-date sections.
       // Use the EFFECTIVE hash (stamped, or derived from the section text for
@@ -310,16 +319,34 @@ export class SearchSession {
       const corpusHashes = new Map(
         corpus.sections.map((s) => [s.href, effectiveSectionHash(s.text, s.sectionTextHash)]),
       );
-      let embeddedSections = 0;
-
-      for (const section of embedded.sections) {
-        const liveHash = corpusHashes.get(section.href);
-        if (liveHash !== undefined && section.sectionTextHash === liveHash) {
-          embeddedSections++;
+      const countMatching = (
+        sections: { href: string; sectionTextHash?: string }[],
+      ): number => {
+        let matching = 0;
+        for (const section of sections) {
+          const liveHash = corpusHashes.get(section.href);
+          if (liveHash !== undefined && section.sectionTextHash === liveHash) matching++;
         }
+        return matching;
+      };
+
+      // The resume journal carries the SAME {href, sectionTextHash} pairs the
+      // vectors row does, in a few hundred bytes instead of megabytes of packed
+      // int8. The panel polls this every few seconds while the indexer is
+      // rewriting the vectors row, so count from the journal whenever it is
+      // available and complete (every entry hash-stamped). A journal that is
+      // absent, or predates the hash stamp, falls back to the full-row read.
+      const job = await embeddingsSource.getJob?.(bookId);
+      if (job && job.sections.every((s) => typeof s.sectionTextHash === 'string')) {
+        return { totalSections, embeddedSections: countMatching(job.sections) };
       }
 
-      return { totalSections, embeddedSections };
+      const embedded = await embeddingsSource.get(bookId);
+      if (!embedded || embedded.sections.length === 0) {
+        return { totalSections, embeddedSections: 0 };
+      }
+
+      return { totalSections, embeddedSections: countMatching(embedded.sections) };
     } catch {
       return null;
     }
@@ -358,6 +385,28 @@ export class SearchSession {
       });
     }
   }
+}
+
+/**
+ * The semantic list, re-ordered into the QUALITY ranking {@link fuseRrf}
+ * consumes (descending cosine), as a copy — the caller's array is untouched.
+ *
+ * {@link semanticRank} deliberately assembles its rows in EMBEDDED-SECTION
+ * order (per-section top-k, sections concatenated front to back) so its
+ * concurrent per-section `rankInt8` calls stay byte-identical to a sequential
+ * pass. `fuseRrf` derives each row's rank from its ARRAY INDEX, so handing that
+ * list over unchanged made a hit's reciprocal-rank contribution a function of
+ * WHICH CHAPTER it came from rather than how well it matched: on a 30-section
+ * book a 0.91-cosine passage in section 24 sits at index ~460 and scores below
+ * every weak section-0 row. That only mis-ordered an uncapped fused list; with
+ * the fused cap it costs RESULTS — the strong late hit is dropped outright.
+ *
+ * The sort is stable, so equal-similarity rows keep their section order and the
+ * fused output stays deterministic. The REGEX list's ordering (the engine's own
+ * occurrence order, which is already its ranking) is never touched.
+ */
+function byDescendingSimilarity(semantic: DetailedSearchResult[]): DetailedSearchResult[] {
+  return [...semantic].sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0));
 }
 
 /**

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
-import type { UserProgress, ReadingEventType, ReadingSession } from '~types/user-data';
+import type { UserProgress, ReadingEventType, ReadingSession, ReadingListEntry } from '~types/user-data';
 import { useLibraryStore, useBookStore } from './useLibraryStore';
 import { useReadingListStore } from './useReadingListStore';
 import { useLocalHistoryStore } from './useLocalHistoryStore';
@@ -10,6 +10,105 @@ import { mergeCfiRanges } from '@kernel/cfi';
 const MAX_READING_SESSIONS = 500;
 const HISTORY_PRUNE_SIZE = 200;
 const MERGE_TIME_WINDOW = 20 * 60 * 1000; // 20 minutes
+
+/**
+ * The precision the reading-list `percentage` is compared at in the mirror
+ * skip below: 1/10_000. That is what the CSV export actually serializes —
+ * `exportReadingListToCSV` writes `entry.percentage.toFixed(4)` (src/lib/csv.ts)
+ * — and it is FINER than anything the UI renders (ReadingListDialog shows
+ * `Math.round(percentage * 100)`). Comparing at the coarser display precision
+ * let the stored value trail by up to half a percent, which the four-decimal
+ * export column showed verbatim.
+ */
+const PERCENTAGE_COMPARE_SCALE = 10_000;
+
+/**
+ * How stale the mirrored `lastUpdated` may get before the skip below gives up
+ * and writes anyway: 5 minutes.
+ *
+ * `lastUpdated` is written by the upsert but is NOT part of the comparison, so
+ * without a bound it stops advancing for as long as every compared field holds
+ * still — a whole span of reading inside one 1/10_000 step, or a book finished
+ * just after midnight (0.995 -> 1.0, both 'read'). Three consumers read the
+ * field: the ReadingListDialog "Last Read" cell, that dialog's default sort,
+ * and the CSV export's "Date Read" column, so a frozen stamp is user-visible.
+ *
+ * The bound keeps the per-page-turn write amplification gone — at most one
+ * upsert per 5 minutes of otherwise-unchanged reading — while capping how far
+ * the date can drift. `Math.abs` so a future-dated stamp from a clock-skewed
+ * device also forces the write instead of freezing until the clock catches up.
+ */
+const READING_LIST_MIRROR_MAX_STALENESS_MS = 5 * 60 * 1000;
+
+/**
+ * perf: structural equality for the CFI-range arrays. `mergeCfiRanges` ALWAYS
+ * returns a fresh array, so a merge that changed nothing still handed the Yjs
+ * scoped diff a new identity — and the diff Object.is-skips unchanged arrays
+ * but DEEP-diffs new ones (toJSON + per-element compare, up to
+ * MAX_READING_SESSIONS entries). Keeping the stored identity when the content
+ * is unchanged turns that back into an Object.is skip.
+ */
+const sameCfiRanges = (a: string[], b: string[]): boolean =>
+    a === b || (a.length === b.length && a.every((value, i) => value === b[i]));
+
+/**
+ * Mirror a book's progress into the reading-list projection.
+ *
+ * perf: the two callers run on EVERY page turn (and every TTS sentence).
+ * `upsertEntry` spreads the whole entries map (O(M)) and opens a SECOND Yjs
+ * transaction, and libraryViewStore subscribes to both stores — so an
+ * unconditional upsert made every page turn recompute the library projection
+ * twice. The write is now skipped while no user-visible field moved AND the
+ * stored entry is still fresh.
+ *
+ * The drift the skip can produce is therefore bounded twice over:
+ * `percentage` is compared at the precision the CSV export SERIALIZES
+ * (`toFixed(4)` — see PERCENTAGE_COMPARE_SCALE), so the stored value can trail
+ * by under 1/10_000; and `lastUpdated` can trail by at most
+ * READING_LIST_MIRROR_MAX_STALENESS_MS.
+ *
+ * fix: the entry also carries the `bookId` FK (types/user-data.ts §D). The
+ * previous whole-entry rebuild omitted it, so every page turn DROPPED the FK
+ * the v8 linker wrote — which pushed libraryViewStore's `useBook` reading-list
+ * join off its O(1) FK lookup and back onto the O(M) scans.
+ */
+function syncReadingListEntry(bookId: string, percentage: number, now: number): void {
+    const book = useBookStore.getState().books?.[bookId];
+    if (!book || !book.sourceFilename) return;
+
+    const { staticMetadata } = useLibraryStore.getState();
+    const meta = staticMetadata[bookId];
+
+    const next: ReadingListEntry = {
+        filename: book.sourceFilename,
+        bookId,
+        title: meta?.title || book.title || 'Unknown',
+        author: meta?.author || book.author || 'Unknown',
+        percentage,
+        lastUpdated: now,
+        status: percentage > 0.98 ? 'read' : 'currently-reading',
+        rating: book.rating
+    };
+
+    const existing = useReadingListStore.getState().entries?.[next.filename];
+    if (
+        existing &&
+        // `lastUpdated` is not compared (it moves on every call by definition),
+        // so the skip is only allowed while the stored stamp is still fresh.
+        Math.abs(now - existing.lastUpdated) < READING_LIST_MIRROR_MAX_STALENESS_MS &&
+        existing.bookId === next.bookId &&
+        existing.title === next.title &&
+        existing.author === next.author &&
+        existing.status === next.status &&
+        existing.rating === next.rating &&
+        Math.round(existing.percentage * PERCENTAGE_COMPARE_SCALE) ===
+            Math.round(next.percentage * PERCENTAGE_COMPARE_SCALE)
+    ) {
+        return;
+    }
+
+    useReadingListStore.getState().upsertEntry(next);
+}
 
 /**
  * Per-device progress structure.
@@ -176,21 +275,7 @@ export const useReadingStateStore = create<ReadingState>()(
                 // Sync to Reading List
                 // We do this outside the set() to avoid side-effects during state calculation,
                 // and because it affects a different store.
-                const book = useBookStore.getState().books?.[bookId];
-                if (book && book.sourceFilename) {
-                    const { staticMetadata } = useLibraryStore.getState();
-                    const meta = staticMetadata[bookId];
-
-                    useReadingListStore.getState().upsertEntry({
-                        filename: book.sourceFilename,
-                        title: meta?.title || book.title || 'Unknown',
-                        author: meta?.author || book.author || 'Unknown',
-                        percentage,
-                        lastUpdated: Date.now(),
-                        status: percentage > 0.98 ? 'read' : 'currently-reading',
-                        rating: book.rating
-                    });
-                }
+                syncReadingListEntry(bookId, percentage, Date.now());
             },
 
             addCompletedRange: (bookId, range, type = 'page', label) => {
@@ -207,7 +292,13 @@ export const useReadingStateStore = create<ReadingState>()(
                         completedRanges: []
                     };
 
-                    const newRanges = mergeCfiRanges(existing.completedRanges || [], range);
+                    // Keep the stored identity when the merge was a no-op (the
+                    // range is already covered) — see sameCfiRanges. The session
+                    // list below is NOT lazily copied: this action always either
+                    // merges into the last session or pushes a new one.
+                    const baseRanges = existing.completedRanges || [];
+                    const mergedRanges = mergeCfiRanges(baseRanges, range);
+                    const newRanges = sameCfiRanges(mergedRanges, baseRanges) ? baseRanges : mergedRanges;
 
                     // Build updated sessions list
                     const now = Date.now();
@@ -282,14 +373,26 @@ export const useReadingStateStore = create<ReadingState>()(
                         completedRanges: []
                     };
 
-                    // 1. Merge all ranges
-                    let newRanges = existing.completedRanges || [];
+                    // 1. Merge all ranges — keeping the stored identity while the
+                    // merges are no-ops (see sameCfiRanges).
+                    const baseRanges = existing.completedRanges || [];
+                    let newRanges = baseRanges;
                     updates.forEach(u => {
-                        newRanges = mergeCfiRanges(newRanges, u.range);
+                        const merged = mergeCfiRanges(newRanges, u.range);
+                        if (!sameCfiRanges(merged, newRanges)) newRanges = merged;
                     });
 
-                    // 2. Append history sessions
-                    let sessions = [...(existing.readingSessions || [])];
+                    // 2. Append history sessions. The array is copied LAZILY: a
+                    // pass that neither merges into the last session nor appends
+                    // one (e.g. a location-only update carrying no `type`) keeps
+                    // the stored array, so the Yjs diff can Object.is-skip a list
+                    // that grows to MAX_READING_SESSIONS entries.
+                    const baseSessions = existing.readingSessions || [];
+                    let sessions = baseSessions;
+                    const mutableSessions = (): ReadingSession[] => {
+                        if (sessions === baseSessions) sessions = [...baseSessions];
+                        return sessions;
+                    };
 
                     updates.forEach(u => {
                         const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
@@ -301,7 +404,8 @@ export const useReadingStateStore = create<ReadingState>()(
                                 const currentRanges = lastSession.cfiRanges || [lastSession.cfiRange];
                                 const mergedRanges = mergeCfiRanges(currentRanges, u.range);
 
-                                sessions[sessions.length - 1] = {
+                                const target = mutableSessions();
+                                target[target.length - 1] = {
                                     ...lastSession,
                                     cfiRange: mergedRanges[0],
                                     cfiRanges: mergedRanges,
@@ -312,7 +416,7 @@ export const useReadingStateStore = create<ReadingState>()(
                         }
 
                         if (!merged && u.type) { // Only add to history if type is provided
-                            sessions.push({
+                            mutableSessions().push({
                                 cfiRange: u.range,
                                 cfiRanges: [u.range],
                                 startTime: now,
@@ -347,21 +451,7 @@ export const useReadingStateStore = create<ReadingState>()(
                     };
                 });
 
-                const book = useBookStore.getState().books?.[bookId];
-                if (book && book.sourceFilename) {
-                    const { staticMetadata } = useLibraryStore.getState();
-                    const meta = staticMetadata[bookId];
-
-                    useReadingListStore.getState().upsertEntry({
-                        filename: book.sourceFilename,
-                        title: meta?.title || book.title || 'Unknown',
-                        author: meta?.author || book.author || 'Unknown',
-                        percentage,
-                        lastUpdated: now,
-                        status: percentage > 0.98 ? 'read' : 'currently-reading',
-                        rating: book.rating
-                    });
-                }
+                syncReadingListEntry(bookId, percentage, now);
             },
 
             updatePlaybackPosition: (bookId, lastPlayedCfi) => {
@@ -490,15 +580,46 @@ export const useBookProgress = (bookId: string | null) => {
 };
 
 /**
- * Hook to get the current device's progress for a book.
- * @param bookId - The book ID, or null.
- * @returns The current device's progress, or null if not found.
+ * The resolved percentage for a book (same Local > Most-recent > Local
+ * fallback as {@link useBookProgress}) as a plain NUMBER.
+ *
+ * perf: a progress entry is a fresh object on EVERY write, so subscribing to
+ * it re-renders the consumer on writes that move nothing it displays — a TTS
+ * queue tick, a playback-position save, a re-relocation to the same page. A
+ * number is Object.is-comparable, so those writes stop at the selector.
  */
-export const useCurrentDeviceProgress = (bookId: string | null) => {
+export const useBookPercentage = (bookId: string | null): number => {
     const deviceId = getDeviceId();
     return useReadingStateStore(state => {
-        if (!bookId) return null;
-        return state.progress?.[bookId]?.[deviceId] || null;
+        if (!bookId) return 0;
+        const bookProgress = state.progress?.[bookId];
+        if (!bookProgress) return 0;
+
+        const local = bookProgress[deviceId];
+        if (local && local.percentage > 0.005) return local.percentage;
+
+        let mostRecent: UserProgress | null = null;
+        for (const id in bookProgress) {
+            const p = bookProgress[id];
+            if (p && p.percentage > 0.005) {
+                if (!mostRecent || p.lastRead > mostRecent.lastRead) mostRecent = p;
+            }
+        }
+        if (mostRecent) return mostRecent.percentage;
+
+        return local?.percentage || 0;
+    });
+};
+
+/**
+ * The CURRENT device's percentage for a book, as a number. Same rationale as
+ * {@link useBookPercentage}.
+ */
+export const useCurrentDevicePercentage = (bookId: string | null): number => {
+    const deviceId = getDeviceId();
+    return useReadingStateStore(state => {
+        if (!bookId) return 0;
+        return state.progress?.[bookId]?.[deviceId]?.percentage || 0;
     });
 };
 

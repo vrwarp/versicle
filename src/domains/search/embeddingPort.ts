@@ -5,7 +5,7 @@
  * injects the real @domains/google embedding facade + repos, exactly like the
  * EmbeddingIndexer's injected ports (EmbeddingIndexer.ts:31-49).
  */
-import type { CacheEmbeddingsRow } from '@data/rows/cache';
+import type { CacheEmbeddingsRow, CacheEmbedJobsRow } from '@data/rows/cache';
 
 /**
  * The quantization scheme stamp the indexer writes and BOTH the read
@@ -49,6 +49,16 @@ export type EmbeddedRowView = Omit<CacheEmbeddingsRow, 'sections'> & {
 /** The slice of the embeddings repo the semantic query path consumes. */
 export interface EmbeddingsSourcePort {
   get(bookId: string): Promise<EmbeddedRowView | undefined>;
+  /**
+   * The resume journal for the book (`cache_embed_jobs`), whose per-section
+   * `{href, sectionTextHash}` entries mirror what the vectors row holds — at a
+   * fraction of the bytes. The embedding-progress poll counts from HERE instead
+   * of deserializing every packed vector in the book once every few seconds
+   * (and while the indexer is rewriting that very row). Optional so existing
+   * injections/doubles that only provide `get` still satisfy the port; callers
+   * fall back to the full-row read when it is absent or returns nothing.
+   */
+  getJob?(bookId: string): Promise<CacheEmbedJobsRow | undefined>;
 }
 
 /** The B3 int8 quantizer port (SearchEngine.quantizeInt8PerVector). */

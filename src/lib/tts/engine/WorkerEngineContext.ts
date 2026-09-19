@@ -44,14 +44,36 @@ import type {
     SessionStore, GenAICallContext } from './EngineContext';
 import { repoBookContentPort, createRepoSessionStore } from './repoPorts';
 
+/**
+ * The ONLY progress fields the engine reads: `PlaybackController.restoreQueue` takes
+ * `currentQueueIndex` / `currentSectionIndex` and nothing else (grep audit, 2026 perf pass).
+ *
+ * Replicating the whole `UserProgress` row made the host's own per-sentence writes
+ * (`updateTTSProgress`, `addCompletedRange`) round-trip `completedRanges` (unbounded) and
+ * `readingSessions` (up to 500) back into the worker twice per sentence. The host narrows to
+ * this view (`toProgressEngineView` in src/app/tts/replicationSpec.ts) and pushes only when
+ * it actually changed.
+ */
+export type ProgressEngineView = Pick<NonNullable<Progress>, 'currentQueueIndex' | 'currentSectionIndex'> | null;
+
 /** Main-thread → worker state replication messages. */
 export type EngineStateUpdate =
     | { kind: 'settings'; settings: TTSSettingsData }
     | { kind: 'genAI'; settings: GenAISettingsSnapshot }
     | { kind: 'activeLanguage'; lang: string }
     | { kind: 'bookLanguage'; bookId: string; lang: string }
-    | { kind: 'analysis'; snapshot: ContentAnalysisSnapshot }
-    | { kind: 'progress'; bookId: string; progress: Progress }
+    // Two shapes, one kind: a map and a single-entry delta, which merges. The host pushes a
+    // delta for the common case (one section's analysis changed), so a content-analysis write
+    // no longer deep-clones and structured-clones the whole cross-book map.
+    //
+    // The map form's SCOPE is `bookId`: omitted it is the cross-book boot snapshot and
+    // replaces the cache wholesale; set, the payload holds only `${bookId}/…` keys and
+    // replaces ONLY that prefix — the live subscription is scoped to the open book, and other
+    // books' boot-replicated entries must survive a write to the open one (they are what the
+    // engine reads after a book switch, which pushes no analysis of its own).
+    | { kind: 'analysis'; snapshot: ContentAnalysisSnapshot; bookId?: string }
+    | { kind: 'analysis'; key: string; analysis: SectionAnalysis }
+    | { kind: 'progress'; bookId: string; progress: ProgressEngineView }
     // Lexicon invalidation ping (5c-PR3): the assembled rules are PULLED via the
     // lexicon port; this update only tells the engine its handle went stale.
     | { kind: 'lexicon'; version: number };
@@ -129,7 +151,7 @@ export class WorkerEngineContext implements EngineContext {
     private activeLanguage: string | null = null;
     private bookLanguages: Record<string, string> = {};
     private analysisSnapshot: ContentAnalysisSnapshot | null = null;
-    private progressByBook: Record<string, Progress> = {};
+    private progressByBook: Record<string, ProgressEngineView> = {};
     /** Which update kinds have been replicated at least once (diagnostics + readiness). */
     readonly receivedKinds = new Set<EngineStateUpdate['kind']>();
 
@@ -175,10 +197,20 @@ export class WorkerEngineContext implements EngineContext {
                 this.bookLanguages[update.bookId] = update.lang;
                 this.bookListeners.forEach((l) => l());
                 break;
-            case 'analysis':
-                this.analysisSnapshot = update.snapshot;
-                this.analysisListeners.forEach((l) => l(update.snapshot));
+            case 'analysis': {
+                // A delta merges into the cached map (shallow copy — entry identities are
+                // preserved, which the AnalysisApplier's generatedAt dedup relies on); a map
+                // replaces the cache, wholly (boot) or within its book's prefix (see the
+                // `bookId` field on the update).
+                const snapshot = 'key' in update
+                    ? { sections: { ...(this.analysisSnapshot?.sections ?? {}), [update.key]: update.analysis } }
+                    : update.bookId === undefined
+                        ? update.snapshot
+                        : { sections: { ...this.sectionsOutsideBook(update.bookId), ...update.snapshot.sections } };
+                this.analysisSnapshot = snapshot;
+                this.analysisListeners.forEach((l) => l(snapshot));
                 break;
+            }
             case 'progress':
                 this.progressByBook[update.bookId] = update.progress;
                 break;
@@ -192,6 +224,21 @@ export class WorkerEngineContext implements EngineContext {
                 throw new Error(`WorkerEngineContext: unhandled state update ${JSON.stringify(unhandled)}`);
             }
         }
+    }
+
+    /**
+     * The cached analyses that do NOT belong to `bookId` — the part a book-scoped map must
+     * leave alone. Keys are `${bookId}/${sectionId}`; the scoped payload is authoritative for
+     * its own prefix (so a deletion in the open book really deletes) and says nothing about
+     * the rest.
+     */
+    private sectionsOutsideBook(bookId: string): Record<string, SectionAnalysis> {
+        const prefix = `${bookId}/`;
+        const kept: Record<string, SectionAnalysis> = {};
+        for (const [key, analysis] of Object.entries(this.analysisSnapshot?.sections ?? {})) {
+            if (!key.startsWith(prefix)) kept[key] = analysis;
+        }
+        return kept;
     }
 
     /** Loud accessor for a boot-replicated slice: throwing beats serving a silent default. */
@@ -239,7 +286,12 @@ export class WorkerEngineContext implements EngineContext {
     };
 
     readingState = {
-        getProgress: (bookId: string): Progress => this.progressByBook[bookId] ?? null,
+        // The cache holds the narrowed {@link ProgressEngineView}, not the store's full row.
+        // `Progress` (the shared port type, src/lib/tts/engine/EngineContext.ts) is that full
+        // row, so the view is widened here — the engine's only reader is restoreQueue's
+        // `currentQueueIndex` / `currentSectionIndex`. Narrowing the port itself is the clean
+        // follow-up; it changes EngineContext + every context implementation.
+        getProgress: (bookId: string): Progress => (this.progressByBook[bookId] ?? null) as Progress,
         updateTTSProgress: (bookId: string, queueIndex: number, sectionIndex: number) =>
             this.post({ kind: 'updateTTSProgress', bookId, queueIndex, sectionIndex }),
         addCompletedRange: (bookId: string, cfiRange: string, type?: ReadingEventType) =>

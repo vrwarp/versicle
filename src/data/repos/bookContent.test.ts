@@ -10,7 +10,7 @@
  * lib/ingestion.ts's raw reprocess transaction), the bulk restore writers,
  * and the orphan scan/prune that moved out of MaintenanceService.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { bookContent } from './bookContent';
 import { getConnection } from '../connection';
 import { idbWriteLockIdle } from '../write-gate';
@@ -360,6 +360,96 @@ describe('data/repos/bookContent', () => {
       await bookContent.updateToc(id, newToc);
 
       expect((await bookContent.getBookStructure(id))?.toc).toEqual(newToc);
+    });
+  });
+
+  /**
+   * getTableImages(bookId) `getAll`s every table row of the book and wraps
+   * each stored ArrayBuffer in a NEW Blob — and the TTS driver called it on
+   * every section load and every prewarm just to read `cfi`/`sectionId`
+   * (10–25 MB of Blob churn per chapter boundary on a table-heavy book).
+   */
+  describe('regression: listTableLocations does not materialize image blobs', () => {
+    it('returns id/cfi/sectionId for the book and constructs no Blob', async () => {
+      await bookContent.ingest(makeIngestData('loc-1'), 'add');
+      await bookContent.ingest(makeIngestData('loc-2'), 'add');
+
+      const BlobCtor = globalThis.Blob;
+      let constructed = 0;
+      class CountingBlob extends BlobCtor {
+        constructor(...args: ConstructorParameters<typeof BlobCtor>) {
+          super(...args);
+          constructed += 1;
+        }
+      }
+      globalThis.Blob = CountingBlob as unknown as typeof Blob;
+      try {
+        const locations = await bookContent.listTableLocations('loc-1');
+        expect(locations).toEqual([
+          { id: 'loc-1-table-cfi', cfi: 'epubcfi(/6/2!/4/8)', sectionId: 'ch1.html' },
+        ]);
+        expect(constructed).toBe(0);
+      } finally {
+        globalThis.Blob = BlobCtor;
+      }
+    });
+
+    it('returns an empty list for a book with no tables', async () => {
+      expect(await bookContent.listTableLocations('nope')).toEqual([]);
+    });
+
+    it('getTableImages(bookId, sectionId) wraps only that section\'s image', async () => {
+      const data = makeIngestData('loc-3');
+      data.tableBatches.push({
+        id: 'loc-3-other-cfi',
+        bookId: 'loc-3',
+        sectionId: 'ch2.html',
+        cfi: 'epubcfi(/6/4!/4/8)',
+        imageBlob: new Blob([new Uint8Array([9, 9])], { type: 'image/webp' }),
+      });
+      await bookContent.ingest(data, 'add');
+
+      expect(await bookContent.getTableImages('loc-3')).toHaveLength(2);
+
+      const scoped = await bookContent.getTableImages('loc-3', 'ch2.html');
+      expect(scoped.map(t => t.id)).toEqual(['loc-3-other-cfi']);
+      expect(scoped[0].imageBlob.type).toBe('image/webp');
+    });
+  });
+
+  /**
+   * restoreResource read the WHOLE existing row (the old EPUB, tens of MB)
+   * only to overwrite both of its fields — N times over during a full
+   * backup restore.
+   */
+  describe('regression: restoreResource does not read the old binary', () => {
+    it('writes the new bytes without a readonly get of the old row', async () => {
+      const id = 'restore-1';
+      await bookContent.ingest(makeIngestData(id), 'add');
+      const db = await getConnection();
+      const getSpy = vi.spyOn(db, 'get');
+
+      try {
+        await bookContent.restoreResource(id, new Uint8Array([5, 5, 5]).buffer);
+        const resourceReads = getSpy.mock.calls.filter(([store]) => store === 'static_resources');
+        expect(resourceReads).toHaveLength(0);
+      } finally {
+        getSpy.mockRestore();
+      }
+
+      const raw = await db.get('static_resources', id);
+      expect(raw).toEqual({ bookId: id, epubBlob: expect.any(ArrayBuffer) });
+      expect(Array.from(new Uint8Array(raw!.epubBlob as ArrayBuffer))).toEqual([5, 5, 5]);
+    });
+
+    it('writes a row for a book that has none (offloaded restore)', async () => {
+      const id = 'restore-2';
+      await bookContent.ingest(makeIngestData(id), 'add');
+      await bookContent.offloadBook(id);
+
+      await bookContent.restoreResource(id, new Uint8Array([9]).buffer);
+
+      expect((await bookContent.getManifestBundle(id))?.hasResource).toBe(true);
     });
   });
 

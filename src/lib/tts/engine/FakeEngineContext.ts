@@ -215,6 +215,10 @@ export class FakeEngineContext implements EngineContext {
     sections: Record<string, Array<{ sectionId: string; title?: string; characterCount?: number }>> = {};
     /** `${bookId}/${sectionId}` → prepared content (content.getTTSPreparation). Markers travel WITH sentences (D4). */
     ttsContent: Record<string, { sentences: Array<{ text: string; cfi: string; sourceIndices?: number[] }>; citationMarkers?: Array<Record<string, unknown>> } | undefined> = {};
+    /** bookId → captured table locations (content.listTableLocations / getTableImages). */
+    tableLocations: Record<string, Array<{ id: string; cfi: string; sectionId: string }>> = {};
+    /** Every bookId listTableLocations was called with (assert the memoization). */
+    readonly tableLocationReads: string[] = [];
     /** bookId → persisted playback session (session.loadSession source). */
     sessions: Record<string, PlaybackSessionRow | undefined> = {};
     /** Recorded session writes (assert against these). */
@@ -225,7 +229,14 @@ export class FakeEngineContext implements EngineContext {
         getSections: async (bookId: string) => (this.sections[bookId] ?? []) as never,
         getTTSPreparation: async (bookId: string, sectionId: string) =>
             this.ttsContent[`${bookId}/${sectionId}`] as never,
-        getTableImages: async () => [],
+        getTableImages: async (bookId: string, sectionId?: string) =>
+            (this.tableLocations[bookId] ?? [])
+                .filter((t) => sectionId === undefined || t.sectionId === sectionId)
+                .map((t) => ({ ...t, bookId, imageBlob: new Blob([]) })),
+        listTableLocations: async (bookId: string) => {
+            this.tableLocationReads.push(bookId);
+            return (this.tableLocations[bookId] ?? []).map((t) => ({ ...t }));
+        },
         getBookStructure: async () => undefined,
     };
 

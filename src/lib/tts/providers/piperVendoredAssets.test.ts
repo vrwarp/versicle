@@ -54,6 +54,34 @@ describe('vendored piper assets (third-party/piper)', () => {
             expect(workerSource).toContain('kind: "output",\n    requestId,');
             expect(workerSource).toContain('self.postMessage({ kind: "complete", requestId });');
         });
+
+        // Patch 8 (2026 perf pass): `init` runs once per SYNTHESIZED CHUNK, so everything it
+        // re-did was per-sentence work — four freshly minted (never revoked) object URLs and
+        // two importScripts of ~660 KB of JavaScript. These anchors pin the fix the way the
+        // patch-script anchors above pin patches 1–7.
+        it('patch 8 — asset object URLs are minted once per worker, not once per sentence', () => {
+            expect(workerSource).toContain('var urlCache = {};');
+            expect(workerSource).toContain('async function assetUrl(url, blobs) {');
+            expect(workerSource).toContain('urlCache[url] = URL.createObjectURL(await getBlob(url, blobs));');
+            expect(workerSource).toContain('await assetUrl(data.piperPhonemizeJsUrl, blobs)');
+            expect(workerSource).toContain('await assetUrl(data.piperPhonemizeWasmUrl, blobs)');
+            expect(workerSource).toContain('await assetUrl(data.piperPhonemizeDataUrl, blobs)');
+            expect(workerSource).toContain('await assetUrl(`${onnxruntimeBase}ort.min.js`, blobs)');
+            // Exactly two mint sites survive: the cache itself, and the one-shot model URL.
+            expect(workerSource.match(/URL\.createObjectURL\(/g) ?? []).toHaveLength(2);
+        });
+
+        it('patch 8 — importScripts runs only when the global is missing', () => {
+            expect(workerSource).toContain('if (typeof createPiperPhonemize === "undefined") importScripts(piperPhonemizeJs);');
+            expect(workerSource).toContain('if (typeof ort === "undefined") importScripts(onnxruntimeJs);');
+            // No unguarded importScripts call may come back.
+            expect(workerSource.match(/importScripts\(/g) ?? []).toHaveLength(2);
+        });
+
+        it('patch 8 — superseded ONNX sessions are released and the model URL is revoked', () => {
+            expect(workerSource).toContain('await cachedSession[key].release();');
+            expect(workerSource).toContain('URL.revokeObjectURL(modelObjectUrl);');
+        });
     });
 
     it('ships every runtime asset the worker loads (same /piper/** layout as before)', () => {

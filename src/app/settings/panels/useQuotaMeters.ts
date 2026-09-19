@@ -53,6 +53,41 @@ const EMPTY_METERS: QuotaMeters = {
   },
 };
 
+/**
+ * True when two meter snapshots carry the same numbers. The poll runs every
+ * second while the GenAI tab is open and the figures are usually IDENTICAL
+ * (nothing spent since the last tick), but a fresh object was set every time —
+ * re-rendering GenAIPanel, and with it the ~900-line GenAISettingsTab, which is
+ * a plain unmemoized child. Comparing here lets the hook return the PREVIOUS
+ * object, which React treats as no change.
+ *
+ * What that removes is the PANEL's per-second render and the duplicate tab
+ * render it caused: two tab renders a second become one. It does NOT leave the
+ * settings tab idle — GenAISettingsTab runs its own 1 s `setTick` interval to
+ * refresh its per-pool rows, so it still commits once a second on its own.
+ * Ending that costs a change in the tab, not here.
+ */
+function sameMeters(a: QuotaMeters, b: QuotaMeters): boolean {
+  return (
+    a.fg.rpm === b.fg.rpm &&
+    a.fg.tpm === b.fg.tpm &&
+    a.fg.rpd === b.fg.rpd &&
+    a.fg.limits.rpd === b.fg.limits.rpd &&
+    a.bg.rpm === b.bg.rpm &&
+    a.bg.tpm === b.bg.tpm &&
+    a.bg.rpd === b.bg.rpd &&
+    a.projectRpd === b.projectRpd &&
+    a.etas.rpmMs === b.etas.rpmMs &&
+    a.etas.rpmPool === b.etas.rpmPool &&
+    a.etas.tpmMs === b.etas.tpmMs &&
+    a.etas.tpmPool === b.etas.tpmPool &&
+    a.etas.rpdMs === b.etas.rpdMs &&
+    a.etas.rpdPool === b.etas.rpdPool &&
+    a.activePools.length === b.activePools.length &&
+    a.activePools.every((pool, i) => pool === b.activePools[i])
+  );
+}
+
 export function useQuotaMeters(): QuotaMeters {
   const getQuotaSnapshot = useGenAIStore((s) => s.getQuotaSnapshot);
   const [meters, setMeters] = useState<QuotaMeters>(EMPTY_METERS);
@@ -148,7 +183,7 @@ export function useQuotaMeters(): QuotaMeters {
       // Add the other active devices' spend EXACTLY once
       totalProjectRpd += sumActiveDeviceSpend(activeDevices, deviceId, nowMs);
 
-      setMeters({
+      const next: QuotaMeters = {
         fg: { rpm: totalFgRpm, tpm: totalFgTpm, rpd: totalFgRpd, limits: { rpd: totalFgRpdLimit } },
         bg: { rpm: totalBgRpm, tpm: totalBgTpm, rpd: totalBgRpd },
         projectRpd: totalProjectRpd,
@@ -161,7 +196,10 @@ export function useQuotaMeters(): QuotaMeters {
           rpdMs: minRpdMs,
           rpdPool: minRpdPool,
         },
-      });
+      };
+      // Keep the PREVIOUS object when nothing moved: an unchanged meter must
+      // not re-render the panel (React bails out on an identical reference).
+      setMeters((prev) => (sameMeters(prev, next) ? prev : next));
     };
 
     tick();

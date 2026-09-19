@@ -10,6 +10,7 @@ import {
   derivedContentSane,
   type ReingestWaveDeps,
 } from './reingest';
+import { TTS_EXTRACTION_VERSION } from '@lib/ingestion/sentence-extraction';
 import type { CacheTtsPreparationRow } from '@data/rows/cache';
 import type { ChapterMapping } from './import/extract';
 
@@ -295,5 +296,80 @@ describe('runReingestWave', () => {
     expect(warn.mock.calls.map((c) => c.map(String).join(' ')).join('\n')).toContain(
       'Re-ingest failed for broken; old rows retained'
     );
+  });
+});
+
+/**
+ * The wave's candidacy scan (`listVersions`) is a cursor over EVERY
+ * `cache_tts_preparation` row of every book — all of a book's sentences
+ * deserialized to read one integer — and it ran 10 s after every single boot,
+ * forever, even for a library that had nothing left to converge. A marker
+ * written when a wave ends with zero candidates now short-circuits it until
+ * the extraction constant moves.
+ */
+describe('regression: a converged library does not re-scan', () => {
+  it('runs listVersions once across two waves, then skips it', async () => {
+    let marker: number | undefined;
+    const deps = makeDeps({
+      // Both books are already at the current version — zero candidates.
+      listVersions: vi.fn(async () => new Map([['a', TTS_EXTRACTION_VERSION], ['b', TTS_EXTRACTION_VERSION]])),
+      convergedVersion: async () => marker,
+      markConverged: async (version: number) => {
+        marker = version;
+      },
+    });
+
+    await runReingestWave(deps);
+    expect(marker).toBe(TTS_EXTRACTION_VERSION);
+    expect(deps.listVersions).toHaveBeenCalledTimes(1);
+
+    // Second boot: the marker answers, the store is never touched.
+    await runReingestWave(deps);
+    expect(deps.listVersions).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not mark convergence while a candidate remains', async () => {
+    let marker: number | undefined;
+    const deps = makeDeps({
+      listVersions: vi.fn(async () => new Map([['old', 2]])),
+      convergedVersion: async () => marker,
+      markConverged: async (version: number) => {
+        marker = version;
+      },
+    });
+
+    await runReingestWave(deps);
+
+    expect(marker).toBeUndefined();
+    // …so the next wave scans again.
+    await runReingestWave(deps);
+    expect(deps.listVersions).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not mark convergence for a wave the defer toggle aborted', async () => {
+    let marker: number | undefined;
+    const deps = makeDeps({
+      listVersions: vi.fn(async () => new Map([['a', TTS_EXTRACTION_VERSION]])),
+      shouldContinue: () => false,
+      convergedVersion: async () => marker,
+      markConverged: async (version: number) => {
+        marker = version;
+      },
+    });
+
+    await runReingestWave(deps);
+
+    expect(marker).toBeUndefined();
+  });
+
+  it('keeps scanning when no marker seam is wired (pre-marker behavior)', async () => {
+    const deps = makeDeps({
+      listVersions: vi.fn(async () => new Map([['a', TTS_EXTRACTION_VERSION]])),
+    });
+
+    await runReingestWave(deps);
+    await runReingestWave(deps);
+
+    expect(deps.listVersions).toHaveBeenCalledTimes(2);
   });
 });

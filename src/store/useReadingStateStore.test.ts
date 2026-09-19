@@ -523,4 +523,249 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             vi.useRealTimers();
         });
     });
+
+    /**
+     * perf: the Yjs scoped diff Object.is-SKIPS an array whose identity is
+     * unchanged but DEEP-diffs a new identity (toJSON + per-element compare)
+     * — and `readingSessions` grows to MAX_READING_SESSIONS (500). The store
+     * used to rebuild both arrays on every write (`mergeCfiRanges` always
+     * returns a fresh array; the session list was copied eagerly), so every
+     * page turn paid that diff even when nothing was appended.
+     */
+    describe('regression: updateReadingSession keeps array identity when nothing changed', () => {
+        const seed = (bookId: string) => {
+            useReadingStateStore.setState({
+                progress: {
+                    [bookId]: {
+                        'test-device-id': {
+                            bookId,
+                            percentage: 0.4,
+                            currentCfi: 'epubcfi(/6/4)',
+                            lastRead: Date.now(),
+                            completedRanges: ['epubcfi(/6/4)'],
+                            readingSessions: [{
+                                cfiRange: 'epubcfi(/6/4)',
+                                cfiRanges: ['epubcfi(/6/4)'],
+                                startTime: Date.now() - 1000,
+                                endTime: Date.now(),
+                                type: 'scroll' as const,
+                            }],
+                        }
+                    }
+                }
+            });
+            return useReadingStateStore.getState().progress[bookId]['test-device-id'];
+        };
+
+        it('keeps both arrays on a location-only update whose range is already covered', () => {
+            const bookId = 'book-identity-1';
+            const before = seed(bookId);
+
+            // No `type` => nothing is appended, and the trailing session is a
+            // 'scroll' so the (u.type || 'page') merge does not apply either.
+            // The mocked mergeCfiRanges returns a structurally identical NEW
+            // array for an already-covered range — exactly the case the guard
+            // has to absorb.
+            useReadingStateStore.getState().updateReadingSession(bookId, 'epubcfi(/6/6)', 0.45, [
+                { range: 'epubcfi(/6/4)' },
+            ]);
+
+            const after = useReadingStateStore.getState().progress[bookId]['test-device-id'];
+            expect(after.completedRanges).toBe(before.completedRanges);
+            expect(after.readingSessions).toBe(before.readingSessions);
+            // The scalar fields still advance — behavior is otherwise identical.
+            expect(after.currentCfi).toBe('epubcfi(/6/6)');
+            expect(after.percentage).toBe(0.45);
+        });
+
+        it('keeps both arrays when there is nothing to apply at all', () => {
+            const bookId = 'book-identity-2';
+            const before = seed(bookId);
+
+            useReadingStateStore.getState().updateReadingSession(bookId, 'epubcfi(/6/8)', 0.5, []);
+
+            const after = useReadingStateStore.getState().progress[bookId]['test-device-id'];
+            expect(after.completedRanges).toBe(before.completedRanges);
+            expect(after.readingSessions).toBe(before.readingSessions);
+        });
+
+        it('still rebuilds the arrays when a range/session IS added', () => {
+            const bookId = 'book-identity-3';
+            const before = seed(bookId);
+
+            useReadingStateStore.getState().updateReadingSession(bookId, 'epubcfi(/6/10)', 0.6, [
+                { range: 'epubcfi(/6/10)', type: 'page' as const },
+            ]);
+
+            const after = useReadingStateStore.getState().progress[bookId]['test-device-id'];
+            expect(after.completedRanges).not.toBe(before.completedRanges);
+            expect(after.completedRanges).toEqual(['epubcfi(/6/4)', 'epubcfi(/6/10)']);
+            expect(after.readingSessions).not.toBe(before.readingSessions);
+            expect(after.readingSessions).toHaveLength(2);
+        });
+
+        it('addCompletedRange keeps completedRanges identity when the range is already covered', () => {
+            const bookId = 'book-identity-4';
+            const before = seed(bookId);
+
+            useReadingStateStore.getState().addCompletedRange(bookId, 'epubcfi(/6/4)', 'page');
+
+            const after = useReadingStateStore.getState().progress[bookId]['test-device-id'];
+            expect(after.completedRanges).toBe(before.completedRanges);
+            // A session is always merged or appended here, so that array moves.
+            expect(after.readingSessions).not.toBe(before.readingSessions);
+        });
+    });
+
+    /**
+     * perf + FK: the reading-list mirror ran on EVERY page turn — `upsertEntry`
+     * spreads the whole entries map and opens a second Yjs transaction, and
+     * libraryViewStore subscribes to both stores — and the whole-entry rebuild
+     * dropped the `bookId` FK the v8 linker wrote.
+     */
+    describe('regression: the reading-list mirror is skipped when nothing visible changed', () => {
+        const BOOK_ID = 'book-reading-list';
+        const FILENAME = 'reading-list.epub';
+
+        const seedInventory = async () => {
+            const { useBookStore } = await import('./useBookStore');
+            const { useReadingListStore } = await import('./useReadingListStore');
+            useReadingListStore.setState({ entries: {} });
+            useBookStore.setState({
+                books: {
+                    [BOOK_ID]: {
+                        bookId: BOOK_ID,
+                        title: 'Inventory Title',
+                        author: 'Inventory Author',
+                        addedAt: 0,
+                        lastInteraction: 0,
+                        sourceFilename: FILENAME,
+                        tags: [],
+                        status: 'reading' as const,
+                    }
+                }
+            });
+            return useReadingListStore;
+        };
+
+        it('upserts once for two writes at the same exported percentage, and carries bookId', async () => {
+            const useReadingListStore = await seedInventory();
+            const upsert = vi.spyOn(useReadingListStore.getState(), 'upsertEntry');
+
+            useReadingStateStore.getState().updateReadingSession(BOOK_ID, 'epubcfi(/6/2)', 0.42, [
+                { range: 'epubcfi(/6/2)', type: 'page' as const },
+            ]);
+            // 0.42004 is the SAME value once the CSV serializes it (toFixed(4)),
+            // so the mirror still skips — the per-page-turn write is still gone.
+            useReadingStateStore.getState().updateReadingSession(BOOK_ID, 'epubcfi(/6/4)', 0.42004, [
+                { range: 'epubcfi(/6/4)', type: 'page' as const },
+            ]);
+
+            expect(upsert).toHaveBeenCalledTimes(1);
+            expect(upsert.mock.calls[0][0]).toMatchObject({
+                filename: FILENAME,
+                bookId: BOOK_ID,
+                percentage: 0.42,
+                status: 'currently-reading',
+            });
+            expect(useReadingListStore.getState().entries[FILENAME].bookId).toBe(BOOK_ID);
+        });
+
+        it('upserts again once the displayed percentage moves', async () => {
+            const useReadingListStore = await seedInventory();
+            const upsert = vi.spyOn(useReadingListStore.getState(), 'upsertEntry');
+
+            useReadingStateStore.getState().updateLocation(BOOK_ID, 'epubcfi(/6/2)', 0.42);
+            useReadingStateStore.getState().updateLocation(BOOK_ID, 'epubcfi(/6/4)', 0.43);
+
+            expect(upsert).toHaveBeenCalledTimes(2);
+            expect(useReadingListStore.getState().entries[FILENAME].percentage).toBe(0.43);
+        });
+    });
+
+    /**
+     * The skip above decides on the DISPLAYED/EXPORTED fields only, so both of
+     * the things it does NOT compare have to stay bounded:
+     *
+     *  - `lastUpdated` is written by the upsert but never compared, so an
+     *    unbounded skip freezes it for the whole span of reading that holds the
+     *    other fields still. The ReadingListDialog "Last Read" cell, that
+     *    dialog's default sort and the CSV export's "Date Read" column all read
+     *    it (src/components/ReadingListDialog.tsx, src/lib/csv.ts).
+     *  - `percentage` is compared rounded, and the CSV export serializes
+     *    `percentage.toFixed(4)` (src/lib/csv.ts) — four decimals, so rounding
+     *    the comparison to whole percents let the exported column trail
+     *    visibly.
+     */
+    describe('regression: the reading-list mirror skip is bounded in time and precision', () => {
+        const BOOK_ID = 'book-reading-list-bounds';
+        const FILENAME = 'reading-list-bounds.epub';
+
+        const seedInventory = async () => {
+            const { useBookStore } = await import('./useBookStore');
+            const { useReadingListStore } = await import('./useReadingListStore');
+            useReadingListStore.setState({ entries: {} });
+            useBookStore.setState({
+                books: {
+                    [BOOK_ID]: {
+                        bookId: BOOK_ID,
+                        title: 'Inventory Title',
+                        author: 'Inventory Author',
+                        addedAt: 0,
+                        lastInteraction: 0,
+                        sourceFilename: FILENAME,
+                        tags: [],
+                        status: 'reading' as const,
+                    }
+                }
+            });
+            return useReadingListStore;
+        };
+
+        it('advances lastUpdated once the stored entry goes stale, at an unchanged percentage', async () => {
+            const useReadingListStore = await seedInventory();
+
+            // A finished book, left open: percentage and status hold still, so
+            // every field the skip compares matches on the next write.
+            const upsert = vi.spyOn(useReadingListStore.getState(), 'upsertEntry');
+            useReadingStateStore.getState().updateLocation(BOOK_ID, 'epubcfi(/6/2)', 1);
+            const seeded = useReadingListStore.getState().entries[FILENAME];
+            expect(seeded.status).toBe('read');
+            upsert.mockClear();
+
+            // Moments later: still skipped — the per-page-turn write stays gone.
+            useReadingStateStore.getState().updateLocation(BOOK_ID, 'epubcfi(/6/2)', 1);
+            expect(upsert).not.toHaveBeenCalled();
+            expect(useReadingListStore.getState().entries[FILENAME].lastUpdated).toBe(seeded.lastUpdated);
+
+            // Six minutes on (the entry is now past the staleness bound), e.g.
+            // the read rolled over midnight: the identical write must land or
+            // the exported "Date Read" still names the previous day.
+            const stale = Date.now() - 6 * 60 * 1000;
+            useReadingListStore.setState({
+                entries: { [FILENAME]: { ...useReadingListStore.getState().entries[FILENAME], lastUpdated: stale } },
+            });
+
+            useReadingStateStore.getState().updateLocation(BOOK_ID, 'epubcfi(/6/2)', 1);
+
+            expect(upsert).toHaveBeenCalledTimes(1);
+            expect(useReadingListStore.getState().entries[FILENAME].lastUpdated).toBeGreaterThan(stale);
+        });
+
+        it('upserts when the percentage moves at the precision the CSV serializes', async () => {
+            const useReadingListStore = await seedInventory();
+
+            const upsert = vi.spyOn(useReadingListStore.getState(), 'upsertEntry');
+            useReadingStateStore.getState().updateLocation(BOOK_ID, 'epubcfi(/6/2)', 0.416);
+            upsert.mockClear();
+
+            // 41.6% -> 42.49%: identical at DISPLAY precision (Math.round(p*100)
+            // is 42 either way) but two different values in the export's
+            // four-decimal Percentage column.
+            useReadingStateStore.getState().updateLocation(BOOK_ID, 'epubcfi(/6/4)', 0.4249);
+
+            expect(upsert).toHaveBeenCalledTimes(1);
+            expect(useReadingListStore.getState().entries[FILENAME].percentage.toFixed(4)).toBe('0.4249');
+        });
+    });
 });

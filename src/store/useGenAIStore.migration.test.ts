@@ -5,7 +5,7 @@
  * prompts and base64 inlineData + dead `usageStats`) must rehydrate with
  * every setting intact and the logs STRIPPED.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Captured shape of `localStorage['genai-storage']` at the pre-Phase-7 HEAD
@@ -302,5 +302,74 @@ describe('genai-storage v4→v5 migration (model rotation on by default)', () =>
     );
     const useGenAIStore = await loadFreshStore();
     expect(useGenAIStore.getState().isModelRotationEnabled).toBe(false);
+  });
+});
+
+/**
+ * F8: `logs` is an in-memory ring buffer outside the partialize allowlist, but
+ * zustand persist re-runs partialize + JSON.stringify and calls
+ * `localStorage.setItem` SYNCHRONOUSLY after EVERY set — so every log line
+ * (GenAI request, embedding request, TTS worker log; many per second during a
+ * backfill) committed a byte-identical settings blob to disk. The deduped
+ * storage (src/lib/persistStorage.ts) drops the commit when the payload is
+ * unchanged; the migration chain above is untouched by it.
+ */
+describe('regression: addLog does not re-persist settings', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const makeLog = (i: number) => ({
+    id: `log-${i}`,
+    timestamp: 1_700_000_000_000 + i,
+    type: 'request' as const,
+    method: 'detectContentTypes',
+    payload: { prompt: `entry ${i}` },
+  });
+
+  it('ten log lines write nothing; a settings change writes once', async () => {
+    const useGenAIStore = await loadFreshStore();
+    useGenAIStore.getState().setModel('gemini-2.5-flash');
+
+    const setItem = vi.spyOn(window.localStorage, 'setItem');
+    const writes = () => setItem.mock.calls.filter(([key]) => key === 'genai-storage').length;
+
+    for (let i = 0; i < 10; i++) {
+      useGenAIStore.getState().addLog(makeLog(i));
+    }
+    expect(useGenAIStore.getState().logs).toHaveLength(10);
+    expect(writes()).toBe(0);
+
+    useGenAIStore.getState().setModel('gemini-3-flash-preview');
+    expect(writes()).toBe(1);
+  });
+
+  it('hydrateLogs and clearLogs still write nothing', async () => {
+    const useGenAIStore = await loadFreshStore();
+    useGenAIStore.getState().setModel('gemini-2.5-flash');
+
+    const setItem = vi.spyOn(window.localStorage, 'setItem');
+    const writes = () => setItem.mock.calls.filter(([key]) => key === 'genai-storage').length;
+
+    useGenAIStore.getState().hydrateLogs([makeLog(1), makeLog(2)]);
+    useGenAIStore.getState().clearLogs();
+
+    expect(useGenAIStore.getState().logs).toEqual([]);
+    expect(writes()).toBe(0);
+  });
+
+  it('the persisted blob still lands on disk for a real settings change', async () => {
+    const useGenAIStore = await loadFreshStore();
+    useGenAIStore.getState().addLog(makeLog(0));
+    useGenAIStore.getState().setApiKey('written-through');
+
+    const parsed = JSON.parse(localStorage.getItem('genai-storage')!);
+    expect(parsed.version).toBe(5);
+    expect(parsed.state.apiKey).toBe('written-through');
+    expect(parsed.state.logs).toBeUndefined();
   });
 });

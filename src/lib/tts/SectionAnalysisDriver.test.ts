@@ -12,6 +12,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { SectionAnalysisDriver } from './SectionAnalysisDriver';
 import { FakeEngineContext } from './engine/FakeEngineContext';
 import type { CitationMarker } from '~types/cache';
+import type { SectionMetadata } from '~types/book';
 
 const GENAI_ALL_ON = {
     isEnabled: true,
@@ -220,5 +221,46 @@ describe('D4: {sentences, citationMarkers} always travel together (5c-PR2)', () 
             { sentences: MARKED_SENTENCES, citationMarkers: MARKERS });
 
         expect(ctx.genAILogs.some(l => l.method === 'detectReferenceStart')).toBe(true);
+    });
+});
+
+/**
+ * buildGroups used to call `content.getTableImages(bookId)` — a getAll over
+ * every table row of the WHOLE book, each stored ArrayBuffer re-wrapped in a
+ * fresh Blob — on every section load and again on every prewarm, to read
+ * nothing but `cfi`/`sectionId`. It now reads locations only, once per book.
+ */
+describe('regression: table locations are read once per book', () => {
+    it('hits the content port once across several sections and prewarms', async () => {
+        const { ctx, driver } = makeDriver();
+        ctx.tableLocations['book1'] = [
+            { id: 'book1-t1', cfi: 'epubcfi(/6/4!/4/2)', sectionId: 's1' },
+            { id: 'book1-t2', cfi: 'epubcfi(/6/6!/4/2)', sectionId: 'next' },
+        ];
+        ctx.ttsContent['book1/s1'] = { sentences: [{ text: 'One.', cfi: 'epubcfi(/6/4!/4/2/1:0)' }] };
+        ctx.ttsContent['book1/next'] = { sentences: [{ text: 'Two.', cfi: 'epubcfi(/6/6!/4/2/1:0)' }] };
+
+        await driver.detectContentSkipMask('book1', 's1', ['reference']);
+        await driver.detectContentSkipMask('book1', 'next', ['reference']);
+        const playlist: SectionMetadata[] = [
+            { id: 'book1-s1', bookId: 'book1', sectionId: 's1', characterCount: 100, playOrder: 0 },
+            { id: 'book1-next', bookId: 'book1', sectionId: 'next', characterCount: 200, playOrder: 1 },
+        ];
+        await driver.prewarmNextSection('book1', 0, playlist);
+        await settle(50);
+
+        expect(ctx.tableLocationReads).toEqual(['book1']);
+    });
+
+    it('re-reads when the open book changes', async () => {
+        const { ctx, driver } = makeDriver();
+        ctx.ttsContent['book1/s1'] = { sentences: [{ text: 'One.', cfi: 'epubcfi(/6/4!/4/2/1:0)' }] };
+        ctx.ttsContent['book2/s1'] = { sentences: [{ text: 'Two.', cfi: 'epubcfi(/6/4!/4/2/1:0)' }] };
+
+        await driver.detectContentSkipMask('book1', 's1', ['reference']);
+        await driver.detectContentSkipMask('book2', 's1', ['reference']);
+        await driver.detectContentSkipMask('book1', 's1', ['reference']);
+
+        expect(ctx.tableLocationReads).toEqual(['book1', 'book2', 'book1']);
     });
 });

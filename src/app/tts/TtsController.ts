@@ -67,6 +67,25 @@ export class TtsController {
      * `stopInternal()`. Re-issuing the provider that is already active therefore
      * killed in-flight audio — the "TTS stops when I come back into the book from
      * the library" bug. Pinned by regression: reader re-entry keeps playing.
+     *
+     * KNOWN GAP (audited, not closable from here): the engine can move off this
+     * provider on its own. `PlaybackController.recoverWithLocalProvider` swaps to
+     * 'local' when a cloud provider fails, and it is silent — it publishes no
+     * error (the fallback deliberately does not surface one) and
+     * {@link PlaybackSnapshot} carries no provider identity, so nothing on the
+     * subscription below reports it. The swap does reach the main thread, but
+     * only as `EngineHost.backendSetProviderById` into the TTSProviderManager
+     * that createWorkerEngineClient owns — no store, no host command, nothing
+     * this controller sees. So after a self-recovery this field still names the
+     * configured provider while the engine runs 'local', and the next
+     * `loadVoices()` skips the swap that would put the user's provider back.
+     * Closing it needs the engine to say which provider it has: one
+     * `readonly providerId` on PlaybackSnapshot, filled from
+     * `PlaybackController.currentProviderId` in `publishSnapshot()`/`snapshot()`
+     * (it rides the existing structured-clone channel — no new channel) and
+     * mirrored onto this field below. The API-key path must stop expressing
+     * "rebuild me" as `null` at the same time (a snapshot would overwrite it);
+     * an explicit force flag replaces it.
      */
     private appliedProviderId: string | null = null;
 

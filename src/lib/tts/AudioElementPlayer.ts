@@ -46,20 +46,38 @@ export class AudioElementPlayer implements AudioSink {
     };
 
     this.audio.onerror = () => {
+      // The failed segment is done with its object URL, exactly like the ended
+      // one above. Every OTHER terminal path (playBlob/playUrl/stop/onended)
+      // revoked it; this one only forwarded the error, so the blob stayed alive
+      // until some later playBlob happened to revoke it — and after a fallback
+      // swap (the engine's recovery moves to a local provider that never touches
+      // this sink) no such call comes, so a run of failures stranded one blob
+      // each. The revoke runs FIRST and cannot break the error path:
+      // revokeCurrentUrl never throws, and the MediaError is read before it so
+      // the callback still fires with the same argument, in the same order.
+      const error = this.audio.error;
+      this.revokeCurrentUrl();
       if (this.onErrorCallback) {
-        this.onErrorCallback(this.audio.error);
+        this.onErrorCallback(error);
       }
     };
   }
 
   /**
    * Revokes the current Object URL to prevent memory leaks.
+   *
+   * Best-effort and non-throwing: every caller is on a terminal path (play swap,
+   * stop, ended, error) where a failed revoke must not abort the work that
+   * follows it. The handle is dropped BEFORE the revoke, so a throw can never
+   * leave it behind to be revoked a second time.
    */
   private revokeCurrentUrl() {
-      if (this.currentObjectUrl) {
-          URL.revokeObjectURL(this.currentObjectUrl);
-          this.currentObjectUrl = null;
-      }
+      const url = this.currentObjectUrl;
+      if (!url) return;
+      this.currentObjectUrl = null;
+      try {
+          URL.revokeObjectURL(url);
+      } catch { /* the handle is gone either way */ }
   }
 
   /**

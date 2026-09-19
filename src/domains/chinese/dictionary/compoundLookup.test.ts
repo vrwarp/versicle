@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { DictEntryTuple } from '@data/repos/dictionary';
-import { compoundCandidates, findCompoundWord } from './compoundLookup';
+import { compoundCandidates, findCompoundWord, findCompoundWords } from './compoundLookup';
 
 const dictOf = (entries: Record<string, DictEntryTuple>) =>
   async (words: readonly string[]): Promise<Map<string, DictEntryTuple>> => {
@@ -83,5 +83,70 @@ describe('findCompoundWord', () => {
     const hit = await findCompoundWord('是朋友', 1, dictOf(tied));
     // Both are length 2; the scan order (start asc) keeps 是朋.
     expect(hit?.word).toBe('是朋');
+  });
+});
+
+/**
+ * The triage card resolved compounds ONE FOCUSED CHARACTER AT A TIME: one
+ * dictionary transaction per Han character in the selection, each re-splitting
+ * the whole selection into code points (quadratic in the selection length).
+ */
+describe('regression: batched compound lookup', () => {
+  const entries: Record<string, DictEntryTuple> = {
+    朋友: ['péng you', 'friend; companion'],
+    好朋友: ['hǎo péng you', 'good friend'],
+    我们: ['wǒ men', 'we; us'],
+    是: ['shì', 'is'],
+  };
+
+  const countingLookup = () => {
+    const calls: string[][] = [];
+    const lookup = async (words: readonly string[]) => {
+      calls.push([...words]);
+      return dictOf(entries)(words);
+    };
+    return { calls, lookup };
+  };
+
+  it('issues ONE lookup for every focused index', async () => {
+    const text = '我们是好朋友';
+    const indices = [0, 1, 2, 3, 4, 5];
+
+    const batched = countingLookup();
+    await findCompoundWords(text, indices, batched.lookup);
+    expect(batched.calls).toHaveLength(1);
+    // The one call carries de-duplicated candidates.
+    expect(new Set(batched.calls[0]).size).toBe(batched.calls[0].length);
+
+    // The per-index path it replaces: one lookup (one IDB transaction) each.
+    const perIndex = countingLookup();
+    for (const index of indices) await findCompoundWord(text, index, perIndex.lookup);
+    expect(perIndex.calls).toHaveLength(indices.length);
+  });
+
+  it('resolves every index exactly as findCompoundWord does', async () => {
+    const text = '我们是好朋友';
+    const indices = [0, 1, 2, 3, 4, 5];
+
+    const batch = await findCompoundWords(text, indices, dictOf(entries));
+    for (const index of indices) {
+      expect(batch.get(index)).toEqual(await findCompoundWord(text, index, dictOf(entries)));
+    }
+  });
+
+  it('matches the single-index semantics on astral text and at boundaries', async () => {
+    const text = '\u{20000}朋友';
+    const indices = [0, 1, 2];
+    const batch = await findCompoundWords(text, indices, dictOf(entries));
+    for (const index of indices) {
+      expect(batch.get(index)).toEqual(await findCompoundWord(text, index, dictOf(entries)));
+    }
+    expect(batch.get(1)).toMatchObject({ word: '朋友' });
+
+    // A single-character selection has no multi-char window at all.
+    const lonely = countingLookup();
+    const none = await findCompoundWords('好', [0], lonely.lookup);
+    expect(none.get(0)).toBeNull();
+    expect(lonely.calls).toHaveLength(0);
   });
 });

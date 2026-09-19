@@ -17,7 +17,7 @@
  * that keeps pre-linking entries working (it dies one release after the
  * v8 linking migration).
  */
-import { useMemo } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { create } from 'zustand';
 import { useBookStore } from './useBookStore';
 import { useLibraryStore } from './useLibraryStore';
@@ -140,7 +140,11 @@ function recomputeLibraryView(): void {
       }
 
       const meta = staticMetadata[book.bookId];
-      const hasCoverBlob = meta?.coverBlob instanceof Blob;
+      // perf (P-mem): the SW route is driven by `hasCover`, not by holding the
+      // bytes. BookRepository omits `coverBlob` whenever the page is SW
+      // controlled; the `instanceof Blob` arm is the pre-`hasCover` fallback
+      // (metadata written by an older build, or the no-controller lane).
+      const hasCover = meta?.hasCover ?? meta?.coverBlob instanceof Blob;
 
       const baseBook: BaseBook = {
         ...book,
@@ -152,7 +156,7 @@ function recomputeLibraryView(): void {
         version: meta?.version || undefined,
         // SW cover route via the shared coverUrl() helper (P3) — never
         // re-inline the endpoint string.
-        coverUrl: hasCoverBlob ? buildCoverUrl(book.bookId) : undefined,
+        coverUrl: hasCover ? buildCoverUrl(book.bookId) : undefined,
         fileHash: meta?.fileHash,
         fileSize: meta?.fileSize,
         totalChars: meta?.totalChars,
@@ -245,7 +249,53 @@ function recomputeLibraryView(): void {
   }
 }
 
+// ── Scheduling (perf): one rebuild per microtask, none while unmounted ────
+//
+// The projection listens to FOUR input stores, and a single page turn writes
+// two of them (useReadingStateStore, then useReadingListStore when a displayed
+// field moved), so an unbatched listener rebuilt the reading-list join maps and
+// allocated a fresh N-element array TWICE per turn. Worse, the subscriptions
+// start on first use and are never torn down, so it did that work while the
+// library view was unmounted (the router swaps the Outlet out for the reader —
+// exactly when page turns happen).
+//
+// Now an input notification only marks the projection dirty:
+//  - with subscribers, the rebuild is deferred to a microtask (one flush per
+//    task, whatever the number of notifications — and still before paint);
+//  - with none, nothing is rebuilt at all. The dirty flag survives, and the
+//    next subscriber flushes it before it reads (`useAllBooks` rebuilds during
+//    its own render while the count is zero, and `subscribeToLibraryView`
+//    flushes again after registering, so nothing that moved in between is
+//    missed).
+
 let started = false;
+/** An input store moved since the last rebuild. */
+let dirty = false;
+/** A microtask flush is already queued. */
+let scheduled = false;
+/** Live projection subscribers (see subscribeToLibraryView). */
+let subscribers = 0;
+
+/** Rebuild now if anything moved. Idempotent and cheap on a clean projection. */
+function flushLibraryView(): void {
+  if (!dirty) return;
+  dirty = false;
+  recomputeLibraryView();
+}
+
+/** An input store notified: coalesce, and skip the work while unmounted. */
+function scheduleLibraryView(): void {
+  dirty = true;
+  if (subscribers === 0 || scheduled) return;
+  scheduled = true;
+  queueMicrotask(() => {
+    scheduled = false;
+    // Unmounted while the flush was queued: stay dirty, the next subscriber
+    // rebuilds on demand.
+    if (subscribers === 0) return;
+    flushLibraryView();
+  });
+}
 
 /**
  * Start the input-store subscriptions (idempotent). Lazily invoked by the
@@ -254,14 +304,103 @@ let started = false;
 function ensureLibraryViewStarted(): void {
   if (started) return;
   started = true;
-  recomputeLibraryView();
-  useBookStore.subscribe(recomputeLibraryView);
-  useLibraryStore.subscribe(recomputeLibraryView);
-  useReadingStateStore.subscribe(recomputeLibraryView);
-  useReadingListStore.subscribe(recomputeLibraryView);
+  dirty = true;
+  flushLibraryView();
+  useBookStore.subscribe(scheduleLibraryView);
+  useLibraryStore.subscribe(scheduleLibraryView);
+  useReadingStateStore.subscribe(scheduleLibraryView);
+  useReadingListStore.subscribe(scheduleLibraryView);
+}
+
+/** The projection's current rows (the uSES snapshot — identity-stable). */
+function getLibraryViewBooks(): LibraryBook[] {
+  return useLibraryViewStore.getState().books;
+}
+
+/**
+ * uSES subscribe. Counting subscribers here is what lets an idle projection
+ * skip the rebuild entirely; the flush after registering means the first
+ * subscriber back from an idle period reads fresh rows.
+ */
+function subscribeToLibraryView(listener: () => void): () => void {
+  subscribers += 1;
+  const unsubscribe = useLibraryViewStore.subscribe(listener);
+  flushLibraryView();
+  return () => {
+    subscribers -= 1;
+    unsubscribe();
+  };
 }
 
 // ── Consumer hooks (moved from the deleted selectors.ts façade) ────────────
+
+/**
+ * perf: the per-book reading-list join, indexed. `useBook`'s selector used to
+ * walk the whole entries map (up to twice — once for the FK, once for the
+ * fuzzy key, re-parsing every title/author) on EVERY store notification, and
+ * the reader plus the app-wide control bar hold several of those selectors.
+ * The maps are rebuilt only when the entries map's identity moves; join ORDER
+ * (FK → exact filename → fuzzy, first match wins) is unchanged.
+ */
+const perBookJoin = {
+  entries: undefined as Record<string, ReadingListEntry> | undefined,
+  fkMap: new Map<string, ReadingListEntry>(),
+  matchMap: new Map<string, ReadingListEntry>(),
+};
+
+function readingListIndex(entries: Record<string, ReadingListEntry>) {
+  if (perBookJoin.entries !== entries) {
+    const fkMap = new Map<string, ReadingListEntry>();
+    const matchMap = new Map<string, ReadingListEntry>();
+    for (const key in entries) {
+      if (!Object.prototype.hasOwnProperty.call(entries, key)) continue;
+      const item = entries[key];
+      if (item.bookId && !fkMap.has(item.bookId)) fkMap.set(item.bookId, item);
+      const matchKey = generateMatchKey(item.title, item.author);
+      if (matchKey && !matchMap.has(matchKey)) matchMap.set(matchKey, item);
+    }
+    perBookJoin.entries = entries;
+    perBookJoin.fkMap = fkMap;
+    perBookJoin.matchMap = matchMap;
+  }
+  return perBookJoin;
+}
+
+/**
+ * The CHROME projection for a book: identity, display strings and the
+ * synthetic-TOC preference — no progress and no reading-list join.
+ *
+ * perf: ReaderControlBar is mounted app-wide (RootLayout), so wiring it to the
+ * full {@link useBook} join subscribed the pill to `state.progress[id]` — a
+ * fresh object on every page turn and every TTS sentence — and re-ran the
+ * reading-list join twice per write, even on the library route.
+ */
+export interface BookChrome {
+  id: string;
+  bookId: string;
+  title: string;
+  syntheticToc?: NavigationItem[];
+  useSyntheticToc?: boolean;
+}
+
+export const useBookChrome = (id: string | null): BookChrome | null => {
+  const book = useBookStore(state => (id && state.books ? state.books[id] : null));
+  const staticMeta = useLibraryStore(state =>
+    id && state.staticMetadata ? state.staticMetadata[id] : null,
+  );
+
+  return useMemo(() => {
+    if (!book) return null;
+    return {
+      id: book.bookId,
+      bookId: book.bookId,
+      // Same precedence as useBook: user overrides > static metadata > snapshot.
+      title: book.customTitle || staticMeta?.title || book.title,
+      syntheticToc: staticMeta?.syntheticToc,
+      useSyntheticToc: book.useSyntheticToc,
+    };
+  }, [book, staticMeta]);
+};
 
 /**
  * Returns all books with static metadata, progress and the reading-list
@@ -269,7 +408,11 @@ function ensureLibraryViewStarted(): void {
  */
 export const useAllBooks = (): LibraryBook[] => {
   ensureLibraryViewStarted();
-  return useLibraryViewStore((state) => state.books);
+  // Nothing is subscribed yet (first mount, or a return from the reader): the
+  // pending rebuild has to land BEFORE this render reads the snapshot. Safe as
+  // a render-phase write precisely because there is no listener to notify.
+  if (subscribers === 0) flushLibraryView();
+  return useSyncExternalStore(subscribeToLibraryView, getLibraryViewBooks, getLibraryViewBooks);
 };
 
 /**
@@ -300,24 +443,17 @@ export const useBook = (id: string | null) => {
   const sourceFilename = book?.sourceFilename;
   const readingListEntry = useReadingListStore(state => {
     if (!state.entries) return undefined;
+    const index = readingListIndex(state.entries);
     if (id) {
-      for (const key in state.entries) {
-        if (state.entries[key].bookId === id) return state.entries[key];
-      }
+      const byFk = index.fkMap.get(id);
+      if (byFk) return byFk;
     }
     if (sourceFilename && state.entries[sourceFilename]) {
       return state.entries[sourceFilename];
     }
     if (book?.title || book?.author) {
       const bookKey = generateMatchKey(book.title || '', book.author || '');
-      if (bookKey) {
-        for (const key in state.entries) {
-          const entry = state.entries[key];
-          if (generateMatchKey(entry.title, entry.author) === bookKey) {
-            return entry;
-          }
-        }
-      }
+      if (bookKey) return index.matchMap.get(bookKey);
     }
     return undefined;
   });
@@ -332,7 +468,7 @@ export const useBook = (id: string | null) => {
   return useMemo(() => {
     if (!book) return null;
 
-    const hasCoverBlob = staticMeta?.coverBlob instanceof Blob;
+    const hasCover = staticMeta?.hasCover ?? staticMeta?.coverBlob instanceof Blob;
     const progressPercentage = progress?.percentage || readingListEntry?.percentage || 0;
 
     return {
@@ -343,7 +479,7 @@ export const useBook = (id: string | null) => {
       author: book.customAuthor || staticMeta?.author || book.author,
       coverBlob: staticMeta?.coverBlob || null,
       // OPTIMIZATION: Use Service Worker route
-      coverUrl: hasCoverBlob ? buildCoverUrl(book.bookId) : undefined,
+      coverUrl: hasCover ? buildCoverUrl(book.bookId) : undefined,
       fileHash: staticMeta?.fileHash,
       fileSize: staticMeta?.fileSize,
       totalChars: staticMeta?.totalChars,
@@ -401,10 +537,15 @@ export const useLastReadBookId = () => {
 };
 
 /**
- * Returns the most recently read book with metadata merged.
- * Uses useLastReadBookId and useBook to avoid full library iteration.
+ * Returns the most recently read book's CHROME projection (identity + display
+ * strings). Uses useLastReadBookId to avoid full library iteration.
+ *
+ * perf: this feeds the app-wide ReaderControlBar summary pill, which renders
+ * the title only — the progress-joined {@link useBook} re-rendered the whole
+ * pill on every progress write (including background-TTS ticks on the library
+ * route). Progress comes from the percentage selectors instead.
  */
-export const useLastReadBook = () => {
+export const useLastReadBook = (): BookChrome | null => {
   const id = useLastReadBookId();
-  return useBook(id);
+  return useBookChrome(id);
 };

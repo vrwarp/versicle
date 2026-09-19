@@ -93,7 +93,7 @@ interface Harness {
   summaries: unknown[];
   logs: { warn: string[]; info: string[]; error: unknown[][] };
   extract: ReturnType<typeof vi.fn>;
-  expandZip: ReturnType<typeof vi.fn>;
+  listZipEpubs: ReturnType<typeof vi.fn>;
   manifests: Map<string, StaticManifestRow>;
   filenameIndex: Map<string, string>;
 }
@@ -118,7 +118,7 @@ const build = (over: Partial<ImportOrchestratorDeps> = {}): Harness => {
   vi.spyOn(console, 'debug').mockImplementation(() => {});
 
   const extract = vi.fn(async () => extraction());
-  const expandZip = vi.fn(async () => []);
+  const listZipEpubs = vi.fn(async () => []);
 
   const orchestrator = new ImportOrchestrator({
     mutex: new KeyedMutex(),
@@ -193,7 +193,7 @@ const build = (over: Partial<ImportOrchestratorDeps> = {}): Harness => {
     },
     extractionOptions: () => ({ minSentenceLength: 2 }) as never,
     extract: extract as unknown as ImportOrchestratorDeps['extract'],
-    expandZip: expandZip as unknown as ImportOrchestratorDeps['expandZip'],
+    listZipEpubs: listZipEpubs as unknown as ImportOrchestratorDeps['listZipEpubs'],
     now: () => 5000,
     ...over,
   });
@@ -211,7 +211,7 @@ const build = (over: Partial<ImportOrchestratorDeps> = {}): Harness => {
     summaries,
     logs,
     extract,
-    expandZip,
+    listZipEpubs,
     manifests,
     filenameIndex,
   };
@@ -578,9 +578,12 @@ describe('ImportOrchestrator — ZIP expansion', () => {
     return file;
   };
 
+  /** A lazily-inflatable entry, the shape `listZipEpubEntries` returns. */
+  const entry = (name: string) => ({ name, read: async () => epubFile(name) });
+
   it('expands a zip into its epubs', async () => {
     const h = build();
-    h.expandZip.mockResolvedValue([epubFile('inner-a.epub'), epubFile('inner-b.epub')]);
+    h.listZipEpubs.mockResolvedValue([entry('inner-a.epub'), entry('inner-b.epub')]);
     let n = 0;
     h.extract.mockImplementation(async () => extraction({ bookId: `book-${n++}` }));
 
@@ -589,9 +592,9 @@ describe('ImportOrchestrator — ZIP expansion', () => {
     expect(summary.imported).toBe(2);
   });
 
-  it('records the zip itself as failed when expansion throws', async () => {
+  it('records the zip itself as failed when enumeration throws', async () => {
     const h = build();
-    h.expandZip.mockRejectedValue(new Error('corrupt archive'));
+    h.listZipEpubs.mockRejectedValue(new Error('corrupt archive'));
 
     const summary = await h.orchestrator.importFiles([zipFile('bad.zip')], { adoptGhosts: false });
 
@@ -601,7 +604,7 @@ describe('ImportOrchestrator — ZIP expansion', () => {
 
   it('names a non-Error zip failure generically', async () => {
     const h = build();
-    h.expandZip.mockRejectedValue('nope');
+    h.listZipEpubs.mockRejectedValue('nope');
 
     const summary = await h.orchestrator.importFiles([zipFile('bad.zip')], { adoptGhosts: false });
 
@@ -622,7 +625,7 @@ describe('ImportOrchestrator — ZIP expansion', () => {
 
   it('matches extensions case-insensitively', async () => {
     const h = build();
-    h.expandZip.mockResolvedValue([]);
+    h.listZipEpubs.mockResolvedValue([]);
 
     const summary = await h.orchestrator.importFiles(
       [new File(['x'], 'A.EPUB'), new File(['x'], 'B.ZIP')],
@@ -630,12 +633,12 @@ describe('ImportOrchestrator — ZIP expansion', () => {
     );
 
     expect(summary.failed).toEqual([]);
-    expect(h.expandZip).toHaveBeenCalledTimes(1);
+    expect(h.listZipEpubs).toHaveBeenCalledTimes(1);
   });
 
-  it('weights expansion progress by BYTES across the whole batch', async () => {
+  it('weights the archive READ progress by BYTES across the whole batch', async () => {
     const h = build();
-    h.expandZip.mockImplementation(async (_f: File, onProgress: (p: number) => void) => {
+    h.listZipEpubs.mockImplementation(async (_f: File, onProgress: (p: number) => void) => {
       onProgress(50);
       onProgress(100);
       return [];
@@ -659,11 +662,126 @@ describe('ImportOrchestrator — ZIP expansion', () => {
 
   it('reports 100% rather than dividing by zero for empty inputs', async () => {
     const h = build();
-    h.expandZip.mockResolvedValue([]);
+    h.listZipEpubs.mockResolvedValue([]);
 
     await h.orchestrator.importFiles([zipFile('empty.zip', 0)], { adoptGhosts: false });
 
     expect(h.uploads[0][0]).toBe(100);
+  });
+});
+
+/**
+ * expandToEpubs decompressed EVERY EPUB of EVERY zip up front and the batch
+ * loop then held that array for the whole run — a 40-book archive meant 40
+ * inflated EPUBs resident from the first import to the last. Entries are now
+ * enumerated cheaply and inflated one at a time, as their turn comes.
+ */
+describe('regression: ZIP entries are inflated one at a time', () => {
+  const lazyZip = (names: string[], onRead: (name: string) => void) =>
+    vi.fn(async () =>
+      names.map((name) => ({
+        name,
+        read: async () => {
+          onRead(name);
+          return epubFile(name);
+        },
+      })),
+    );
+
+  it('inflates each entry only when its import starts', async () => {
+    const reads: string[] = [];
+    const listZipEpubs = lazyZip(['inner-a.epub', 'inner-b.epub'], (n) => reads.push(n));
+    const imports: string[] = [];
+    const h = build({
+      listZipEpubs: listZipEpubs as unknown as ImportOrchestratorDeps['listZipEpubs'],
+    });
+    let n = 0;
+    h.extract.mockImplementation(async () => {
+      // Every earlier entry has been read; no later one has.
+      imports.push(reads.join(','));
+      return extraction({ bookId: `book-${n++}` });
+    });
+
+    const summary = await h.orchestrator.importFiles(
+      [new File([new Uint8Array(100)], 'books.zip', { type: 'application/zip' })],
+      { adoptGhosts: false },
+    );
+
+    expect(summary.imported).toBe(2);
+    expect(imports).toEqual(['inner-a.epub', 'inner-a.epub,inner-b.epub']);
+  });
+
+  it('never inflates an entry whose name already imported in this batch', async () => {
+    const reads: string[] = [];
+    const listZipEpubs = lazyZip(['dup.epub', 'dup.epub'], (n) => reads.push(n));
+    const h = build({
+      listZipEpubs: listZipEpubs as unknown as ImportOrchestratorDeps['listZipEpubs'],
+    });
+
+    const summary = await h.orchestrator.importFiles(
+      [new File([new Uint8Array(100)], 'books.zip', { type: 'application/zip' })],
+      { adoptGhosts: false },
+    );
+
+    expect(summary.skipped).toEqual(['dup.epub']);
+    expect(reads).toEqual(['dup.epub']);
+  });
+
+  it('records a failed inflation against the entry, and keeps going', async () => {
+    const h = build({
+      listZipEpubs: (async () => [
+        { name: 'broken.epub', read: async () => { throw new Error('bad entry'); } },
+        { name: 'fine.epub', read: async () => epubFile('fine.epub') },
+      ]) as unknown as ImportOrchestratorDeps['listZipEpubs'],
+    });
+
+    const summary = await h.orchestrator.importFiles(
+      [new File([new Uint8Array(100)], 'books.zip', { type: 'application/zip' })],
+      { adoptGhosts: false },
+    );
+
+    expect(summary.failed).toEqual([{ filename: 'broken.epub', reason: 'bad entry' }]);
+    expect(summary.imported).toBe(1);
+  });
+});
+
+/**
+ * The eager `expandZip` dependency defaulted to null, so `if (this.expandZip)`
+ * was unreachable in production — yet every ZIP test injected it, so the whole
+ * expansion block (failure attribution, case-insensitive matching,
+ * byte-weighted progress, the divide-by-zero guard) pinned dead code and
+ * breaking the real lazy path left the suite green. There is now ONE seam.
+ */
+describe('regression: the only zip seam is the lazy one production uses', () => {
+  const zipFile = (name = 'books.zip', size = 100): File =>
+    new File([new Uint8Array(size)], name, { type: 'application/zip' });
+
+  it('has no eager expansion seam left to route around the lazy path', async () => {
+    const expandZip = vi.fn(async () => [epubFile('eager.epub')]);
+    const h = build({ expandZip } as unknown as Partial<ImportOrchestratorDeps>);
+    h.listZipEpubs.mockResolvedValue([
+      { name: 'lazy.epub', read: async () => epubFile('lazy.epub') },
+    ]);
+
+    const summary = await h.orchestrator.importFiles([zipFile()], { adoptGhosts: false });
+
+    expect(expandZip).not.toHaveBeenCalled();
+    expect(h.listZipEpubs).toHaveBeenCalledTimes(1);
+    expect(summary.imported).toBe(1);
+  });
+
+  it('hands the enumerator a read-progress callback so the bar still moves', async () => {
+    const h = build();
+    h.listZipEpubs.mockImplementation(async (_f: File, onProgress?: (p: number) => void) => {
+      onProgress?.(50);
+      return [];
+    });
+
+    await h.orchestrator.importFiles([zipFile('a.zip', 100)], { adoptGhosts: false });
+
+    expect(typeof h.listZipEpubs.mock.calls[0][1]).toBe('function');
+    // Half of the batch's only file: the read is visible while it happens.
+    expect(h.uploads.map(([p]) => p)).toEqual([50, 100]);
   });
 });
 

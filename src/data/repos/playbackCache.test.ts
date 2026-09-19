@@ -77,6 +77,118 @@ describe('data/repos/playbackCache', () => {
     expect(row?.playbackQueue).toEqual([{ text: 'New', cfi: 'c2' }]);
   });
 
+  describe('regression: session mirror is bounded', () => {
+    // The mirror (one record per book touched, each carrying that book's whole TTS queue)
+    // was never pruned, in BOTH the worker and the main-thread instance. It is now an
+    // insertion-ordered LRU; an evicted book re-seeds from disk on its next touch.
+    //
+    // Eviction is asserted through observable behaviour rather than a spy on the connection:
+    // `idb` hands out a Proxy-wrapped database, so `vi.spyOn(db, 'get')` never takes effect.
+    // Instead the row is rewritten on disk behind the repo's back — a MIRRORED book ignores
+    // it (the mirror wins), an EVICTED book re-reads and the disk value shows through.
+    const ids = ['lru-1', 'lru-2', 'lru-3', 'lru-4', 'lru-5', 'lru-6'];
+    const queueOf = (id: string) => [{ text: id, cfi: `cfi-${id}` }];
+
+    it('evicts the oldest non-dirty books; an evicted book re-seeds from disk', async () => {
+      const db = await getConnection();
+      // Flush between books so none of them stays dirty — only then may they be evicted.
+      for (const id of ids) {
+        playbackCache.saveQueue(id, queueOf(id));
+        await playbackCache.flushPending();
+      }
+      for (const id of ids) {
+        expect((await db.get('cache_session_state', id))?.playbackQueue, id).toEqual(queueOf(id));
+      }
+
+      // The OLDEST book left the mirror: its next touch re-reads the (diverged) disk row.
+      await db.put('cache_session_state', {
+        bookId: 'lru-1', playbackQueue: [{ text: 'from disk', cfi: 'cfi-disk' }], updatedAt: 2,
+      });
+      await playbackCache.savePauseTime('lru-1', 99);
+      await playbackCache.flushPending();
+      const evicted = await db.get('cache_session_state', 'lru-1');
+      expect(evicted?.playbackQueue, 'evicted book must re-seed from disk').toEqual([
+        { text: 'from disk', cfi: 'cfi-disk' },
+      ]);
+      expect(evicted?.lastPauseTime).toBe(99);
+
+      // The NEWEST book is still mirrored: the same divergence is overwritten by the mirror.
+      await db.put('cache_session_state', {
+        bookId: 'lru-6', playbackQueue: [{ text: 'from disk', cfi: 'cfi-disk' }], updatedAt: 2,
+      });
+      await playbackCache.savePauseTime('lru-6', 77);
+      await playbackCache.flushPending();
+      const mirrored = await db.get('cache_session_state', 'lru-6');
+      expect(mirrored?.playbackQueue, 'recent book must still be mirrored').toEqual(queueOf('lru-6'));
+      expect(mirrored?.lastPauseTime).toBe(77);
+    });
+
+    it('never evicts a book with a pending debounced write — every queue still lands', async () => {
+      const db = await getConnection();
+      const dirty = ids.map((id) => `dirty-${id}`);
+      // No flush in between: every book has an unflushed write when the next one evicts.
+      for (const id of dirty) playbackCache.saveQueue(id, queueOf(id));
+      await playbackCache.flushPending();
+
+      for (const id of dirty) {
+        expect((await db.get('cache_session_state', id))?.playbackQueue, id).toEqual(queueOf(id));
+      }
+    });
+  });
+
+  /**
+   * The mirror's 4-entry LRU broke the "seed once per book" premise its consumer
+   * (createRepoSessionStore) memoizes: once a book is evicted, a saveQueue built
+   * its record from scratch — `{bookId, playbackQueue, updatedAt}` — and the next
+   * write dropped every other field the persisted row carried, the previous
+   * session's pause stamp included. saveQueue is cold-safe now: the flush merges
+   * the persisted row in first (outside the gate, before the synchronous put).
+   */
+  describe('regression: a cold saveQueue keeps what the persisted row carried', () => {
+    it('re-seeds an LRU-evicted book from disk instead of clobbering its pause stamp', async () => {
+      const db = await getConnection();
+      await playbackCache.savePauseTime('cold-a', 4242);
+      playbackCache.saveQueue('cold-a', [{ text: 'First', cfi: 'cfi-first' }]);
+      await playbackCache.flushPending();
+      expect((await db.get('cache_session_state', 'cold-a'))?.lastPauseTime).toBe(4242);
+
+      // The engine touches four more books: the 4-entry mirror evicts book A.
+      for (const id of ['cold-b', 'cold-c', 'cold-d', 'cold-e']) {
+        playbackCache.saveQueue(id, [{ text: id, cfi: `cfi-${id}` }]);
+        await playbackCache.flushPending();
+      }
+
+      // A later persist for A — its consumer still believes A was seeded once
+      // and never re-reads, so the repo has to be the one that stays honest.
+      playbackCache.saveQueue('cold-a', [{ text: 'Later', cfi: 'cfi-later' }]);
+      await playbackCache.flushPending();
+
+      const row = await db.get('cache_session_state', 'cold-a');
+      expect(row?.playbackQueue).toEqual([{ text: 'Later', cfi: 'cfi-later' }]);
+      expect(row?.lastPauseTime, 'the persisted pause stamp must survive').toBe(4242);
+    });
+
+    it('still lets savePauseTime(null) clear the stamp on a cold record', async () => {
+      const db = await getConnection();
+      await db.put('cache_session_state', {
+        bookId: 'cold-clear',
+        playbackQueue: [{ text: 'Persisted', cfi: 'cfi-p' }],
+        lastPauseTime: 99,
+        updatedAt: 1,
+      });
+
+      // Cold saveQueue (nothing mirrored) followed by an explicit clear: the
+      // merge restores absent fields, never overrides a deliberate update.
+      playbackCache.saveQueue('cold-clear', [{ text: 'New', cfi: 'cfi-n' }]);
+      await playbackCache.savePauseTime('cold-clear', null);
+      await playbackCache.flushPending();
+
+      const row = await db.get('cache_session_state', 'cold-clear');
+      expect(row?.playbackQueue).toEqual([{ text: 'New', cfi: 'cfi-n' }]);
+      expect(row?.lastPauseTime).toBeUndefined();
+    });
+  });
+
   describe('regression: teardown drops (never flushes) the pending write (absorbed from db/DBService.test.ts)', () => {
     it('dropPending prevents a scheduled saveQueue from ever reaching disk', async () => {
       const db = await getConnection();

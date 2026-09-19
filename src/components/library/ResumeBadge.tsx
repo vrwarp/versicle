@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 
 import { useDeviceStore } from '@store/useDeviceStore';
 import { getDeviceId } from '@lib/device-id';
@@ -21,10 +22,8 @@ export const ResumeBadge: React.FC<ResumeBadgeProps> = React.memo(({ allProgress
 
 
 
-  // This selector returns the entire devices object, causing re-renders on ANY device update.
-  // By isolating this in ResumeBadge, we prevent the heavy BookCard from re-rendering.
-  const devices = useDeviceStore((state) => state.devices);
-
+  // Which remote device to offer is decided by the PROGRESS PROP alone — the
+  // device store only supplies the label for it.
   const resumeInfo = useMemo(() => {
     if (!allProgress) return null;
 
@@ -32,7 +31,7 @@ export const ResumeBadge: React.FC<ResumeBadgeProps> = React.memo(({ allProgress
     const localPercentage = localProgress?.percentage || 0;
     const localLastRead = localProgress?.lastRead || 0;
 
-    let bestRemote: { deviceId: string; percentage: number; cfi: string; deviceName: string } | null = null;
+    let bestRemote: { deviceId: string; percentage: number; cfi: string } | null = null;
 
     for (const [deviceId, progress] of Object.entries(allProgress)) {
       if (deviceId === currentDeviceId) continue;
@@ -43,22 +42,30 @@ export const ResumeBadge: React.FC<ResumeBadgeProps> = React.memo(({ allProgress
 
       // Remote has further progress AND is more recent
       if (remotePercentage > localPercentage && remoteLastRead > localLastRead) {
-        const device = devices[deviceId];
-        const deviceName = device?.name || 'Other device';
-
         if (!bestRemote || remotePercentage > bestRemote.percentage) {
           bestRemote = {
             deviceId,
             percentage: remotePercentage,
-            cfi: remoteProgress.currentCfi || '',
-            deviceName
+            cfi: remoteProgress.currentCfi || ''
           };
         }
       }
     }
 
     return bestRemote;
-  }, [allProgress, currentDeviceId, devices]);
+  }, [allProgress, currentDeviceId]);
+
+  // Subscribing to the whole `devices` map re-rendered EVERY mounted badge on
+  // any device write — and the rolling embed-spend publisher writes that map
+  // during a backfill. Only the resolved remote's two RENDERED fields are
+  // subscribed here; useShallow keeps the reference while they are unchanged,
+  // so an unrelated device (or another field of this one) notifies nothing.
+  const { deviceName, platform } = useDeviceStore(
+    useShallow((state) => {
+      const device = resumeInfo ? state.devices[resumeInfo.deviceId] : undefined;
+      return { deviceName: device?.name, platform: device?.platform };
+    })
+  );
 
   if (!resumeInfo) return null;
 
@@ -72,11 +79,11 @@ export const ResumeBadge: React.FC<ResumeBadgeProps> = React.memo(({ allProgress
       }}
       className="absolute bottom-[calc(100%-var(--cover-height)+1rem)] right-2 z-10 flex items-center gap-1 px-2 py-1 h-auto rounded-full text-xs font-medium shadow-md transition-colors translate-y-[-50%]"
       data-testid="resume-badge"
-      title={`Continue from ${resumeInfo.deviceName} at ${Math.round(resumeInfo.percentage * 100)}%`}
-      aria-label={`Continue from ${resumeInfo.deviceName} at ${Math.round(resumeInfo.percentage * 100)}%`}
+      title={`Continue from ${deviceName || 'Other device'} at ${Math.round(resumeInfo.percentage * 100)}%`}
+      aria-label={`Continue from ${deviceName || 'Other device'} at ${Math.round(resumeInfo.percentage * 100)}%`}
       style={{ bottom: '90px' }} // Approximate position above text
     >
-      <DeviceIcon platform={devices[resumeInfo.deviceId]?.platform || ''} className="w-3 h-3" />
+      <DeviceIcon platform={platform || ''} className="w-3 h-3" />
       <span>{Math.round(resumeInfo.percentage * 100)}%</span>
     </Button>
   );

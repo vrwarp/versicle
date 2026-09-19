@@ -12,6 +12,7 @@ import {
   initGenAILogPersistence,
   __flushGenAILogPersistenceForTests,
   __resetGenAILogPersistenceForTests,
+  __genaiLogPersistenceKnownIdsForTests,
 } from './genaiLogPersistence';
 
 const DB_NAME = GENAI_LOGS_DB_NAME;
@@ -117,5 +118,30 @@ describe('genaiLogPersistence (cross-restart logs)', () => {
     await initGenAILogPersistence();
 
     expect(useGenAIStore.getState().logs.map((l) => l.id)).toEqual(['b', 'c']);
+  });
+
+  /**
+   * The mirror's dedupe set only ever GREW: the ring buffer trims entries from
+   * the front, but their ids stayed in the set until Clear Logs — one leaked
+   * string per entry logged, for the whole session. It is now re-keyed to the
+   * live buffer after every change.
+   */
+  describe('regression: knownIds stays bounded', () => {
+    it('tracks at most maxLogs ids however many entries are logged', async () => {
+      useGenAIStore.setState({ logs: [], maxLogs: 100 });
+      await initGenAILogPersistence();
+
+      for (let i = 0; i < 5000; i++) {
+        useGenAIStore.getState().addLog(entry(`e-${i}`, 1000 + i));
+      }
+      await __flushGenAILogPersistenceForTests();
+
+      // The store's ring buffer is capped…
+      expect(useGenAIStore.getState().logs).toHaveLength(100);
+      // …and so is the mirror's dedupe set (it was 5000 before).
+      expect(__genaiLogPersistenceKnownIdsForTests()).toBeLessThanOrEqual(100);
+      // Every entry was still persisted exactly once — no re-appends.
+      expect(useGenAIStore.getState().logs[99].id).toBe('e-4999');
+    });
   });
 });

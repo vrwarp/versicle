@@ -21,9 +21,19 @@ interface LocalHistoryState {
  */
 export const useLocalHistoryStore = create<LocalHistoryState>()(
     persist(
-        (set) => ({
+        (set, get) => ({
             lastReadBookId: null,
-            setLastReadBookId: (id) => set({ lastReadBookId: id }),
+            // perf(store): bail BEFORE set() on an unchanged id. The hot
+            // writers (every page turn + every TTS sentence, via
+            // useReadingStateStore) call this with the same id over and over;
+            // zustand's persist middleware wraps the config `set` as
+            // `set(...); setItem()` — setItem runs even when the inner set
+            // short-circuits on Object.is, so a no-op write would still cost a
+            // JSON.stringify + a synchronous localStorage.setItem.
+            setLastReadBookId: (id) => {
+                if (get().lastReadBookId === id) return;
+                set({ lastReadBookId: id });
+            },
         }),
         {
             name: 'local-history-storage',

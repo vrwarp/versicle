@@ -25,7 +25,7 @@ describe('useAllBooks Performance', () => {
         vi.restoreAllMocks();
     });
 
-    it('should skip resolveProgress (and getDeviceId access) for unchanged books', () => {
+    it('should skip resolveProgress (and getDeviceId access) for unchanged books', async () => {
         // 1. Setup 10 books with progress
         const books: Record<string, UserInventoryItem> = {};
         const progress: Record<string, Record<string, UserProgress>> = {};
@@ -72,7 +72,9 @@ describe('useAllBooks Performance', () => {
         // 3. Update progress for ONE book
         getDeviceIdSpy.mockClear();
 
-        act(() => {
+        // The projection rebuilds on a microtask now (one flush per task),
+        // so the update has to be awaited before the rebuild can be counted.
+        await act(async () => {
             useReadingStateStore.setState(state => ({
                 progress: {
                     ...state.progress,

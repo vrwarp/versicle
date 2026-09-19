@@ -164,11 +164,28 @@ export function useEpubReader(
     optionsRef.current = options;
   }, [options]);
 
-  // Sync metadata from options if it changes reactively
+  // Sync metadata from options if it changes reactively.
+  //
+  // perf: `setMetadata` with a fresh object commits a second full render pass
+  // of the host (the whole reader tree). The app passes a live library
+  // projection whose identity moves on every progress write, so a page turn
+  // used to double-render for nothing. The hook consumes the metadata STATE
+  // for exactly two fields — the theme spec's baseFontSize/baseLineHeight
+  // (everything else is read through `optionsRef` at load time) — so only a
+  // change to those needs a commit.
   useEffect(() => {
-    if (options.metadata) {
-      setMetadata(options.metadata);
-    }
+    const next = options.metadata;
+    if (!next) return;
+    setMetadata((prev) => {
+      if (
+        prev &&
+        prev.baseFontSize === next.baseFontSize &&
+        prev.baseLineHeight === next.baseLineHeight
+      ) {
+        return prev;
+      }
+      return next;
+    });
   }, [options.metadata]);
 
 

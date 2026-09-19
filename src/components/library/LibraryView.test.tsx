@@ -7,6 +7,7 @@ import { useLibraryStore, useBookStore } from '@store/useLibraryStore';
 import { useToastStore } from '@store/useToastStore';
 import { MemoryRouter } from 'react-router-dom';
 import type { BookMetadata } from '~types/book';
+import type { UserInventoryItem } from '~types/user-data';
 import type { UserProgress } from '~types/user-data';
 
 // Mock zustand/middleware to disable persistence
@@ -30,6 +31,12 @@ vi.mock('./BookCard', () => ({
 // Mock EmptyLibrary
 vi.mock('./EmptyLibrary', () => ({
     EmptyLibrary: () => <div data-testid="empty-library">Empty Library</div>
+}));
+
+// Mock the lazy notes view: this suite renders the notes CONTEXT of the shell
+// (regression block below) and only cares about what the shell itself builds.
+vi.mock('../notes/GlobalNotesView', () => ({
+    GlobalNotesView: () => <div data-testid="global-notes-view">Notes</div>
 }));
 
 // Mock ReprocessingInterstitial
@@ -327,5 +334,102 @@ describe('LibraryView', () => {
         await waitFor(() => {
             expect(replaceStateSpy).toHaveBeenCalledWith({}, expect.any(String));
         });
+    });
+});
+
+/**
+ * F4: the grid/list element arrays and the filter+sort pass are consumed ONLY
+ * under `context === 'library'`, but used to be computed for /notes, /search
+ * and /drive as well — an N-element BookCard tree plus an O(N log N) collator
+ * sort allocated and thrown away on every `books` identity change.
+ *
+ * The probe is the real store value both per-book passes touch: the filter
+ * reads `staticMetadata[id]` once per book (under the "On Device" filter) and
+ * each built item reads it again for its ghost check, so ANY of the three
+ * memos running shows up as ≥ 50 reads. A warm-up render settles the
+ * libraryViewStore projection — which reads the same map off-render — so the
+ * counter that follows can only be the view's own per-book work.
+ */
+describe('regression: does not build book items outside the library context', () => {
+    const BOOK_COUNT = 50;
+
+    const seedFiftyBooks = () => {
+        let metadataReads = 0;
+
+        const books: Record<string, UserInventoryItem> = {};
+        const metadata: Record<string, BookMetadata> = {};
+        for (let i = 0; i < BOOK_COUNT; i++) {
+            const id = `book-${i}`;
+            books[id] = {
+                bookId: id,
+                title: `Title ${i}`,
+                author: `Author ${i}`,
+                addedAt: 1000 + i,
+                lastInteraction: 1000 + i,
+                tags: [],
+                status: 'unread' as const,
+            };
+            metadata[id] = { id, title: `Title ${i}`, author: `Author ${i}`, addedAt: 1000 + i };
+        }
+
+        const staticMetadata = new Proxy(metadata, {
+            get(target, prop, receiver) {
+                if (typeof prop === 'string') metadataReads++;
+                return Reflect.get(target, prop, receiver);
+            },
+        });
+
+        useBookStore.setState({ books });
+        useLibraryStore.setState({ staticMetadata, offloadedBookIds: new Set<string>() });
+        // "On Device" makes the filter pass read staticMetadata per book.
+        usePreferencesStore.setState({ libraryFilterMode: 'downloaded', librarySortOrder: 'title' });
+
+        return {
+            reads: () => metadataReads,
+            reset: () => {
+                metadataReads = 0;
+            },
+        };
+    };
+
+    /** Settle the derived projection so its own reads are not counted below. */
+    const warmProjection = (context: 'library' | 'notes') => {
+        const view = render(
+            <MemoryRouter>
+                <LibraryView context={context} />
+            </MemoryRouter>
+        );
+        view.unmount();
+    };
+
+    it('renders the notes context without filtering, sorting or building a single card', () => {
+        const probe = seedFiftyBooks();
+        warmProjection('notes');
+        probe.reset();
+
+        render(
+            <MemoryRouter>
+                <LibraryView context="notes" />
+            </MemoryRouter>
+        );
+
+        expect(screen.queryAllByTestId('book-card')).toHaveLength(0);
+        expect(probe.reads()).toBe(0);
+    });
+
+    it('still filters, sorts and builds them in the library context', () => {
+        const probe = seedFiftyBooks();
+        warmProjection('library');
+        probe.reset();
+
+        render(
+            <MemoryRouter>
+                <LibraryView context="library" />
+            </MemoryRouter>
+        );
+
+        expect(screen.getAllByTestId('book-card')).toHaveLength(BOOK_COUNT);
+        // One read per book in the filter pass + one per built grid item.
+        expect(probe.reads()).toBeGreaterThanOrEqual(BOOK_COUNT * 2);
     });
 });

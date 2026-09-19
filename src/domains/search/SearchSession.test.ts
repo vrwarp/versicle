@@ -5,12 +5,18 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { SearchEngine } from '@lib/search-engine';
-import { SearchSession, type SearchEngineHandle, type SearchTextSource } from './SearchSession';
+import {
+  SearchSession,
+  type SearchEngineHandle,
+  type SearchEngineProtocol,
+  type SearchTextSource,
+} from './SearchSession';
 import { chunkSection } from './chunker';
 import { effectiveSectionHash } from './sectionHash';
 import { MockEmbeddingClient } from '@domains/google';
 import { NetRateLimitedError } from '~types/errors';
 import type { EmbeddedRowView, EmbeddingClientPort } from './embeddingPort';
+import type { CacheEmbedJobsRow } from '@data/rows/cache';
 
 function makeFactory() {
   const created: { engine: SearchEngine; dispose: ReturnType<typeof vi.fn> }[] = [];
@@ -412,6 +418,121 @@ describe('SearchSession — hybrid semantic query path (Increment D)', () => {
     expect(results.some((r) => SEMANTIC_TEXT.substring(r.charOffset, r.charOffset + r.matchLength).toLowerCase().includes('whale'))).toBe(true);
   });
 
+  /**
+   * `semanticRank` assembles its rows in EMBEDDED-SECTION order (per-section
+   * top-k, sections concatenated front to back) while `fuseRrf` reads each
+   * row's RANK straight off its array index. Fusing the section-ordered list
+   * therefore made a semantic hit's reciprocal-rank contribution a function of
+   * WHICH CHAPTER it came from: on a 30-section book the best passage, in
+   * section 24, sat at array index ~456, so the fused 100-cap dropped it while
+   * every weak section-0 row survived.
+   */
+  describe('regression: the fused cap cuts by similarity, not by chapter position', () => {
+    const SECTIONS = 30;
+    const ROWS_PER_SECTION = 19;
+    /** The section holding the one strong passage (late in the book). */
+    const BEST_SECTION = 24;
+    const BEST_COSINE = 0.91;
+    const WEAK_COSINE = 0.2;
+
+    const href = (section: number) => `s${section}.xhtml`;
+
+    /**
+     * A 30-section embedded row with persisted chunk offsets (so the read path
+     * never re-chunks). `scales[0]` carries the section index, which lets the
+     * fake engine score a section WITHOUT depending on the order the
+     * concurrent rankInt8 calls happen to fire in.
+     */
+    const manySectionRow = (): EmbeddedRowView => ({
+      bookId: 'bk-1',
+      model: 'mock-embed',
+      dims: DIMS,
+      quant: 'int8-pervec',
+      extractionVersion: 3,
+      sections: Array.from({ length: SECTIONS }, (_unused, section) => {
+        const scales = new Float32Array(ROWS_PER_SECTION).fill(1);
+        scales[0] = section;
+        return {
+          href: href(section),
+          sectionTextHash: `h${section}`,
+          chunks: Array.from({ length: ROWS_PER_SECTION }, (_c, row) => ({
+            cfiStart: '',
+            cfiEnd: '',
+            tokenCount: 9,
+            charStart: row * 5,
+            charEnd: row * 5 + 20,
+          })),
+          vectors: new Int8Array(DIMS * ROWS_PER_SECTION),
+          scales,
+        };
+      }),
+    });
+
+    const manySectionTextSource = (): SearchTextSource => ({
+      get: vi.fn(async () => ({
+        extractionVersion: 3,
+        sections: Array.from({ length: SECTIONS }, (_unused, section) => ({
+          href: href(section),
+          title: `Chapter ${section}`,
+          text: SEMANTIC_TEXT,
+        })),
+      })),
+    });
+
+    /**
+     * A concept query matching no literal text: the regex list is EMPTY, so the
+     * fused page is the semantic ranking alone. Every section returns
+     * ROWS_PER_SECTION rows, all weak except the one strong passage.
+     */
+    const conceptEngine = (): SearchEngineProtocol => ({
+      initIndex: vi.fn(),
+      addDocuments: vi.fn(),
+      searchDetailed: () => ({ results: [], truncated: false }),
+      rankInt8: (_packedVecs, scales) =>
+        Array.from({ length: ROWS_PER_SECTION }, (_unused, row) => ({
+          row,
+          cosine:
+            scales[0] === BEST_SECTION && row === 0 ? BEST_COSINE : WEAK_COSINE - row / 1000,
+        })),
+      findBestSentences: async () => [],
+    });
+
+    const conceptSession = () =>
+      new SearchSession({
+        engineFactory: () => ({ engine: conceptEngine(), dispose: vi.fn() }),
+        textSource: manySectionTextSource(),
+        embeddingClient: new MockEmbeddingClient({ dims: DIMS }),
+        embeddingsSource: { get: vi.fn(async () => manySectionRow()) },
+        quantize,
+        getSemanticConfig: semanticConfig(true),
+      });
+
+    it('a strong hit from a LATE section outranks and outlives weak early-section hits', async () => {
+      const { results, truncated } = await conceptSession().search('bk-1', 'the pull of obsession');
+
+      // 30 sections x 19 rows = 570 semantic hits, cut to the fused page.
+      expect(results).toHaveLength(100);
+      expect(truncated).toBe(true);
+
+      // The 0.91 passage sits at index ~456 of the section-ordered semantic
+      // list; it must LEAD the fused page, not be cut from it.
+      expect(results[0].href).toBe(href(BEST_SECTION));
+      expect(results[0].similarity).toBe(BEST_COSINE);
+
+      // The page is ordered by match quality, so every section's best row beats
+      // section 0's weaker tail — one chapter can no longer own the whole page.
+      expect(new Set(results.map((r) => r.href)).size).toBe(SECTIONS);
+      expect(results.filter((r) => r.href === href(0))).not.toHaveLength(ROWS_PER_SECTION);
+    });
+
+    it('fuses the semantic side in descending-similarity order', async () => {
+      const { results } = await conceptSession().search('bk-1', 'the pull of obsession');
+
+      const similarities = results.map((r) => r.similarity ?? 0);
+      expect([...similarities].sort((a, b) => b - a)).toEqual(similarities);
+    });
+  });
+
   describe('getEmbeddingStatus', () => {
     it('returns null when semantic ports are absent', async () => {
       const { factory } = makeFactory();
@@ -591,6 +712,134 @@ describe('SearchSession — hybrid semantic query path (Increment D)', () => {
       await expect(session.getEmbeddingStatus('bk-1')).resolves.toEqual({
         totalSections: 1,
         embeddedSections: 1,
+      });
+    });
+
+    /**
+     * The search panel polls this every 3 s while the indexer is REWRITING the
+     * vectors row. Deserializing the whole packed-int8 row each poll, just to
+     * count sections, was pure waste: the resume journal carries the same
+     * {href, sectionTextHash} pairs in a few hundred bytes.
+     */
+    describe('regression: status does not read the vector row', () => {
+      const jobRow = (sections: { href: string; sectionTextHash?: string }[]): CacheEmbedJobsRow => ({
+        bookId: 'bk-1',
+        extractionVersion: 3,
+        sections: sections.map((s) => ({ ...s, embeddedThroughChunk: 1 })),
+        embeddableSections: sections.length,
+        updatedAt: 0,
+      });
+
+      it('counts from the job row, never touching the packed vectors', async () => {
+        const { factory } = makeFactory();
+        const queryClient = new MockEmbeddingClient({ dims: DIMS });
+        const get = vi.fn(async () => undefined);
+        const getJob = vi.fn(async () => jobRow([{ href: SEMANTIC_HREF, sectionTextHash: 'h1' }]));
+
+        const session = new SearchSession({
+          engineFactory: factory,
+          textSource: {
+            get: vi.fn(async () => ({
+              extractionVersion: 3,
+              sections: [{ href: SEMANTIC_HREF, title: 'Ch 1', text: SEMANTIC_TEXT, sectionTextHash: 'h1' }],
+            })),
+          },
+          embeddingClient: queryClient,
+          embeddingsSource: { get, getJob },
+          getSemanticConfig: semanticConfig(true),
+        });
+
+        await expect(session.getEmbeddingStatus('bk-1')).resolves.toEqual({
+          totalSections: 1,
+          embeddedSections: 1,
+        });
+        expect(getJob).toHaveBeenCalledTimes(1);
+        expect(get).not.toHaveBeenCalled();
+      });
+
+      it('still honors the corpus hash: a re-extracted section does not count', async () => {
+        const { factory } = makeFactory();
+        const queryClient = new MockEmbeddingClient({ dims: DIMS });
+        const get = vi.fn(async () => undefined);
+
+        const session = new SearchSession({
+          engineFactory: factory,
+          textSource: {
+            get: vi.fn(async () => ({
+              extractionVersion: 3,
+              sections: [{ href: SEMANTIC_HREF, title: 'Ch 1', text: SEMANTIC_TEXT, sectionTextHash: 'h2' }],
+            })),
+          },
+          embeddingClient: queryClient,
+          embeddingsSource: { get, getJob: vi.fn(async () => jobRow([{ href: SEMANTIC_HREF, sectionTextHash: 'h1' }])) },
+          getSemanticConfig: semanticConfig(true),
+        });
+
+        await expect(session.getEmbeddingStatus('bk-1')).resolves.toEqual({
+          totalSections: 1,
+          embeddedSections: 0,
+        });
+        expect(get).not.toHaveBeenCalled();
+      });
+
+      it('falls back to the vector row when the journal is absent or pre-dates the hash stamp', async () => {
+        const { factory } = makeFactory();
+        const queryClient = new MockEmbeddingClient({ dims: DIMS });
+        const embedded = {
+          extractionVersion: 3,
+          sections: [{ href: SEMANTIC_HREF, sectionTextHash: 'h1' }],
+        };
+        const textSource: SearchTextSource = {
+          get: vi.fn(async () => ({
+            extractionVersion: 3,
+            sections: [{ href: SEMANTIC_HREF, title: 'Ch 1', text: SEMANTIC_TEXT, sectionTextHash: 'h1' }],
+          })),
+        };
+
+        // (a) no journal row at all
+        const getNoJob = vi.fn(async () => embedded as unknown as EmbeddedRowView);
+        const noJob = new SearchSession({
+          engineFactory: factory,
+          textSource,
+          embeddingClient: queryClient,
+          embeddingsSource: { get: getNoJob, getJob: vi.fn(async () => undefined) },
+          getSemanticConfig: semanticConfig(true),
+        });
+        await expect(noJob.getEmbeddingStatus('bk-1')).resolves.toEqual({
+          totalSections: 1,
+          embeddedSections: 1,
+        });
+        expect(getNoJob).toHaveBeenCalledTimes(1);
+
+        // (b) a legacy journal row whose entries carry no hash
+        const getLegacy = vi.fn(async () => embedded as unknown as EmbeddedRowView);
+        const legacy = new SearchSession({
+          engineFactory: factory,
+          textSource,
+          embeddingClient: queryClient,
+          embeddingsSource: { get: getLegacy, getJob: vi.fn(async () => jobRow([{ href: SEMANTIC_HREF }])) },
+          getSemanticConfig: semanticConfig(true),
+        });
+        await expect(legacy.getEmbeddingStatus('bk-1')).resolves.toEqual({
+          totalSections: 1,
+          embeddedSections: 1,
+        });
+        expect(getLegacy).toHaveBeenCalledTimes(1);
+
+        // (c) a port without getJob at all (older injections/doubles)
+        const getNoPort = vi.fn(async () => embedded as unknown as EmbeddedRowView);
+        const noPort = new SearchSession({
+          engineFactory: factory,
+          textSource,
+          embeddingClient: queryClient,
+          embeddingsSource: { get: getNoPort },
+          getSemanticConfig: semanticConfig(true),
+        });
+        await expect(noPort.getEmbeddingStatus('bk-1')).resolves.toEqual({
+          totalSections: 1,
+          embeddedSections: 1,
+        });
+        expect(getNoPort).toHaveBeenCalledTimes(1);
       });
     });
   });

@@ -9,12 +9,18 @@
  * PlaybackStateManager/AudioPlayerService). It must never import stores,
  * sync services, React, or zustand.
  *
+ * P13a (closed): a `saveQueue` on a mirror that does not hold the book builds
+ * a fresh record, so it used to clobber whatever else the persisted row
+ * carried (a previous session's `lastPauseTime`). It now marks the book
+ * unseeded and the flush merges the persisted row in — a read OUTSIDE the
+ * gate, before the single synchronous put, never inside the transaction. The
+ * consumer's "seeded once" memo (createRepoSessionStore) cannot carry that
+ * guarantee any more: since the mirror became an LRU, a book it believes
+ * seeded may have been evicted, so cold-safety has to live HERE.
+ *
  * KNOWN GAPS deliberately deferred to P5b (the SessionStore port / single
  * session-owner fix of the C4 decomposition — engine surgery, not storage
  * motion):
- *  - P13a: a cold-start `savePauseTime` seeds the mirror from disk, but a
- *    cold-start `saveQueue` constructs a fresh record and can clobber a
- *    persisted `lastPauseTime` from a previous session.
  *  - Dual mirror: the worker and the main thread each hold their own
  *    `sessionCache` instance. The navigator.locks write gate removes the
  *    cross-context HANG hazard; single ownership lands with P5b.
@@ -24,6 +30,21 @@ import { runExclusiveIdbWrite } from '../write-gate';
 import { handleDbError } from '../errors';
 import type { CacheSessionStateRow } from '../rows/cache';
 import type { TTSQueueItem } from '~types/tts';
+
+/**
+ * How many books' rows the in-memory mirror keeps (insertion-ordered LRU).
+ *
+ * The mirror exists so a write never needs an intra-transaction read (the WebKit hang
+ * shape) — it is NOT meant to be a library-wide cache. One row carries that book's whole
+ * playback queue (300–800 {@link TTSQueueItem}s, ~50–150 KB), it was never pruned, and BOTH
+ * the worker and the main-thread instance hold their own Map, so a long session that touched
+ * many books grew two unbounded copies. An evicted book re-seeds from disk on its next touch —
+ * {@link PlaybackCacheRepo.loadSession} on the read paths, and the merge in
+ * {@link PlaybackCacheRepo.mergePersisted} for a cold {@link PlaybackCacheRepo.saveQueue},
+ * which is what keeps eviction from costing the row's other fields; a book with an unflushed
+ * write is never evicted, because for those the mirror IS the payload.
+ */
+const MAX_MIRRORED_BOOKS = 4;
 
 class PlaybackCacheRepo {
   // ── cache_session_state persistence (WebKit-hang-safe) ─────────────────────
@@ -40,6 +61,54 @@ class PlaybackCacheRepo {
   // await before it (no intra-transaction read).
   private sessionWriteChain: Promise<void> = Promise.resolve();
   private sessionCache = new Map<string, CacheSessionStateRow>();
+  /** Books whose write is queued or in flight (counted — writes can overlap per book). */
+  private sessionWriting = new Map<string, number>();
+  /**
+   * Books whose mirrored record was built COLD — `saveQueue` found no mirror
+   * entry (first touch of this session, or the LRU evicted the book) and
+   * started from `{bookId, playbackQueue, updatedAt}`. Such a record knows
+   * nothing about the fields the persisted row carries, so the next write
+   * merges the stored row in first (outside the gate). Cleared by any read
+   * that seeds from disk.
+   */
+  private sessionUnseeded = new Set<string>();
+
+  /**
+   * Mark a book most-recently-used and prune the mirror back to {@link MAX_MIRRORED_BOOKS},
+   * oldest first. Rows a pending (debounced) or in-flight write still has to read are
+   * skipped: `writeSession` resolves the row from the mirror at commit time.
+   */
+  private touchSession(bookId: string, session: CacheSessionStateRow): void {
+    // Map iteration follows insertion order, so delete+set moves the book to the recent end.
+    this.sessionCache.delete(bookId);
+    this.sessionCache.set(bookId, session);
+    if (this.sessionCache.size <= MAX_MIRRORED_BOOKS) return;
+    for (const id of this.sessionCache.keys()) {
+      if (this.sessionCache.size <= MAX_MIRRORED_BOOKS) break;
+      if (id === bookId || this.sessionDirty.has(id) || this.sessionWriting.has(id)) continue;
+      this.sessionCache.delete(id);
+      // The cold-record flag describes a mirrored record; the record is gone,
+      // and the book's next saveQueue re-flags it on the mirror miss.
+      this.sessionUnseeded.delete(id);
+    }
+  }
+
+  /**
+   * Fold the persisted row into a COLD mirrored record (one built by
+   * `saveQueue` without a mirror entry), once. The record's own fields always
+   * win — it carries the update being written — so this only restores what a
+   * fresh `{bookId, playbackQueue, updatedAt}` never knew about, `lastPauseTime`
+   * included. Mutates in place: `savePauseTime`/`saveQueue` hold references to
+   * this object, and swapping it for a new one would drop their updates.
+   */
+  private mergePersisted(
+    bookId: string,
+    session: CacheSessionStateRow,
+    persisted: CacheSessionStateRow | undefined,
+  ): void {
+    if (!this.sessionUnseeded.delete(bookId)) return;
+    if (persisted) Object.assign(session, { ...persisted, ...session });
+  }
 
   private enqueueSessionWrite(work: () => Promise<void>): Promise<void> {
     const next = this.sessionWriteChain.then(work, work);
@@ -51,7 +120,10 @@ class PlaybackCacheRepo {
   /** Resolve a book's session record, seeding the in-memory mirror from disk once. */
   private async loadSession(bookId: string): Promise<CacheSessionStateRow> {
     const cached = this.sessionCache.get(bookId);
-    if (cached) return cached;
+    if (cached) {
+      this.touchSession(bookId, cached);
+      return cached;
+    }
     let session: CacheSessionStateRow | undefined;
     try {
       const db = await getConnection();
@@ -61,32 +133,54 @@ class PlaybackCacheRepo {
     }
     // A concurrent caller may have populated the mirror while we awaited the read.
     const current = this.sessionCache.get(bookId);
-    if (current) return current;
+    if (current) {
+      // …including a cold saveQueue: the row we just read is what it lacks.
+      this.mergePersisted(bookId, current, session);
+      return current;
+    }
+    // The disk row (or its confirmed absence) is in hand: nothing left to merge.
+    this.sessionUnseeded.delete(bookId);
     const resolved = session || { bookId, playbackQueue: [], updatedAt: Date.now() };
-    this.sessionCache.set(bookId, resolved);
+    this.touchSession(bookId, resolved);
     return resolved;
   }
 
   /** Serialised, hang-safe write of a book's mirrored record (single synchronous put). */
   private writeSession(bookId: string): Promise<void> {
+    // Pin the mirrored row for the whole queued+in-flight window: the work below resolves it
+    // from the mirror at commit time, so an eviction in between would silently drop the write.
+    this.sessionWriting.set(bookId, (this.sessionWriting.get(bookId) ?? 0) + 1);
     return this.enqueueSessionWrite(async () => {
-      const session = this.sessionCache.get(bookId);
-      if (!session) return;
-      // Snapshot now so a later in-memory mutation can't change the object mid-commit.
-      const snapshot = { ...session };
       try {
-        const db = await getConnection();
-        // Serialised through the shared IDB write gate so this cache_session_state readwrite
-        // transaction never overlaps a Yjs `updates` write — concurrent readwrite txns hang
-        // WebKit (see src/data/write-gate.ts).
-        await runExclusiveIdbWrite(async () => {
-          const tx = db.transaction('cache_session_state', 'readwrite');
-          // Single synchronous put, no await before it — the WebKit-hang-safe shape.
-          tx.objectStore('cache_session_state').put(snapshot);
-          await tx.done;
-        });
-      } catch (error) {
-        handleDbError(error);
+        const session = this.sessionCache.get(bookId);
+        if (!session) return;
+        try {
+          const db = await getConnection();
+          if (this.sessionUnseeded.has(bookId)) {
+            // Cold record (first touch, or the LRU evicted this book while its
+            // consumer still believed it seeded): read the persisted row and
+            // merge it in. OUTSIDE the gate and before the transaction is
+            // opened — the WebKit-hang shape below is untouched.
+            this.mergePersisted(bookId, session, await db.get('cache_session_state', bookId));
+          }
+          // Snapshot now so a later in-memory mutation can't change the object mid-commit.
+          const snapshot = { ...session };
+          // Serialised through the shared IDB write gate so this cache_session_state readwrite
+          // transaction never overlaps a Yjs `updates` write — concurrent readwrite txns hang
+          // WebKit (see src/data/write-gate.ts).
+          await runExclusiveIdbWrite(async () => {
+            const tx = db.transaction('cache_session_state', 'readwrite');
+            // Single synchronous put, no await before it — the WebKit-hang-safe shape.
+            tx.objectStore('cache_session_state').put(snapshot);
+            await tx.done;
+          });
+        } catch (error) {
+          handleDbError(error);
+        }
+      } finally {
+        const outstanding = (this.sessionWriting.get(bookId) ?? 0) - 1;
+        if (outstanding > 0) this.sessionWriting.set(bookId, outstanding);
+        else this.sessionWriting.delete(bookId);
       }
     });
   }
@@ -124,8 +218,11 @@ class PlaybackCacheRepo {
       const db = await getConnection();
       const session = await db.get('cache_session_state', bookId);
       if (session) {
-        this.sessionCache.set(bookId, session);
+        this.touchSession(bookId, session);
       }
+      // The mirror now holds the persisted row (or disk has none): either way
+      // there is nothing left for a later write to merge.
+      this.sessionUnseeded.delete(bookId);
       return session;
     } catch (error) {
       handleDbError(error);
@@ -135,10 +232,14 @@ class PlaybackCacheRepo {
   /** Mirror-update + debounced disk write of the playback queue (saveTTSState). */
   saveQueue(bookId: string, queue: TTSQueueItem[]): void {
     // Update the in-memory mirror (preserving lastPauseTime), then debounce the disk write.
-    const session = this.sessionCache.get(bookId) || { bookId, playbackQueue: [], updatedAt: Date.now() };
+    // Stays synchronous: a cold record is flagged instead, and the flush merges the
+    // persisted row in before the put (see mergePersisted).
+    const cached = this.sessionCache.get(bookId);
+    const session = cached || { bookId, playbackQueue: [], updatedAt: Date.now() };
+    if (!cached) this.sessionUnseeded.add(bookId);
     session.playbackQueue = queue;
     session.updatedAt = Date.now();
-    this.sessionCache.set(bookId, session);
+    this.touchSession(bookId, session);
     this.scheduleSessionWrite(bookId);
   }
 

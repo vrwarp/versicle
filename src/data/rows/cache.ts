@@ -291,12 +291,23 @@ export const cacheEmbedJobsRowSchema = z.looseObject({
       sectionTextHash: z.string().optional(),
     }),
   ),
+  /**
+   * How many of the book's corpus sections can actually be embedded (the ones
+   * with embeddable text — an image-only cover page yields no chunks and never
+   * lands in `cache_embeddings`). Stamped by the indexer on every job write so
+   * a progress badge can be computed from THIS row alone, without loading the
+   * whole search text and the whole vector row. Additive/optional like
+   * `sectionTextHash` above: rows written before it existed lack it and the
+   * reader falls back to counting the corpus (no migration, no DB_VERSION bump).
+   */
+  embeddableSections: z.number().optional(),
   updatedAt: z.number(),
 });
 export type CacheEmbedJobsRow = {
   bookId: string;
   extractionVersion: number;
   sections: { href: string; embeddedThroughChunk: number; sectionTextHash?: string }[];
+  embeddableSections?: number;
   updatedAt: number;
 };
 

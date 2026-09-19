@@ -155,17 +155,23 @@ export const VocabTriageCard: React.FC<{ text: string }> = ({ text }) => {
       try {
         await service.ensureReady();
         const chars = Array.from(text);
-        const hanChars = [...new Set(chars.filter((ch) => HAN_RE.test(ch)))];
-        const entries = await service.getEntries(hanChars);
-        const next = new Map<number, TileData>();
+        const hanIndices: number[] = [];
         for (let index = 0; index < chars.length; index++) {
-          if (!HAN_RE.test(chars[index])) continue;
+          if (HAN_RE.test(chars[index])) hanIndices.push(index);
+        }
+        const hanChars = [...new Set(hanIndices.map((index) => chars[index]))];
+        // TWO batched lookups for the whole selection — one for the standalone
+        // entries, one for every compound window. It used to be one lookup per
+        // Han character, each its own IDB transaction re-splitting the text.
+        const entries = await service.getEntries(hanChars);
+        const compounds = await service.getCompounds(text, hanIndices);
+        const next = new Map<number, TileData>();
+        for (const index of hanIndices) {
           const entry = entries.get(chars[index]);
-          const compound = await service.getCompound(text, index);
           next.set(index, {
             pinyin: entry ? entry[0] : '',
             definition: entry ? entry[1] : '',
-            compound,
+            compound: compounds.get(index) ?? null,
           });
         }
         if (!cancelled) setTiles(next);

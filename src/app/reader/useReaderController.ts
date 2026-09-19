@@ -22,7 +22,10 @@ import { useShallow } from 'zustand/react/shallow';
 import { useEpubReader, type EpubReaderOptions } from '@hooks/useEpubReader';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLayerManager';
-import { ReadingSessionRecorder } from '@domains/reader/session/ReadingSessionRecorder';
+import {
+  ReadingSessionRecorder,
+  setActiveReadingSessionRecorder,
+} from '@domains/reader/session/ReadingSessionRecorder';
 import type { ReaderCommands } from '@domains/reader/ui/ReaderCommands';
 import { SearchSession, createWorkerSearchEngineFactory, EmbeddingIndexer } from '@domains/search';
 import { getEmbeddingClient, type EmbeddingClient } from '@domains/google';
@@ -46,7 +49,7 @@ import { useBook } from '@store/libraryViewStore';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
 import { createSearchNavigator, type SearchNavigator } from '@app/reader/searchNavigation';
 import { ColdOpenResumeGuard } from '@app/reader/coldOpenResumeGuard';
-import { isYjsSyncSettled } from '@store/yjs-provider';
+import { isYjsSyncSettled, flushYjsPersistence } from '@store/yjs-provider';
 import { getActiveReaderEngine } from '@domains/reader/engine/activeEngineRegistry';
 import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import { createLogger } from '@lib/logger';
@@ -212,6 +215,71 @@ export function useReaderController(
     };
   }, [rawBookMetadata]);
 
+  // perf: `useBook` returns a NEW object on every progress write (it subscribes
+  // to `state.progress[id]`, which is a fresh object per write), so
+  // `bookMetadata` changes identity on every page turn and TTS sentence. The
+  // full projection still flows out of the controller — ImportJumpPrompt reads
+  // `progress`/`currentCfi` off it — but the reader ENGINE consumes only the
+  // fields below plus the version the redirect checks. useEpubReader reads, off
+  // the metadata it is handed: the theme spec's baseFontSize/baseLineHeight,
+  // the synthetic-TOC pair (useSyntheticToc/syntheticToc) at load time, and
+  // `currentCfi` as its LAST-RESORT start location. Narrowing them into their
+  // own memo keeps `readerOptions` and the version-check effect stable across
+  // progress-only writes: every hoisted dependency is a primitive, so a
+  // progress write that moves none of them does not move the memo either.
+  //
+  // Every field useEpubReader consumes has to be listed here — the narrowed
+  // object still satisfies `BookMetadata` (every consumed field is optional),
+  // so an omission is a SILENT drop, not a type error. useReaderController's
+  // suite gates that against the hook's source.
+  const hasBookMetadata = bookMetadata != null;
+  const metaId = bookMetadata?.id;
+  const metaTitle = bookMetadata?.title;
+  const metaAuthor = bookMetadata?.author;
+  const metaAddedAt = bookMetadata?.addedAt;
+  const bookLanguage = bookMetadata?.language;
+  const metaVersion = bookMetadata?.version;
+  const metaBaseFontSize = bookMetadata?.baseFontSize;
+  const metaBaseLineHeight = bookMetadata?.baseLineHeight;
+  const metaUseSyntheticToc = bookMetadata?.useSyntheticToc;
+  const metaSyntheticToc = bookMetadata?.syntheticToc;
+  // A string, so hoisting it keeps the memo free of identity churn.
+  const metaCurrentCfi = bookMetadata?.currentCfi;
+  const readerMetadata = useMemo<BookMetadata | null>(
+    () =>
+      !hasBookMetadata
+        ? null
+        : {
+            // Defaults only satisfy the required BookMetadata fields; the real
+            // projection always carries them and the hook reads none of them.
+            id: metaId ?? '',
+            title: metaTitle ?? '',
+            author: metaAuthor ?? '',
+            addedAt: metaAddedAt ?? 0,
+            language: bookLanguage,
+            version: metaVersion,
+            baseFontSize: metaBaseFontSize,
+            baseLineHeight: metaBaseLineHeight,
+            useSyntheticToc: metaUseSyntheticToc,
+            syntheticToc: metaSyntheticToc,
+            currentCfi: metaCurrentCfi,
+          },
+    [
+      hasBookMetadata,
+      metaId,
+      metaTitle,
+      metaAuthor,
+      metaAddedAt,
+      bookLanguage,
+      metaVersion,
+      metaBaseFontSize,
+      metaBaseLineHeight,
+      metaUseSyntheticToc,
+      metaSyntheticToc,
+      metaCurrentCfi,
+    ],
+  );
+
   const [searchParams] = useSearchParams();
   const cfiOverride = searchParams.get('cfi');
   const locationOverride = searchParams.get('location');
@@ -289,12 +357,12 @@ export function useReaderController(
     currentTheme,
     customTheme,
     fontFamily,
-    fontSize: (fontProfiles[(bookMetadata?.language || 'en').split('-')[0]] || {}).fontSize || fontSize,
-    lineHeight: (fontProfiles[(bookMetadata?.language || 'en').split('-')[0]] || {}).lineHeight || lineHeight,
+    fontSize: (fontProfiles[(bookLanguage || 'en').split('-')[0]] || {}).fontSize || fontSize,
+    lineHeight: (fontProfiles[(bookLanguage || 'en').split('-')[0]] || {}).lineHeight || lineHeight,
     shouldForceFont,
     initialLocation,
     getInitialLocation,
-    metadata: bookMetadata,
+    metadata: readerMetadata,
     onLocationChange: (location, percentage, title, sectionId) => {
       // Initialize the recorder's previous-location tracker (legacy step 1
       // — it ran even when the import-jump check skipped the save).
@@ -396,7 +464,8 @@ export function useReaderController(
     shouldForceFont,
     bookId,
     dispatchCompass,
-    bookMetadata,
+    bookLanguage,
+    readerMetadata,
     initialLocation,
     getInitialLocation,
     coldOpenGuard,
@@ -420,8 +489,23 @@ export function useReaderController(
   // SearchSession per open reader — worker lifecycle owned here (created
   // lazily on first index/search), corpus from the searchText repo, engine
   // crashes reset the session and surface a toast (search.md #6).
+  //
+  // fix(reader): the session is keyed by bookId. React Router reuses the
+  // `/read/:id` element across a /read/A -> /read/B navigation, so this hook
+  // instance (and its refs) survives the book change — an unkeyed lazy
+  // `if (!ref.current)` would have handed book B book A's worker, corpus cache
+  // and navigator. Retiring the previous pair here (rather than in the unmount
+  // cleanup) keeps `searchSession` below pointing at the LIVE session in the
+  // same render that changed the id.
   const searchSessionRef = useRef<SearchSession | null>(null);
-  if (!searchSessionRef.current) {
+  const searchSessionBookIdRef = useRef<string | undefined>(undefined);
+  const searchNavigatorRef = useRef<SearchNavigator | null>(null);
+  if (!searchSessionRef.current || searchSessionBookIdRef.current !== bookId) {
+    searchNavigatorRef.current?.dispose();
+    searchNavigatorRef.current = null;
+    searchSessionRef.current?.dispose();
+    searchSessionBookIdRef.current = bookId;
+
     // Foreground document-embedding indexer: ports wired from the lazy embedding
     // client facade + the searchText/embeddings repos + the int8 quantizer.
     // bookId/CFI flow as arguments through enqueueEmbedding, so the search domain
@@ -487,7 +571,6 @@ export function useReaderController(
   }
   const searchSession = searchSessionRef.current;
 
-  const searchNavigatorRef = useRef<SearchNavigator | null>(null);
   if (!searchNavigatorRef.current) {
     searchNavigatorRef.current = createSearchNavigator(() => engineRef.current);
   }
@@ -536,7 +619,6 @@ export function useReaderController(
   // Preference reads stay store-side here (domains-no-store): injected as a
   // thunk, read at run time. Preference CHANGES drive an explicit refresh —
   // the legacy React-deps re-run, made event-driven (CH-2).
-  const bookLanguage = bookMetadata?.language;
   useEffect(() => {
     if (!engine || getBookBaseLanguage(bookLanguage) !== 'zh') {
       pinyinFeed.set([]);
@@ -570,18 +652,24 @@ export function useReaderController(
     };
   }, [engine, bookLanguage, pinyinFeed]);
 
-  // Check version and redirect if outdated
+  // Check version and redirect if outdated. Keyed on the narrowed projection
+  // so a progress-only write no longer re-runs it.
   useEffect(() => {
-    if (bookMetadata) {
-      const effectiveVersion = bookMetadata.version ?? 0;
+    if (readerMetadata) {
+      const effectiveVersion = readerMetadata.version ?? 0;
       if (effectiveVersion < CURRENT_BOOK_VERSION && bookId) {
         navigate('/', { state: { reprocessBookId: bookId } });
       }
     }
-  }, [bookMetadata, bookId, navigate]);
+  }, [readerMetadata, bookId, navigate]);
 
   // Reading-session recorder lifecycle (Phase 6 §6): one per book.
-  // flushSync on teardown is the legacy unmount panic save.
+  // flushSync on teardown is the legacy unmount panic save; the recorder's
+  // coalescing window (one CRDT write per 5s instead of one per page turn) is
+  // additionally drained on `visibilitychange` → hidden and on `pagehide` —
+  // the only signals a mobile background kill reliably delivers — and the
+  // y-idb queue is forced to disk behind it, so the drain ends on DISK and
+  // not in another debounce (see flushDurably below).
   useEffect(() => {
     if (!bookId) return;
     const recorder = new ReadingSessionRecorder({
@@ -609,9 +697,39 @@ export function useReaderController(
       onHistoryRecorded: () => setHistoryTick(t => t + 1),
     });
     recorderRef.current = recorder;
+    setActiveReadingSessionRecorder(recorder);
+
+    // The durability drain, in two steps — BOTH are required.
+    //
+    // 1. flushPending() issues the recorder's merged commit window into the
+    //    CRDT store. That only puts bytes in y-idb's in-memory queue.
+    // 2. flushYjsPersistence() forces that queue to disk immediately instead
+    //    of leaving it behind the 200ms write debounce. y-idb has its own
+    //    unload drain, but it is registered at boot and therefore runs BEFORE
+    //    this handler (listeners fire in registration order) — it snapshots a
+    //    queue that does not yet contain step 1's write, and does not run
+    //    again. Without step 2 a background kill within ~200ms of the signal
+    //    loses the whole window, which is exactly what the un-coalesced
+    //    write-through path could not lose.
+    const flushDurably = () => {
+      recorder.flushPending();
+      void flushYjsPersistence().catch((e) =>
+        logger.error('Persistence flush on backgrounding failed', e),
+      );
+    };
+    const flushOnPageHide = () => flushDurably();
+    const flushOnHidden = () => {
+      if (document.visibilityState === 'hidden') flushDurably();
+    };
+    document.addEventListener('visibilitychange', flushOnHidden);
+    window.addEventListener('pagehide', flushOnPageHide);
+
     return () => {
+      document.removeEventListener('visibilitychange', flushOnHidden);
+      window.removeEventListener('pagehide', flushOnPageHide);
       recorder.flushSync();
       recorder.dispose();
+      setActiveReadingSessionRecorder(null);
       recorderRef.current = null;
     };
   }, [bookId, coldOpenGuard]);

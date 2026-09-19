@@ -185,4 +185,77 @@ describe('useCfiCoordinates', () => {
     // Reference equality should be maintained
     expect(result.current).toBe(initialCoords);
   });
+
+  /**
+   * perf: the hook used to measure EVERY note CFI on every relocation and
+   * resize tick. `getRangeRects` on a CFI whose section is not rendered still
+   * parses a fresh EpubCFI and walks the manager's visible views, only to
+   * return null — for a book with hundreds of notes that is hundreds of wasted
+   * parses per page turn.
+   */
+  describe('regression: off-section CFIs are not measured', () => {
+    const sectionOf = (cfi: string) => (cfi.startsWith('here:') ? 'here.xhtml' : 'elsewhere.xhtml');
+
+    const partitioningEngine = (getRangeRects: (cfi: string) => RangeRects | null) =>
+      ({
+        getOverlayContainer: () => container,
+        getRangeRects,
+        getContentViews: () => [{ sectionHref: 'here.xhtml' }],
+        resolveSection: (cfi: string) => ({ href: sectionOf(cfi), index: 0 }),
+        subscribe: (listener: (e: ReaderEngineEvent) => void) => {
+          listeners.push(listener);
+          return () => {
+            listeners = listeners.filter((l) => l !== listener);
+          };
+        },
+      }) as unknown as ReaderEngine;
+
+    it('only measures CFIs in the rendered section', () => {
+      const spy = vi.fn((_cfi: string): RangeRects | null => ({
+        rects: [{ top: 100, right: 150 }] as unknown as DOMRect[],
+        iframeOffset: IFRAME_OFFSET,
+      }));
+
+      const cfis = [
+        ...Array.from({ length: 48 }, (_, i) => `away:${i}`),
+        'here:1',
+        'here:2',
+      ];
+
+      const { result } = renderHook(() => useCfiCoordinates(partitioningEngine(spy), cfis));
+      act(() => { vi.runAllTimers(); });
+
+      spy.mockClear();
+      act(() => {
+        emitRelocated();
+        vi.runAllTimers();
+      });
+
+      expect(spy.mock.calls.length).toBeLessThanOrEqual(2);
+      expect(spy.mock.calls.map(([cfi]) => cfi).sort()).toEqual(['here:1', 'here:2']);
+      expect(result.current.map((c) => c.cfi).sort()).toEqual(['here:1', 'here:2']);
+    });
+
+    it('falls back to measuring everything when the rendered set is unknown', () => {
+      const spy = vi.fn((_cfi: string): RangeRects | null => null);
+      const engine = {
+        getOverlayContainer: () => container,
+        getRangeRects: spy,
+        // No rendered views reported: the partition must not be trusted.
+        getContentViews: () => [],
+        resolveSection: (cfi: string) => ({ href: sectionOf(cfi), index: 0 }),
+        subscribe: (listener: (e: ReaderEngineEvent) => void) => {
+          listeners.push(listener);
+          return () => {
+            listeners = listeners.filter((l) => l !== listener);
+          };
+        },
+      } as unknown as ReaderEngine;
+
+      renderHook(() => useCfiCoordinates(engine, ['away:1', 'here:1']));
+      act(() => { vi.runAllTimers(); });
+
+      expect(spy.mock.calls.map(([cfi]) => cfi).sort()).toEqual(['away:1', 'here:1']);
+    });
+  });
 });

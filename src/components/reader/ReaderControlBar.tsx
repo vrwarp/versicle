@@ -11,9 +11,9 @@
  */
 import React, { useEffect, useRef } from 'react';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
-import { useCurrentDeviceProgress, useBookProgress } from '@store/useReadingStateStore';
+import { useBookPercentage, useCurrentDevicePercentage } from '@store/useReadingStateStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
-import { useBook, useLastReadBook } from '@store/libraryViewStore';
+import { useBookChrome, useLastReadBook } from '@store/libraryViewStore';
 import { useAnnotationStore } from '@store/useAnnotationStore';
 import { AudioPill } from './pills/AudioPill';
 import { SummaryPill } from './pills/SummaryPill';
@@ -94,16 +94,23 @@ export const ReaderControlBar: React.FC = () => {
     // 2. Must not have been dismissed for this specific device/timestamp combo (simplified to deviceId for now)
     const showSyncAlert = remoteProgress && !dismissedSyncAlerts.has(remoteProgress.deviceId);
 
+    // perf: this component is mounted app-wide (RootLayout), so it must never
+    // subscribe to anything that churns on a page turn beyond what it draws.
+    // The two book lookups are CHROME projections (no progress join) and the
+    // two progress reads are plain numbers, so a write that does not move a
+    // displayed value — a TTS queue tick, a playback-position save, a
+    // re-relocation — stops at the selectors instead of re-rendering the pill.
+
     // Select the most recently read book
     const lastReadBook = useLastReadBook();
-    const lastReadBookProgress = useCurrentDeviceProgress(lastReadBook?.bookId || null);
+    const lastReadBookPercentage = useCurrentDevicePercentage(lastReadBook?.bookId || null);
 
     // Select the current book if active
-    const currentBook = useBook(currentBookId);
-    // useBookProgress applies the same fallback logic as getProgress() (most-recent
+    const currentBook = useBookChrome(currentBookId);
+    // useBookPercentage applies the same fallback logic as getProgress() (most-recent
     // across devices, with isValidProgress guard), so the scrubber always reflects
     // the best available progress rather than just the current-device entry.
-    const currentBookProgress = useBookProgress(currentBookId);
+    const currentBookPercentage = useBookPercentage(currentBookId);
 
     const isReaderActive = !!currentBookId;
 
@@ -262,7 +269,7 @@ export const ReaderControlBar: React.FC = () => {
         title = lastReadBook.title;
         subtitle = "Continue Reading";
         // Get progress from reading state (local device)
-        progress = (lastReadBookProgress?.percentage || 0) * 100;
+        progress = lastReadBookPercentage * 100;
     } else if ((variant === 'active' || variant === 'compact') && isReaderActive && currentBook) {
         title = currentBook.title;
         const useSynthetic = resolveSyntheticPreference(currentBook);
@@ -273,7 +280,7 @@ export const ReaderControlBar: React.FC = () => {
         // Only override progress when TTS is not active; when TTS has queue items,
         // the AudioPill uses its own TTS-based chapter progress from useSectionDuration.
         if (!hasQueueItems) {
-            progress = (currentBookProgress?.percentage || 0) * 100;
+            progress = currentBookPercentage * 100;
         }
     }
 

@@ -233,3 +233,98 @@ describe('useDeviceStore', () => {
         });
     });
 });
+
+/**
+ * F5(a): the QuotaGovernor publishes this device's rolling daily spend on
+ * EVERY embedding acquire AND commit. Each accepted publish is a synced CRDT
+ * write (Y.Doc transaction → y-idb row → outbound push) and a notification to
+ * every `devices` subscriber (one ResumeBadge per mounted book card). The
+ * value is a coarse cross-device quota signal, so sub-step same-day moves are
+ * dropped: the state object — and therefore the CRDT diff and the subscriber
+ * notification — must not move.
+ */
+describe('regression: coalesces embed-spend publishing', () => {
+    const DAY = '2026-06-13';
+
+    const seedSelf = () => {
+        useDeviceStore.setState({
+            devices: {
+                'device-self': {
+                    id: 'device-self',
+                    name: 'My Device',
+                    platform: 'macOS',
+                    browser: 'Chrome',
+                    model: null,
+                    userAgent: 'test',
+                    appVersion: '1.0.0',
+                    created: 1000,
+                    lastActive: 1000,
+                    profile: {
+                        theme: 'light',
+                        fontSize: 16,
+                        ttsVoiceURI: null,
+                        ttsRate: 1,
+                        ttsPitch: 1
+                    }
+                }
+            }
+        });
+    };
+
+    /** Publish and report whether the devices map actually moved. */
+    const publish = (spend: { day: string; rpd: number }): boolean => {
+        const before = useDeviceStore.getState().devices;
+        useDeviceStore.getState().publishEmbedSpend('device-self', spend);
+        return useDeviceStore.getState().devices !== before;
+    };
+
+    it('50 same-day publishes of rpd+1 move the devices map only at step crossings', () => {
+        seedSelf();
+
+        const wroteAt: number[] = [];
+        for (let rpd = 1; rpd <= 50; rpd++) {
+            if (publish({ day: DAY, rpd })) wroteAt.push(rpd);
+        }
+
+        // First publish (no prior spend) + every crossing of the 10-request step.
+        expect(wroteAt).toEqual([1, 11, 21, 31, 41]);
+        // The stored figure is the last one written — coarse, never ahead.
+        expect(useDeviceStore.getState().devices['device-self'].embedSpend).toEqual({ day: DAY, rpd: 41 });
+    });
+
+    it('a day rollover always writes, even when rpd is unchanged', () => {
+        seedSelf();
+
+        expect(publish({ day: DAY, rpd: 40 })).toBe(true);
+        expect(publish({ day: DAY, rpd: 41 })).toBe(false);
+        // Same rpd, new PT day: the reconciler ignores spend stamped with a
+        // prior day, so this MUST be written through.
+        expect(publish({ day: '2026-06-14', rpd: 41 })).toBe(true);
+        expect(useDeviceStore.getState().devices['device-self'].embedSpend).toEqual({ day: '2026-06-14', rpd: 41 });
+    });
+
+    it('a reset to zero (a fresh counter) still writes', () => {
+        seedSelf();
+
+        expect(publish({ day: DAY, rpd: 200 })).toBe(true);
+        // |0 - 200| >= the step, so a counter reset is never swallowed.
+        expect(publish({ day: DAY, rpd: 0 })).toBe(true);
+        expect(useDeviceStore.getState().devices['device-self'].embedSpend).toEqual({ day: DAY, rpd: 0 });
+    });
+
+    it('does not notify subscribers on a coalesced publish', () => {
+        seedSelf();
+        publish({ day: DAY, rpd: 1 });
+
+        const listener = vi.fn();
+        const unsubscribe = useDeviceStore.subscribe(listener);
+        for (let rpd = 2; rpd <= 10; rpd++) {
+            useDeviceStore.getState().publishEmbedSpend('device-self', { day: DAY, rpd });
+        }
+        expect(listener).not.toHaveBeenCalled();
+
+        useDeviceStore.getState().publishEmbedSpend('device-self', { day: DAY, rpd: 11 });
+        expect(listener).toHaveBeenCalledTimes(1);
+        unsubscribe();
+    });
+});

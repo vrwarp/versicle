@@ -7,8 +7,9 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { ReaderShell } from '../ReaderShell';
+import { SearchSession } from '@domains/search';
 import { FakeReaderEngine } from '@domains/reader/engine/FakeReaderEngine';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useReadingStateStore } from '@store/useReadingStateStore';
@@ -91,5 +92,50 @@ describe('renderer-swap smoke: ReaderView boots on FakeReaderEngine', () => {
     fireEvent.click(screen.getByText('Chapter 2'));
     await waitFor(() => expect(displaySpy).toHaveBeenCalledWith('chapter2.xhtml'));
     expect(fakeEngine.currentLocation()?.sectionHref).toBe('chapter2.xhtml');
+  });
+
+  /**
+   * React Router reuses the `/read/:id` element across a /read/A -> /read/B
+   * navigation, so the shell (and the controller's refs) survive the book
+   * change. The controller's per-book singletons — the SearchSession with its
+   * worker + corpus cache, and the search navigator — were built once per HOOK
+   * INSTANCE and disposed only on unmount, so book B would have been served
+   * book A's index.
+   */
+  describe('regression: a book change retires the previous search session', () => {
+    const Navigator: React.FC = () => {
+      const navigate = useNavigate();
+      return (
+        <button data-testid="go-to-book-b" onClick={() => navigate('/read/fake-book-b')}>
+          Open book B
+        </button>
+      );
+    };
+
+    it('disposes the previous session and builds a new one for the new book', async () => {
+      const dispose = vi.spyOn(SearchSession.prototype, 'dispose');
+
+      const view = render(
+        <MemoryRouter initialEntries={['/read/fake-book-a']}>
+          <Navigator />
+          <Routes>
+            <Route path="/read/:id" element={<ReaderShell />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => expect(screen.getByTestId('reader-view')).toBeInTheDocument());
+      expect(dispose).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByTestId('go-to-book-b'));
+
+      // Book A's session is retired the moment the id changes...
+      await waitFor(() => expect(dispose).toHaveBeenCalledTimes(1));
+      expect(screen.getByTestId('reader-view')).toBeInTheDocument();
+
+      // ...and a LIVE session exists for book B — the unmount retires it too.
+      view.unmount();
+      expect(dispose).toHaveBeenCalledTimes(2);
+    });
   });
 });

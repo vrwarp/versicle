@@ -93,6 +93,26 @@ export type BackupManifest = BackupManifestV2 | BackupManifestV3;
 type BackupManifestRow = { bookId: string } & Record<string, unknown>;
 
 /**
+ * EPUBs inflated (and written) in parallel during a full restore. Two keeps
+ * the write gate busy without holding the whole backup in memory.
+ */
+const RESTORE_CONCURRENCY = 2;
+
+/** base64 window size (bytes on the encode side). */
+const BASE64_CHUNK_BYTES = 0x8000;
+/** …and on the decode side, a multiple of 4 (one base64 quantum). */
+const BASE64_CHUNK_CHARS = 0x8000;
+
+function decodeBase64Window(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
  * Service responsible for creating and restoring backups of the application data.
  *
  * v3 Architecture (Yjs Snapshots + lossless binary fields):
@@ -166,8 +186,8 @@ export class BackupService {
     }
 
     onProgress?.(90, 'Compressing archive...');
-    const content = await zip.generateAsync({ type: 'blob' }, (metadata) => {
-      onProgress?.(90 + (metadata.percent * 0.1), 'Compressing...');
+    const content = await this.generateZipBlob(zip, (percent) => {
+      onProgress?.(90 + (percent * 0.1), 'Compressing...');
     });
 
     const filename = `versicle_backup_full_${new Date().toISOString().split('T')[0]}.zip`;
@@ -179,6 +199,45 @@ export class BackupService {
     });
 
     onProgress?.(100, 'Done!');
+  }
+
+  /**
+   * Drain the archive through JSZip's chunk stream into a Blob built from the
+   * chunk list.
+   *
+   * `generateAsync({ type: 'blob' })` accumulates every chunk, concatenates
+   * them into one Uint8Array, converts THAT to an ArrayBuffer and only then
+   * constructs the Blob — three full copies of the whole library resident at
+   * once. `new Blob(chunks)` hands the pieces to the browser's blob store
+   * (which may spill to disk) with no intermediate copy.
+   *
+   * `streamFiles: true` lets JSZip emit each entry's local header before the
+   * entry is compressed (sizes ride in a trailing data descriptor), so no
+   * single EPUB is buffered whole either. The central directory still carries
+   * the real sizes, so the archive reads back the same everywhere — the
+   * round-trip through `restoreFullBackup` is pinned in the suite.
+   *
+   * Progress keeps `generateAsync`'s semantics: the same `metadata.percent`
+   * values, forwarded as they arrive.
+   */
+  private generateZipBlob(zip: JSZip, onPercent: (percent: number) => void): Promise<Blob> {
+    return new Promise<Blob>((resolve, reject) => {
+      // BlobPart, not Uint8Array[]: jszip types its chunks over
+      // ArrayBufferLike, which lib.dom's BlobPart (ArrayBufferView<ArrayBuffer>)
+      // does not accept. The runtime values are plain Uint8Arrays.
+      const chunks: BlobPart[] = [];
+      zip
+        .generateInternalStream({ type: 'uint8array', streamFiles: true })
+        .on('data', (chunk, metadata) => {
+          chunks.push(chunk as BlobPart);
+          onPercent(metadata.percent);
+        })
+        .on('error', reject)
+        .on('end', () => {
+          resolve(new Blob(chunks, { type: 'application/zip' }));
+        })
+        .resume();
+    });
   }
 
   async restoreBackup(file: File, onProgress?: (percent: number, message: string) => void): Promise<void> {
@@ -401,26 +460,35 @@ export class BackupService {
       const restoredBookIds: string[] = [];
 
       if (filesFolder) {
-        // Iterate over files in the zip folder directly
-        const filePromises: Promise<void>[] = [];
-
+        // Collect the entries first, then inflate them a couple at a time.
+        // `Promise.all` over every entry started N simultaneous inflations —
+        // every EPUB in the backup decompressed into memory at once, each
+        // then waiting its turn on the single write gate. The bound keeps
+        // peak memory at ~RESTORE_CONCURRENCY books while the gate stays
+        // saturated.
+        const entries: { bookId: string; zipFile: JSZip.JSZipObject }[] = [];
         filesFolder.forEach((relativePath, zipFile) => {
           if (relativePath.endsWith('.epub')) {
-            const bookId = relativePath.replace('.epub', '');
-
-            const p = (async () => {
-              const arrayBuffer = await zipFile.async('arraybuffer');
-
-              // Repo write (read-merge outside the gate, synchronous put inside).
-              await bookContent.restoreResource(bookId, arrayBuffer);
-
-              restoredBookIds.push(bookId);
-            })();
-            filePromises.push(p);
+            entries.push({ bookId: relativePath.replace('.epub', ''), zipFile });
           }
         });
 
-        await Promise.all(filePromises);
+        let next = 0;
+        const worker = async (): Promise<void> => {
+          while (next < entries.length) {
+            const { bookId, zipFile } = entries[next++];
+            const arrayBuffer = await zipFile.async('arraybuffer');
+
+            // Repo write (read-merge outside the gate, synchronous put inside).
+            await bookContent.restoreResource(bookId, arrayBuffer);
+
+            restoredBookIds.push(bookId);
+          }
+        };
+
+        await Promise.all(
+          Array.from({ length: Math.min(RESTORE_CONCURRENCY, entries.length) }, worker),
+        );
       }
 
       // Clear offloaded status for restored books — per-key deltas only
@@ -508,22 +576,55 @@ export class BackupService {
 
   // === Utility Methods ===
 
+  /**
+   * base64 in 32 KiB windows. The per-byte `binary += String.fromCharCode(…)`
+   * this replaces was quadratic in practice (rope flattening) — ~74 ms per
+   * MB, so a library with 500 covers plus the Yjs snapshot blocked the main
+   * thread for the better part of two seconds on every backup. Output is
+   * byte-identical: the windows are concatenated before the single btoa().
+   */
   private uint8ArrayToBase64(bytes: Uint8Array): string {
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
+    const parts: string[] = [];
+    for (let i = 0; i < bytes.byteLength; i += BASE64_CHUNK_BYTES) {
+      const window = bytes.subarray(i, i + BASE64_CHUNK_BYTES);
+      // `apply` over a typed-array view: no intermediate number[] copy.
+      parts.push(String.fromCharCode.apply(null, window as unknown as number[]));
     }
-    return btoa(binary);
+    return btoa(parts.join(''));
   }
 
+  /**
+   * The inverse, decoded in 4-char-aligned windows so the whole binary string
+   * never exists alongside the output bytes. A base64 quantum is 4 chars and
+   * BASE64_CHUNK_CHARS is a multiple of 4, so every window but the last is
+   * padding-free and decodes independently.
+   *
+   * `atob` also tolerates embedded ASCII whitespace (MIME-wrapped base64),
+   * which would shift the window alignment — such input takes the
+   * single-shot path so the result stays identical to the old helper's.
+   */
   private base64ToUint8Array(base64: string): Uint8Array {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
+    if (base64.length <= BASE64_CHUNK_CHARS || /\s/.test(base64)) {
+      return decodeBase64Window(base64);
+    }
+
+    const windows: Uint8Array[] = [];
+    let total = 0;
+    for (let i = 0; i < base64.length; i += BASE64_CHUNK_CHARS) {
+      const decoded = decodeBase64Window(base64.slice(i, i + BASE64_CHUNK_CHARS));
+      windows.push(decoded);
+      total += decoded.byteLength;
+    }
+
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const window of windows) {
+      bytes.set(window, offset);
+      offset += window.byteLength;
     }
     return bytes;
   }
 }
 
 export const backupService = new BackupService();
+

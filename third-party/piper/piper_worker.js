@@ -44,12 +44,26 @@ self.onunhandledrejection = function(event) {
         stack: event.reason ? event.reason.stack : null
     });
 };
+// Versicle patch 8: per-worker object-URL cache + one-shot importScripts.
+// `init` runs ONCE PER SYNTHESIZED CHUNK (PiperRuntime posts one {kind:"init"} per
+// generate()), and every run used to mint a FRESH object URL for each cached blob — four
+// blob-URL registry entries leaked per sentence, each pinning its blob for the worker's
+// lifetime — and re-imported piper_phonemize.js (120 KB) + ort.min.js (540 KB) each time,
+// re-parsing ~660 KB of JavaScript per sentence. Both are per-worker constants.
+var urlCache = {};
+async function assetUrl(url, blobs) {
+  if (!urlCache[url]) {
+    urlCache[url] = URL.createObjectURL(await getBlob(url, blobs));
+  }
+  return urlCache[url];
+}
 async function phonemize(data, onnxruntimeBase, modelConfig) {
   const { input, speakerId, blobs, modelUrl, modelConfigUrl } = data;
-  const piperPhonemizeJs = URL.createObjectURL(await getBlob(data.piperPhonemizeJsUrl, blobs));
-  const piperPhonemizeWasm = URL.createObjectURL(await getBlob(data.piperPhonemizeWasmUrl, blobs));
-  const piperPhonemizeData = URL.createObjectURL(await getBlob(data.piperPhonemizeDataUrl, blobs));
-  importScripts(piperPhonemizeJs);
+  const piperPhonemizeJs = await assetUrl(data.piperPhonemizeJsUrl, blobs);
+  const piperPhonemizeWasm = await assetUrl(data.piperPhonemizeWasmUrl, blobs);
+  const piperPhonemizeData = await assetUrl(data.piperPhonemizeDataUrl, blobs);
+  // Versicle patch 8: createPiperPhonemize is a worker global once imported.
+  if (typeof createPiperPhonemize === "undefined") importScripts(piperPhonemizeJs);
   const phonemeIds = await new Promise(async (resolve) => {
     const module = await createPiperPhonemize({
       print: (data2) => {
@@ -115,8 +129,9 @@ async function init(data, phonemizeOnly = false) {
     self.postMessage({ kind: "complete", requestId });
     return;
   }
-  const onnxruntimeJs = URL.createObjectURL(await getBlob(`${onnxruntimeBase}ort.min.js`, blobs));
-  importScripts(onnxruntimeJs);
+  const onnxruntimeJs = await assetUrl(`${onnxruntimeBase}ort.min.js`, blobs);
+  // Versicle patch 8: ort is a worker global once imported.
+  if (typeof ort === "undefined") importScripts(onnxruntimeJs);
   ort.env.wasm.numThreads = navigator.hardwareConcurrency;
   ort.env.wasm.wasmPaths = onnxruntimeBase;
   const sampleRate = modelConfig.audio.sample_rate;
@@ -125,9 +140,31 @@ async function init(data, phonemizeOnly = false) {
   const lengthScale = modelConfig.inference.length_scale;
   const noiseW = modelConfig.inference.noise_w;
   const modelBlob = await getBlob(modelUrl, blobs);
-  const session = cachedSession[modelUrl] ?? await ort.InferenceSession.create(URL.createObjectURL(modelBlob));
-  if (Object.keys(cachedSession).length && !cachedSession[modelUrl])
-    cachedSession = {};
+  let session = cachedSession[modelUrl];
+  if (!session) {
+    // Versicle patch 8: ort fetches this URL exactly once inside create() and copies the
+    // bytes into the WASM heap (ort.min.js `createInferenceSessionHandler(path)`), so the
+    // URL is revoked as soon as the session exists — leaving it registered pinned the whole
+    // model blob in the worker for its lifetime.
+    const modelObjectUrl = URL.createObjectURL(modelBlob);
+    try {
+      session = await ort.InferenceSession.create(modelObjectUrl);
+    } finally {
+      URL.revokeObjectURL(modelObjectUrl);
+    }
+    if (Object.keys(cachedSession).length) {
+      // Versicle patch 8: a superseded session holds its model weights in the ort WASM
+      // heap; dropping the reference alone never frees them. release() does.
+      for (const key of Object.keys(cachedSession)) {
+        try {
+          await cachedSession[key].release();
+        } catch (err) {
+          console.warn("Failed to release ONNX session", err);
+        }
+      }
+      cachedSession = {};
+    }
+  }
   cachedSession[modelUrl] = session;
   const feeds = {
     input: new ort.Tensor("int64", phonemeIds, [1, phonemeIds.length]),

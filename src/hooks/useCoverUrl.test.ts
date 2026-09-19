@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useCoverUrl } from './useCoverUrl';
+import { bookContent } from '@data/repos/bookContent';
 
 describe('useCoverUrl hook', () => {
   const mockBlob = new Blob(['image-data'], { type: 'image/jpeg' });
@@ -77,6 +78,60 @@ describe('useCoverUrl hook', () => {
     unmount();
 
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
+  });
+
+  /**
+   * perf (P-mem): the library projection no longer carries a Blob per book
+   * while the page is SW controlled. When the controller is gone but the
+   * projection still says a cover exists, the fallback lane reads THAT ONE
+   * cover from the data layer instead of relying on every book's bytes being
+   * in memory.
+   */
+  describe('regression: the fallback lane reads the cover on demand', () => {
+    it('fetches the single cover row when no blob was handed in', async () => {
+      const spy = vi
+        .spyOn(bookContent, 'getCoverBlob')
+        .mockResolvedValue(new Blob(['on-demand'], { type: 'image/webp' }));
+
+      const { result } = renderHook(() => useCoverUrl(mockBookId, undefined, mockSwUrl));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(spy).toHaveBeenCalledWith(mockBookId);
+      expect(result.current).toBe('blob:mock-url');
+    });
+
+    it('does not read anything when the SW route is live', async () => {
+      Object.defineProperty(navigator, 'serviceWorker', {
+        value: { controller: {} },
+        writable: true,
+        configurable: true,
+      });
+      const spy = vi.spyOn(bookContent, 'getCoverBlob');
+
+      const { result } = renderHook(() => useCoverUrl(mockBookId, undefined, mockSwUrl));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(spy).not.toHaveBeenCalled();
+      expect(result.current).toBe(mockSwUrl);
+    });
+
+    it('does not read anything for a book with no cover at all', async () => {
+      const spy = vi.spyOn(bookContent, 'getCoverBlob');
+
+      renderHook(() => useCoverUrl(mockBookId, undefined, undefined));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 
   it('revokes and recreates object URL when blob changes', () => {

@@ -39,7 +39,7 @@ import {
   type BookMetadataExtraction,
   type FullBookExtraction,
 } from './extract';
-import { extractEpubsFromZip as realExtractEpubsFromZip } from './zip';
+import { listZipEpubEntries as realListZipEpubEntries } from './zip';
 import { retargetExtraction } from './persist';
 import { computeContentHash, matchesLegacyFingerprint } from './identity';
 
@@ -80,8 +80,23 @@ export interface ImportOrchestratorDeps {
   extractionOptions: ExtractionOptionsProvider;
   /** Pure-function seams (default real; injected by tests). */
   extract?: typeof realExtractBook;
-  expandZip?: typeof realExtractEpubsFromZip;
+  /**
+   * Zip enumeration: the archive is read once (reporting read progress) and
+   * its entries are inflated on demand, one at a time. This is the ONE zip
+   * seam — there is no eager variant to inject, so a test that stubs it
+   * drives exactly the code production runs.
+   */
+  listZipEpubs?: typeof realListZipEpubEntries;
   now?: () => number;
+}
+
+/**
+ * One pending import: a name to report and dedupe on, and the File behind it
+ * — which for a ZIP entry is not decompressed until it is that book's turn.
+ */
+interface ImportSource {
+  name: string;
+  read(): Promise<File>;
 }
 
 interface QueueJob {
@@ -93,7 +108,7 @@ interface QueueJob {
 
 export class ImportOrchestrator {
   private readonly extract: typeof realExtractBook;
-  private readonly expandZip: typeof realExtractEpubsFromZip;
+  private readonly listZipEpubs: typeof realListZipEpubEntries;
   private readonly now: () => number;
   private normalQueue: QueueJob[] = [];
   private idleQueue: QueueJob[] = [];
@@ -101,7 +116,7 @@ export class ImportOrchestrator {
 
   constructor(private readonly deps: ImportOrchestratorDeps) {
     this.extract = deps.extract ?? realExtractBook;
-    this.expandZip = deps.expandZip ?? realExtractEpubsFromZip;
+    this.listZipEpubs = deps.listZipEpubs ?? realListZipEpubEntries;
     this.now = deps.now ?? Date.now;
   }
 
@@ -173,18 +188,32 @@ export class ImportOrchestrator {
       projection.setBatchSummary(null);
       try {
         const summary: BatchImportSummary = { imported: 0, skipped: [], failed: [] };
-        const epubs = await this.expandToEpubs(files, summary);
+        // Sources, not files: a ZIP's entries are enumerated (cheap) but each
+        // EPUB is inflated only when its turn comes, so a 40-book archive no
+        // longer holds 40 decompressed books in memory for the whole batch.
+        const sources = await this.expandToSources(files, summary);
 
         const seen = new Set<string>();
-        for (let i = 0; i < epubs.length; i++) {
-          const epub = epubs[i];
+        for (let i = 0; i < sources.length; i++) {
+          const source = sources[i];
           projection.importProgress(
-            Math.round((i / epubs.length) * 100),
-            `Importing ${i + 1} of ${epubs.length}: ${epub.name}`,
+            Math.round((i / sources.length) * 100),
+            `Importing ${i + 1} of ${sources.length}: ${source.name}`,
           );
 
-          if (seen.has(epub.name)) {
-            summary.skipped.push(epub.name);
+          if (seen.has(source.name)) {
+            summary.skipped.push(source.name);
+            continue;
+          }
+
+          let epub: File;
+          try {
+            epub = await source.read();
+          } catch (e) {
+            summary.failed.push({
+              filename: source.name,
+              reason: e instanceof Error ? e.message : 'Failed to read the file.',
+            });
             continue;
           }
 
@@ -193,14 +222,14 @@ export class ImportOrchestrator {
             case 'imported':
             case 'replaced':
               summary.imported += 1;
-              seen.add(epub.name);
+              seen.add(source.name);
               break;
             case 'duplicate':
             case 'skipped':
-              summary.skipped.push(epub.name);
+              summary.skipped.push(source.name);
               break;
             case 'failed':
-              summary.failed.push({ filename: epub.name, reason: result.error.message });
+              summary.failed.push({ filename: source.name, reason: result.error.message });
               break;
           }
         }
@@ -528,25 +557,27 @@ export class ImportOrchestrator {
     }
   }
 
-  private async expandToEpubs(files: File[], summary: BatchImportSummary): Promise<File[]> {
+  private async expandToSources(files: File[], summary: BatchImportSummary): Promise<ImportSource[]> {
     const projection = this.deps.projection;
     const totalSize = files.reduce((acc, f) => acc + f.size, 0);
     let processedBytes = 0;
-    const epubs: File[] = [];
+    const sources: ImportSource[] = [];
+    const percentOf = (done: number) =>
+      totalSize > 0 ? Math.min(100, Math.round((done / totalSize) * 100)) : 100;
 
     for (const file of files) {
       const startBytes = processedBytes;
       const name = file.name.toLowerCase();
       if (name.endsWith('.zip')) {
         try {
-          const extracted = await this.expandZip(file, (percent) => {
+          // Enumeration reads the archive (and reports that read, weighted by
+          // this file's share of the batch's bytes); the entries themselves
+          // are inflated later, one at a time, under importProgress.
+          const entries = await this.listZipEpubs(file, (percent) => {
             const done = startBytes + (percent / 100) * file.size;
-            projection.uploadProgress(
-              totalSize > 0 ? Math.min(100, Math.round((done / totalSize) * 100)) : 100,
-              `Processing ${file.name}...`,
-            );
+            projection.uploadProgress(percentOf(done), `Processing ${file.name}...`);
           });
-          epubs.push(...extracted);
+          sources.push(...entries.map((entry) => ({ name: entry.name, read: () => entry.read() })));
         } catch (e) {
           logger.warn(`Failed to extract zip ${file.name}:`, e);
           summary.failed.push({
@@ -555,7 +586,7 @@ export class ImportOrchestrator {
           });
         }
       } else if (name.endsWith('.epub')) {
-        epubs.push(file);
+        sources.push({ name: file.name, read: async () => file });
       } else {
         summary.failed.push({ filename: file.name, reason: 'Unsupported file type (expected .epub or .zip).' });
       }
@@ -563,7 +594,7 @@ export class ImportOrchestrator {
     }
 
     projection.uploadProgress(100, 'All files processed. Starting import...');
-    return epubs;
+    return sources;
   }
 }
 
