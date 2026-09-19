@@ -496,6 +496,8 @@ At the composition root, `getConfig` is `() => useGenAIStore.getState()` — a l
 
 ```typescript
 export const GENAI_ROTATION_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-3.5-flash',
   'gemini-3.5-flash-lite',
@@ -508,11 +510,11 @@ export const GENAI_ROTATION_MODELS = [
 
 When `rotationEnabled` is true in the config, `modelsToTry()` walks this array **in order** (no shuffle) and tries each model in turn, continuing whenever `isRetryableForRotation(error)` holds.
 
-**Order does not change the daily total.** Each model has an independent free-tier bucket that resets at midnight PT, and the loop falls through to the next entry whenever one is spent, so the ceiling is the SUM of the buckets — 1,100 requests/day — whatever the order. Nothing is stranded: a request that cannot be admitted at position N simply continues to N+1. What the order decides is which model serves the bulk of the day, and how much of the chain a hard failure takes down with it:
+**Order does not change the daily total.** Each model has an independent free-tier bucket that resets at midnight PT, and the loop falls through to the next entry whenever one is spent, so the ceiling is the SUM of the buckets — 1,140 requests/day — whatever the order. Nothing is stranded: a request that cannot be admitted at position N simply continues to N+1. What the order decides is which model serves the bulk of the day, and how much of the chain a hard failure takes down with it:
 
-- **1–2**, the stable 20-RPD frontier models (`gemini-3.6-flash`, `gemini-3.5-flash`). There is no per-call-type routing, so scarce premium quota cannot be *reserved* for high-value calls — it is spent on whatever arrives first or it expires. Leading with them guarantees it is spent.
-- **3–4**, the stable 500-RPD lite models — the workhorses that serve ~91% of the day.
-- **5–7**, the preview and deprecating models. Google retires models on its own schedule and a retired model answers **404, not 429**; `isModelUnavailable` makes that continuable, but keeping anything with a shutdown date below the workhorses bounds even an uncovered failure mode to the last 60 requests of the day rather than the first 1,040.
+- **1–4**, the stable 20-RPD frontier models (`gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`). There is no per-call-type routing, so scarce premium quota cannot be *reserved* for high-value calls — it is spent on whatever arrives first or it expires. Leading with them guarantees it is spent.
+- **5–6**, the stable 500-RPD lite models — the workhorses that serve ~88% of the day.
+- **7–9**, the preview and deprecating models. Google retires models on its own schedule and a retired model answers **404, not 429**; `isModelUnavailable` makes that continuable, but keeping anything with a shutdown date below the workhorses bounds even an uncovered failure mode to the last 60 requests of the day rather than the first 1,080.
 
 `isRetryableForRotation` continues on three conditions: a server 429 (`isResourceExhausted`), an unusable model (`isModelUnavailable` — a 404, or a 400 whose `apiStatus` is `FAILED_PRECONDITION`), and a pre-network `NetRateLimitedError`. A bare 400 `INVALID_ARGUMENT` deliberately does **not** rotate: a malformed prompt fails identically on every model, so rotating would turn one bad request into a round trip per model.
 

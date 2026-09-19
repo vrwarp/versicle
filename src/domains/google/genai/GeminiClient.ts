@@ -49,25 +49,25 @@ const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
  * The free-tier rotation list, iterated IN ORDER (no shuffle). Each entry has
  * its own daily bucket that resets at midnight PT, and the loop falls through to
  * the next entry whenever one is spent, so the day's ceiling is the SUM of the
- * buckets — 1,100 requests — REGARDLESS of order. Ordering does not add or lose
+ * buckets — 1,140 requests — REGARDLESS of order. Ordering does not add or lose
  * quota; nothing is ever stranded, because a request that cannot be admitted at
  * position N simply continues to N+1.
  *
  * What the order does decide is (a) which model serves the bulk of the day and
  * (b) how much of the chain a hard failure takes down with it. Hence:
  *
- *  1-2. The two stable 20-RPD frontier models, newest first. There is no
+ *  1-4. The four stable 20-RPD frontier models, newest first. There is no
  *       per-call-type routing, so scarce premium quota cannot be RESERVED for
  *       high-value calls — it is spent on whatever arrives first or it expires
  *       at midnight. Leading with them at least guarantees it is spent.
- *  3-4. The two stable 500-RPD lite models: the workhorses that serve ~91% of
+ *  5-6. The two stable 500-RPD lite models: the workhorses that serve ~88% of
  *       the day.
- *  5-7. Preview and deprecating models LAST. Google retires models on its own
+ *  7-9. Preview and deprecating models LAST. Google retires models on its own
  *       schedule, and a retired model answers 404, not 429. Rotation now treats
  *       that as continuable (see isModelUnavailable), but keeping anything with
  *       a shutdown date below the workhorses means even a failure mode the
  *       predicate does NOT cover costs only the last 60 requests of the day
- *       instead of the first 1,040.
+ *       instead of the first 1,080.
  *
  * The per-model 429 cooldown is recorded against that model's OWN rate pool
  * (see `recordCooldown(..., modelId)` below), so exhausting one model never
@@ -78,6 +78,8 @@ const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
  * input for table adaptation.
  */
 export const GENAI_ROTATION_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
   'gemini-3.6-flash',
   'gemini-3.5-flash',
   'gemini-3.5-flash-lite',

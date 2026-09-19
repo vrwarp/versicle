@@ -140,7 +140,7 @@ describe('GenAI log replay (synthetic export)', () => {
     expect(d.sameInstantRequests).toBe(1);
     expect(d.requestsAfter).toBe(2);
     expect(d.quota.headModelRpd).toBe(20);
-    expect(d.quota.rotationCapacityRpd).toBe(1100);
+    expect(d.quota.rotationCapacityRpd).toBe(1140);
 
     expect(report.embedding.clusters.map((c) => [c.kind, c.count, c.requestsUnderPolicy])).toEqual([
       ['daily-quota', 2, 1],
