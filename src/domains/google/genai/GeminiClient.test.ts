@@ -88,7 +88,7 @@ describe('GeminiClient', () => {
     const model = (url: string) => url.match(/models\/([^:]+):/)?.[1];
     expect(model(calls[0].url)).toBe(GENAI_ROTATION_MODELS[0]);
     expect(model(calls[1].url)).toBe(GENAI_ROTATION_MODELS[1]);
-    expect(model(calls[0].url)).toBe('gemini-3.6-flash');
+    expect(model(calls[0].url)).toBe('gemini-3.8-flash');
   });
 
   it('every rotation model has its own quota pool, summing to the free-tier day', () => {
@@ -97,7 +97,7 @@ describe('GeminiClient', () => {
     // far looser `default` pool, which would overrun its real free tier.
     const rpd = GENAI_ROTATION_MODELS.map((m) => DEFAULT_QUOTA_LIMITS[m]?.rpd);
     expect(rpd).not.toContain(undefined);
-    expect(rpd.reduce((sum, n) => sum! + n!, 0)).toBe(1100);
+    expect(rpd.reduce((sum, n) => sum! + n!, 0)).toBe(1140);
   });
 
   it('models with a shutdown date are ordered BELOW the high-daily-quota workhorses', () => {
@@ -133,7 +133,7 @@ describe('GeminiClient', () => {
     // 429. Without this the loop rethrows on the spot and every model below it
     // — including the 500-RPD workhorses — goes unused for the rest of the day.
     const { client, calls } = makeClient(
-      [errorResponse(404, 'models/gemini-3.6-flash is not found'), geminiResponse('success')],
+      [errorResponse(404, 'models/gemini-3.8-flash is not found'), geminiResponse('success')],
       { rotationEnabled: true },
     );
     await expect(client.generateText('prompt')).resolves.toBe('success');

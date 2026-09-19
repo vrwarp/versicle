@@ -13,6 +13,7 @@ import type { ContentType } from '~types/content-analysis';
 import type { QuotaLimits, LaneUsage } from '@kernel/quota';
 import { formatTime, formatNumber } from '@kernel/locale/format';
 import { DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';
+import { RATE_POOL_LABELS } from './ratePoolLabels';
 
 /**
  * Per-lane time-to-exhaustion hints (ms; null when not filling) the panel
@@ -144,77 +145,6 @@ export interface GenAISettingsTabProps {
     shareAiCaches: boolean;
     onShareAiCachesChange: (enabled: boolean) => void;
 }
-
-const RATE_POOL_LABELS: Record<string, string> = {
-    default: 'Default / General',
-    'gemini-1.5-pro': 'Gemini 1.5 Pro',
-    // Text-out models
-    'gemini-flash-lite-latest': 'Gemini Flash-Lite Latest (alias)',
-    'gemini-2.0-flash': 'Gemini 2 Flash',
-    'gemini-2.0-flash-lite': 'Gemini 2 Flash Lite',
-    'gemini-2.5-flash': 'Gemini 2.5 Flash',
-    'gemini-2.5-flash-lite': 'Gemini 2.5 Flash-Lite',
-    'gemini-2.5-pro': 'Gemini 2.5 Pro',
-    'gemini-3-flash-preview': 'Gemini 3 Flash',
-    'gemini-3.1-flash-lite': 'Gemini 3.1 Flash Lite',
-    'gemini-3.1-pro-preview': 'Gemini 3.1 Pro',
-    'gemini-3.5-flash': 'Gemini 3.5 Flash',
-    'gemini-3.5-flash-lite': 'Gemini 3.5 Flash Lite',
-    'gemini-3.6-flash': 'Gemini 3.6 Flash',
-    // Agents
-    'antigravity-preview-05-2026': 'Antigravity',
-    'deep-research-pro-preview-12-2025': 'Deep Research Pro Preview',
-    // Multi-modal generative models
-    'gemini-2.5-flash-image': 'Nano Banana (Gemini 2.5 Flash Image)',
-    'gemini-2.5-flash-preview-tts': 'Gemini 2.5 Flash TTS',
-    'gemini-2.5-pro-preview-tts': 'Gemini 2.5 Pro TTS',
-    'gemini-3-pro-image': 'Nano Banana Pro (Gemini 3 Pro Image)',
-    'gemini-3.1-flash-image': 'Nano Banana 2 (Gemini 3.1 Flash Image)',
-    'gemini-3.1-flash-lite-image': 'Nano Banana 2 Lite (Gemini 3.1 Flash Lite Image)',
-    'gemini-3.1-flash-tts-preview': 'Gemini 3.1 Flash TTS',
-    'gemini-omni-flash-preview': 'Gemini Omni Flash',
-    'imagen-4.0-fast-generate-001': 'Imagen 4 Fast Generate',
-    'imagen-4.0-generate-001': 'Imagen 4 Generate',
-    'imagen-4.0-ultra-generate-001': 'Imagen 4 Ultra Generate',
-    'lyria-3-clip-preview': 'Lyria 3 Clip',
-    'lyria-3-pro-preview': 'Lyria 3 Pro',
-    'veo-3.1-fast-generate-preview': 'Veo 3 Fast Generate',
-    'veo-3.1-generate-preview': 'Veo 3 Generate',
-    'veo-3.1-lite-generate-preview': 'Veo 3 Lite Generate',
-    // Live API
-    'gemini-2.5-flash-native-audio-preview-12-2025': 'Gemini 2.5 Flash Native Audio Dialog',
-    'gemini-3.1-flash-live-preview': 'Gemini 3 Flash Live',
-    'gemini-3.5-live-translate-preview': 'Gemini 3.5 Live Translate',
-    // Other models
-    'gemini-2.5-computer-use-preview-10-2025': 'Computer Use Preview',
-    'gemini-embedding-001': 'Gemini Embedding 1',
-    'gemini-embedding-2': 'Gemini Embedding 2',
-    'gemini-robotics-er-1.5-preview': 'Gemini Robotics ER 1.5 Preview',
-    'gemini-robotics-er-1.6-preview': 'Gemini Robotics ER 1.6 Preview',
-    'gemma-4-26b-a4b-it': 'Gemma 4 26B',
-    'gemma-4-31b-it': 'Gemma 4 31B',
-    'deep-research-pro-preview-map-grounding': 'Deep Research Pro Preview (Map Grounding)',
-    'gemini-2-flash-map-grounding': 'Gemini 2 Flash (Map Grounding)',
-    'gemini-2.0-flash-map-grounding': 'Gemini 2.0 Flash (Map Grounding)',
-    'computer-use-preview-map-grounding': 'Computer Use Preview (Map Grounding)',
-    'gemini-2.5-flash-map-grounding': 'Gemini 2.5 Flash (Map Grounding)',
-    'gemini-2.5-flash-lite-map-grounding': 'Gemini 2.5 Flash Lite (Map Grounding)',
-    'gemini-3.1-flash-lite-map-grounding': 'Gemini 3.1 Flash Lite (Map Grounding)',
-    'gemini-3.1-flash-tts-map-grounding': 'Gemini 3.1 Flash TTS (Map Grounding)',
-    'gemini-robotics-er-1.6-preview-map-grounding': 'Gemini Robotics ER 1.6 Preview (Map Grounding)',
-    'gemini-2-search-grounding': 'Gemini 2 (Search Grounding)',
-    'gemini-2.0-search-grounding': 'Gemini 2.0 (Search Grounding)',
-    'gemini-2.5-search-grounding': 'Gemini 2.5 (Search Grounding)',
-    'default-search-grounding': 'Default (Search Grounding)',
-    'google-tts': 'Google Text-to-Speech (Fallback)',
-    'google-tts-chirp3-hd': 'Google TTS Chirp 3: HD',
-    'google-tts-wavenet': 'Google TTS WaveNet',
-    'google-tts-studio': 'Google TTS Studio',
-    'google-tts-standard': 'Google TTS Standard',
-    'google-tts-neural2': 'Google TTS Neural2',
-    'google-tts-polyglot': 'Google TTS Polyglot (Preview)',
-    'openai-tts': 'OpenAI Text-to-Speech',
-};
 
 export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
     isEnabled,

@@ -235,6 +235,8 @@ export const DEFAULT_QUOTA_LIMITS: Record<string, QuotaLimits> = {
   'gemini-3.5-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
   'gemini-3.5-flash-lite': { rpm: 15, tpm: 250_000, rpd: 500 },
   'gemini-3.6-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+  'gemini-3.7-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
+  'gemini-3.8-flash': { rpm: 5, tpm: 250_000, rpd: 20 },
 
   // --- Agents (Interactions API; keyed by their "Agent code") ------------
   'antigravity-preview-05-2026': { rpm: 60, tpm: 100_000, rpd: 100 },
@@ -248,7 +250,11 @@ export const DEFAULT_QUOTA_LIMITS: Record<string, QuotaLimits> = {
   'gemini-3.1-flash-image': { rpm: 0, tpm: 0, rpd: 0 },
   'gemini-3.1-flash-lite-image': { rpm: 0, tpm: 0, rpd: 0 },
   'gemini-3.1-flash-tts-preview': { rpm: 3, tpm: 10_000, rpd: 10 },
+  // The dashboard carries BOTH Omni rows: the model docs now point the
+  // "Gemini Omni Flash" name at the 1.1 endpoint, while the original preview
+  // endpoint still meters under its own row. Both are a zero free allowance.
   'gemini-omni-flash-preview': { rpm: 0, tpm: 0, rpd: 0 },
+  'gemini-omni-1.1-flash': { rpm: 0, tpm: 0, rpd: 0 },
   'imagen-4.0-fast-generate-001': { rpm: UNMETERED_REQUESTS, tpm: UNMETERED_TOKENS, rpd: 25 },
   'imagen-4.0-generate-001': { rpm: UNMETERED_REQUESTS, tpm: UNMETERED_TOKENS, rpd: 25 },
   'imagen-4.0-ultra-generate-001': { rpm: UNMETERED_REQUESTS, tpm: UNMETERED_TOKENS, rpd: 25 },
@@ -273,6 +279,20 @@ export const DEFAULT_QUOTA_LIMITS: Record<string, QuotaLimits> = {
     tpm: 20_000,
     rpd: UNMETERED_REQUESTS,
   },
+  // Transcribe ships as a pair of endpoints: the batch one is metered per
+  // request, the `-live` session one is unmetered like the rest of Live API.
+  'gemini-3.5-transcribe': { rpm: 3, tpm: 10_000, rpd: 25 },
+  'gemini-3.5-transcribe-live': {
+    rpm: UNMETERED_REQUESTS,
+    tpm: 20_000,
+    rpd: UNMETERED_REQUESTS,
+  },
+  'gemini-3.8-live': { rpm: UNMETERED_REQUESTS, tpm: 65_000, rpd: UNMETERED_REQUESTS },
+  'gemini-3.8-live-extended-thinking': {
+    rpm: UNMETERED_REQUESTS,
+    tpm: 65_000,
+    rpd: UNMETERED_REQUESTS,
+  },
 
   // --- Other models ------------------------------------------------------
   'gemini-2.5-computer-use-preview-10-2025': { rpm: 0, tpm: 0, rpd: 0 },
@@ -280,6 +300,7 @@ export const DEFAULT_QUOTA_LIMITS: Record<string, QuotaLimits> = {
   'gemini-embedding-2': { rpm: 100, tpm: 30_000, rpd: 1000 },
   'gemini-robotics-er-1.5-preview': { rpm: 10, tpm: 250_000, rpd: 20 },
   'gemini-robotics-er-1.6-preview': { rpm: 5, tpm: 250_000, rpd: 20 },
+  'gemini-robotics-er-2-preview': { rpm: 5, tpm: 250_000, rpd: 20 },
   'gemma-4-26b-a4b-it': { rpm: 30, tpm: 16_000, rpd: 14_400 },
   'gemma-4-31b-it': { rpm: 30, tpm: 16_000, rpd: 14_400 },
 
@@ -290,12 +311,23 @@ export const DEFAULT_QUOTA_LIMITS: Record<string, QuotaLimits> = {
   'computer-use-preview-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
   'gemini-2.5-flash-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
   'gemini-2.5-flash-lite-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'gemini-2.5-pro-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 0 },
+  'gemini-3-flash-preview-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 0 },
+  'gemini-3.1-pro-preview-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 0 },
   'gemini-3.1-flash-lite-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
   'gemini-3.1-flash-tts-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'gemini-3.5-flash-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 0 },
+  'gemini-3.5-flash-lite-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'gemini-3.5-transcribe-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'gemini-3.6-flash-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 0 },
+  'gemini-3.7-flash-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 0 },
+  'gemini-3.8-flash-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 0 },
   'gemini-robotics-er-1.6-preview-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
+  'gemini-robotics-er-2-preview-map-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 500 },
   'gemini-2-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
   'gemini-2.0-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
   'gemini-2.5-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
+  'gemini-3-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 0 },
   'default-search-grounding': { rpm: 999_999, tpm: 999_999_999, rpd: 1500 },
 };
 

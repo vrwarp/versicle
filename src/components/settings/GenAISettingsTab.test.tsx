@@ -2,6 +2,8 @@ import React from 'react';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { GenAISettingsTab, type GenAISettingsTabProps } from './GenAISettingsTab';
+import { RATE_POOL_LABELS } from './ratePoolLabels';
+import { DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';
 
 // Mock UI components
 vi.mock('../ui/Select', () => ({
@@ -420,5 +422,12 @@ describe('GenAISettingsTab', () => {
         // The first row is the header, so the first data row is at index 1.
         expect(rowElements[1]).toHaveTextContent('Gemini 1.5 Pro');
     });
-});
 
+    it('every rate pool with a default limit is labelled, so none is invisible in settings', () => {
+        // The Quota & Usage list iterates RATE_POOL_LABELS, not the defaults
+        // table: a pool seeded in DEFAULT_QUOTA_LIMITS but never labelled has a
+        // ceiling the user cannot see, inspect or edit.
+        const unlabelled = Object.keys(DEFAULT_QUOTA_LIMITS).filter((key) => !RATE_POOL_LABELS[key]);
+        expect(unlabelled).toEqual([]);
+    });
+});
