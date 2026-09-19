@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { extractContentOffscreen } from './offscreen-renderer';
+import {
+  extractContentOffscreen,
+  isHeavyMediaAsset,
+  tableMarkupOf,
+  referencesAssetFile,
+} from './offscreen-renderer';
 import ePub from 'epubjs';
 import { snapdom } from '@zumer/snapdom';
 import { extractSentencesFromNodeAsync } from '@lib/ingestion/sentence-extraction';
@@ -81,7 +86,7 @@ describe('extractContentOffscreen', () => {
     const file = new Blob(['dummy content']);
     await extractContentOffscreen(file);
 
-    expect(ePub).toHaveBeenCalledWith(file);
+    expect(ePub).toHaveBeenCalledWith(file, { replacements: 'none' });
     expect(mockBook.renderTo).toHaveBeenCalled();
     expect(mockRendition.display).toHaveBeenCalledTimes(2);
     expect(mockRendition.display).toHaveBeenCalledWith('chapter1.xhtml');
@@ -485,6 +490,194 @@ describe('extractContentOffscreen', () => {
         expect(measures.has(name)).toBe(true);
         expect(measures.get(name)!).toBeGreaterThanOrEqual(0);
       }
+    });
+  });
+
+  /**
+   * Opening an ARCHIVED book ran epub.js's `Book.replacements()` whatever
+   * `replacements` was set to, and that inflates EVERY non-HTML manifest
+   * entry — Uint8Array → Blob → object URL — in one `Promise.all` before the
+   * first chapter renders. On a 25 MB illustrated EPUB that is the whole
+   * image payload resident at once, for a pass that only wants text and
+   * CFIs. (Measured on verification/pride-and-prejudice.epub: 180 object
+   * URLs / 24.9 MB before, 17 / 0.48 MB after, with the persisted
+   * sentences, CFIs, baseFontSize, baseLineHeight and table captures
+   * byte-identical.)
+   *
+   * The catch is that snapdom's table captures ARE persisted extraction
+   * output, so any media a table points at still has to be real — dropping
+   * it outright shrank that book's title-page capture from 4200 to 1094
+   * bytes. Hence the scoping the tests below pin.
+   */
+  describe('regression: asset inflation is scoped to what extraction output needs', () => {
+    /** A Resources double shaped like epub.js 0.3.93's. */
+    const makeResources = (opts: {
+      assets: { href: string; type?: string }[];
+      html?: { href: string }[];
+      sections?: Record<string, string>;
+    }) => {
+      const sections = opts.sections ?? {};
+      return {
+        urls: opts.assets.map((a) => a.href),
+        assets: opts.assets,
+        html: opts.html ?? [],
+        replacementUrls: [] as (string | undefined)[],
+        replaceCss: vi.fn(async () => undefined),
+        settings: {
+          resolver: (p: string) => `/${p}`,
+          archive: {
+            getText: vi.fn(async (url: string) => sections[url.replace(/^\//, '')]),
+            getBlob: vi.fn(async (url: string) => new Blob([url], { type: 'application/octet-stream' })),
+          },
+        },
+      };
+    };
+
+    const renderEmptyChapters = () => {
+      mockRendition.getContents.mockReturnValue([{
+        document: document.implementation.createHTMLDocument(),
+        cfiFromRange: vi.fn(() => 'epubcfi(/6/2!/4/1:0)'),
+        cfiFromNode: vi.fn(() => 'epubcfi(/6/2!/4/2)'),
+      }]);
+    };
+
+    it('opens the extraction book with replacements disabled', async () => {
+      renderEmptyChapters();
+      const file = new Blob(['x']);
+
+      await extractContentOffscreen(file);
+
+      expect(ePub).toHaveBeenCalledWith(file, { replacements: 'none' });
+    });
+
+    it('inflates stylesheets and fonts but not bulk media no table uses', async () => {
+      const resources = makeResources({
+        assets: [
+          { href: 'style.css', type: 'text/css' },
+          { href: 'fonts/body.otf', type: 'application/vnd.ms-opentype' },
+          { href: 'images/plate1.jpg', type: 'image/jpeg' },
+          { href: 'audio/track.mp3', type: 'audio/mpeg' },
+        ],
+        html: [{ href: 'ch1.xhtml' }],
+        sections: { 'ch1.xhtml': '<p>no tables here</p>' },
+      });
+      mockBook.resources = resources;
+      renderEmptyChapters();
+
+      await extractContentOffscreen(new Blob(['x']));
+
+      expect(resources.replacementUrls[0]).toMatch(/^blob:/); // css
+      expect(resources.replacementUrls[1]).toMatch(/^blob:/); // font
+      expect(resources.replacementUrls[2]).toBeUndefined(); // image
+      expect(resources.replacementUrls[3]).toBeUndefined(); // audio
+    });
+
+    it('inflates media a table references, wherever in the book that table is', async () => {
+      const resources = makeResources({
+        assets: [
+          { href: 'images/peacock.png', type: 'image/png' },
+          { href: 'images/plate1.jpg', type: 'image/jpeg' },
+        ],
+        html: [{ href: 'ch1.xhtml' }, { href: 'ch2.xhtml' }],
+        sections: {
+          'ch1.xhtml': '<p><img src="plate1.jpg"/></p>',
+          'ch2.xhtml': '<table><tr><td><img src="../images/peacock.png"/></td></tr></table>',
+        },
+      });
+      mockBook.resources = resources;
+      renderEmptyChapters();
+
+      await extractContentOffscreen(new Blob(['x']));
+
+      expect(resources.replacementUrls[0]).toMatch(/^blob:/);
+      // Referenced only OUTSIDE a table: not extraction output, stays out.
+      expect(resources.replacementUrls[1]).toBeUndefined();
+    });
+
+    it('inflates media a stylesheet names (a cell background lands in the capture)', async () => {
+      const resources = makeResources({
+        assets: [
+          { href: 'style.css', type: 'text/css' },
+          { href: 'images/cellbg.png', type: 'image/png' },
+          { href: 'images/plate1.jpg', type: 'image/jpeg' },
+        ],
+        html: [{ href: 'ch1.xhtml' }],
+        sections: {
+          'ch1.xhtml': '<p>no tables</p>',
+          'style.css': 'td.bg { background-image: url(images/cellbg.png); }',
+        },
+      });
+      mockBook.resources = resources;
+      renderEmptyChapters();
+
+      await extractContentOffscreen(new Blob(['x']));
+
+      expect(resources.replacementUrls[1]).toMatch(/^blob:/);
+      expect(resources.replacementUrls[2]).toBeUndefined();
+    });
+
+    it('re-runs replaceCss so stylesheet url() refs see the new urls', async () => {
+      const resources = makeResources({
+        assets: [{ href: 'fonts/body.woff2', type: 'font/woff2' }],
+      });
+      mockBook.resources = resources;
+      renderEmptyChapters();
+
+      await extractContentOffscreen(new Blob(['x']));
+
+      // epub.js already ran it once at open, against an EMPTY table.
+      expect(resources.replaceCss).toHaveBeenCalledTimes(1);
+    });
+
+    it('revokes every object url it created (epub.js revokes none)', async () => {
+      const revoke = vi.spyOn(URL, 'revokeObjectURL');
+      const resources = makeResources({
+        assets: [{ href: 'style.css', type: 'text/css' }],
+      });
+      mockBook.resources = resources;
+      renderEmptyChapters();
+
+      await extractContentOffscreen(new Blob(['x']));
+
+      expect(revoke).toHaveBeenCalledWith(resources.replacementUrls[0]);
+      revoke.mockRestore();
+    });
+
+    it('is inert on a book with no resources (and never blocks extraction)', async () => {
+      renderEmptyChapters();
+      await expect(extractContentOffscreen(new Blob(['x']))).resolves.toBeDefined();
+    });
+
+    it('classifies bulk media by media-type, falling back to the extension', () => {
+      expect(isHeavyMediaAsset({ href: 'a.png', type: 'image/png' })).toBe(true);
+      expect(isHeavyMediaAsset({ href: 'a.mp3', type: 'audio/mpeg' })).toBe(true);
+      expect(isHeavyMediaAsset({ href: 'a.mp4', type: 'video/mp4' })).toBe(true);
+      expect(isHeavyMediaAsset({ href: 'a.css', type: 'text/css' })).toBe(false);
+      expect(isHeavyMediaAsset({ href: 'f.otf', type: 'application/vnd.ms-opentype' })).toBe(false);
+      // No media-type in the manifest: fall back to the file extension.
+      expect(isHeavyMediaAsset({ href: 'art/cover.JPEG' })).toBe(true);
+      expect(isHeavyMediaAsset({ href: 'css/main.css' })).toBe(false);
+    });
+
+    it('collects table markup without swallowing the document between tables', () => {
+      const html = '<p>a</p><table id="one"><td>x</td></table><p>mid</p><table>y</table>';
+      const markup = tableMarkupOf(html);
+      expect(markup).toContain('id="one"');
+      expect(markup).toContain('y');
+      expect(markup).not.toContain('mid');
+      expect(tableMarkupOf('<p>no tables</p>')).toBe('');
+      // A tag that merely starts with "table" is not a table.
+      expect(tableMarkupOf('<tablet>x</tablet>')).toBe('');
+    });
+
+    it('matches a reference across relative-path and encoding shapes', () => {
+      const markup = '<table><img src="../img/pea%20cock.png"/></table>';
+      expect(referencesAssetFile(markup, 'OEBPS/img/pea cock.png')).toBe(true);
+      expect(referencesAssetFile(markup, 'img/pea%20cock.png')).toBe(true);
+      expect(referencesAssetFile(markup, 'img/other.png')).toBe(false);
+      expect(referencesAssetFile('<table>x</table>', '')).toBe(false);
+      // Same matcher serves stylesheet text.
+      expect(referencesAssetFile('td{background-image:url(../i/bg.png)}', 'i/bg.png')).toBe(true);
     });
   });
 });
