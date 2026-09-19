@@ -139,19 +139,61 @@ export async function getCoverFromDB(bookId: string): Promise<Blob | ArrayBuffer
   }
 }
 
+/**
+ * Bytes inspected to recognize a cover's format — the longest signature below
+ * (`RIFF....WEBP`).
+ */
+const COVER_SNIFF_BYTES = 12;
+
+/**
+ * The cover's real content type, read from its leading bytes.
+ *
+ * Covers reach this route with no type of their own: ingest normalizes
+ * Blob → ArrayBuffer (WebKit's IDB structured clone cannot hold a Blob) and a
+ * restore decodes them straight out of base64, and BOTH drop the MIME type —
+ * so the fallback below is what every current-format row is actually served
+ * with. It used to be a flat `image/webp`, on the grounds that the import path
+ * compresses thumbnails to webp; but `imageCompression` failures keep the
+ * ORIGINAL cover bytes (`thumbnailBlob = coverBlob` in
+ * domains/library/import/extract.ts), so a cover is just as legitimately jpeg,
+ * png or gif. Asking the bytes costs 12 of them and is never wrong.
+ *
+ * Practically inert for `<img>`, which sniffs the payload regardless — but the
+ * header is not inert everywhere: this response carries a one-year
+ * `Cache-Control`, so a wrong type is what the HTTP cache (and anything doing
+ * `(await fetch(coverUrl(id))).blob().type`) sees for a year.
+ *
+ * Returns undefined for anything that is not one of the four raster formats a
+ * cover can be; the caller then says so honestly rather than inventing one.
+ */
+function sniffCoverType(head: Uint8Array): string | undefined {
+  const at = (offset: number, ...expected: number[]) =>
+    expected.every((byte, i) => head[offset + i] === byte);
+
+  if (at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return 'image/png';
+  if (at(0, 0xff, 0xd8, 0xff)) return 'image/jpeg';
+  if (at(0, 0x47, 0x49, 0x46, 0x38)) return 'image/gif'; // GIF87a / GIF89a
+  // RIFF <4-byte size> WEBP
+  if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return 'image/webp';
+  return undefined;
+}
+
 export async function createCoverResponse(bookId: string): Promise<Response> {
   try {
     const coverData = await getCoverFromDB(bookId);
 
     if (coverData) {
       const blob = coverData instanceof Blob ? coverData : new Blob([coverData as ArrayBuffer]);
+      // A legacy row that still holds a real Blob carries its own type; every
+      // other lane lost it, so sniff (see sniffCoverType). Unknown bytes are
+      // served as opaque rather than mislabelled as an image format.
+      const contentType = blob.type
+        || sniffCoverType(new Uint8Array(await blob.slice(0, COVER_SNIFF_BYTES).arrayBuffer()))
+        || 'application/octet-stream';
+
       return new Response(blob, {
         headers: {
-          // A cover stored as ArrayBuffer (the WebKit-safe normalization) has
-          // no type of its own: the capture path compresses every thumbnail
-          // to webp (domains/library/import/extract.ts), so that — not jpeg —
-          // is what an untyped cover actually is.
-          'Content-Type': blob.type || 'image/webp',
+          'Content-Type': contentType,
           'Cache-Control': 'public, max-age=31536000', // Long cache
         },
       });

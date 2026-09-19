@@ -197,3 +197,89 @@ describe('regression: a reprocess of the OPEN book must not skip its adaptations
         expect(ctx.tableLocationReads).toEqual(['book1', 'book1']);
     });
 });
+
+
+/**
+ * The residual the blob-miss heal above could not reach: a reprocess that moves
+ * a table to a DIFFERENT sectionId. The stale memo reports the new section as
+ * tableless, the method returned before the image read, and the heal — which
+ * hangs off that read — never fired, so the section went without adaptations
+ * for the rest of the session. An empty section list is now confirmed against
+ * the live rows, but only ONCE per book: the cost is one extra read for the
+ * whole book, never one per tableless section.
+ */
+describe('regression: a table the reprocess moved to another section still heals', () => {
+    const CFI = 'epubcfi(/6/14!/4/2)';
+    const SENTENCES: SentenceNode[] = [{ text: 'Row one, column one.', cfi: 'epubcfi(/6/14!/4/2/1:0)' }];
+
+    function openBook(locations: Array<{ id: string; cfi: string; sectionId: string }>) {
+        const ctx = new FakeEngineContext();
+        ctx.genAISettings = { isEnabled: true, isTableAdaptationEnabled: true, apiKey: 'test-key' };
+        ctx.genAIConfigured = true;
+        ctx.tableAdaptationResults = [{ cfi: CFI, adaptation: 'A table, in words.' }];
+        ctx.tableLocations['book1'] = locations;
+        return { ctx, processor: new TableAdaptationProcessor(ctx) };
+    }
+
+    it('sends the moved table instead of returning on the stale empty list', async () => {
+        const { ctx, processor } = openBook([{ id: `book1-${CFI}`, cfi: CFI, sectionId: 'section1' }]);
+        // Warmed by the first section load (buildGroups shares this memo)…
+        await processor.getTableLocations('book1');
+        // …then the open book is reprocessed and the table lands in section2.
+        ctx.tableLocations['book1'] = [{ id: `book1-${CFI}`, cfi: CFI, sectionId: 'section2' }];
+
+        await processor.processTableAdaptations('book1', 'section2', SENTENCES, () => {});
+
+        expect(ctx.generateTableAdaptationsCalls).toHaveLength(1);
+        expect(ctx.generateTableAdaptationsCalls[0].nodes.map(n => n.rootCfi)).toEqual([CFI]);
+        expect(ctx.savedTableAdaptations).toEqual([{
+            bookId: 'book1',
+            sectionId: 'section2',
+            adaptations: [{ rootCfi: CFI, text: 'A table, in words.' }],
+        }]);
+        // …and the stale memo is dropped, so the grouping read heals too.
+        await processor.getTableLocations('book1');
+        expect(ctx.tableLocationReads).toEqual(['book1', 'book1']);
+    });
+
+    it('confirms an empty section once per book, not once per section', async () => {
+        // The memo is accurate: one table, in section1, nothing anywhere else.
+        const { ctx, processor } = openBook([{ id: `book1-${CFI}`, cfi: CFI, sectionId: 'section1' }]);
+        const imageReads = vi.spyOn(ctx.content, 'getTableImages');
+
+        for (const sectionId of ['section2', 'section3', 'section4']) {
+            await processor.processTableAdaptations('book1', sectionId, SENTENCES, () => {});
+        }
+
+        expect(imageReads).toHaveBeenCalledTimes(1);
+        expect(imageReads).toHaveBeenCalledWith('book1', 'section2');
+        // Nothing was sent, and a confirmed-accurate memo is left alone.
+        expect(ctx.generateTableAdaptationsCalls).toEqual([]);
+        expect(ctx.tableLocationReads).toEqual(['book1']);
+    });
+
+    it('a book with no tables at all never pays a read per section', async () => {
+        const { ctx, processor } = openBook([]);
+        const imageReads = vi.spyOn(ctx.content, 'getTableImages');
+
+        for (const sectionId of ['section1', 'section2', 'section3', 'section4']) {
+            await processor.processTableAdaptations('book1', sectionId, SENTENCES, () => {});
+        }
+
+        expect(imageReads).toHaveBeenCalledTimes(1);
+        expect(ctx.generateTableAdaptationsCalls).toEqual([]);
+    });
+
+    it('with the model off, the confirmation costs no read at all', async () => {
+        const { ctx, processor } = openBook([]);
+        ctx.genAISettings = { isEnabled: false };
+        ctx.genAIConfigured = false;
+        const imageReads = vi.spyOn(ctx.content, 'getTableImages');
+
+        for (const sectionId of ['section1', 'section2']) {
+            await processor.processTableAdaptations('book1', sectionId, SENTENCES, () => {});
+        }
+
+        expect(imageReads).not.toHaveBeenCalled();
+    });
+});

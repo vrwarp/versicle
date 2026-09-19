@@ -1,5 +1,5 @@
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioElementPlayer } from './AudioElementPlayer';
 
 describe('AudioElementPlayer', () => {
@@ -111,5 +111,51 @@ describe('AudioElementPlayer', () => {
       }
 
       expect(callback).toHaveBeenCalled();
+  });
+
+  describe('regression: a sink error must not strand the segment object URL', () => {
+      // playBlob/playUrl/stop/onended all revoke the current object URL; onerror
+      // only forwarded the MediaError. The engine's recovery swaps to a local
+      // provider that never touches this sink, so nothing came along to revoke
+      // it — a provider failing repeatedly stranded one blob per failure.
+      const MEDIA_ERROR = { code: 3, message: 'decode' };
+      const realRevoke = global.URL.revokeObjectURL;
+      afterEach(() => { global.URL.revokeObjectURL = realRevoke; });
+
+      it('revokes the failed segment URL and still forwards the MediaError', async () => {
+          const revoke = vi.fn();
+          global.URL.revokeObjectURL = revoke;
+          const onError = vi.fn();
+          player.setOnError(onError);
+
+          await player.playBlob(new Blob(['segment'], { type: 'audio/wav' }));
+          expect(revoke).not.toHaveBeenCalled();
+
+          mockAudio.error = MEDIA_ERROR;
+          mockAudio.onerror(new Event('error'));
+
+          expect(revoke).toHaveBeenCalledWith('blob:mock-url');
+          // Same argument, and still AFTER the cleanup — the order onended uses.
+          expect(onError).toHaveBeenCalledWith(MEDIA_ERROR);
+          expect(revoke.mock.invocationCallOrder[0])
+              .toBeLessThan(onError.mock.invocationCallOrder[0]);
+
+          // The handle is gone, so a later stop cannot revoke it a second time.
+          player.stop();
+          expect(revoke).toHaveBeenCalledTimes(1);
+      });
+
+      it('a revoke that throws cannot swallow the error callback', async () => {
+          const revoke = vi.fn(() => { throw new Error('revoke failed'); });
+          global.URL.revokeObjectURL = revoke;
+          const onError = vi.fn();
+          player.setOnError(onError);
+
+          await player.playBlob(new Blob(['segment'], { type: 'audio/wav' }));
+          expect(() => mockAudio.onerror(new Event('error'))).not.toThrow();
+
+          expect(revoke).toHaveBeenCalledWith('blob:mock-url');
+          expect(onError).toHaveBeenCalledTimes(1);
+      });
   });
 });

@@ -33,12 +33,22 @@ export class TableAdaptationProcessor {
      * section's adaptations outright (a work set of stale ids matches no live
      * blob, leaving nothing to send the model), which is why
      * {@link processTableAdaptations} detects the total blob miss and heals
-     * from the live read. There is no engine-side reprocess notification
-     * today; reprocess writes IndexedDB directly, with no store to subscribe
-     * to (unlike the lexicon invalidation ping).
+     * from the live read. A reprocess that MOVES a table to a different
+     * sectionId never reaches that lookup at all (the stale memo reports the
+     * section as tableless), so an empty section list is confirmed against the
+     * live rows once per book — see {@link emptySectionProbedBookId}. There is
+     * no engine-side reprocess notification today; reprocess writes IndexedDB
+     * directly, with no store to subscribe to (unlike the lexicon invalidation
+     * ping).
      */
     private locationsBookId: string | null = null;
     private locationsPromise: Promise<TableLocation[]> | null = null;
+    /**
+     * The book whose empty section list has already been confirmed against the
+     * live table rows. Bounds that confirmation to ONE read per book instead of
+     * one per tableless section (see {@link processTableAdaptations} step 3).
+     */
+    private emptySectionProbedBookId: string | null = null;
 
     /**
      * @param ctx The engine context. Required (no default) so this module never statically
@@ -120,12 +130,27 @@ export class TableAdaptationProcessor {
                 cfi: normalizeTableCfi(t.cfi),
             }));
 
-            if (sectionTables.length === 0) return;
-
             // 3. Filter for those missing from the cache
             const workSet = sectionTables.filter(t => !existingAdaptations.has(t.cfi));
 
-            if (workSet.length === 0) return;
+            // An EMPTY section list is ambiguous while the memo can be stale: a
+            // reprocess that MOVED a table to a different sectionId empties this
+            // section's list, and returning on it would never reach the blob
+            // lookup the heal below hangs off — so the section would go without
+            // adaptations until the next book switch. It is therefore confirmed
+            // against the live rows, but only ONCE per book: the claim is made
+            // synchronously, so concurrent section loads cannot each pay for it,
+            // an accurate memo costs a single extra read for the WHOLE book, and
+            // a book with no tables at all never pays one per section. (A move
+            // into a section whose emptiness was already confirmed still waits
+            // for the book switch — a bounded check buys the common case, not
+            // every case.) The read itself stays behind the GenAI gate below:
+            // with no model to send tables to there is nothing to heal.
+            const verifyEmptySection = sectionTables.length === 0
+                && this.emptySectionProbedBookId !== bookId;
+            if (verifyEmptySection) this.emptySectionProbedBookId = bookId;
+
+            if (workSet.length === 0 && !verifyEmptySection) return;
 
             // 4. Check if GenAI is enabled + configured (the ONE gate — 5c-PR2;
             // configures from the stored key, DEV/E2E-gated mock seam)
@@ -139,14 +164,20 @@ export class TableAdaptationProcessor {
                     .map(t => ({ rootCfi: t.cfi, imageBlob: blobsById.get(t.id) }))
                     .filter((n): n is { rootCfi: string; imageBlob: Blob } => n.imageBlob !== undefined);
 
-                if (nodes.length === 0 && workSet.length > 0) {
-                    // Wanted tables, resolved none: every memoized row id is gone,
-                    // which is what a reprocess of the OPEN book does (it rewrites
-                    // this book's rows, and CFI drift re-keys them). Drop the memo
-                    // so the next read — here and in buildGroups — is fresh, and
-                    // rebuild the work set from the live rows already in hand, so
-                    // the section still gets its adaptations instead of silently
-                    // getting none for the rest of the session.
+                if (nodes.length === 0 && (workSet.length > 0 || images.length > 0)) {
+                    // Wanted tables, resolved none — or wanted none and the live
+                    // rows say otherwise. Either way the memo disagrees with the
+                    // rows, which is what a reprocess of the OPEN book does: it
+                    // rewrites this book's rows, CFI drift re-keys every id
+                    // (`workSet.length > 0`, nothing resolves) and a table can
+                    // land in a different section than the memo remembers
+                    // (`images.length > 0` for a section the memo called empty).
+                    // Drop the memo so the next read — here and in buildGroups —
+                    // is fresh, and rebuild the work set from the live rows
+                    // already in hand, so the section still gets its adaptations
+                    // instead of silently getting none for the rest of the
+                    // session. A confirmed-empty section reads no images, so it
+                    // falls through with nothing to do and leaves the memo alone.
                     this.invalidateTableLocations(bookId);
                     nodes = images
                         .map(img => ({ rootCfi: normalizeTableCfi(img.cfi), imageBlob: img.imageBlob }))

@@ -211,30 +211,6 @@ describe('regression: cover reads share one connection', () => {
         await expect(getCoverFromDB('book-1')).resolves.toBeInstanceOf(Blob);
         expect(idb.openDB).toHaveBeenCalledTimes(2);
     });
-
-    it('serves an untyped (ArrayBuffer) cover as webp — what the capture path writes', async () => {
-        mockDb.get.mockResolvedValue({
-            coverBlob: new Uint8Array([1, 2, 3]).buffer as unknown as Blob,
-        });
-
-        const originalResponse = global.Response;
-        global.Response = class MockResponse {
-            status: number;
-            _headers: Map<string, string>;
-            constructor(_body: unknown, init?: { status?: number; headers?: Record<string, string> }) {
-                this.status = init?.status || 200;
-                this._headers = new Map(Object.entries(init?.headers || {}));
-            }
-            get headers() { return this._headers; }
-        } as unknown as typeof Response;
-
-        try {
-            const response = await createCoverResponse('book-1');
-            expect(response.headers.get('Content-Type')).toBe('image/webp');
-        } finally {
-            global.Response = originalResponse;
-        }
-    });
 });
 
 /**
@@ -323,5 +299,104 @@ describe('regression: the idle close is bound to the connection it was armed for
         // C2 survived, so the next cover still rides the same connection.
         await expect(getCoverFromDB('book-3')).resolves.toBeInstanceOf(Blob);
         expect(idb.openDB).toHaveBeenCalledTimes(2);
+    });
+});
+
+
+/**
+ * The route served `blob.type || 'image/webp'`. Nothing that reaches it still
+ * HAS a type — ingest normalizes Blob → ArrayBuffer (WebKit IDB cannot clone a
+ * Blob) and a backup restore decodes the cover out of base64, and both drop the
+ * MIME type — so the webp guess is what EVERY current-format row was served
+ * with. The guess was justified by the import path compressing thumbnails to
+ * webp, but that lane is not the only one: an `imageCompression` failure keeps
+ * the ORIGINAL cover bytes (extract.ts: `thumbnailBlob = coverBlob`), which are
+ * whatever the EPUB shipped. `<img>` sniffs and did not care; the one-year
+ * `Cache-Control` on this response means everything else was stuck with the
+ * wrong label.
+ */
+describe('regression: the cover route serves the type the bytes actually are', () => {
+    const mockDb = {
+        objectStoreNames: { contains: vi.fn(() => true) },
+        get: vi.fn(),
+        close: vi.fn(),
+    };
+
+    beforeEach(async () => {
+        await closeCoverConnection();
+        vi.clearAllMocks();
+        mockDb.objectStoreNames.contains.mockReturnValue(true);
+        vi.mocked(idb.openDB).mockResolvedValue(mockDb as unknown as idb.IDBPDatabase);
+    });
+
+    afterEach(async () => {
+        await closeCoverConnection();
+    });
+
+    /**
+     * Run `fn` with the header-recording Response stand-in this file already
+     * uses (undici's Response cannot stream a Node Blob, so the real one turns
+     * every cover into a 500 here).
+     */
+    const withMockResponse = async <T>(fn: () => Promise<T>): Promise<T> => {
+        const originalResponse = global.Response;
+        global.Response = class MockResponse {
+            status: number;
+            _headers: Map<string, string>;
+            constructor(_body: unknown, init?: { status?: number; headers?: Record<string, string> }) {
+                this.status = init?.status || 200;
+                this._headers = new Map(Object.entries(init?.headers || {}));
+            }
+            get headers() { return this._headers; }
+        } as unknown as typeof Response;
+
+        try {
+            return await fn();
+        } finally {
+            global.Response = originalResponse;
+        }
+    };
+
+    /** The Content-Type the route serves for a stored cover row. */
+    const servedType = async (coverBlob: unknown): Promise<string | null> => {
+        mockDb.get.mockResolvedValue({ coverBlob });
+        return withMockResponse(async () =>
+            (await createCoverResponse('book-1')).headers.get('Content-Type'));
+    };
+
+    /** An untyped (ArrayBuffer) cover starting with `head`. */
+    const stored = (head: number[]): ArrayBuffer => new Uint8Array([...head, 0x00, 0x00]).buffer;
+
+    const FORMATS: ReadonlyArray<{ name: string; head: number[]; type: string }> = [
+        { name: 'webp', head: [0x52, 0x49, 0x46, 0x46, 0x2a, 0, 0, 0, 0x57, 0x45, 0x42, 0x50], type: 'image/webp' },
+        { name: 'jpeg', head: [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10], type: 'image/jpeg' },
+        { name: 'png', head: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], type: 'image/png' },
+        { name: 'gif', head: [0x47, 0x49, 0x46, 0x38, 0x39, 0x61], type: 'image/gif' },
+    ];
+
+    for (const { name, head, type } of FORMATS) {
+        it(`serves an untyped ${name} cover as ${type}`, async () => {
+            expect(await servedType(stored(head))).toBe(type);
+        });
+    }
+
+    it('never invents an image type for bytes it does not recognize', async () => {
+        expect(await servedType(stored([0x01, 0x02, 0x03]))).toBe('application/octet-stream');
+    });
+
+    it('still trusts a legacy row that kept its own Blob type', async () => {
+        expect(await servedType(new Blob(['x'], { type: 'image/jpeg' }))).toBe('image/jpeg');
+    });
+
+    it('keeps the route shape: long cache on a hit, 404 on a miss', async () => {
+        await withMockResponse(async () => {
+            mockDb.get.mockResolvedValue({ coverBlob: stored([0xff, 0xd8, 0xff]) });
+            const hit = await createCoverResponse('book-1');
+            expect(hit.status).toBe(200);
+            expect(hit.headers.get('Cache-Control')).toBe('public, max-age=31536000');
+
+            mockDb.get.mockResolvedValue(undefined);
+            expect((await createCoverResponse('book-2')).status).toBe(404);
+        });
     });
 });
